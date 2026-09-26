@@ -15,7 +15,10 @@ string (voicing on strings D-G-B-E) and moves to the B string (voicing on string
 A-D-G-B) when that gives a better position, or when the melody lies below the
 high E string's open pitch `E4` and cannot be voiced there at all.
 
-The entire library lives in a single module: `arranger.py`.
+The entire library lives in a single module: `arranger.py`. Melody notes that fall
+outside the chord are handled by a selectable strategy (chord extension, Barry
+Harris dim7 substitution, or holding the inner voices) — see
+`arrange_progression(non_chord_tone=...)` below.
 
 ## Repository Layout
 
@@ -25,9 +28,11 @@ arranger/
 ├── pyproject.toml         # PEP 621 metadata (setuptools backend)
 ├── README.md              # User-facing overview and usage
 ├── Makefile               # install / test / demo / build / clean targets
+├── .gitignore             # Excludes .venv/, __pycache__/ and build artefacts
 ├── tests/                 # unittest test suite (one file per concern)
 │   ├── test_chord_parser.py
 │   ├── test_fretboard.py
+│   ├── test_non_chord_tones.py
 │   ├── test_progressions.py
 │   ├── test_voice_leading.py
 │   └── test_voicings.py
@@ -133,12 +138,19 @@ musically correct and playable.
   `active_frets()`, `fret_span()`, `midi_notes()`, `pitch_classes()`,
   `soprano_string()` (index of the highest sounding string; `-1` if all muted).
   Supports legacy dict-style access (`v["frets"]`).
-- `ArrangementStep` — a dataclass of `chord`, `melody`, `voicing`. Also
-  supports legacy dict-style access (`step["chord"]`).
+- `ArrangementStep` — a dataclass of `chord`, `melody`, `voicing` plus the
+  non-chord-tone bookkeeping `non_chord_tone` (bool), `strategy` (which strategy
+  handled the step) and `harmonized_as` (the substitute chord name). Also supports
+  legacy dict-style access (`step["chord"]`).
 - `GuitarFretboard` — static helpers `note_to_fret(string_index, note)` and
   `fret_to_midi(string_index, fret)`. Out-of-range inputs return `-1`.
-- `ChordParser` — `parse_chord_name(name) -> (root, quality)` and
-  `get_melody_degree(root, melody_note) -> 0..11`.
+- `ChordParser` — `parse_chord_name(name) -> (root, quality)`,
+  `get_melody_degree(root, melody_note) -> 0..11`, `canonical_quality(quality)`
+  (case-sensitive alias resolution: `M7` -> `maj7`, `m7` stays `m7`) and
+  `get_chord_tones(quality, chord_name=None)` -> every pitch class in the chord.
+  `CHORD_TONES_FROM_ROOT` is the full tone set per quality, deliberately distinct
+  from `DEGREE_OFFSETS_FROM_ROOT`, which lists only the four notes a drop-2 shape
+  voices — so the root of a rootless `7b9` still counts as a chord tone.
 - `VoiceLeadingEngine` — the core engine:
   - `DROP2_INTERVAL_SETS`: semitone offsets from the soprano voice for each
     supported chord quality (major, minor, dominant families) plus aliases.
@@ -154,21 +166,41 @@ musically correct and playable.
   - `calculate_pitch_leading_distance(voicing_a, voicing_b)` — movement in
     semitones between sorted sounding pitches; identical to the fret metric within
     one block, and the metric `arrange_progression` uses across blocks.
-  - `arrange_progression(progression, top_strings=MELODY_STRING_CHOICES)`.
-- `__version__` — the library version string (currently `0.1.0`). `pyproject.toml`
+  - `NON_CHORD_TONE_EXTENSIONS` — canonical quality → `{melody degree: extension
+    quality}`, the routing used by the `extension` strategy.
+  - `NON_CHORD_TONE_STRATEGIES` — the accepted `non_chord_tone` values.
+  - `is_chord_tone(melody_note, chord_type, chord_name)` — chord-tone detection
+    using `ChordParser.CHORD_TONES_FROM_ROOT`; `False` for unknown qualities.
+  - `resolve_non_chord_tone(melody_note, chord_type, chord_name, strategy,
+    next_melody=None)` -> `(quality, name)` for a substitute chord, or `None` when
+    the strategy cannot help (the caller then keeps its fallback).
+  - `sustain_inner_voices(previous_voicing, melody_note)` — holds the previous
+    voicing's inner voices and moves only the soprano; `None` when unplayable.
+  - `arrange_progression(progression, top_strings=MELODY_STRING_CHOICES,
+    non_chord_tone="extension")` — voices each step and, when a melody note is not
+    a chord tone, applies the selected strategy. An unknown strategy raises
+    `ValueError`.
+- `__version__` — the library version string (currently `0.2.0`). `pyproject.toml`
   reads it as the dynamic project version, so it is the single source of truth.
 - `main()` — prints the built-in demonstration arrangements; exposed as the
   `jazz-arranger` console script via `[project.scripts]`.
 
 ### Adding a new chord quality
 
-1. Add a template list to `DROP2_INTERVAL_SETS` (four inversion templates, each
-   `[0, offset2, offset3, offset4]` in semitones below the soprano).
-2. Add the matching entry to `DEGREE_OFFSETS_FROM_ROOT` so the melody note is
-   matched to the correct inversion.
-3. Add any aliases in the `DROP2_INTERVAL_SETS[...] = ...` block.
-4. Add a test in `tests/test_voicings.py` verifying pitch classes and
-   `fret_span() <= 5`.
+1. Add a template list to `DROP2_INTERVAL_SETS` (one inversion template per voiced
+   tone, each `[0, offset2, offset3, offset4]` in semitones below the soprano).
+   Drop-2 = a close voicing with the 2nd voice from the top dropped an octave;
+   ninth/13th qualities are voiced rootless (root, or 5th when the root is on top,
+   omitted) so the extra tone still fits four strings.
+2. Add the matching entry to `DEGREE_OFFSETS_FROM_ROOT` **in the same order** as
+   the templates, so each melody note is matched to the correct inversion.
+3. Add the quality's full tone set to `ChordParser.CHORD_TONES_FROM_ROOT`.
+4. Add aliases to `ChordParser.QUALITY_ALIASES` (and, for backward compatibility,
+   optionally to the `DROP2_INTERVAL_SETS[...] = ...` block).
+5. To make the quality reachable by the `extension` strategy, add it to
+   `NON_CHORD_TONE_EXTENSIONS`.
+6. Add a test in `tests/test_voicings.py` verifying that pitch classes are a subset
+   of `ChordParser.get_chord_tones(...)` and that `fret_span() <= 5`.
 
 ## Coding Conventions
 
@@ -206,8 +238,8 @@ musically correct and playable.
    `.venv/bin/python -m unittest discover -s tests -v` (must report `OK`).
 5. Run the demo (`.venv/bin/python arranger.py`) when touching voicing or
    voice-leading logic and sanity-check the printed tabs.
-6. Keep commits focused; note that this directory is **not currently a git
-   repository**, so initialize one only if the user asks.
+6. Keep commits focused. This directory is a git repository (initialized with a
+   baseline commit), so commit each logical change separately.
 
 ## Known Limitations
 
@@ -219,9 +251,19 @@ musically correct and playable.
   (melody on the G string, strings G-D-A-low E) is a one-tuple addition to
   `MELODY_STRING_CHOICES`.
 - A fixed max fret span of 5 and fret range 0–18 is assumed.
+- Non-chord melody notes are only covered for the mappings in
+  `NON_CHORD_TONE_EXTENSIONS` (9ths, 6/9s, 13ths) plus the dim7 substitution. An
+  unmapped non-chord tone prints a warning and keeps the legacy quality-only
+  fallback, which can sound the melody over a different chord's shape.
+- The `sustain` strategy is structural, not rhythmic: `arrange_progression` takes
+  only `(note, quality, name)` triples, so it cannot tell a brief passing note from
+  an accented tension. Holding the inner voices is applied whenever the shape can
+  physically stay put.
+- `7b9`/`7alt` are voiced rootless apart from their new root-in-top inversion;
+  other omitted tones (e.g. a root-on-top `13`) have no template yet.
 - If no voicing matches a melody/chord, `arrange_progression` prints a warning
   and **skips** that step (rather than raising).
 - The public API is packaged as `jazz-arranger` and versioned through
-  `arranger.__version__` (currently `0.1.0`), but there is no CI and nothing has
+  `arranger.__version__` (currently `0.2.0`), but there is no CI and nothing has
   been published to PyPI.
 
