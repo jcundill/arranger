@@ -19,6 +19,11 @@ STRING_NAMES = ["E", "A", "D", "G", "B", "E"]
 # because that is the common jazz spelling for the chords this library builds.
 PITCH_CLASS_NAMES = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"]
 
+# The Weimar Jazz Database's "no chord" marker: a bar that carries melody but no
+# harmony. Such a step is voiced as melody alone - no harmonisation, no
+# reharmonisation, no warning (see VoiceLeadingEngine.get_melody_only_voicing).
+NO_CHORD = "NC"
+
 # Soprano (melody) string indices a Drop-2 voicing may be pinned to, and the four
 # contiguous strings each one uses. Index 0 = low E ... index 5 = high E.
 #   5 -> strings D-G-B-E, melody on the high E string (traditional shape)
@@ -126,6 +131,11 @@ class ArrangementStep:
     non_chord_tone: bool = False
     strategy: Optional[str] = None
     harmonized_as: Optional[str] = None
+    # True for a step that was arranged melody-only because its chord slot was
+    # NO_CHORD. Defaulted, so existing construction and the __getitem__ shim are
+    # unaffected. A melody-only step is deliberately NOT a drop-2 voicing: it has
+    # a single active fret and does not obey the four-string playability invariant.
+    melody_only: bool = False
 
     def tab_line(self) -> str:
         """Returns the one-line tab for this step, e.g. 'x-x-12-13-13-13'."""
@@ -160,6 +170,22 @@ class GuitarFretboard:
         if string_index < 0 or string_index >= len(STANDARD_TUNING) or fret < 0:
             return -1
         return STANDARD_TUNING[string_index].midi_note() + fret
+
+
+def _melody_only_string_order(prefer: Tuple[int, ...]) -> List[int]:
+    """
+    String indices to try for a melody-only voicing: those in `prefer` first (in
+    the order given), then every other string from the highest sounding one down.
+
+    Duplicates and out-of-range indices in `prefer` are ignored, so a caller
+    cannot make the search repeat a string or index past the fretboard.
+    """
+    order: List[int] = []
+    top = len(STANDARD_TUNING) - 1
+    for string_index in list(prefer) + list(range(top, -1, -1)):
+        if 0 <= string_index <= top and string_index not in order:
+            order.append(string_index)
+    return order
 
 
 class ChordParser:
@@ -679,6 +705,34 @@ class VoiceLeadingEngine:
 
         return candidates
 
+    @classmethod
+    def get_melody_only_voicing(
+        cls,
+        melody_note: Note,
+        prefer: Tuple[int, ...] = MELODY_STRING_CHOICES,
+    ) -> Optional[Voicing]:
+        """
+        Returns a single-fret Voicing that plays melody_note alone, or None.
+
+        This is the voicing used for a NO_CHORD ("NC") step: a bar of melody with
+        no harmony behind it, which is voiced as written rather than harmonised or
+        reharmonised. It is deliberately NOT a drop-2 voicing and so does not obey
+        the four-contiguous-strings playability invariant - there is exactly one
+        active fret, and fret_span() is 0.
+
+        The strings in `prefer` (high E, then B) are tried in order; when none of
+        them can reach the note - or the preferred ones are exhausted - the
+        remaining strings are tried from the high E downwards, so a low melody
+        such as G3 still sounds on the open G string.
+        """
+        for string_index in _melody_only_string_order(prefer):
+            fret = GuitarFretboard.note_to_fret(string_index, melody_note)
+            if 0 <= fret <= 18:
+                frets = [-1] * len(STANDARD_TUNING)
+                frets[string_index] = fret
+                return Voicing(frets=frets, top_fret=fret, avg_fret=float(fret))
+        return None
+
     # ------------------------------------------------------------------
     # Non-chord melody tones
     # ------------------------------------------------------------------
@@ -866,6 +920,13 @@ class VoiceLeadingEngine:
                          melody, for brief passing tones;
           'legacy'     - keep the original quality-only fallback behaviour.
         Steps whose melody is already a chord tone are unaffected by this choice.
+
+        A step whose chord_type or name is NO_CHORD ("NC") is voiced as the melody
+        alone on a single fret (get_melody_only_voicing) and flagged
+        melody_only=True. Such a step is short-circuited before any chord logic,
+        so it is never reharmonised and never warns; it also does not take part in
+        voice-leading minimisation, and being neither a drop-2 voicing nor a
+        four-string shape it is exempt from that playability invariant.
         """
         if non_chord_tone not in cls.NON_CHORD_TONE_STRATEGIES:
             raise ValueError(
@@ -877,6 +938,26 @@ class VoiceLeadingEngine:
         
         for index, (note_str, chord_type, name) in enumerate(progression):
             melody_note = Note(note_str)
+
+            # A NO_CHORD step carries melody but no harmony: it is voiced as the
+            # melody alone. This happens before any chord logic, so there is no
+            # non-chord-tone strategy, no substitute chord and no warning.
+            if chord_type == NO_CHORD or name == NO_CHORD:
+                solo_voicing = cls.get_melody_only_voicing(melody_note, prefer=top_strings)
+                if solo_voicing is None:
+                    print(
+                        f"Warning: melody {note_str} is unreachable on any string; "
+                        f"skipping the no-chord step"
+                    )
+                    continue
+                arrangements.append(ArrangementStep(
+                    chord=name,
+                    melody=note_str,
+                    voicing=solo_voicing,
+                    melody_only=True,
+                ))
+                continue
+
             # get_all_drop2_voicings applies the chord-tone match first and the
             # quality-only fallback second, across every allowed soprano string.
             candidates = cls.get_all_drop2_voicings(
@@ -976,9 +1057,12 @@ def _step_annotation(step: ArrangementStep) -> str:
     """
     Returns the non-chord-tone annotation for a step, e.g. '-> Cmaj9 via extension'.
 
-    Empty string for an ordinary chord tone. Shared by format_progression and the
-    demonstration so the two renderings cannot drift apart.
+    A melody-only (no chord) step is annotated instead with '(no chord - melody
+    alone)'. Empty string for an ordinary chord tone. Shared by format_progression
+    and the demonstration so the two renderings cannot drift apart.
     """
+    if step.melody_only:
+        return " (no chord - melody alone)"
     if not step.non_chord_tone:
         return ""
     if step.harmonized_as:

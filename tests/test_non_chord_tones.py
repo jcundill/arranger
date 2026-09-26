@@ -1,6 +1,85 @@
 import unittest
 from musthe import Note
-from arranger import ChordParser, VoiceLeadingEngine
+from arranger import (
+    NO_CHORD,
+    ArrangementStep,
+    ChordParser,
+    VoiceLeadingEngine,
+    Voicing,
+    _step_annotation,
+    format_progression,
+)
+
+
+class TestMelodyOnlyVoicing(unittest.TestCase):
+    """get_melody_only_voicing plays one note on one string, for NC bars."""
+
+    def setUp(self):
+        self.engine = VoiceLeadingEngine()
+
+    def test_high_e_string_is_preferred(self):
+        """F4 sits on the high E string at fret 1."""
+        voicing = self.engine.get_melody_only_voicing(Note("F4"))
+        self.assertIsNotNone(voicing)
+        assert voicing is not None
+        self.assertEqual(voicing.tab_string(), "x-x-x-x-x-1")
+        self.assertEqual(voicing.fret_span(), 0)
+        self.assertEqual(voicing.midi_notes(), [65])
+
+    def test_below_the_high_e_open_pitch_falls_to_the_b_string(self):
+        """Eb4 cannot be played on the high E, so it drops to the B string."""
+        voicing = self.engine.get_melody_only_voicing(Note("Eb4"))
+        self.assertIsNotNone(voicing)
+        assert voicing is not None
+        self.assertEqual(voicing.tab_string(), "x-x-x-x-4-x")
+        self.assertEqual(voicing.soprano_string(), 4)
+
+    def test_low_melody_uses_a_string_outside_the_melody_choices(self):
+        """G3 is unreachable on both melody strings and sounds on the open G."""
+        voicing = self.engine.get_melody_only_voicing(Note("G3"))
+        self.assertIsNotNone(voicing)
+        assert voicing is not None
+        self.assertEqual(voicing.tab_string(), "x-x-x-0-x-x")
+        self.assertEqual(voicing.soprano_string(), 3)
+
+    def test_exactly_one_active_fret(self):
+        """Whatever string is chosen, a melody-only step is a single fret."""
+        for name in ("F5", "Eb5", "Db5", "Bb4", "G3", "Bb3", "B3"):
+            voicing = self.engine.get_melody_only_voicing(Note(name))
+            self.assertIsNotNone(voicing, name)
+            assert voicing is not None
+            self.assertEqual(len(voicing.active_frets()), 1, name)
+
+    def test_top_fret_and_avg_fret_describe_the_single_fret(self):
+        """top_fret/avg_fret are consistent for a one-fret voicing."""
+        voicing = self.engine.get_melody_only_voicing(Note("Bb3"))
+        self.assertIsNotNone(voicing)
+        assert voicing is not None
+        self.assertEqual(voicing.top_fret, 3)
+        self.assertEqual(voicing.avg_fret, 3.0)
+
+    def test_unreachable_note_returns_none(self):
+        """Below the low E open there is nothing to play."""
+        self.assertIsNone(self.engine.get_melody_only_voicing(Note("D2")))
+
+    def test_notes_above_the_18th_fret_return_none(self):
+        """B5 and C6 are the only NC pitches the database has that cannot sound."""
+        for name in ("B5", "C6"):
+            self.assertIsNone(self.engine.get_melody_only_voicing(Note(name)), name)
+
+    def test_prefer_order_is_honoured(self):
+        """A caller may pin the melody to a specific string."""
+        voicing = self.engine.get_melody_only_voicing(Note("G3"), prefer=(3,))
+        self.assertIsNotNone(voicing)
+        assert voicing is not None
+        self.assertEqual(voicing.soprano_string(), 3)
+
+    def test_out_of_range_prefer_indices_are_ignored(self):
+        """A bad index in `prefer` must not raise or index off the fretboard."""
+        voicing = self.engine.get_melody_only_voicing(Note("F4"), prefer=(99, -1))
+        self.assertIsNotNone(voicing)
+        assert voicing is not None
+        self.assertEqual(voicing.soprano_string(), 5)
 
 
 class TestNonChordToneDetection(unittest.TestCase):
@@ -263,6 +342,79 @@ class TestNonChordToneStrategiesEndToEnd(unittest.TestCase):
         """A typo in the strategy name is a programming error, not a silent skip."""
         with self.assertRaises(ValueError):
             self.engine.arrange_progression(self.all_of_me, non_chord_tone="nonsense")
+
+
+class TestNoChordSteps(unittest.TestCase):
+    """NC steps are voiced melody-alone: no reharmonisation, no warning."""
+
+    def setUp(self):
+        self.engine = VoiceLeadingEngine()
+
+    def test_nc_step_is_melody_only(self):
+        """An NC step is flagged melody_only with no strategy applied."""
+        steps = self.engine.arrange_progression([("F4", NO_CHORD, NO_CHORD)])
+        self.assertEqual(len(steps), 1)
+        step = steps[0]
+        self.assertTrue(step.melody_only)
+        self.assertFalse(step.non_chord_tone)
+        self.assertIsNone(step.harmonized_as)
+        self.assertIsNone(step.strategy)
+        self.assertEqual(step.tab_line(), "x-x-x-x-x-1")
+
+    def test_nc_is_detected_from_chord_type_or_chord_name(self):
+        """Either slot carrying "NC" marks the step as unaccompanied."""
+        for progression in ([("F4", NO_CHORD, "NC")], [("F4", "NC", NO_CHORD)]):
+            steps = self.engine.arrange_progression(progression)
+            self.assertEqual(len(steps), 1, progression)
+            self.assertTrue(steps[0].melody_only, progression)
+
+    def test_nc_mixed_with_harmonised_steps(self):
+        """NC steps sit in an arrangement alongside ordinary chords."""
+        steps = self.engine.arrange_progression([
+            ("C5", "maj7", "Cmaj7"),
+            ("F4", NO_CHORD, NO_CHORD),
+            ("C5", "maj7", "Cmaj7"),
+        ])
+        self.assertEqual(len(steps), 3)
+        self.assertFalse(steps[0].melody_only)
+        self.assertTrue(steps[1].melody_only)
+        self.assertFalse(steps[2].melody_only)
+
+    def test_nc_note_is_never_reharmonised(self):
+        """An NC melody note gets no substitute chord, whatever it would be."""
+        steps = self.engine.arrange_progression([("F#4", NO_CHORD, NO_CHORD)])
+        self.assertEqual(len(steps), 1)
+        self.assertIsNone(steps[0].harmonized_as)
+        self.assertIsNone(steps[0].strategy)
+        self.assertEqual(ChordParser.canonical_quality(NO_CHORD), NO_CHORD)
+
+    def test_unreachable_nc_note_is_skipped_not_raised(self):
+        """An unplayable NC note warns and is skipped rather than raising."""
+        self.assertEqual(self.engine.arrange_progression([("D2", NO_CHORD, NO_CHORD)]), [])
+
+    def test_annotation_is_shared_by_both_renderings(self):
+        """format_progression and _step_annotation report the same text."""
+        steps = self.engine.arrange_progression([("F4", NO_CHORD, NO_CHORD)])
+        expected = _step_annotation(steps[0])
+        self.assertEqual(expected, " (no chord - melody alone)")
+        self.assertIn(expected, format_progression(steps))
+        self.assertIn(expected, format_progression(steps, vertical=True))
+
+    def test_ordinary_step_annotation_is_unchanged(self):
+        """A chord tone still gets an empty annotation."""
+        steps = self.engine.arrange_progression([("C5", "maj7", "Cmaj7")])
+        self.assertEqual(_step_annotation(steps[0]), "")
+
+    def test_melody_only_defaults_to_false(self):
+        """The defaulted field keeps plain construction and the shim working."""
+        step = ArrangementStep(
+            chord="Cmaj7",
+            melody="C5",
+            voicing=Voicing(frets=[-1, -1, 9, 9, 8, 8], top_fret=9, avg_fret=8.5),
+        )
+        self.assertFalse(step.melody_only)
+        self.assertEqual(step["melody_only"], False)
+        self.assertEqual(step["chord"], "Cmaj7")
 
 
 if __name__ == "__main__":
