@@ -146,14 +146,16 @@ musically correct and playable.
   `fret_to_midi(string_index, fret)`. Out-of-range inputs return `-1`.
 - `ChordParser` — `parse_chord_name(name) -> (root, quality)`,
   `get_melody_degree(root, melody_note) -> 0..11`, `canonical_quality(quality)`
-  (case-sensitive alias resolution: `M7` -> `maj7`, `m7` stays `m7`) and
+  (case-sensitive alias resolution: `M7` -> `maj7`, `M` -> `maj`, `m7` stays `m7`)
+  and
   `get_chord_tones(quality, chord_name=None)` -> every pitch class in the chord.
   `CHORD_TONES_FROM_ROOT` is the full tone set per quality, deliberately distinct
   from `DEGREE_OFFSETS_FROM_ROOT`, which lists only the four notes a drop-2 shape
   voices — so the root of a rootless `7b9` still counts as a chord tone.
 - `VoiceLeadingEngine` — the core engine:
   - `DROP2_INTERVAL_SETS`: semitone offsets from the soprano voice for each
-    supported chord quality (major, minor, dominant families) plus aliases.
+    supported chord quality (seventh, extended, triad, suspended and altered
+    families) plus aliases.
   - `DEGREE_OFFSETS_FROM_ROOT`: which chord tone each inversion places on top.
   - `get_drop2_voicings(melody_note, chord_type, chord_name=None, top_string=5)`
     — one string block; `top_string=4` pins the melody to the B string.
@@ -180,7 +182,7 @@ musically correct and playable.
     non_chord_tone="extension")` — voices each step and, when a melody note is not
     a chord tone, applies the selected strategy. An unknown strategy raises
     `ValueError`.
-- `__version__` — the library version string (currently `0.2.0`). `pyproject.toml`
+- `__version__` — the library version string (currently `0.3.0`). `pyproject.toml`
   reads it as the dynamic project version, so it is the single source of truth.
 - `main()` — prints the built-in demonstration arrangements; exposed as the
   `jazz-arranger` console script via `[project.scripts]`.
@@ -189,9 +191,13 @@ musically correct and playable.
 
 1. Add a template list to `DROP2_INTERVAL_SETS` (one inversion template per voiced
    tone, each `[0, offset2, offset3, offset4]` in semitones below the soprano).
-   Drop-2 = a close voicing with the 2nd voice from the top dropped an octave;
-   ninth/13th qualities are voiced rootless (root, or 5th when the root is on top,
-   omitted) so the extra tone still fits four strings.
+   Derive each template from the close-position stack under the melody: with
+   `d1 < d2 < d3` the **cumulative** semitone distances down from the top voice to
+   the next three chord tones (each the nearest chord tone below), the drop-2 shape
+   is `[0, -d2, -d3, -(d1 + 12)]` — the second voice from the top lowered an octave.
+   A triad needs a fourth voice, so its templates double the root an octave below the
+   stack; ninth/13th qualities are voiced rootless (root, or 5th when the root is on
+   top, omitted) so the extra tone still fits four strings.
 2. Add the matching entry to `DEGREE_OFFSETS_FROM_ROOT` **in the same order** as
    the templates, so each melody note is matched to the correct inversion.
 3. Add the quality's full tone set to `ChordParser.CHORD_TONES_FROM_ROOT`.
@@ -199,8 +205,10 @@ musically correct and playable.
    optionally to the `DROP2_INTERVAL_SETS[...] = ...` block).
 5. To make the quality reachable by the `extension` strategy, add it to
    `NON_CHORD_TONE_EXTENSIONS`.
-6. Add a test in `tests/test_voicings.py` verifying that pitch classes are a subset
-   of `ChordParser.get_chord_tones(...)` and that `fret_span() <= 5`.
+6. Add tests to `tests/test_voicings.py`: exact fingerings, pitch classes a subset of
+   `ChordParser.get_chord_tones(...)`, `fret_span() <= 5`. `TestQualityTableInvariants`
+   checks the template and degree lists stay the same length, and
+   `tests/test_non_chord_tones.py` covers any new `NON_CHORD_TONE_EXTENSIONS` route.
 
 ## Coding Conventions
 
@@ -252,9 +260,15 @@ musically correct and playable.
   `MELODY_STRING_CHOICES`.
 - A fixed max fret span of 5 and fret range 0–18 is assumed.
 - Non-chord melody notes are only covered for the mappings in
-  `NON_CHORD_TONE_EXTENSIONS` (9ths, 6/9s, 13ths) plus the dim7 substitution. An
-  unmapped non-chord tone prints a warning and keeps the legacy quality-only
-  fallback, which can sound the melody over a different chord's shape.
+  `NON_CHORD_TONE_EXTENSIONS` (9ths, 6/9s, 11ths, #11s, b13s, 13ths and the
+  half-diminished 9th) plus the dim7 substitution. An unmapped non-chord tone prints
+  a warning and keeps the legacy quality-only fallback, which can sound the melody
+  over a different chord's shape.
+- A handful of low melodies (around `B3`–`C4`) reach no chord-tone-matched inversion
+  on either block and therefore use that quality-only fallback; the rate matches the
+  long-standing qualities (`maj7`, `m7`, `9`, `m9`). Triad shapes double the root, so
+  their second voice can sit up to 10 semitones below the melody — the same span
+  limit, not a new failure mode.
 - The `sustain` strategy is structural, not rhythmic: `arrange_progression` takes
   only `(note, quality, name)` triples, so it cannot tell a brief passing note from
   an accented tension. Holding the inner voices is applied whenever the shape can

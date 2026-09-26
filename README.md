@@ -113,7 +113,9 @@ sustain     ['x-x-9-9-8-8', 'x-x-9-9-8-10', 'x-x-9-9-8-8']
 - `extension` (default) — absorb the note as an extension: `D5` over `Cmaj7`
   becomes a `Cmaj9`, so `D` is a chord tone again and the shape sounds only
   `Cmaj7`-family pitches. The mapping lives in
-  `VoiceLeadingEngine.NON_CHORD_TONE_EXTENSIONS` (9ths, 6/9s and 13ths).
+  `VoiceLeadingEngine.NON_CHORD_TONE_EXTENSIONS`: 9ths and 6/9ths, plus the #11
+  (`Cmaj7#11`), the 11th (`G7sus4`), the #11/b13 over dominants, the 13th and the
+  half-diminished 9th (`Am9b5`).
 - `diminished` — the Barry Harris 6/dim7 substitution: the passing `D5` is voiced
   inside `Bdim7` (the dim7 a semitone below the note the line resolves to), giving
   a smooth chromatic resolution.
@@ -129,11 +131,37 @@ arranged exactly as before, whichever strategy is selected.
 
 ## Supported chord qualities
 
-`maj7`, `6`, `m7`, `m7b5`, `dim7`, `m6`, `mMaj7`, `7`, `7b9`, `7alt` and the
-extended `maj9`, `m9`, `9`, `6/9`, `13` — plus the aliases `min7`, `min7b5`, `ø7`,
-`ø`, `half-dim`, `°7`, `°`, `dim`, `min6`, `minMaj7`, `mmaj7`, `min9`, `dom7`,
-`dom9`, `dom13`, `M7`, `M9` and `69`. Aliases resolve case-sensitively, so `M7` is a
-major seventh while `m7` is a minor seventh.
+Seventh chords: `maj7`, `6`, `m7`, `m7b5`, `dim7`, `m6`, `mMaj7`, `7`, `7b9`,
+`7alt`. Extensions: `maj9`, `m9`, `9`, `6/9`, `13`. Triads: `maj`, `m`, `aug`.
+Suspended: `sus4`, `sus2`, `7sus4`. Added-note and altered colours: `add9`, `madd9`,
+`7b5`, `7#5`, `7#11`, `7b13`, `maj7#11`, `m9b5`.
+
+Aliases resolve case-sensitively, so `M7` is a major seventh while `m7` is a minor
+seventh and `M` is a major triad. They include `min7`, `min7b5`, `ø7`, `ø`,
+`half-dim`, `°7`, `°`, `dim`, `min6`, `minMaj7`, `mmaj7`, `min9`, `dom7`, `dom9`,
+`dom13`, `M7`, `M9`, `69`, `min`, `-`, `+`, `sus` and `7sus`. Two deliberate
+conventions: `dim` still means `dim7` (the diminished triad is not voiced), and a
+bare `C` is not assumed to be major — spell it `Cmaj` or `CM`.
+
+A drop-2 shape has four voices, so the triad templates double the root an octave
+below the stack:
+
+```python
+from musthe import Note
+
+colours = [
+    ("E5",  "maj",  "Cmaj"),         # x-x-10-9-8-12
+    ("C5",  "sus4", "Gsus4"),        # x-x-5-5-3-8
+    ("D5",  "add9", "Cadd9"),        # x-x-10-9-8-10
+    ("Db5", "7#11", "G7#11"),        # x-x-9-10-8-9
+    ("Eb5", "7b13", "G7b13"),        # x-x-9-10-8-11
+    ("F#5", "maj7#11", "Cmaj7#11"),  # x-x-14-16-13-14
+    ("B4",  "m9b5", "Am9b5"),        # x-x-5-5-4-7
+]
+for note, quality, name in colours:
+    voicing = engine.get_drop2_voicings(Note(note), quality, chord_name=name)[0]
+    print(f"{name:<9} {note:<3} {voicing.tab_string()}")
+```
 
 Unsupported qualities return no voicings; `arrange_progression` prints a warning and
 skips that step rather than raising.
@@ -164,8 +192,12 @@ architecture, coding conventions, and the recipe for adding a new chord quality.
 - Melodies are confined to `B3`–`Bb5`.
 - A fixed maximum fret span of 5 and fret range 0–18 are assumed.
 - Non-chord melody notes are handled only for the mappings in
-  `NON_CHORD_TONE_EXTENSIONS` (9ths, 6/9s, 13ths) plus dim7; anything else keeps the
-  legacy quality-only fallback.
+  `NON_CHORD_TONE_EXTENSIONS` (9ths, 6/9s, 11ths, #11s, b13s, 13ths and the
+  half-diminished 9th) plus dim7; anything else keeps the legacy quality-only
+  fallback.
+- A handful of low melodies (around `B3`–`C4`) reach no chord-tone-matched inversion
+  on either four-string block and fall back to quality-only voicings. The rate is the
+  same as for the long-standing qualities (`maj7`, `m7`, `9`, `m9`).
 - The `sustain` strategy is structural — the API takes only `(note, quality, name)`
   triples, so rhythm and duration cannot be used to spot a brief passing tone.
 - No CI and no release has been published to PyPI.
