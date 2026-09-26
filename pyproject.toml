@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jazz-arranger"
+dynamic = ["version"]
+description = "Generate playable jazz guitar chord-melody arrangements from a chord progression."
+readme = "README.md"
+requires-python = ">=3.10"
+keywords = ["jazz", "guitar", "chord-melody", "drop-2", "voicing", "music-theory"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Multimedia :: Sound/Audio",
+]
+dependencies = ["musthe>=1.0.0"]
+
+[project.scripts]
+jazz-arranger = "arranger:main"
+
+[tool.setuptools]
+# The whole library is a single top-level module. Listing it explicitly keeps
+# flat-layout auto-discovery from tripping over the non-package `tests/` dir.
+py-modules = ["arranger"]
+
+[tool.setuptools.dynamic]
+# Single source of truth: the version lives in arranger.__version__.
+version = {attr = "arranger.__version__"}
