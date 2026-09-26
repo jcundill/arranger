@@ -27,9 +27,10 @@ import sqlite3
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 from arranger import NO_CHORD, ChordParser
+from musthe import Note
 
 __all__ = [
     "DEFAULT_DB",
@@ -46,6 +47,8 @@ __all__ = [
     "matching_sections",
     "load_solo",
     "load_section",
+    "HeadSelection",
+    "select_head",
 ]
 
 
@@ -605,6 +608,322 @@ def load_section(
         hi = min(hi, bars[1])
     solo.notes = solo.notes_in_bars(lo, hi)
     return solo, sections
+
+
+# ---------------------------------------------------------------------------
+# Head selection
+# ---------------------------------------------------------------------------
+
+# Bounds on the head search. MIN_HEAD_BARS is an empirical floor, not a musical
+# constant: 4 is where a head stops being a fragment (a 4-bar slice of a diatonic
+# progression recurs inside almost any standard, so 4 matches by coincidence),
+# while 6 is the shortest span that did not do so across the corpus. MAX_HEAD_BARS
+# bounds the search so a 1352-bar A-block cannot produce a useless scan.
+MIN_HEAD_BARS = 6
+MAX_HEAD_BARS = 64
+
+# How many bars two statements of the same progression may differ in. Analysts do
+# not enter every change a piece is usually written with - Konitz's ATTYA omits the
+# G7 of bar 6 - so an exact match fails on real transcriptions. One is enough to
+# recognise a statement; two also matches unrelated progressions, so this stays 1.
+REPEAT_TOLERANCE = 1
+
+# How far back from an A-block to look for the intro that may contain the head,
+# and how much of a gap between the two still counts as contiguous. The slack is
+# small on purpose: an intro ending fourteen bars before the A-block is a
+# different section, not a prefix of the head.
+MAX_INTRO_BARS = 16
+INTRO_CONTIGUITY_SLACK = 2
+
+
+@dataclass(frozen=True)
+class HeadSelection:
+    """A head, plus what was selected and why.
+
+    `section` is the head itself as a bar span. `seed` is the A-block it was found
+    through (or None when there was no A-form at all), `anchor_chords` the chord
+    progression the head was cut on, and `degraded`/`note` report the degenerate
+    cases the selector detected rather than crashing on them.
+    """
+
+    melid: int
+    section: Section
+    seed: Optional[Section] = None
+    anchor_chords: Tuple[str, ...] = ()
+    degraded: bool = False
+    note: str = ""
+
+    @property
+    def start(self) -> int:
+        return self.section.start
+
+    @property
+    def end(self) -> int:
+        return self.section.end
+
+    @property
+    def length(self) -> int:
+        return self.section.length
+
+    def describe(self) -> str:
+        """One line naming the melid, the bars, and the anchor progression."""
+        chords = " ".join(self.anchor_chords) if self.anchor_chords else "no chords"
+        suffix = f" [{self.note}]" if self.note else ""
+        return (
+            f"melid {self.melid}: head at bars {self.start}-{self.end - 1} "
+            f"({self.length} bars), anchored on {chords}{suffix}"
+        )
+
+
+def _form_sections(melid: int, db_path: Optional[Union[str, Path]] = None) -> List[Section]:
+    """FORM spans of a transcription, ordered by start bar."""
+    return sorted(list_sections(melid, type="FORM", db_path=db_path), key=lambda s: s.start)
+
+
+def _seed_span(forms: Sequence[Section]) -> Optional[Tuple[Section, int, int]]:
+    """The span to search for a head: the first A-block, extended back over intros.
+
+    Returns (seed_section, lo, hi). The extension is the important part: the `I`
+    (intro) block routinely *contains* the head, with `A1` starting at the second
+    statement - on all four "All the Things You Are" transcriptions the real
+    8-bar head sits in the intro, before `A1` begins. Extension stops at the first
+    bar no preceding I-block reaches, and is bounded by MAX_INTRO_BARS so a
+    distant intro cannot swallow the head.
+
+    Returns None when the transcription has no A-form at all.
+    """
+    a_block = next((f for f in forms if f.value.upper().startswith("A")), None)
+    if a_block is None:
+        return None
+
+    lo = a_block.start
+    extended = True
+    while extended:
+        extended = False
+        for form in forms:
+            if not form.value.upper().startswith("I"):
+                continue
+            # The intro must actually reach the A-block, allowing a bar or two of
+            # slack since analysts do not always label spans contiguously. Without
+            # the slack requirement an unrelated intro far earlier would be
+            # absorbed and the seed would start at the top of the piece.
+            reaches = form.end >= lo - INTRO_CONTIGUITY_SLACK
+            if form.start < lo and lo - form.length <= MAX_INTRO_BARS and reaches:
+                lo = form.start
+                extended = True
+    return a_block, lo, a_block.end
+
+
+def _bar_grid(solo: Solo, lo: int, hi: int) -> Dict[int, Optional[Tuple[Tuple[str, int], ...]]]:
+    """Per-bar chords of a span as (quality, root pitch class), from the forward fill.
+
+    A bar-grid rather than a list of changes, because a chord routinely lasts two
+    bars and transcriptions are not consistent about it: ATTYA's A section is
+    written as eight changes, but Konitz enters seven of them with `Cj7` held for
+    two bars. Comparing change *lists* therefore fails to line the two statements
+    up at all, while comparing bar-by-bar lines them up and lets the one
+    disagreeing bar be tolerated.
+
+    Each bar holds a *tuple* of chords, because two changes can share a bar. Sims's
+    ATTYA puts `D-7` and `G7` both in bar 6; keeping only the first of them loses
+    the `G7`, and the statement then fails to match its own return. A tuple keeps
+    every change, and the single-chord case - nearly every bar - is unchanged.
+    """
+    by_bar: Dict[int, List[Tuple[str, int]]] = {}
+    nc_bars: set = set()
+    for bar, chord in solo.chords():
+        if bar >= hi:
+            break
+        if bar < lo:
+            continue
+        if chord == NO_CHORD:
+            nc_bars.add(bar)
+            continue
+        root, quality, _ = parse_weimar_chord(chord)
+        if root is not None and quality is not None:
+            by_bar.setdefault(bar, []).append((quality, Note(root + "4").midi_note() % 12))
+
+    # Bars with no change of their own carry the previous bar's harmony forward,
+    # which is exactly what the forward fill means. An NC bar is recorded as None
+    # rather than inheriting: it is genuinely unaccompanied, and the repeat test
+    # treats it as a wildcard rather than as a chord carried forward.
+    grid: Dict[int, Optional[Tuple[Tuple[str, int], ...]]] = {}
+    running: Optional[Tuple[Tuple[str, int], ...]] = None
+    for bar in range(lo, hi):
+        if bar in by_bar:
+            running = tuple(by_bar[bar])
+        grid[bar] = None if bar in nc_bars else running
+    return grid
+
+
+def _is_transposed_repeat(
+    grid: Mapping[int, Optional[Tuple[Tuple[str, int], ...]]],
+    start: int,
+    period: int,
+    hi: int,
+    tolerance: int = 1,
+) -> bool:
+    """True when the `period` bars at `start` are restated at `start + period`.
+
+    Matching is modulo transposition: chord *qualities* must agree and every root
+    must move by one constant interval. Comparing qualities alone is too weak - a
+    blues head is nearly all dominant sevenths, so it would match itself at every
+    offset - while comparing absolute roots is too strict, because the same
+    progression recurs in a new key in the later sections of a modulating form.
+
+    `tolerance` is how many chords the two statements may differ by, which real
+    transcriptions require: analysts do not enter every change a piece is usually
+    written with. Konitz's ATTYA omits the `G7` of bar 6, so an exact match fails
+    on all four transcriptions; one is enough to recognise a statement, and two
+    also matches unrelated progressions, so the default stays at one.
+
+    An unaccompanied bar is a wildcard rather than a mismatch, so the `NC` bars of
+    an intro cannot decide whether a progression repeats. A bar that is *absent*
+    from the grid is not a wildcard: that means the span ran out, which the bound
+    above has already excluded.
+    """
+    if start + 2 * period > hi:
+        return False
+
+    transpose: Optional[int] = None
+    differences = 0
+    for offset in range(period):
+        first = grid.get(start + offset, ())
+        second = grid.get(start + period + offset, ())
+        if first is None or second is None:
+            continue
+        # Pair the chords of the two bars in order, which is exact whenever they
+        # hold the same number of changes and tolerant when one has an extra.
+        for (quality_a, root_a), (quality_b, root_b) in zip(first, second):
+            if quality_a == quality_b:
+                shift = (root_b - root_a) % 12
+                if transpose is None:
+                    transpose = shift
+                elif shift != transpose:
+                    # Same quality, different root: a genuine harmonic difference
+                    # (an altered dominant against a plain one), not a dropped
+                    # change, so this is not a candidate repeat at all.
+                    return False
+            else:
+                differences += 1
+                if differences > tolerance:
+                    return False
+        # Chords present in one bar but not the other are dropped changes.
+        differences += abs(len(first) - len(second))
+        if differences > tolerance:
+            return False
+    return True
+
+
+
+def select_head(melid: int, db_path: Optional[Union[str, Path]] = None) -> Optional[HeadSelection]:
+    """Selects the head of a transcription - the tune, as distinct from the solo.
+
+    The head is found on the **chord progression, not the form label**, because
+    the label is unreliable: on all four "All the Things You Are" transcriptions
+    `FORM A1` starts at the *second* statement, and the real 8-bar head lies
+    inside the preceding `I` (intro) block, before `A1` begins.
+
+    The algorithm, in order:
+
+    1. **Seed** from the first `FORM` A-block, extended backwards over any
+       contiguous preceding `I` block. This alone recovers all four ATTYA heads.
+    2. **Anchor** on the chord progression at the seed's first chord bar.
+    3. **Trim** to the shortest span that is then repeated - the first
+       transposed repeat of the anchor progression. This is what makes the result
+       a *head* rather than a form cycle: it cuts a 35-99 bar A-block down to one
+       statement.
+    4. **Report** the anchor chords and the trimmed length, so the caller can see
+       what was chosen and override it with an explicit bar range.
+
+    Returns None when the transcription has no A-form. Degenerate A-forms are
+    reported through `HeadSelection.degraded` and `note` rather than crashing: a
+    zero-length or sub-4-bar block, a block over-long enough that the user should
+    hear about it first, and a progression that never repeats.
+
+    Known limitation: the trim is a heuristic and does not land on the head for
+    every transcription. On the four "All the Things You Are" transcriptions it
+    finds the 8-bar head on 266 and 342, but returns a 6-bar fragment on 328 and
+    falls back to the whole A-block on 451, whose A section the analyst wrote with
+    fewer changes than the head has bars. Across the corpus 434 of 456
+    transcriptions yield a head and the median length is 8 bars, which is what a
+    head should be, but a user wanting a specific tune should pass an explicit bar
+    range. This is the open question CORPUS_PLAN.md section 12 records about how
+    aggressive the progression trim should be.
+    """
+    forms = _form_sections(melid, db_path)
+    seeded = _seed_span(forms)
+    if seeded is None:
+        return None
+    seed, lo, hi = seeded
+
+    notes: List[str] = []
+    degraded = False
+    if seed.length < MIN_HEAD_BARS:
+        degraded = True
+        notes.append(f"degenerate A-block ({seed.value}, bars {seed.start}-{seed.end})")
+    elif seed.length > MAX_HEAD_BARS:
+        notes.append(f"A-block is {seed.length} bars; trimmed to one statement")
+
+    solo = load_solo(melid, db_path)
+    grid = _bar_grid(solo, lo, hi)
+    bars = [bar for bar, cell in grid.items() if cell]
+    if not bars:
+        return None
+
+    # Search every bar as a candidate start, earliest first, and at each one take
+    # the *shortest* span that recurs. Both halves of that ordering matter:
+    #
+    # * Earliest-first skips the anacrusis. ATTYA's pickups run bars -12..-1 and
+    #   bar 0 holds the turnaround back into the tune, so the seed's first chord is
+    #   the tail of the previous section, not the head. The head is the first bar
+    #   that begins a progression which then repeats.
+    # * Shortest-at-each-bar keeps the result one statement rather than a form
+    #   cycle. ATTYA's whole 36-bar form is itself periodic, so searching for the
+    #   longest repeat anywhere returns 36 bars; the 8-bar A section is the head.
+    longest = min(MAX_HEAD_BARS, (hi - bars[0]) // 2)
+    start: Optional[int] = None
+    period: Optional[int] = None
+    for bar in bars:
+        found = next(
+            (
+                p
+                for p in range(MIN_HEAD_BARS, min(longest, (hi - bar) // 2) + 1)
+                if _is_transposed_repeat(grid, bar, p, hi, REPEAT_TOLERANCE)
+            ),
+            None,
+        )
+        if found is not None:
+            start, period = bar, found
+            break
+
+    if start is None or period is None:
+        # Nothing recurs, so the head cannot be cut from a repeat. Fall back to
+        # the A-block itself and say so, rather than inventing a length.
+        degraded = True
+        notes.append("no repeated progression found; using the whole A-block")
+        start, end = seed.start, seed.end
+    else:
+        # The head runs up to the bar where the restatement begins, so an 8-bar
+        # head starting at bar 1 ends at bar 9.
+        end = start + period
+
+    if end <= start:
+        return None
+
+    anchor = tuple(chord for bar, chord in solo.chords() if start <= bar < end)[:16]
+    head = Section(melid=melid, type="FORM", start=start, end=end, value="head")
+    return HeadSelection(
+        melid=melid,
+        section=head,
+        seed=seed,
+        anchor_chords=anchor,
+        degraded=degraded,
+        note="; ".join(notes),
+    )
+
+
+
 
 
 

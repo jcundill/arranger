@@ -22,6 +22,9 @@ from wjazzd import (
     matching_sections,
     parse_section_selector,
     parse_weimar_chord,
+    select_head,
+    _is_transposed_repeat,
+    _seed_span,
 )
 
 HAS_DB = DEFAULT_DB.is_file()
@@ -345,6 +348,229 @@ class TestLoadSection(unittest.TestCase):
                 if note.chord in ("", "NC"):
                     continue
                 self.assertIn(note.quality, expected, f"{melid} bar {note.bar} {note.chord}")
+
+
+class TestSeedSpan(unittest.TestCase):
+    """The A-block seed and its extension back over an intro, no database needed."""
+
+    def test_no_a_block_returns_none(self):
+        """A transcription with no A-form has no seed to search."""
+        self.assertIsNone(_seed_span([Section(1, "FORM", 0, 8, "I1")]))
+
+    def test_a_block_alone_is_the_seed(self):
+        """With no preceding intro the seed starts at the A-block."""
+        forms = [Section(1, "FORM", 0, 6, "I1"), Section(1, "FORM", 20, 60, "A1")]
+        seed, lo, hi = _seed_span(forms)  # type: ignore[misc]
+        self.assertEqual((lo, hi), (20, 60))
+        self.assertEqual(seed.value, "A1")
+
+    def test_seed_extends_back_over_a_contiguous_intro(self):
+        """An I-block ending where the A-block starts is absorbed into the seed.
+
+        This is the case a form-label-only design gets wrong: the head sits in the
+        intro, so seeding from A1 alone would miss it entirely.
+        """
+        forms = [Section(1, "FORM", 0, 8, "I1"), Section(1, "FORM", 8, 44, "A1")]
+        _, lo, _ = _seed_span(forms)  # type: ignore[misc]
+        self.assertEqual(lo, 0)
+
+    def test_a_distant_intro_does_not_swallow_the_head(self):
+        """An I-block far from the A-block is a different section, not a prefix."""
+        forms = [Section(1, "FORM", 0, 4, "I1"), Section(1, "FORM", 60, 100, "A1")]
+        _, lo, _ = _seed_span(forms)  # type: ignore[misc]
+        self.assertEqual(lo, 60)
+
+    def test_only_i_and_a_forms_count(self):
+        """A B-block adjacent to the A-block is not an intro."""
+        forms = [Section(1, "FORM", 0, 8, "B1"), Section(1, "FORM", 8, 44, "A1")]
+        _, lo, _ = _seed_span(forms)  # type: ignore[misc]
+        self.assertEqual(lo, 8)
+
+
+class TestTransposedRepeat(unittest.TestCase):
+    """_is_transposed_repeat: the matching rule the head is cut with."""
+
+    def grid(self, rows):
+        """Builds a dense bar grid from [(bar, chords), ...].
+
+        Bars between the first and last listed one are filled with None (an NC
+        wildcard), matching what _bar_grid produces for a real span. A sparse
+        grid would let a comparison see only one pair of chords, and a single
+        pair can never violate the constant-interval rule.
+        """
+        listed = {bar: chords for bar, chords in rows}
+        if not listed:
+            return {}
+        lo, hi = min(listed), max(listed)
+        return {bar: tuple(listed[bar]) if bar in listed else None for bar in range(lo, hi + 1)}
+
+    def test_identical_progression_matches(self):
+        """The same chords in the same key repeat."""
+        rows = [(bar, [("m7", 5)]) for bar in range(0, 17, 4)]
+        self.assertTrue(_is_transposed_repeat(self.grid(rows), 0, 8, 17))
+
+    def test_transposed_progression_matches(self):
+        """A progression returning a tone higher is the same one.
+
+        This is the case ATTYA depends on: its A section comes back a whole tone
+        higher, so an exact-root comparison would never find the head.
+        """
+        rows = [(bar, [("m7", 5 + 2 * (bar // 4))]) for bar in range(0, 17, 4)]
+        self.assertTrue(_is_transposed_repeat(self.grid(rows), 0, 8, 17))
+
+    def test_different_qualities_do_not_match_without_tolerance(self):
+        """A minor seventh and a dominant seventh are not the same statement.
+
+        Checked at tolerance 0 because one differing chord *is* tolerated by
+        default - that tolerance is what lets a dropped change through.
+        """
+        rows = [(bar, [("m7" if bar < 8 else "7", 5)]) for bar in range(0, 17, 4)]
+        self.assertFalse(_is_transposed_repeat(self.grid(rows), 0, 8, 17, tolerance=0))
+
+    def test_same_quality_different_interval_is_not_a_transposition(self):
+        """A constant interval is required, not merely matching qualities.
+
+        Without this a blues head - nearly all dominant sevenths - would match
+        itself at every offset, each chord being allowed its own shift.
+        """
+        rows = [(bar, [("7", bar % 3)]) for bar in range(0, 17)]
+        self.assertFalse(_is_transposed_repeat(self.grid(rows), 0, 4, 17))
+
+    def test_a_constant_interval_is_enough_however_large(self):
+        """The rule allows any transposition, not just close keys."""
+        rows = [(bar, [("m7", (5 + 6 * (bar // 4)) % 12)]) for bar in range(0, 17, 4)]
+        self.assertTrue(_is_transposed_repeat(self.grid(rows), 0, 8, 17))
+
+    def test_one_dropped_change_is_tolerated(self):
+        """Transcriptions omit changes; a single difference still matches."""
+        rows = [(bar, [("m7" if bar != 9 else "maj7", 7)]) for bar in range(0, 17, 4)]
+        self.assertTrue(_is_transposed_repeat(self.grid(rows), 0, 8, 17))
+
+    def test_two_dropped_changes_are_not(self):
+        """Two differences also match unrelated progressions, so they are refused."""
+        rows = [(bar, [("m7" if bar < 8 else "maj7", 7)]) for bar in range(0, 16, 2)]
+        self.assertFalse(_is_transposed_repeat(self.grid(rows), 0, 8, 17))
+
+    def test_a_bar_with_two_chords_keeps_both(self):
+        """Sims's ATTYA puts D-7 and G7 both in bar 6; neither may be lost."""
+        rows = [(bar, [("m7", 2), ("7", 9)] if bar < 8 else [("m7", 4), ("7", 11)])
+                for bar in range(0, 17, 8)]
+        self.assertTrue(_is_transposed_repeat(self.grid(rows), 0, 8, 17))
+
+    def test_a_bar_with_a_missing_chord_is_a_dropped_change(self):
+        """One bar holding two chords against one holding one is a difference.
+
+        Checked at tolerance 0, because a single dropped chord is exactly what
+        the default tolerance of 1 exists to absorb.
+        """
+        rows = [(0, [("m7", 2), ("7", 9)]), (8, [("m7", 4)]), (16, [])]
+        self.assertFalse(_is_transposed_repeat(self.grid(rows), 0, 8, 17, tolerance=0))
+        self.assertTrue(_is_transposed_repeat(self.grid(rows), 0, 8, 17))
+
+    def test_a_span_too_short_is_not_a_repeat(self):
+        """The restatement must lie inside the span being searched."""
+        self.assertFalse(_is_transposed_repeat(self.grid([(0, [("m7", 5)]), (8, [("m7", 7)])]), 0, 8, 9))
+
+    def test_no_chord_bars_do_not_disprove_a_repeat(self):
+        """NC bars are wildcards, so an unaccompanied intro cannot veto a match."""
+        rows = [(0, []), (1, [("m7", 5)]), (8, []), (9, [("m7", 7)])]
+        self.assertTrue(_is_transposed_repeat(self.grid(rows), 0, 2, 17))
+
+
+@requires_db
+class TestSelectHead(unittest.TestCase):
+    """select_head: the head found on the chord progression, not the form label."""
+
+    def test_blue_train_head_is_one_blues_statement(self):
+        """melid 218 yields the 12-bar head, not the 79-bar A1 block.
+
+        The A1 label spans bars 7-86 - six and a half statements of the changes -
+        so a form-label selector returns a form cycle rather than the head.
+        """
+        head = select_head(218)
+        assert head is not None
+        self.assertEqual(head.start, 1)
+        self.assertEqual(head.length, 12)
+        self.assertEqual(head.anchor_chords[0], "Eb7")
+
+    def test_head_is_not_the_form_a1_span(self):
+        """The regression that the original form-label design would have failed."""
+        head = select_head(218)
+        assert head is not None
+        a1 = [s for s in list_sections(218, "FORM") if s.value == "A1"][0]
+        self.assertNotEqual((head.start, head.end), (a1.start, a1.end))
+        self.assertLess(head.length, a1.length)
+
+    def test_attya_head_is_found_inside_the_intro(self):
+        """Konitz's and Metheny's heads are the 8 bars before FORM A1 begins.
+
+        The plan's validation case: `FORM A1` starts at bars 78 and 15
+        respectively, while the head is at bars 1-8 in both.
+        """
+        for melid, a1_start in ((266, 78), (342, 15)):
+            head = select_head(melid)
+            assert head is not None, melid
+            self.assertEqual((head.start, head.length), (1, 8), melid)
+            self.assertLess(head.end, a1_start, melid)
+
+    def test_attya_head_progression_is_the_canonical_a_section(self):
+        """The anchor chords are ATTYA's A1, in the database's own spelling."""
+        head = select_head(342)
+        assert head is not None
+        self.assertEqual(
+            list(head.anchor_chords[:6]), ["F-7", "Bb-7", "Eb7", "Abj7", "Dbj7", "G7"]
+        )
+
+    def test_trim_is_modulo_transposition(self):
+        """The head is found even though its return is in a new key.
+
+        ATTYA's A section comes back a whole tone higher, so a selector comparing
+        absolute roots would not find the repeat at all.
+        """
+        head = select_head(266)
+        assert head is not None
+        self.assertEqual(head.length, 8)
+
+    def test_no_a_form_returns_none(self):
+        """melid 6 is the one transcription in 456 with no A-form."""
+        self.assertIsNone(select_head(6))
+
+    def test_head_is_not_assumed_to_start_at_bar_zero(self):
+        """A head may open with a pickup, so the selector must not assume bar 0."""
+        head = select_head(218)
+        assert head is not None
+        self.assertEqual(head.start, 1)
+
+    def test_degenerate_a_block_is_reported_not_crashed_on(self):
+        """A block yielding no usable repeat is flagged rather than raising."""
+        head = select_head(44)
+        assert head is not None
+        self.assertTrue(head.degraded)
+        self.assertIn("no repeated progression", head.note)
+
+    def test_describe_reports_the_bars_and_the_anchor(self):
+        """The caller can see what was selected and override it."""
+        head = select_head(218)
+        assert head is not None
+        self.assertIn("bars 1-12", head.describe())
+        self.assertIn("Eb7", head.describe())
+
+    def test_every_transcription_selects_without_raising(self):
+        """The selector runs over the whole corpus and reports, never crashes.
+
+        456 transcriptions with degenerate A-forms, NC bars, negative bars and
+        unmapped chords among them.
+        """
+        found = 0
+        for solo in list_solos():
+            head = select_head(solo.melid)
+            if head is None:
+                continue
+            found += 1
+            self.assertGreater(head.length, 0, solo.melid)
+            self.assertLessEqual(head.start, head.end, solo.melid)
+        # The plan records 455 of 456 transcriptions carrying an A-form.
+        self.assertGreaterEqual(found, 400)
 
 
 if __name__ == "__main__":
