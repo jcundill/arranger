@@ -59,5 +59,53 @@ class TestChordParser(unittest.TestCase):
         self.assertEqual(ChordParser.get_melody_degree("G", Note("Ab5")), 1)  # Flat 9th
 
 
+class TestChordToneSets(unittest.TestCase):
+    """Tests for quality normalisation and the full chord-tone oracle."""
+
+    def test_canonical_quality_resolves_aliases_case_sensitively(self):
+        """Aliases map to their canonical key, and M7 must not be folded into m7."""
+        cases = [
+            ("M7", "maj7"),
+            ("m7", "m7"),
+            ("min7", "m7"),
+            ("dom7", "7"),
+            ("half-dim", "m7b5"),
+            ("ø7", "m7b5"),
+            ("°7", "dim7"),
+            ("dim", "dim7"),
+            ("min6", "m6"),
+            ("mmaj7", "mMaj7"),
+            ("minMaj7", "mMaj7"),
+            ("M9", "maj9"),
+            ("69", "6/9"),
+            ("  m7  ", "m7"),
+        ]
+        for alias, expected in cases:
+            self.assertEqual(ChordParser.canonical_quality(alias), expected, alias)
+
+    def test_canonical_quality_passes_unknown_qualities_through(self):
+        """Unknown qualities are returned unchanged so callers can report them."""
+        self.assertEqual(ChordParser.canonical_quality("not-a-chord"), "not-a-chord")
+        self.assertEqual(ChordParser.canonical_quality(""), "")
+        self.assertEqual(ChordParser.canonical_quality(None), "")
+
+    def test_get_chord_tones_relative_to_root(self):
+        """Without a chord name the tones are pitch classes relative to the root."""
+        self.assertEqual(ChordParser.get_chord_tones("maj7"), (0, 4, 7, 11))
+        self.assertEqual(ChordParser.get_chord_tones("m7"), (0, 3, 7, 10))
+
+    def test_get_chord_tones_absolute_with_chord_name(self):
+        """With a chord name the pitch classes are absolute."""
+        self.assertEqual(ChordParser.get_chord_tones("maj7", "Cmaj7"), (0, 4, 7, 11))
+        self.assertEqual(ChordParser.get_chord_tones("maj7", "Dmaj7"), (2, 6, 9, 1))
+        # The root is included even though a 7b9 is voiced rootless
+        self.assertEqual(ChordParser.get_chord_tones("7b9", "G7b9"), (7, 8, 11, 2, 5))
+
+    def test_get_chord_tones_unknown_quality_is_empty(self):
+        """An unsupported quality has no known tones."""
+        self.assertEqual(ChordParser.get_chord_tones("not-a-chord"), ())
+        self.assertEqual(ChordParser.get_chord_tones("not-a-chord", "Cnot-a-chord"), ())
+
+
 if __name__ == "__main__":
     unittest.main()

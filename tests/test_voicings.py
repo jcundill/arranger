@@ -1,6 +1,6 @@
 import unittest
 from musthe import Note
-from arranger import VoiceLeadingEngine, Voicing, GuitarFretboard
+from arranger import VoiceLeadingEngine, Voicing, GuitarFretboard, ChordParser
 
 
 class TestDrop2Voicings(unittest.TestCase):
@@ -72,6 +72,57 @@ class TestDrop2Voicings(unittest.TestCase):
         # Dictionary-like backward compatibility
         self.assertEqual(v["top_fret"], 10)
         self.assertEqual(v["frets"], [-1, -1, 10, 11, 10, 10])
+
+
+class TestExtendedQualities(unittest.TestCase):
+    """Ninth/13th qualities added so non-chord melody notes can be absorbed."""
+
+    def setUp(self):
+        self.engine = VoiceLeadingEngine()
+
+    def test_extension_qualities_sound_only_chord_tones_and_stay_playable(self):
+        """Every voicing of maj9/m9/9/6-9/13 sounds tones of that chord only."""
+        cases = [
+            ("maj9", "C5"), ("maj9", "D5"),
+            ("m9", "D5"), ("9", "D5"),
+            ("6/9", "D5"), ("13", "A4"),
+        ]
+        for quality, melody in cases:
+            chord_name = "C" + quality
+            tones = set(ChordParser.get_chord_tones(quality, chord_name))
+            voicings = self.engine.get_drop2_voicings(Note(melody), quality, chord_name=chord_name)
+            self.assertTrue(voicings, f"Expected a voicing for {chord_name} with melody {melody}")
+            for v in voicings:
+                self.assertLessEqual(v.fret_span(), 5)
+                self.assertTrue(
+                    set(v.pitch_classes()) <= tones,
+                    f"{v.tab_string()} sounds {sorted(v.pitch_classes())} outside {sorted(tones)}",
+                )
+
+    def test_extension_quality_without_chord_name_offers_every_inversion(self):
+        """Without a chord name all five inversions are offered for each block."""
+        voicings = self.engine.get_all_drop2_voicings(Note("D5"), "maj9")
+        self.assertEqual(len(voicings), 10)  # 5 templates x 2 soprano strings
+        for v in voicings:
+            self.assertLessEqual(v.fret_span(), 5)
+            self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()))
+
+    def test_rootless_dominant_root_in_top_inversion(self):
+        """7b9 and 7alt are voiced rootless, so a root melody used to fall through to
+        a wrong chord; each now has a root-in-top inversion that contains its root."""
+        for quality, chord_name in (("7b9", "G7b9"), ("7alt", "G7alt")):
+            tones = set(ChordParser.get_chord_tones(quality, chord_name))
+            voicings = self.engine.get_drop2_voicings(Note("G5"), quality, chord_name=chord_name)
+            self.assertEqual([v.tab_string() for v in voicings], ["x-x-15-13-12-15"], quality)
+            self.assertTrue(set(voicings[0].pitch_classes()) <= tones)
+            self.assertIn(7, voicings[0].pitch_classes())  # the root sounds
+
+    def test_quality_alias_selects_the_same_inversion_as_the_canonical_spelling(self):
+        """M7 must behave like maj7 - it used to be read as m7."""
+        canonical = self.engine.get_drop2_voicings(Note("B4"), "maj7", chord_name="Cmaj7")
+        alias = self.engine.get_drop2_voicings(Note("B4"), "M7", chord_name="Cmaj7")
+        self.assertEqual([v.tab_string() for v in canonical], ["x-x-5-5-5-7"])
+        self.assertEqual([v.tab_string() for v in alias], [v.tab_string() for v in canonical])
 
 
 class TestMelodyStringChoices(unittest.TestCase):
