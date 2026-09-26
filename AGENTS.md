@@ -215,7 +215,8 @@ integer everywhere in the loader, spans are half-open `[start, end)`, and
 | `list_solos` / `list_sections` / `parse_section_selector` / `matching_sections` | metadata and span selection |
 | `load_solo` / `load_section` | notes with each note's chord forward-filled |
 | `select_head(melid)` | the head, found on the chord progression |
-| `skeleton` / `build_skeleton` / `arrange_head` | reduction, register, voicings |
+| `skeleton_slots` / `skeleton` | the reduction, with and without each slot's timing |
+| `build_skeleton` / `arrange_head` | reduction, register, voicings |
 | `corpus_cli` / `parse_bar_range` | the `corpus` command and its `--bars` parsing |
 
 ### The chord is reconstructed by a forward fill
@@ -271,6 +272,15 @@ One voicing is generated per *slot*; the strategy decides what a slot is:
 `chords`, `beats`, `eighths`, `sixteenths`, `notes`. The grid is derived from
 each note's own `tatum`/`division` rather than assumed to be 4/4, so triplet
 transcriptions are handled.
+
+`skeleton_slots` is the reduction that keeps each slot's `(bar, beat, duration)`;
+`skeleton` is the same thing with the timing discarded, and is what most callers
+want. `Skeleton.timings` carries the timings in step with `triples`, and
+`arrange_head` stamps them onto the `ArrangementStep`s, which is the only way a
+renderer can place a chord on its real beat rather than on an even grid. The two
+lists stay the same length by construction — the lift transposes notes but never
+drops or reorders a slot, and the diminished fallback acts per step — so
+`arrange_head` still guards the index rather than trusting it.
 
 **`eighths` is the default, by measurement.** Across 116 sampled heads the median
 voiced-step rate is 85.9% for eighths against 85.6% for sixteenths and 85.7% for
@@ -356,11 +366,36 @@ what they are missing without opting in.
   handled the step) and `harmonized_as` (the substitute chord name). Also
   `tab_line()` / `tab_block()`, which delegate to the `Voicing` renderers.
   Supports legacy dict-style access (`step["chord"]`).
+  The optional `bar` / `beat` / `duration` (all default `None`) carry the timing the
+  staff renderer needs; `has_timing` reports whether a step can be placed on a grid.
 - `format_progression(steps, vertical=False)` — module-level renderer for a
   whole arrangement: one line per step by default, six-line tab blocks when
   `vertical=True`. Non-chord-tone steps are annotated via the shared
   `_step_annotation()` helper, which `_print_step()` also uses so the two
   renderings cannot drift.
+- `format_tab_staff(steps, beats_per_bar=4, rhythm=True, show_chords=True,
+  show_melody=False, show_melody_string=True, show_mutes=False, collapse=True,
+  measures_per_line=4)` — renders the **whole progression along one six-line
+  staff** in reading order (high E on top), which is the standard tab layout and
+  unlike `format_progression` is not one block per chord. Chord names go on a line
+  above, each starting in the column where its shape is struck. Three decisions are
+  load-bearing and were each forced by looking at the output:
+  - **Fret cells are left-aligned in a fixed-width column.** A right-aligned cell
+    looks tidy on its own but puts the fret at the far end of the column, so the
+    chord name and its frets no longer share a column. The column width widens to
+    the longest chord name rather than letting the chord line drift out of step
+    with the frets under it.
+  - **`collapse` compares sounding pitches, not fret numbers.** The skeleton voices
+    one step per eighth, so without it a held chord is restruck eight times a bar and
+    the staff is a chord list rather than a held shape. A rest clears the held
+    pitches, because a rest genuinely stops the ringing.
+  - **Barlines are every `measures_per_line` bars, not every bar**, and the grid
+    starts at the first step's own onset so a head selected from bar 1 (or from a
+    negative pickup bar) is not preceded by empty bars.
+  Muted strings are blank by default (a ringing voice is not restruck);
+  `show_mutes` spells them out, and a melody-only step always shows its `x`s.
+  With no step timing, `rhythm=True` falls back to a uniform one-chord-per-beat
+  grid rather than failing.
 - `GuitarFretboard` — static helpers `note_to_fret(string_index, note)` and
   `fret_to_midi(string_index, fret)`. Out-of-range inputs return `-1`.
 - `ChordParser` — `parse_chord_name(name) -> (root, quality)`,

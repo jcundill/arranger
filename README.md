@@ -115,6 +115,10 @@ python arranger.py corpus --melid 218 --section chorus:1  # a solo chorus instea
 | `--non-chord-tone` | `extension` | `extension`, `diminished`, `sustain`, `legacy` |
 | `--fallback` | off | `diminished` — see the trade-off below |
 | `--vertical` | off | six-line tab per step |
+| `--tab` | `line` | `staff` lays the head on one six-line staff, spaced on its real rhythm |
+| `--melody` | off | with `--tab staff`, add a line of melody note names |
+| `--mutes` | off | with `--tab staff`, spell out the unsounded strings as `x` |
+| `--bars-per-line` | `4` | with `--tab staff`, bars per staff line |
 
 ### How the head is found
 
@@ -222,6 +226,55 @@ E| x-|
 
 Steps whose melody is a non-chord tone are annotated with the substitution that
 was applied, so a reharmonised passing tone is never silent about itself.
+
+### A whole progression on one staff
+
+`format_progression` gives one line — or one block — *per chord*. For something
+you could read off a page, `format_tab_staff` lays the entire progression along a
+single six-line staff, in reading order:
+
+```python
+from arranger import format_tab_staff
+
+print(format_tab_staff(steps, show_melody=True))
+```
+
+```text
+   Dm7  |G7   |Cmaj7
+   D5   |B4   |C5
+e*|10   |7    |8    |
+B |10   |6    |8    |
+G |10   |7    |9    |
+D |10   |5    |9    |
+A |     |     |     |
+E |     |     |     |
+```
+
+The chord names sit on a line above, each starting in the column where its shape is
+struck, and `e*` marks the string carrying the melody.
+
+Two options do most of the work:
+
+- **`collapse=True` (the default)** strikes a shape once and lets it ring while the
+  melody moves over the same pitches, instead of restriking it on every step. The
+  skeleton voices one step per eighth; a player holds the shape rather than hitting
+  it eight times a bar. A rest breaks the ring, so the next shape is struck again.
+  Pass `collapse=False` to see every voicing.
+- **`rhythm=True` (the default)** spaces the chords on their real beats, drawing a
+  barline every `measures_per_line` bars. This needs each step to carry `bar` and
+  `beat`, which the corpus loader supplies; a hand-written progression has no timing
+  and falls back to one chord per beat.
+
+Muted strings are left blank by default, because in chord-melody a voice that is
+still ringing is not restruck. Pass `show_mutes=True` to spell them out as `x`; a
+melody-only (no chord) step always shows its `x`s, since there the other strings
+really are silent.
+
+From the command line, the same renderer is `--tab staff`:
+
+```bash
+python arranger.py corpus --melid 218 --tab staff --melody --bars-per-line 4
+```
 
 For a single voicing, `Voicing.tab_string()` gives the one-line form while
 `Voicing.tab_block()` (a `List[str]`) and `Voicing.tab()` (the same joined into

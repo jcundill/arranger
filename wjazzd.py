@@ -1080,6 +1080,12 @@ class Skeleton:
     coverage_lifted: Tuple[int, int] = (0, 0)
     rescued: int = 0
     notes: Tuple[str, ...] = ()
+    # Each slot's (bar, beat, duration), in the same order as `triples`, so a
+    # renderer can place the chords on their real beats instead of one per cell.
+    # Parallel to `triples` by construction: the lift transposes melody notes
+    # but never drops or reorders a slot, and the diminished fallback in
+    # arrange_head acts per step.
+    timings: Tuple[Tuple[int, float, float], ...] = ()
 
     def __len__(self) -> int:
         return len(self.triples)
@@ -1132,13 +1138,17 @@ def _chord_slots(solo: Solo, lo: int, hi: int) -> List[Tuple[int, float, int]]:
     return slots
 
 
-def skeleton(
+def skeleton_slots(
     solo: Solo,
     strategy: str = "beats",
     section: Optional[Tuple[int, int]] = None,
     pick: str = "first",
-) -> List[Tuple[str, str, str]]:
-    """Reduces a transcribed line to the (note, quality, name) triples to arrange.
+) -> List[Tuple[Tuple[str, str, str], int, float, float]]:
+    """As `skeleton`, but each slot keeps its timing: (triple, bar, beat, duration).
+
+    The duration is in whole notes, as the database records it. This is the form
+    the tab staff renderer needs, because a tab that spaces every chord evenly is
+    not the tune; `skeleton` is this with the timing discarded.
 
     One voicing is generated per *slot*, and the strategy decides what a slot is:
     a chord change, a beat, an eighth, a sixteenth, or a single note. That is the
@@ -1180,13 +1190,15 @@ def skeleton(
             groups.setdefault(_slot_key(note, strategy), []).append(note)
         ordered = sorted(groups)
 
-    triples: List[Tuple[str, str, str]] = []
+    slots: List[Tuple[Tuple[str, str, str], int, float, float]] = []
     for key in ordered:
         candidates = groups[key]
         chosen = max(candidates, key=lambda n: n.duration) if pick == "longest" else candidates[0]
         chord = chosen.chord
         if chord == NO_CHORD:
-            triples.append((midi_to_note_name(chosen.pitch), NO_CHORD, NO_CHORD))
+            slots.append(
+                ((midi_to_note_name(chosen.pitch), NO_CHORD, NO_CHORD), chosen.bar, chosen.beat, chosen.duration)
+            )
             continue
         if not chord or chosen.quality is None:
             # No chord, or a suffix the notation table does not translate.
@@ -1195,8 +1207,24 @@ def skeleton(
         if root is None or quality is None:
             continue
         promoted = promote_slash_chord(root, quality, bass)
-        triples.append((midi_to_note_name(chosen.pitch), promoted, chord))
-    return triples
+        slots.append(
+            ((midi_to_note_name(chosen.pitch), promoted, chord), chosen.bar, chosen.beat, chosen.duration)
+        )
+    return slots
+
+
+def skeleton(
+    solo: Solo,
+    strategy: str = "beats",
+    section: Optional[Tuple[int, int]] = None,
+    pick: str = "first",
+) -> List[Tuple[str, str, str]]:
+    """Reduces a transcribed line to the (note, quality, name) triples to arrange.
+
+    This is `skeleton_slots` with the timing discarded, kept as the plain public
+    reduction because that is all most callers need.
+    """
+    return [triple for triple, _, _, _ in skeleton_slots(solo, strategy, section, pick)]
 
 
 def _transpose(triples: Sequence[Tuple[str, str, str]], semitones: int) -> List[Tuple[str, str, str]]:
@@ -1284,17 +1312,19 @@ def build_skeleton(
     if lift not in LIFT_MODES:
         raise ValueError(f"Unknown lift mode {lift!r}; expected one of {LIFT_MODES}")
 
-    base = skeleton(solo, strategy, section, pick)
+    slots = skeleton_slots(solo, strategy, section, pick)
+    base = [triple for triple, _, _, _ in slots]
+    timings = tuple((bar, beat, duration) for _, bar, beat, duration in slots)
     notes: List[str] = []
     coverage = _voice_coverage(base, non_chord_tone)
     if lift == "none":
-        return Skeleton(base, 0, "none", coverage, coverage, 0, tuple(notes))
+        return Skeleton(base, 0, "none", coverage, coverage, 0, tuple(notes), timings)
 
     raised = _transpose(base, LIFT_SEMITONES)
     coverage_lifted = _voice_coverage(raised, non_chord_tone)
 
     if lift == "always":
-        return Skeleton(raised, LIFT_SEMITONES, "always", coverage, coverage_lifted, 0, tuple(notes))
+        return Skeleton(raised, LIFT_SEMITONES, "always", coverage, coverage_lifted, 0, tuple(notes), timings)
     if lift == "per-note":
         # Lift only the notes the library cannot play. This is the mode the plan
         # warns tears the line, kept because it is occasionally what is wanted.
@@ -1303,14 +1333,14 @@ def build_skeleton(
             for n, q, c in base
         ]
         notes.append("per-note lift can distort melodic intervals")
-        return Skeleton(mixed, LIFT_SEMITONES, "per-note", coverage, coverage_lifted, 0, tuple(notes))
+        return Skeleton(mixed, LIFT_SEMITONES, "per-note", coverage, coverage_lifted, 0, tuple(notes), timings)
 
     # auto: keep the octave only when it demonstrably voices more of the head.
     if coverage_lifted[0] > coverage[0]:
         notes.append(f"lifted an octave: {coverage[0]} -> {coverage_lifted[0]} of {coverage[1]} steps voiced")
-        return Skeleton(raised, LIFT_SEMITONES, "auto", coverage, coverage_lifted, 0, tuple(notes))
+        return Skeleton(raised, LIFT_SEMITONES, "auto", coverage, coverage_lifted, 0, tuple(notes), timings)
     notes.append(f"left in register: {coverage[0]} of {coverage[1]} steps voiced, no better an octave up")
-    return Skeleton(base, 0, "auto", coverage, coverage_lifted, 0, tuple(notes))
+    return Skeleton(base, 0, "auto", coverage, coverage_lifted, 0, tuple(notes), timings)
 
 
 @dataclass
@@ -1370,7 +1400,7 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
     """
     import argparse
 
-    from arranger import format_progression
+    from arranger import format_progression, format_tab_staff, write_tab_html
 
     parser = argparse.ArgumentParser(
         prog="arranger.py corpus",
@@ -1406,6 +1436,33 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
         help="retry unresolved tensions as dim7 substitutions; replaces the written chord",
     )
     parser.add_argument("--vertical", action="store_true", help="six-line tab per step")
+    parser.add_argument(
+        "--tab",
+        choices=["line", "staff"],
+        default="line",
+        help="'staff' lays the head on one six-line staff, spaced on its real "
+             "rhythm; 'line' (the default) keeps one line per chord",
+    )
+    parser.add_argument(
+        "--melody",
+        action="store_true",
+        help="with --tab staff, add a line of melody note names",
+    )
+    parser.add_argument(
+        "--mutes",
+        action="store_true",
+        help="with --tab staff, spell out the unsounded strings as x",
+    )
+    parser.add_argument(
+        "--bars-per-line", type=int, default=4, help="with --tab staff, bars per line"
+    )
+    parser.add_argument(
+        "--html",
+        default=None,
+        metavar="PATH",
+        help="also write the head to PATH as a self-contained HTML page "
+             "(e.g. --html head.html), and say where it went",
+    )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
     if args.list:
@@ -1471,7 +1528,40 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
             f"rescued with --fallback diminished, which replaces the written chord"
         )
     print()
-    print(format_progression(arrangement.steps, vertical=args.vertical))
+    if args.tab == "staff":
+        # The staff is the only renderer that uses the step timing, so it is the
+        # one that can show where a chord actually falls in the bar.
+        print(
+            format_tab_staff(
+                arrangement.steps,
+                measures_per_line=args.bars_per_line,
+                show_melody=args.melody,
+                show_mutes=args.mutes,
+            )
+        )
+    else:
+        print(format_progression(arrangement.steps, vertical=args.vertical))
+
+    if args.html:
+        # The HTML page carries the diagnostics the terminal output prints above,
+        # so the saved file explains itself without this run's log.
+        provenance = list(arrangement.notes)
+        if arrangement.skeleton.rescued and not args.fallback:
+            provenance.append(
+                f"{arrangement.skeleton.rescued} unresolved tension(s) could be "
+                f"rescued with --fallback diminished, which replaces the written chord"
+            )
+        written = write_tab_html(
+            arrangement.steps,
+            args.html,
+            title=solo.title or f"melid {solo.melid}",
+            subtitle=f"{solo.performer} - {solo.key}".strip(" -"),
+            measures_per_line=args.bars_per_line,
+            show_melody=args.melody,
+            show_mutes=args.mutes,
+            notes=provenance,
+        )
+        print(f"\nwrote {written}")
     return 0
 
 
@@ -1567,6 +1657,12 @@ def arrange_head(
     steps: List[ArrangementStep] = []
     previous: Optional[Voicing] = None
     for index, (melody, quality, name) in enumerate(triples):
+        # The slot's own (bar, beat, duration), so the staff renderer can lay the
+        # chords on their real beats. Lengths match by construction; the guard is
+        # so a hand-built Skeleton cannot shift the timings onto the wrong step.
+        bar, beat, duration = (
+            built.timings[index] if index < len(built.timings) else (None, None, None)
+        )
         if index in retry:
             # Re-resolve this step as a dim7 and remember that we did, so the
             # caller can report which chords were substituted.
@@ -1582,7 +1678,10 @@ def arrange_head(
             voicing = engine.get_melody_only_voicing(Note(melody))
             if voicing is None:
                 continue
-            step = ArrangementStep(chord=name, melody=melody, voicing=voicing, melody_only=True)
+            step = ArrangementStep(
+                chord=name, melody=melody, voicing=voicing, melody_only=True,
+                bar=bar, beat=beat, duration=duration,
+            )
             steps.append(step)
             previous = voicing
             continue
@@ -1591,7 +1690,10 @@ def arrange_head(
         voicing = _arrange_step_with_bass(engine, melody, quality, name, bass, previous)
         if voicing is None:
             continue
-        steps.append(ArrangementStep(chord=name, melody=melody, voicing=voicing))
+        steps.append(ArrangementStep(
+            chord=name, melody=melody, voicing=voicing,
+            bar=bar, beat=beat, duration=duration,
+        ))
         previous = voicing
 
     built.rescued = len(unresolved)
