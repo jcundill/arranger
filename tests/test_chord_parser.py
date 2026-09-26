@@ -79,6 +79,13 @@ class TestChordToneSets(unittest.TestCase):
             ("M9", "maj9"),
             ("69", "6/9"),
             ("  m7  ", "m7"),
+            # triads and suspended chords ("dim" deliberately still means dim7)
+            ("M", "maj"),
+            ("min", "m"),
+            ("-", "m"),
+            ("+", "aug"),
+            ("sus", "sus4"),
+            ("7sus", "7sus4"),
         ]
         for alias, expected in cases:
             self.assertEqual(ChordParser.canonical_quality(alias), expected, alias)
@@ -105,6 +112,43 @@ class TestChordToneSets(unittest.TestCase):
         """An unsupported quality has no known tones."""
         self.assertEqual(ChordParser.get_chord_tones("not-a-chord"), ())
         self.assertEqual(ChordParser.get_chord_tones("not-a-chord", "Cnot-a-chord"), ())
+
+
+class TestWidenedQualityVocabulary(unittest.TestCase):
+    """Tone sets for the triads, sus, added-note and altered qualities."""
+
+    NEW_QUALITIES = [
+        ("maj", (0, 4, 7)),
+        ("m", (0, 3, 7)),
+        ("aug", (0, 4, 8)),
+        ("sus4", (0, 5, 7)),
+        ("sus2", (0, 2, 7)),
+        ("add9", (0, 2, 4, 7)),
+        ("madd9", (0, 2, 3, 7)),
+        ("7sus4", (0, 5, 7, 10)),
+        ("7b5", (0, 4, 6, 10)),
+        ("7#5", (0, 4, 8, 10)),
+        ("7#11", (0, 4, 6, 7, 10)),
+        ("7b13", (0, 4, 7, 8, 10)),
+        ("maj7#11", (0, 4, 6, 7, 11)),
+        ("m9b5", (0, 2, 3, 6, 10)),
+    ]
+
+    def test_relative_tone_sets(self):
+        for quality, tones in self.NEW_QUALITIES:
+            self.assertEqual(ChordParser.get_chord_tones(quality), tones, quality)
+
+    def test_absolute_tone_sets(self):
+        self.assertEqual(ChordParser.get_chord_tones("7sus4", "G7sus4"), (7, 0, 2, 5))
+        self.assertEqual(ChordParser.get_chord_tones("m9b5", "Am9b5"), (9, 11, 0, 3, 7))
+        self.assertEqual(ChordParser.get_chord_tones("aug", "Caug"), (0, 4, 8))
+
+    def test_bare_major_chord_symbol_is_not_assumed(self):
+        """A name with no written quality ('C') is not guessed to be a major
+        triad; the caller spells it, e.g. 'Cmaj' or 'M'."""
+        self.assertEqual(ChordParser.parse_chord_name("C"), ("C", ""))
+        self.assertEqual(ChordParser.get_chord_tones(""), ())
+        self.assertEqual(ChordParser.get_chord_tones("", "C"), ())
 
 
 if __name__ == "__main__":

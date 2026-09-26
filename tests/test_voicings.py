@@ -1,6 +1,6 @@
 import unittest
 from musthe import Note
-from arranger import VoiceLeadingEngine, Voicing, GuitarFretboard, ChordParser
+from arranger import VoiceLeadingEngine, Voicing, GuitarFretboard, ChordParser, PITCH_CLASS_NAMES
 
 
 class TestDrop2Voicings(unittest.TestCase):
@@ -211,6 +211,136 @@ class TestMelodyStringChoices(unittest.TestCase):
         """An unknown chord quality yields no voicings, whichever soprano strings are allowed."""
         self.assertEqual(self.engine.get_all_drop2_voicings(Note("D5"), "not-a-chord"), [])
         self.assertEqual(self.engine.get_all_drop2_voicings(Note("D5"), "not-a-chord", "Dm7"), [])
+
+
+class TestTriadSusAndAlteredQualities(unittest.TestCase):
+    """Triads, suspended chords and altered colours added to the vocabulary.
+
+    A drop-2 shape needs four voices, so the triad templates double the root an
+    octave below the stack. Every shape must still sound only tones of its own
+    chord, stay inside the five-fret span and pin the melody to the soprano.
+    """
+
+    # (chord name, melody, expected high-E fingering)
+    CASES = [
+        ("Cmaj", "E5", "x-x-10-9-8-12"),
+        ("Cm", "C5", "x-x-5-5-4-8"),
+        ("Caug", "E5", "x-x-10-9-9-12"),
+        ("Gsus4", "C5", "x-x-5-5-3-8"),
+        ("Gsus2", "A4", "x-x-5-2-3-5"),
+        ("Cadd9", "D5", "x-x-10-9-8-10"),
+        ("Cmadd9", "D5", "x-x-10-8-8-10"),
+        ("G7sus4", "C5", "x-x-5-7-6-8"),
+        ("G7b5", "Db5", "x-x-9-10-8-9"),
+        ("G7#5", "Eb5", "x-x-9-10-8-11"),
+        ("G7#11", "Db5", "x-x-9-10-8-9"),
+        ("G7b13", "Eb5", "x-x-9-10-8-11"),
+        ("Cmaj7#11", "F#5", "x-x-14-16-13-14"),
+        ("Am9b5", "B4", "x-x-5-5-4-7"),
+    ]
+
+    def setUp(self):
+        self.engine = VoiceLeadingEngine()
+
+    def test_exact_fingering_and_chord_tone_purity(self):
+        """Each new quality offers one chord-tone-matched inversion per melody,
+        and that shape sounds only pitches of its own chord."""
+        for chord_name, melody, expected in self.CASES:
+            quality = ChordParser.parse_chord_name(chord_name)[1]
+            tones = set(ChordParser.get_chord_tones(quality, chord_name))
+            voicings = self.engine.get_drop2_voicings(Note(melody), quality, chord_name=chord_name)
+            self.assertEqual([v.tab_string() for v in voicings], [expected], chord_name)
+            voicing = voicings[0]
+            self.assertTrue(set(voicing.pitch_classes()) <= tones, f"{chord_name} {voicing.tab_string()}")
+            self.assertLessEqual(voicing.fret_span(), 5, chord_name)
+            self.assertTrue(all(0 <= f <= 18 for f in voicing.active_frets()), chord_name)
+            self.assertEqual(GuitarFretboard.fret_to_midi(5, voicing.frets[5]), Note(melody).midi_note())
+
+    def test_every_chord_tone_is_voiceable_in_the_working_register(self):
+        """In the E4-Bb5 register each chord tone of each new quality gets a pure,
+        playable, chord-tone-matched voicing on one of the two blocks."""
+        checked = 0
+        for quality in ("maj", "m", "aug", "sus4", "sus2", "add9", "madd9", "7sus4",
+                        "7b5", "7#5", "7#11", "7b13", "maj7#11", "m9b5"):
+            for root_str in ("C", "F#"):
+                chord_name = root_str + quality
+                tones = set(ChordParser.get_chord_tones(quality, chord_name))
+                root_pc = Note(root_str + "4").midi_note() % 12
+                for degree in VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT[quality]:
+                    midi = next(m for m in range(64, 83) if m % 12 == (root_pc + degree) % 12)
+                    melody = PITCH_CLASS_NAMES[midi % 12] + str(midi // 12 - 1)
+                    matched = [
+                        v for top_string in (5, 4)
+                        for v in self.engine.get_drop2_voicings(
+                            Note(melody), quality, chord_name=chord_name, top_string=top_string)
+                    ]
+                    if not matched:
+                        # Pre-existing low-register gap, shared with maj7/m7/9/m9:
+                        # the caller falls back to quality-only voicings.
+                        self.assertTrue(
+                            self.engine.get_all_drop2_voicings(Note(melody), quality, chord_name=chord_name),
+                            (chord_name, melody),
+                        )
+                        continue
+                    checked += 1
+                    for v in matched:
+                        self.assertTrue(set(v.pitch_classes()) <= tones, (chord_name, melody, v.tab_string()))
+                        self.assertLessEqual(v.fret_span(), 5, (chord_name, melody))
+                        self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()), (chord_name, melody))
+                        self.assertIn(v.soprano_string(), (5, 4), (chord_name, melody))
+        self.assertGreater(checked, 100)
+
+    def test_symmetrical_qualities_reuse_their_shapes(self):
+        """aug is symmetrical (like dim7), while 7b5/7#11 and 7#5/7b13 need only
+        two distinct shapes each."""
+        def shapes(quality):
+            return {tuple(template) for template in VoiceLeadingEngine.DROP2_INTERVAL_SETS[quality]}
+
+        self.assertEqual(len(shapes("aug")), 1)
+        self.assertEqual(len(shapes("dim7")), 1)
+        self.assertEqual(len(shapes("7b5")), 2)
+        self.assertEqual(len(shapes("7#11")), 2)
+        self.assertEqual(shapes("7b5"), shapes("7#11"))
+        self.assertEqual(shapes("7#5"), shapes("7b13"))
+
+    def test_aliases_reach_the_new_qualities(self):
+        """M/min/-/+/sus/7sus resolve to the canonical qualities' voicings."""
+        cases = [
+            ("M", "maj", "Cmaj", "E5"),
+            ("min", "m", "Cm", "C5"),
+            ("-", "m", "Cm", "C5"),
+            ("+", "aug", "Caug", "E5"),
+            ("sus", "sus4", "Gsus4", "C5"),
+            ("7sus", "7sus4", "G7sus4", "C5"),
+        ]
+        for alias, canonical, chord_name, melody in cases:
+            expected = self.engine.get_drop2_voicings(Note(melody), canonical, chord_name=chord_name)
+            aliased = self.engine.get_drop2_voicings(Note(melody), alias, chord_name=chord_name)
+            self.assertTrue(expected, chord_name)
+            self.assertEqual([v.tab_string() for v in aliased], [v.tab_string() for v in expected], alias)
+
+
+class TestQualityTableInvariants(unittest.TestCase):
+    """Structural rules that keep the quality tables in step with each other."""
+
+    def test_templates_and_degree_offsets_have_one_entry_each(self):
+        for quality, degrees in VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT.items():
+            templates = VoiceLeadingEngine.DROP2_INTERVAL_SETS[quality]
+            self.assertEqual(len(templates), len(degrees), quality)
+
+    def test_templates_are_four_voice_drop2_shapes(self):
+        for quality in VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT:
+            for template in VoiceLeadingEngine.DROP2_INTERVAL_SETS[quality]:
+                self.assertEqual(len(template), 4, quality)
+                self.assertEqual(template[0], 0, quality)
+                self.assertEqual(template, sorted(template, reverse=True), (quality, template))
+                self.assertTrue(all(-19 <= offset < 0 for offset in template[1:]), (quality, template))
+
+    def test_every_top_degree_is_a_chord_tone(self):
+        for quality, degrees in VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT.items():
+            tones = {tone % 12 for tone in ChordParser.CHORD_TONES_FROM_ROOT[quality]}
+            for degree in degrees:
+                self.assertIn(degree % 12, tones, (quality, degree))
 
 
 if __name__ == "__main__":

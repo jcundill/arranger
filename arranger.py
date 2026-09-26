@@ -27,7 +27,7 @@ MELODY_STRING_CHOICES = (5, 4)
 
 # Library version. Kept here as the single source of truth; pyproject.toml reads
 # it via [tool.setuptools.dynamic] instead of duplicating the number.
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 
 @dataclass
@@ -151,6 +151,15 @@ class ChordParser:
         "M7": "maj7",
         "M9": "maj9",
         "69": "6/9",
+        # triads and suspended chords. Note the bare major-third symbol "M" is a
+        # triad here while "M7" stays a major seventh; "dim" deliberately keeps
+        # resolving to dim7 (the diminished triad is not voiced by this library).
+        "M": "maj",
+        "min": "m",
+        "-": "m",
+        "+": "aug",
+        "sus": "sus4",
+        "7sus": "7sus4",
     }
 
     # Every chord tone of each quality, as pitch classes relative to the root
@@ -176,6 +185,26 @@ class ChordParser:
         "9": (0, 2, 4, 7, 10),
         "6/9": (0, 2, 4, 7, 9),
         "13": (0, 2, 4, 7, 9, 10),
+        # Triads and suspended chords. A drop-2 shape needs four voices, so the
+        # triad templates double the root an octave below the stack.
+        "maj": (0, 4, 7),
+        "m": (0, 3, 7),
+        "aug": (0, 4, 8),
+        "sus4": (0, 5, 7),
+        "sus2": (0, 2, 7),
+        # Added-note colours
+        "add9": (0, 2, 4, 7),
+        "madd9": (0, 2, 3, 7),
+        # Suspended and altered dominants
+        "7sus4": (0, 5, 7, 10),
+        "7b5": (0, 4, 6, 10),
+        "7#5": (0, 4, 8, 10),
+        # Colour qualities whose four-note shapes omit a tone, so the full tone
+        # set is deliberately wider than the notes any one shape sounds.
+        "7#11": (0, 4, 6, 7, 10),
+        "7b13": (0, 4, 7, 8, 10),
+        "maj7#11": (0, 4, 6, 7, 11),
+        "m9b5": (0, 2, 3, 6, 10),
     }
 
     @staticmethod
@@ -340,6 +369,99 @@ class VoiceLeadingEngine:
             [0, -3, -6, -13],   # b7 in top voice
             [0, -5, -11, -14],  # 13th in top voice
         ],
+
+        # --- Triads (four voices: the root is doubled an octave below the stack) ---
+        "maj": [
+            [0, -8, -12, -17],  # Root in top voice (root doubled underneath)
+            [0, -9, -12, -16],  # 3rd in top voice
+            [0, -7, -12, -15],  # 5th in top voice
+        ],
+        "m": [
+            [0, -9, -12, -17],  # Root in top voice (root doubled underneath)
+            [0, -8, -12, -15],  # b3 in top voice
+            [0, -7, -12, -16],  # 5th in top voice
+        ],
+        "aug": [
+            # Symmetrical, so every inversion fingers identically (like dim7).
+            [0, -8, -12, -16],  # Root in top voice
+            [0, -8, -12, -16],  # 3rd in top voice
+            [0, -8, -12, -16],  # #5 in top voice
+        ],
+
+        # --- Suspended chords ---
+        "sus4": [
+            [0, -7, -12, -17],   # Root in top voice
+            [0, -10, -12, -17],  # 4th in top voice
+            [0, -7, -12, -14],   # 5th in top voice
+        ],
+        "sus2": [
+            [0, -10, -12, -17],  # Root in top voice
+            [0, -7, -12, -14],   # 2nd (9th) in top voice
+            [0, -7, -12, -17],   # 5th in top voice
+        ],
+        "7sus4": [
+            [0, -5, -7, -14],   # Root in top voice (3rd replaced by the 4th)
+            [0, -7, -10, -17],  # 4th in top voice
+            [0, -7, -9, -14],   # 5th in top voice
+            [0, -5, -10, -15],  # b7 in top voice
+        ],
+
+        # --- Added-note colours ---
+        "add9": [
+            [0, -8, -10, -17],  # Root in top voice (5th omitted)
+            [0, -7, -10, -14],  # 9th in top voice
+            [0, -4, -9, -14],   # 3rd in top voice
+            [0, -5, -7, -15],   # 5th in top voice
+        ],
+        "madd9": [
+            [0, -9, -10, -17],  # Root in top voice (5th omitted)
+            [0, -7, -11, -14],  # 9th in top voice
+            [0, -3, -8, -13],   # b3 in top voice
+            [0, -5, -7, -16],   # 5th in top voice
+        ],
+
+        # --- Altered and Lydian dominants ---
+        "7b5": [
+            # Symmetrical, so only two distinct shapes cover the four inversions.
+            [0, -6, -8, -14],   # Root in top voice
+            [0, -6, -10, -16],  # 3rd in top voice
+            [0, -6, -8, -14],   # b5 in top voice
+            [0, -6, -10, -16],  # b7 in top voice
+        ],
+        "7#5": [
+            [0, -4, -8, -14],   # Root in top voice
+            [0, -6, -8, -16],   # 3rd in top voice
+            [0, -8, -10, -16],  # #5 in top voice
+            [0, -6, -10, -14],  # b7 in top voice
+        ],
+        "7#11": [
+            # The #11 replaces the perfect 5th: root, 3rd, #11, b7.
+            [0, -6, -8, -14],   # Root in top voice (5th omitted)
+            [0, -6, -10, -16],  # 3rd in top voice
+            [0, -6, -8, -14],   # #11 in top voice
+            [0, -6, -10, -16],  # b7 in top voice
+        ],
+        "7b13": [
+            # b13 is enharmonic with #5, so the shapes match 7#5.
+            [0, -4, -8, -14],   # Root in top voice (natural 5th omitted)
+            [0, -6, -8, -16],   # 3rd in top voice
+            [0, -8, -10, -16],  # b13 in top voice
+            [0, -6, -10, -14],  # b7 in top voice
+        ],
+        "maj7#11": [
+            [0, -6, -8, -13],   # Root in top voice (5th omitted)
+            [0, -5, -10, -16],  # 3rd in top voice
+            [0, -6, -7, -14],   # #11 in top voice
+            [0, -7, -11, -17],  # 7th in top voice
+        ],
+        "m9b5": [
+            # Half-diminished ninth: the m9 shapes with the 5th flattened.
+            [0, -9, -10, -14],  # Root in top voice (b5 omitted: root-9-b3-b7)
+            [0, -5, -9, -13],   # b3 in top voice (rootless b3-b5-b7-9)
+            [0, -4, -8, -15],   # b5 in top voice
+            [0, -7, -8, -16],   # b7 in top voice
+            [0, -8, -11, -16],  # 9th in top voice
+        ],
     }
 
     # Aliases for flexible chord quality notation
@@ -376,6 +498,20 @@ class VoiceLeadingEngine:
         "9": [0, 4, 7, 10, 2],
         "6/9": [0, 4, 7, 9, 2],
         "13": [0, 4, 7, 10, 9],
+        "maj": [0, 4, 7],
+        "m": [0, 3, 7],
+        "aug": [0, 4, 8],
+        "sus4": [0, 5, 7],
+        "sus2": [0, 2, 7],
+        "add9": [0, 2, 4, 7],
+        "madd9": [0, 2, 3, 7],
+        "7sus4": [0, 5, 7, 10],
+        "7b5": [0, 4, 6, 10],
+        "7#5": [0, 4, 8, 10],
+        "7#11": [0, 4, 6, 10],
+        "7b13": [0, 4, 8, 10],
+        "maj7#11": [0, 4, 6, 11],
+        "m9b5": [0, 3, 6, 10, 2],
     }
 
     # Non-chord-tone strategy routing: canonical base quality -> {melody degree
@@ -383,10 +519,15 @@ class VoiceLeadingEngine:
     # Only entries that are musically unambiguous are listed; anything missing
     # leaves the melody to the existing quality-only fallback.
     NON_CHORD_TONE_EXTENSIONS = {
-        "maj7": {2: "maj9", 9: "6/9"},  # 9th, 6th/13th
-        "6": {2: "6/9"},                # 9th
-        "m7": {2: "m9"},                # 9th
-        "7": {2: "9", 9: "13"},         # 9th, 13th
+        "maj7": {2: "maj9", 6: "maj7#11", 9: "6/9"},   # 9th, #11, 6th/13th
+        "6": {2: "6/9"},                               # 9th
+        "m7": {2: "m9"},                               # 9th
+        "m7b5": {2: "m9b5"},                           # 9th (half-diminished 9)
+        # 9th, 11th (the suspended dominant), #11, b13, 13th
+        "7": {2: "9", 5: "7sus4", 6: "7#11", 8: "7b13", 9: "13"},
+        "7b9": {5: "7sus4", 6: "7#11", 8: "7b13"},     # 11th, #11, b13
+        "9": {6: "7#11", 9: "13"},                     # #11, 13th
+        "13": {6: "7#11"},                             # #11
     }
 
     # Accepted values for arrange_progression(non_chord_tone=...).

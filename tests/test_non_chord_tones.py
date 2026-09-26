@@ -1,6 +1,6 @@
 import unittest
 from musthe import Note
-from arranger import VoiceLeadingEngine
+from arranger import ChordParser, VoiceLeadingEngine
 
 
 class TestNonChordToneDetection(unittest.TestCase):
@@ -88,6 +88,74 @@ class TestNonChordToneResolution(unittest.TestCase):
     def test_legacy_strategy_never_substitutes(self):
         """The legacy strategy keeps the historical behaviour untouched."""
         self.assertIsNone(self.engine.resolve_non_chord_tone(Note("D5"), "maj7", "Cmaj7", "legacy"))
+
+
+class TestExtendedExtensionMappings(unittest.TestCase):
+    """The widened NON_CHORD_TONE_EXTENSIONS routing: 11ths, #11s, b13s and the
+    half-diminished ninth now have somewhere to go instead of the legacy
+    quality-only fallback."""
+
+    def setUp(self):
+        self.engine = VoiceLeadingEngine()
+
+    def test_every_mapping_target_contains_the_degree_and_can_top_it(self):
+        """Table invariant: a routed substitute must contain the melody degree as
+        a chord tone *and* offer an inversion that puts it on top - the two
+        conditions resolve_non_chord_tone relies on. The degree must really be
+        outside the source chord, otherwise no substitution is needed."""
+        for quality, mapping in VoiceLeadingEngine.NON_CHORD_TONE_EXTENSIONS.items():
+            source_tones = {tone % 12 for tone in ChordParser.CHORD_TONES_FROM_ROOT[quality]}
+            for degree, target in mapping.items():
+                self.assertNotIn(degree % 12, source_tones, (quality, degree))
+                target_tones = {tone % 12 for tone in ChordParser.CHORD_TONES_FROM_ROOT[target]}
+                self.assertIn(degree % 12, target_tones, (quality, degree, target))
+                target_top = {d % 12 for d in VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT[target]}
+                self.assertIn(degree % 12, target_top, (quality, degree, target))
+
+    def test_new_routes_resolve_to_their_extension(self):
+        cases = [
+            (Note("C5"), "7", "G7", ("7sus4", "G7sus4")),          # 11th over a dominant
+            (Note("C#5"), "7", "G7", ("7#11", "G7#11")),           # #11
+            (Note("Eb5"), "7", "G7", ("7b13", "G7b13")),           # b13
+            (Note("F#5"), "maj7", "Cmaj7", ("maj7#11", "Cmaj7#11")),
+            (Note("B4"), "m7b5", "Am7b5", ("m9b5", "Am9b5")),
+            (Note("C5"), "7b9", "G7b9", ("7sus4", "G7sus4")),
+            (Note("C#5"), "7b9", "G7b9", ("7#11", "G7#11")),
+            (Note("Eb5"), "7b9", "G7b9", ("7b13", "G7b13")),
+            (Note("C#5"), "9", "G9", ("7#11", "G7#11")),
+            (Note("C#5"), "13", "G13", ("7#11", "G7#11")),
+        ]
+        for melody, quality, name, expected in cases:
+            self.assertEqual(
+                self.engine.resolve_non_chord_tone(melody, quality, name, "extension"),
+                expected,
+                (name, str(melody)),
+            )
+
+    def test_the_mapped_notes_really_are_non_chord_tones(self):
+        """Guard the cases above: each melody sits outside its written chord."""
+        for melody, quality, name in (
+            (Note("C5"), "7", "G7"),
+            (Note("F#5"), "maj7", "Cmaj7"),
+            (Note("B4"), "m7b5", "Am7b5"),
+        ):
+            self.assertFalse(self.engine.is_chord_tone(melody, quality, name))
+
+    def test_end_to_end_extension_steps_use_the_new_colours(self):
+        """A bar that hits the new colours: each non-chord melody becomes the
+        named substitute, and every sounding pitch belongs to that substitute."""
+        progression = [
+            ("C5", "7", "G7"),         # the 11th -> G7sus4
+            ("F#5", "maj7", "Cmaj7"),  # the #11 -> Cmaj7#11
+            ("B4", "m7b5", "Am7b5"),   # the 9th -> Am9b5
+        ]
+        result = self.engine.arrange_progression(progression)
+        self.assertEqual([step.harmonized_as for step in result], ["G7sus4", "Cmaj7#11", "Am9b5"])
+        self.assertTrue(all(step.non_chord_tone for step in result))
+        self.assertTrue(all(step.strategy == "extension" for step in result))
+        for step, quality in zip(result, ("7sus4", "maj7#11", "m9b5")):
+            tones = set(ChordParser.get_chord_tones(quality, step.harmonized_as))
+            self.assertTrue(set(step.voicing.pitch_classes()) <= tones, step.voicing.tab_string())
 
 
 class TestSustainInnerVoices(unittest.TestCase):
