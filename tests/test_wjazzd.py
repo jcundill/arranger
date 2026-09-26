@@ -7,7 +7,7 @@ table, the record types, the selector parser) always run.
 
 import unittest
 
-from arranger import ChordParser
+from arranger import NO_CHORD, ChordParser, Note
 from wjazzd import (
     DEFAULT_DB,
     SECTION_TYPES,
@@ -22,7 +22,15 @@ from wjazzd import (
     matching_sections,
     parse_section_selector,
     parse_weimar_chord,
+    arrange_head,
+    bass_cost,
+    build_skeleton,
+    promote_slash_chord,
+    bass_pitch_class,
+    _arrange_step_with_bass,
     select_head,
+    skeleton,
+    SKELETON_STRATEGIES,
     _is_transposed_repeat,
     _seed_span,
 )
@@ -571,6 +579,288 @@ class TestSelectHead(unittest.TestCase):
             self.assertLessEqual(head.start, head.end, solo.melid)
         # The plan records 455 of 456 transcriptions carrying an A-form.
         self.assertGreaterEqual(found, 400)
+
+
+class TestSlashChordRules(unittest.TestCase):
+    """Rules B and C: the slash bass, handled in the loader with the engine frozen."""
+
+    def test_rule_b_promotes_a_minor_triad_over_its_seventh(self):
+        """A-/G and C-/Bb are Am7/G and Cm7/Bb: a triad whose bass is the 7th."""
+        self.assertEqual(promote_slash_chord("A", "m", "G"), "m7")
+        self.assertEqual(promote_slash_chord("C", "m", "Bb"), "m7")
+        self.assertEqual(promote_slash_chord("D", "m", "C"), "m7")
+
+    def test_rule_b_promotes_a_major_triad_over_its_seventh(self):
+        """C/Bb is written for what a musician reads as C7."""
+        self.assertEqual(promote_slash_chord("C", "maj", "Bb"), "maj7")
+
+    def test_rule_b_leaves_other_basses_alone(self):
+        """A first-inversion triad is still a triad; only the 7th implies a 7th."""
+        self.assertEqual(promote_slash_chord("A", "m", "C"), "m")
+        self.assertEqual(promote_slash_chord("C", "maj", "E"), "maj")
+
+    def test_rule_b_leaves_non_triads_alone(self):
+        """A seventh chord already says what it is."""
+        self.assertEqual(promote_slash_chord("F", "m7", "Ab"), "m7")
+        self.assertEqual(promote_slash_chord("E", "7", "G"), "7")
+
+    def test_rule_b_without_a_bass_is_a_no_op(self):
+        """No bass, nothing to promote."""
+        self.assertEqual(promote_slash_chord("A", "m", None), "m")
+
+    def test_rule_c_measures_the_lowest_note(self):
+        """The cost is the distance from the bass to the lowest sounding pitch."""
+        self.assertEqual(bass_cost([60, 64, 67], 0), 0)   # C in the bass
+        self.assertEqual(bass_cost([62, 65, 69], 0), 2)   # D above a C bass
+        self.assertEqual(bass_cost([61, 64, 67], 0), 1)   # C# above a C bass
+
+    def test_rule_c_wraps_around_the_octave(self):
+        """B is one semitone below C, not eleven above it."""
+        self.assertEqual(bass_cost([59, 62, 65], 0), 1)
+
+    def test_rule_c_without_a_bass_costs_nothing(self):
+        """An unslashed chord has no bass preference to honour."""
+        self.assertEqual(bass_cost([60, 64], None), 0)
+
+    def test_rule_c_changes_the_pick_in_a_real_corpus_case(self):
+        """The bass preference is not a no-op on real material.
+
+        melid 46 is C-/Bb - a minor triad over its own seventh, so rule B makes
+        it Cm7/Bb - with Db in the melody. The engine's hand-position rule alone
+        picks x-x-9-9-9-9, whose lowest note is D; the bass rule picks
+        x-x-8-10-9-9, which actually sounds the Bb the notation asks for.
+        """
+        from arranger import VoiceLeadingEngine
+
+        root, quality, bass, melody, name = "C", "m", "Bb", "Db5", "Cm7"
+        promoted = promote_slash_chord(root, quality, bass)
+        self.assertEqual(promoted, "m7")
+        plain = min(
+            VoiceLeadingEngine.get_all_drop2_voicings(Note(melody), promoted, chord_name=name),
+            key=lambda v: abs(v.avg_fret - 9),
+        )
+        with_bass = _arrange_step_with_bass(
+            VoiceLeadingEngine(), melody, promoted, name, bass, None
+        )
+        self.assertIsNotNone(with_bass)
+        assert with_bass is not None
+        self.assertNotEqual(plain.tab_string(), with_bass.tab_string())
+        self.assertEqual(bass_cost(with_bass.midi_notes(), bass_pitch_class(bass)), 0)
+
+
+@requires_db
+class TestSkeletonStrategies(unittest.TestCase):
+    """The five reductions, measured on selected heads rather than assumed."""
+
+    def head_section(self, melid):
+        head = select_head(melid)
+        assert head is not None
+        return load_solo(melid), (head.start, head.end)
+
+    def test_strategies_are_ordered_by_density(self):
+        """Each strategy is at least as dense as the one before it."""
+        solo, section = self.head_section(218)
+        counts = [len(skeleton(solo, name, section)) for name in SKELETON_STRATEGIES]
+        self.assertEqual(counts, sorted(counts), counts)
+
+    def test_blue_train_head_step_counts(self):
+        """Blue Train's 12-bar head, pinned so a change to the grid is visible."""
+        solo, section = self.head_section(218)
+        self.assertEqual(
+            {name: len(skeleton(solo, name, section)) for name in SKELETON_STRATEGIES},
+            {"chords": 7, "beats": 36, "eighths": 62, "sixteenths": 80, "notes": 80},
+        )
+
+    def test_attya_head_step_counts(self):
+        """The trimmed 8-bar ATTYA head, the case the feature usually sees."""
+        solo, section = self.head_section(342)
+        self.assertEqual(
+            {name: len(skeleton(solo, name, section)) for name in SKELETON_STRATEGIES},
+            {"chords": 7, "beats": 27, "eighths": 29, "sixteenths": 31, "notes": 31},
+        )
+
+    def test_sixteenths_and_notes_agree_at_division_four(self):
+        """A note-per-slot grid and a sixteenth grid coincide here.
+
+        They differ only where a player doubles notes inside one sixteenth, or
+        where the division is not 4, which is why `notes` is kept for
+        diagnostics rather than as a finer default than `sixteenths`.
+        """
+        solo, section = self.head_section(218)
+        divisions = {n.division for n in solo.notes_in_bars(*section)}
+        self.assertIn(4, divisions)
+        self.assertEqual(
+            len(skeleton(solo, "sixteenths", section)), len(skeleton(solo, "notes", section))
+        )
+
+    def test_unknown_strategy_raises(self):
+        """A typo is a usage error, not a silent fallback."""
+        solo, section = self.head_section(218)
+        with self.assertRaises(ValueError):
+            skeleton(solo, "quavers", section)
+
+    def test_unknown_pick_raises(self):
+        """A typo in the slot pick is a usage error too."""
+        solo, section = self.head_section(218)
+        with self.assertRaises(ValueError):
+            skeleton(solo, "eighths", section, pick="middle")
+
+    def test_pick_longest_prefers_the_sustained_note(self):
+        """Both picks are exercised; the beat grid is where they differ."""
+        solo, section = self.head_section(218)
+        first = skeleton(solo, "beats", section, pick="first")
+        longest = skeleton(solo, "beats", section, pick="longest")
+        self.assertEqual(len(first), len(longest))
+        self.assertTrue(first)
+        self.assertNotEqual(first, longest)
+
+    def test_section_narrows_to_the_head(self):
+        """A skeleton of a span is shorter than one of the whole transcription."""
+        solo, section = self.head_section(218)
+        self.assertLess(
+            len(skeleton(solo, "eighths", section)), len(skeleton(solo, "eighths", None))
+        )
+
+    def test_every_triple_carries_a_usable_quality(self):
+        """No step reaches the engine with a quality it cannot voice."""
+        solo, section = self.head_section(218)
+        for melody, quality, name in skeleton(solo, "eighths", section):
+            if quality == NO_CHORD:
+                continue
+            self.assertIn(quality, ChordParser.CHORD_TONES_FROM_ROOT, name)
+
+
+@requires_db
+class TestRegisterLift(unittest.TestCase):
+    """`--lift auto`: the whole head, moved only when that measurably helps."""
+
+    def head_section(self, melid):
+        head = select_head(melid)
+        assert head is not None
+        return load_solo(melid), head, (head.start, head.end)
+
+    def test_auto_lifts_a_head_that_is_an_octave_too_low(self):
+        """Metheny's ATTYA head is 15 notes below B3; lifting voices all of it."""
+        solo, head, section = self.head_section(342)
+        self.assertTrue([n for n in solo.notes_in_bars(*section) if n.pitch < 59])
+        built = build_skeleton(solo, "eighths", section, lift="auto")
+        self.assertEqual(built.lift, 12)
+        self.assertGreater(built.coverage_lifted[0], built.coverage[0])
+        self.assertTrue(all(Note(m).midi_note() >= 59 for m, _, _ in built.triples))
+
+    def test_none_never_lifts(self):
+        """`none` leaves the head exactly as transcribed."""
+        solo, head, section = self.head_section(342)
+        built = build_skeleton(solo, "eighths", section, lift="none")
+        self.assertEqual(built.lift, 0)
+        self.assertEqual(list(built), skeleton(solo, "eighths", section))
+
+    def test_always_lifts_regardless(self):
+        """`always` is the manual override, not a measurement."""
+        solo, head, section = self.head_section(218)
+        self.assertEqual(build_skeleton(solo, "eighths", section, lift="always").lift, 12)
+
+    def test_per_note_lifts_only_the_unplayable_notes(self):
+        """`per-note` is opt-in because it tears the line; it is still available."""
+        solo, head, section = self.head_section(218)
+        built = build_skeleton(solo, "eighths", section, lift="per-note")
+        self.assertTrue(any("per-note" in n for n in built.notes))
+        self.assertTrue(any(Note(m).midi_note() >= 59 for m, _, _ in built.triples))
+
+    def test_whole_head_lift_preserves_every_interval(self):
+        """A uniform transposition cannot distort the line.
+
+        This is what makes whole-head lifting safe and per-note lifting dangerous:
+        a descending 3rd stays a descending 3rd. Compared note-for-note on the
+        same triples, since the reduction drops steps that cannot be translated.
+        """
+        solo, head, section = self.head_section(342)
+        base = skeleton(solo, "eighths", section)
+        lifted = list(build_skeleton(solo, "eighths", section, lift="always"))
+        self.assertEqual(len(base), len(lifted))
+        for (original, quality, _), (moved, moved_quality, _) in zip(base, lifted):
+            self.assertEqual(quality, moved_quality)
+            if quality == NO_CHORD:
+                self.assertEqual(original, moved)
+                continue
+            self.assertEqual(Note(moved).midi_note() - Note(original).midi_note(), 12)
+
+    def test_unknown_lift_mode_raises(self):
+        """A typo is a usage error."""
+        solo, head, section = self.head_section(218)
+        with self.assertRaises(ValueError):
+            build_skeleton(solo, "eighths", section, lift="maybe")
+
+    def test_nc_steps_are_not_transposed(self):
+        """An unaccompanied bar keeps the pitch it was transcribed at."""
+        solo = load_solo(218)
+        plain = build_skeleton(solo, "eighths", (0, 1), lift="none")
+        lifted = build_skeleton(solo, "eighths", (0, 1), lift="always")
+        nc = [(m, q) for m, q, _ in plain.triples if q == NO_CHORD]
+        self.assertTrue(nc)
+        lifted_nc = [m for m, q, _ in lifted.triples if q == NO_CHORD]
+        self.assertEqual([m for m, _ in nc], lifted_nc)
+
+
+@requires_db
+class TestArrangeHead(unittest.TestCase):
+    """The end-to-end path: head -> skeleton -> register -> voicings."""
+
+    def arrange(self, melid, **kwargs):
+        head = select_head(melid)
+        assert head is not None
+        return arrange_head(load_solo(melid), head, **kwargs)
+
+    def test_every_harmonised_step_obeys_the_playability_invariant(self):
+        """Four contiguous strings, a fret span of 5 or less, melody on top."""
+        for melid in (218, 342, 266):
+            for step in self.arrange(melid).steps:
+                if step.melody_only:
+                    self.assertEqual(len(step.voicing.active_frets()), 1, melid)
+                    continue
+                active = [i for i, f in enumerate(step.voicing.frets) if f >= 0]
+                self.assertEqual(len(active), 4, f"{melid} {step.tab_line()}")
+                self.assertEqual(active, list(range(active[0], active[0] + 4)), melid)
+                self.assertLessEqual(step.voicing.fret_span(), 5, melid)
+                self.assertIn(step.voicing.soprano_string(), (5, 4), melid)
+
+    def test_nc_bars_become_melody_only_steps(self):
+        """Blue Train's bar 0 is NC; it is voiced alone, not harmonised."""
+        result = arrange_head(load_solo(218), section=(0, 1))
+        self.assertTrue(result.steps)
+        for step in result.steps:
+            self.assertTrue(step.melody_only)
+            self.assertFalse(step.non_chord_tone)
+            self.assertIsNone(step.harmonized_as)
+            self.assertEqual(len(step.voicing.active_frets()), 1)
+
+    def test_diminished_fallback_is_off_by_default(self):
+        """Without the flag, no written chord is replaced."""
+        plain = self.arrange(218)
+        self.assertEqual(plain.rescued, ())
+        self.assertFalse(any("diminished" in n for n in plain.notes))
+
+    def test_diminished_fallback_rescues_unresolved_steps(self):
+        """With the flag on, the steps nothing else could resolve get a dim7."""
+        result = self.arrange(218, fallback="diminished")
+        self.assertTrue(result.rescued, "expected some steps to be rescued")
+        self.assertEqual(len(result.rescued), result.skeleton.rescued)
+        self.assertTrue(any("diminished" in n for n in result.notes))
+
+    def test_the_recovery_count_is_reported_without_the_flag(self):
+        """A user can see what they would gain without opting in."""
+        self.assertGreater(self.arrange(218).skeleton.rescued, 0)
+
+    def test_unknown_fallback_raises(self):
+        """A typo is a usage error."""
+        with self.assertRaises(ValueError):
+            self.arrange(218, fallback="dominant")
+
+    def test_a_head_arranges_to_real_voicings(self):
+        """The worked example produces printable tab."""
+        result = self.arrange(218)
+        self.assertGreater(len(result.steps), 20)
+        self.assertTrue(all(step.tab_line() for step in result.steps))
 
 
 if __name__ == "__main__":

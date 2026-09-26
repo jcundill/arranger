@@ -16,11 +16,42 @@ It provides:
 
 Deliberately stdlib-only (`sqlite3`): `musthe` remains the sole dependency.
 
+It provides:
+
+* `WEIMAR_QUALITY_ALIASES` / `parse_weimar_chord` - the database's chord notation
+  translated into the library's chord qualities, with unmapped suffixes reported
+  rather than guessed.
+* `list_solos` / `list_sections` / `parse_section_selector` / `load_solo` /
+  `load_section` - metadata, span selection and note loading, with each note's
+  active chord reconstructed by a forward fill over the `beats` table.
+* `select_head` - the head, found on the chord progression rather than the form
+  label.
+* `skeleton` / `build_skeleton` / `arrange_head` - reducing a head to a playable
+  skeleton, choosing its register, and voicing it.
+
+Two defaults were settled by measurement rather than by assumption, and the
+numbers are recorded here because they are the reason for the defaults:
+
+* **Skeleton density is `eighths`.** Across 116 sampled heads the median
+  voiced-step rate is 85.9% for eighths against 85.6% for sixteenths and 85.7%
+  for beats, so the extra density buys no extra playability; eighths keeps 32
+  steps where sixteenths keeps 38. `chords` voices everything but yields four
+  steps for an eight-bar head, which is a chord list rather than an arrangement.
+* **Heads are often lifted an octave.** `--lift auto` compares how much of the
+  head each version voices and keeps the better one. On the *trimmed* head this
+  fires more often than the plan expected: Blue Train's head voices 51 of 62
+  steps as transcribed and 60 of 62 an octave up, so it is lifted, because the
+  head dips to Eb3. The plan's "Blue Train is not transposed" figure was
+  measured on the untrimmed 79-bar A-block, where those few low notes were
+  diluted across 845 notes.
+
 See `CORPUS_PLAN.md` for the measurements the design decisions rest on.
 """
 
 from __future__ import annotations
 
+import contextlib
+import io
 import os
 import re
 import sqlite3
@@ -29,8 +60,15 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
-from arranger import NO_CHORD, ChordParser
-from musthe import Note
+from arranger import (
+    NO_CHORD,
+    PITCH_CLASS_NAMES,
+    ArrangementStep,
+    ChordParser,
+    Note,
+    Voicing,
+    VoiceLeadingEngine,
+)
 
 __all__ = [
     "DEFAULT_DB",
@@ -49,6 +87,10 @@ __all__ = [
     "load_section",
     "HeadSelection",
     "select_head",
+    "Skeleton",
+    "build_skeleton",
+    "arrange_head",
+    "promote_slash_chord",
 ]
 
 
@@ -243,7 +285,9 @@ class NoteEvent:
     `pitch` is the MIDI number, `bar` and `beat` its position (bar may be
     negative). `chord` is the raw Weimar symbol from the forward fill - "NC" for
     a bar with no harmony - and `quality` is its library translation, or None
-    when the suffix is unmapped.
+    when the suffix is unmapped. `tatum` is the note's position within its beat
+    (1-based) and `division` how many tatums a beat is divided into, which is
+    what the rhythmic skeletons derive their grid from.
     """
 
     bar: int
@@ -252,6 +296,7 @@ class NoteEvent:
     duration: float
     onset: float = 0.0
     tatum: float = 0.0
+    division: int = 4
     chord: str = ""
     quality: Optional[str] = None
     bass: Optional[str] = None
@@ -544,7 +589,7 @@ def load_solo(melid: int, db_path: Optional[Union[str, Path]] = None) -> Solo:
         timeline = _chord_timeline(melid, connection)
         note_rows = connection.execute(
             """
-            SELECT bar, beat, pitch, duration, onset, tatum
+            SELECT bar, beat, pitch, duration, onset, tatum, division
             FROM melody WHERE melid = ? ORDER BY bar, beat, onset
             """,
             (melid,),
@@ -568,6 +613,7 @@ def load_solo(melid: int, db_path: Optional[Union[str, Path]] = None) -> Solo:
                 duration=float(note_row["duration"] or 0.0),
                 onset=float(note_row["onset"] or 0.0),
                 tatum=float(note_row["tatum"] or 0.0),
+                division=int(note_row["division"] or 4),
                 chord=chord,
                 quality=quality,
                 bass=bass,
@@ -921,6 +967,495 @@ def select_head(melid: int, db_path: Optional[Union[str, Path]] = None) -> Optio
         degraded=degraded,
         note="; ".join(notes),
     )
+
+
+# ---------------------------------------------------------------------------
+# Slash chords
+# ---------------------------------------------------------------------------
+
+# The chord qualities that are triads, and so can be promoted to a seventh chord
+# when the notation implies one (rule B).
+_TRIAD_QUALITIES = ("maj", "m")
+
+# Which seventh a triad becomes when its bass note is the seventh, keyed by the
+# triad's own quality. A minor triad over a minor seventh is m7, a major triad
+# over a major seventh is maj7.
+_TRIAD_PROMOTION = {"m": "m7", "maj": "maj7"}
+
+
+def promote_slash_chord(root: str, quality: str, bass: Optional[str]) -> str:
+    """Rule B: promotes a triad to a seventh chord when the bass implies one.
+
+    The database writes `A-/G`, `C-/Bb` and `D/C` for what a musician reads as
+    Am7/G, Cm7/Bb and Dm7/C: a triad whose bass is its own seventh. Naming the
+    seventh makes the melody note a chord tone instead of an unresolved tension,
+    and it recovers the largest group of otherwise inexplicable basses.
+
+    Triads with any other bass, and every non-triad quality, pass through
+    unchanged. A pedal or an inverted bass is honoured by `bass_pitch_class`
+    instead, which is a preference rather than a change of chord.
+    """
+    if bass is None or quality not in _TRIAD_QUALITIES:
+        return quality
+    root_pc = Note(root + "4").midi_note() % 12
+    bass_pc = Note(bass + "4").midi_note() % 12
+    if (bass_pc - root_pc) % 12 == 10:  # the seventh
+        return _TRIAD_PROMOTION[quality]
+    return quality
+
+
+def bass_pitch_class(bass: Optional[str]) -> Optional[int]:
+    """Rule C: the pitch class a slash bass asks for, or None when there is none."""
+    if bass is None:
+        return None
+    return Note(bass + "4").midi_note() % 12
+
+
+def bass_cost(voicing_midis: Sequence[int], bass_pc: Optional[int]) -> int:
+    """How far a voicing's lowest sounding pitch is from the requested bass.
+
+    In semitones, as the smallest interval from the bass pitch class to the
+    lowest note actually played. Zero means the bass is in the voicing; 6 means
+    it is a tritone away. Used only to *prefer* one candidate over another, so a
+    voicing that cannot honour the bass is still usable.
+    """
+    if bass_pc is None or not voicing_midis:
+        return 0
+    lowest = min(voicing_midis) % 12
+    direct = abs(lowest - bass_pc)
+    return min(direct, 12 - direct)
+
+
+# ---------------------------------------------------------------------------
+# Skeletons - reducing a transcribed line to a playable skeleton
+# ---------------------------------------------------------------------------
+
+# The five reduction strategies, coarsest first. A drop-2 voicing is a per-beat
+# object, so a head has to be thinned before it can be arranged: a raw head runs
+# to 10.7 notes per bar, which is not an arrangement.
+SKELETON_STRATEGIES = ("chords", "beats", "eighths", "sixteenths", "notes")
+
+# Which note represents a slot when several notes share it.
+SLOT_PICKS = ("first", "longest")
+
+# How a head may be transposed into the library's playable register.
+#
+# `auto` (the default) is the coverage comparison: build the head as transcribed
+# and again an octave up, and keep whichever voices more steps, with ties going
+# to the original. It is self-correcting and threshold-free, so it cannot be
+# defeated by a median sitting one semitone above an arbitrary cut-off, and it
+# cannot move music that was already fine.
+#
+# `always` and `per-note` are there for when the user knows better. `per-note` is
+# opt-in only: lifting single notes tears the line apart, turning a descending
+# 3rd into a descending 10th.
+LIFT_MODES = ("auto", "none", "always", "per-note")
+
+# An octave is the only transposition considered: the library's window is B3-Bb5,
+# so a head is either an octave too low or already in reach.
+LIFT_SEMITONES = 12
+
+# The library's melody floor, B3. Notes below it are unplayable and get skipped.
+MELODY_FLOOR = 59
+
+
+@dataclass
+class Skeleton:
+    """A reduced line, ready to arrange, with the diagnostics behind it.
+
+    `triples` are the (note, quality, name) tuples for arrange_progression.
+    `lift` is the transposition applied to reach them and `lift_mode` how that was
+    decided. `coverage` and `coverage_lifted` record how many steps each version
+    voiced - the measurement `auto` is defined by. `rescued` is how many steps a
+    diminished retry would have rescued, reported whether or not the retry is
+    enabled, so a user can see what they are missing without opting in.
+    """
+
+    triples: List[Tuple[str, str, str]] = field(default_factory=list)
+    lift: int = 0
+    lift_mode: str = "none"
+    coverage: Tuple[int, int] = (0, 0)
+    coverage_lifted: Tuple[int, int] = (0, 0)
+    rescued: int = 0
+    notes: Tuple[str, ...] = ()
+
+    def __len__(self) -> int:
+        return len(self.triples)
+
+    def __iter__(self):
+        return iter(self.triples)
+
+
+def midi_to_note_name(pitch: int) -> str:
+    """MIDI number to a note name, spelled with flats.
+
+    Flats because the database's keys and chord symbols are flat-based (Eb, Bb,
+    Ab), so a flat spelling is the one that reads correctly next to them.
+    """
+    pitch = int(round(pitch))
+    return f"{PITCH_CLASS_NAMES[pitch % 12]}{pitch // 12 - 1}"
+
+
+def _slot_key(note: NoteEvent, strategy: str) -> Tuple[int, float, int]:
+    """The (bar, beat, subdivision) key a note occupies under a strategy.
+
+    The grid is derived from each note's own `tatum` and `division` rather than
+    assumed to be 4/4 sixteenths: a transcription in division 3 is in triplets,
+    and one in division 2 has no eighths at all. Bars are signed, so pickup
+    material orders correctly with no special case.
+    """
+    if strategy == "beats":
+        return (note.bar, note.beat, 0)
+    if strategy == "eighths":
+        # Two tatums make an eighth. In a triplet division there is no eighth, so
+        # the tatum is used as-is rather than inventing a division that is not there.
+        step = 2 if note.division and note.division % 2 == 0 else 1
+        return (note.bar, note.beat, int((note.tatum - 1) // step))
+    if strategy == "sixteenths":
+        return (note.bar, note.beat, int(note.tatum - 1))
+    # "notes" keeps every note: each gets a slot of its own, ordered by onset.
+    return (note.bar, note.beat, int(round(note.onset * 1000)))
+
+
+def _chord_slots(solo: Solo, lo: int, hi: int) -> List[Tuple[int, float, int]]:
+    """One slot per chord change, at the bar the change starts.
+
+    The `chords` skeleton is the written harmony rather than the melody: it is
+    the natural reading of a slow tune, where the head moves roughly once per bar.
+    """
+    slots: List[Tuple[int, float, int]] = []
+    for bar, chord in solo.chords():
+        if lo <= bar < hi and chord != NO_CHORD:
+            slots.append((bar, 1.0, 0))
+    return slots
+
+
+def skeleton(
+    solo: Solo,
+    strategy: str = "beats",
+    section: Optional[Tuple[int, int]] = None,
+    pick: str = "first",
+) -> List[Tuple[str, str, str]]:
+    """Reduces a transcribed line to the (note, quality, name) triples to arrange.
+
+    One voicing is generated per *slot*, and the strategy decides what a slot is:
+    a chord change, a beat, an eighth, a sixteenth, or a single note. That is the
+    whole reduction mechanism - the line is thinned to the density the strategy
+    names, and what remains is arranged as chord-melody.
+
+    `section` is a half-open (start, end) bar range, normally the head from
+    `select_head`; it defaults to the whole transcription. `pick` chooses which
+    note represents a slot holding several: `first` (the default, and almost
+    always the only one on a sixteenth grid) or `longest`, which favours the
+    sustained note and is useful on the beat grid.
+
+    An `NC` bar becomes a melody-only step, carried through as the literal "NC"
+    so `arrange_progression` short-circuits it instead of inventing a harmony.
+    A chord whose suffix the alias table could not translate is skipped, because
+    there is no quality to hand the engine and guessing one is worse than a gap.
+    """
+    if strategy not in SKELETON_STRATEGIES:
+        raise ValueError(f"Unknown skeleton strategy {strategy!r}; expected one of {SKELETON_STRATEGIES}")
+    if pick not in SLOT_PICKS:
+        raise ValueError(f"Unknown slot pick {pick!r}; expected one of {SLOT_PICKS}")
+
+    lo, hi = section if section is not None else solo.bars
+    notes = [n for n in solo.notes if lo <= n.bar < hi]
+    if not notes:
+        return []
+
+    if strategy == "chords":
+        wanted = set(_chord_slots(solo, lo, hi))
+        groups: Dict[Tuple[int, float, int], List[NoteEvent]] = {}
+        for note in notes:
+            key = _slot_key(note, "beats")
+            if key in wanted:
+                groups.setdefault(key, []).append(note)
+        ordered = [k for k in sorted(groups)]
+    else:
+        groups = {}
+        for note in notes:
+            groups.setdefault(_slot_key(note, strategy), []).append(note)
+        ordered = sorted(groups)
+
+    triples: List[Tuple[str, str, str]] = []
+    for key in ordered:
+        candidates = groups[key]
+        chosen = max(candidates, key=lambda n: n.duration) if pick == "longest" else candidates[0]
+        chord = chosen.chord
+        if chord == NO_CHORD:
+            triples.append((midi_to_note_name(chosen.pitch), NO_CHORD, NO_CHORD))
+            continue
+        if not chord or chosen.quality is None:
+            # No chord, or a suffix the notation table does not translate.
+            continue
+        root, quality, bass = parse_weimar_chord(chord)
+        if root is None or quality is None:
+            continue
+        promoted = promote_slash_chord(root, quality, bass)
+        triples.append((midi_to_note_name(chosen.pitch), promoted, chord))
+    return triples
+
+
+def _transpose(triples: Sequence[Tuple[str, str, str]], semitones: int) -> List[Tuple[str, str, str]]:
+    """Moves every melody note by `semitones`, leaving the harmony alone.
+
+    Transposing the whole unit at once cannot distort an interval: a uniform
+    transposition leaves every melodic interval exactly as transcribed. That is
+    why the lift is applied to a whole head rather than to individual notes.
+    """
+    if not semitones:
+        return list(triples)
+    moved: List[Tuple[str, str, str]] = []
+    for note, quality, name in triples:
+        if quality == NO_CHORD:
+            moved.append((note, quality, name))
+            continue
+        moved.append((midi_to_note_name(Note(note).midi_note() + semitones), quality, name))
+    return moved
+
+
+def _voice_coverage(
+    triples: Sequence[Tuple[str, str, str]],
+    non_chord_tone: str = "extension",
+) -> Tuple[int, int]:
+    """How many steps of a progression the engine can actually voice.
+
+    (voiced, attempted). Measured by arranging with stdout captured, because
+    arrange_progression reports an unvoiceable step by warning and skipping it
+    rather than raising - and the whole point of the lift is that comparison.
+    """
+    if not triples:
+        return (0, 0)
+    buffer = io.StringIO()
+    with contextlib.redirect_stdout(buffer):
+        steps = VoiceLeadingEngine.arrange_progression(list(triples), non_chord_tone=non_chord_tone)
+    return (len(steps), len(triples))
+
+
+def unresolved_steps(
+    triples: Sequence[Tuple[str, str, str]],
+    non_chord_tone: str = "extension",
+) -> List[int]:
+    """Indexes of steps no non-chord-tone strategy could resolve.
+
+    These are the steps a diminished retry would have to rescue: the melody is
+    not a chord tone, and neither `extension` nor the strategy in force maps it
+    onto a substitute. Reported so a user can see what `--fallback diminished`
+    would buy without enabling it.
+    """
+    unresolved: List[int] = []
+    for index, (note, quality, name) in enumerate(triples):
+        if quality == NO_CHORD or not name:
+            continue
+        melody = Note(note)
+        if VoiceLeadingEngine.is_chord_tone(melody, quality, name):
+            continue
+        if non_chord_tone == "legacy":
+            continue
+        resolved = VoiceLeadingEngine.resolve_non_chord_tone(melody, quality, name, non_chord_tone)
+        if resolved is None:
+            unresolved.append(index)
+    return unresolved
+
+
+def build_skeleton(
+    solo: Solo,
+    strategy: str = "eighths",
+    section: Optional[Tuple[int, int]] = None,
+    pick: str = "first",
+    lift: str = "auto",
+    non_chord_tone: str = "extension",
+) -> Skeleton:
+    """Reduces a head to a playable skeleton, transposing it if that helps.
+
+    The reduction itself is `skeleton`; this adds the register decision and the
+    diagnostics. `lift` is one of LIFT_MODES, and `auto` - the default - keeps
+    the +12 version only when it voices strictly more steps than the original.
+    Ties go to the original, so music is never moved without a gain.
+
+    The cost of `auto` is that the head is voiced twice. That is cheap next to
+    being wrong: the alternative rule, "lift when the median is below B3", is
+    defeated by a head whose median sits one or two semitones above the
+    threshold while half of it is unplayable.
+    """
+    if lift not in LIFT_MODES:
+        raise ValueError(f"Unknown lift mode {lift!r}; expected one of {LIFT_MODES}")
+
+    base = skeleton(solo, strategy, section, pick)
+    notes: List[str] = []
+    coverage = _voice_coverage(base, non_chord_tone)
+    if lift == "none":
+        return Skeleton(base, 0, "none", coverage, coverage, 0, tuple(notes))
+
+    raised = _transpose(base, LIFT_SEMITONES)
+    coverage_lifted = _voice_coverage(raised, non_chord_tone)
+
+    if lift == "always":
+        return Skeleton(raised, LIFT_SEMITONES, "always", coverage, coverage_lifted, 0, tuple(notes))
+    if lift == "per-note":
+        # Lift only the notes the library cannot play. This is the mode the plan
+        # warns tears the line, kept because it is occasionally what is wanted.
+        mixed = [
+            (midi_to_note_name(Note(n).midi_note() + LIFT_SEMITONES) if Note(n).midi_note() < MELODY_FLOOR else n, q, c)
+            for n, q, c in base
+        ]
+        notes.append("per-note lift can distort melodic intervals")
+        return Skeleton(mixed, LIFT_SEMITONES, "per-note", coverage, coverage_lifted, 0, tuple(notes))
+
+    # auto: keep the octave only when it demonstrably voices more of the head.
+    if coverage_lifted[0] > coverage[0]:
+        notes.append(f"lifted an octave: {coverage[0]} -> {coverage_lifted[0]} of {coverage[1]} steps voiced")
+        return Skeleton(raised, LIFT_SEMITONES, "auto", coverage, coverage_lifted, 0, tuple(notes))
+    notes.append(f"left in register: {coverage[0]} of {coverage[1]} steps voiced, no better an octave up")
+    return Skeleton(base, 0, "auto", coverage, coverage_lifted, 0, tuple(notes))
+
+
+@dataclass
+class HeadArrangement:
+    """An arranged head, with everything the caller needs to explain it."""
+
+    steps: List[ArrangementStep] = field(default_factory=list)
+    skeleton: Skeleton = field(default_factory=Skeleton)
+    head: Optional[HeadSelection] = None
+    rescued: Tuple[int, ...] = ()
+    notes: Tuple[str, ...] = ()
+
+    def __len__(self) -> int:
+        return len(self.steps)
+
+
+def _arrange_step_with_bass(
+    engine: VoiceLeadingEngine,
+    melody: str,
+    quality: str,
+    name: str,
+    bass: Optional[str],
+    previous: Optional[Voicing],
+) -> Optional[Voicing]:
+    """Arranges one step, preferring candidates whose lowest note is the bass.
+
+    This is rule C, and it lives here rather than in the engine so the engine's
+    public surface stays frozen. The two rules that select a candidate - the
+    slash bass and voice leading - are *combined*, not applied in sequence: the
+    candidates are partitioned by how well they honour the bass, and the engine's
+    own voice-leading rule then decides within the best group. Applying them one
+    after the other would let whichever ran last always override the other.
+    """
+    bass_pc = bass_pitch_class(bass)
+    candidates = engine.get_all_drop2_voicings(Note(melody), quality, chord_name=name)
+    if not candidates:
+        return None
+    if bass_pc is None:
+        chosen = _pick_by_voice_leading(engine, candidates, previous)
+    else:
+        costs = [bass_cost(v.midi_notes(), bass_pc) for v in candidates]
+        best = min(costs)
+        # Only restrict when the bass is actually satisfiable; when it is not,
+        # behaviour is exactly what it would be with no slash chord at all.
+        preferred = [v for v, c in zip(candidates, costs) if c == best] if best <= 2 else candidates
+        chosen = _pick_by_voice_leading(engine, preferred, previous)
+    return chosen
+
+
+def _pick_by_voice_leading(
+    engine: VoiceLeadingEngine,
+    candidates: Sequence[Voicing],
+    previous: Optional[Voicing],
+) -> Voicing:
+    """The engine's own choice among candidates: hand position, then minimal movement."""
+    if previous is None:
+        return min(candidates, key=lambda v: abs(v.avg_fret - 9))
+    return min(candidates, key=lambda v: engine.calculate_pitch_leading_distance(previous, v))
+
+
+def arrange_head(
+    solo: Solo,
+    head: Optional[HeadSelection] = None,
+    strategy: str = "eighths",
+    pick: str = "first",
+    lift: str = "auto",
+    non_chord_tone: str = "extension",
+    fallback: Optional[str] = None,
+    section: Optional[Tuple[int, int]] = None,
+) -> HeadArrangement:
+    """Builds a chord-melody arrangement of a head, end to end.
+
+    Loads nothing itself: it reduces the notes it is given to a skeleton, decides
+    the register, and arranges. `fallback` may be "diminished", which retries
+    the steps no strategy could resolve as Barry Harris dim7 substitutions.
+
+    That retry is opt-in for a reason. It works mechanically - it finds the dim7 a
+    semitone below the resolution target - but it **replaces the written chord**,
+    and on a 12-bar blues six of the substitutions tend to land on the tonic, so
+    the tonic bar stops being a plain dominant. A head is meant to be the written
+    tune, so substituting under it is not something a "give me the head" command
+    should do by default. The count of steps it *would* rescue is always reported
+    in `rescued`, whether or not the retry is enabled.
+
+    `section` narrows to a bar range directly, for callers that want a span the
+    head selector did not choose; `head` takes precedence when both are given.
+    """
+    engine = VoiceLeadingEngine()
+    if fallback not in (None, "diminished"):
+        raise ValueError(f"Unknown fallback {fallback!r}; expected None or 'diminished'")
+
+    if section is None and head is not None:
+        section = (head.start, head.end)
+    built = build_skeleton(solo, strategy, section, pick, lift, non_chord_tone)
+    triples = list(built.triples)
+    notes = list(built.notes)
+
+    unresolved = unresolved_steps(triples, non_chord_tone)
+    retry = list(unresolved) if fallback == "diminished" else []
+    rescued: List[int] = []
+    if retry:
+        notes.append(
+            f"diminished fallback replaced the written chord on {len(retry)} step(s)"
+        )
+
+    steps: List[ArrangementStep] = []
+    previous: Optional[Voicing] = None
+    for index, (melody, quality, name) in enumerate(triples):
+        if index in retry:
+            # Re-resolve this step as a dim7 and remember that we did, so the
+            # caller can report which chords were substituted.
+            resolved = engine.resolve_non_chord_tone(
+                Note(melody), quality, name, "diminished",
+                next_melody=_next_chord_tone_melody(triples, index),
+            )
+            if resolved is not None:
+                quality, name = resolved
+                rescued.append(index)
+
+        if quality == NO_CHORD:
+            voicing = engine.get_melody_only_voicing(Note(melody))
+            if voicing is None:
+                continue
+            step = ArrangementStep(chord=name, melody=melody, voicing=voicing, melody_only=True)
+            steps.append(step)
+            previous = voicing
+            continue
+
+        bass = parse_weimar_chord(name)[2]
+        voicing = _arrange_step_with_bass(engine, melody, quality, name, bass, previous)
+        if voicing is None:
+            continue
+        steps.append(ArrangementStep(chord=name, melody=melody, voicing=voicing))
+        previous = voicing
+
+    built.rescued = len(unresolved)
+    return HeadArrangement(steps, built, head, tuple(rescued), tuple(notes))
+
+
+def _next_chord_tone_melody(triples: Sequence[Tuple[str, str, str]], index: int) -> Optional[str]:
+    """The next melody note that is a chord tone of its own chord, if any."""
+    for melody, quality, name in triples[index + 1:]:
+        if quality == NO_CHORD or not name:
+            continue
+        if VoiceLeadingEngine.is_chord_tone(Note(melody), quality, name):
+            return melody
+    return None
 
 
 
