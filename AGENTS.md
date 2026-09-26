@@ -50,6 +50,9 @@ version dynamically from `arranger.__version__`.
   e.g. `Voicing | dict`). The local dev virtualenv runs **Python 3.14**.
 - One third-party runtime dependency: **[musthe](https://pypi.org/project/musthe/)**
   (music theory primitives: `Note`, `Chord`, `Interval`).
+- One optional, **dev-only** tool: **[pyright](https://pypi.org/project/pyright/)**
+  for type checking. It is installed in `.venv/` but is deliberately absent from
+  `pyproject.toml`, so it never reaches users of the package.
 
 ## Setup
 
@@ -61,6 +64,7 @@ Recreate it from scratch if needed:
 ```bash
 python3 -m venv .venv
 .venv/bin/pip install musthe
+.venv/bin/pip install pyright   # dev-only type checker, not a package dependency
 ```
 
 No editable install is required — tests import `arranger` directly from the
@@ -125,6 +129,29 @@ Some tests assert **exact tab strings** (e.g. `"x-x-12-13-13-13"`) and exact
 voice-leading distances. If you intentionally change voicing generation, expect
 to update those expected values — but only after confirming the new output is
 musically correct and playable.
+
+## Type Checking
+
+The whole repository (`arranger.py` plus `tests/`) is kept clean under
+[pyright](https://pypi.org/project/pyright/) in its default `standard` mode:
+
+```bash
+.venv/bin/pyright arranger.py tests   # or: make typecheck
+```
+
+There is no `pyrightconfig.json` and none is needed — pyright resolves `musthe`
+from the virtualenv it is installed in, so no `--pythonpath` flag is required.
+
+Pyright is a **dev-only** convenience: it is not declared in `pyproject.toml` and
+must never become a runtime dependency. Reproduce it in a fresh venv with
+`.venv/bin/pip install pyright`; `make typecheck` prints that hint when the tool
+is missing.
+
+One recurring trap here: an optional argument written as `chord_name: str = None`
+is rejected by pyright, because the default contradicts the annotation. When the
+argument really may be `None` (several helpers guard it with `if not chord_name`),
+annotate it `Optional[str]` instead. Note also that pyright narrows through a bare
+`assert x is not None` but **not** through `self.assertIsNotNone(x)` in tests.
 
 ## Architecture / Key Types (`arranger.py`)
 
@@ -244,9 +271,12 @@ musically correct and playable.
    what is verified.
 4. Run the full suite from the repo root:
    `.venv/bin/python -m unittest discover -s tests -v` (must report `OK`).
-5. Run the demo (`.venv/bin/python arranger.py`) when touching voicing or
+5. Run the type checker (`.venv/bin/pyright arranger.py tests`, or `make typecheck`)
+   — it must report `0 errors`. Do not leave a new `reportArgumentType` behind,
+   especially when touching a signature.
+6. Run the demo (`.venv/bin/python arranger.py`) when touching voicing or
    voice-leading logic and sanity-check the printed tabs.
-6. Keep commits focused. This directory is a git repository (initialized with a
+7. Keep commits focused. This directory is a git repository (initialized with a
    baseline commit), so commit each logical change separately.
 
 ## Known Limitations

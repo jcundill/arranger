@@ -169,13 +169,16 @@ skips that step rather than raising.
 ## Development
 
 The only runtime dependency is `musthe`; tests use the standard-library `unittest`
-framework (there is no pytest dependency).
+framework (there is no pytest dependency). Type checking uses
+[pyright](https://pypi.org/project/pyright/), which is a dev-only tool — install it
+with `.venv/bin/pip install pyright` (it is deliberately not a package dependency).
 
 ```bash
-make test      # .venv/bin/python -m unittest discover -s tests -v
-make demo      # run the built-in demonstration
-make build     # build a wheel into dist/
-make clean     # remove caches and build artefacts
+make test       # .venv/bin/python -m unittest discover -s tests -v
+make typecheck  # .venv/bin/pyright arranger.py tests (must report 0 errors)
+make demo       # run the built-in demonstration
+make build      # build a wheel into dist/
+make clean      # remove caches and build artefacts
 ```
 
 `make` prefers the repository's `.venv/bin/python`; override it with
