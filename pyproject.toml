@@ -26,7 +26,7 @@ jazz-arranger = "arranger:main"
 [tool.setuptools]
 # The whole library is a single top-level module. Listing it explicitly keeps
 # flat-layout auto-discovery from tripping over the non-package `tests/` dir.
-py-modules = ["arranger"]
+py-modules = ["arranger", "wjazzd"]
 
 [tool.setuptools.dynamic]
 # Single source of truth: the version lives in arranger.__version__.

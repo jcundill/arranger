@@ -10,7 +10,7 @@ help:
 	@echo "Available targets:"
 	@echo "  make install   Install the package into the local virtualenv (editable)"
 	@echo "  make test      Run the full unittest suite (verbose)"
-	@echo "  make typecheck Run pyright over arranger.py and tests/ (dev-only tool)"
+	@echo "  make typecheck Run pyright over arranger.py, wjazzd.py and tests/ (dev-only tool)"
 	@echo "  make demo      Run the built-in demonstration arrangements"
 	@echo "  make build     Build a wheel into dist/ (no extra tooling required)"
 	@echo "  make clean     Remove caches and build artefacts"
@@ -23,7 +23,7 @@ test:
 
 typecheck:
 	@command -v $(PYRIGHT) >/dev/null 2>&1 || { echo "make typecheck needs pyright: $(PYTHON) -m pip install pyright"; exit 1; }
-	$(PYRIGHT) arranger.py tests
+	$(PYRIGHT) arranger.py wjazzd.py tests
 
 demo:
 	$(PYTHON) arranger.py

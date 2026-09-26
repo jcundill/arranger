@@ -5,6 +5,8 @@ suite still passes on a fresh clone. Tests that need no database (the notation
 table, the record types, the selector parser) always run.
 """
 
+import contextlib
+import io
 import unittest
 
 from arranger import NO_CHORD, ChordParser, Note
@@ -25,6 +27,8 @@ from wjazzd import (
     arrange_head,
     bass_cost,
     build_skeleton,
+    corpus_cli,
+    parse_bar_range,
     promote_slash_chord,
     bass_pitch_class,
     _arrange_step_with_bass,
@@ -861,6 +865,129 @@ class TestArrangeHead(unittest.TestCase):
         result = self.arrange(218)
         self.assertGreater(len(result.steps), 20)
         self.assertTrue(all(step.tab_line() for step in result.steps))
+
+
+class TestBarRangeParsing(unittest.TestCase):
+    """--bars parsing, including the negative bounds the anacrusis needs."""
+
+    def test_plain_range(self):
+        """LO-HI, half-open."""
+        self.assertEqual(parse_bar_range("0-8"), (0, 8))
+        self.assertEqual(parse_bar_range("10-14"), (10, 14))
+
+    def test_negative_low_bound(self):
+        """'-4-8' is a negative low bound, not a malformed range."""
+        self.assertEqual(parse_bar_range("-4-8"), (-4, 8))
+
+    def test_negative_high_bound(self):
+        """A negative HI is a real bound, reached through the pickups."""
+        self.assertEqual(parse_bar_range("-8--1"), (-8, -1))
+
+    def test_open_ended(self):
+        """A single number means 'from here to the end'."""
+        self.assertEqual(parse_bar_range("12"), (12, None))
+
+    def test_whitespace_is_tolerated(self):
+        """Quoted arguments often carry spaces."""
+        self.assertEqual(parse_bar_range(" -4 - 8 "), (-4, 8))
+
+    def test_empty_range_raises(self):
+        """An empty string is a usage error."""
+        with self.assertRaises(ValueError):
+            parse_bar_range("")
+
+    def test_inverted_range_raises(self):
+        """A range with HI <= LO selects nothing and is almost always a typo."""
+        with self.assertRaises(ValueError):
+            parse_bar_range("9-3")
+
+    def test_non_numeric_raises(self):
+        """Text where a bar number belongs is a usage error."""
+        with self.assertRaises(ValueError):
+            parse_bar_range("start-end")
+
+
+@requires_db
+class TestCorpusCli(unittest.TestCase):
+    """The `corpus` front end, exercised end to end against the real database."""
+
+    def run_cli(self, *argv):
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            code = corpus_cli(list(argv))
+        return code, buffer.getvalue()
+
+    def test_blue_train_head_renders_tab(self):
+        """The default invocation prints a header and real tab."""
+        code, output = self.run_cli("--melid", "218")
+        self.assertEqual(code, 0)
+        self.assertIn("Blue Train", output)
+        self.assertIn("John Coltrane", output)
+        self.assertIn("head at bars 1-12", output)
+        self.assertIn("x-x-", output)
+
+    def test_the_head_is_the_default_selection(self):
+        """No --section means the head, and the CLI says which one it chose."""
+        _, output = self.run_cli("--melid", "218")
+        self.assertIn("head at bars 1-12 (12 bars)", output)
+
+    def test_explicit_section_overrides_the_head(self):
+        """--section selects a named span instead."""
+        _, output = self.run_cli("--melid", "218", "--section", "form:I1")
+        self.assertIn("section form:I1: bars 0-5", output)
+
+    def test_glob_section(self):
+        """A * glob selects every matching span."""
+        _, output = self.run_cli("--melid", "218", "--section", "form:I*")
+        self.assertIn("form:I*", output)
+
+    def test_negative_bars_reach_the_pickups(self):
+        """--bars -4-1 renders the anacrusis, which sits below bar 0."""
+        _, output = self.run_cli("--melid", "266", "--bars", "-4-1", "--skeleton", "chords")
+        self.assertIn("All the Things You Are", output)
+        self.assertIn("x-", output)
+
+    def test_vertical_rendering(self):
+        """--vertical switches to six-line tab blocks."""
+        _, output = self.run_cli("--melid", "218", "--bars", "1-2", "--vertical")
+        self.assertIn("e|", output)
+        self.assertIn("B|", output)
+
+    def test_the_diminished_offer_is_reported_without_the_flag(self):
+        """The user is told what the opt-in would buy before opting in."""
+        _, output = self.run_cli("--melid", "218")
+        self.assertIn("--fallback diminished", output)
+
+    def test_fallback_flag_is_honoured(self):
+        """With the flag the substitution note appears instead of the offer."""
+        _, output = self.run_cli("--melid", "218", "--fallback", "diminished")
+        self.assertIn("diminished fallback replaced the written chord", output)
+
+    def test_lift_decision_is_reported(self):
+        """The register decision is visible, because it moves the music."""
+        _, output = self.run_cli("--melid", "342")
+        self.assertIn("lifted an octave", output)
+
+    def test_list_does_not_require_a_melid(self):
+        """--list enumerates the corpus on its own."""
+        code, output = self.run_cli("--list")
+        self.assertEqual(code, 0)
+        self.assertIn("Blue Train", output)
+
+    def test_bad_selector_is_a_usage_error(self):
+        """An unknown span kind exits cleanly rather than raising."""
+        with self.assertRaises(SystemExit):
+            self.run_cli("--melid", "218", "--section", "bogus:x")
+
+    def test_missing_melid_is_a_usage_error(self):
+        """--melid is required unless --list is given."""
+        with self.assertRaises(SystemExit):
+            self.run_cli("--skeleton", "chords")
+
+    def test_unknown_skeleton_is_rejected_by_the_parser(self):
+        """argparse rejects an unknown choice before any work happens."""
+        with self.assertRaises(SystemExit):
+            self.run_cli("--melid", "218", "--skeleton", "quavers")
 
 
 if __name__ == "__main__":

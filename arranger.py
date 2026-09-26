@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import sys
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Dict, Any
 from musthe import Note, Chord, Interval
@@ -1119,14 +1120,21 @@ def _print_step(step: ArrangementStep) -> None:
 
 def main() -> None:
     """
-    Prints the built-in demonstration arrangements.
+    Entry point: the built-in demonstration, or a subcommand.
 
-    Runs the four example progressions (minor ii-V-i, major ii-V-I, a low-register
-    cadence with the melody on the B string, and a bar of non-chord melody tones
-    shown under every strategy) through VoiceLeadingEngine.arrange_progression and
-    prints each resulting tab. This is the entry point exposed as the
-    `jazz-arranger` console script (see pyproject.toml).
+    With no arguments this prints the built-in demonstration arrangements.
+
+    With `corpus` as the first argument it hands over to `wjazzd.corpus_cli`, the
+    Weimar Jazz Database front end, which is where the transcribed-head feature
+    lives. The import is deliberately lazy and inside the branch: the database
+    module is optional glue over a 42 MB file that most users do not have, and
+    `import arranger` must never depend on it.
     """
+    if len(sys.argv) > 1 and sys.argv[1] == "corpus":
+        from wjazzd import corpus_cli
+
+        raise SystemExit(corpus_cli(sys.argv[2:]))
+
     engine = VoiceLeadingEngine()
 
     # Example 1: Minor ii - V - i cadence in C Minor (Dm7b5 -> G7b9 -> Cm7)

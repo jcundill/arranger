@@ -91,6 +91,8 @@ __all__ = [
     "build_skeleton",
     "arrange_head",
     "promote_slash_chord",
+    "corpus_cli",
+    "parse_bar_range",
 ]
 
 
@@ -1323,6 +1325,154 @@ class HeadArrangement:
 
     def __len__(self) -> int:
         return len(self.steps)
+
+
+# A bar range is an optionally negative LO, a hyphen, and an optionally negative
+# HI. Both bounds may be negative at once ("-8--1"), so the two numbers are pulled
+# out by pattern rather than by splitting on a hyphen, which cannot tell a
+# separator from a minus sign. Whitespace is allowed because a quoted shell
+# argument commonly carries it.
+_BAR_RANGE_RE = re.compile(r"^\s*(-?\d+)\s*(?:-\s*(-?\d+))?\s*$")
+
+
+def parse_bar_range(text: str) -> Tuple[int, Optional[int]]:
+    """Parses a "LO-HI" bar range, half-open, with signed bounds.
+
+        '0-8'   -> (0, 8)
+        '-4-8'  -> (-4, 8)     the anacrusis, as a negative LO
+        '12'    -> (12, None)  open-ended; the section's own end applies
+        '-8--1' -> (-8, -1)    a range that lies entirely in the pickups
+
+    Negative bounds are ordinary, not malformed: 1,335 `beats` rows across 149
+    transcriptions sit below bar 0, reaching bar -31, and the ATTYA pickups live
+    there.
+    """
+    match = _BAR_RANGE_RE.match((text or "").strip())
+    if match is None:
+        raise ValueError(f"Invalid bar range {text!r}; expected LO-HI, e.g. '0-8' or '-4-8'")
+    lo = int(match.group(1))
+    hi = int(match.group(2)) if match.group(2) is not None else None
+    if hi is not None and hi <= lo:
+        raise ValueError(f"Bar range {text!r} is empty; HI must be greater than LO")
+    return (lo, hi)
+
+
+def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
+    """The `corpus` command: render a head from the Weimar Jazz Database.
+
+    Returns a process exit code. Defaults follow the decisions in
+    CORPUS_PLAN.md: the head is the default selection, the register is decided
+    by measured coverage, the non-chord-tone strategy is `extension`, and the
+    diminished retry is off because it replaces the written chord.
+
+    Nothing here is required to use the library - this is a thin front end over
+    `select_head` and `arrange_head`.
+    """
+    import argparse
+
+    from arranger import format_progression
+
+    parser = argparse.ArgumentParser(
+        prog="arranger.py corpus",
+        description="Render the head of a Weimar Jazz Database transcription as chord-melody.",
+    )
+    parser.add_argument("--melid", type=int, default=None, help="transcription id (melid)")
+    parser.add_argument(
+        "--list", action="store_true", help="list the 456 transcriptions and exit"
+    )
+    parser.add_argument(
+        "--section",
+        default=None,
+        help="a span selector such as form:A1, chorus:1, phrase:2, idea:lick; "
+             "a * glob is allowed. Defaults to the head.",
+    )
+    parser.add_argument(
+        "--bars",
+        default=None,
+        help="narrow to a half-open LO-HI bar range; bounds may be negative for pickups",
+    )
+    parser.add_argument("--skeleton", choices=SKELETON_STRATEGIES, default="eighths")
+    parser.add_argument("--pick", choices=SLOT_PICKS, default="first")
+    parser.add_argument("--lift", choices=LIFT_MODES, default="auto")
+    parser.add_argument(
+        "--non-chord-tone",
+        choices=VoiceLeadingEngine.NON_CHORD_TONE_STRATEGIES,
+        default="extension",
+    )
+    parser.add_argument(
+        "--fallback",
+        choices=["diminished"],
+        default=None,
+        help="retry unresolved tensions as dim7 substitutions; replaces the written chord",
+    )
+    parser.add_argument("--vertical", action="store_true", help="six-line tab per step")
+    args = parser.parse_args(list(argv) if argv is not None else None)
+
+    if args.list:
+        for solo in list_solos():
+            print(f"{solo.melid:>4}  {solo.performer:<22} {solo.title}")
+        return 0
+
+    if args.melid is None:
+        parser.error("--melid is required unless --list is given")
+
+    solo = load_solo(args.melid)
+    head: Optional[HeadSelection] = None
+    section: Optional[Tuple[int, int]] = None
+    if args.section:
+        try:
+            matched = matching_sections(args.melid, args.section)
+        except ValueError as error:
+            # A bad selector is a usage error, so report it as one rather than
+            # letting a ValueError traceback reach the user.
+            parser.error(str(error))
+        if not matched:
+            parser.error(f"no section matches {args.section!r} for melid {args.melid}")
+        section = (min(s.start for s in matched), max(s.end for s in matched))
+    else:
+        head = select_head(args.melid)
+        if head is not None:
+            section = (head.start, head.end)
+
+    if args.bars:
+        # An explicit range *overrides* the selected span rather than being
+        # intersected with it. Intersecting is the narrower reading, but it makes
+        # the negative bounds unreachable in the default path: the head starts at
+        # bar 1, so --bars -4-2 would silently clamp to bar 1 and the pickups
+        # could never be rendered. Being explicit about bars should win.
+        try:
+            lo, hi = parse_bar_range(args.bars)
+        except ValueError as error:
+            parser.error(str(error))
+        first, last = solo.bars
+        section = (max(first, lo), last if hi is None else min(last, hi))
+
+    arrangement = arrange_head(
+        solo,
+        head,
+        strategy=args.skeleton,
+        pick=args.pick,
+        lift=args.lift,
+        non_chord_tone=args.non_chord_tone,
+        fallback=args.fallback,
+        section=section,
+    )
+
+    print(f"{solo.title} - {solo.performer} (melid {solo.melid}, {solo.key})")
+    if head is not None:
+        print(f"  {head.describe()}")
+    if args.section and section is not None:
+        print(f"  section {args.section}: bars {section[0]}-{section[1] - 1}")
+    for note in arrangement.notes:
+        print(f"  note: {note}")
+    if arrangement.skeleton.rescued and not args.fallback:
+        print(
+            f"  note: {arrangement.skeleton.rescued} unresolved tension(s) could be "
+            f"rescued with --fallback diminished, which replaces the written chord"
+        )
+    print()
+    print(format_progression(arrangement.steps, vertical=args.vertical))
+    return 0
 
 
 def _arrange_step_with_bass(
