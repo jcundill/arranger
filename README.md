@@ -66,6 +66,70 @@ non-chord-tone fields `non_chord_tone`, `strategy` and `harmonized_as`); the
 Tab strings run from the low E string to the high E string, with `x` for a muted
 string — so `x-x-12-13-13-13` is a voicing on D-G-B-E with the melody on the high E.
 
+## Rendering tab
+
+`arrange_progression` returns data; every tab renderer is a **pure function that
+returns a string and prints nothing**, so you decide how the tab is displayed.
+
+To render a whole progression, use `format_progression`:
+
+```python
+from arranger import VoiceLeadingEngine, format_progression
+
+engine = VoiceLeadingEngine()
+steps = engine.arrange_progression(
+    [("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7")]
+)
+
+print(format_progression(steps))
+```
+
+```text
+Dm7      D5   x-x-10-10-10-10
+G7       B4   x-x-5-7-6-7
+Cmaj7    C5   x-x-9-9-8-8
+```
+
+Pass `vertical=True` for real six-line tab, one block per chord:
+
+```python
+print(format_progression(steps, vertical=True))
+```
+
+```text
+Dm7 (D5)
+e|10-|
+B|10-|
+G|10-|
+D|10-|
+A| x-|
+E| x-|
+
+G7 (B4)
+e| 7-|
+B| 6-|
+G| 7-|
+D| 5-|
+A| x-|
+E| x-|
+
+Cmaj7 (C5)
+e| 8-|
+B| 8-|
+G| 9-|
+D| 9-|
+A| x-|
+E| x-|
+```
+
+Steps whose melody is a non-chord tone are annotated with the substitution that
+was applied, so a reharmonised passing tone is never silent about itself.
+
+For a single voicing, `Voicing.tab_string()` gives the one-line form while
+`Voicing.tab_block()` (a `List[str]`) and `Voicing.tab()` (the same joined into
+one string) give the vertical six-line form. `ArrangementStep.tab_line()` and
+`ArrangementStep.tab_block()` do the same for a step.
+
 ## Low-register melodies
 
 Melodies below the high E string's open pitch (`E4`) cannot be voiced on that block.

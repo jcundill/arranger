@@ -34,6 +34,7 @@ arranger/
 │   ├── test_fretboard.py
 │   ├── test_non_chord_tones.py
 │   ├── test_progressions.py
+│   ├── test_tab_rendering.py
 │   ├── test_voice_leading.py
 │   └── test_voicings.py
 └── .venv/                 # Local virtualenv (not committed)
@@ -161,14 +162,26 @@ annotate it `Optional[str]` instead. Note also that pyright narrows through a ba
   pinned to (`5` → D-G-B-E, `4` → A-D-G-B). Index `0` = low E ... `5` = high E, so
   the conventional guitar string number is `6 - index` (index `5` = string 1).
 - `Voicing` — a dataclass for one fretboard shape: `frets` (6 entries,
-  `-1` = muted), `top_fret`, `avg_fret`. Helpers: `tab_string()`,
-  `active_frets()`, `fret_span()`, `midi_notes()`, `pitch_classes()`,
-  `soprano_string()` (index of the highest sounding string; `-1` if all muted).
-  Supports legacy dict-style access (`v["frets"]`).
+  `-1` = muted), `top_fret`, `avg_fret`. Helpers: `tab_string()` (one-line
+  `x-x-12-13-13-13`, frozen: ~40 call sites in tests and docs depend on it),
+  `tab_block()` (six-line vertical tab, high E first, two-char right-aligned
+  cells, highest string labelled lowercase `e`), `tab()` (`tab_block()` joined
+  with newlines), `active_frets()`, `fret_span()`, `midi_notes()`,
+  `pitch_classes()`, `soprano_string()` (index of the highest sounding string;
+  `-1` if all muted). Supports legacy dict-style access (`v["frets"]`).
+- Tab rendering is **pure**: every renderer returns a string (or list of
+  strings) and prints nothing, so callers control display. Only `main()` and the
+  `arrange_progression` warning paths write to stdout.
 - `ArrangementStep` — a dataclass of `chord`, `melody`, `voicing` plus the
   non-chord-tone bookkeeping `non_chord_tone` (bool), `strategy` (which strategy
-  handled the step) and `harmonized_as` (the substitute chord name). Also supports
-  legacy dict-style access (`step["chord"]`).
+  handled the step) and `harmonized_as` (the substitute chord name). Also
+  `tab_line()` / `tab_block()`, which delegate to the `Voicing` renderers.
+  Supports legacy dict-style access (`step["chord"]`).
+- `format_progression(steps, vertical=False)` — module-level renderer for a
+  whole arrangement: one line per step by default, six-line tab blocks when
+  `vertical=True`. Non-chord-tone steps are annotated via the shared
+  `_step_annotation()` helper, which `_print_step()` also uses so the two
+  renderings cannot drift.
 - `GuitarFretboard` — static helpers `note_to_fret(string_index, note)` and
   `fret_to_midi(string_index, fret)`. Out-of-range inputs return `-1`.
 - `ChordParser` — `parse_chord_name(name) -> (root, quality)`,

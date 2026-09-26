@@ -41,6 +41,39 @@ class Voicing:
         """Returns standard tab representation, e.g. 'x-x-12-13-13-13'."""
         return "-".join(str(f) if f >= 0 else "x" for f in self.frets)
 
+    def tab_block(self) -> List[str]:
+        """
+        Renders the voicing as a six-line vertical tab, highest string first.
+
+        Each line is labelled with the string name and holds the fret cell for
+        that string, right-aligned to two characters so frets 0-9, 10-18 and
+        the muted 'x' all line up in a column:
+
+            e|--0---3---|
+            B|--1---3---|
+            G|--0---2---|
+            D|--3---3---|
+            A|-x-------|
+            E|-x-------|
+
+        Returns exactly six lines, one per string, ordered high E (string 1)
+        down to low E (string 6) the way tab is read. A fully muted voicing
+        renders as six 'x' lines rather than raising. Purely a render: it
+        prints nothing, so callers decide how to display it.
+        """
+        cells = [("x" if f < 0 else str(f)).rjust(2) for f in self.frets]
+        lines = []
+        for string_index in range(len(self.frets) - 1, -1, -1):
+            # The highest string is labelled with a lowercase 'e', the usual tab
+            # convention, so the top and bottom lines of the block stay distinct.
+            name = "e" if string_index == 5 else STRING_NAMES[string_index]
+            lines.append(f"{name}|{cells[string_index]}-|")
+        return lines
+
+    def tab(self) -> str:
+        """Returns tab_block() as a single newline-joined string."""
+        return "\n".join(self.tab_block())
+
     def active_frets(self) -> List[int]:
         """Returns list of fret positions for played strings."""
         return [f for f in self.frets if f >= 0]
@@ -93,6 +126,14 @@ class ArrangementStep:
     non_chord_tone: bool = False
     strategy: Optional[str] = None
     harmonized_as: Optional[str] = None
+
+    def tab_line(self) -> str:
+        """Returns the one-line tab for this step, e.g. 'x-x-12-13-13-13'."""
+        return self.voicing.tab_string()
+
+    def tab_block(self) -> List[str]:
+        """Returns the six-line vertical tab for this step's voicing."""
+        return self.voicing.tab_block()
 
     # Backward compatibility: dictionary-like indexing step["chord"], step["voicing"]
     def __getitem__(self, item: str) -> Any:
@@ -931,19 +972,64 @@ class VoiceLeadingEngine:
         return None
 
 
+def _step_annotation(step: ArrangementStep) -> str:
+    """
+    Returns the non-chord-tone annotation for a step, e.g. '-> Cmaj9 via extension'.
+
+    Empty string for an ordinary chord tone. Shared by format_progression and the
+    demonstration so the two renderings cannot drift apart.
+    """
+    if not step.non_chord_tone:
+        return ""
+    if step.harmonized_as:
+        return f" (non-chord tone -> {step.harmonized_as} via {step.strategy})"
+    return " (non-chord tone)"
+
+
+def format_progression(steps: List[ArrangementStep], vertical: bool = False) -> str:
+    """
+    Renders an arranged progression as tab and returns it as a string.
+
+    This is a pure renderer: it prints nothing and writes nothing to stdout, so
+    the caller stays in control of the output.
+
+    With vertical=False (the default) each step is one line, most compact first:
+
+        Dm7      D5  x-x-10-10-10-10
+        G7       B4  x-x-5-7-6-7
+        Cmaj7    C5  x-x-9-9-8-8
+
+    With vertical=True each step is rendered as a full six-line vertical tab
+    block, preceded by its chord, melody and any non-chord-tone annotation.
+
+    Args:
+        steps: arrangement steps, typically from VoiceLeadingEngine.arrange_progression.
+        vertical: render the six-line vertical tab instead of the one-line form.
+
+    Returns:
+        The rendered tab, with steps separated by newlines.
+    """
+    if not vertical:
+        return "\n".join(
+            f"{step.chord:<8} {step.melody:<3} "
+            f"{_step_annotation(step)} {step.tab_line()}".rstrip()
+            for step in steps
+        )
+
+    blocks = []
+    for step in steps:
+        header = f"{step.chord} ({step.melody}){_step_annotation(step)}"
+        blocks.append("\n".join([header, *step.tab_block()]))
+    return "\n\n".join(blocks)
+
+
 # --- Demonstration ---
 def _print_step(step: ArrangementStep) -> None:
     """Prints one arranged step, including which string carries the melody."""
     melody_string = 6 - step.voicing.soprano_string()  # guitar string number, 1 = high E
-    annotation = ""
-    if step.non_chord_tone:
-        if step.harmonized_as:
-            annotation = f" (non-chord tone -> {step.harmonized_as} via {step.strategy})"
-        else:
-            annotation = " (non-chord tone)"
     print(
-        f"Chord: {step.chord:<8} | Melody: {step.melody:<3}{annotation} | "
-        f"Tab [E-A-D-G-B-E]: {step.voicing.tab_string()} | Melody string: {melody_string}"
+        f"Chord: {step.chord:<8} | Melody: {step.melody:<3}{_step_annotation(step)} | "
+        f"Tab [E-A-D-G-B-E]: {step.tab_line()} | Melody string: {melody_string}"
     )
 
 
@@ -1015,6 +1101,15 @@ def main() -> None:
         print(f"  strategy: {strategy}")
         for step in engine.arrange_progression(all_of_me, non_chord_tone=strategy):
             _print_step(step)
+
+    # Example 5: Tab rendering. format_progression() returns the tab as a string
+    # and prints nothing itself, so callers choose what to do with it. Here it is
+    # used once horizontally and once as vertical six-line tab blocks.
+    print("\n--- TAB RENDERING: format_progression(), one line per chord ---")
+    print(format_progression(result_major))
+
+    print("\n--- TAB RENDERING: format_progression(vertical=True), six lines per chord ---")
+    print(format_progression(result_major, vertical=True))
 
 
 if __name__ == "__main__":
