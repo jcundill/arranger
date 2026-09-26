@@ -15,7 +15,11 @@ for smooth left-hand movement.
   shape under a passing tone (see [Non-chord melody notes](#non-chord-melody-notes)).
 - **Voice leading** that minimises sounding-pitch movement between consecutive chords,
   so a chord can stay where the previous one left the hand.
-- **Dependency-light**: Python 3.10+ and [musthe](https://pypi.org/project/musthe/) only.
+- **Dependency-light**: Python 3.10+ and [musthe](https://pypi.org/project/musthe/) only. The
+  optional [Weimar Jazz Database](#rendering-a-head-from-the-weimar-jazz-database)
+  integration adds no dependencies at all — it is stdlib `sqlite3`.
+- **Heads from real transcriptions**: render the head of any of the 456 Weimar
+  Jazz Database solos as chord-melody.
 
 > The **distribution** is named `jazz-arranger` (the PyPI name `arranger` is already
 > taken by an unrelated project). The **import** name is simply `arranger`.
@@ -65,6 +69,100 @@ non-chord-tone fields `non_chord_tone`, `strategy` and `harmonized_as`); the
 
 Tab strings run from the low E string to the high E string, with `x` for a muted
 string — so `x-x-12-13-13-13` is a voicing on D-G-B-E with the melody on the high E.
+
+## Rendering a head from the Weimar Jazz Database
+
+The database holds 456 jazz transcriptions. `arranger.py corpus` turns the **head**
+— the tune — of any of them into a chord-melody arrangement:
+
+```bash
+python arranger.py corpus --melid 218     # Coltrane, "Blue Train"
+```
+
+```text
+Blue Train - John Coltrane (melid 218, Eb-maj)
+  melid 218: head at bars 1-12 (12 bars), anchored on Eb7 Ab7 Eb7 Ab7 Eb7 C7 F-7 Bb7 Eb7 [A-block is 79 bars; trimmed to one statement]
+  note: lifted an octave: 51 -> 60 of 62 steps voiced
+  note: 13 unresolved tension(s) could be rescued with --fallback diminished, which replaces the written chord
+
+Eb7      F5   x-x-12-12-12-13
+Ab7      Eb5  x-x-10-11-9-11
+Ab7      F5   x-x-12-12-12-13
+Ab7      Db5  x-x-9-10-9-9
+Ab7      Eb5  x-x-10-11-9-11
+Ab7      F5   x-x-12-12-12-13
+Eb7      E5   x-x-12-13-12-12
+```
+
+This needs `wjazzd.db` (42 MB) from [jazzomat.hfm-weimar.de](http://jazzomat.hfm-weimar.de/),
+placed beside `arranger.py` or pointed at by `WJAZZD_DB`. It is not committed, and
+nothing in the library requires it.
+
+```bash
+python arranger.py corpus --list                        # the 456 transcriptions
+python arranger.py corpus --melid 342 --vertical        # "All the Things You Are", Metheny
+python arranger.py corpus --melid 266 --bars -4-1       # the pickups, below bar 0
+python arranger.py corpus --melid 218 --section chorus:1  # a solo chorus instead
+```
+
+| flag | default | |
+|---|---|---|
+| `--section` | the head | `form:A1`, `chorus:1`, `phrase:2`, `idea:lick`; `*` globs |
+| `--bars` | the whole span | half-open `LO-HI`; **bounds may be negative** for pickups |
+| `--skeleton` | `eighths` | `chords`, `beats`, `eighths`, `sixteenths`, `notes` |
+| `--pick` | `first` | `first` or `longest`, for slots holding several notes |
+| `--lift` | `auto` | `auto`, `none`, `always`, `per-note` |
+| `--non-chord-tone` | `extension` | `extension`, `diminished`, `sustain`, `legacy` |
+| `--fallback` | off | `diminished` — see the trade-off below |
+| `--vertical` | off | six-line tab per step |
+
+### How the head is found
+
+Not from the form label. On all four "All the Things You Are" transcriptions,
+`FORM A1` starts at the *second* statement and the real 8-bar head sits in the
+preceding intro block, so a label-based selector misses it entirely. The head is
+found on the **chord progression**: seed from the first A-block extended back over
+any intro, anchor on its progression, then trim to the first span that recurs —
+matched modulo transposition, since the same progression returns in a new key.
+
+The command reports the bars and the anchor chords it chose, so you can see the
+selection and override it with `--bars`.
+
+This is a heuristic and does not land on the head every time: it is right on
+melids 266 and 342, returns a short fragment on 328, and falls back to the whole
+A-block on 451. Across the corpus 434 of 456 transcriptions yield a head, and the
+median head is 8 bars.
+
+### Three things to know before you rely on it
+
+**Heads are not harmonically simpler than solos.** This is the most common
+surprise. The chord-tone rate for a head is 58.7% at best, statistically
+indistinguishable from the solo material, and only 48.6–64.5% on real standard
+melodies — *worse* than the bebop lines it was compared against. A standard tune is
+built from passing tones between widely spaced chord tones, so it is more
+non-chordal, not less. Roughly half the steps need the non-chord-tone strategy,
+and some need more than the library's extension table can reach.
+
+**`--lift auto` may transpose the head an octave.** It builds the head twice, as
+transcribed and an octave up, and keeps whichever voices more steps; ties go to
+the original. It is threshold-free, so a head whose median sits one or two
+semitones above an arbitrary cut-off cannot defeat it. Transposing the *whole*
+head at once cannot distort any interval, but it does move the music — Blue
+Train's head is lifted, because it dips to E♭3. The decision is printed on every
+run; `--lift none` or `always` overrides it.
+
+**`--fallback diminished` replaces the written chord.** It rescues the tensions
+nothing else can resolve — 13 steps on Blue Train's head — by substituting a
+Barry Harris dim7 a semitone below the resolution target. It works
+mechanically, but harmonically it rewrites the tune, and on a 12-bar blues most
+of the substitutions land on the tonic, so the tonic bar stops being a plain
+dominant. A head is supposed to be the written tune, so it is **off by default**
+and the count of steps it *would* rescue is always reported. Pass it only when you
+want that colour.
+
+A bar marked `NC` in the database is melody with no harmony; it is played alone on
+a single fret rather than harmonised, which is why such a step does not obey the
+four-string rule.
 
 ## Rendering tab
 
@@ -249,8 +347,11 @@ make clean      # remove caches and build artefacts
 `make test PYTHON=python3`. The equivalent long form is
 `.venv/bin/python -m unittest discover -s tests -v` run from the repository root.
 
-The whole library lives in a single module, `arranger.py`. See `AGENTS.md` for the
-architecture, coding conventions, and the recipe for adding a new chord quality.
+The library itself lives in a single module, `arranger.py`. `wjazzd.py` is
+separate, optional glue over the Weimar Jazz Database that nothing in the library
+imports, so the library still works with no database present. See `AGENTS.md` for
+the architecture, the corpus design, the coding conventions, and the recipe for
+adding a new chord quality.
 
 ## Known limitations
 
@@ -267,6 +368,11 @@ architecture, coding conventions, and the recipe for adding a new chord quality.
   same as for the long-standing qualities (`maj7`, `m7`, `9`, `m9`).
 - The `sustain` strategy is structural — the API takes only `(note, quality, name)`
   triples, so rhythm and duration cannot be used to spot a brief passing tone.
+- From the corpus side: the head selector is a heuristic and misses the head on some
+  transcriptions (328 and 451 of the four "All the Things You Are" entries);
+  `wjazzd.db` is a 42 MB download that must be supplied separately; and a slash bass
+  is honoured as a preference rather than a hard constraint. See
+  [How the head is found](#how-the-head-is-found).
 - No CI and no release has been published to PyPI.
 
 ## License

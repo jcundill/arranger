@@ -33,7 +33,8 @@ MELODY_STRING_CHOICES = (5, 4)
 
 # Library version. Kept here as the single source of truth; pyproject.toml reads
 # it via [tool.setuptools.dynamic] instead of duplicating the number.
-__version__ = "0.3.0"
+# 0.4.0 added the optional Weimar Jazz Database corpus integration (wjazzd.py).
+__version__ = "0.4.0"
 
 
 @dataclass
