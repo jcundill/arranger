@@ -9,3 +9,11 @@ __pycache__/
 build/
 dist/
 *.egg-info/
+
+
+# Editor settings
+.vscode/
+
+# Weimar Jazz Database (42 MB, downloaded from jazzomat.hfm-weimar.de; see
+# CORPUS_PLAN.md). Not part of the source tree.
+*.db
