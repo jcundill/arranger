@@ -150,11 +150,12 @@ class TestExtendedExtensionMappings(unittest.TestCase):
             ("B4", "m7b5", "Am7b5"),   # the 9th -> Am9b5
         ]
         result = self.engine.arrange_progression(progression)
-        self.assertEqual([step.harmonized_as for step in result], ["G7sus4", "Cmaj7#11", "Am9b5"])
+        expected_names = ["G7sus4", "Cmaj7#11", "Am9b5"]
+        self.assertEqual([step.harmonized_as for step in result], expected_names)
         self.assertTrue(all(step.non_chord_tone for step in result))
         self.assertTrue(all(step.strategy == "extension" for step in result))
-        for step, quality in zip(result, ("7sus4", "maj7#11", "m9b5")):
-            tones = set(ChordParser.get_chord_tones(quality, step.harmonized_as))
+        for step, quality, name in zip(result, ("7sus4", "maj7#11", "m9b5"), expected_names):
+            tones = set(ChordParser.get_chord_tones(quality, name))
             self.assertTrue(set(step.voicing.pitch_classes()) <= tones, step.voicing.tab_string())
 
 
@@ -169,7 +170,9 @@ class TestSustainInnerVoices(unittest.TestCase):
         """x-x-9-9-8-8 becomes x-x-9-9-8-10 for a D5 passing tone: only the melody
         string moves."""
         held = self.engine.sustain_inner_voices(self.cmaj7, Note("D5"))
-        self.assertIsNotNone(held)
+        # A bare assert narrows the Optional for the type checker; the test still
+        # fails hard if the shape cannot be held.
+        assert held is not None
         self.assertEqual(held.tab_string(), "x-x-9-9-8-10")
         self.assertEqual(held.frets[2:5], self.cmaj7.frets[2:5])
 

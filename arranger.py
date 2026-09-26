@@ -208,7 +208,7 @@ class ChordParser:
     }
 
     @staticmethod
-    def canonical_quality(chord_type: str) -> str:
+    def canonical_quality(chord_type: Optional[str]) -> str:
         """
         Normalises a chord quality to its canonical spelling.
 
@@ -223,7 +223,7 @@ class ChordParser:
         return ChordParser.QUALITY_ALIASES.get(quality, quality)
 
     @staticmethod
-    def parse_chord_name(name: str) -> Tuple[Optional[str], Optional[str]]:
+    def parse_chord_name(name: Optional[str]) -> Tuple[Optional[str], Optional[str]]:
         """Extracts root pitch and quality string from chord name (e.g. 'Dm7b5' -> ('D', 'm7b5'))."""
         if not name:
             return None, None
@@ -239,7 +239,7 @@ class ChordParser:
         return (melody_note.midi_note() - root_midi) % 12
 
     @staticmethod
-    def get_chord_tones(chord_type: str, chord_name: str = None) -> Tuple[int, ...]:
+    def get_chord_tones(chord_type: str, chord_name: Optional[str] = None) -> Tuple[int, ...]:
         """
         Returns the pitch classes (0-11) of every tone in a chord quality.
 
@@ -543,7 +543,7 @@ class VoiceLeadingEngine:
         cls,
         melody_note: Note,
         chord_type: str,
-        chord_name: str = None,
+        chord_name: Optional[str] = None,
         top_string: int = 5,
     ) -> List[Voicing]:
         """
@@ -615,7 +615,7 @@ class VoiceLeadingEngine:
         cls,
         melody_note: Note,
         chord_type: str,
-        chord_name: str = None,
+        chord_name: Optional[str] = None,
         top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES,
     ) -> List[Voicing]:
         """
@@ -642,7 +642,7 @@ class VoiceLeadingEngine:
     # Non-chord melody tones
     # ------------------------------------------------------------------
     @classmethod
-    def is_chord_tone(cls, melody_note: Note, chord_type: str, chord_name: str = None) -> bool:
+    def is_chord_tone(cls, melody_note: Note, chord_type: str, chord_name: Optional[str] = None) -> bool:
         """
         True when melody_note is one of the chord's tones.
 
@@ -671,7 +671,7 @@ class VoiceLeadingEngine:
         chord_type: str,
         chord_name: str,
         strategy: str = "extension",
-        next_melody: str = None,
+        next_melody: Optional[str] = None,
     ) -> Optional[Tuple[str, str]]:
         """
         Picks a substitute (chord quality, chord name) that turns a non-chord

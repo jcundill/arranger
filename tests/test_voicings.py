@@ -247,6 +247,7 @@ class TestTriadSusAndAlteredQualities(unittest.TestCase):
         and that shape sounds only pitches of its own chord."""
         for chord_name, melody, expected in self.CASES:
             quality = ChordParser.parse_chord_name(chord_name)[1]
+            assert quality is not None
             tones = set(ChordParser.get_chord_tones(quality, chord_name))
             voicings = self.engine.get_drop2_voicings(Note(melody), quality, chord_name=chord_name)
             self.assertEqual([v.tab_string() for v in voicings], [expected], chord_name)
