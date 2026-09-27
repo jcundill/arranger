@@ -409,11 +409,27 @@ def _build_part(
         # stops; both are written as they are, which is what `<implicit>` and the
         # closing rest are for.
         first, last = measures[0], measures[-1]
-        # `padAsAnacrusis` is a method, not a flag: assigning to it would quietly do
-        # nothing at all, and a pickup written as a full bar is a bar of wrong music.
-        if first.duration.quarterLength < state["length"] - 1e-9:
+        # The test is "is there a pickup", not "is this measure short". They are not
+        # the same thing: a head that starts on the third beat fills its two-beat
+        # pickup *exactly*, so the measure is complete and still an anacrusis. Testing
+        # the length alone would write it as a normal bar, and a reader would expect a
+        # downbeat that is not there.
+        #
+        # Two separate music21 levers, because they do different jobs:
+        # `padAsAnacrusis` says the bar is incomplete and must be padded when the
+        # stream is re-barred, while `showNumber` is what music21 actually writes into
+        # `<measure implicit="...">` - `padAsAnacrusis` on its own changes nothing in
+        # the output. It is a method rather than a flag, so assigning to it would
+        # silently do nothing at all.
+        if pickup > 1e-9:
             first.padAsAnacrusis(True)
+            first.showNumber = stream.enums.ShowNumber.NEVER
         last.padAsAnacrusis(False)
+        # `last` and `first` can be the same measure - an arrangement that fits in one
+        # bar - and the pickup flag must not then be overwritten by the closing one.
+        # A lone pickup bar stays implicit: it is still a pickup.
+        if last is not first:
+            last.showNumber = stream.enums.ShowNumber.ALWAYS
         # The closing bar is a full one, unless the whole arrangement is the pickup.
         closing = bar_length if len(measures) > 1 else bar_length - pickup
         shortfall = closing - last.duration.quarterLength

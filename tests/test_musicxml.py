@@ -249,6 +249,40 @@ class TestMusicXMLRhythm(MusicXMLTestCase):
                     total, per_bar * divisions, f"bar {measure.get('number')} is wrong"
                 )
 
+    def test_a_head_starting_mid_bar_is_written_as_a_pickup(self):
+        """
+        A head that starts part-way into a bar opens with an anacrusis.
+
+        The first measure is flagged `implicit="yes"`, which is how a reader knows the
+        music does not begin on a downbeat. The subtlety is that a pickup can be
+        *exactly* filled - a head starting on the third beat has two beats of pickup
+        and puts two beats of music in it - so "is the measure short" is the wrong
+        test for "is this an anacrusis", and a complete-looking first bar would
+        otherwise claim a downbeat that is not there.
+        """
+        from arranger import format_musicxml
+
+        for step in self.steps:
+            # Bar 0, starting on the third beat: two beats of pickup, filled exactly.
+            step.bar, step.beat, step.duration = 0, 3.0, 0.25
+        root = self.root()
+        first = self.tab_part(root).findall("measure")[0]
+        self.assertEqual(first.get("implicit"), "yes")
+        divisions = first.find("attributes/divisions")
+        assert divisions is not None and divisions.text is not None
+        total = sum(
+            int(node.find("duration").text)  # type: ignore[union-attr]
+            for node in self.attacks(first)
+        )
+        self.assertEqual(total, 2 * int(divisions.text), "the pickup is two beats")
+
+    def test_a_head_starting_on_the_downbeat_is_not_a_pickup(self):
+        """A head that starts on beat 1 has no pickup, and no implicit bar."""
+        for step in self.steps:
+            step.bar, step.beat, step.duration = 0, 1.0, 0.25
+        first = self.tab_part(self.root()).findall("measure")[0]
+        self.assertEqual(first.get("implicit"), "no")
+
     def test_chord_symbols_appear_once_per_change(self):
         """
         A symbol on every step would bury the tab, so one is written per change.
