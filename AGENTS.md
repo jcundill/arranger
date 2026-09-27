@@ -105,6 +105,32 @@ Note the name split: the **distribution** is `jazz-arranger` because the PyPI na
 `arranger` is already taken by an unrelated project, while the **import** name stays
 `arranger`.
 
+### If the interpreter hangs at startup
+
+`Fatal Python error: init_import_site: Failed to import the site module`, with a
+traceback running through `site.addsitedir`, means the editable-install finder in
+`site-packages` is broken. It is worth knowing because the symptom is a **hang, not an
+error**: the traceback only appears once something interrupts it, so the shell can
+look simply stuck rather than broken, and the failure gets mistaken for a slow import
+or a flaky terminal.
+
+The cause seen here was a stale finder for a long-superseded version —
+`__editable___jazz_arranger_0_1_0_finder.py`, left over from when the project was at
+0.1.0 and now 0.5.0. It is regenerated on every `pip install -e .`, so the stale copy
+is what a version bump in `pyproject.toml` leaves behind when the reinstall is
+skipped.
+
+The fix is to reinstall rather than to hand-edit the finder:
+
+```bash
+.venv/bin/pip install -e . --no-deps
+```
+
+That replaces the stale finder and the matching `.pth` with ones for the current
+version. To confirm the symptom is this and not something else, run
+`./.venv/bin/python -S -c 'print(1)'`: the `-S` skips site processing, so it succeeds
+where the normal invocation hangs.
+
 ## Build / Run
 
 There is no build step for local development. Run the built-in demonstration
