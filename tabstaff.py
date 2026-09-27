@@ -19,7 +19,7 @@ except for the public re-exports at the bottom - see the note there.
 
 from __future__ import annotations
 
-from typing import Any, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Tuple
 
 from arranger import STRING_NAMES, ArrangementStep, _MUTED_CELL
 
@@ -658,4 +658,35 @@ def write_tab_html(steps: List[ArrangementStep], path: str, **kwargs: Any) -> st
 # in `arranger` would be a genuine import cycle: importing `tabstaff` first would
 # re-enter a half-initialised `arranger` and fail to find these names. The lazy
 # `__getattr__` in `arranger` breaks it without a lazy import at every call site.
-__all__ = ["format_tab_staff", "format_tab_html", "write_tab_html"]
+# The MusicXML renderer lives in `tabxml`, which imports this module. Re-exporting it
+# here is what keeps one spelling for the whole staff-rendering surface - `from
+# arranger import format_musicxml` - and the re-export is lazy for the same reason
+# and with the same cycle: `tabxml` imports `tabstaff`, so a top-level import here
+# would re-enter a half-initialised `tabxml`.
+_TABXML_EXPORTS = ("format_musicxml", "write_musicxml")
+
+if TYPE_CHECKING:
+    # The names are resolved by `__getattr__` below, which a static checker cannot
+    # follow - so without this it would report them as absent from the module and
+    # flag the `__all__` entries. The same trick `arranger` uses for these names.
+    from tabxml import format_musicxml, write_musicxml
+
+# The five names a star-import of this module must carry. Spelled out as one literal
+# rather than `+=`, which a static checker cannot follow.
+__all__ = [
+    "format_tab_staff",
+    "format_tab_html",
+    "write_tab_html",
+    "format_musicxml",
+    "write_musicxml",
+]
+
+
+def __getattr__(name: str) -> Any:
+    """Resolves the `tabxml` renderers on first access. See _TABXML_EXPORTS."""
+    if name in _TABXML_EXPORTS:
+        import tabxml
+
+        return getattr(tabxml, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+

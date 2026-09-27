@@ -20,6 +20,13 @@ classifiers = [
 ]
 dependencies = ["musthe>=1.0.0"]
 
+# MusicXML export is the one thing the library cannot do with the standard library,
+# and it is opt-in for exactly that reason: a plain `pip install jazz-arranger` pulls
+# in musthe alone, and `pip install 'jazz-arranger[xml]'` adds the renderer. The
+# import inside tabxml is lazy, so everything else in the package works without it.
+[project.optional-dependencies]
+xml = ["music21>=9.1"]
+
 [project.scripts]
 jazz-arranger = "arranger:main"
 
@@ -28,7 +35,7 @@ jazz-arranger = "arranger:main"
 # them explicitly keeps flat-layout auto-discovery from tripping over the
 # non-package `tests/` dir. `tabstaff` holds the whole-progression staff renderers
 # and imports `arranger`, so it is listed after it.
-py-modules = ["arranger", "tabstaff", "wjazzd"]
+py-modules = ["arranger", "tabstaff", "tabxml", "wjazzd"]
 
 [tool.setuptools.dynamic]
 # Single source of truth: the version lives in arranger.__version__.

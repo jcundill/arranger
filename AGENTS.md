@@ -34,6 +34,7 @@ Harris dim7 substitution, or holding the inner voices) — see
 arranger/
 ├── arranger.py            # The engine + a main() demonstration entry point
 ├── tabstaff.py            # Whole-progression staff renderers (ASCII + HTML)
+├── tabxml.py              # MusicXML export (optional extra: music21)
 ├── wjazzd.py              # Optional Weimar Jazz Database glue (stdlib sqlite3 only)
 ├── pyproject.toml         # PEP 621 metadata (setuptools backend)
 ├── README.md              # User-facing overview and usage
@@ -43,6 +44,7 @@ arranger/
 │   ├── test_chord_parser.py
 │   ├── test_fretboard.py
 │   ├── test_grips.py
+│   ├── test_musicxml.py
 │   ├── test_non_chord_tones.py
 │   ├── test_progressions.py
 │   ├── test_tab_rendering.py
@@ -58,8 +60,9 @@ measured, what was decided, and what is still open. Read it before changing
 
 There is **no** `setup.py`, `setup.cfg`, `requirements.txt`, or CI config, and none
 is needed. Packaging metadata lives solely in `pyproject.toml`, which uses the
-setuptools backend, declares `musthe` as its only runtime dependency, and reads the
-version dynamically from `arranger.__version__`.
+setuptools backend, declares `musthe` as its only runtime dependency, offers
+`music21` as the `xml` extra, and reads the version dynamically from
+`arranger.__version__`.
 
 ## Requirements
 
@@ -67,6 +70,12 @@ version dynamically from `arranger.__version__`.
   e.g. `Voicing | dict`). The local dev virtualenv runs **Python 3.14**.
 - One third-party runtime dependency: **[musthe](https://pypi.org/project/musthe/)**
   (music theory primitives: `Note`, `Chord`, `Interval`).
+- One **optional** dependency: **[music21](https://pypi.org/project/music21/)**, the
+  `xml` extra, used only by `tabxml.py`. It is the single exception to the
+  musthe-only rule, and it is not a soft one: the import is *inside* the functions,
+  so `import arranger`, the ASCII staff and the HTML page all work on a machine
+  that has never installed it, and `tests/test_musicxml.py` is `skipUnless`-guarded
+  exactly as the database-backed tests are.
 - One optional, **dev-only** tool: **[pyright](https://pypi.org/project/pyright/)**
   for type checking. It is installed in `.venv/` but is deliberately absent from
   `pyproject.toml`, so it never reaches users of the package.
@@ -119,6 +128,7 @@ needs the 42 MB `wjazzd.db` beside the module or at `WJAZZD_DB`:
 
 ```bash
 .venv/bin/python arranger.py corpus --melid 218
+.venv/bin/python arranger.py corpus --melid 218 --musicxml head.musicxml   # optional extra
 .venv/bin/python arranger.py corpus --list          # the 456 transcriptions
 ```
 
@@ -620,6 +630,11 @@ duplicated or imported across the boundary.
 | `_staff_columns` / `_staff_breaks` | the shared layout core, both renderers call these |
 | `_carries_melody` | which strings carry the melody, for the `*` marker |
 
+`format_musicxml` and `write_musicxml` are the same rendering decision in a different
+medium, and they live in `tabxml.py` rather than here — see
+[MusicXML export](#musicxml-export). `tabstaff` re-exports both, so there is still one
+spelling for the whole staff-rendering surface.
+
 **The dependency is one-way: `tabstaff` imports `arranger`, never the reverse.** It
 takes `STRING_NAMES`, `ArrangementStep` and `_MUTED_CELL` from here; the last of
 those stays put because `Voicing.tab_block()` and `format_progression` use it too.
@@ -637,7 +652,89 @@ Two consequences worth knowing:
 
 - **A `TYPE_CHECKING` import** in `arranger.py` gives the type checker and IDEs the
   real declarations, since a checker cannot follow `__getattr__`. Without it pyright
-  reports the three names as "not present in module".
+  reports the names as "not present in module". The same import is in `tabstaff.py`
+  for the two `tabxml` names, and without it pyright flags their `__all__` entries.
+- **`__all__` is an explicit list**, not computed from `globals()`. It had to be
+  added: the module never had one, so `from arranger import *` used to export every
+  public name, and the lazy `__getattr__` hides the re-exported ones from a star
+  import. `TestTabstaffModuleBoundary::test_dunder_all_matches_the_public_surface`
+  fails if the list and the module's public names diverge, in either direction. It is
+  spelled as one literal in both modules rather than with `+=`, which a checker
+  cannot follow either.
+
+## MusicXML export
+
+`format_musicxml` / `write_musicxml` in `tabxml.py` render an arrangement as a
+`score-partwise` document for a notation program. It is a **third renderer family**,
+not a third column: it is the only one that needs a dependency, and the only one that
+has to be post-processed before it is correct.
+
+| name | role |
+|---|---|
+| `tabxml.format_musicxml` | the document, as a string. Pure, like every other renderer |
+| `tabxml.write_musicxml` | the only function in the module that touches the filesystem |
+| `_events` / `_is_hold` | placement, durations and the pickup; the rhythmic core |
+| `_build_part` | one staff: measures, notes, ties, chord symbols |
+| `_split_technicals` | **redistributes** a chord's frets onto its own notes |
+| `_add_staff_details` | writes `<staff-lines>6</staff-lines>` |
+| `_chord_symbol` | a symbol, or a text-only one for a name music21 rejects |
+| `_drop_empty_inversions` | removes the meaningless `<inversion>-1</inversion>` |
+
+Four decisions in here were each forced by a failure, not chosen:
+
+- **The document is post-processed with `ElementTree` after music21 writes it.**
+  music21 does not export the fret and string of the notes *inside* a chord - it puts
+  them all on the chord's first note (cuthbertLab/music21#1534) - and it writes no
+  `<staff-lines>` for a `TabClef`. Both are missing information a reader cannot
+  recover: a note with no `<fret>` has no position at all, so notation software
+  computes one from the pitch and puts the shape in the wrong place. The pairs are
+  already in the right order (`_build_note` appends them lowest string first, and a
+  `Chord` keeps its note order), so `_split_technicals` hands pair *i* to note *i*.
+- **Steps are placed by `tabxml`, not by `tabstaff._staff_columns`.** The column grid
+  is deliberately lossy - two steps on one onset collapse into one column, "the first
+  step in a column owns that column" - which is right for a fixed-width ASCII staff
+  and wrong for a score. The eighth-note skeleton puts two steps on the last beat of
+  most bars, so sharing the grid would drop a chord from every bar of a head. What is
+  shared is the *semantics*: absolute onsets with signed bars, and collapse on
+  unchanged sounding pitches.
+- **Steps sharing an onset divide their span equally**, and the transcribed
+  `duration` is not used as a weight. It is the length of the *melody note* the step
+  came from, which runs past the onset, and the corpus's values are arbitrary
+  fractions of a whole note; scaling by them yields note values music21 refuses to
+  write, and it refuses the **whole export** rather than rounding one. Two eighths on
+  the last beat of a bar are two eighths.
+- **Every measure carries its own time signature.** music21 resolves a measure's bar
+  length from its own context when it pads and ties the bar; with the signature only
+  on the first measure the later ones have none and the export dies inside
+  `makeRests`. Repeating a valid element in each measure is cheaper than the crash.
+
+Two more are worth stating because they look like bugs otherwise:
+
+- `Measure.padAsAnacrusis` is a **method**, not a flag. Assigning to it silently does
+  nothing, and a pickup written as a full bar is a bar of wrong music.
+- An event that runs across a bar line is **tied**, not stretched. A note cannot cross
+  a bar line in MusicXML, and a measure holding more than its time signature is not a
+  measure, so the renderer cuts it and ties the halves. The written rhythm survives
+  even where the transcription's phrasing disagrees with the metre.
+
+**Dependencies and the optional extra.** `music21` is the single exception to the
+musthe-only rule, and it is opt-in: `pip install 'jazz-arranger[xml]'`. `_music21()`
+imports it inside the functions and rewrites the `ImportError` into a message naming
+that install command, so `import arranger`, the ASCII staff and the HTML page all work
+without it, and `corpus_cli` reports the missing extra as a usage message rather than a
+traceback.
+
+**A chord name music21 cannot classify is written, not dropped.** `mMaj7`, `maj9` and
+`7alt` are among the ones it rejects, and the Weimar notation produces more
+(`Bb7sus4`). `_chord_symbol` falls back to `<kind text="...">other</kind>` with the
+root still parsed out by `ChordParser`, which is how MusicXML spells a symbol whose
+type the writer does not recognise.
+
+**Known limitations.** Durations are floored at a sixteenth, because MusicXML cannot
+write less and music21 aborts rather than rounding; nothing this library generates is
+shorter than an eighth. A triplet onset that does not divide the bar evenly would hit
+the same wall - untested. The provenance notes the HTML page carries (`notes=`) are
+not written into the score.
 - **`__all__` is an explicit list**, not computed from `globals()`. It had to be
   added: the module never had one, so `from arranger import *` used to export every
   public name, and the lazy `__getattr__` hides the re-exported ones from a star

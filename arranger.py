@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import re
 import sys
 from dataclasses import dataclass
@@ -186,7 +187,8 @@ HIGH_FRET_LIMIT = 13
 # Library version. Kept here as the single source of truth; pyproject.toml reads
 # it via [tool.setuptools.dynamic] instead of duplicating the number.
 # 0.4.0 added the optional Weimar Jazz Database corpus integration (wjazzd.py).
-__version__ = "0.4.0"
+# 0.5.0 added MusicXML export (tabxml.py), behind the optional `xml` extra.
+__version__ = "0.5.0"
 
 
 @dataclass
@@ -2265,15 +2267,22 @@ def _step_cells(step: ArrangementStep) -> List[str]:
 # `from arranger import format_tab_html` keeps working - the spelling the README,
 # the tests and wjazzd all use - without a lazy import at every call site. This is
 # the same lazy-import discipline main() uses for wjazzd, for the same reason.
-_TABSTAFF_EXPORTS = ("format_tab_staff", "format_tab_html", "write_tab_html")
+_TABSTAFF_EXPORTS = {
+    # name -> the module it lives in. The MusicXML renderers live in `tabxml`, which
+    # `tabstaff` re-exports, so resolving them through `tabstaff` as well keeps one
+    # spelling for the whole rendering surface.
+    "format_tab_staff": "tabstaff",
+    "format_tab_html": "tabstaff",
+    "write_tab_html": "tabstaff",
+    "format_musicxml": "tabstaff",
+    "write_musicxml": "tabstaff",
+}
 
 
 def __getattr__(name: str) -> Any:
-    """Resolves the `tabstaff` renderers on first access. See _TABSTAFF_EXPORTS."""
+    """Resolves the renderer modules on first access. See _TABSTAFF_EXPORTS."""
     if name in _TABSTAFF_EXPORTS:
-        import tabstaff
-
-        return getattr(tabstaff, name)
+        return getattr(importlib.import_module(_TABSTAFF_EXPORTS[name]), name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
@@ -2451,7 +2460,13 @@ if __name__ == "__main__":
 # `from arranger import format_tab_html` type-checks and IDEs resolve it, while at
 # runtime the names still come from __getattr__ and never trigger an import cycle.
 if TYPE_CHECKING:
-    from tabstaff import format_tab_html, format_tab_staff, write_tab_html
+    from tabstaff import (
+        format_musicxml,
+        format_tab_html,
+        format_tab_staff,
+        write_musicxml,
+        write_tab_html,
+    )
 
 # Star-import support. This module never had an __all__, so `from arranger import *`
 # used to export every public name; the lazy __getattr__ above hides the tabstaff
@@ -2479,11 +2494,13 @@ __all__ = [
     "VoiceLeadingEngine",
     "Voicing",
     "format_progression",
+    "format_musicxml",
     "format_tab_html",
     "format_tab_staff",
     "main",
     "normalised_harmony",
     "sounding_harmony",
     "supported_string_sets",
+    "write_musicxml",
     "write_tab_html",
 ]

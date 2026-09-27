@@ -30,6 +30,16 @@ for smooth left-hand movement.
 pip install -e .        # or: make install
 ```
 
+MusicXML export is the one thing the library cannot do with the standard library, so
+it lives in an **optional extra**. A plain install pulls in `musthe` alone:
+
+```bash
+pip install -e '.[xml]' # adds music21, for format_musicxml / write_musicxml
+```
+
+Nothing else in the package needs it: the renderer imports `music21` when it is
+called, not when it is imported.
+
 Or, without installing, just run everything from the repository root — the module
 imports directly:
 
@@ -280,6 +290,44 @@ For a single voicing, `Voicing.tab_string()` gives the one-line form while
 `Voicing.tab_block()` (a `List[str]`) and `Voicing.tab()` (the same joined into
 one string) give the vertical six-line form. `ArrangementStep.tab_line()` and
 `ArrangementStep.tab_block()` do the same for a step.
+
+### MusicXML, for a notation program
+
+`format_musicxml` writes the same arrangement as a real score, so a head can go on
+to MuseScore, Sibelius or Final without being retyped. It needs the optional extra
+(`pip install '.[xml]'`):
+
+```python
+from arranger import write_musicxml
+
+write_musicxml(steps, "head.musicxml", title="Blue Train", subtitle="John Coltrane")
+```
+
+The document holds a **six-line TAB staff** whose every note carries its own
+`<fret>` and `<string>`, a **notation staff** of the same music above it, and the
+**chord symbols** on each change. The written rhythm is preserved: each step becomes
+a note or chord of the length it occupies, a shape that is *held* rather than
+restruck becomes one longer note, and an event that runs across a bar line is tied
+rather than stretched. A hand-written progression with no timing falls back to one
+chord per beat, exactly as the other two renderers do.
+
+Three options shape the output:
+
+- **`show_notation=True` (the default)** includes the notation staff. Pass `False`
+  for a one-staff tab document.
+- **`show_chords=True` (the default)** writes the chord symbols, one per change.
+- **`collapse=True` (the default)** writes a held shape once. Pass `False` to hear
+  it re-struck on every step.
+
+From the command line it is `--musicxml PATH`, and `--no-notation-staff` drops the
+upper staff:
+
+```bash
+python arranger.py corpus --melid 218 --musicxml head.musicxml
+```
+
+A chord name music21 cannot classify — the Weimar notation produces several — is
+written as text with the root still parsed out, rather than dropped.
 
 ## Low-register melodies
 

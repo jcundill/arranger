@@ -905,12 +905,44 @@ class TestTabstaffModuleBoundary(unittest.TestCase):
         """
         The README, the tests and wjazzd all spell these as `from arranger import`,
         so the split must not move the public name even though it moved the code.
+        The MusicXML renderers are included: they live in `tabxml`, which `tabstaff`
+        re-exports, and all four must be reachable the same one way.
         """
         import arranger
         import tabstaff
 
         for name in ("format_tab_staff", "format_tab_html", "write_tab_html"):
             self.assertIs(getattr(arranger, name), getattr(tabstaff, name))
+        for name in ("format_musicxml", "write_musicxml"):
+            self.assertIs(getattr(arranger, name), getattr(tabstaff, name))
+
+    def test_the_musicxml_renderers_are_lazy(self):
+        """
+        `tabxml` needs music21, an optional extra, and it imports `tabstaff` - so it
+        must be resolved on first access rather than at import time. Importing
+        `arranger` and `tabstaff` on a machine with no music21 has to keep working,
+        which is the whole reason music21 is not a runtime dependency.
+        """
+        import subprocess
+        import sys
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                # Block music21 outright, then check the package still imports and
+                # that only *calling* the renderer complains.
+                "import sys;"
+                " sys.modules['music21'] = None;"
+                " import arranger, tabstaff;"
+                " print(arranger.format_tab_staff.__name__);"
+                " print(arranger.format_musicxml.__name__)",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("format_musicxml", result.stdout)
 
     def test_importing_tabstaff_first_does_not_crash(self):
         """
@@ -962,6 +994,7 @@ class TestTabstaffModuleBoundary(unittest.TestCase):
             "TYPE_CHECKING",
             "annotations",
             "dataclass",
+            "importlib",
             "re",
             "sys",
         }

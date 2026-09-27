@@ -1407,7 +1407,13 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
     """
     import argparse
 
-    from arranger import format_progression, format_tab_staff, write_tab_html
+    from arranger import (
+        format_progression,
+        format_musicxml,
+        format_tab_staff,
+        write_musicxml,
+        write_tab_html,
+    )
 
     parser = argparse.ArgumentParser(
         prog="arranger.py corpus",
@@ -1488,6 +1494,20 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
         metavar="PATH",
         help="also write the head to PATH as a self-contained HTML page "
              "(e.g. --html head.html), and say where it went",
+    )
+    parser.add_argument(
+        "--musicxml",
+        default=None,
+        metavar="PATH",
+        help="also write the head to PATH as MusicXML, for a notation program "
+             "(e.g. --musicxml head.musicxml). Needs the optional extra: "
+             "pip install 'jazz-arranger[xml]'",
+    )
+    parser.add_argument(
+        "--no-notation-staff",
+        action="store_true",
+        help="with --musicxml, write the tab staff on its own, without the "
+             "notation staff above it",
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -1597,6 +1617,24 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
             notes=provenance,
         )
         print(f"\nwrote {written}")
+
+    if args.musicxml:
+        # The score is written separately from the HTML rather than inside it, so a
+        # run that asks for both produces both, and a run that asks for neither is
+        # unaffected by the optional extra. A missing music21 is a usage problem,
+        # not a crash: the message says which install command fixes it.
+        try:
+            written = write_musicxml(
+                arrangement.steps,
+                args.musicxml,
+                title=solo.title or f"melid {solo.melid}",
+                subtitle=f"{solo.performer} - {solo.key}".strip(" -"),
+                show_notation=not args.no_notation_staff,
+            )
+        except ImportError as error:
+            print(f"\n{error}")
+            return 1
+        print(f"wrote {written}")
     return 0
 
 
