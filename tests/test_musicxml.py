@@ -5,10 +5,12 @@ Every test here checks the *document* - the XML a notation program receives - ra
 than the music21 objects that produced it, because the document is the contract.
 """
 import os
+import re
 import tempfile
 import unittest
 from xml.etree import ElementTree
 from arranger import ArrangementStep, Voicing, VoiceLeadingEngine
+from tabxml import _READABLE_KINDS, _downgrade_kinds
 try:
     import music21  # noqa: F401
     HAS_MUSIC21 = True
@@ -343,13 +345,137 @@ class TestMusicXMLRhythm(MusicXMLTestCase):
         name the analyst wrote.
         """
         from arranger import format_musicxml
+
         step = make_step([-1, 3, 5, 5, 5, -1], chord="Bb7sus4")
         root = ElementTree.fromstring(format_musicxml([step]))
         symbols = self.symbols(self.tab_part(root))
         self.assertEqual(len(symbols), 1)
         self.assertIn("sus4", ElementTree.tostring(symbols[0], encoding="unicode"))
 
+
 @requires_music21
+
+
+class TestMusicXML31Kinds(MusicXMLTestCase):
+    """
+    Every `<kind>` in the document must be a value MusicXML 3.1 actually has.
+
+    This is the class of defect that neither a unit test nor `converter.parse()` can
+    see. music21 writes MusicXML 4.0, reads 4.0 back without complaint, and a 4.0-only
+    `kind` value is a fatal import error for a 3.1-era reader such as MuseScore 3:
+
+        Content of element kind does not match its type definition:
+        String content is not listed in the enumeration facet.
+
+    So the check reads the finished document, not the intent behind it.
+    """
+
+    def kinds(self, root):
+        """The `<kind>` text of every chord symbol in the document, both parts."""
+        return [(node.text or "").strip() for node in root.iter("kind")]
+
+    def test_every_kind_is_in_the_3_1_enumeration(self):
+        """
+        The invariant itself, on a document whose chords music21 does classify.
+        This is the assertion that would have caught the export that could not be
+        opened; it reads the XML, so it does not care how the values got there.
+        """
+        found = self.kinds(self.root())
+        self.assertTrue(found, "the document has chord symbols to check")
+        for kind in found:
+            self.assertIn(kind, _READABLE_KINDS, f"not a MusicXML 3.1 kind: {kind!r}")
+
+    def test_a_seventh_sus_is_written_in_3_1_terms(self):
+        """
+        A 7sus4 is the case that broke it: music21 writes the 4.0-only
+        `suspended-fourth-seventh`, and 3.1 spells the same chord as a
+        `suspended-fourth` with the 7th added as a degree.
+
+        The root must survive - it is what tells the reader the chord is an F - and
+        neither the 4.0 value nor the string 'suspended-fourth-seventh' may remain
+        anywhere in the document.
+        """
+        from arranger import format_musicxml
+
+        step = make_step([-1, 3, 5, 5, 5, -1], chord="F7sus4", melody="C5")
+        root = ElementTree.fromstring(format_musicxml([step]))
+        symbols = self.symbols(self.tab_part(root))
+        self.assertEqual(len(symbols), 1)
+        harmony = symbols[0]
+        self.assertEqual(harmony.findtext("root/root-step"), "F")
+        kind = harmony.find("kind")
+        assert kind is not None
+        self.assertEqual((kind.text or "").strip(), "suspended-fourth")
+        added = [
+            (node.findtext("degree-value"), node.findtext("degree-type"))
+            for node in harmony.findall("degree")
+        ]
+        self.assertIn(("7", "add"), added, "the 7th is carried as an added degree")
+        self.assertNotIn("suspended-fourth-seventh", ElementTree.tostring(
+            root, encoding="unicode"
+        ))
+
+    def test_an_unknown_kind_falls_back_to_text(self):
+        """
+        A `<kind>` 3.1 has no type for becomes `<kind text="...">other</kind>`.
+
+        `other` is in the 3.1 enumeration and `text` is the attribute 3.1 defines for
+        a chord symbol it cannot classify, so this imports everywhere - which is the
+        same fallback `_chord_symbol` uses for a name music21 cannot parse, and the
+        backstop behind the sus mapping.
+        """
+        from arranger import format_musicxml
+
+        step = make_step([-1, 3, 5, 5, 5, -1], chord="Cmaj7")
+        root = ElementTree.fromstring(format_musicxml([step]))
+        kind = next(root.iter("kind"))
+        kind.text = "some-future-4.0-kind"
+        _downgrade_kinds(root)
+        self.assertEqual((kind.text or "").strip(), "other")
+        self.assertEqual(kind.get("text"), "some-future-4.0-kind")
+
+    def test_an_ordinary_progression_is_untouched(self):
+        """
+        The pass is a compatibility filter, not a rewriter: on a document whose kinds
+        are already legal, it must change nothing at all - no degree invented, no
+        attribute added. Anything else would risk degrading a file that already works.
+        """
+        import copy
+
+        from arranger import format_musicxml
+
+        # A copy of one document, not two exports: music21 mints a fresh part id on
+        # every export, so two documents would differ for reasons that have nothing
+        # to do with the pass.
+        before = ElementTree.fromstring(format_musicxml(self.steps))
+        degrees_before = len(list(before.iter("degree")))
+        after = copy.deepcopy(before)
+        _downgrade_kinds(after)
+        self.assertEqual(
+            ElementTree.tostring(before, encoding="unicode"),
+            ElementTree.tostring(after, encoding="unicode"),
+        )
+        # music21 writes `<degree>` of its own on some chords, so the invariant is that
+        # the pass adds none, not that the document has none.
+        self.assertEqual(len(list(after.iter("degree"))), degrees_before)
+
+    def test_the_downgrade_is_wired_into_the_export(self):
+        """
+        The pass is called from `format_musicxml`, not merely defined.
+
+        Asserted through the exported document rather than by patching the call, so
+        this cannot pass on a pass that is present but unreachable - which is what
+        would happen if a later refactor dropped it from the post-processing chain.
+        """
+        from arranger import format_musicxml
+
+        document = format_musicxml(self.steps)
+        for kind in re.findall(r"<kind[^>]*>([^<]*)</kind>", document):
+            self.assertIn(kind.strip(), _READABLE_KINDS, kind)
+
+
+@requires_music21
+
 
 class TestMusicXMLFileOutput(unittest.TestCase):
     """`write_musicxml` is the only function here that touches the filesystem."""

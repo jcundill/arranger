@@ -57,6 +57,71 @@ TAB_PART_NAME = "TAB"
 _MIN_EVENT_LENGTH = 0.25
 
 
+# The MusicXML 3.1 `kind-value` enumeration, transcribed from the 3.1 schema.
+#
+# `kind` is a **closed** enumeration, so a value outside it is a fatal import error in
+# any 3.1-era reader, not a warning. MusicXML 4.0 added values to it -
+# `suspended-fourth-seventh` among them - and music21 writes 4.0: MuseScore 3 rejects
+# the file outright with
+#
+#     Content of element kind does not match its type definition:
+#     String content is not listed in the enumeration facet.
+#
+# and `converter.parse()` does not notice, because music21 both wrote the value and
+# reads it back. 3.1 rather than 4.0 deliberately: it is a strict subset, so a
+# 3.1-legal document is also 4.0-legal. That keeps the DOCTYPE honest while making
+# the file importable by as many readers as possible.
+_READABLE_KINDS = frozenset(
+    {
+        "major",
+        "minor",
+        "augmented",
+        "diminished",
+        "dominant",
+        "major-seventh",
+        "minor-seventh",
+        "diminished-seventh",
+        "augmented-seventh",
+        "half-diminished",
+        "major-minor",
+        "major-sixth",
+        "minor-sixth",
+        "dominant-ninth",
+        "major-ninth",
+        "minor-ninth",
+        "dominant-11th",
+        "major-11th",
+        "minor-11th",
+        "dominant-13th",
+        "major-13th",
+        "minor-13th",
+        "suspended-second",
+        "suspended-fourth",
+        "Neapolitan",
+        "Italian",
+        "French",
+        "German",
+        "pedal",
+        "power",
+        "Tristan",
+        "other",
+        "none",
+    }
+)
+
+# The MusicXML 4.0 `kind` values that 3.1 lacks, and how each is spelled in 3.1:
+# the base kind it becomes, plus the degrees to `add` to carry the part the new value
+# folded into its name. MusicXML has no 3.1 kind for a sus chord with another interval
+# in the name, but it does have the `<degree>` idiom for a harmony expressed as a base
+# kind plus alterations - which is the case 3.1 was designed to cover, so a 7sus4 still
+# arrives as a real chord symbol rather than as text.
+_SUS_KINDS = {
+    "suspended-fourth-seventh": ("suspended-fourth", (7,)),
+    "suspended-second-seventh": ("suspended-second", (7,)),
+    "suspended-fourth-ninth": ("suspended-fourth", (9,)),
+    "suspended-second-ninth": ("suspended-second", (9,)),
+}
+
 def _music21() -> Any:
     """
     Imports music21 on demand, with a message that says how to get it.
@@ -564,6 +629,69 @@ def _unique_instrument_ids(root: ElementTree.Element) -> None:
             instrument.set("id", renumbered)
 
 
+def _add_degrees(harmony: ElementTree.Element, values: Sequence[int]) -> None:
+    """
+    Appends one `add` `<degree>` per value to a `<harmony>`, in schema order.
+
+    A `<harmony>` is a sequence - root, kind, inversion, bass, then the degrees - so
+    these are appended rather than inserted, which puts them after everything music21
+    already wrote and in the right order among the degrees themselves.
+    """
+    for value in values:
+        degree = ElementTree.SubElement(harmony, "degree")
+        for tag, text in (
+            ("degree-value", str(value)),
+            ("degree-alter", "0"),
+            ("degree-type", "add"),
+        ):
+            node = ElementTree.SubElement(degree, tag)
+            node.text = text
+
+
+def _downgrade_kinds(root: ElementTree.Element) -> None:
+    """
+    Rewrites any `<kind>` value MusicXML 3.1 does not have, so a 3.1-era reader can
+    open the file.
+
+    music21 writes MusicXML 4.0, and 4.0 extended the closed `kind-value` enumeration -
+    `suspended-fourth-seventh` among the additions. A reader that validates against 3.1
+    rejects the whole document, so the cost of one chord is the whole file. Two
+    rewrites, in this order of preference:
+
+    1. **The spec's own spelling.** `suspended-fourth-seventh` becomes
+       `suspended-fourth` plus a `<degree>` adding the 7th. MusicXML 3.1 has no kind
+       for the combination, but it does have the `add`-degree idiom for a harmony
+       expressed as a base kind plus alterations, so the chord still arrives as a
+       classified symbol rather than as loose text. The other 4.0-only sus kinds get
+       the same treatment, with the degree each one folded in.
+    2. **`other` with the name text.** Anything else unknown becomes
+       `<kind text="...">other</kind>` - the same fallback `_chord_symbol` already uses
+       for a name music21 cannot parse. Guaranteed to import; not classified.
+
+    The `<root>` is untouched: a sus chord's root is not what is in question. This is a
+    no-op on a document that only uses 3.1 kinds, which is the overwhelmingly common
+    case, and it runs last so that it sees the finished document rather than an
+    intermediate one.
+    """
+    for harmony in root.iter("harmony"):
+        kind = harmony.find("kind")
+        if kind is None:
+            continue
+        text = (kind.text or "").strip()
+        if text in _READABLE_KINDS:
+            continue
+        downgrade = _SUS_KINDS.get(text)
+        if downgrade is not None:
+            base, degrees = downgrade
+            kind.text = base
+            _add_degrees(harmony, degrees)
+        else:
+            # Unknown to 3.1. `text` is the attribute MusicXML 3.1 defines on `kind`
+            # for a chord it has no type for, which is precisely this case.
+            kind.set("text", text)
+            kind.text = "other"
+
+
 def _chord_groups(measure: ElementTree.Element) -> List[List[ElementTree.Element]]:
     """
     Splits a measure's `<note>` elements into groups, one per attack.
@@ -772,6 +900,9 @@ def format_musicxml(
     _split_technicals(root, tab_part_id)
     _add_staff_details(root, tab_part_id)
     _drop_empty_inversions(root)
+    # A compatibility filter, so it runs last: it sees the finished document, and
+    # nothing below it can put a 4.0-only value back.
+    _downgrade_kinds(root)
     return _document_prologue(document) + ElementTree.tostring(root, encoding="unicode")
 
 

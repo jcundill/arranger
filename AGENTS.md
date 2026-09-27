@@ -679,6 +679,7 @@ has to be post-processed before it is correct.
 | `_add_staff_details` | writes `<staff-lines>6</staff-lines>` |
 | `_chord_symbol` | a symbol, or a text-only one for a name music21 rejects |
 | `_drop_empty_inversions` | removes the meaningless `<inversion>-1</inversion>` |
+| `_downgrade_kinds` | rewrites a `<kind>` value MusicXML 3.1 does not have |
 
 Four decisions in here were each forced by a failure, not chosen:
 
@@ -729,6 +730,49 @@ traceback.
 (`Bb7sus4`). `_chord_symbol` falls back to `<kind text="...">other</kind>` with the
 root still parsed out by `ChordParser`, which is how MusicXML spells a symbol whose
 type the writer does not recognise.
+
+**The output is valid MusicXML 3.1, not just 4.0.**
+
+`kind-value` is a **closed enumeration**, and music21 writes MusicXML 4.0, which
+extended it. `suspended-fourth-seventh` is the value that actually bites: MuseScore 3
+refuses to open the file at all, with
+
+```
+Content of element kind does not match its type definition:
+String content is not listed in the enumeration facet.
+```
+
+One chord costs the whole document, because the reader rejects the file rather than
+the symbol.
+
+`converter.parse()` **cannot see this** - music21 both writes the 4.0 value and reads
+it back - and neither could any test asserting on the music21 objects. It is the second
+consecutive defect of that shape, the first being the duplicate part-list instrument
+id, so `tests/test_musicxml.py::TestMusicXML31Kinds` asserts on the **document**: every
+`<kind>` value in it is in `_READABLE_KINDS`. A 3.1-legal file is also 4.0-legal, so
+this costs nothing against the DOCTYPE and maximises what imports.
+
+`_downgrade_kinds` runs last, as a compatibility filter over the finished document,
+and rewrites in two steps:
+
+- **the spec's own spelling** - `suspended-fourth-seventh` becomes `suspended-fourth`
+  plus a `<degree>` adding the 7th. 3.1 has no kind for the combination, but it does
+  have the `add`-degree idiom for a harmony expressed as a base kind plus alterations,
+  so the chord still arrives as a classified symbol. `_SUS_KINDS` holds the mapping;
+- **`other` with the analyst's text**, the same fallback `_chord_symbol` uses. This is
+  the backstop for any value not in the table, and it is why the pass generalises to
+  kinds nobody has hit yet.
+
+The `<root>` is never touched, and on a document that only uses 3.1 kinds the pass is
+a no-op - `test_an_ordinary_progression_is_untouched` asserts the document is
+byte-identical afterwards, because a filter that degrades a working file is worse than
+the bug.
+
+**Open, and worth doing next: validate against the actual XSD.** `xmlschema` as a
+**dev-only** tool (like pyright, never a runtime dependency and not in the `xml` extra)
+would catch this whole class - MusicXML-level errors invisible to a round trip. It
+means vendoring the 3.1 XSD into `tests/` and skipping when absent, in the same
+`skipUnless` spirit as the `wjazzd.db` tests.
 
 **Known limitations.** Durations are floored at a sixteenth, because MusicXML cannot
 write less and music21 aborts rather than rounding; nothing this library generates is
