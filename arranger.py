@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import sys
 from dataclasses import dataclass
-from typing import Container, List, Optional, Sequence, Tuple, Dict, Any
+from typing import TYPE_CHECKING, Container, List, Optional, Sequence, Tuple, Dict, Any
 from musthe import Note, Chord, Interval
 
 # Standard tuning pitches in MIDI / Pitch class equivalents
@@ -2257,593 +2257,29 @@ def _step_cells(step: ArrangementStep) -> List[str]:
     return cells
 
 
-def _staff_columns(
-    steps: List[ArrangementStep],
-    beats_per_bar: int,
-    rhythm: bool,
-    collapse: bool = True,
-) -> List[Tuple[float, Optional[ArrangementStep], bool]]:
-    """
-    Places each step on an absolute beat, padding the gaps with rests.
-
-    An absolute beat is `bar * beats_per_bar + (beat - 1)`, the same signed-bar
-    arithmetic NoteEvent.beat_position uses, so a pickup in a negative bar sorts
-    before bar 0 without a special case. The list is sorted and de-duplicated
-    because two steps can share an onset (a chord change inside a held bar), and
-    the first step in a column owns that column.
-
-    Each column comes back with a `strikes` flag. With `collapse` on, a step
-    sounding exactly the same pitches as the one before it is a *hold*, not a new
-    attack: it stays on the grid (so the barlines and the chord line still line
-    up) but prints no frets, because the previous shape is still ringing. That is
-    what separates chord-melody tab from a chord list - the skeleton voices one
-    step per eighth, and a player holds the shape rather than restriking it eight
-    times a bar. Comparing sounding pitches rather than fret numbers is what makes
-    this work: the same shape reached by a different route is still the same hold.
-
-    Without timing - a hand-written progression, or `rhythm=False` - each step
-    simply takes the next beat, reproducing a one-chord-per-cell grid.
-    """
-    if rhythm and steps and all(step.has_timing for step in steps):
-        placed: List[Tuple[float, ArrangementStep]] = [
-            (step.bar * beats_per_bar + (step.beat - 1), step)  # type: ignore[operator]
-            for step in steps
-        ]
-    else:
-        placed = [(float(index), step) for index, step in enumerate(steps)]
-
-    columns: List[Tuple[float, Optional[ArrangementStep]]] = []
-    for onset, step in sorted(placed, key=lambda item: item[0]):
-        if columns and abs(columns[-1][0] - onset) < 1e-9:
-            continue
-        columns.append((onset, step))
-
-    # Fill the holes a real rhythm leaves, so a chord held for two beats is
-    # followed by a rest rather than by the next chord jammed up against it.
-    # The grid starts at the first onset, not at zero: a head selected from bar 1
-    # (or from a negative pickup bar) should not be preceded by a screen of empty
-    # bars standing in for the music before it.
-    filled: List[Tuple[float, Optional[ArrangementStep]]] = []
-    current = columns[0][0] if columns else 0.0
-    for onset, step in columns:
-        while current < onset - 1e-9:
-            filled.append((current, None))
-            current += 1.0
-        filled.append((onset, step))
-        current = onset + 1.0
-
-    if not collapse:
-        return [(onset, step, True) for onset, step in filled]
-
-    collapsed: List[Tuple[float, Optional[ArrangementStep], bool]] = []
-    held: Optional[Tuple[int, ...]] = None
-    for onset, step in filled:
-        if step is None:
-            # A rest breaks the ring: whatever was sounding has stopped, so the
-            # next step is a fresh attack even when it is the same shape.
-            held = None
-            collapsed.append((onset, None, False))
-            continue
-        pitches = tuple(sorted(step.voicing.midi_notes()))
-        # A repeated melody still strikes: the soprano is re-articulated even when the
-        # shape underneath is the one already ringing, so the note is heard again. The
-        # renderers show the soprano alone and blank the held inner voices.
-        strikes = pitches != held or step.repeated
-        collapsed.append((onset, step, strikes))
-        if strikes:
-            held = pitches
-    return collapsed
+# The whole-progression staff renderers live in `tabstaff`, which imports this
+# module. They are exposed here through a module-level __getattr__ rather than a
+# top-level `from tabstaff import ...`, because that would be an import cycle:
+# importing `tabstaff` first would re-enter this half-initialised module and fail to
+# find the names. PEP 562 resolves each name on first access instead, so
+# `from arranger import format_tab_html` keeps working - the spelling the README,
+# the tests and wjazzd all use - without a lazy import at every call site. This is
+# the same lazy-import discipline main() uses for wjazzd, for the same reason.
+_TABSTAFF_EXPORTS = ("format_tab_staff", "format_tab_html", "write_tab_html")
 
 
-def _carries_melody(steps: List[ArrangementStep], string_index: int) -> bool:
-    """True when the melody rides on this string somewhere in the progression."""
-    return any(
-        step.voicing.frets[string_index] >= 0
-        and step.voicing.soprano_string() == string_index
-        for step in steps
-    )
+def __getattr__(name: str) -> Any:
+    """Resolves the `tabstaff` renderers on first access. See _TABSTAFF_EXPORTS."""
+    if name in _TABSTAFF_EXPORTS:
+        import tabstaff
+
+        return getattr(tabstaff, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-def _staff_breaks(
-    columns: List[Tuple[float, Optional[ArrangementStep], bool]],
-    beats_per_bar: int,
-    measures_per_line: int,
-) -> set:
-    """
-    The column indexes that carry a barline.
-
-    A barline belongs to the *first* column of a bar, so a column qualifies only
-    when its bar differs from the previous column's. Testing the bar number alone
-    would flag every column of that bar - and since a bar holds several columns,
-    the staff would come out with a barline between every chord.
-
-    Barlines are drawn every `measures_per_line` bars, measured from the first
-    column's own bar rather than from bar 0, because a head picked up
-    mid-transcription (a negative pickup bar, or a `--bars` range that starts at
-    12) must not be padded out by the bars before it.
-    """
-    start_bar = int(columns[0][0] // beats_per_bar)
-    breaks = set()
-    previous_bar: Optional[int] = None
-    for index, (onset, _, _) in enumerate(columns):
-        bar = int(onset // beats_per_bar)
-        if index and bar != previous_bar and (bar - start_bar) % measures_per_line == 0:
-            breaks.add(index)
-        previous_bar = bar
-    return breaks
-
-
-def format_tab_staff(
-    steps: List[ArrangementStep],
-    beats_per_bar: int = 4,
-    rhythm: bool = True,
-    show_chords: bool = True,
-    show_melody: bool = False,
-    show_melody_string: bool = True,
-    show_mutes: bool = False,
-    collapse: bool = True,
-    measures_per_line: int = 4,
-) -> str:
-    """
-    Renders a whole progression as a standard six-line guitar staff.
-
-    format_progression() gives one line, or one six-line block, *per chord*. This
-    instead lays every step along a single staff in reading order - high E on top
-    down to low E - which is how printed tab is read, with the chord names on a
-    line above and a barline wherever the bar changes.
-
-    Fret cells are a fixed width and the number sits at the left of its column,
-    which is how tab is written and what keeps a chord name aligned with the fret
-    it belongs to. The width is at least two characters, so a two-digit fret never
-    runs into its neighbour. An unsounded string is left blank by default:
-    in chord-melody a voice that is still ringing is not restruck, and marking
-    it `x` on every chord would be noise. Pass `show_mutes` to spell them out. A
-    melody-only (no chord) step always shows its `x`s, because there the other
-    strings really are silent.
-
-    Args:
-        steps: arranged steps, typically from arrange_progression().
-        beats_per_bar: beats in a bar, used to place the barlines.
-        rhythm: space the steps on their real beats. This needs every step to
-            carry `bar` and `beat`; if any does not, the uniform grid is used, so
-            a hand-written progression still renders sensibly.
-        show_chords: draw the chord-name line.
-        show_melody: draw the melody-note line.
-        show_melody_string: mark the string carrying the melody with a `*`.
-        show_mutes: print `x` on every unsounded string.
-        collapse: strike a shape once and let it ring while the melody moves over the
-            same pitches, instead of restriking it on every step. This is the
-            default, and it is what makes a held chord read as a held chord.
-        measures_per_line: bars per staff line; the last line may be shorter.
-
-    Returns:
-        The rendered staff as a newline-joined string, or "" for no steps. Pure:
-        nothing is printed, so the caller stays in control of the output.
-    """
-    if beats_per_bar < 1:
-        raise ValueError(f"beats_per_bar must be at least 1, got {beats_per_bar!r}")
-    if measures_per_line < 1:
-        raise ValueError(f"measures_per_line must be at least 1, got {measures_per_line!r}")
-    if not steps:
-        return ""
-
-    columns = _staff_columns(steps, beats_per_bar, rhythm, collapse)
-    breaks = _staff_breaks(columns, beats_per_bar, measures_per_line)
-
-    def cell(step: Optional[ArrangementStep], string_index: int, strikes: bool) -> str:
-        """One fret cell: a fret number, a mute marker, or a blank."""
-        if step is None or not strikes:
-            return ""
-        # A repeated melody is a single note: the soprano alone is struck, and the
-        # other strings are simply not played. They stay blank rather than 'x',
-        # because the player is not muting them.
-        if step.repeated and string_index != step.voicing.soprano_string():
-            return ""
-        fret = step.voicing.frets[string_index]
-        if fret < 0:
-            return _MUTED_CELL if (show_mutes or step.melody_only) else ""
-        return str(fret)
-
-    # Every line shares one column width. A chord name is wider than two
-    # characters, so the grid widens to the longest label rather than letting the
-    # chord line push itself out of step with the frets underneath it.
-    width = _STAFF_CELL_WIDTH
-    for _, step, _ in columns:
-        if step is None:
-            continue
-        for text in (step.chord, step.melody):
-            width = max(width, len(text))
-
-    def line(text_for: Any, when_struck: bool, dedupe: bool = False) -> str:
-        """Renders a chord or melody line on the staff's own column grid.
-
-        `when_struck` is False for the melody line, which must label every step:
-        the melody moves on even while the shape underneath it is being held.
-        `dedupe` prints a label only where it changes from the previous one, which
-        is how a lead sheet spells a chord held across several slots.
-        """
-        # The same three-character offset the string lines use (label, melody
-        # marker, '|'), so a chord name starts in the column of its own frets.
-        out = ["   "]
-        previous = None
-        for index, (_, step, strikes) in enumerate(columns):
-            if index in breaks:
-                out.append("|")
-            elif index:
-                out.append(" ")
-            text = text_for(step) if (strikes or not when_struck) else ""
-            if dedupe and text and text == previous:
-                text = ""
-            if text:
-                previous = text
-            out.append(text.ljust(width) if text else " " * width)
-        return "".join(out).rstrip()
-
-    def string_line(string_index: int) -> str:
-        out = ["*", "|"] if show_melody_string and _carries_melody(steps, string_index) else [" ", "|"]
-        for index, (_, step, strikes) in enumerate(columns):
-            if index in breaks:
-                out.append("|")
-            elif index:
-                out.append("-")
-            out.append(cell(step, string_index, strikes).ljust(width))
-        out.append("|")
-        # The highest string is labelled with a lowercase 'e', the usual tab
-        # convention, so the top and bottom lines of the staff stay distinct.
-        name = "e" if string_index == 5 else STRING_NAMES[string_index]
-        return f"{name}{''.join(out)}"
-
-    lines: List[str] = []
-    if show_chords:
-        lines.append(
-            line(lambda step: step.chord if step else "", when_struck=True, dedupe=True)
-        )
-    if show_melody:
-        lines.append(line(lambda step: step.melody if step else "", when_struck=False))
-    lines.extend(string_line(index) for index in range(5, -1, -1))
-    return "\n".join(lines).rstrip()
-
-
-# --- HTML tab ---
-#
-# The staff above is ASCII, because that is what goes in a terminal. A browser can
-# do better: a table gives every column its own box, so fret numbers, chord names
-# and barlines align by construction rather than by counting characters, and the
-# page can be styled, reflowed and printed. The output is one self-contained file -
-# the stylesheet is inlined - so it can be emailed or opened from disk.
-#
-# Everything here reuses _staff_columns and _staff_breaks, so the text and HTML
-# renderings place a chord in the same column by construction and cannot drift.
-
-# Cell classes used by both the stylesheet and the row builder below. They are
-# named here rather than spelled inline so a rename cannot half-apply.
-_CLASS_SYSTEM = "system"
-_CLASS_MEASURE = "measure"
-_CLASS_STRING = "string"
-_CLASS_CHORD = "chord"
-_CLASS_MELODY = "melody"
-_CLASS_MUTE = "mute"
-_CLASS_SOPRANO = "soprano"
-_CLASS_BARNUM = "barnum"
-# Marks every cell of a repeated-melody column. Those cells are otherwise empty, so
-# without this a repeated note reads as a gap in the music rather than as a deliberate
-# single note.
-_CLASS_REPEAT = "repeat"
-
-_HTML_STYLESHEET = """
-:root { color-scheme: light dark; --ink: #1b1b1b; --rule: #b8b8b8;
-        --fret: #1b1b1b; --accent: #7a2f2f; --mute: #a9a9a9;
-        --strike: #f2ede2; --page: #fdfdfb; --faint: #8a8a8a; }
-@media (prefers-color-scheme: dark) {
-  :root { --ink: #e8e6e1; --rule: #4a4a4a; --fret: #f2efe9; --accent: #e0a3a3;
-          --mute: #6f6f6f; --strike: #2b2b2b; --page: #16181c; --faint: #8f8f8f; }
-}
-* { box-sizing: border-box; }
-body { margin: 0; padding: 2.5rem 1.5rem 4rem; background: var(--page);
-       color: var(--ink);
-       font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-main { max-width: 68rem; margin: 0 auto; }
-h1 { font-size: 1.5rem; font-weight: 650; margin: 0 0 .25rem; letter-spacing: -.01em; }
-p.sub { margin: 0 0 .35rem; color: var(--faint); font-size: .9rem; }
-p.meta { margin: 0 0 2rem; font-size: .8rem; color: var(--faint); }
-.systems { display: flex; flex-direction: column; gap: 1.6rem; }
-.system { display: flex; align-items: stretch; overflow-x: auto; }
-.measure { border-left: 1px solid var(--rule); padding: 0 .5rem; }
-.measure:first-of-type { border-left: 2px solid var(--rule); }
-.barnum { font-variant-numeric: tabular-nums; font-size: .7rem; color: var(--faint);
-          align-self: flex-start; padding-top: .1rem; min-width: 1.6rem;
-          text-align: right; }
-table { border-collapse: collapse;
-        font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
-th, td { padding: .05rem .28rem; text-align: left; white-space: nowrap; }
-/* Chord names share a column with the frets beneath them, so a name wider than a
-   fret widens the column instead of shifting the staff out of alignment. */
-tr.chord td { font-family: ui-sans-serif, system-ui, sans-serif; font-weight: 600;
-              color: var(--accent); font-size: .82rem; padding-bottom: .15rem; }
-tr.melody td { font-size: .72rem; color: var(--faint); padding-bottom: .3rem; }
-tr.string th { font-weight: 500; font-size: .72rem; color: var(--faint); width: 1ch;
-               padding-right: .5rem; }
-tr.string th.soprano { color: var(--accent); }
-tr.string td { font-size: .9rem; color: var(--fret);
-               font-variant-numeric: tabular-nums; min-width: 1.1ch; }
-/* A struck chord is tinted; a held one is left plain, because the shape is still
-   ringing from the attack before it. */
-td.strike { background: var(--strike); border-radius: 2px; }
-td.mute { color: var(--mute); }
-/* A repeated melody is played as a single note: the other strings are left empty and
-   the column is tinted, so it reads as a deliberate single note rather than as a gap
-   in the music. */
-td.repeat { background: var(--strike); border-radius: 2px; }
-.notes { margin: 2.5rem 0 0; font-size: .78rem; color: var(--faint); }
-.notes li { margin: .2rem 0; }
-@media print { body { padding: 0; } .system { overflow: visible; } }
-"""
-
-
-def _escape(text: str) -> str:
-    """HTML-escapes a value taken from the arrangement.
-
-    Chord names and note names can come from the corpus database, so they are
-    treated as untrusted text rather than assumed safe to interpolate.
-    """
-    return (
-        str(text)
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace('"', "&quot;")
-    )
-
-
-def _staff_lines(
-    columns: List[Tuple[float, Optional[ArrangementStep], bool]],
-    breaks: set,
-    beats_per_bar: int,
-) -> List[List[int]]:
-    """
-    Splits the columns into the systems of music that will be drawn, in order.
-
-    A system ends at a barline, so a break both closes one system and opens the
-    next. Columns that fall between barlines are all kept, including the rests.
-    The last system may be short, which is why this returns a list of lists rather
-    than a single count.
-    """
-    lines: List[List[int]] = []
-    current: List[int] = []
-    for index, (onset, _, _) in enumerate(columns):
-        if index in breaks and current:
-            lines.append(current)
-            current = []
-        current.append(index)
-    if current:
-        lines.append(current)
-    return lines
-
-
-def _html_chord_row(
-    columns: List[Tuple[float, Optional[ArrangementStep], bool]],
-    measure: List[int],
-    previous: Optional[str],
-) -> Tuple[str, Optional[str]]:
-    """
-    One row of chord names, plus the chord now in force for the next measure.
-
-    A name is printed only where it changes from the one in force, and only on a
-    struck chord, which is how a lead sheet spells a chord held across several
-    slots. The running `previous` is threaded through the whole page rather than
-    kept in module state or reset per measure, so a chord spanning a barline is
-    named once, and two calls in a row cannot see each other's chords.
-    """
-    # The leading empty <th> matches the string rows' label cell. Without it the
-    # whole row would sit one column left of the frets it belongs to, because a
-    # table column is shared by every row above and below it.
-    cells: List[str] = ["<th></th>"]
-    for index in measure:
-        _, step, strikes = columns[index]
-        if step is None or not strikes:
-            cells.append("<td></td>")
-            continue
-        if step.chord != previous:
-            cells.append(f"<td>{_escape(step.chord)}</td>")
-            previous = step.chord
-        else:
-            cells.append("<td></td>")
-    return f'<tr class="{_CLASS_CHORD}">{"".join(cells)}</tr>', previous
-
-
-def _html_melody_row(
-    columns: List[Tuple[float, Optional[ArrangementStep], bool]],
-    measure: List[int],
-) -> str:
-    """
-    One row of melody note names.
-
-    Labelled on every step, not only on a strike: the melody moves on even while
-    the shape underneath it is being held, so the held columns are exactly where a
-    note name is most useful.
-    """
-    cells = "<th></th>" + "".join(
-        # An empty cell is one with no step on it; pyright cannot see that the
-        # conditional already guards it, so the binding is named explicitly.
-        f"<td>{_escape(step.melody) if (step := columns[i][1]) else ''}</td>"
-        for i in measure
-    )
-    return f'<tr class="{_CLASS_MELODY}">{cells}</tr>'
-
-
-def _html_string_row(
-    columns: List[Tuple[float, Optional[ArrangementStep], bool]],
-    measure: List[int],
-    string_index: int,
-    sopranos: set,
-    show_mutes: bool,
-) -> str:
-    """
-    One row of fret numbers for a measure, on the string given.
-
-    A ringing voice is not restruck, so a muted string is left as an empty cell
-    rather than marked x on every chord - that would be noise. `show_mutes` spells
-    them out, and a melody-only step always shows its x, because there the other
-    strings really are silent.
-    """
-    label = (
-        f'<th class="{_CLASS_SOPRANO}">*</th>'
-        if string_index in sopranos
-        else "<th></th>"
-    )
-    cells = [label]
-    for index in measure:
-        _, step, strikes = columns[index]
-        if step is None or not strikes:
-            cells.append("<td></td>")
-            continue
-        # A repeated melody is a single note, so the other strings are not played at
-        # all and their cells stay empty. The column is still marked so a repeated
-        # note is visible as such rather than looking like a gap.
-        if step.repeated and string_index != step.voicing.soprano_string():
-            cells.append(f'<td class="{_CLASS_REPEAT}"></td>')
-            continue
-        fret = step.voicing.frets[string_index]
-        if fret < 0:
-            cells.append(
-                f'<td class="{_CLASS_MUTE}">x</td>'
-                if (show_mutes or step.melody_only)
-                else "<td></td>"
-            )
-        else:
-            repeat = f" {_CLASS_REPEAT}" if step.repeated else ""
-            cells.append(f'<td class="{repeat.strip()}">{fret}</td>' if repeat else f"<td>{fret}</td>")
-    return f'<tr class="{_CLASS_STRING}">{"".join(cells)}</tr>'
-
-
-def format_tab_html(
-    steps: List[ArrangementStep],
-    title: str = "Chord-melody arrangement",
-    subtitle: str = "",
-    beats_per_bar: int = 4,
-    rhythm: bool = True,
-    show_melody: bool = True,
-    show_mutes: bool = False,
-    collapse: bool = True,
-    measures_per_line: int = 4,
-    notes: Optional[Sequence[str]] = None,
-) -> str:
-    """
-    Renders a whole progression as a self-contained HTML tab page.
-
-    The same layout the ASCII staff draws, in a form a browser can present well:
-    every column is a table cell, so chord names, fret numbers and barlines stay
-    aligned by the table rather than by counting characters, and the page carries
-    its own stylesheet (including a dark-mode one), so it needs no network access
-    and no sibling files.
-
-    Args:
-        steps: arranged steps, typically from arrange_progression().
-        title: the page heading, and the browser window title.
-        subtitle: an optional line under the heading, e.g. the performer.
-        beats_per_bar: beats in a bar, used to place the barlines.
-        rhythm: space the chords on their real beats. Falls back to a uniform grid
-            when the steps carry no timing, exactly as format_tab_staff does.
-        show_melody: draw the melody-note line.
-        show_mutes: spell out the unsounded strings as a dimmed x. A melody-only
-            step always shows its x, since there the strings really are silent.
-        collapse: strike each shape once and let it ring, rather than restriking
-            an unchanged shape on every step.
-        measures_per_line: bars per system of music.
-        notes: optional lines of provenance, e.g. the register lift decision.
-
-    Returns:
-        A complete HTML document as a string, or "" for no steps. Pure: nothing is
-        printed and no file is written, so the caller stays in control.
-    """
-    if beats_per_bar < 1:
-        raise ValueError(f"beats_per_bar must be at least 1, got {beats_per_bar!r}")
-    if measures_per_line < 1:
-        raise ValueError(f"measures_per_line must be at least 1, got {measures_per_line!r}")
-    if not steps:
-        return ""
-
-    columns = _staff_columns(steps, beats_per_bar, rhythm, collapse)
-    breaks = _staff_breaks(columns, beats_per_bar, measures_per_line)
-    # Which strings carry the melody somewhere in the progression, so those rows
-    # can be marked once for the whole page rather than per chord.
-    sopranos = {index for index in range(6) if _carries_melody(steps, index)}
-
-    parts: List[str] = [
-        "<!DOCTYPE html>",
-        '<html lang="en">',
-        "<head>",
-        '<meta charset="utf-8">',
-        '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        f"<title>{_escape(title)}</title>",
-        f"<style>{_HTML_STYLESHEET}</style>",
-        "</head>",
-        "<body><main>",
-        f"<h1>{_escape(title)}</h1>",
-    ]
-    if subtitle:
-        parts.append(f'<p class="sub">{_escape(subtitle)}</p>')
-    parts.append(
-        f'<p class="meta">{len(steps)} step{"" if len(steps) == 1 else "s"}</p>'
-    )
-    parts.append('<div class="systems">')
-
-    start_bar = int(columns[0][0] // beats_per_bar)
-    # The chord in force, carried across systems so a chord held over a system
-    # break is not named a second time.
-    in_force: Optional[str] = None
-
-    def bar_of(index: int) -> int:
-        return int(columns[index][0] // beats_per_bar) - start_bar
-
-    for line in _staff_lines(columns, breaks, beats_per_bar):
-        parts.append(f'<div class="{_CLASS_SYSTEM}">')
-        parts.append(f'<span class="{_CLASS_BARNUM}">{bar_of(line[0]) + 1}</span>')
-        # Split the system into measures at each bar change, so every measure gets
-        # its own ruled box. The last measure of a system may be short.
-        measures: List[List[int]] = []
-        for index in line:
-            if measures and bar_of(measures[-1][0]) == bar_of(index):
-                measures[-1].append(index)
-            else:
-                measures.append([index])
-        for measure in measures:
-            parts.append(f'<div class="{_CLASS_MEASURE}"><table>')
-            chord_row, in_force = _html_chord_row(columns, measure, in_force)
-            parts.append(chord_row)
-            if show_melody:
-                parts.append(_html_melody_row(columns, measure))
-            for string_index in range(5, -1, -1):
-                parts.append(
-                    _html_string_row(
-                        columns, measure, string_index, sopranos, show_mutes
-                    )
-                )
-            parts.append("</table></div>")
-        parts.append("</div>")
-
-    parts.append("</div>")
-
-    if notes:
-        items = "".join(f"<li>{_escape(note)}</li>" for note in notes)
-        parts.append(f'<ul class="notes">{items}</ul>')
-
-    parts.append("</main></body></html>")
-    return "\n".join(parts)
-
-
-def write_tab_html(steps: List[ArrangementStep], path: str, **kwargs: Any) -> str:
-    """
-    Renders `format_tab_html` to a file and returns the path written.
-
-    The one function in this module that touches the filesystem, which is what
-    lets every renderer stay pure. Writing is separated from rendering so a caller
-    who only wants the string never creates a file by accident.
-    """
-    html = format_tab_html(steps, **kwargs)
-    with open(path, "w", encoding="utf-8") as handle:
-        handle.write(html)
-    return str(path)
+def __dir__() -> List[str]:
+    """Lists the lazily-exported renderers alongside the module's own names."""
+    return sorted(__all__)
 
 
 def format_progression(steps: List[ArrangementStep], vertical: bool = False) -> str:
@@ -2990,8 +2426,12 @@ def main() -> None:
     # between bars - so it is what a player would actually read off the page. These
     # steps carry no timing, so the chords fall on consecutive beats; a transcribed
     # head (see `arranger.py corpus --tab staff`) is spaced on its real rhythm.
+    # The renderer is reached through the module's lazy export rather than imported
+    # at the top, which is what keeps tabstaff importable on its own; see __getattr__.
+    import tabstaff
+
     print("\n--- TAB RENDERING: format_tab_staff(), one progression on a six-line staff ---")
-    print(format_tab_staff(result_major, show_melody=True))
+    print(tabstaff.format_tab_staff(result_major, show_melody=True))
 
     # Example 8: The same cadence with the timing the corpus loader supplies, so the
     # chords sit on their own beats and a barline falls between the two bars.
@@ -2999,8 +2439,51 @@ def main() -> None:
     for index, step in enumerate(timed_major):
         step.bar, step.beat, step.duration = index, 1.0, 1.0
     print("\n--- TAB RENDERING: format_tab_staff() on a timed progression, barline per bar ---")
-    print(format_tab_staff(timed_major, show_melody=True, measures_per_line=1))
+    print(tabstaff.format_tab_staff(timed_major, show_melody=True, measures_per_line=1))
 
 
 if __name__ == "__main__":
     main()
+
+
+# The three renderers are re-exported lazily (see __getattr__), which a static
+# checker cannot follow. A TYPE_CHECKING import gives it the real declarations, so
+# `from arranger import format_tab_html` type-checks and IDEs resolve it, while at
+# runtime the names still come from __getattr__ and never trigger an import cycle.
+if TYPE_CHECKING:
+    from tabstaff import format_tab_html, format_tab_staff, write_tab_html
+
+# Star-import support. This module never had an __all__, so `from arranger import *`
+# used to export every public name; the lazy __getattr__ above hides the tabstaff
+# renderers from that, so they are listed here explicitly. Keep it in step when
+# adding a public name - test_dunder_all_matches_the_public_surface checks that.
+__all__ = [
+    "DUO_DEGREES",
+    "GRIP_MAX_SPAN",
+    "GRIP_PREFERENCE",
+    "GRIP_STRING_SETS",
+    "HIGH_FRET_LIMIT",
+    "MELODY_STRING_CHOICES",
+    "MELODY_STRING_CHOICES_FULL",
+    "NECK_FRET_MAX",
+    "NECK_FRET_MIN",
+    "NO_CHORD",
+    "PITCH_CLASS_NAMES",
+    "SHELL_DEGREES",
+    "STANDARD_TUNING",
+    "STRING_NAMES",
+    "ArrangementStep",
+    "ChordParser",
+    "GuitarFretboard",
+    "StepPreparation",
+    "VoiceLeadingEngine",
+    "Voicing",
+    "format_progression",
+    "format_tab_html",
+    "format_tab_staff",
+    "main",
+    "normalised_harmony",
+    "sounding_harmony",
+    "supported_string_sets",
+    "write_tab_html",
+]

@@ -877,3 +877,113 @@ class TestRepeatedMelody(unittest.TestCase):
         )
         self.assertFalse(any(step.repeated for step in steps))
         self.assertTrue(all(step.melody_only for step in steps))
+
+
+class TestTabstaffModuleBoundary(unittest.TestCase):
+    """Tests that the staff renderers live in `tabstaff` and stay importable
+    from `arranger`."""
+
+    def test_renderers_are_defined_in_tabstaff(self):
+        """
+        The split's whole point: the three whole-progression renderers must not be
+        defined in arranger.py any more, so arranger re-exports rather than owns
+        them. format_progression, which is per-step rather than per-staff, stays.
+        """
+        import arranger
+        import tabstaff
+
+        for name in ("format_tab_staff", "format_tab_html", "write_tab_html"):
+            self.assertTrue(
+                hasattr(tabstaff, name), f"tabstaff should define {name}"
+            )
+            self.assertNotIn(
+                name, vars(arranger), f"{name} should not be defined in arranger"
+            )
+        self.assertIn("format_progression", vars(arranger))
+
+    def test_arranger_re_exports_the_renderers(self):
+        """
+        The README, the tests and wjazzd all spell these as `from arranger import`,
+        so the split must not move the public name even though it moved the code.
+        """
+        import arranger
+        import tabstaff
+
+        for name in ("format_tab_staff", "format_tab_html", "write_tab_html"):
+            self.assertIs(getattr(arranger, name), getattr(tabstaff, name))
+
+    def test_importing_tabstaff_first_does_not_crash(self):
+        """
+        tabstaff imports arranger, so importing it first re-enters arranger while
+        it is being set up. The lazy __getattr__ is what keeps that from failing, as
+        a bottom-of-file import would have.
+        """
+        import subprocess
+        import sys
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-c",
+                "import tabstaff; from arranger import format_tab_html;"
+                " print(format_tab_html.__name__)",
+            ],
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("format_tab_html", result.stdout)
+
+    def test_dunder_all_matches_the_public_surface(self):
+        """
+        `from arranger import *` used to export every public name, before the lazy
+        __getattr__ began hiding the re-exported ones. __all__ restores that, and
+        this keeps it honest: every listed name must resolve, and every public name
+        defined in the module must be listed.
+        """
+        import arranger
+
+        for name in arranger.__all__:
+            self.assertTrue(hasattr(arranger, name), f"{name} in __all__ but missing")
+        defined = {n for n in vars(arranger) if not n.startswith("_")}
+        # Names bound by imports rather than defined by this module - the typing
+        # aliases, musthe's classes, and the stdlib modules - are not API.
+        ignored = {
+            "Any",
+            "Chord",
+            "Container",
+            "Dict",
+            "Interval",
+            "List",
+            "Note",
+            "Optional",
+            "Sequence",
+            "Tuple",
+            "TYPE_CHECKING",
+            "annotations",
+            "dataclass",
+            "re",
+            "sys",
+        }
+        self.assertEqual(
+            defined - set(arranger.__all__) - ignored,
+            set(),
+            "a public name is defined but missing from __all__",
+        )
+
+    def test_tabstaff_shares_the_layout_core(self):
+        """
+        Both renderings call the same _staff_columns, which is what makes them
+        agree on where a chord sits and what counts as a hold. They must not drift
+        into separate implementations.
+        """
+        import inspect
+
+        import tabstaff
+
+        for name in ("format_tab_staff", "format_tab_html"):
+            self.assertIn(
+                "_staff_columns",
+                inspect.getsource(getattr(tabstaff, name)),
+                f"{name} should build its columns from _staff_columns",
+            )

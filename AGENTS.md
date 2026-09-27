@@ -32,7 +32,8 @@ Harris dim7 substitution, or holding the inner voices) — see
 
 ```
 arranger/
-├── arranger.py            # The whole library + a main() demonstration entry point
+├── arranger.py            # The engine + a main() demonstration entry point
+├── tabstaff.py            # Whole-progression staff renderers (ASCII + HTML)
 ├── wjazzd.py              # Optional Weimar Jazz Database glue (stdlib sqlite3 only)
 ├── pyproject.toml         # PEP 621 metadata (setuptools backend)
 ├── README.md              # User-facing overview and usage
@@ -161,7 +162,7 @@ The whole repository (`arranger.py` plus `tests/`) is kept clean under
 [pyright](https://pypi.org/project/pyright/) in its default `standard` mode:
 
 ```bash
-.venv/bin/pyright arranger.py wjazzd.py tests   # or: make typecheck
+.venv/bin/pyright arranger.py tabstaff.py wjazzd.py tests   # or: make typecheck
 ```
 
 There is no `pyrightconfig.json` and none is needed — pyright resolves `musthe`
@@ -426,6 +427,9 @@ what they are missing without opting in.
   `vertical=True`. Non-chord-tone steps are annotated via the shared
   `_step_annotation()` helper, which `_print_step()` also uses so the two
   renderings cannot drift.
+- `format_tab_staff`, `format_tab_html` and `write_tab_html` **live in
+  `tabstaff.py`**, not here, and are re-exported below. See
+  [The staff renderers live in `tabstaff.py`](#the-staff-renderers-live-in-tabstaffpy).
 - `format_tab_staff(steps, beats_per_bar=4, rhythm=True, show_chords=True,
   show_melody=False, show_melody_string=True, show_mutes=False, collapse=True,
   measures_per_line=4)` — renders the **whole progression along one six-line
@@ -559,8 +563,9 @@ what they are missing without opting in.
 
 ## Coding Conventions
 
-- Single-module design — keep new public behavior in `arranger.py` unless the
-  user asks to split it.
+- Single-module design — keep new **engine** behavior in `arranger.py` unless the
+  user asks to split it. The one exception is the staff renderers, which live in
+  `tabstaff.py` (see below).
 - `from __future__ import annotations` at the top; use `typing` aliases
   (`List`, `Optional`, `Tuple`, `Dict`, `Any`) consistent with the file.
 - Dataclasses for value objects; `@staticmethod`/`@classmethod` for stateless
@@ -589,6 +594,55 @@ what they are missing without opting in.
     placement, and the other invariants hold unchanged.
 - **Do not add new third-party dependencies** without explicit approval;
   `musthe` is the only one in use.
+
+## The staff renderers live in `tabstaff.py`
+
+`format_tab_staff`, `format_tab_html` and `write_tab_html` are the renderers that
+lay an arrangement along **one staff in reading order**, and they were split out of
+`arranger.py` so the engine can be read without them. `format_progression` (one
+line or one block *per chord*) and the vertical `tab_block()` stay in
+`arranger.py`: they are a different shape of output, and `Voicing.tab_block()` is
+called from the dataclass itself.
+
+**They are split together, never separately**, because the two renderings share
+`_staff_columns` — which places each step on an absolute beat and decides what is a
+strike and what is a hold. That sharing is not incidental duplication to be tidied
+away: it is *why* the two grids agree on where a chord sits and what counts as a
+hold. Splitting the HTML half alone would have forced that shared core to be
+duplicated or imported across the boundary.
+`TestTabstaffModuleBoundary::test_tabstaff_shares_the_layout_core` guards it.
+
+| name | role |
+|---|---|
+| `tabstaff.format_tab_staff` | the ASCII staff, for a terminal |
+| `tabstaff.format_tab_html` | a self-contained HTML page for a browser |
+| `tabstaff.write_tab_html` | the only function in the module that touches the filesystem |
+| `_staff_columns` / `_staff_breaks` | the shared layout core, both renderers call these |
+| `_carries_melody` | which strings carry the melody, for the `*` marker |
+
+**The dependency is one-way: `tabstaff` imports `arranger`, never the reverse.** It
+takes `STRING_NAMES`, `ArrangementStep` and `_MUTED_CELL` from here; the last of
+those stays put because `Voicing.tab_block()` and `format_progression` use it too.
+
+### The re-export is lazy, and has to be
+
+`from arranger import format_tab_html` still works — the README, the tests and
+`wjazzd` all spell it that way — but `arranger` does **not** import `tabstaff` at
+the top. A top-level (or even bottom-of-file) import would be a genuine cycle:
+importing `tabstaff` first would re-enter a half-initialised `arranger` and fail to
+find the names. So `arranger` exposes them through a **module-level `__getattr__`**
+(PEP 562), which resolves each name on first access.
+
+Two consequences worth knowing:
+
+- **A `TYPE_CHECKING` import** in `arranger.py` gives the type checker and IDEs the
+  real declarations, since a checker cannot follow `__getattr__`. Without it pyright
+  reports the three names as "not present in module".
+- **`__all__` is an explicit list**, not computed from `globals()`. It had to be
+  added: the module never had one, so `from arranger import *` used to export every
+  public name, and the lazy `__getattr__` hides the re-exported ones from a star
+  import. `TestTabstaffModuleBoundary::test_dunder_all_matches_the_public_surface`
+  fails if the list and the module's public names diverge, in either direction.
 
 ## Grips, and the position-aware selector
 
@@ -741,7 +795,7 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
    what is verified.
 4. Run the full suite from the repo root:
    `.venv/bin/python -m unittest discover -s tests -v` (must report `OK`).
-5. Run the type checker (`.venv/bin/pyright arranger.py wjazzd.py tests`, or `make typecheck`)
+5. Run the type checker (`.venv/bin/pyright arranger.py tabstaff.py wjazzd.py tests`, or `make typecheck`)
    — it must report `0 errors`. Do not leave a new `reportArgumentType` behind,
    especially when touching a signature.
 6. Run the demo (`.venv/bin/python arranger.py`) when touching voicing or
