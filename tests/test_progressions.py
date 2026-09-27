@@ -54,10 +54,15 @@ class TestProgressions(unittest.TestCase):
         result = self.engine.arrange_progression(progression)
         self.assertEqual(len(result), 3)
         
-        # Check tabs
-        self.assertEqual(result[0].voicing.tab_string(), "x-x-7-8-8-8")
-        self.assertEqual(result[1].voicing.tab_string(), "x-x-7-8-7-8")
-        self.assertEqual(result[2].voicing.tab_string(), "x-x-5-7-5-6")
+        # Check tabs. All three are complete four-note chords: the selector treats a
+        # partial harmonisation as a fallback rather than a style, so a shell only wins
+        # where no full shape fits. Every note still belongs to its own chord.
+        self.assertEqual(
+            [step.voicing.tab_string() for step in result],
+            ["x-x-7-8-8-8", "x-x-7-8-7-8", "x-x-5-7-5-6"],
+        )
+        self.assertEqual([step.grip for step in result], ["drop2"] * 3)
+        self.assertTrue(not any(step.partial for step in result))
 
     def test_major_ii_v_i_progression(self):
         """
@@ -81,11 +86,11 @@ class TestProgressions(unittest.TestCase):
         """An empty progression should return an empty list gracefully."""
         self.assertEqual(self.engine.arrange_progression([]), [])
 
-    def test_low_register_cadence_falls_back_to_the_b_string(self):
+    def test_low_register_cadence_voices_low_with_a_complete_chord_or_a_shell(self):
         """
         D4 and C4 sit below the high E string's open pitch, so these steps used to be
-        skipped with a warning. With the default soprano choices the melody moves to the
-        B string and the whole cadence sits in low position.
+        skipped with a warning. They are now voiced on the G string, one string lower
+        again, which puts the whole cadence in low position on the bottom four strings.
         """
         progression = [
             ("D4", "m7", "Dm7"),
@@ -94,14 +99,26 @@ class TestProgressions(unittest.TestCase):
         ]
         result = self.engine.arrange_progression(progression)
 
+        # None of these uses 6-5-4-3: a four-note voicing on the four lowest strings
+        # does not sound good, so a low melody is harmonised with a complete chord on
+        # 5-4-3-2 or a three-note shell instead.
         self.assertEqual(
             [(step.chord, step.voicing.tab_string()) for step in result],
-            [("Dm7", "x-3-3-2-3-x"), ("G7", "x-2-3-0-3-x"), ("Cmaj7", "x-2-2-0-1-x")],
+            [("Dm7", "x-3-3-2-3-x"), ("G7", "x-x-3-4-3-x"), ("Cmaj7", "x-2-2-5-x-x")],
         )
         for step in result:
-            self.assertEqual(step.voicing.soprano_string(), 4)  # B string carries the melody
-            self.assertEqual(step.voicing.frets[0], -1)         # Low E muted
-            self.assertEqual(step.voicing.frets[5], -1)         # High E muted
+            self.assertNotEqual(
+                step.voicing.active_strings, [0, 1, 2, 3], step.tab_line()
+            )
+        # Dm7 is a complete chord on strings 5-4-3-2. The other two are three-note
+        # shells, because no four-note shape fits under a melody that low without the
+        # bottom-four block, and a shell is the right answer there anyway.
+        self.assertEqual([step.grip for step in result], ["drop2", "shell", "shell"])
+        self.assertEqual(result[1].voicing.active_strings, [2, 3, 4])   # 2-3-4
+        self.assertEqual(result[2].voicing.active_strings, [1, 2, 3])   # 5-4-3
+        self.assertEqual(sorted(result[0].voicing.pitch_classes()), [0, 2, 5, 9])
+        self.assertEqual(sorted(result[1].voicing.pitch_classes()), [2, 5, 11])  # D F B
+        self.assertEqual(sorted(result[2].voicing.pitch_classes()), [0, 4, 11])  # C E B
 
     def test_high_e_only_top_strings_still_skips_low_melodies(self):
         """top_strings=(5,) restores the pre-existing behaviour of skipping these steps."""

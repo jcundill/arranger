@@ -61,13 +61,20 @@ from pathlib import Path
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 from arranger import (
+    GRIP_PREFERENCE,
+    MELODY_STRING_CHOICES_FULL,
+    NECK_FRET_MAX,
+    NECK_FRET_MIN,
     NO_CHORD,
     PITCH_CLASS_NAMES,
     ArrangementStep,
     ChordParser,
     Note,
+    StepPreparation,
     Voicing,
     VoiceLeadingEngine,
+    normalised_harmony,
+    sounding_harmony,
 )
 
 __all__ = [
@@ -1435,6 +1442,25 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
         default=None,
         help="retry unresolved tensions as dim7 substitutions; replaces the written chord",
     )
+    parser.add_argument(
+        "--fret-min",
+        type=int,
+        default=NECK_FRET_MIN,
+        help=f"lowest fret the selector aims for (default {NECK_FRET_MIN})",
+    )
+    parser.add_argument(
+        "--fret-max",
+        type=int,
+        default=NECK_FRET_MAX,
+        help=f"highest fret the selector aims for (default {NECK_FRET_MAX})",
+    )
+    parser.add_argument(
+        "--grips",
+        nargs="+",
+        choices=GRIP_PREFERENCE,
+        default=list(GRIP_PREFERENCE),
+        help="grip families to use, most preferred first (default: all of them)",
+    )
     parser.add_argument("--vertical", action="store_true", help="six-line tab per step")
     parser.add_argument(
         "--tab",
@@ -1504,6 +1530,9 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
         first, last = solo.bars
         section = (max(first, lo), last if hi is None else min(last, hi))
 
+    if args.fret_min > args.fret_max:
+        parser.error("--fret-min must not be above --fret-max")
+
     arrangement = arrange_head(
         solo,
         head,
@@ -1513,6 +1542,7 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
         non_chord_tone=args.non_chord_tone,
         fallback=args.fallback,
         section=section,
+        grips=tuple(args.grips),
     )
 
     print(f"{solo.title} - {solo.performer} (melid {solo.melid}, {solo.key})")
@@ -1520,7 +1550,12 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
         print(f"  {head.describe()}")
     if args.section and section is not None:
         print(f"  section {args.section}: bars {section[0]}-{section[1] - 1}")
-    for note in arrangement.notes:
+    notes = getattr(arrangement, "notes", ())
+    print(
+        f"  neck window: frets {args.fret_min}-{args.fret_max}"
+        f" (a preference, not a constraint); grips: {', '.join(args.grips)}"
+    )
+    for note in notes:
         print(f"  note: {note}")
     if arrangement.skeleton.rescued and not args.fallback:
         print(
@@ -1567,46 +1602,81 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
 
 def _arrange_step_with_bass(
     engine: VoiceLeadingEngine,
-    melody: str,
-    quality: str,
-    name: str,
-    bass: Optional[str],
-    previous: Optional[Voicing],
-) -> Optional[Voicing]:
+    progression: Sequence[Tuple[str, str, str]],
+    index: int,
+    previous: Optional[Voicing] = None,
+    previous_chord: Optional[str] = None,
+    non_chord_tone: str = "extension",
+    top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
+    grips: Tuple[str, ...] = GRIP_PREFERENCE,
+    bass: Optional[str] = None,
+) -> Optional[Tuple[Voicing, StepPreparation]]:
     """Arranges one step, preferring candidates whose lowest note is the bass.
 
     This is rule C, and it lives here rather than in the engine so the engine's
     public surface stays frozen. The two rules that select a candidate - the
     slash bass and voice leading - are *combined*, not applied in sequence: the
     candidates are partitioned by how well they honour the bass, and the engine's
-    own voice-leading rule then decides within the best group. Applying them one
+    own selection rule then decides within the best group. Applying them one
     after the other would let whichever ran last always override the other.
+
+    The candidates come from the engine's own `prepare_step`, so a head gets the
+    same non-chord-tone strategies, the same octave-down rescue and the same
+    tone-purity criterion as the library. This function used to build candidates
+    itself and call `_best_voicing` with no `allowed_tones`, which silently
+    dropped all three: across a 25-transcription sample 0 non-chord tones were
+    flagged, and 41.6% of steps sounded an inner voice outside the written chord
+    against 23.0% for the same progression through the library.
+
+    The final choice is the engine's `_best_voicing`, the same function
+    arrange_progression uses, so a head arranged here and the same head arranged
+    through the library cannot disagree about which shape is better.
     """
-    bass_pc = bass_pitch_class(bass)
-    candidates = engine.get_all_drop2_voicings(Note(melody), quality, chord_name=name)
-    if not candidates:
+    prepared = engine.prepare_step(
+        list(progression), index,
+        previous=previous,
+        previous_chord=previous_chord,
+        top_strings=top_strings,
+        non_chord_tone=non_chord_tone,
+        grips=grips,
+    )
+    if prepared is None:
         return None
+
+    candidates = prepared.candidates
+    # The slash bass normally rides along in the chord name, which skeleton_slots
+    # keeps intact. `bass` is the override for a caller that knows it out of band -
+    # rule B promotion, for instance, turns `C-/Bb` into a plain `m7` and would
+    # otherwise lose the Bb.
+    if bass is None:
+        bass = parse_weimar_chord(progression[index][2])[2]
+    bass_pc = bass_pitch_class(bass)
     if bass_pc is None:
-        chosen = _pick_by_voice_leading(engine, candidates, previous)
+        preferred = candidates
     else:
         costs = [bass_cost(v.midi_notes(), bass_pc) for v in candidates]
         best = min(costs)
         # Only restrict when the bass is actually satisfiable; when it is not,
         # behaviour is exactly what it would be with no slash chord at all.
-        preferred = [v for v, c in zip(candidates, costs) if c == best] if best <= 2 else candidates
-        chosen = _pick_by_voice_leading(engine, preferred, previous)
-    return chosen
+        preferred = (
+            [v for v, c in zip(candidates, costs) if c == best]
+            if best <= 2
+            else candidates
+        )
 
-
-def _pick_by_voice_leading(
-    engine: VoiceLeadingEngine,
-    candidates: Sequence[Voicing],
-    previous: Optional[Voicing],
-) -> Voicing:
-    """The engine's own choice among candidates: hand position, then minimal movement."""
-    if previous is None:
-        return min(candidates, key=lambda v: abs(v.avg_fret - 9))
-    return min(candidates, key=lambda v: engine.calculate_pitch_leading_distance(previous, v))
+    voicing = engine._best_voicing(
+        list(preferred), previous,
+        NECK_FRET_MIN, NECK_FRET_MAX,
+        # The tones the *written* chord allows, matching arrange_progression: the
+        # selector prefers a shape that is merely out of position over one that
+        # sounds a wrong note.
+        allowed_tones=ChordParser.get_chord_tones(
+            ChordParser.canonical_quality(prepared.chord_type), prepared.chord_name
+        ),
+    )
+    if voicing is None:
+        return None
+    return voicing, prepared
 
 
 def arrange_head(
@@ -1618,6 +1688,7 @@ def arrange_head(
     non_chord_tone: str = "extension",
     fallback: Optional[str] = None,
     section: Optional[Tuple[int, int]] = None,
+    grips: Tuple[str, ...] = GRIP_PREFERENCE,
 ) -> HeadArrangement:
     """Builds a chord-melody arrangement of a head, end to end.
 
@@ -1656,6 +1727,13 @@ def arrange_head(
 
     steps: List[ArrangementStep] = []
     previous: Optional[Voicing] = None
+    # What the `sustain` strategy reports as harmonized_as: the previous step's
+    # *written* chord, matching arrange_progression.
+    previous_chord: Optional[str] = None
+    # The diminished retry rewrites a step's chord, so the engine has to see the
+    # substituted triple. Worked on a copy, because `triples` is what the caller
+    # gets back and must keep reporting what was written.
+    working = list(triples)
     for index, (melody, quality, name) in enumerate(triples):
         # The slot's own (bar, beat, duration), so the staff renderer can lay the
         # chords on their real beats. Lengths match by construction; the guard is
@@ -1672,6 +1750,7 @@ def arrange_head(
             )
             if resolved is not None:
                 quality, name = resolved
+                working[index] = (melody, quality, name)
                 rescued.append(index)
 
         if quality == NO_CHORD:
@@ -1684,17 +1763,46 @@ def arrange_head(
             )
             steps.append(step)
             previous = voicing
+            previous_chord = name
             continue
 
-        bass = parse_weimar_chord(name)[2]
-        voicing = _arrange_step_with_bass(engine, melody, quality, name, bass, previous)
-        if voicing is None:
+        arranged = _arrange_step_with_bass(
+            engine, working, index,
+            previous=previous, previous_chord=previous_chord,
+            non_chord_tone=non_chord_tone, grips=grips,
+        )
+        if arranged is None:
             continue
+        voicing, prepared = arranged
+        # A repeated melody is a soprano-only re-strike, so the renderers hold the
+        # inner voices. Mirrors the rule in VoiceLeadingEngine.arrange_progression:
+        # the same sounding pitch as the previous step, that step was a real
+        # voicing rather than a melody-only bar, and the harmony under the note has
+        # not changed. Across a chord change there is nothing to hold - the ringing
+        # voices belong to the chord the hold began on - so the new chord is sounded.
+        previous_step = steps[-1] if steps else None
+        repeated = bool(
+            previous_step is not None
+            and not previous_step.melody_only
+            and max(previous_step.voicing.midi_notes()) == max(voicing.midi_notes())
+            and sounding_harmony(previous_step)
+            == normalised_harmony(name, prepared.harmonized_as)
+        )
         steps.append(ArrangementStep(
-            chord=name, melody=melody, voicing=voicing,
-            bar=bar, beat=beat, duration=duration,
+            chord=name, melody=prepared.melody, voicing=voicing,
+            non_chord_tone=prepared.is_non_chord_tone,
+            strategy=prepared.strategy,
+            harmonized_as=prepared.harmonized_as,
+            original_melody=prepared.original_melody,
+            bar=bar, beat=beat, duration=duration, repeated=repeated,
+            # Carried from the voicing rather than defaulted, so a head built here
+            # reports the same grip and partial flag as the same chord arranged through
+            # arranger.arrange_progression.
+            grip=voicing.grip,
+            partial=len(voicing.active_frets()) < 4,
         ))
         previous = voicing
+        previous_chord = name
 
     built.rescued = len(unresolved)
     return HeadArrangement(steps, built, head, tuple(rescued), tuple(notes))

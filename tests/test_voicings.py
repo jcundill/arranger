@@ -1,6 +1,14 @@
 import unittest
 from musthe import Note
-from arranger import VoiceLeadingEngine, Voicing, GuitarFretboard, ChordParser, PITCH_CLASS_NAMES
+from arranger import (
+    VoiceLeadingEngine,
+    Voicing,
+    GuitarFretboard,
+    ChordParser,
+    PITCH_CLASS_NAMES,
+    HIGH_FRET_LIMIT,
+    format_progression,
+)
 
 
 class TestDrop2Voicings(unittest.TestCase):
@@ -100,7 +108,11 @@ class TestExtendedQualities(unittest.TestCase):
                 )
 
     def test_extension_quality_without_chord_name_offers_every_inversion(self):
-        """Without a chord name all five inversions are offered for each block."""
+        """
+        Without a chord name all five inversions are offered. D5 is reachable on both
+        blocks (fret 10 on the high E, fret 15 on the B), so both are listed: candidate
+        generation is pure and does not reposition anything.
+        """
         voicings = self.engine.get_all_drop2_voicings(Note("D5"), "maj9")
         self.assertEqual(len(voicings), 10)  # 5 templates x 2 soprano strings
         for v in voicings:
@@ -211,6 +223,136 @@ class TestMelodyStringChoices(unittest.TestCase):
         """An unknown chord quality yields no voicings, whichever soprano strings are allowed."""
         self.assertEqual(self.engine.get_all_drop2_voicings(Note("D5"), "not-a-chord"), [])
         self.assertEqual(self.engine.get_all_drop2_voicings(Note("D5"), "not-a-chord", "Dm7"), [])
+
+
+class TestHighFretOctaveDown(unittest.TestCase):
+    """
+    Tests for moving a melody that can only be voiced above HIGH_FRET_LIMIT down an
+    octave onto the B string.
+
+    The B string is five semitones below the high E, so the same written pitch sits
+    five frets *higher* on it - revoicing onto the B string alone would push the
+    voicing further up the neck, not down. Dropping the melody an octave is what
+    actually brings the whole harmonisation into a lower position.
+    """
+
+    def setUp(self):
+        self.engine = VoiceLeadingEngine()
+
+    def test_get_octave_down_candidates_never_goes_back_to_the_high_e(self):
+        """The octave-down pool stays on the B and G strings, never the high E.
+
+        The B string is five semitones below the high E, so putting the transposed note
+        back on the high E would raise the voicing by an octave and defeat the move
+        entirely. The G string is also offered - it is a string further down still, so a
+        note that is comfortable there is genuinely lower on the neck.
+        """
+        candidates = self.engine.get_octave_down_candidates(Note("A5"), "m7", chord_name="Dm7")
+        self.assertTrue(candidates)
+        for v in candidates:
+            self.assertIn(v.soprano_string(), (4, 3))
+            self.assertEqual(v.frets[5], -1)  # high E muted
+        # The low E is not required to be muted: a G-string soprano legitimately uses it
+        # as the bottom voice of its four-note block.
+        self.assertTrue(any(v.soprano_string() == 4 for v in candidates))
+
+    def test_octave_down_sounds_the_written_pitch_an_octave_lower(self):
+        """The B-string shape sounds the melody exactly one octave below the written note."""
+        written = Note("A5").midi_note()
+        candidates = self.engine.get_octave_down_candidates(Note("A5"), "m7", chord_name="Dm7")
+        self.assertEqual(max(candidates[0].midi_notes()), written - 12)
+
+    def test_octave_down_lands_in_the_window(self):
+        """The whole point of the move: the soprano ends up in a comfortable position.
+
+        Asserted on the voicing the arrangement *chooses* rather than on every
+        candidate, because the candidate pool is pure by design - it still offers the
+        higher G-string position, and it is the selector's job to reject it.
+        """
+        candidates = self.engine.get_octave_down_candidates(Note("A5"), "m7", chord_name="Dm7")
+        # The pool is unfiltered, so a high option is still there...
+        self.assertTrue(any(v.top_fret > HIGH_FRET_LIMIT for v in candidates))
+        # ...but the chosen voicing is inside the window.
+        step = self.engine.arrange_progression([("A5", "m7", "Dm7")])[0]
+        self.assertLessEqual(step.voicing.fret_on_soprano, HIGH_FRET_LIMIT)
+
+    def test_progression_transposes_a_high_melody_down_an_octave(self):
+        """A5 over Dm7 can only be voiced at fret 17, so it is arranged as A4 in low position."""
+        steps = self.engine.arrange_progression([("A5", "m7", "Dm7")])
+        self.assertEqual(len(steps), 1)
+        step = steps[0]
+        self.assertEqual(step.melody, "A4")
+        self.assertEqual(step.original_melody, "A5")
+        self.assertLessEqual(step.voicing.top_fret, HIGH_FRET_LIMIT)
+        self.assertEqual(step.voicing.soprano_string(), 4)
+
+    def test_progression_leaves_a_low_melody_alone(self):
+        """D5 is playable in low position on the high E, so nothing is transposed."""
+        steps = self.engine.arrange_progression([("D5", "m7", "Dm7")])
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(steps[0].melody, "D5")
+        self.assertIsNone(steps[0].original_melody)
+
+    def test_transposed_step_sounds_its_reported_melody(self):
+        """A transposed step's reported melody is the pitch that actually sounds."""
+        step = self.engine.arrange_progression([("A5", "m7", "Dm7")])[0]
+        self.assertEqual(max(step.voicing.midi_notes()), Note(step.melody).midi_note())
+
+    def test_transposition_keeps_the_voicing_playable(self):
+        """The ordinary drop-2 invariants still hold after the move down the neck."""
+        step = self.engine.arrange_progression([("A5", "m7", "Dm7")])[0]
+        v = step.voicing
+        self.assertLessEqual(v.fret_span(), 5)
+        self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()))
+        self.assertEqual(v.soprano_string(), 4)
+        self.assertTrue(set(v.pitch_classes()) <= set(ChordParser.get_chord_tones("m7", "Dm7")))
+
+    def test_transposition_is_reported_in_the_annotation(self):
+        """format_progression shows the written pitch, since step.melody is the transposed one."""
+        rendered = format_progression(self.engine.arrange_progression([("A5", "m7", "Dm7")]))
+        self.assertIn("transposed down an octave from A5", rendered)
+
+    def test_unreachable_melody_is_still_skipped_not_transposed(self):
+        """
+        C6 is fret 20 on the high E - past the end of the board - so there is no voicing
+        at all to reposition. The step is warned about and skipped rather than silently
+        respelled an octave down, which would hide the real problem.
+        """
+        steps = self.engine.arrange_progression([("C6", "m7", "Dm7")])
+        self.assertEqual(steps, [])
+
+    def test_melody_only_step_also_moves_down(self):
+        """A no-chord step high on the neck is played an octave down on the B string too."""
+        step = self.engine.arrange_progression([("A5", "NC", "NC")])[0]
+        self.assertTrue(step.melody_only)
+        self.assertEqual(step.melody, "A4")
+        self.assertEqual(step.original_melody, "A5")
+        self.assertEqual(step.voicing.soprano_string(), 4)
+
+    def test_melody_only_low_note_is_untouched(self):
+        """A note already in a low position on the high E still sounds where it was written."""
+        step = self.engine.arrange_progression([("D5", "NC", "NC")])[0]
+        self.assertIsNone(step.original_melody)
+        self.assertEqual(max(step.voicing.midi_notes()), Note("D5").midi_note())
+
+    def test_melody_only_transposition_is_reported_from_the_sounding_pitch(self):
+        """
+        G5 is fret 15 on the high E, so it moves down to G4. The step reports that from
+        the pitch that actually sounds, not from the fret number - the octave-down note
+        lands at a *lower* fret, so a fret comparison would wrongly read it as untransposed.
+        """
+        step = self.engine.arrange_progression([("G5", "NC", "NC")])[0]
+        self.assertEqual(step.melody, "G4")
+        self.assertEqual(step.original_melody, "G5")
+        self.assertEqual(max(step.voicing.midi_notes()), Note("G4").midi_note())
+
+    def test_melody_only_unreachable_note_still_returns_none(self):
+        """
+        B5 and C6 cannot sound at the written pitch at all. None is the documented signal
+        for that, so the melody-only search does not quietly respell them an octave down.
+        """
+        for name in ("B5", "C6"):
+            self.assertIsNone(self.engine.get_melody_only_voicing(Note(name)), name)
 
 
 class TestTriadSusAndAlteredQualities(unittest.TestCase):

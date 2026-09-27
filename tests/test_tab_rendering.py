@@ -112,8 +112,12 @@ class TestFormatProgression(unittest.TestCase):
 
     def setUp(self):
         self.engine = VoiceLeadingEngine()
+        # Pinned to drop-2 on the high E block, so the expected tabs below describe a
+        # known arrangement rather than whatever the selector currently prefers.
         self.major = self.engine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7")]
+            [("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7")],
+            top_strings=(5,),
+            grips=("drop2",),
         )
         self.all_of_me = self.engine.arrange_progression(
             [("C5", "maj7", "Cmaj7"), ("D5", "maj7", "Cmaj7"), ("C5", "maj7", "Cmaj7")]
@@ -190,9 +194,13 @@ class TestStaffTab(unittest.TestCase):
 
     def setUp(self):
         self.engine = VoiceLeadingEngine()
-        # Dm7 -> G7 -> Cmaj7, all voiced on the high E string block.
+        # Dm7 -> G7 -> Cmaj7, pinned to drop-2 on the high E block. These tests are
+        # about the *renderer*, so the arrangement is fixed rather than left to the
+        # selector, which would otherwise choose a different string set or a shell.
         self.steps = self.engine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7")]
+            [("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7")],
+            top_strings=(5,),
+            grips=("drop2",),
         )
 
     def staff_lines(self, steps, **kwargs):
@@ -458,7 +466,9 @@ class TestHtmlTab(unittest.TestCase):
     def setUp(self):
         self.engine = VoiceLeadingEngine()
         self.steps = self.engine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7")]
+            [("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7")],
+            top_strings=(5,),
+            grips=("drop2",),
         )
         self.html = format_tab_html(self.steps, title="Test", subtitle="A subtitle")
 
@@ -510,6 +520,7 @@ class TestHtmlTab(unittest.TestCase):
         """
         measure = re.search(r'<div class="measure"><table>(.*?)</table>', self.html, re.S)
         self.assertIsNotNone(measure)
+        assert measure is not None  # pyright does not narrow through assertIsNotNone
         rows = re.findall(r'<tr class="string">.*?</tr>', measure.group(1), re.S)
         self.assertEqual(len(rows), 6)
         starred = [i for i, row in enumerate(rows) if 'class="soprano"' in row]
@@ -522,6 +533,8 @@ class TestHtmlTab(unittest.TestCase):
         reason for rendering a table rather than a block of text.
         """
         measure = re.search(r'<div class="measure"><table>(.*?)</table>', self.html, re.S)
+        self.assertIsNotNone(measure)
+        assert measure is not None  # pyright does not narrow through assertIsNotNone
         counts = {
             row.count("<td>") + row.count('<th')
             for row in re.findall(r'<tr class="[^"]+">.*?</tr>', measure.group(1), re.S)
@@ -691,3 +704,176 @@ class TestHtmlTab(unittest.TestCase):
                     continue
                 self.assertIn(str(fret), text)
                 self.assertIn(f"<td>{fret}</td>", page)
+
+
+
+
+class TestRepeatedMelody(unittest.TestCase):
+    """
+    A melody that repeats the previous step's pitch is played as a single note:
+    the shape is struck once and the melody is re-articulated on its own. This
+    matches what the Weimar transcription of "All the Things You Are" does at bars
+    61-63, where one note is held across three chord changes. The voicing is still
+    generated in full, so these tests check the *rendering* while `voicing` keeps
+    the real shape available to a caller.
+    """
+
+    def setUp(self):
+        # C4 on the B string at fret 1: the shape F-7 is voiced with in bar 61.
+        self.voicing = make_voicing([-1, 1, 1, 0, 1, -1])
+        self.steps = [
+            ArrangementStep(
+                chord="F-7", melody="C4", voicing=self.voicing, bar=0, beat=1.0
+            ),
+            ArrangementStep(
+                chord="Bb-7", melody="C4", voicing=self.voicing,
+                repeated=True, bar=1, beat=1.0,
+            ),
+            ArrangementStep(
+                chord="Eb7", melody="C4", voicing=self.voicing,
+                repeated=True, bar=2, beat=1.0,
+            ),
+        ]
+
+    def test_engine_marks_a_repeated_melody(self):
+        """arrange_progression flags every step after the first on the same pitch."""
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("D5", "m7", "Dm7"), ("D5", "m7", "Dm7"), ("F5", "maj7", "Fmaj7")]
+        )
+        self.assertEqual([step.repeated for step in steps], [False, True, False])
+
+    def test_engine_does_not_flag_a_moving_melody(self):
+        """A step whose melody moves is not a repeat, even on the same chord."""
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("D5", "m7", "Dm7"), ("F5", "m7", "Dm7")]
+        )
+        self.assertFalse(any(step.repeated for step in steps))
+
+    def test_a_run_of_repeats_is_all_flagged(self):
+        """Four notes on the same pitch: the first is struck, the next three repeat."""
+        progression = [("C4", "m7", "Dm7")] * 4
+        steps = VoiceLeadingEngine.arrange_progression(progression)
+        self.assertEqual([step.repeated for step in steps], [False, True, True, True])
+
+    def test_engine_does_not_flag_a_repeat_across_a_chord_change(self):
+        """
+        A held note under a new chord is not a hold: the ringing voices belong to the
+        chord the hold started on, so the step is re-harmonised and struck in full.
+        """
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("C4", "m7", "F-7"), ("C4", "m7", "Bb-7"), ("C4", "7", "Eb7")]
+        )
+        self.assertEqual([step.repeated for step in steps], [False, False, False])
+
+    def test_engine_still_holds_a_repeat_under_one_chord(self):
+        """
+        The flip side: a repeat that is not also a chord change is still a hold. This
+        is the case that leaves the shape ringing rather than re-fingering it.
+        """
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("C4", "7", "Eb7"), ("C4", "7", "Eb7"), ("C4", "7", "Eb7")]
+        )
+        self.assertEqual([step.repeated for step in steps], [False, True, True])
+
+    def test_engine_compares_harmony_not_the_chord_spelling(self):
+        """
+        `D-7` and `Dm7` are the same chord written two ways, so a note repeating
+        across that change is still a hold. Compared as (root, quality), not as text.
+        """
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("C4", "m7", "D-7"), ("C4", "m7", "Dm7")]
+        )
+        self.assertEqual([step.repeated for step in steps], [False, True])
+
+    def test_repeat_across_a_chord_change_is_reharmonised(self):
+        """
+        A melody repeating is a hold only while the harmony under it is unchanged.
+        Across a chord change the ringing voices belong to the chord the hold began
+        on, so the step is sounded in full and the renderers show the whole shape.
+        """
+        chords = ["F-7", "Bb-7", "Eb7", "Eb7"]
+        steps = [
+            ArrangementStep(
+                chord=chord, melody="C4", voicing=self.voicing,
+                # Only the second Eb7 is a hold: a repeat under the same chord.
+                repeated=(index == 2),
+                bar=index, beat=1.0,
+            )
+            for index, chord in enumerate(chords[1:])
+        ]
+        lines = format_progression(steps).split("\n")
+        # The two chord changes are sounded in full, so the renderers show the shape.
+        for line, chord in zip(lines[:2], chords[1:3]):
+            self.assertNotIn("melody repeated", line, chord)
+        # Only the last is a hold: the Eb7 repeating under the Eb7.
+        self.assertIn("melody repeated", lines[-1])
+        self.assertEqual(
+            lines[-1].split()[-1].split("-"), ["", "", "", "", "1", ""]
+        )
+
+    def test_voicing_is_unchanged_so_the_shape_is_still_available(self):
+        """The flag is presentational: the step keeps its full drop-2 voicing."""
+        self.assertEqual(self.steps[1].tab_line(), "x-1-1-0-1-x")
+
+    def test_one_line_tab_plays_a_single_note(self):
+        """Only the melody string carries a fret; the rest are blank, not 'x'."""
+        line = format_progression(self.steps).split("\n")[1]
+        self.assertEqual(line.split()[-1].split("-"), ["", "", "", "", "1", ""])
+
+    def test_annotation_says_the_note_repeats(self):
+        """The chord label alone would imply a full shape, so the line is annotated."""
+        self.assertIn(
+            "melody repeated", format_progression(self.steps).split("\n")[1]
+        )
+
+    def test_vertical_block_leaves_every_other_string_empty(self):
+        """The six-line block strikes the melody string and leaves the rest blank."""
+        block = format_progression(self.steps, vertical=True).split("\n\n")[1]
+        self.assertIn("B| 1-|", block)
+        self.assertEqual(block.count("|  -|"), 5)
+        self.assertNotIn("x", block)
+
+    def test_staff_shows_the_soprano_only(self):
+        """On the staff the other strings are left blank, as for a held voice."""
+        string_lines = format_tab_staff(self.steps).split("\n")[-6:]
+        # The B line carries the melody on all three steps; the G line only on the
+        # first, because the repeats strike the melody alone.
+        self.assertEqual(string_lines[1].count("1"), 3)
+        self.assertEqual(string_lines[2].count("0"), 1)
+
+    def test_staff_still_strikes_a_repeated_step_under_collapse(self):
+        """
+        Collapse would normally print nothing for an unchanged shape, but a
+        repeated melody is re-articulated, so the step must still strike.
+        """
+        string_lines = format_tab_staff(self.steps, collapse=True).split("\n")[-6:]
+        self.assertEqual(string_lines[1].count("1"), 3)
+
+    def test_html_shows_the_soprano_only(self):
+        """The HTML table leaves the other strings empty, not marked x."""
+        page = format_tab_html(self.steps)
+        measures = page.split('<div class="measure">')[1:]
+        self.assertEqual(measures[0].count("<td>1</td>"), 3)
+        self.assertEqual(measures[1].count('class="repeat">1<'), 1)
+        self.assertIn('<td class="repeat"></td>', measures[1])
+
+    def test_html_marks_a_repeated_column(self):
+        """
+        The muted strings are drawn faintly, so without a marker a repeated note
+        would read as a mostly-empty column rather than a deliberate single note.
+        """
+        page = format_tab_html(self.steps)
+        measures = page.split('<div class="measure">')[1:]
+        self.assertNotIn("repeat", measures[0])
+        self.assertIn("repeat", measures[1])
+
+    def test_melody_only_repeat_stays_a_single_fret(self):
+        """
+        An NC step has no inner voices to hold, so it is never marked as a repeat
+        and keeps spelling its own mutes.
+        """
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("D5", "NC", "NC"), ("D5", "NC", "NC")]
+        )
+        self.assertFalse(any(step.repeated for step in steps))
+        self.assertTrue(all(step.melody_only for step in steps))

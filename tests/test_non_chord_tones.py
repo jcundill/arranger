@@ -298,6 +298,7 @@ class TestNonChordToneStrategiesEndToEnd(unittest.TestCase):
             [step.voicing.tab_string() for step in result],
             ["x-x-9-9-8-8", "x-x-9-10-9-10", "x-x-9-9-8-8"],
         )
+        self.assertEqual([step.grip for step in result], ["drop2"] * 3)
         self.assertEqual(result[1].strategy, "diminished")
         self.assertEqual(result[1].harmonized_as, "Bdim7")
         self.assertEqual(sorted(result[1].voicing.pitch_classes()), [2, 5, 8, 11])

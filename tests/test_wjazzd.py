@@ -9,7 +9,12 @@ import contextlib
 import io
 import unittest
 
-from arranger import NO_CHORD, ChordParser, Note
+from arranger import (
+    GRIP_STRING_SETS,
+    NO_CHORD,
+    ChordParser,
+    Note,
+)
 from wjazzd import (
     DEFAULT_DB,
     SECTION_TYPES,
@@ -644,10 +649,14 @@ class TestSlashChordRules(unittest.TestCase):
             key=lambda v: abs(v.avg_fret - 9),
         )
         with_bass = _arrange_step_with_bass(
-            VoiceLeadingEngine(), melody, promoted, name, bass, None
+            VoiceLeadingEngine(),
+            [(melody, promoted, name)],
+            0,
+            bass=bass,
         )
         self.assertIsNotNone(with_bass)
         assert with_bass is not None
+        with_bass, _prepared = with_bass
         self.assertNotEqual(plain.tab_string(), with_bass.tab_string())
         self.assertEqual(bass_cost(with_bass.midi_notes(), bass_pitch_class(bass)), 0)
 
@@ -816,17 +825,36 @@ class TestArrangeHead(unittest.TestCase):
         return arrange_head(load_solo(melid), head, **kwargs)
 
     def test_every_harmonised_step_obeys_the_playability_invariant(self):
-        """Four contiguous strings, a fret span of 5 or less, melody on top."""
+        """A supported string set, a fret span of 5 or less, the melody on top.
+
+        The invariant is no longer "four contiguous strings": a shell uses three
+        strings and a duo two, and 6-4-3 deliberately skips the A string. What still
+        holds is that the sounding strings are exactly one GRIP_STRING_SETS entry, that
+        the melody is on that entry's soprano, and that the hand does not stretch.
+        """
+        # drop-2 is "four contiguous strings under the soprano" for any soprano, so it
+        # is generated rather than read from the table; shell and duo are named shapes
+        # and are read from theirs.
+        supported = {frozenset(range(top - 3, top + 1)) for top in (5, 4, 3)}
+        supported |= {frozenset(s) for s, _ in GRIP_STRING_SETS["shell"]}
+        supported |= {frozenset(s) for s, _ in GRIP_STRING_SETS["duo"]}
         for melid in (218, 342, 266):
             for step in self.arrange(melid).steps:
                 if step.melody_only:
                     self.assertEqual(len(step.voicing.active_frets()), 1, melid)
                     continue
-                active = [i for i, f in enumerate(step.voicing.frets) if f >= 0]
-                self.assertEqual(len(active), 4, f"{melid} {step.tab_line()}")
-                self.assertEqual(active, list(range(active[0], active[0] + 4)), melid)
+                active = step.voicing.active_strings
+                self.assertIn(frozenset(active), supported, f"{melid} {step.tab_line()}")
+                self.assertIn(len(active), (2, 3, 4), f"{melid} {step.tab_line()}")
                 self.assertLessEqual(step.voicing.fret_span(), 5, melid)
-                self.assertIn(step.voicing.soprano_string(), (5, 4), melid)
+                self.assertTrue(all(0 <= f <= 18 for f in step.voicing.active_frets()))
+                # The soprano is the melody, and it is one of the three allowed strings.
+                self.assertIn(step.voicing.soprano_string(), (5, 4, 3), melid)
+                self.assertEqual(
+                    max(step.voicing.midi_notes()),
+                    Note(step.melody).midi_note(),
+                    f"{melid} {step.tab_line()}",
+                )
 
     def test_nc_bars_become_melody_only_steps(self):
         """Blue Train's bar 0 is NC; it is voiced alone, not harmonised."""
@@ -930,6 +958,99 @@ class TestCorpusCli(unittest.TestCase):
         """No --section means the head, and the CLI says which one it chose."""
         _, output = self.run_cli("--melid", "218")
         self.assertIn("head at bars 1-12 (12 bars)", output)
+
+    def test_head_path_agrees_with_the_library_on_a_non_chord_tone(self):
+        """
+        The head path used to build its own candidates and call `_best_voicing` with
+        no `allowed_tones`, which skipped the non-chord-tone strategies, the
+        tone-purity criterion and the octave-down rescue. The same chord therefore
+        harmonised differently depending on which door it came through.
+        """
+        from arranger import VoiceLeadingEngine as Engine
+
+        solo = load_solo(266)
+        arrangement = arrange_head(solo)
+        triples = list(arrangement.skeleton.triples)
+        import io
+        import contextlib
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            library = Engine.arrange_progression(triples)
+
+        self.assertTrue(
+            any(step.non_chord_tone for step in arrangement.steps),
+            "the head path should now resolve non-chord tones",
+        )
+        self.assertEqual(
+            [s.tab_line() for s in arrangement.steps if not s.melody_only],
+            [s.tab_line() for s in library if not s.melody_only],
+        )
+
+    def test_attya_held_note_is_reharmonised_across_a_chord_change(self):
+        """
+        Where ATTYA holds C4 across a chord change, the held soprano is harmonised
+        against each new chord instead of being held as a bare single note.
+
+        The ringing inner voices of a held shape belong to the chord the hold began
+        on, so printing a new chord's name over a single struck note claims a harmony
+        that is not sounding. The voicing was already built against the new chord -
+        only the rendering used to discard it - so the fix is that such a step is no
+        longer marked as a repeat. A repeat under the *same* chord is still a repeat,
+        which is what the final Eb7 here is.
+        """
+        from arranger import ChordParser
+
+        steps = arrange_head(load_solo(266)).steps
+        held = [s for s in steps if s.bar in (61, 62, 63) and s.melody == "C4"]
+        self.assertEqual([s.chord for s in held], ["F-7", "Bb-7", "Eb7", "Eb7"])
+        # Each chord change re-harmonises; only the second Eb7 holds.
+        self.assertEqual([s.repeated for s in held], [False, False, False, True])
+
+        # The two changes are resolved as genuine extensions, and the held soprano
+        # sounds as the new chord's 9th/6th over its 3rd and 7th. Before the head
+        # path shared the engine's step logic, bar 62 was voiced `x-0-2-0-1-x` -
+        # A2, E3, G3, C4, an Am7 sharing no pitch class at all with Bbm7.
+        expected = [("m9", "Bbm9"), ("13", "Eb13")]
+        for step, (quality, name) in zip(held[1:3], expected):
+            self.assertEqual(step.harmonized_as, name)
+            tones = set(ChordParser.get_chord_tones(quality, name))
+            inner = set(step.voicing.pitch_classes()) - {max(step.voicing.midi_notes()) % 12}
+            self.assertTrue(
+                inner <= tones,
+                f"{step.chord} sounded inner voices outside {name}: "
+                f"{sorted(inner - tones)}",
+            )
+
+    def test_attya_low_chord_tone_is_voiced_on_the_g_string(self):
+        """
+        The Ab3 in bar 61 sits below the B string's open pitch and used to be
+        unvoiceable and silently skipped. It is now harmonised as a 6-4-3 shell on the G
+        string - a three-note shell, because no four-note shape fits under a note that
+        low without the bottom-four block that does not sound good. So a note of the
+        transcription is played rather than dropped.
+
+        Both are three-note shells on the G string, and both sound only tones of their
+        own chord - a full voicing was available for neither, and a four-note shape on
+        6-5-4-3 is deliberately not offered.
+        """
+        steps = arrange_head(load_solo(266)).steps
+        # Spelled out rather than re-derived from the chord symbol: parse_chord_name
+        # returns the *suffix*, and "-7" is an alias for a minor triad in the quality
+        # table, so feeding it back would check this shape against the wrong chord.
+        expected = {("F-7", "Ab3"): {0, 3, 5, 8}, ("Bb-7", "Bb3"): {1, 5, 8, 10}}
+        for bar, melody in ((61, "Ab3"), (62, "Bb3")):
+            found = [s for s in steps if s.bar == bar and s.melody == melody]
+            self.assertTrue(found, f"the {melody} in bar {bar} should be voiced")
+            step = found[0]
+            self.assertEqual(step.grip, "shell")
+            self.assertEqual(step.voicing.soprano_string(), 3)   # the G string
+            self.assertEqual(step.voicing.active_strings, [1, 2, 3])
+            self.assertEqual(max(step.voicing.midi_notes()), Note(melody).midi_note())
+            tones = expected[(step.chord, melody)]
+            self.assertTrue(
+                set(step.voicing.pitch_classes()) <= tones,
+                f"{step.chord} {melody} {step.tab_line()}",
+            )
 
     def test_explicit_section_overrides_the_head(self):
         """--section selects a named span instead."""

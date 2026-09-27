@@ -554,13 +554,20 @@ begin at bar 0 (§2.5), so a head may legitimately open unaccompanied.
 - `_step_annotation` gains `(no chord — melody alone)`, shared by
   `format_progression` and `_print_step` so the two renderings cannot drift.
 
-### 5.2 The four-string invariant does not apply
+### 5.2 The string-set invariant does not apply to a melody-only step
 
-The documented playability invariant (four contiguous strings, melody on the
-soprano) is a property of **drop-2 voicings**. A melody-only step is explicitly
-not one: it does not go through `get_all_drop2_voicings` and does not participate
-in voice-leading minimisation. This must be stated in the code and the docs
-rather than left implicit, and the invariant tests must exempt such steps.
+The documented playability invariant (the sounding strings are one
+`supported_string_sets()` entry, melody on its soprano) is a property of a
+*harmonised* voicing. A melody-only step is explicitly not one: it does not go
+through `get_all_grip_voicings` and does not participate in selection. It has a
+single active fret and `fret_span() == 0`. This must be stated in the code and the
+docs rather than left implicit, and the invariant tests must exempt such steps.
+
+Note the invariant itself has since widened: it is no longer "four contiguous
+strings". Shells use three strings and duos two, and the 6-4-3 shell deliberately
+skips the A string. What still holds — and what the corpus-wide test now asserts —
+is membership of a supported set, the melody on its topmost string, and
+`fret_span() <= 5`.
 
 ### 5.3 Verified
 

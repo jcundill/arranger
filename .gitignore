@@ -17,3 +17,9 @@ dist/
 # Weimar Jazz Database (42 MB, downloaded from jazzomat.hfm-weimar.de; see
 # CORPUS_PLAN.md). Not part of the source tree.
 *.db
+
+# Renderer and export output from the corpus CLI. Regenerate rather than commit:
+# the HTML renders are per-tune debugging aids and the export is a snapshot.
+*.html
+leadsheet_export.json
+
