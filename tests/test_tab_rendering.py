@@ -987,3 +987,56 @@ class TestTabstaffModuleBoundary(unittest.TestCase):
                 inspect.getsource(getattr(tabstaff, name)),
                 f"{name} should build its columns from _staff_columns",
             )
+
+
+class TestStaffBarlineAlignment(unittest.TestCase):
+    """Tests that every row of the ASCII staff is ruled identically.
+
+    The chord, melody and string rows are drawn on one shared column grid, so a
+    barline is only legible if it lands in the same column on all of them. Two
+    separate defects made it not: the chord and melody rows began with three
+    spaces rather than a barline, and rstrip() trimmed their trailing blank
+    columns so they ended short of the string rows.
+    """
+
+    def build(self, measures_per_line=1, bars=4):
+        """A timed progression of `bars` one-bar chords, to force real barlines."""
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("D", "m7", "Dm7"), ("G", "7", "G7"),
+             ("C", "maj7", "Cmaj7"), ("F", "m7", "Fm7")][:bars]
+        )
+        for index, step in enumerate(steps):
+            step.bar, step.beat, step.duration = index + 1, 1.0, 4.0
+        return format_tab_staff(
+            steps, show_melody=True, measures_per_line=measures_per_line
+        )
+
+    def test_every_row_is_the_same_width(self):
+        """A short chord row is what made the staff look unaligned."""
+        lines = self.build().split("\n")
+        self.assertEqual(len({len(line) for line in lines}), 1, lines)
+
+    def test_barlines_land_in_the_same_column_on_every_row(self):
+        """The barline positions are compared against the string rows."""
+        lines = self.build().split("\n")
+        columns = [[i for i, c in enumerate(line) if c == "|"] for line in lines]
+        for line, positions in zip(lines[1:], columns[1:]):
+            self.assertEqual(positions, columns[2], f"misaligned: {line!r}")
+
+    def test_chord_and_melody_rows_are_both_end_bounded(self):
+        """
+        A chord row with no leading barline reads as a caption above the staff
+        rather than as part of it, so both ends must be ruled.
+        """
+        lines = self.build().split("\n")
+        for line in lines[:2]:
+            self.assertTrue(line.startswith("  |"), repr(line))
+            self.assertTrue(line.endswith("|"), repr(line))
+
+    def test_sparse_barlines_still_line_up(self):
+        """The default four bars per line draws fewer barlines, not misaligned ones."""
+        lines = self.build(measures_per_line=4).split("\n")
+        self.assertEqual(len({len(line) for line in lines}), 1, lines)
+        positions = [[i for i, c in enumerate(line) if c == "|"] for line in lines]
+        for row in positions[1:]:
+            self.assertEqual(row, positions[2])

@@ -235,9 +235,12 @@ def format_tab_staff(
         `dedupe` prints a label only where it changes from the previous one, which
         is how a lead sheet spells a chord held across several slots.
         """
-        # The same three-character offset the string lines use (label, melody
-        # marker, '|'), so a chord name starts in the column of its own frets.
-        out = ["   "]
+        # Two spaces then a barline, which is the same three-character offset the
+        # string lines use (string label, melody marker, '|'), so a chord name
+        # starts in the column of its own frets and every row is ruled identically.
+        # The closing barline matters as much as the leading one: without it these
+        # rows stop short of the string rows and the staff reads as unaligned.
+        out = ["  |"]
         previous = None
         for index, (_, step, strikes) in enumerate(columns):
             if index in breaks:
@@ -250,7 +253,12 @@ def format_tab_staff(
             if text:
                 previous = text
             out.append(text.ljust(width) if text else " " * width)
-        return "".join(out).rstrip()
+        # No rstrip here. The chord and melody rows share their column grid with the
+        # string rows, so a trailing blank column has to stay blank rather than be
+        # trimmed: trimming shortens the row and leaves its closing barline short of
+        # the string rows'. The closing '|' is what makes the trailing spaces read as
+        # an empty bar rather than as ragged text.
+        return "".join(out) + "|"
 
     def string_line(string_index: int) -> str:
         out = ["*", "|"] if show_melody_string and _carries_melody(steps, string_index) else [" ", "|"]
