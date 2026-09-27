@@ -33,6 +33,7 @@ time.
 
 from __future__ import annotations
 
+import re
 from typing import Any, List, Optional, Sequence, Tuple
 from xml.etree import ElementTree
 
@@ -461,6 +462,31 @@ def _drop_empty_inversions(root: ElementTree.Element) -> None:
                     break
 
 
+# The XML declaration and the MusicXML DTD that music21 writes ahead of the root
+# element. `ElementTree` keeps neither when it serialises, and the DOCTYPE is what
+# tells a reader which MusicXML version the file claims to be, so both are carried
+# over from the document music21 produced rather than re-invented here.
+_DOCTYPE_PATTERN = re.compile(r"<!DOCTYPE[^>]*>")
+
+
+def _document_prologue(document: str) -> str:
+    """
+    The XML declaration and DOCTYPE music21 wrote, or an empty string without them.
+
+    A MusicXML file is written before the root element rather than inside it, so
+    `ElementTree` cannot carry these through a parse/serialise round trip: the DOCTYPE
+    is the declaration of the MusicXML 4.0 DTD, which is how a reader knows which
+    version the file is claiming. It is captured from the text music21 emitted, so a
+    future music21 that declares a different version is carried through rather than
+    overridden.
+    """
+    prologue = '<?xml version="1.0" encoding="UTF-8"?>'
+    match = _DOCTYPE_PATTERN.search(document)
+    if match:
+        prologue += "\n" + match.group(0)
+    return prologue + "\n"
+
+
 def _tab_part_id(root: ElementTree.Element) -> Optional[str]:
     """
     The id of the tab part in a written document, found by its TAB clef.
@@ -510,6 +536,32 @@ def _chord_symbol(name: str) -> Any:
         symbol.chordKindStr = name
     symbol.writeAsChord = False
     return symbol
+
+
+def _unique_instrument_ids(root: ElementTree.Element) -> None:
+    """
+    Gives every `<score-instrument>` in the part list an id of its own.
+
+    The instrument ids live in the `<part-list>`, not in the parts, and music21 writes
+    the *same* one into every `<score-part>` when the parts share a single
+    `instrument.Guitar()` - which is what happens as soon as there is more than one
+    staff. MusicXML requires those ids to be unique within the part list, and MuseScore
+    refuses to open the file at all when they are not:
+
+        Fatal error: ID value 'I56a9...' is not unique.
+
+    Each `<score-instrument>` is paired with a `<midi-instrument>` of the same id, and
+    that pairing is what identifies "this part plays this instrument", so the two are
+    renumbered together and a part's `<score-instrument>` and `<midi-instrument>` keep
+    matching. Nothing else refers to these ids: an `<midi-device>` would, and a
+    part-list written this way has none.
+    """
+    for index, score_part in enumerate(root.findall("part-list/score-part"), start=1):
+        renumbered = f"P{index}-I"
+        for instrument in score_part.findall("score-instrument"):
+            instrument.set("id", renumbered)
+        for instrument in score_part.findall("midi-instrument"):
+            instrument.set("id", renumbered)
 
 
 def _chord_groups(measure: ElementTree.Element) -> List[List[ElementTree.Element]]:
@@ -715,11 +767,12 @@ def format_musicxml(
     # staff lines, and a fret on each note of a chord. Both are put back here, from
     # the parsed tree, rather than by editing the text.
     root = ElementTree.fromstring(document)
+    _unique_instrument_ids(root)
     tab_part_id = _tab_part_id(root)
     _split_technicals(root, tab_part_id)
     _add_staff_details(root, tab_part_id)
     _drop_empty_inversions(root)
-    return ElementTree.tostring(root, encoding="unicode")
+    return _document_prologue(document) + ElementTree.tostring(root, encoding="unicode")
 
 
 def write_musicxml(steps: List[ArrangementStep], path: str, **kwargs: Any) -> str:

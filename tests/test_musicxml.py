@@ -126,6 +126,45 @@ class TestMusicXMLDocument(MusicXMLTestCase):
         self.assertTrue(values, "the tab staff declares no staff-lines")
         self.assertEqual(set(values), {"6"})
 
+    def test_instrument_ids_are_unique_across_the_part_list(self):
+        """
+        Every `<score-instrument>` in the part list has an id of its own.
+
+        music21 writes the same instrument id into every `<score-part>` when the parts
+        share one `instrument.Guitar()`, and MusicXML requires those ids to be unique
+        within the part list. MuseScore 3 refuses the file outright when they are not:
+
+            Fatal error: ID value 'I56a9...' is not unique.
+
+        music21 reads its own output back happily, so nothing in this library's own
+        round trip would ever catch it - only a real notation program does.
+        """
+        seen = []
+        for score_part in self.root().findall("part-list/score-part"):
+            ids = [node.get("id") for node in score_part.findall("score-instrument")]
+            self.assertTrue(ids, "a score-part declares no instrument")
+            seen.extend(ids)
+            # A score-instrument and its midi-instrument share an id, which is how a
+            # reader knows which MIDI patch belongs to which part.
+            midi = [node.get("id") for node in score_part.findall("midi-instrument")]
+            self.assertEqual(midi, ids, "score-instrument and midi-instrument must pair")
+        self.assertEqual(
+            len(seen), len(set(seen)), f"duplicate instrument id in {seen}"
+        )
+
+    def test_the_document_declares_its_xml_version(self):
+        """
+        The file opens with the XML declaration and the MusicXML DOCTYPE.
+
+        Both sit *before* the root element, so `ElementTree` drops them when it
+        serialises a parsed tree. The DOCTYPE is the MusicXML 4.0 DTD declaration -
+        it is how a reader knows which version the file claims - so it is carried over
+        from what music21 wrote rather than lost.
+        """
+        document = self.document()
+        self.assertTrue(document.startswith("<?xml version="), document[:40])
+        self.assertIn("<!DOCTYPE score-partwise", document.split("\n")[1])
+
     def test_show_notation_false_gives_one_staff(self):
         """`show_notation=False` drops the notation staff, keeping the tab."""
         root = self.root(show_notation=False)
