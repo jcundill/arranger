@@ -27,3 +27,4 @@ dist/
 *.gp5
 leadsheet_export.json
 
+*.pdf
