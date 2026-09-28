@@ -164,11 +164,35 @@ class TestMusicXMLDocument(MusicXMLTestCase):
         self.assertTrue(document.startswith("<?xml version="), document[:40])
         self.assertIn("<!DOCTYPE score-partwise", document.split("\n")[1])
 
-    def test_time_signature_is_written(self):
-        """The time signature reaches the reader, and every measure carries it."""
-        part = self.part(self.root())
-        beats = [node.text for node in part.iter("beats")]
-        self.assertIn("4", beats)
+    def test_the_time_signature_is_written_once(self):
+        """
+        The signature reaches the reader, and only in the first measure.
+
+        MusicXML says a signature holds until it changes, so repeating it in every
+        bar is legal but reads as a new one at each: MuseScore 3 draws a 4/4 over
+        every bar of the head. This is the regression for that, and it is also the
+        check that the later bars are still *resolved* against the signature in
+        force - `test_every_bar_is_the_length_of_its_time_signature` is what proves
+        they inherit it rather than falling back to nothing.
+        """
+        # Twelve steps of the same shape collapse into three bars at one chord per
+        # beat, which is more than the one bar the three-step fixture would give.
+        from arranger import format_musicxml
+        long_head = [make_step([-1, -1, 3, 5, 5, -1]) for _ in range(12)]
+        root = ElementTree.fromstring(format_musicxml(long_head))
+        measures = list(self.part(root).iter("measure"))
+        self.assertGreater(len(measures), 1, "needs a multi-bar document to mean anything")
+        with_time = [m for m in measures if m.find("attributes/time") is not None]
+        self.assertEqual(len(with_time), 1, "the time signature was written more than once")
+        self.assertIs(with_time[0], measures[0], "it was not written in the first measure")
+        self.assertEqual(with_time[0].findtext("attributes/time/beats"), "4")
+        self.assertEqual(with_time[0].findtext("attributes/time/beat-type"), "4")
+
+    def test_the_signature_is_written_even_for_a_one_bar_document(self):
+        """There is no 'second measure inherits it' to lean on: it must still be there."""
+        from arranger import format_musicxml
+        root = ElementTree.fromstring(format_musicxml(self.steps[:1]))
+        self.assertEqual(len(list(self.part(root).iter("time"))), 1)
 
     def test_no_steps_renders_nothing(self):
         """An empty arrangement is an empty string, not a partial document."""

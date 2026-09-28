@@ -370,15 +370,19 @@ def _build_part(
     # The time signature is written once, in the first measure. MusicXML says a
     # signature holds until it changes, so repeating it in every bar is legal but
     # reads as a new one at each: MuseScore 3 draws a 4/4 over every bar of the head.
+    # `state["signature"]` is the flag, rather than a local, because `new_measure`
+    # has to see it and the alternative is a second piece of mutable state.
+    state["signature"] = False
+
     def new_measure() -> Any:
         """Appends an empty, numbered, timed measure and returns it."""
         built = stream.Measure(number=state["number"])
-        # Every measure carries the time signature, not just the first. music21 resolves
-        # a measure's bar length from its own context when it pads and ties the bar,
-        # and with the signature only on the first measure the later ones have none, so
-        # the export dies inside makeRests with 'NoneType' has no attribute
-        # 'barDuration'. Repeating the element in each measure is valid MusicXML.
-        built.timeSignature = meter.TimeSignature(f"{beats_per_bar}/4")
+        if not state["signature"]:
+            state["signature"] = True
+            # Only the first measure. music21 fills each measure from the signature
+            # already in force - the one this writes - so the later bars need none,
+            # and `makeRests` still has a `barDuration` to pad and tie against.
+            built.timeSignature = meter.TimeSignature(f"{beats_per_bar}/4")
         part.append(built)
         return built
 

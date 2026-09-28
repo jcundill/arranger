@@ -747,10 +747,16 @@ Four decisions in here were each forced by a failure, not chosen:
   fractions of a whole note; scaling by them yields note values music21 refuses to
   write, and it refuses the **whole export** rather than rounding one. Two eighths on
   the last beat of a bar are two eighths.
-- **Every measure carries its own time signature.** music21 resolves a measure's bar
-  length from its own context when it pads and ties the bar; with the signature only
-  on the first measure the later ones have none and the export dies inside
-  `makeRests`. Repeating a valid element in each measure is cheaper than the crash.
+- **Only the first measure carries the time signature.** MusicXML says a signature
+  holds until it changes, so repeating it in every bar is legal but reads as a new one
+  at each: MuseScore 3 draws a 4/4 over every bar of the head. This replaced a
+  deliberate per-measure repetition, whose stated reason was that music21 needs a
+  signature in each measure to pad and tie the bar. **That reason was measured and is
+  false** - music21 resolves each measure against the signature already in force, and
+  the export does not touch `makeRests` without one. Eight corpus heads, plus pickups,
+  bar-line crossings and rests, all re-parse with every bar the right length.
+  `tests/test_musicxml.py::test_the_time_signature_is_written_once` is the regression.
+
 Two more are worth stating because they look like bugs otherwise:
 
 - `Measure.padAsAnacrusis` is a **method**, not a flag. Assigning to it silently does
