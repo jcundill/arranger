@@ -87,7 +87,7 @@ string — so `x-x-12-13-13-13` is a voicing on D-G-B-E with the melody on the h
 a lead sheet, a melody-only score, or anything else in MusicXML:
 
 ```bash
-python arranger.py head But_Not_for_Me.mxl --bars 1-5
+python arranger.py head tests/data/but_not_for_me.mxl --bars 1-5
 ```
 
 ```text
@@ -110,11 +110,12 @@ taking the first XML file out of the archive.
 **It needs no optional dependency.** The exporter wants `music21`; the importer
 wants `zipfile` and `xml.etree`, which are in the standard library. A plain
 `pip install jazz-arranger` can read a score, and `tests/test_headxml.py` is not
-`skipUnless`-guarded at all.
+`skipUnless`-guarded at all — the scores it reads are committed in `tests/data/`,
+so a clone runs the whole thing.
 
 ```bash
-python arranger.py head "Here's That Rainy Day.musicxml" --tab staff --melody
-python arranger.py head I_Was_Doing_All_Right.mxl --bars 1-3 --html head.html
+python arranger.py head tests/data/heres_that_rainy_day.musicxml --tab staff --melody
+python arranger.py head tests/data/i_was_doing_all_right.mxl --bars 1-3 --html head.html
 ```
 
 | flag | default | |
@@ -164,7 +165,7 @@ rule, and it shipped unnoticed until a transcribing analyst measured it.
 ```python
 from headxml import load_musicxml, head_skeleton
 
-head = load_musicxml("But_Not_for_Me.mxl")   # a Head: melody, timing, chords
+head = load_musicxml("tests/data/but_not_for_me.mxl")   # melody, timing, chords
 print(head.title, head.beats_per_bar, len(head))
 for triple, bar, beat, duration in head_skeleton(head, "eighths"):
     print(bar, beat, triple)

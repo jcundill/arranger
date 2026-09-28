@@ -2,10 +2,14 @@
 
 Nothing here is `skipUnless`-guarded, and that is the point: unlike the exporter,
 the importer needs no optional dependency, so its whole suite runs on a fresh
-clone. The tests build their own scores where a specific structure is what is
-under test, and read the four real files in the repository where a real score is
-what is under test - a hand-written document proves the parser agrees with itself,
-not that it reads what MuseScore and music21 actually write.
+clone - and the four real scores it reads are committed in `tests/data/`, so
+nothing is skipped for want of a file either. A missing fixture is a broken
+checkout, not a reason to pass quietly.
+
+The tests build their own scores where a specific structure is what is under
+test, and read the committed ones where a real score is what is under test - a
+hand-written document proves the parser agrees with itself, not that it reads
+what MuseScore and music21 actually write.
 """
 import os
 import tempfile
@@ -27,25 +31,22 @@ from headxml import (
 )
 from wjazzd import arrange_slots
 
-REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-# The real files in the repository. Each is skipped when absent, so the suite
-# passes on a clone that carries only the source.
-RAINY_DAY = os.path.join(REPO, "Here's That Rainy Day.musicxml")
-BUT_NOT_FOR_ME = os.path.join(REPO, "But_Not_for_Me.mxl")
-TENOR_MADNESS = os.path.join(REPO, "387-tenor-madness.musicxml")
-I_WAS_DOING_ALL_RIGHT = os.path.join(REPO, "I_Was_Doing_All_Right.mxl")
-
-requires_rainy_day = unittest.skipUnless(os.path.isfile(RAINY_DAY), "score not in repo")
-requires_but_not_for_me = unittest.skipUnless(
-    os.path.isfile(BUT_NOT_FOR_ME), "score not in repo"
-)
-requires_tenor_madness = unittest.skipUnless(
-    os.path.isfile(TENOR_MADNESS), "score not in repo"
-)
-requires_i_was_doing = unittest.skipUnless(
-    os.path.isfile(I_WAS_DOING_ALL_RIGHT), "score not in repo"
-)
+# The real scores the importer's tests read, in `tests/data/`. They are committed
+# and are NOT guarded: a missing fixture is a broken checkout, not a reason to
+# pass the suite quietly. `tests/data/` is excepted from the `*.musicxml` / `*.mxl`
+# rules in `.gitignore`, which exist for *export output*.
+#
+# Who wrote each one, which is the point of keeping them:
+#   but_not_for_me.mxl            music21, cut time, lyrics, a tie across a barline
+#   i_was_doing_all_right.mxl     music21, 2/2, triplets in 10080 divisions, a piano part
+#   heres_that_rainy_day.musicxml MuseScore 3 (3.1), slash chords, <degree> alterations
+#   tenor_madness.musicxml        this library's own export: a TAB staff beside a
+#                                 notation one, and chords music21 could not classify
+DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+RAINY_DAY = os.path.join(DATA, "heres_that_rainy_day.musicxml")
+BUT_NOT_FOR_ME = os.path.join(DATA, "but_not_for_me.mxl")
+TENOR_MADNESS = os.path.join(DATA, "tenor_madness.musicxml")
+I_WAS_DOING_ALL_RIGHT = os.path.join(DATA, "i_was_doing_all_right.mxl")
 
 
 def score(
@@ -413,7 +414,6 @@ class TestRealScores(unittest.TestCase):
     which is the part only the real thing can check.
     """
 
-    @requires_rainy_day
     def test_a_musescore_export_reads_its_chords_and_slash_basses(self):
         """Rainy Day is a MuseScore 3 file: 3.1, one voice, slash chords, degrees."""
         head = load_musicxml(RAINY_DAY)
@@ -428,7 +428,6 @@ class TestRealScores(unittest.TestCase):
         self.assertIn("Am7", chords)
         self.assertTrue(any(n.bass == "F#" for n in head.notes))
 
-    @requires_rainy_day
     def test_a_degree_written_chord_becomes_the_chord_it_spells(self):
         """MuseScore writes an E7b5 as `dominant` plus a flat 5th degree.
 
@@ -438,13 +437,11 @@ class TestRealScores(unittest.TestCase):
         head = load_musicxml(RAINY_DAY)
         self.assertIn("E7b5", {n.chord for n in head.notes})
 
-    @requires_rainy_day
     def test_every_chord_in_a_real_score_is_voiceable_or_reported(self):
         """Nothing is dropped silently: what cannot be voiced is counted."""
         head = load_musicxml(RAINY_DAY)
         self.assertEqual(head.unmapped, ())
 
-    @requires_but_not_for_me
     def test_a_zipped_music21_export_reads(self):
         """But Not For Me is a music21-written .mxl in cut time, with lyrics."""
         head = load_musicxml(BUT_NOT_FOR_ME)
@@ -456,7 +453,6 @@ class TestRealScores(unittest.TestCase):
         self.assertEqual(head.notes[0].chord, "Bb7")
         self.assertIn("They're", head.notes[0].lyrics)
 
-    @requires_but_not_for_me
     def test_a_bar_whose_harmony_arrives_mid_bar_is_read_in_order(self):
         """Bar 3 opens with the tied note and a rest, and declares Bb7 after them.
 
@@ -475,7 +471,6 @@ class TestRealScores(unittest.TestCase):
         self.assertEqual(bar_two[-1].chord, "Cm7")
         self.assertNotEqual(bar_two[-1].chord, bar_three[0].chord)
 
-    @requires_but_not_for_me
     def test_a_tied_note_becomes_one_voice(self):
         """The file ties a note across a bar line, and it must not become two.
 
@@ -485,7 +480,6 @@ class TestRealScores(unittest.TestCase):
         """
 
 
-    @requires_tenor_madness
     def test_this_librarys_own_export_reads_back(self):
         """A score this library exported is read by its own importer.
 
@@ -543,7 +537,6 @@ class TestRealScores(unittest.TestCase):
             if before.pitch == after.pitch and before.bar == after.bar:
                 self.assertNotEqual(before.beat, after.beat)
 
-    @requires_i_was_doing
     def test_a_score_with_tuplets_stays_in_time(self):
         """I Was Doing All Right is a piano part in triplets, in 10080 divisions.
 

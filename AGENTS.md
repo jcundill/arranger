@@ -53,7 +53,10 @@ arranger/
 │   ├── test_tab_rendering.py
 │   ├── test_voice_leading.py
 │   ├── test_voicings.py
-│   └── test_wjazzd.py
+│   ├── test_wjazzd.py
+│   └── data/                 # Committed MusicXML fixtures: music21, MuseScore and
+│                              # this library's own export. Excepted from the
+│                              # *.musicxml / *.mxl rules in .gitignore.
 └── .venv/                 # Local virtualenv (not committed)
 ```
 
@@ -723,6 +726,15 @@ forms of the format, so a plain `pip install jazz-arranger` can import a head an
 `tests/test_headxml.py` needs no `skipUnless` guard at all. That asymmetry with
 the exporter is deliberate and is the reason the two are separate modules rather
 than two halves of one.
+
+**Its four test scores are committed in `tests/data/`, and are not guarded.** A
+hand-built fixture proves the parser agrees with itself; only a file written by
+music21, MuseScore or this library's own exporter proves it reads what a notation
+program actually writes. They are excepted from the `*.musicxml` / `*.mxl` rules
+in `.gitignore` — which exist for *export output* — and a missing fixture is a
+broken checkout, not a reason to pass quietly. `tenor_madness.musicxml` is 528 KB
+and the largest of them; it earns its place by being the only two-part score,
+which is what makes the TAB-staff part-selection test possible.
 
 | name | role |
 |---|---|

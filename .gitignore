@@ -22,10 +22,19 @@ dist/
 # the HTML renders are per-tune debugging aids and the exports are snapshots of
 # whatever the renderer produced at the time, so a stale one in the tree is worse
 # than none. .gp5 in particular is checked by opening it in a notation program.
+#
+# `tests/data/` is the exception, and deliberately so: those are the *inputs* the
+# MusicXML importer's tests read, written by music21, MuseScore and this library
+# rather than by a renderer here. A hand-built fixture proves the parser agrees
+# with itself; only a real file proves it reads what a notation program wrote. The
+# exception is spelled out rather than left implicit, so a future export dropped
+# in `tests/data/` still needs a deliberate change to be committed.
 *.html
 *.musicxml
 *.mxl
 *.gp5
+!tests/data/*.musicxml
+!tests/data/*.mxl
 leadsheet_export.json
 
 *.pdf
