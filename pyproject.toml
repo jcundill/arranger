@@ -24,8 +24,13 @@ dependencies = ["musthe>=1.0.0"]
 # and it is opt-in for exactly that reason: a plain `pip install jazz-arranger` pulls
 # in musthe alone, and `pip install 'jazz-arranger[xml]'` adds the renderer. The
 # import inside tabxml is lazy, so everything else in the package works without it.
+#
+# Guitar Pro export is opt-in on the same grounds. PyGuitarPro is LGPL-3.0, which is
+# why it is an extra and never a runtime dependency: a plain install must not pull it
+# in. `tabgp` imports it lazily too, so both extras are independently absent-safe.
 [project.optional-dependencies]
 xml = ["music21>=9.1"]
+gp = ["PyGuitarPro>=0.11"]
 
 [project.scripts]
 jazz-arranger = "arranger:main"
@@ -34,8 +39,9 @@ jazz-arranger = "arranger:main"
 # The library is two top-level modules plus the optional corpus front end. Listing
 # them explicitly keeps flat-layout auto-discovery from tripping over the
 # non-package `tests/` dir. `tabstaff` holds the whole-progression staff renderers
-# and imports `arranger`, so it is listed after it.
-py-modules = ["arranger", "tabstaff", "tabxml", "wjazzd"]
+# and imports `arranger`, so it is listed after it. `tabxml` and `tabgp` each import
+# both, and are independent of one another.
+py-modules = ["arranger", "tabstaff", "tabxml", "tabgp", "wjazzd"]
 
 [tool.setuptools.dynamic]
 # Single source of truth: the version lives in arranger.__version__.

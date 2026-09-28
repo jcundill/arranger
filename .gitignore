@@ -19,7 +19,11 @@ dist/
 *.db
 
 # Renderer and export output from the corpus CLI. Regenerate rather than commit:
-# the HTML renders are per-tune debugging aids and the export is a snapshot.
+# the HTML renders are per-tune debugging aids and the exports are snapshots of
+# whatever the renderer produced at the time, so a stale one in the tree is worse
+# than none. .gp5 in particular is checked by opening it in a notation program.
 *.html
+*.musicxml
+*.gp5
 leadsheet_export.json
 
