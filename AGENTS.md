@@ -711,23 +711,29 @@ has to be post-processed before it is correct.
 | `tabxml.format_musicxml` | the document, as a string. Pure, like every other renderer |
 | `tabxml.write_musicxml` | the only function in the module that touches the filesystem |
 | `_events` / `_is_hold` | placement, durations and the pickup; the rhythmic core |
-| `_build_part` | one staff: measures, notes, ties, chord symbols |
-| `_split_technicals` | **redistributes** a chord's frets onto its own notes |
-| `_add_staff_details` | writes `<staff-lines>6</staff-lines>` |
+| `_build_part` | the staff: measures, notes, ties, chord symbols |
 | `_chord_symbol` | a symbol, or a text-only one for a name music21 rejects |
 | `_drop_empty_inversions` | removes the meaningless `<inversion>-1</inversion>` |
 | `_downgrade_kinds` | rewrites a `<kind>` value MusicXML 3.1 does not have |
 
+**There is no TAB staff, deliberately.** This was a measured decision, not a
+simplification. music21 cannot write a TAB staff a notation program renders
+correctly: it emits neither the `<staff-lines>6</staff-lines>` a tab staff needs nor a
+fret and string for each note *inside* a chord - it puts them all on the chord's first
+note (cuthbertLab/music21#1534). Both were patched back in afterwards, and the patched
+document **still did not display correctly in MuseScore 3**. A workaround that does not
+work costs more than not shipping it, so `tabxml` writes a **notation staff only** and
+`tabgp` writes the fretting, as a Guitar Pro 5 file. The two are divided by what each
+format can do: GP5 stores a fret and a string per note natively, MusicXML reaches
+Sibelius, MuseScore and Final. Everything that is genuinely *shared* - `_events`,
+`_is_hold`, `_substitute_steps` - is still shared, so a head lands on the same beats in
+both files.
+
 Four decisions in here were each forced by a failure, not chosen:
 
-- **The document is post-processed with `ElementTree` after music21 writes it.**
-  music21 does not export the fret and string of the notes *inside* a chord - it puts
-  them all on the chord's first note (cuthbertLab/music21#1534) - and it writes no
-  `<staff-lines>` for a `TabClef`. Both are missing information a reader cannot
-  recover: a note with no `<fret>` has no position at all, so notation software
-  computes one from the pitch and puts the shape in the wrong place. The pairs are
-  already in the right order (`_build_note` appends them lowest string first, and a
-  `Chord` keeps its note order), so `_split_technicals` hands pair *i* to note *i*.
+- **The document is post-processed with `ElementTree` after music21 writes it** - for
+  `_drop_empty_inversions` and `_downgrade_kinds`, and `_unique_instrument_ids`. The
+  two passes that used to repair a tab staff are gone with it.
 - **Steps are placed by `tabxml`, not by `tabstaff._staff_columns`.** The column grid
   is deliberately lossy - two steps on one onset collapse into one column, "the first
   step in a column owns that column" - which is right for a fixed-width ASCII staff
@@ -745,7 +751,6 @@ Four decisions in here were each forced by a failure, not chosen:
   length from its own context when it pads and ties the bar; with the signature only
   on the first measure the later ones have none and the export dies inside
   `makeRests`. Repeating a valid element in each measure is cheaper than the crash.
-
 Two more are worth stating because they look like bugs otherwise:
 
 - `Measure.padAsAnacrusis` is a **method**, not a flag. Assigning to it silently does
@@ -840,11 +845,15 @@ MusicXML score, and it is **not a replacement for MusicXML** — see below.
 
 **Why a third renderer rather than a replacement.** GP5 is a *tab* format, so it
 stores a fret and a string per note natively and a shape survives the round trip
-exactly — which is why the mapping here is a few lines, where MusicXML needs
-`music21` plus `_split_technicals` to put the fret back on each note of a chord. But
-GP5 opens in Guitar Pro and nowhere else, has no notation staff, and is a closed
-format. MusicXML remains the way into Sibelius, MuseScore and Final. Both are
-shipped, and both are one flag on `corpus_cli` (`--musicxml`, `--gp5`).
+exactly — which is why the mapping here is a few lines with no post-processing at
+all. That is not merely tidier than the MusicXML tab staff used to be: it is the
+**only** one that works, since music21 cannot write a tab staff a notation program
+renders correctly (see [MusicXML export](#musicxml-export)). So the division is now
+by capability, not by preference: GP5 carries the fingering, MusicXML carries the
+notation, and neither renderer tries to do the other's job. But GP5 opens in Guitar
+Pro and nowhere else, has no notation staff, and is a closed format. MusicXML remains
+the way into Sibelius, MuseScore and Final. Both are shipped, and both are one flag
+on `corpus_cli` (`--musicxml`, `--gp5`).
 
 **What is shared, deliberately.** `tabgp` calls `tabxml._events` and
 `tabxml._substitute_steps` rather than reimplementing either, so a head lands on the

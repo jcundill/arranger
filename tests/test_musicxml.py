@@ -8,9 +8,10 @@ import os
 import re
 import tempfile
 import unittest
+from typing import List
 from xml.etree import ElementTree
 from arranger import ArrangementStep, Voicing, VoiceLeadingEngine
-from tabxml import _READABLE_KINDS, _downgrade_kinds
+from tabxml import _READABLE_KINDS, _downgrade_kinds, _sounding
 try:
     import music21  # noqa: F401
     HAS_MUSIC21 = True
@@ -32,6 +33,19 @@ def make_step(frets, chord="Cmaj7", melody="B4", **kwargs):
         **kwargs,
     )
 
+def _midi(note_element):
+    """The MIDI number of a written `<note>`, or None for one with no pitch."""
+    pitch = note_element.find("pitch")
+    if pitch is None:
+        return None
+    semitone = {"C": 0, "D": 2, "E": 4, "F": 5, "G": 7, "A": 9, "B": 11}[
+        pitch.findtext("step", "C")
+    ]
+    alter = int(pitch.findtext("alter", "0"))
+    octave = int(pitch.findtext("octave", "0"))
+    return (octave + 1) * 12 + semitone + alter
+
+
 class MusicXMLTestCase(unittest.TestCase):
     """Shared helpers: a small progression and accessors into the written document."""
 
@@ -50,22 +64,15 @@ class MusicXMLTestCase(unittest.TestCase):
     def root(self, **kwargs):
         return ElementTree.fromstring(self.document(**kwargs))
 
-    def tab_part(self, root):
-        """The tab part's element, found by its TAB clef rather than by position."""
-        for part in root.findall("part"):
-            for clef in part.iter("clef"):
-                sign = clef.find("sign")
-                if sign is not None and sign.text == "TAB":
-                    return part
-        self.fail("no tab part in the document")
-
-    def other_part(self, root):
-        """The notation part, i.e. the one that is not the tab staff."""
-        tab = self.tab_part(root)
-        for part in root.findall("part"):
-            if part is not tab:
-                return part
-        self.fail("no notation part in the document")
+    def part(self, root):
+        """
+        The score's one part. There is no tab part to tell apart from a notation one:
+        the document is notation only, and it is asserted as such elsewhere.
+        """
+        parts = root.findall("part")
+        if len(parts) != 1:
+            self.fail(f"expected exactly one part, found {len(parts)}")
+        return parts[0]
 
     def notes(self, part):
         """The sounding notes of a part, excluding the chord symbols.
@@ -89,17 +96,6 @@ class MusicXMLTestCase(unittest.TestCase):
         """The chord symbols of a part, one per chord change."""
         return list(part.iter("harmony"))
 
-    def fretted(self, part):
-        """(string, fret) for every note that carries a position."""
-        found = []
-        for note in self.notes(part):
-            for technical in note.iter("technical"):
-                string = technical.find("string")
-                fret = technical.find("fret")
-                if string is not None and fret is not None:
-                    found.append((string.text, fret.text))
-        return found
-
 @requires_music21
 
 class TestMusicXMLDocument(MusicXMLTestCase):
@@ -110,23 +106,24 @@ class TestMusicXMLDocument(MusicXMLTestCase):
         root = self.root()
         self.assertEqual(root.tag, "score-partwise")
 
-    def test_has_a_tab_staff_and_a_notation_staff(self):
-        """Both staves are present by default, and the tab one is a TAB clef."""
-        root = self.root()
-        self.assertEqual(len(root.findall("part")), 2)
-        self.assertIsNotNone(self.tab_part(root))
-        self.assertIsNotNone(self.other_part(root))
+    def test_the_document_is_one_notation_staff(self):
+        """
+        A single treble-clef part, and no tab staff anywhere in it.
 
-    def test_the_tab_staff_has_six_lines(self):
+        This is the regression for the change that dropped the tab staff: music21
+        cannot write one a notation program renders correctly (see `tabxml`'s module
+        docstring), so a `TAB` clef or a `<staff-lines>6</staff-lines>` in the document
+        means the tab path has crept back in. Fretting is written by `tabgp`.
         """
-        `<staff-lines>6</staff-lines>` is what makes a staff a tab staff.
-        music21 does not write it for a TabClef, so `tabxml` adds it. Without it a
-        reader assumes five lines and every fret lands on the wrong one.
-        """
-        lines = self.tab_part(self.root()).iter("staff-lines")
-        values = [node.text for node in lines]
-        self.assertTrue(values, "the tab staff declares no staff-lines")
-        self.assertEqual(set(values), {"6"})
+        root = self.root()
+        self.assertEqual(len(root.findall("part")), 1)
+        self.part(root)
+        for clef_node in root.iter("clef"):
+            sign = clef_node.find("sign")
+            self.assertNotEqual(sign.text if sign is not None else None, "TAB")
+        self.assertEqual([node.text for node in root.iter("staff-lines")], [])
+        self.assertEqual([node.text for node in root.iter("fret")], [])
+        self.assertEqual([node.text for node in root.iter("string")], [])
 
     def test_instrument_ids_are_unique_across_the_part_list(self):
         """
@@ -167,15 +164,9 @@ class TestMusicXMLDocument(MusicXMLTestCase):
         self.assertTrue(document.startswith("<?xml version="), document[:40])
         self.assertIn("<!DOCTYPE score-partwise", document.split("\n")[1])
 
-    def test_show_notation_false_gives_one_staff(self):
-        """`show_notation=False` drops the notation staff, keeping the tab."""
-        root = self.root(show_notation=False)
-        self.assertEqual(len(root.findall("part")), 1)
-        self.assertIsNotNone(self.tab_part(root))
-
     def test_time_signature_is_written(self):
         """The time signature reaches the reader, and every measure carries it."""
-        part = self.tab_part(self.root())
+        part = self.part(self.root())
         beats = [node.text for node in part.iter("beats")]
         self.assertIn("4", beats)
 
@@ -192,43 +183,35 @@ class TestMusicXMLDocument(MusicXMLTestCase):
 
 @requires_music21
 
-class TestMusicXMLFretting(MusicXMLTestCase):
-    """The fretting survives the round trip - which is the point of a tab staff."""
+class TestMusicXMLVoices(MusicXMLTestCase):
+    """Which of a step's voices reach the notation staff."""
 
-    def test_every_sounding_note_carries_a_fret_and_a_string(self):
+    def test_every_sounding_pitch_is_written(self):
         """
-        Every note of every shape has its own `<fret>` and `<string>`.
-        This is the regression the renderer exists for: music21 writes all of a
-        chord's fret data onto the chord's *first* note and leaves the rest bare
-        (cuthbertLab/music21#1534), and a note with no fret has no position at all -
-        notation software then computes one from the pitch and puts the shape in the
-        wrong place on the neck.
+        A step's shape arrives as one note per sounding string, as pitches.
+
+        The pitch list is the arrangement itself on a notation staff; the *fretting*
+        is `tabgp`'s job now, so this is checked on the pitches rather than on
+        `<fret>`/`<string>`, which the document no longer contains.
         """
-        tab = self.tab_part(self.root())
-        sounded = self.notes(tab)
+        sounded = self.notes(self.part(self.root()))
         self.assertTrue(sounded)
-        self.assertEqual(len(self.fretted(tab)), len(sounded))
-
-    def test_the_strings_and_frets_are_the_ones_the_engine_chose(self):
-        """
-        The written positions match `Voicing.frets`, string 6 being the low E.
-        String *numbering* is the one thing that can silently transpose a shape:
-        music21 and MusicXML number the high E as string 1, while the library indexes
-        strings 0 (low E) to 5 (high E), so the index is flipped on the way out.
-        """
-        tab = self.tab_part(self.root())
+        written = [_midi(note) for note in sounded]
+        self.assertEqual(len(written), len(sounded), "a note was written without a pitch")
+        # The three steps of the ii-V-I, each sounded as a chord, so the written
+        # pitches are every sounding pitch of every step, in the order they were
+        # played: low string first within a step, as `_sounding` returns them.
+        expected: List[int] = []
         for step in self.steps:
-            for index, fret in enumerate(step.voicing.frets):
-                if fret < 0:
-                    continue
-                self.assertIn((str(6 - index), str(fret)), self.fretted(tab))
+            expected.extend(_sounding(step))
+        self.assertEqual(written, expected)
 
     def test_a_held_shape_is_not_rewritten_as_a_second_attack(self):
         """A repeated melody is a single note, as it is in the tab."""
         from arranger import format_musicxml
         step = make_step([-1, -1, 3, 5, 5, -1], repeated=True)
         root = ElementTree.fromstring(format_musicxml([step]))
-        sounded = self.notes(self.tab_part(root))
+        sounded = self.notes(self.part(root))
         self.assertEqual(len(sounded), 1, "the held melody became more than one note")
 
 @requires_music21
@@ -250,12 +233,12 @@ class TestMusicXMLRhythm(MusicXMLTestCase):
         progression that is not a whole number of bars long has no fixed bar count.
         """
         root = self.root()
-        self.assertEqual(len(self.attacks(self.tab_part(root))), len(self.steps))
+        self.assertEqual(len(self.attacks(self.part(root))), len(self.steps))
 
     def test_timing_places_the_chords_in_bars(self):
         """Three chords spread over the first two beats of two bars fill two bars."""
         self.timed_steps()
-        measures = self.tab_part(self.root()).findall("measure")
+        measures = self.part(self.root()).findall("measure")
         self.assertEqual(len(measures), 2)
 
     def test_every_bar_is_the_length_of_its_time_signature(self):
@@ -307,7 +290,7 @@ class TestMusicXMLRhythm(MusicXMLTestCase):
             # Bar 0, starting on the third beat: two beats of pickup, filled exactly.
             step.bar, step.beat, step.duration = 0, 3.0, 0.25
         root = self.root()
-        first = self.tab_part(root).findall("measure")[0]
+        first = self.part(root).findall("measure")[0]
         self.assertEqual(first.get("implicit"), "yes")
         divisions = first.find("attributes/divisions")
         assert divisions is not None and divisions.text is not None
@@ -321,7 +304,7 @@ class TestMusicXMLRhythm(MusicXMLTestCase):
         """A head that starts on beat 1 has no pickup, and no implicit bar."""
         for step in self.steps:
             step.bar, step.beat, step.duration = 0, 1.0, 0.25
-        first = self.tab_part(self.root()).findall("measure")[0]
+        first = self.part(self.root()).findall("measure")[0]
         self.assertEqual(first.get("implicit"), "no")
 
     def test_chord_symbols_appear_once_per_change(self):
@@ -330,7 +313,7 @@ class TestMusicXMLRhythm(MusicXMLTestCase):
         The ii-V-I has three distinct chords, so three symbols - and not one per note.
         """
         root = self.root()
-        self.assertEqual(len(self.symbols(self.tab_part(root))), len(self.steps))
+        self.assertEqual(len(self.symbols(self.part(root))), len(self.steps))
 
     def test_chord_symbols_can_be_turned_off(self):
         """`show_chords=False` writes the notes without any harmony."""
@@ -348,7 +331,7 @@ class TestMusicXMLRhythm(MusicXMLTestCase):
 
         step = make_step([-1, 3, 5, 5, 5, -1], chord="Bb7sus4")
         root = ElementTree.fromstring(format_musicxml([step]))
-        symbols = self.symbols(self.tab_part(root))
+        symbols = self.symbols(self.part(root))
         self.assertEqual(len(symbols), 1)
         self.assertIn("sus4", ElementTree.tostring(symbols[0], encoding="unicode"))
 
@@ -399,7 +382,7 @@ class TestMusicXML31Kinds(MusicXMLTestCase):
 
         step = make_step([-1, 3, 5, 5, 5, -1], chord="F7sus4", melody="C5")
         root = ElementTree.fromstring(format_musicxml([step]))
-        symbols = self.symbols(self.tab_part(root))
+        symbols = self.symbols(self.part(root))
         self.assertEqual(len(symbols), 1)
         harmony = symbols[0]
         self.assertEqual(harmony.findtext("root/root-step"), "F")
@@ -498,8 +481,10 @@ class TestMusicXMLFileOutput(unittest.TestCase):
         parsed = converter.parseData(document, format="musicxml")
         from music21 import stream as music21_stream
 
+        # One part: the document is a notation staff, and a tab staff beside it
+        # would be a second one. See `test_the_document_is_one_notation_staff`.
         self.assertEqual(
-            len(parsed.recurse().getElementsByClass(music21_stream.Part)), 2
+            len(parsed.recurse().getElementsByClass(music21_stream.Part)), 1
         )
 
     def test_rendering_writes_no_file(self):

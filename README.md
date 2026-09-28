@@ -304,24 +304,28 @@ from arranger import write_musicxml
 write_musicxml(steps, "head.musicxml", title="Blue Train", subtitle="John Coltrane")
 ```
 
-The document holds a **six-line TAB staff** whose every note carries its own
-`<fret>` and `<string>`, a **notation staff** of the same music above it, and the
-**chord symbols** on each change. The written rhythm is preserved: each step becomes
-a note or chord of the length it occupies, a shape that is *held* rather than
-restruck becomes one longer note, and an event that runs across a bar line is tied
-rather than stretched. A hand-written progression with no timing falls back to one
-chord per beat, exactly as the other two renderers do.
+The document is a **notation staff** — one staff, in the treble clef a chord-melody
+part is written in — carrying the **chord symbols** on each change. The written rhythm
+is preserved: each step becomes a note or chord of the length it occupies, a shape that
+is *held* rather than restruck becomes one longer note, and an event that runs across a
+bar line is tied rather than stretched. A hand-written progression with no timing falls
+back to one chord per beat, exactly as the other renderers do.
 
-Three options shape the output:
+There is **no TAB staff in the MusicXML**, and that is deliberate. `music21` cannot
+write one that a notation program renders correctly — it emits neither the six
+`<staff-lines>` a tab staff needs nor a fret and string per note, and the document it
+produced still displayed incorrectly in MuseScore 3. For the fingering, use the
+[Guitar Pro 5 export](#guitar-pro-5-for-a-tabber) below, which stores a fret and a
+string per note natively. The two outputs share their note placement, so a head lands on
+the same beats in both.
 
-- **`show_notation=True` (the default)** includes the notation staff. Pass `False`
-  for a one-staff tab document.
+Two options shape the output:
+
 - **`show_chords=True` (the default)** writes the chord symbols, one per change.
 - **`collapse=True` (the default)** writes a held shape once. Pass `False` to hear
   it re-struck on every step.
 
-From the command line it is `--musicxml PATH`, and `--no-notation-staff` drops the
-upper staff:
+From the command line it is `--musicxml PATH`:
 
 ```bash
 python arranger.py corpus --melid 218 --musicxml head.musicxml
@@ -355,8 +359,8 @@ struck note, all as in the other two renderers. `tempo`, `beats_per_bar`,
 **This is not a replacement for MusicXML.** A `.gp5` file opens in Guitar Pro and
 nowhere else, and it has no notation staff; the MusicXML export is still the way into
 MuseScore, Sibelius and Final. Use whichever the destination needs — the two are
-independent extras and the two outputs share their note placement, so a head lands on
-the same beats in both.
+independent extras, the two outputs share their note placement, and between them they
+cover what a two-staff score would have: the fingering here, the notation there.
 
 One difference worth knowing: GP5 has no way to write a short first bar, so a head
 starting on an upbeat gets a full first measure with the leading beats empty rather

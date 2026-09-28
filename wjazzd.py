@@ -1501,14 +1501,9 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
         default=None,
         metavar="PATH",
         help="also write the head to PATH as MusicXML, for a notation program "
-             "(e.g. --musicxml head.musicxml). Needs the optional extra: "
+             "(e.g. --musicxml head.musicxml). A notation staff only; for the "
+             "fingering use --gp5. Needs the optional extra: "
              "pip install 'jazz-arranger[xml]'",
-    )
-    parser.add_argument(
-        "--no-notation-staff",
-        action="store_true",
-        help="with --musicxml, write the tab staff on its own, without the "
-             "notation staff above it",
     )
     parser.add_argument(
         "--gp5",
@@ -1638,7 +1633,6 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
                 args.musicxml,
                 title=solo.title or f"melid {solo.melid}",
                 subtitle=f"{solo.performer} - {solo.key}".strip(" -"),
-                show_notation=not args.no_notation_staff,
             )
         except ImportError as error:
             print(f"\n{error}")

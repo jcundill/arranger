@@ -7,15 +7,27 @@ MuseScore or Final without being retyped.
 
 What it writes is a real score rather than a note list:
 
-- a six-line **TAB staff** (`<staff-lines>6</staff-lines>`, `TAB` clef) whose notes
-  carry their own fret and string, so a shape survives the round trip exactly;
-- a **notation staff** of the same music, in the treble clef a chord-melody part
-  is written in. Both parts are built from the same event list, so they cannot drift
-  apart.
-- **chord symbols** on each chord change, and
+- a **notation staff** of the music, in the treble clef a chord-melody part is
+  written in, and
+- the **chord symbols** on each chord change, on
 - the **written rhythm**: each step is a note or chord of the length it occupies, an
   unchanged shape is written as one longer note rather than a re-strike, and an event
   that runs across a bar line is tied rather than stretched.
+
+**There is no TAB staff here, deliberately.** This module used to write a six-line TAB
+staff beside the notation one, and it is worth recording why it no longer does.
+music21 cannot produce a TAB staff that a real reader renders correctly: it writes
+neither the `<staff-lines>6</staff-lines>` a tab staff needs nor a fret and string for
+each note *inside* a chord - music21 issue 1534 puts them all on the chord's first
+note - so both had to be patched into the finished XML afterwards. The patched
+document still did not display correctly in MuseScore 3, and a workaround that does
+not work costs more than not shipping it.
+
+Fretting belongs to the renderer whose format stores it natively. `tabgp` writes a
+Guitar Pro 5 file, which is a *tab* format: a fret and a string per note survive the
+round trip exactly, with no post-processing at all. So the two renderers divide the
+work by what each format can actually do - notation here, tab there - while the
+placement of every step is still shared, so a head lands on the same beats in both.
 
 The placement is its own, in `_events`, and deliberately does **not** reuse
 `tabstaff._staff_columns`. That column grid is lossy - two steps on one onset collapse
@@ -38,19 +50,6 @@ from typing import Any, List, Optional, Sequence, Tuple
 from xml.etree import ElementTree
 
 from arranger import NO_CHORD, PITCH_CLASS_NAMES, ArrangementStep, GuitarFretboard
-
-# music21 calls the conventional guitar string number 1 the high E and 6 the low
-# E, while this library indexes strings 0 (low E) to 5 (high E). A TAB staff is
-# numbered the way music21 numbers it, so the index is flipped on the way out.
-_MUSIC_STRING_OFFSET = 6
-
-# The number of strings in a TAB staff, and the number of lines it is drawn on. Both
-# are what MusicXML needs to render the staff as tab rather than as notation.
-TAB_STAFF_LINES = 6
-
-# The name the tab staff is given in the score. Shown in the part list, and also the
-# one place a reader can tell the two staves apart.
-TAB_PART_NAME = "TAB"
 
 # The shortest event MusicXML can write, in quarter lengths: a sixteenth. See the
 # duration floor in `_events`.
@@ -154,14 +153,14 @@ def _pitch(midi: int) -> Tuple[str, int]:
     return PITCH_CLASS_NAMES[midi % 12], midi // 12 - 1
 
 
-def _sounding(step: ArrangementStep) -> List[Tuple[int, int]]:
+def _sounding(step: ArrangementStep) -> List[int]:
     """
-    The pitches a step actually sounds, as (midi, string_index), low string first.
+    The pitches a step actually sounds, as MIDI numbers, lowest string first.
 
     A repeated melody is a **single note**: the renderers show the soprano alone and
     leave the inner voices blank, because the held shape belongs to the chord the
     hold began on and the player is not re-fingering it. Honoured here rather than
-    taken from the full voicing, so the XML says the same thing the tab says.
+    taken from the full voicing, so the score says the same thing the tab says.
     """
     voicing = step.voicing
     soprano = voicing.soprano_string()
@@ -169,8 +168,7 @@ def _sounding(step: ArrangementStep) -> List[Tuple[int, int]]:
     if step.repeated and soprano >= 0:
         strings = [soprano]
     return [
-        (GuitarFretboard.fret_to_midi(index, voicing.frets[index]), index)
-        for index in strings
+        GuitarFretboard.fret_to_midi(index, voicing.frets[index]) for index in strings
     ]
 
 
@@ -299,46 +297,35 @@ def _is_hold(
     return sorted(previous.voicing.midi_notes()) == sorted(step.voicing.midi_notes())
 
 
-def _build_note(step: ArrangementStep, length: float, technicals: bool) -> Any:
+def _build_note(step: ArrangementStep, length: float) -> Any:
     """
     One step as a music21 `Chord`, a single `Note`, or a `Rest`.
 
     A one-pitch step becomes a `Note` rather than a one-note `Chord`, so a repeated
     melody exports as the single note it is played as, and a melody-only (no chord)
     step does the same. Anything else is a `Chord` carrying one note per sounding
-    string, which is what lets a fret and a string be attached to each note of the
-    shape rather than to the shape as a whole.
+    string, written as **pitches only**: the staff is notation, and a `<fret>` or a
+    `<string>` on a notation staff is information no reader can use. Fretting is
+    written by `tabgp` - see the module docstring.
     """
-    from music21 import articulations, chord, note
+    from music21 import chord, note
 
     sounding = _sounding(step)
     if not sounding:
         return note.Rest(quarterLength=length)
 
     pitches = []
-    for midi, _ in sounding:
+    for midi in sounding:
         step_name, octave = _pitch(midi)
         pitches.append(f"{step_name}{octave}")
     if len(pitches) == 1:
-        built: Any = note.Note(pitches[0], quarterLength=length)
-    else:
-        built = chord.Chord(pitches, quarterLength=length)
-        # A guitar shape is played with the fingers on the frets it is written on, so
-        # the stems point down however high the top note is - the top note of a drop-2
-        # voicing is often the *lowest* sounding voice inverted on the high string.
-        built.stemDirection = "down"
+        return note.Note(pitches[0], quarterLength=length)
 
-    if technicals:
-        built.articulations = [
-            articulation
-            for _, index in sounding
-            for articulation in (
-                articulations.StringIndication(
-                    _MUSIC_STRING_OFFSET - index
-                ),
-                articulations.FretIndication(step.voicing.frets[index]),
-            )
-        ]
+    built: Any = chord.Chord(pitches, quarterLength=length)
+    # A guitar shape is played with the fingers on the frets it is written on, so
+    # the stems point down however high the top note is - the top note of a drop-2
+    # voicing is often the *lowest* sounding voice inverted on the high string.
+    built.stemDirection = "down"
     return built
 
 
@@ -346,17 +333,11 @@ def _build_part(
     events: Sequence[Tuple[Optional[ArrangementStep], bool, float]],
     title: str,
     beats_per_bar: int,
-    tab: bool,
     pickup: float = 0.0,
     show_chords: bool = True,
 ) -> Any:
     """
-    One staff of the score: a `Part` of measures, in reading order.
-
-    The TAB and notation parts are built from the *same* event list, so the two
-    staves of the score necessarily say the same thing. The only difference is what
-    each note carries: fret and string on the tab staff, nothing extra on the
-    notation staff.
+    The staff of the score: a `Part` of measures, in reading order.
 
     A new `Measure` is started at every bar line, because music21 exports the
     measures a stream actually has: given one measure holding a whole head, it
@@ -364,22 +345,13 @@ def _build_part(
     a head selected from a pickup bar starts part-way through a bar - so it is
     marked as an anacrusis, and the last one is padded with a rest, rather than
     either being quietly stretched to fill its bar.
-
-    The tab part is found by its clef rather than by its name or by an id assumed up
-    front: music21 mints its own part ids on export, and a title chosen by the caller
-    could be anything. The TAB clef is the one thing about a part that this renderer
-    controls outright.
     """
     from music21 import clef, meter, stream
 
     bar_length = float(beats_per_bar)
     part = stream.Part()
-    part.partName = TAB_PART_NAME if tab else title
-    part.append(clef.TabClef() if tab else clef.TrebleClef())
-    if tab:
-        # Six lines, not five, or every fret lands on the wrong line. music21 does
-        # not write this for a TabClef, so it goes in during post-processing.
-        part.staffLines = TAB_STAFF_LINES
+    part.partName = title
+    part.append(clef.TrebleClef())
 
     # Offsets run from zero, so a head picked up part-way through a bar simply starts
     # the first written bar as a short one - which is what it is.
@@ -395,7 +367,9 @@ def _build_part(
         "measure": None, "start": 0.0, "number": number,
         "length": bar_length - pickup,
     }
-
+    # The time signature is written once, in the first measure. MusicXML says a
+    # signature holds until it changes, so repeating it in every bar is legal but
+    # reads as a new one at each: MuseScore 3 draws a 4/4 over every bar of the head.
     def new_measure() -> Any:
         """Appends an empty, numbered, timed measure and returns it."""
         built = stream.Measure(number=state["number"])
@@ -453,7 +427,7 @@ def _build_part(
             remaining -= piece
 
         for index, (where, at, piece) in enumerate(pieces):
-            built = _rest(piece) if step is None else _build_note(step, piece, technicals=tab)
+            built = _rest(piece) if step is None else _build_note(step, piece)
             if len(pieces) > 1:
                 built.tie = tie_module.Tie(
                     "start" if index == 0
@@ -552,24 +526,6 @@ def _document_prologue(document: str) -> str:
     return prologue + "\n"
 
 
-def _tab_part_id(root: ElementTree.Element) -> Optional[str]:
-    """
-    The id of the tab part in a written document, found by its TAB clef.
-
-    music21 mints a part id on export, so it cannot be known before the document
-    exists, and it is not a name this renderer chose either - a caller-supplied title
-    could be anything. The TAB clef is the one thing about the part that is entirely
-    under this renderer's control, so that is what identifies it. Returns None when
-    there is no tab staff, which the callers treat as "nothing to do".
-    """
-    for part in root.findall("part"):
-        for clef_node in part.iter("clef"):
-            sign = clef_node.find("sign")
-            if sign is not None and sign.text == "TAB":
-                return part.get("id")
-    return None
-
-
 def _chord_symbol(name: str) -> Any:
     """
     A chord symbol for the score, or a text-only one when music21 cannot read the name.
@@ -609,9 +565,11 @@ def _unique_instrument_ids(root: ElementTree.Element) -> None:
 
     The instrument ids live in the `<part-list>`, not in the parts, and music21 writes
     the *same* one into every `<score-part>` when the parts share a single
-    `instrument.Guitar()` - which is what happens as soon as there is more than one
-    staff. MusicXML requires those ids to be unique within the part list, and MuseScore
-    refuses to open the file at all when they are not:
+    `instrument.Guitar()`. The score has one part now, so this is a no-op on the
+    document this renderer writes; it is kept because the ids are minted by music21
+    rather than by this renderer, and MusicXML requires them to be unique within the
+    part list regardless. MuseScore refuses to open the file outright when they are
+    not:
 
         Fatal error: ID value 'I56a9...' is not unique.
 
@@ -692,109 +650,6 @@ def _downgrade_kinds(root: ElementTree.Element) -> None:
             kind.text = "other"
 
 
-def _chord_groups(measure: ElementTree.Element) -> List[List[ElementTree.Element]]:
-    """
-    Splits a measure's `<note>` elements into groups, one per attack.
-
-    A chord in MusicXML is several sibling `<note>` elements of which all but the
-    first carry a `<chord/>` child. That is why the fret data has to be redistributed
-    after the fact: the notes are siblings, not a container.
-    """
-    groups: List[List[ElementTree.Element]] = []
-    for child in measure:
-        if child.tag != "note":
-            continue
-        if child.find("chord") is not None and groups:
-            groups[-1].append(child)
-        else:
-            groups.append([child])
-    return groups
-
-
-def _split_technicals(root: ElementTree.Element, part_id: Optional[str]) -> None:
-    """
-    Gives every note of a chord its own fret and string, after music21 has written it.
-
-    music21 writes all of a chord's fret and string data onto the chord's *first*
-    note, and the rest of the shape comes out bare (cuthbertLab/music21#1534). In a
-    TAB staff that is not cosmetic: a note with no `<fret>` has no position at all,
-    so notation software falls back to computing one from the pitch - and computes
-    the wrong one, putting the shape at a different place on the neck.
-
-    The pairs are already in the right order, because `_build_note` appends them
-    lowest string first and a `Chord` preserves its note order. So the fix is to
-    hand pair *i* to note *i* rather than to leave them all on the first. Only the
-    tab staff is touched, which is identified by `part_id`; a None id means there is
-    no tab staff to fix.
-    """
-    if part_id is None:
-        return
-    for part in root.findall("part"):
-        if part.get("id") != part_id:
-            continue
-        for measure in part.findall("measure"):
-            for group in _chord_groups(measure):
-                first = group[0]
-                notations = first.find("notations")
-                if notations is None:
-                    continue
-                technical = notations.find("technical")
-                if technical is None:
-                    continue
-                strings = [node.text for node in technical.findall("string")]
-                frets = [node.text for node in technical.findall("fret")]
-                if len(strings) != len(frets):
-                    continue
-                # One pair per note. A shape with fewer pairs than notes (music21
-                # dropped some) leaves the rest bare rather than inventing positions.
-                for note_element, string, fret in zip(group, strings, frets):
-                    own = note_element.find("notations")
-                    if own is None:
-                        own = ElementTree.SubElement(note_element, "notations")
-                    own_technical = ElementTree.SubElement(own, "technical")
-                    string_node = ElementTree.SubElement(own_technical, "string")
-                    if string is not None:
-                        string_node.text = string
-                    fret_node = ElementTree.SubElement(own_technical, "fret")
-                    if fret is not None:
-                        fret_node.text = fret
-                # The original block has been redistributed, so it always comes off:
-                # leaving it in place would give the chord's bottom note every
-                # position at once as well as its own.
-                notations.remove(technical)
-                if len(list(notations)) == 0:
-                    first.remove(notations)
-
-
-def _add_staff_details(root: ElementTree.Element, part_id: Optional[str]) -> None:
-    """
-    Declares the tab part as a six-line staff, in the first measure.
-
-    MusicXML carries this in `<attributes>` as `<staff-details><staff-lines>`. music21
-    does not write it for a `TabClef`, and a reader that finds no `<staff-lines>`
-    assumes five - which puts every fret on the wrong line. Added to the
-    `<attributes>` music21 already wrote, which is where a schema expects it.
-    """
-    if part_id is None:
-        return
-    for part in root.findall("part"):
-        if part.get("id") != part_id:
-            continue
-        first_measure = part.find("measure")
-        if first_measure is None:
-            return
-        attributes = first_measure.find("attributes")
-        if attributes is None:
-            attributes = ElementTree.Element("attributes")
-            first_measure.insert(0, attributes)
-        if attributes.find("staff-details") is not None:
-            return
-        details = ElementTree.SubElement(attributes, "staff-details")
-        lines = ElementTree.SubElement(details, "staff-lines")
-        lines.text = str(TAB_STAFF_LINES)
-        return
-
-
 def _substitute_steps(steps: List[ArrangementStep]) -> List[ArrangementStep]:
     """
     The harmony a step is *sounding*, as a step carrying that chord name.
@@ -825,16 +680,19 @@ def format_musicxml(
     beats_per_bar: int = 4,
     rhythm: bool = True,
     collapse: bool = True,
-    show_notation: bool = True,
     show_chords: bool = True,
 ) -> str:
     """
     Renders a whole progression as a MusicXML (score-partwise) document.
 
-    The document holds a six-line TAB staff carrying the fretting and a notation
-    staff of the same music, both built from the same events, so the two staves
-    cannot disagree. Chord symbols sit on each chord change, and a shape that is
-    held rather than restruck is written as one longer note.
+    The document is a **notation staff** in the treble clef a chord-melody part is
+    written in, with the **chord symbols** on each change and the **written rhythm**:
+    a shape that is held rather than restruck is one longer note, and a step whose
+    melody repeats under an unchanged harmony is a single struck note.
+
+    There is no TAB staff. music21 cannot write one that a notation program renders
+    correctly, so the fretting is written by `tabgp` as a Guitar Pro 5 file instead -
+    see the module docstring for why the two renderers divide the work that way.
 
     Args:
         steps: arranged steps, typically from `arrange_progression()`.
@@ -846,8 +704,6 @@ def format_musicxml(
             one-chord-per-beat grid when the steps carry no timing, exactly as
             `format_tab_staff` does, so a hand-written progression still exports.
         collapse: write a held shape as one longer note instead of restriking it.
-        show_notation: include the notation staff alongside the TAB staff. Off gives
-            a one-staff tab document.
         show_chords: write the chord symbols.
 
     Returns:
@@ -876,29 +732,19 @@ def format_musicxml(
     if subtitle:
         score.metadata.movementName = subtitle
 
-    tab_part = _build_part(
-        events, title, beats_per_bar, tab=True, pickup=pickup, show_chords=show_chords
+    score.insert(
+        0,
+        _build_part(
+            events, title, beats_per_bar, pickup=pickup, show_chords=show_chords
+        ),
     )
-    score.insert(0, tab_part)
-    if show_notation:
-        score.insert(
-            0,
-            _build_part(
-                events, title, beats_per_bar, tab=False, pickup=pickup,
-                show_chords=show_chords,
-            ),
-        )
 
     document = musicxml.m21ToXml.GeneralObjectExporter().parse(score).decode("utf-8")
 
-    # music21 leaves two things out of the tab staff that a reader needs: the six
-    # staff lines, and a fret on each note of a chord. Both are put back here, from
-    # the parsed tree, rather than by editing the text.
+    # What music21's own output still needs, applied to the parsed tree rather than
+    # by editing the text. None of it is about tab any more.
     root = ElementTree.fromstring(document)
     _unique_instrument_ids(root)
-    tab_part_id = _tab_part_id(root)
-    _split_technicals(root, tab_part_id)
-    _add_staff_details(root, tab_part_id)
     _drop_empty_inversions(root)
     # A compatibility filter, so it runs last: it sees the finished document, and
     # nothing below it can put a 4.0-only value back.

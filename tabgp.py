@@ -1,10 +1,15 @@
 """Guitar Pro 5 export for a whole arranged progression.
 
 This is a **third renderer family**, beside the ASCII/HTML staff in `tabstaff` and
-the MusicXML score in `tabxml`. It exists because GP5 is a *tab* format: it stores
-a fret number and a string for every note natively, so a chord shape survives the
-round trip exactly, where MusicXML needs `music21` plus a post-processing pass to
-put the fret back on each note of a chord (see `tabxml._split_technicals`).
+the MusicXML score in `tabxml`. It is also where the **fingering** now lives, because
+GP5 is a *tab* format: it stores a fret number and a string for every note natively,
+so a chord shape survives the round trip exactly. `tabxml` used to write a TAB staff
+alongside its notation one, but `music21` cannot write a TAB staff a notation program
+renders correctly - it emits neither the six `<staff-lines>` nor a fret and string per
+note, and the patched-up document still displayed incorrectly in MuseScore 3. So the
+two renderers divide the work by what each format can do: **notation in MusicXML,
+tab here**, with `_events` and `_substitute_steps` shared so a head lands on the same
+beats in both files.
 
 What it writes is one guitar track of shapes, each carrying the chord name it is
 sounding, on the written rhythm, with a held shape written as one longer note
@@ -60,7 +65,7 @@ GP_VERSION = (5, 1, 0)
 GP_SIGNATURE = b"\x18FICHIER GUITAR PRO v5.10\x00"
 
 # guitarpro numbers the strings 1..6 with 1 = high E; this library indexes 0 = low
-# E. The same conversion `tabxml` applies to a MusicXML TAB staff.
+# E, so the conversion is `6 - index`.
 
 
 def _guitarpro() -> Any:
