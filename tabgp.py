@@ -205,19 +205,19 @@ def _measures(
     events: List[Tuple[Optional[ArrangementStep], bool, float]],
     pickup: float,
     beats_per_bar: int,
+    beat_type: int = 4,
 ) -> List[List[Tuple[Optional[ArrangementStep], float]]]:
     """
     The events as a list of measures, each a list of (step, length) beats.
 
-    **This is where GP5 and MusicXML genuinely differ**, and the difference is
-    forced by the format rather than chosen. MusicXML has an anacrusis: a measure
-    may simply be short, and `tabxml._build_part` writes it that way. A GP5 measure
-    is a fixed-length container and the file has no way to say "this first bar is
-    only two beats long", so a head that starts on the third beat is written as a
-    **full first measure with the leading beats left empty** and the music begins
-    on its downbeat. That moves every onset later by the length of the pickup
-    rather than reshaping the metre, which is the lesser of the two distortions:
-    the notes and their order are untouched, only their position within the bar.
+    **This is where GP5 and MusicXML differ**, and the difference is forced by the
+    format rather than chosen. MusicXML has an anacrusis: a measure may simply be
+    short, and `tabxml._build_part` writes it that way. A GP5 measure is a
+    fixed-length container with no "implicit" or "pickup" attribute the format
+    relies on, so a head that starts part-way into its first bar is written as a
+    **rest** for the pickup and the music begins after it. The bar is then full
+    length, exactly as GP5 requires, and every note keeps the position the score
+    gave it.
 
     An event that runs across a bar line is **split**, not stretched and not
     dropped: the two halves are written in consecutive measures, which is what
@@ -225,19 +225,34 @@ def _measures(
     across a bar line is a slur the player has to interpret rather than a hold, so
     the halves are written out instead.
     """
-    bar_length = float(beats_per_bar)
-    # A GP5 measure is a fixed-length container, so a head that starts part-way
-    # into a bar gets a full first measure with its leading beats left empty and
-    # the music begins on the following downbeat. See the docstring.
+    # The bar in quarter notes: `beats_per_bar` beats of **4 / beat_type**
+    # quarters - a 2/2 beat is a *half* note, so two quarters to the beat, not
+    # `2/4` of one. Both 4/4 and 2/2 bars are four quarters, which is the check
+    # that catches this: reading the fraction the other way round is right in 4/4
+    # and makes every cut-time bar a quarter note long, and 4/4 is the one metre
+    # where the error is invisible to the whole suite.
+    bar_length = float(beats_per_bar) * (4.0 / float(beat_type))
     measures: List[List[Tuple[Optional[ArrangementStep], float]]] = []
     if pickup > 0:
-        measures.append([])
+        # The pickup is written as a **rest** at the head of the first measure, and
+        # the cursor below starts at zero, so the music follows it rather than
+        # replacing it. Bar 1 of "But Not For Me" is a quarter rest and then three
+        # quarter notes; discarding the rest moved the whole head onto the downbeat
+        # and wrote the bar as three chords where the file says rest-plus-three.
+        #
+        # The earlier code opened an *empty* measure here and dropped it again at the
+        # end, which is not a representation of a pickup but its deletion: the music
+        # after it slid forward by the length of the rest to fill the gap. A rest is
+        # a beat the format can hold, so writing one keeps every onset where the
+        # score puts it, which is the whole claim of this renderer.
+        measures.append([(None, pickup)])
 
-    # A running cursor in quarter notes from the first note. A measure is opened
-    # whenever the cursor *reaches* a bar line, not only when an event crosses
-    # one: the eighth-note skeleton puts beats that land exactly on the boundary,
-    # and testing only for a crossing leaves them all in one measure.
-    cursor = 0.0
+    # A running cursor in quarter notes, **offset by the pickup** so the music
+    # follows the rest rather than starting on top of it. Whenever the cursor
+    # *reaches* a bar line a measure is opened, not only when an event crosses one:
+    # the eighth-note skeleton puts beats that land exactly on the boundary, and
+    # testing only for a crossing leaves them all in one measure.
+    cursor = pickup
     for step, _strikes, length in events:
         remaining = length
         while remaining > 1e-9:
@@ -269,11 +284,9 @@ def _measures(
     # than being padded. This also removes the trailing measure left when a bar is
     # filled exactly, which is why there is no separate trim afterwards.
     #
-    # The leading measure is a pickup and is empty by construction, so it is
-    # dropped here too and the music simply starts on the first written downbeat.
-    # That is the same outcome `_measures` documents for a head that starts on an
-    # upbeat - the onsets are already counted from the first note, so nothing else
-    # has to move.
+    # The leading measure is *not* one of these: it now holds the pickup rest, so it
+    # has a beat in it and survives. That is the point - see the `pickup` branch
+    # above.
     return [beats for beats in measures if beats]
 
 
@@ -285,6 +298,7 @@ def _build_song(
     composer: str,
     tempo: int,
     beats_per_bar: int,
+    beat_type: int = 4,
 ) -> Any:
     """
     The measures as a guitarpro `Song`, ready to write.
@@ -292,7 +306,13 @@ def _build_song(
     Reuses the `Song`'s own default header and track rather than appending to
     them, and gives every measure its second empty voice - see the module
     docstring, both of which are silent corruptions rather than errors.
+
+    `beat_type` is the denominator, and it is not always 4: a head notated in cut
+    time is 2/2, and writing that as 2/4 states a metre the tune is not in. The
+    *bar length* is the same either way, so this affects only what the file
+    displays.
     """
+    signature = gp.TimeSignature(beats_per_bar, gp.Duration(beat_type))
     song = gp.Song(
         versionTuple=GP_VERSION,
         title=title,
@@ -302,7 +322,7 @@ def _build_song(
     )
     header = song.measureHeaders[0]
     header.number = 1
-    header.timeSignature = gp.TimeSignature(beats_per_bar, gp.Duration(4))
+    header.timeSignature = signature
     track = song.tracks[0]
     track.name = "Lead"
     track.measures = []
@@ -311,7 +331,7 @@ def _build_song(
         if index > 1:
             header = gp.MeasureHeader(
                 number=index,
-                timeSignature=gp.TimeSignature(beats_per_bar, gp.Duration(4)),
+                timeSignature=gp.TimeSignature(beats_per_bar, gp.Duration(beat_type)),
             )
             song.measureHeaders.append(header)
         voice = gp.Voice(None)
@@ -361,6 +381,7 @@ def format_gp5(
     composer: str = "",
     tempo: int = 120,
     beats_per_bar: int = 4,
+    beat_type: int = 4,
     rhythm: bool = True,
     collapse: bool = True,
     show_chords: bool = True,
@@ -388,6 +409,9 @@ def format_gp5(
         composer: the artist credit.
         tempo: beats per minute, clamped to what a GP file can hold.
         beats_per_bar: beats in a bar, used for the time signature and the bars.
+        beat_type: the denominator of that signature. Pass the notated value, so a
+            head in cut time is written 2/2 rather than restated as 2/4; the bar
+            length is identical either way and only the displayed metre differs.
         rhythm: place the steps on their real beats. Falls back to a uniform
             one-chord-per-beat grid when the steps carry no timing, exactly as
             `format_musicxml` and `format_tab_staff` do, so a hand-written
@@ -413,12 +437,12 @@ def format_gp5(
     # is sounding a different chord from the one written is named the same way in
     # both files rather than only in the one that remembered to ask.
     events, pickup = _events(
-        _substitute_steps(steps), beats_per_bar, rhythm and collapse
+        _substitute_steps(steps), beats_per_bar, rhythm and collapse, beat_type
     )
     if not any(step is not None for step, _, _ in events):
         return b""
 
-    measures = _measures(events, pickup, beats_per_bar)
+    measures = _measures(events, pickup, beats_per_bar, beat_type)
     if not show_chords:
         measures = [
             [
@@ -434,7 +458,7 @@ def format_gp5(
         ]
 
     song = _build_song(
-        gp, measures, title, subtitle, composer, tempo, beats_per_bar
+        gp, measures, title, subtitle, composer, tempo, beats_per_bar, beat_type
     )
     buffer = io.BytesIO()
     gp.write(song, buffer, version=GP_VERSION)

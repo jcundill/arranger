@@ -775,13 +775,30 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
                 continue
             if child.find("grace") is not None:
                 skip("grace notes")
+                # A grace note has no `<duration>` of its own - it borrows the
+                # length of the note it decorates - so it occupies no cursor time
+                # and must *not* be added here or it would be counted twice.
                 continue
             if child.find("cue") is not None:
                 skip("cue notes")
+                if child.find("chord") is None:
+                    cursor += _duration_in_divisions(child)
                 continue
+            # A rest is not a melody note, but it is still *time*: the cursor has to
+            # move past it or every note after it is read too early. Bar 1 of "But
+            # Not For Me" is a quarter rest followed by three quarter notes, and
+            # dropping the rest's length put the F4 on beat 1.0 instead of 1.5 -
+            # which moved the whole head up a beat, invented a pickup that was not
+            # there, and wrote bar 1 as three chords filling a bar it should have
+            # shared with a rest. Every skip below is therefore `continue`-with-no-
+            # cursor-move only where the element really occupies no time; a rest,
+            # a grace note and a cue note all do.
             pitch_element = child.find("pitch")
             if pitch_element is None:
                 skip("rests and unpitched notes")
+                # Not a `<chord>` member, so it advances the cursor in its own right.
+                if child.find("chord") is None:
+                    cursor += _duration_in_divisions(child)
                 continue
             pitch = _midi(pitch_element)
             if pitch is None:
@@ -861,6 +878,10 @@ _STRATEGY_GRID: Dict[str, Optional[float]] = {
     "sixteenths": 0.25,
     "notes": None,
 }
+
+# The distance a slot's beat is kept inside its bar when there is no grid to step
+# back by. See `_slot_key`, which is the only user.
+_BEAT_EPSILON = 1e-6
 
 
 def head_skeleton(
@@ -944,15 +965,29 @@ def _slot_key(note: HeadNote, head: Head, grid: Optional[float]) -> Tuple[int, f
     spaced on: a note a hair off the beat must land on the beat, which is the same
     quantisation the corpus path does by deriving its key from `tatum`.
 
-    A note on the last subdivision of a bar rounds to the bar line, so it is pulled
-    back inside - otherwise the bar would gain a phantom step on its own downbeat
-    and the last chord of one bar would collide with the first of the next.
+    A beat that lands **on or past the bar line** is pulled back inside the bar, so
+    a bar cannot gain a phantom step on its own downbeat and collide with the first
+    step of the next. The limit is therefore the *last grid position still inside
+    the bar*, which is one grid step short of `beats_per_bar + 1` - **not**
+    `beats_per_bar` itself.
+
+    That distinction is the whole point, and it is what cut time exposes. A 2/2 bar
+    is two beats wide, so its eighths run 1.0, 1.5, 2.0, **2.5**: the last eighth of
+    the bar is beat 2.5, half a beat past `beats_per_bar`. Clamping to
+    `beats_per_bar` folded every one of those notes onto beat 2.0, where they
+    collided with the note already there and were dropped by the slot's `pick` rule
+    - 13 of the 80 notes in "But Not For Me", a music21-written 2/2 head whose
+    fourth quarter of every bar sits at beat 2.5. Losing a note of the tune to a
+    clamp is far worse than voicing one a hair off the beat.
     """
     if grid is None:
-        beat = note.beat
-    else:
-        beat = 1.0 + round((note.beat - 1.0) / grid) * grid
-    return (note.bar, round(min(beat, float(head.beats_per_bar)), 6))
+        # No quantisation, so there is no grid to step back by and the limit is the
+        # bar line itself, approached from inside.
+        limit = float(head.beats_per_bar) + 1.0 - _BEAT_EPSILON
+        return (note.bar, round(min(note.beat, limit), 6))
+    beat = 1.0 + round((note.beat - 1.0) / grid) * grid
+    limit = float(head.beats_per_bar) + 1.0 - grid
+    return (note.bar, round(min(beat, limit), 6))
 
 
 def _chord_change_groups(notes: Sequence[HeadNote]) -> Dict[Tuple[int, float], List[HeadNote]]:
@@ -1190,12 +1225,25 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     # the HTML, so a run asking for one does not need the others' dependency, and
     # a missing one is a usage problem rather than a crash - exactly as in
     # `wjazzd.corpus_cli`.
+    #
+    # The notated metre goes to both, as it does to the staff and the HTML above.
+    # Omitting it left each writer on its own `beats_per_bar=4` default, so a head
+    # in cut time was written as 4/4: every bar's contents laid out against the
+    # wrong grid, and a tune notated 2/2 displayed as common time. `beat_type` is
+    # what makes it 2/2 rather than 2/4 - the bar length is the same either way, so
+    # this is the difference between the right metre and a wrong-looking one.
     for flag, writer in (("musicxml", write_musicxml), ("gp5", write_gp5)):
         target = getattr(args, flag)
         if not target:
             continue
         try:
-            written = writer(steps, target, title=title)
+            written = writer(
+                steps,
+                target,
+                title=title,
+                beats_per_bar=head.beats_per_bar,
+                beat_type=head.beat_type,
+            )
         except ImportError as error:
             print(f"\n{error}")
             return 1

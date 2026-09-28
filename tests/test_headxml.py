@@ -29,6 +29,7 @@ from headxml import (
     load_musicxml,
     parse_musicxml_chord,
 )
+from tabxml import _events, _substitute_steps
 from wjazzd import arrange_slots
 
 # The real scores the importer's tests read, in `tests/data/`. They are committed
@@ -687,6 +688,131 @@ class TestReductionAndArranging(unittest.TestCase):
         # downbeat the grid would have put it on.
         self.assertEqual([s[2] for s in slots], [1.0, 4.0])
 
+    def test_a_leading_rest_still_takes_up_its_time(self):
+        """A rest is not a note, but it is time, and the cursor must cross it.
+
+        Bar 1 of "But Not For Me" is a quarter rest and then three quarter notes.
+        The rest is skipped - it is not melody - but its *length* still has to be
+        added to the cursor, or every note after it is read a beat early. That put
+        the F4 on beat 1.0 instead of 1.5, which moved the whole head up a beat and
+        wrote the bar as three chords instead of a rest and three.
+
+        The distinction is between a note that carries no time (a grace note, which
+        borrows the length of the note it decorates and must not be added or it
+        would be counted twice) and one that does.
+        """
+        head = self.load(
+            rest(duration=8)
+            + harmony("C", "major")
+            + note("E", duration=8) + note("F", duration=8) + note("G", duration=8),
+            divisions=8,
+        )
+        # A 4/4 bar: the rest is one quarter, so the E is on beat 2.
+        self.assertEqual([n.beat for n in head.notes], [2.0, 3.0, 4.0])
+        # And it is counted as skipped rather than dropped in silence. The counts
+        # are per reason and phrased as a tally, so this matches on the words.
+        self.assertTrue(
+            any("rests and unpitched notes" in entry for entry in head.skipped),
+            head.skipped,
+        )
+
+    def test_a_rest_mid_bar_does_not_move_the_notes_after_it(self):
+        """A rest in the middle of a bar holds its place like any other duration."""
+        head = self.load(
+            harmony("C", "major")
+            + note("E", duration=8) + rest(duration=8) + note("F", duration=8),
+            divisions=8,
+        )
+        # E on beat 1, the rest occupies beat 2, F on beat 3.
+        self.assertEqual([n.beat for n in head.notes], [1.0, 3.0])
+
+    def test_a_cut_time_head_opens_on_the_beat_its_first_note_is_written_on(self):
+        """The real 2/2 head begins after a rest, and the loader must say so.
+
+        Read on the committed music21 score rather than a hand-built one, because
+        the leading quarter rest is what a notation program actually writes for this
+        head and a synthetic fixture is the only way to miss it.
+        """
+        head = load_musicxml(BUT_NOT_FOR_ME)
+        first = head.notes[0]
+        self.assertEqual((first.bar, first.beat), (1, 1.5))
+        # A head that starts part-way into its first bar has a pickup, which is what
+        # makes the renderers write that bar short rather than inventing a downbeat.
+        events, pickup = _events(
+            _substitute_steps(
+                arrange_xml_head(BUT_NOT_FOR_ME, strategy="eighths")[0]
+            ),
+            head.beats_per_bar,
+            True,
+            head.beat_type,
+        )
+        self.assertAlmostEqual(pickup, 1.0, places=6)
+
+    def test_the_last_eighth_of_a_cut_time_bar_is_not_folded_onto_the_second_beat(self):
+        """A 2/2 bar's eighths run to 2.5, and every one of them is kept.
+
+        This is the regression for the clamp in `_slot_key`, which limited a slot
+        to `beats_per_bar`. In cut time the bar is two beats wide but four quarters
+        long, so the fourth quarter sits at beat **2.5** - half a beat past the
+        count. Every one of those notes was folded onto beat 2.0, collided with the
+        note already there, and was dropped by the `pick` rule: 13 of the 80 notes
+        of "But Not For Me", silently. A note of the tune is worth more than a
+        tidy beat number.
+        """
+        # divisions=8, so a quarter is 8 and a 2/2 bar is 32 of them - four quarters.
+        head = self.load(
+            harmony("C", "major")
+            + note("E", duration=8) + note("F", duration=8)
+            + note("G", duration=8) + note("A", duration=8),
+            divisions=8, beats=2, beat_type=2,
+        )
+        self.assertEqual((head.beats_per_bar, head.beat_type), (2, 2))
+        # Read raw, the fourth quarter really is past the beat count...
+        self.assertEqual([n.beat for n in head.notes], [1.0, 1.5, 2.0, 2.5])
+        # ...and the eighth grid keeps all four rather than folding the last onto 2.0.
+        self.assertEqual(
+            [s[2] for s in head_skeleton(head, "eighths")], [1.0, 1.5, 2.0, 2.5]
+        )
+
+    def test_a_bar_line_overflow_is_still_pulled_back_inside(self):
+        """The clamp the last-eighth fix refines still does its original job.
+
+        A note that *rounds onto* the bar line - the last thing `_slot_key` is
+        documented to catch - is still pulled back to the last grid position inside
+        the bar, so a bar cannot gain a phantom step on its own downbeat and collide
+        with the first step of the next.
+        """
+        head = self.load(
+            harmony("C", "major")
+            + note("E", duration=8) + note("F", duration=8)
+            # A note at 2.75 rounds up to 3.0, which is the bar line in a 2/2 bar.
+            + note("G", duration=6) + note("A", duration=2),
+            divisions=8, beats=2, beat_type=2,
+        )
+        beats = [s[2] for s in head_skeleton(head, "eighths")]
+        # Nothing lands on 3.0 or beyond: the overflow came back to 2.5.
+        self.assertTrue(all(b <= 2.5 for b in beats), beats)
+        self.assertIn(2.5, beats)
+
+    def test_a_cut_time_head_keeps_every_note_of_the_tune(self):
+        """No note of a real 2/2 head is lost to the reduction.
+
+        Pinned on the committed music21 score rather than a hand-built one, because
+        the bug only appears on a file whose quarters land past the beat count - the
+        first three of the 80 notes are enough to see the meter, and all 80 are what
+        the arrangement is supposed to carry.
+        """
+        head = load_musicxml(BUT_NOT_FOR_ME)
+        self.assertEqual((head.beats_per_bar, head.beat_type), (2, 2))
+        # The last quarter of a 2/2 bar is beat 2.5, so these exist in the file...
+        self.assertTrue(any(n.beat > head.beats_per_bar for n in head.notes))
+        # ...and the eighth grid must not have folded them onto the second beat.
+        slots = head_skeleton(head, "eighths")
+        self.assertTrue(any(beat > head.beats_per_bar for _t, _b, beat, _d in slots))
+        # Nothing may land on or past the bar line either.
+        for _triple, _bar, beat, _duration in slots:
+            self.assertLessEqual(beat, head.beats_per_bar + 1.0 - 0.5)
+
     def test_a_slash_bass_stays_in_the_chord_name(self):
         """The bass rides in the name, as the corpus path keeps it, and rule B
         promotes a triad whose bass is its own seventh."""
@@ -838,6 +964,42 @@ class TestHeadCli(unittest.TestCase):
         """Asking for a file that is not there says so, rather than raising."""
         with self.assertRaises(SystemExit):
             self.run_cli("/nonexistent/head.musicxml")
+
+    def test_the_written_files_carry_the_notated_metre(self):
+        """A head in cut time is written 2/2, not left on the writers' 4/4 default.
+
+        `head_cli` passes the notated metre to the staff and the HTML but used to
+        pass nothing to the two file writers, so each fell back to its own
+        `beats_per_bar=4`. A 2/2 head was therefore written as 4/4: every bar laid
+        out against the wrong grid, and a tune in cut time displayed as common time.
+        The denominator matters too - 2/2 and 2/4 are the same bar length but not
+        the same metre, and only the notated `beat_type` tells them apart.
+        """
+        try:
+            import music21  # noqa: F401
+        except ImportError:
+            self.skipTest("music21 is not installed")
+        try:
+            import guitarpro  # noqa: F401
+        except ImportError:
+            self.skipTest("PyGuitarPro is not installed")
+
+        target = os.path.join(tempfile.mkdtemp(), "cut.gp5")
+        self.addCleanup(lambda: os.path.exists(target) and os.unlink(target))
+        output = self.run_cli(BUT_NOT_FOR_ME, "--gp5", target)
+        self.assertEqual(self.code, 0)
+        self.assertIn("wrote", output)
+
+        from guitarpro import parse
+
+        song = parse(target)
+        signature = song.measureHeaders[0].timeSignature
+        self.assertEqual(signature.numerator, 2)
+        self.assertEqual(signature.denominator.value, 2)
+        # The bar length is the real one: a 2/2 bar is four quarters, so a head of
+        # 32 bars is 32 measures and not 64 half-length ones. Reading the beat count
+        # as a quarter count is what doubled it.
+        self.assertEqual(len(song.tracks[0].measures), 32)
 
     def test_a_file_that_is_not_a_score_is_a_usage_error(self):
         """A readable non-score is caught here, not deep in the loader."""

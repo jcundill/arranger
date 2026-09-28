@@ -766,6 +766,95 @@ Six decisions are load-bearing, and each was forced by a real file:
   makes a 2/2 bar two beats wide — a quarter note in cut time is on beat 1.5, not
   beat 3 — and three of the four scores in the repository are in cut time. The
   `<time>` read is the **last** one stated, since a score may change metre.
+
+### A beat is not a quarter note
+
+Cut time is where every metre assumption in this library comes apart, and it did so
+three separate times in one review of `but_not_for_me.mxl` — a music21-written
+**2/2** head whose `<time symbol="cut">` is the only signature in the file. The
+tune *sounds* like common time and is written with a quarter-note pulse, which is
+exactly why it is easy to assume 4/4 and wrong to: the file says 2/2, and the
+loader is right to read it that way. The bar is four quarters long either way; only
+the *counting* differs.
+
+**A beat is `4 / beat_type` quarters long, and a bar is `beats_per_bar` of them.**
+The divisor is the load-bearing part: a 2/2 beat is a **half** note, so two
+quarters, not `2/4` of one. Every renderer needs both numbers, and reading the
+beat count as a quarter count is what each of the four bugs below was:
+
+| where | was | cost |
+|---|---|---|
+| `headxml._slot_key` | clamped a slot to `beats_per_bar` | **13 of 80 notes lost.** A 2/2 bar's eighths run 1.0 … **2.5**; clamping to 2.0 folded the last eighth of every bar onto beat 2, where it collided and was dropped by `pick` |
+| `head_cli` → the file writers | passed no metre at all | both writers used their own `beats_per_bar=4`, so a 2/2 head was written as 4/4 on the wrong grid |
+| `tabxml._events`, `tabgp._measures` | `4.0 / beats_per_bar`, `bar_length = beats_per_bar` | a cut-time beat measured as half a quarter, so every bar came out half length — 32 measures written as 64 |
+| the same two, *after* the fix above | `beat_type / 4` instead of `4 / beat_type` | **every bar a quarter note long.** The measure *count* stayed right, because onsets are placed in beats and that part was correct — so 32 short bars under a 2/2 signature, each holding a quarter of the music it claimed |
+
+That last one is the instructive one, and it is worth stating as a rule of thumb:
+**4/4 cannot catch it.** Both readings of the fraction give 1 quarter to the beat
+in 4/4, so the whole suite passed with the file unusable for every other metre.
+A test that asserts the measure *count* cannot catch it either, for the same
+reason - the count was right. The check that catches it is summing each
+measure's durations back to a bar length, which is what
+`GuitarProTestCase.bar_quarters` and
+`test_every_measure_of_a_written_head_fills_its_bar` do.
+
+So `beat_type` is now a parameter of `format_musicxml` and `format_gp5` (and of
+`_events`, `_measures`, `_build_part`, `_build_song`), it is what makes a 2/2 head
+read as **2/2 rather than 2/4** in the file, and `head_cli` passes
+`head.beats_per_bar` and `head.beat_type` to every renderer. `tabstaff` needs
+neither: it works in *beats* throughout and never converts to a length.
+
+### A rest is not a note, but it is time
+
+The same review turned up a bug that has nothing to do with the metre, and it is
+worth stating separately because it is the one a musician hears first.
+
+Bar 1 of `but_not_for_me.mxl` is **a quarter rest followed by three quarter
+notes**. `_read_notes` skipped the rest — correctly, it is not melody — but
+skipped it with a bare `continue`, so **the cursor never moved past it**. Every
+note in the file after that rest was read a beat early: the F4 landed on beat 1.0
+instead of 1.5, the head appeared to begin on a downbeat, and the GP5 bar was
+written as three chords filling a bar the score says is a rest and three.
+
+The general rule is that *every* element the loader steps over has to be asked
+whether it occupies time, and a rest does:
+
+| element | advances the cursor? |
+|---|---|
+| a rest | **yes** — it is a `<duration>` like any other |
+| a cue note | **yes** — it sounds in another part, and time passes |
+| a grace note | **no** — it borrows the length of the note it decorates, so adding it would count that note twice |
+| a lower voice of a `<chord>` group | no — the group's unmarked member carries the length |
+
+This is a different failure from the metre one and a nastier one to spot, because
+every bar is still exactly full afterwards: the music is simply a beat out, and
+the error survives any test that only checks bar lengths. The test that catches it
+is reading the *first note's own beat* off the committed file, which is
+`test_a_cut_time_head_opens_on_the_beat_its_first_note_is_written_on`.
+
+Fixing it exposed a second one, in the renderer rather than the loader. GP5 has
+no anacrusis, and `tabgp._measures` represented a pickup by opening an **empty**
+first measure and dropping it again at the end - which is not a representation of a
+pickup, it is its deletion, and the music after it slid forward by the length of
+the rest to fill the gap. It is now a **rest beat** at the head of the first
+measure, with the cursor offset to follow it, so the bar is full *and* the music
+sits where the score puts it. A knock-on effect worth knowing: a note that used to
+be split across a bar line is often no longer split, because the rest is time
+rather than a hole. `test_a_step_crossing_a_bar_line_is_split_not_stretched` pins
+the new placement, and `test_a_long_step_is_split_across_a_bar_line_rather_than_stretched`
+covers the split itself without a pickup in the way.
+
+`_slot_key`'s clamp is now `beats_per_bar + 1 - grid` — the last grid position
+**inside** the bar — rather than `beats_per_bar`. It still catches what it was
+written to catch (a note that rounds onto the bar line is pulled back), which is
+what `test_a_bar_line_overflow_is_still_pulled_back_inside` pins, because a fix
+that kept those notes must not lose the protection.
+
+The general lesson, and the one to apply to the next importer: **a count without a
+denominator is not a metre.** 2/2 and 2/4 are both two beats to the bar, so
+`beats_per_bar` alone cannot say which - which is why `Head` carries `beat_type`
+and why it is now plumbed all the way to the file headers.
+
 - **A `<chord>` group reduces to its highest note.** MusicXML does not order a
   group by pitch: only the first member is unmarked, and in a chord-melody part
   that member is the *lowest* note of the shape. Taking the maximum is what makes

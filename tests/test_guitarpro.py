@@ -105,6 +105,27 @@ class GuitarProTestCase(unittest.TestCase):
             if fret >= 0
         )
 
+    def bar_quarters(self, measure):
+        """A measure's total length in quarter notes, read back out of the file.
+
+        `Duration.value` is the *denominator* - 4 a quarter, 8 an eighth - so the
+        length is `4 / value` quarters, scaled by the tuplet when there is one
+        (`times` notes are played in the time `enters` would normally take, per
+        PyGuitarPro's `Tuplet`). Summing this across a measure is the only check
+        that says whether the file's bars are as long as its signature claims, and
+        it is the check that a measure *count* cannot make: an over-short bar can
+        still be the right number of bars.
+        """
+        total = 0.0
+        for voice in measure.voices:
+            for beat in voice.beats:
+                duration = beat.duration
+                length = 4.0 / duration.value
+                if duration.tuplet is not None:
+                    length *= duration.tuplet.times / duration.tuplet.enters
+                total += length
+        return total
+
 
 @requires_guitarpro
 class TestRoundTrip(GuitarProTestCase):
@@ -341,18 +362,158 @@ class TestRhythm(GuitarProTestCase):
         after = make_step([-1, -1, 12, 12, 12, 12], "G7", "B4",
                           bar=2, beat=1, duration=1.0)
         measures = self.measures(steps=[crossing, after])
-        # The head starts on beat 3, so the first measure is the pickup one: the
-        # two beats of Dm7, then the G7 that follows on the next downbeat.
+        # The head starts on beat 3, so the first bar opens with a **rest** for the
+        # two beats before it and the Dm7 fills the rest of it exactly. Nothing
+        # crosses a bar line any more, because the rest is time rather than a hole:
+        # the G7 gets the whole of bar 2 in one note. (It used to be split in two,
+        # which was a symptom of the pickup being dropped and the music sliding up
+        # into it - the split was the format working around the loader's error.)
         self.assertEqual(
             [b.text for m in measures for b in m.voices[0].beats],
-            ["Dm7", "G7", "G7"],
+            [None, "Dm7", "G7"],
         )
+        # Both bars are exactly full, which is what GP5 requires.
+        for measure in measures:
+            self.assertAlmostEqual(self.bar_quarters(measure), 4.0, places=6)
+
+    def test_a_long_step_is_split_across_a_bar_line_rather_than_stretched(self):
+        """A note longer than the bar it starts in is written out, in two measures.
+
+        The same mechanism as the anacrusis case above, and the reason it exists: a
+        GP5 measure is a fixed-length container, so a shape that runs over the bar
+        line is written as two notes in consecutive bars. This is deliberately built
+        without a pickup, so the split is caused by the note's own length rather
+        than by where the head starts.
+        """
+        long_step = make_step([-1, -1, 10, 10, 10, 10], "Dm7", "A4",
+                              bar=1, beat=1, duration=1.0)
+        # The length written is the gap to the *next* onset, so the split needs a
+        # following step on the far side of the bar line, not a long duration.
+        final = make_step([-1, -1, 12, 12, 12, 12], "G7", "B4",
+                          bar=3, beat=1, duration=1.0)
+        measures = self.measures(steps=[long_step, final])
+        self.assertEqual(len(measures), 3)
+        for measure in measures:
+            self.assertAlmostEqual(self.bar_quarters(measure), 4.0, places=6)
+        # The Dm7 is written as two half-bar notes, in the two bars it spans, and
+        # the G7 follows on its own downbeat - split, not stretched or substituted.
+        self.assertEqual(
+            [b.text for m in measures for b in m.voices[0].beats],
+            ["Dm7", "Dm7", "G7"],
+        )
+
+    def test_a_pickup_is_written_as_a_rest_not_dropped(self):
+        """A head that starts on the upbeat keeps its rest, in its first bar.
+
+        Bar 1 of "But Not For Me" is a quarter rest and then three quarter notes.
+        The rest was skipped as a non-note and the *cursor* was not moved past it, so
+        every note after it was read a beat early, the head appeared to start on the
+        downbeat, and the bar was written as three chords filling it. Both halves of
+        that are wrong in a way the ear catches before any test does: the tune is a
+        beat out and its first bar has the wrong rhythm.
+        """
+        song = self.song(
+            steps=[
+                make_step([-1, -1, 10, 10, 10, 10], "Dm7", "A4",
+                          bar=1, beat=2, duration=1.0),
+                make_step([-1, -1, 12, 12, 12, 12], "G7", "B4",
+                          bar=1, beat=3, duration=1.0),
+            ],
+            beats_per_bar=4,
+        )
+        beats = song.tracks[0].measures[0].voices[0].beats
+        # A quarter of rest, then the two chords: the bar is four quarters of time.
+        self.assertEqual(len(beats), 3)
+        self.assertEqual(beats[0].notes, [])
+        self.assertAlmostEqual(4.0 / beats[0].duration.value, 1.0, places=6)
+        self.assertEqual([b.text for b in beats[1:]], ["Dm7", "G7"])
+        self.assertAlmostEqual(self.bar_quarters(song.tracks[0].measures[0]), 4.0, places=6)
 
     def test_tempo_and_time_signature_reach_the_file(self):
         """The score's tempo and metre are set, not left at the defaults."""
         song = self.song(tempo=180, beats_per_bar=3)
         self.assertEqual(song.tempo, 180)
         self.assertEqual(song.measureHeaders[0].timeSignature.numerator, 3)
+
+    def test_the_denominator_is_not_hardcoded_to_four(self):
+        """A head in cut time is written 2/2, not restated as 2/4.
+
+        The count alone cannot say which metre a head is in: 2/2 and 2/4 are both
+        two beats to the bar, so a writer that assumes a denominator of 4 turns a
+        standard into a tune that is notated wrongly. Only the notated `beat_type`
+        distinguishes them, so it is the caller's to pass.
+        """
+        song = self.song(beats_per_bar=2, beat_type=2)
+        signature = song.measureHeaders[0].timeSignature
+        self.assertEqual(signature.numerator, 2)
+        self.assertEqual(signature.denominator.value, 2)
+        # The default is unchanged for an ordinary 4/4 progression.
+        self.assertEqual(
+            self.song().measureHeaders[0].timeSignature.denominator.value, 4
+        )
+
+    def test_a_cut_time_bar_is_four_quarters_long_not_two(self):
+        """A 2/2 bar is four quarters, and every measure has to be that long.
+
+        A beat is a *half* note in 2/2 and a quarter in 4/4, so a bar of
+        `beats_per_bar` beats is `beats_per_bar * 4 / beat_type` quarters - which is
+        **four quarters in both metres**, since 2/2 and 4/4 differ in how a bar is
+        counted, not in how long it is.
+
+        This asserts the summed duration rather than the measure *count*, and the
+        difference matters. Reading the fraction the other way round, `beat_type/4`,
+        gives a bar of `2 * 0.5` quarters: the measure count still comes out right
+        (the onsets are placed in beats, which is correct either way) while every
+        measure holds a quarter of the music its signature claims. A test on the
+        count alone passes that, and 4/4 cannot catch it at all.
+        """
+        # One step on the downbeat of bar 1 and one on the downbeat of bar 2: a
+        # whole bar apart in either metre.
+        first = make_step([-1, -1, 10, 10, 10, 10], "Dm7", "A4", bar=1, beat=1.0)
+        second = make_step([-1, -1, 12, 12, 12, 12], "G7", "B4", bar=2, beat=1.0)
+
+        for beats_per_bar, beat_type in ((2, 2), (4, 4), (3, 4), (6, 8)):
+            with self.subTest(metre=f"{beats_per_bar}/{beat_type}"):
+                measures = self.measures(
+                    steps=[first, second],
+                    beats_per_bar=beats_per_bar,
+                    beat_type=beat_type,
+                )
+                self.assertEqual(len(measures), 2)
+                for measure in measures:
+                    self.assertAlmostEqual(
+                        self.bar_quarters(measure),
+                        beats_per_bar * 4.0 / beat_type,
+                        places=6,
+                    )
+
+    def test_every_measure_of_a_written_head_fills_its_bar(self):
+        """A real 2/2 head comes out as full bars, not a quarter note of music each.
+
+        The round trip over a committed score, and the check that actually matters
+        on a file no hand-written fixture imitates: read every measure back and sum
+        it. A measure may be *short* (a pickup, or the trailing one), but a bar in
+        the middle cannot be, and a systematic shortfall of exactly 4x is the
+        signature of the beat length being read as a fraction rather than a divisor.
+        """
+        from headxml import arrange_xml_head
+
+        steps, head, _notes = arrange_xml_head(
+            os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "data", "but_not_for_me.mxl"),
+            strategy="eighths",
+        )
+        song = self.song(
+            steps=steps,
+            beats_per_bar=head.beats_per_bar,
+            beat_type=head.beat_type,
+        )
+        measures = song.tracks[0].measures
+        self.assertEqual(len(measures), 32)
+        bar = head.beats_per_bar * 4.0 / head.beat_type
+        # Every interior measure is full; a leading pickup or a padded tail may not be.
+        for measure in measures[1:-1]:
+            self.assertAlmostEqual(self.bar_quarters(measure), bar, places=6)
 
 
 @requires_guitarpro

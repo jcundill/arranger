@@ -174,7 +174,10 @@ def _sounding(step: ArrangementStep) -> List[int]:
 
 
 def _events(
-    steps: List[ArrangementStep], beats_per_bar: int, rhythm: bool
+    steps: List[ArrangementStep],
+    beats_per_bar: int,
+    rhythm: bool,
+    beat_type: int = 4,
 ) -> Tuple[List[Tuple[Optional[ArrangementStep], bool, float]], float]:
     """
     The arrangement as (step, strikes, quarter_length) events, and the pickup.
@@ -203,8 +206,16 @@ def _events(
     of most bars, so sharing the grid would drop a chord from every bar of a head.
     What is shared is the *semantics* - absolute onsets with signed bars, and
     collapse on unchanged sounding pitches - and both are implemented here.
+
+    `beat_type` is what makes a **beat** a measurable length, and the expression
+    is `4 / beat_type` quarters to the beat. That is a half note in 2/2 and a
+    quarter in 4/4, so both metres give a four-quarter bar and only the counting
+    differs. The tempting `beat_type / 4` is the same number inverted, and it is
+    right in 4/4 and four times too small in 2/2 - which is why a bar written that
+    way holds a quarter of the music its signature claims. `AGENTS.md` records
+    this as the one error 4/4 cannot catch.
     """
-    beat_in_quarters = 4.0 / beats_per_bar
+    beat_in_quarters = 4.0 / float(beat_type)
     timed = bool(rhythm) and bool(steps) and all(step.has_timing for step in steps)
 
     if timed:
@@ -335,6 +346,7 @@ def _build_part(
     beats_per_bar: int,
     pickup: float = 0.0,
     show_chords: bool = True,
+    beat_type: int = 4,
 ) -> Any:
     """
     The staff of the score: a `Part` of measures, in reading order.
@@ -345,10 +357,19 @@ def _build_part(
     a head selected from a pickup bar starts part-way through a bar - so it is
     marked as an anacrusis, and the last one is padded with a rest, rather than
     either being quietly stretched to fill its bar.
+
+    `beat_type` is the denominator of the written signature, and it is not always
+    4: a head notated in cut time is 2/2, and writing that as 2/4 states a metre
+    the tune is not in. It also fixes the bar's *length*, which is
+    `beats_per_bar` beats of `4 / beat_type` quarters - a half note to the beat in
+    2/2 and a quarter in 4/4, so **both bars are four quarters** and only the
+    counting differs. Treating the count as a quarter count is what wrote a 32-bar
+    cut-time head as 64 bars; inverting the fraction is what then made each of
+    them a quarter note long.
     """
     from music21 import clef, meter, stream
 
-    bar_length = float(beats_per_bar)
+    bar_length = float(beats_per_bar) * (4.0 / float(beat_type))
     part = stream.Part()
     part.partName = title
     part.append(clef.TrebleClef())
@@ -382,7 +403,7 @@ def _build_part(
             # Only the first measure. music21 fills each measure from the signature
             # already in force - the one this writes - so the later bars need none,
             # and `makeRests` still has a `barDuration` to pad and tie against.
-            built.timeSignature = meter.TimeSignature(f"{beats_per_bar}/4")
+            built.timeSignature = meter.TimeSignature(f"{beats_per_bar}/{beat_type}")
         part.append(built)
         return built
 
@@ -682,6 +703,7 @@ def format_musicxml(
     subtitle: str = "",
     composer: str = "",
     beats_per_bar: int = 4,
+    beat_type: int = 4,
     rhythm: bool = True,
     collapse: bool = True,
     show_chords: bool = True,
@@ -704,6 +726,9 @@ def format_musicxml(
         subtitle: an optional line under it, e.g. the performer.
         composer: an optional composer credit.
         beats_per_bar: beats in a bar, used for the time signature and the bars.
+        beat_type: the denominator of that signature. Pass the notated value, so a
+            head in cut time is written 2/2 rather than restated as 2/4; the bar
+            length is identical either way and only the displayed metre differs.
         rhythm: space the steps on their real beats. Falls back to a uniform
             one-chord-per-beat grid when the steps carry no timing, exactly as
             `format_tab_staff` does, so a hand-written progression still exports.
@@ -726,7 +751,9 @@ def format_musicxml(
     # The sounding harmony is settled here rather than inside the note builder,
     # because a substitution is a property of the *step* - it changes the chord name
     # printed above the shape, not the pitches of the shape.
-    events, pickup = _events(_substitute_steps(steps), beats_per_bar, rhythm and collapse)
+    events, pickup = _events(
+        _substitute_steps(steps), beats_per_bar, rhythm and collapse, beat_type
+    )
     if not any(step is not None for step, _, _ in events):
         return ""
 
@@ -739,7 +766,8 @@ def format_musicxml(
     score.insert(
         0,
         _build_part(
-            events, title, beats_per_bar, pickup=pickup, show_chords=show_chords
+            events, title, beats_per_bar, pickup=pickup, show_chords=show_chords,
+            beat_type=beat_type,
         ),
     )
 
