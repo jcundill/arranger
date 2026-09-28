@@ -24,6 +24,7 @@ dist/
 # than none. .gp5 in particular is checked by opening it in a notation program.
 *.html
 *.musicxml
+*.mxl
 *.gp5
 leadsheet_export.json
 

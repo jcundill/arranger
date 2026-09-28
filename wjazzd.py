@@ -96,6 +96,7 @@ __all__ = [
     "select_head",
     "Skeleton",
     "build_skeleton",
+    "arrange_slots",
     "arrange_head",
     "promote_slash_chord",
     "corpus_cli",
@@ -1737,47 +1738,46 @@ def _arrange_step_with_bass(
     return voicing, prepared
 
 
-def arrange_head(
-    solo: Solo,
-    head: Optional[HeadSelection] = None,
-    strategy: str = "eighths",
-    pick: str = "first",
-    lift: str = "auto",
+def arrange_slots(
+    triples: Sequence[Tuple[str, str, str]],
+    timings: Sequence[Tuple[Optional[int], Optional[float], Optional[float]]] = (),
     non_chord_tone: str = "extension",
     fallback: Optional[str] = None,
-    section: Optional[Tuple[int, int]] = None,
     grips: Tuple[str, ...] = GRIP_PREFERENCE,
-) -> HeadArrangement:
-    """Builds a chord-melody arrangement of a head, end to end.
+) -> Tuple[List[ArrangementStep], List[int], List[str]]:
+    """Voices a list of (note, quality, name) triples, one step per slot.
 
-    Loads nothing itself: it reduces the notes it is given to a skeleton, decides
-    the register, and arranges. `fallback` may be "diminished", which retries
-    the steps no strategy could resolve as Barry Harris dim7 substitutions.
+    This is the arrangement engine's step loop, and it is deliberately **not**
+    duplicated per input source. The Weimar corpus path and the MusicXML path in
+    `headxml` both reach the voicings through here, so a head imported from a score
+    is voiced by exactly the same code as the same head read out of the database -
+    the same non-chord-tone strategies, the same opt-in diminished retry, the same
+    repeated-melody hold, the same slash-bass rule and the same
+    `HIGH_FRET_LIMIT` rescue. A second implementation is precisely how the corpus
+    path came to disagree with the library once already.
 
-    That retry is opt-in for a reason. It works mechanically - it finds the dim7 a
-    semitone below the resolution target - but it **replaces the written chord**,
-    and on a 12-bar blues six of the substitutions tend to land on the tonic, so
-    the tonic bar stops being a plain dominant. A head is meant to be the written
-    tune, so substituting under it is not something a "give me the head" command
-    should do by default. The count of steps it *would* rescue is always reported
-    in `rescued`, whether or not the retry is enabled.
+    `timings` is the slots' own `(bar, beat, duration)`, in the renderer's units:
+    a signed bar, the beat within it, and a length in whole notes. It is optional
+    and indexed defensively, so a hand-built sequence without timings still
+    arranges - the step simply has none, and the renderers fall back to a uniform
+    grid.
 
-    `section` narrows to a bar range directly, for callers that want a span the
-    head selector did not choose; `head` takes precedence when both are given.
+    `fallback` may be "diminished", which retries the steps no strategy could
+    resolve as Barry Harris dim7 substitutions. It replaces the written chord, so
+    it is off unless asked for; the count of steps it *would* rescue is always
+    returned in the notes.
+
+    Returns the steps, the indexes of the steps the diminished retry actually
+    substituted, and any diagnostic notes worth printing.
     """
     engine = VoiceLeadingEngine()
     if fallback not in (None, "diminished"):
         raise ValueError(f"Unknown fallback {fallback!r}; expected None or 'diminished'")
 
-    if section is None and head is not None:
-        section = (head.start, head.end)
-    built = build_skeleton(solo, strategy, section, pick, lift, non_chord_tone)
-    triples = list(built.triples)
-    notes = list(built.notes)
-
-    unresolved = unresolved_steps(triples, non_chord_tone)
+    unresolved = unresolved_steps(list(triples), non_chord_tone)
     retry = list(unresolved) if fallback == "diminished" else []
     rescued: List[int] = []
+    notes: List[str] = []
     if retry:
         notes.append(
             f"diminished fallback replaced the written chord on {len(retry)} step(s)"
@@ -1797,7 +1797,7 @@ def arrange_head(
         # chords on their real beats. Lengths match by construction; the guard is
         # so a hand-built Skeleton cannot shift the timings onto the wrong step.
         bar, beat, duration = (
-            built.timings[index] if index < len(built.timings) else (None, None, None)
+            timings[index] if index < len(timings) else (None, None, None)
         )
         if index in retry:
             # Re-resolve this step as a dim7 and remember that we did, so the
@@ -1862,8 +1862,55 @@ def arrange_head(
         previous = voicing
         previous_chord = name
 
-    built.rescued = len(unresolved)
-    return HeadArrangement(steps, built, head, tuple(rescued), tuple(notes))
+    return steps, rescued, notes
+
+
+def arrange_head(
+    solo: Solo,
+    head: Optional[HeadSelection] = None,
+    strategy: str = "eighths",
+    pick: str = "first",
+    lift: str = "auto",
+    non_chord_tone: str = "extension",
+    fallback: Optional[str] = None,
+    section: Optional[Tuple[int, int]] = None,
+    grips: Tuple[str, ...] = GRIP_PREFERENCE,
+) -> HeadArrangement:
+    """Builds a chord-melody arrangement of a head, end to end.
+
+    Loads nothing itself: it reduces the notes it is given to a skeleton, decides
+    the register, and arranges. `fallback` may be "diminished", which retries
+    the steps no strategy could resolve as Barry Harris dim7 substitutions.
+
+    That retry is opt-in for a reason. It works mechanically - it finds the dim7 a
+    semitone below the resolution target - but it **replaces the written chord**,
+    and on a 12-bar blues six of the substitutions tend to land on the tonic, so
+    the tonic bar stops being a plain dominant. A head is meant to be the written
+    tune, so substituting under it is not something a "give me the head" command
+    should do by default. The count of steps it *would* rescue is always reported
+    in `rescued`, whether or not the retry is enabled.
+
+    `section` narrows to a bar range directly, for callers that want a span the
+    head selector did not choose; `head` takes precedence when both are given.
+
+    The voicing itself is `arrange_slots`, shared with the MusicXML importer in
+    `headxml`: which source a head was read from is the loader's business, and
+    nothing about the voicings may depend on it.
+    """
+    if section is None and head is not None:
+        section = (head.start, head.end)
+    built = build_skeleton(solo, strategy, section, pick, lift, non_chord_tone)
+    steps, rescued, arrange_notes = arrange_slots(
+        built.triples, built.timings, non_chord_tone=non_chord_tone,
+        fallback=fallback, grips=grips,
+    )
+    # How many steps a diminished retry *would* rescue, whether or not it ran. Set
+    # here rather than in arrange_slots, which has no Skeleton to report it on and
+    # should not grow one for the benefit of one caller.
+    built.rescued = len(unresolved_steps(list(built.triples), non_chord_tone))
+    return HeadArrangement(
+        steps, built, head, tuple(rescued), tuple(built.notes) + tuple(arrange_notes)
+    )
 
 
 def _next_chord_tone_melody(triples: Sequence[Tuple[str, str, str]], index: int) -> Optional[str]:

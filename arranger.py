@@ -188,7 +188,7 @@ HIGH_FRET_LIMIT = 13
 # it via [tool.setuptools.dynamic] instead of duplicating the number.
 # 0.4.0 added the optional Weimar Jazz Database corpus integration (wjazzd.py).
 # 0.5.0 added MusicXML export (tabxml.py), behind the optional `xml` extra.
-__version__ = "0.5.0"
+__version__ = "0.6.0"
 
 
 @dataclass
@@ -2356,6 +2356,14 @@ def main() -> None:
         from wjazzd import corpus_cli
 
         raise SystemExit(corpus_cli(sys.argv[2:]))
+
+    if len(sys.argv) > 1 and sys.argv[1] == "head":
+        # The MusicXML importer, imported here for the same reason as the corpus
+        # front end above: both are optional entry points, and neither may be a
+        # cost - or a dependency - to somebody who only wants the library.
+        from headxml import head_cli
+
+        raise SystemExit(head_cli(sys.argv[2:]))
 
     engine = VoiceLeadingEngine()
 

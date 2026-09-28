@@ -36,6 +36,7 @@ arranger/
 ├── tabstaff.py            # Whole-progression staff renderers (ASCII + HTML)
 ├── tabxml.py              # MusicXML export (optional extra: music21)
 ├── tabgp.py               # Guitar Pro 5 export (optional extra: PyGuitarPro)
+├── headxml.py             # MusicXML import: read a melody + chord-symbol score
 ├── wjazzd.py              # Optional Weimar Jazz Database glue (stdlib sqlite3 only)
 ├── pyproject.toml         # PEP 621 metadata (setuptools backend)
 ├── README.md              # User-facing overview and usage
@@ -45,6 +46,7 @@ arranger/
 │   ├── test_chord_parser.py
 │   ├── test_fretboard.py
 │   ├── test_grips.py
+│   ├── test_headxml.py
 │   ├── test_musicxml.py
 │   ├── test_non_chord_tones.py
 │   ├── test_progressions.py
@@ -407,7 +409,8 @@ what they are missing without opting in.
   sign when both bounds are negative (`-8--1`).
 - **Imports are lazy where they keep `arranger` clean** — `corpus_cli` imports
   `argparse` and `format_progression` inside the function, and `main()` imports
-  `wjazzd` inside the branch.
+  `wjazzd` inside the branch. `headxml.head_cli` does the same, importing
+  `argparse` *and* every renderer, so `load_musicxml` costs nothing.
 - **Tests are guarded** by `skipUnless(DEFAULT_DB.is_file())` so the suite passes
   on a fresh clone with no 42 MB download. Tests needing no database (the
   notation table, the record types, the selector and range parsers) always run.
@@ -556,7 +559,7 @@ what they are missing without opting in.
     strategy raises `ValueError`. `grips=("drop2",)` with
     `top_strings=MELODY_STRING_CHOICES` reproduces the library's original output
     exactly, which is what the renderer tests pin their fixture to.
-- `__version__` — the library version string (currently `0.4.0`). `pyproject.toml`
+- `__version__` — the library version string (currently `0.6.0`). `pyproject.toml`
   reads it as the dynamic project version, so it is the single source of truth.
 - `NO_CHORD` — the string `"NC"`, a bar carrying melody with no harmony.
 - `VoiceLeadingEngine.get_melody_only_voicing(melody_note, prefer=...)` — a
@@ -564,8 +567,9 @@ what they are missing without opting in.
   explicitly *not* a harmonised voicing and is exempt from the string-set invariant.
 - `ArrangementStep.melody_only` — defaulted flag set on NC steps.
 - `main()` — with no arguments, prints the built-in demonstrations; with `corpus`
-  as the first argument, delegates to `wjazzd.corpus_cli` through a **lazy**
-  import, so `import arranger` never depends on the database module.
+  as the first argument, delegates to `wjazzd.corpus_cli` and with `head` to
+  `headxml.head_cli`, both through a **lazy** import inside the branch, so
+  `import arranger` never depends on the database module or the importer.
 - `main()` — prints the built-in demonstration arrangements; exposed as the
   `jazz-arranger` console script via `[project.scripts]`.
 
@@ -596,7 +600,14 @@ what they are missing without opting in.
    distinct suffixes in its own notation, and one that is absent resolves to
    `None` and is *counted and reported* rather than guessed - so a new quality
    the corpus cannot reach is silent until this step is done.
-7. Add tests to `tests/test_voicings.py` for the drop-2 fingerings and to
+7. **If a MusicXML file should be able to spell it**, add the matching
+   `kind-value` to `MUSICXML_KIND_QUALITIES` in `headxml.py`, and any `<degree>`
+   alteration that reaches it to `_DEGREE_REFINEMENTS`. The same rule applies: an
+   absent kind resolves to `None` and is counted in `Head.unmapped`, so a new
+   quality MusicXML cannot spell stays silent until this step is done. Note the
+   table is keyed on the *library* quality, so a `kind` that only a `<degree>`
+   reaches (a 7b5, say) needs a degree entry rather than a kind entry.
+8. Add tests to `tests/test_voicings.py` for the drop-2 fingerings and to
    `tests/test_grips.py` for the other grips: exact fingerings, pitch classes a subset
    of `ChordParser.get_chord_tones(...)`, `fret_span() <= 5`, and the sounding strings
    a member of `supported_string_sets()`.
@@ -605,6 +616,8 @@ what they are missing without opting in.
    `NON_CHORD_TONE_EXTENSIONS` route. `tests/test_wjazzd.py` asserts every
    `WEIMAR_QUALITY_ALIASES` entry resolves to a quality the library can voice, so
    a table entry naming an unvoiceable quality fails the suite.
+   `tests/test_headxml.py::TestChordParsing::test_every_kind_the_table_names_is_voiceable`
+   is the same assertion for `MUSICXML_KIND_QUALITIES`.
 
 ## Coding Conventions
 
@@ -699,7 +712,87 @@ Two consequences worth knowing:
   spelled as one literal in both modules rather than with `+=`, which a checker
   cannot follow either.
 
-## MusicXML export
+## MusicXML import
+
+`headxml` is the counterpart to `tabxml`: it reads a written head — a melody plus
+chord symbols — out of a MusicXML file and arranges it. `arranger.py head FILE`
+is its front end.
+
+**It needs no optional dependency.** `zipfile` and `xml.etree` are enough for both
+forms of the format, so a plain `pip install jazz-arranger` can import a head and
+`tests/test_headxml.py` needs no `skipUnless` guard at all. That asymmetry with
+the exporter is deliberate and is the reason the two are separate modules rather
+than two halves of one.
+
+| name | role |
+|---|---|
+| `MUSICXML_KIND_QUALITIES` | `kind-value` → library quality; the inverse of `tabxml._READABLE_KINDS` |
+| `_DEGREE_REFINEMENTS` | `(quality, degree, alter) → quality`, for the alterations a kind cannot name |
+| `parse_musicxml_chord(harmony)` | → `(root, quality, bass)`; `None` for a chord that cannot be voiced |
+| `Head` / `HeadNote` | the loaded melody, its timing, and each note's chord |
+| `load_musicxml(path, part=None)` | `.mxl` or `.musicxml` → `Head` |
+| `head_skeleton(head, strategy, section, pick)` | slots of `(triple, bar, beat, duration)` |
+| `arrange_xml_head(path, …)` | the whole pipeline → steps, the `Head`, and diagnostics |
+| `head_cli(argv)` | the `head` command |
+
+Six decisions are load-bearing, and each was forced by a real file:
+
+- **The harmony is a timeline, not a per-note attribute.** A `<harmony>` precedes
+  the note it governs, several can share a bar, and a bar can carry none at all —
+  But Not For Me bars 3 and 5 carry no harmony, and Rainy Day bar 1 changes twice
+  inside the bar. So a chord is **held** from the note it is declared before until
+  the next replaces it, the same forward fill `wjazzd` applies to the `beats`
+  table. Reading the chord off the following note would drop the harmony from
+  every bar that does not change.
+- **A `.mxl` is read through `META-INF/container.xml`,** which names the root
+  file. "The first `.xml` in the archive" looks equivalent and is not: a container
+  may carry a `score.xml` beside a stylesheet or a thumbnail, and picking the
+  wrong one is a *silent* failure. The largest XML member is the fallback when the
+  container is missing; a non-zip is read as a bare document.
+- **The metre is the notated one.** `beat` is the beat within the bar in notated
+  beats, so `1 + onset/divisions * beats_per_bar / 4`. Dividing by four is what
+  makes a 2/2 bar two beats wide — a quarter note in cut time is on beat 1.5, not
+  beat 3 — and three of the four scores in the repository are in cut time. The
+  `<time>` read is the **last** one stated, since a score may change metre.
+- **A `<chord>` group reduces to its highest note.** MusicXML does not order a
+  group by pitch: only the first member is unmarked, and in a chord-melody part
+  that member is the *lowest* note of the shape. Taking the maximum is what makes
+  the reduction independent of how the writer ordered the notes, and it is what
+  lets this library read back its own two-part export with the TAB staff skipped.
+- **`<degree>` is how a chord its `kind` cannot name is spelled** — a `dominant`
+  with a flat 5th is a 7b5, which is exactly how MuseScore writes one, and "Here's
+  That Rainy Day" is a third of an E7b5 under an F melody line. The degrees are
+  applied **in document order, each refining the last**, so the table keys off the
+  *result* of the previous degree as well as the base kind. The `text` attribute
+  is the final fallback and the inverse of `tabxml._downgrade_kinds`: that pass
+  writes an unclassifiable chord as `<kind text="Bb7sus4">other</kind>`, so
+  without reading `text` back a round trip of this library's own export would lose
+  every chord it could not spell.
+- **A tuplet's `<duration>` is unreduced** and must be divided by
+  `time-modification`, or every bar after the first drifts a third long.
+  "I Was Doing All Right" is written in triplets at 10080 divisions and is the
+  test for it.
+
+**Never guess a chord.** A kind the library cannot voice is absent from
+`MUSICXML_KIND_QUALITIES` rather than folded into a near neighbour —
+`Neapolitan`, `Italian`, `French`, `German`, `pedal`, `power`, `Tristan` and
+`none` are all real MusicXML kinds and all absent — and it is counted in
+`Head.unmapped` and printed, on the same principle as
+`WEIMAR_QUALITY_ALIASES`. A quality naming a chord the voicing tables do not hold
+is reported as untranslatable rather than failing silently later.
+
+**The voicings are not re-implemented here.** `arrange_xml_head` hands its slots
+to `wjazzd.arrange_slots`, the step loop promoted out of `wjazzd.arrange_head` for
+exactly this. An imported head therefore gets the same non-chord-tone strategies,
+the same opt-in dim7 retry, the same `repeated` hold and the same slash-bass rule
+as one read from the database. A second implementation of the step loop is how
+the corpus path came to disagree with the library once already; the whole point of
+the extraction is that it cannot happen again.
+
+**Imports are lazy where they keep the module cheap** — `argparse` inside
+`head_cli`, and the renderers inside it too, so `load_musicxml` costs nothing.
+`main()` imports `headxml` inside the `head` branch, as it does `wjazzd`.
+
 
 `format_musicxml` / `write_musicxml` in `tabxml.py` render an arrangement as a
 `score-partwise` document for a notation program. It is a **third renderer family**,
@@ -1166,6 +1259,22 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
   other omitted tones (e.g. a root-on-top `13`) have no template yet.
 - If no voicing matches a melody/chord, `arrange_progression` prints a warning
   and **skips** that step (rather than raising).
+- **MusicXML import (`headxml.py`):**
+  - A score that changes metre is laid out in its **prevailing** metre — the last
+    `<time>` stated — rather than per bar. A head that moves from 4/4 to 3/4
+    mid-way will have the wrong bar lines in its first half.
+  - A `<chord>` group is reduced to its highest note, so a **piano** part read as
+    a melody is the top line of the right hand with the left hand discarded. That
+    is the right reading for a chord-melody part and the wrong one for a
+    two-hand piano reduction; there is no staccato/hand inference.
+  - A melody below the library's `G3` floor is still unvoiceable, so a very low
+    lead sheet needs `--bars` or a transposition, as the corpus path does.
+  - No 11th chord is voiced: a dominant 11th is read as the 9th shape and a major
+    11th as `maj7#11`, which is the shape it would be played as rather than a
+    refusal. A `<degree>` the table does not know is ignored rather than guessed
+    at, so an unfamiliar alteration leaves the base kind standing.
+  - Repeat barlines and `<ending>` markers are read as text, not expanded: a head
+    written with a repeat is played once, not twice.
 - **Corpus (`wjazzd.py`):**
   - The head selector is a heuristic. It finds the right 8-bar head on ATTYA
     melids 266 and 342, but returns a 6-bar fragment on 328 and falls back to the
@@ -1188,6 +1297,6 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
   `rel_pitch_class` and `solo_info.tempo`, none of which exist in this database.
   It is not part of the package and is not covered by the corpus work.
 - The public API is packaged as `jazz-arranger` and versioned through
-  `arranger.__version__` (currently `0.4.0`), but there is no CI and nothing has
+  `arranger.__version__` (currently `0.6.0`), but there is no CI and nothing has
   been published to PyPI.
 

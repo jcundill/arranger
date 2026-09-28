@@ -81,6 +81,96 @@ non-chord-tone fields `non_chord_tone`, `strategy` and `harmonized_as`); the
 Tab strings run from the low E string to the high E string, with `x` for a muted
 string — so `x-x-12-13-13-13` is a voicing on D-G-B-E with the melody on the high E.
 
+## Reading a head from a MusicXML file
+
+`arranger.py head` does the same job from a **written melody and chord symbols** —
+a lead sheet, a melody-only score, or anything else in MusicXML:
+
+```bash
+python arranger.py head But_Not_for_Me.mxl --bars 1-5
+```
+
+```text
+But Not For Me - George Gershwin
+  part: Voice
+  2/2, 80 melody note(s), bars 1-32; neck window: frets 2-13; grips: drop2, shell, duo
+  note: 15 rests and unpitched notes
+
+Bb7      F4   x-5-6-3-6-x
+Bb7      G4   (non-chord tone -> Bb13 via extension) x-8-6-7-8-x
+Bb7      F4   x-5-6-3-6-x
+Ebmaj    G4   x-6-5-3-8-x
+Ebmaj    F4   (non-chord tone) x-5-3-3-6-x
+```
+
+Both forms of the format are read: a bare `.musicxml` document and a zipped `.mxl`
+container, which is resolved through its `META-INF/container.xml` rather than by
+taking the first XML file out of the archive.
+
+**It needs no optional dependency.** The exporter wants `music21`; the importer
+wants `zipfile` and `xml.etree`, which are in the standard library. A plain
+`pip install jazz-arranger` can read a score, and `tests/test_headxml.py` is not
+`skipUnless`-guarded at all.
+
+```bash
+python arranger.py head "Here's That Rainy Day.musicxml" --tab staff --melody
+python arranger.py head I_Was_Doing_All_Right.mxl --bars 1-3 --html head.html
+```
+
+| flag | default | |
+|---|---|---|
+| `--part` | the melody part | a `<score-part>` id, when a score has several |
+| `--bars` | the whole head | half-open `LO-HI`; **bounds may be negative** for pickups |
+| `--skeleton` | `eighths` | `chords`, `beats`, `eighths`, `sixteenths`, `notes` |
+| `--pick` | `first` | `first` or `longest`, for slots holding several notes |
+| `--non-chord-tone` | `extension` | `extension`, `diminished`, `sustain`, `legacy` |
+| `--fallback` | off | `diminished` — see the trade-off below |
+| `--vertical` | off | six-line tab per step |
+| `--tab` | `line` | `staff` lays the head on one six-line staff, spaced on its real rhythm |
+| `--melody` / `--mutes` | off | as for `corpus` |
+| `--html` / `--musicxml` / `--gp5` | off | the same renderers `corpus` offers |
+
+### Four things a score does that a database does not
+
+**The harmony is a timeline.** A `<harmony>` precedes the note it governs, several
+can share a bar, and a bar can carry none at all — so a chord is *held* from the
+note it is declared before until the next one replaces it. Reading the chord off
+the note that follows it would drop the harmony from every bar that does not
+change, which on a slow head is most of them.
+
+**The metre is the notated one.** `beat` is the beat *within* the bar in notated
+beats, so a 2/2 head is two beats to the bar rather than four — which is how most
+standards are written, and how three of the four scores in this repository are.
+
+**The melody is the top line.** A `<chord>` group reduces to its *highest* note,
+because MusicXML does not order a group by pitch and in a chord-melody part the
+first member is the lowest note of the shape. Everything else is counted and
+reported in `skipped`, not dropped in silence.
+
+**A chord this library cannot voice is counted, not guessed.** `Neapolitan` is a
+real MusicXML kind and a real chord; it is not one this library holds under a
+melody, so it is listed in `Head.unmapped` and the run says so. The same rule
+`wjazzd` follows for an untranslatable Weimar suffix.
+
+### It is the same arrangement code
+
+A head read from a score is voiced by `wjazzd.arrange_slots` — the corpus path's
+own step loop. The non-chord-tone strategies, the opt-in diminished retry, the
+repeated-melody hold and the slash-bass preference are therefore identical
+whichever source a head was read from; only the *selection* differs. That is
+deliberate: the corpus path once had a second, weaker implementation of the same
+rule, and it shipped unnoticed until a transcribing analyst measured it.
+
+```python
+from headxml import load_musicxml, head_skeleton
+
+head = load_musicxml("But_Not_for_Me.mxl")   # a Head: melody, timing, chords
+print(head.title, head.beats_per_bar, len(head))
+for triple, bar, beat, duration in head_skeleton(head, "eighths"):
+    print(bar, beat, triple)
+```
+
+
 ## Rendering a head from the Weimar Jazz Database
 
 The database holds 456 jazz transcriptions. `arranger.py corpus` turns the **head**

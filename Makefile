@@ -35,7 +35,7 @@ test:
 
 typecheck:
 	@command -v $(PYRIGHT) >/dev/null 2>&1 || { echo "make typecheck needs pyright: $(PYTHON) -m pip install pyright"; exit 1; }
-	$(PYRIGHT) arranger.py tabstaff.py tabxml.py tabgp.py wjazzd.py tests
+	$(PYRIGHT) arranger.py tabstaff.py tabxml.py tabgp.py wjazzd.py headxml.py tests
 
 demo:
 	$(PYTHON) arranger.py

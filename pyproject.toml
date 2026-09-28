@@ -36,12 +36,14 @@ gp = ["PyGuitarPro>=0.11"]
 jazz-arranger = "arranger:main"
 
 [tool.setuptools]
-# The library is two top-level modules plus the optional corpus front end. Listing
-# them explicitly keeps flat-layout auto-discovery from tripping over the
-# non-package `tests/` dir. `tabstaff` holds the whole-progression staff renderers
-# and imports `arranger`, so it is listed after it. `tabxml` and `tabgp` each import
-# both, and are independent of one another.
-py-modules = ["arranger", "tabstaff", "tabxml", "tabgp", "wjazzd"]
+# The library is two top-level modules plus the optional corpus and MusicXML-import
+# front ends. Listing them explicitly keeps flat-layout auto-discovery from
+# tripping over the non-package `tests/` dir. `tabstaff` holds the whole-progression
+# staff renderers and imports `arranger`, so it is listed after it. `tabxml` and
+# `tabgp` each import both, and are independent of one another. `headxml` is the
+# MusicXML *importer* and imports `arranger` and `wjazzd`; it is stdlib-only, so
+# unlike `tabxml` it needs no optional extra to work.
+py-modules = ["arranger", "tabstaff", "tabxml", "tabgp", "wjazzd", "headxml"]
 
 [tool.setuptools.dynamic]
 # Single source of truth: the version lives in arranger.__version__.
