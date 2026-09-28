@@ -35,6 +35,7 @@ it lives in an **optional extra**. A plain install pulls in `musthe` alone:
 
 ```bash
 pip install -e '.[xml]' # adds music21, for format_musicxml / write_musicxml
+pip install -e '.[gp]'  # adds PyGuitarPro, for format_gp5 / write_gp5
 ```
 
 Nothing else in the package needs it: the renderer imports `music21` when it is
@@ -328,6 +329,40 @@ python arranger.py corpus --melid 218 --musicxml head.musicxml
 
 A chord name music21 cannot classify — the Weimar notation produces several — is
 written as text with the root still parsed out, rather than dropped.
+
+### Guitar Pro 5, for a tabber
+
+`write_gp5` writes the same arrangement as a **Guitar Pro 5 file**, to open in Guitar
+Pro alongside your own tab. It needs its own extra (`pip install '.[gp]'`):
+
+```python
+from arranger import write_gp5
+
+write_gp5(steps, "head.gp5", title="Blue Train", subtitle="John Coltrane")
+```
+
+```bash
+python arranger.py corpus --melid 218 --gp5 head.gp5
+```
+
+GP5 is a *tab* format, so every note carries its own fret and string and a shape
+survives the round trip exactly — no re-deriving the fingering from the pitch. Each
+step is written on its real beat with the chord name it is sounding above it, a held
+shape is one longer note rather than a re-strike, and a repeated melody is a single
+struck note, all as in the other two renderers. `tempo`, `beats_per_bar`,
+`collapse` and `show_chords` work as they do for MusicXML.
+
+**This is not a replacement for MusicXML.** A `.gp5` file opens in Guitar Pro and
+nowhere else, and it has no notation staff; the MusicXML export is still the way into
+MuseScore, Sibelius and Final. Use whichever the destination needs — the two are
+independent extras and the two outputs share their note placement, so a head lands on
+the same beats in both.
+
+One difference worth knowing: GP5 has no way to write a short first bar, so a head
+starting on an upbeat gets a full first measure with the leading beats empty rather
+than an anacrusis. A shape that runs across a bar line is written out in two
+measures instead of being tied, because a GP tie across a bar is a slur the player
+has to interpret. Neither changes the notes.
 
 ## Low-register melodies
 

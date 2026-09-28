@@ -35,6 +35,7 @@ arranger/
 ├── arranger.py            # The engine + a main() demonstration entry point
 ├── tabstaff.py            # Whole-progression staff renderers (ASCII + HTML)
 ├── tabxml.py              # MusicXML export (optional extra: music21)
+├── tabgp.py               # Guitar Pro 5 export (optional extra: PyGuitarPro)
 ├── wjazzd.py              # Optional Weimar Jazz Database glue (stdlib sqlite3 only)
 ├── pyproject.toml         # PEP 621 metadata (setuptools backend)
 ├── README.md              # User-facing overview and usage
@@ -76,6 +77,14 @@ setuptools backend, declares `musthe` as its only runtime dependency, offers
   so `import arranger`, the ASCII staff and the HTML page all work on a machine
   that has never installed it, and `tests/test_musicxml.py` is `skipUnless`-guarded
   exactly as the database-backed tests are.
+- A second **optional** dependency, on the same terms:
+  **[PyGuitarPro](https://pypi.org/project/PyGuitarPro/)**, the `gp` extra, used only
+  by `tabgp.py`. It is **LGPL-3.0** and pulls in `attrs`, which is why it is a
+  separate extra and never a runtime dependency — a plain `pip install
+  jazz-arranger` must not pull it in. It is imported the same lazy way, and
+  `tests/test_guitarpro.py` is guarded the same way. The two extras are
+  independent: a run asking for a GP5 file must not require `music21`, or the
+  other way round.
 - One optional, **dev-only** tool: **[pyright](https://pypi.org/project/pyright/)**
   for type checking. It is installed in `.venv/` but is deliberately absent from
   `pyproject.toml`, so it never reaches users of the package.
@@ -658,8 +667,10 @@ duplicated or imported across the boundary.
 
 `format_musicxml` and `write_musicxml` are the same rendering decision in a different
 medium, and they live in `tabxml.py` rather than here — see
-[MusicXML export](#musicxml-export). `tabstaff` re-exports both, so there is still one
-spelling for the whole staff-rendering surface.
+[MusicXML export](#musicxml-export). `format_gp5` and `write_gp5` are the same again
+in a third medium and live in `tabgp.py` — see
+[Guitar Pro 5 export](#guitar-pro-5-export). `tabstaff` re-exports all four, so
+there is still one spelling for the whole staff-rendering surface.
 
 **The dependency is one-way: `tabstaff` imports `arranger`, never the reverse.** It
 takes `STRING_NAMES`, `ArrangementStep` and `_MUTED_CELL` from here; the last of
@@ -810,6 +821,118 @@ not written into the score.
   public name, and the lazy `__getattr__` hides the re-exported ones from a star
   import. `TestTabstaffModuleBoundary::test_dunder_all_matches_the_public_surface`
   fails if the list and the module's public names diverge, in either direction.
+## Guitar Pro 5 export
+
+`format_gp5` / `write_gp5` in `tabgp.py` render an arrangement as a **Guitar Pro 5
+file**. It is a **third renderer family**, beside the ASCII/HTML staff and the
+MusicXML score, and it is **not a replacement for MusicXML** — see below.
+
+| name | role |
+|---|---|
+| `tabgp.format_gp5` | the file, as bytes. Pure, like every other renderer |
+| `tabgp.write_gp5` | the only function in the module that touches the filesystem |
+| `tabgp._guitarpro` | the lazy import, mirroring `tabxml._music21` |
+| `_measures` | events to measures of beats; where GP5 and MusicXML differ |
+| `_build_song` | the guitarpro `Song` |
+| `_duration_split` | a quarter-length to the `Duration` + `Tuplet` that sum to it |
+| `_sounding_frets` | which strings a step plays; a repeated melody is one note |
+| `GP_VERSION` / `GP_SIGNATURE` | `(5, 1, 0)` and the file header it writes |
+
+**Why a third renderer rather than a replacement.** GP5 is a *tab* format, so it
+stores a fret and a string per note natively and a shape survives the round trip
+exactly — which is why the mapping here is a few lines, where MusicXML needs
+`music21` plus `_split_technicals` to put the fret back on each note of a chord. But
+GP5 opens in Guitar Pro and nowhere else, has no notation staff, and is a closed
+format. MusicXML remains the way into Sibelius, MuseScore and Final. Both are
+shipped, and both are one flag on `corpus_cli` (`--musicxml`, `--gp5`).
+
+**What is shared, deliberately.** `tabgp` calls `tabxml._events` and
+`tabxml._substitute_steps` rather than reimplementing either, so a head lands on the
+same beats in both files and a substituted chord is named the same way in both.
+That is the *semantics*; the bar grid is separate, for the reason below.
+
+### Where GP5 genuinely differs from MusicXML
+`tabxml._build_part` writes a **short first measure** for a head with an anacrusis,
+because MusicXML has an anacrusis. A GP5 measure is a fixed-length container and the
+format cannot say "this bar is only two beats long", so `_measures` writes a **full
+first measure with the leading beats empty** and the music begins on the following
+downbeat. That moves every onset later rather than reshaping the metre — the lesser
+of the two distortions, since the notes and their order are untouched.
+
+Two more consequences of a fixed-length measure:
+
+- **An event crossing a bar line is split**, written as two notes in consecutive
+  measures. MusicXML ties the halves; a GP file cannot express a tie across a bar
+  without it becoming a slur the player has to interpret, so the halves are written
+  out. Same music, and the only thing the format can say.
+- **A measure opens when the cursor *reaches* a bar line**, not only when a step
+  *crosses* one. Testing only for a crossing was a real bug found by the eighth-note
+  case: beats landing exactly on the boundary all piled into the first bar, so a
+  two-bar head came out as one eight-beat bar.
+
+### Two things the format cannot express, found by TuxGuitar
+
+TuxGuitar rejected a written head with `voice 1 is too long` on three measures of
+*Blue Train* and one each of two *All the Things You Are* transcriptions. Both causes
+are in `_duration_split`, and **both are silent** — the file writes cleanly and is
+only wrong on read, so nothing in the round-trip test caught them until a real
+notation program was run against the output.
+
+- **A duration is a power of two, and there is no dotted note.** The value is
+  written as `value.bit_length() - 3` and read back as `1 << (n + 2)`, so a length
+  that is not a power of two has to be *split*, not rounded. A dotted half (3
+  quarters) rounded to the nearest legal value is a **whole note** — a quarter too
+  long, and a bar summing to more than its 4/4 signature. It is now written as a
+  half plus a quarter.
+- **A triplet is a `Tuplet`, not a `Duration` of 12.** `12.bit_length() - 3` is 1,
+  so a bare `Duration(12)` is written as an **eighth** and reads back as one. Every
+  triplet in a head silently became an eighth, and the bar went a quarter long. A
+  triplet eighth is `Duration(8)` with `Tuplet(3, 2)`.
+
+The rule is the one `test_no_written_bar_is_longer_than_its_time_signature` states:
+**the parts must sum to the length asked for.** A split may leave a bar slightly
+short, which a reader tolerates; it must never be long, which a reader rejects.
+`_duration_split` therefore only ever takes parts that *fit*, and reaches for a
+triplet only once no plain note does — so a dotted half stays a half and a quarter
+rather than becoming three triplet eighths.
+
+### Five undocumented traps, each found by a failed round trip
+
+None is in PyGuitarPro's documentation, all of them look innocent, and **every one
+is a silent corruption rather than an exception** — the file writes without
+complaint and is unreadable. They are recorded in `tabgp`'s module docstring, and
+repeated here because the test that catches them is the one thing not to weaken:
+
+- **`Song()` already contains one `MeasureHeader` and one `Track`.** Appending
+  another yields a file that reads back as an extra track. Use `tracks[0]` and
+  `measureHeaders[0]`.
+- **`Measure.maxVoices` is 2 and the writer emits every voice.** A one-voice measure
+  desyncs the byte stream; the reader fails much later with an unrelated-looking
+  `count must be less than or equal than 255`.
+- **`Beat.status` defaults to `BeatStatus.empty`,** which occupies *zero* duration.
+  A beat that is meant to sound must say `BeatStatus.normal`.
+- **Strings are numbered 1–6 with 1 = high E.** This library indexes 0 = low E, so
+  the conversion is `6 - index` — the same flip `tabxml` makes.
+- **`Chord` is a chord *diagram*, not a shape.** It holds a name, a root and a fret
+  vector for the little box above the staff. A played shape is several `Note`s on one
+  `Beat`, `Note.value` being the fret. Using `Chord` for the shape is the obvious
+  mistake and writes a box rather than a chord.
+
+### Why the test suite round-trips
+
+`tests/test_guitarpro.py` writes the file, parses it back with `guitarpro.parse`, and
+compares the notes against `step.voicing.frets`. That is the whole point: a GP file's
+only contract is that Guitar Pro can open it, and every trap above produces a file
+that passes any assertion on the builder's own output while being unusable. A parse
+is the closest proxy available without Guitar Pro itself. `test_every_shape_survives_the_round_trip`
+is the one that matters.
+
+**Known limitation.** `PyGuitarPro` 0.11 writes GP3/GP4/GP5/TGP; GP5 is the newest it
+supports. Guitar Pro 7+ `.gp` is a different, zip-based format that nothing here can
+write, so a file from this renderer targets Guitar Pro 5 and 6 as well as anything
+later that still reads GP5.
+
+
 
 ## Grips, and the position-aware selector
 
