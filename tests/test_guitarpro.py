@@ -6,11 +6,18 @@ clone runs a reduced suite.
 
 The core of these tests is a **round trip**: the file is written, parsed back with
 `guitarpro.parse`, and the notes compared against the frets the arrangement was built
-from. That is deliberate, and it is how the format's five undocumented traps were
+from. That is deliberate, and it is how the format's six undocumented traps were
 found in the first place - each one produces a file that *writes without complaint*
 and is corrupt on read, so an assertion on the builder's own output would pass while
 the file was unusable. A GP file's only contract is that Guitar Pro can open it, and
 a parse is the closest proxy available without Guitar Pro itself.
+
+The limit of that proxy is worth stating, because one trap has already got past it:
+a file can be self-consistent and still be read wrongly by another program. The
+unmarked-rest defect is the example - PyGuitarPro read back exactly what was written,
+MuseScore 3 rendered it correctly, and TuxGuitar put the rest in the wrong place. So
+the assertions check the *semantics a reader acts on* (note type, beat status),
+not merely that the round trip is lossless.
 """
 
 import os
@@ -18,6 +25,10 @@ import tempfile
 import unittest
 
 from arranger import ArrangementStep, Voicing, VoiceLeadingEngine
+
+# The shared placement core, reached directly: these tests are about where events
+# land, which is decided in `tabxml` and only turned into beats by `tabgp`.
+from tabxml import _events, _substitute_steps
 
 try:
     import guitarpro  # noqa: F401
@@ -329,7 +340,7 @@ class TestRhythm(GuitarProTestCase):
             # The exact lengths the renderer was asked for. A bar is at most a bar
             # long: the closing one is shorter, because the head stops there.
             self.assertLessEqual(
-                sum(length for _s, length in beats),
+                sum(length for _s, length, _tie in beats),
                 4.0 + 1e-6,
                 msg=f"bar {number} is longer than 4/4",
             )
@@ -354,8 +365,8 @@ class TestRhythm(GuitarProTestCase):
         """A step running over a bar line is written in two measures, in order.
 
         The MusicXML renderer ties the halves. A GP5 measure is fixed-length, so
-        the split is written as two notes in consecutive bars - the same music, and
-        the only thing the format can express.
+        the split is written as two notes in consecutive bars, joined by a GP tie -
+        see `test_a_held_shape_is_tied_across_a_bar_line_not_re_struck`.
         """
         crossing = make_step([-1, -1, 10, 10, 10, 10], "Dm7", "A4",
                              bar=1, beat=3, duration=1.0)
@@ -376,6 +387,108 @@ class TestRhythm(GuitarProTestCase):
         for measure in measures:
             self.assertAlmostEqual(self.bar_quarters(measure), 4.0, places=6)
 
+    def test_a_length_the_format_cannot_exact_is_written_short_never_long(self):
+        """A length with no exact decomposition is truncated, not padded.
+
+        The property the reader actually enforces, stated directly: a beat's written
+        parts may sum to *less* than the length asked for, never more. A bar that
+        overruns its signature is rejected outright.
+
+        The last case is the one that was wrong. A triplet-eighth is exactly
+        representable, but a **triplet-quarter** is `Duration(4)` with a `Tuplet`,
+        and a length of 1/6 quarter - which is what a triplet-eighth rest resolves to
+        once the skeleton divides an onset - leaves a sliver the greedy pass cannot
+        cover by any single note. The old code appended a sixteenth to close it, and
+        on the Weimar head that made bar 2 four and a half sixteenths long.
+        """
+        from tabgp import _duration_split
+
+        def written(length):
+            total = 0.0
+            for value, tuplet in _duration_split(length):
+                part = 4.0 / value
+                if tuplet is not None:
+                    part = part * tuplet[1] / tuplet[0]
+                total += part
+            return total
+
+        for length in (0.25, 0.5, 0.75, 1.0, 1.5, 1.25, 1.0 / 3.0, 1.0 / 6.0):
+            self.assertLessEqual(
+                written(length), length + 1e-6,
+                f"{length} quarters was written longer than it is",
+            )
+        # The exact cases are still exact - the rule is a ceiling, not a licence to
+        # round.
+        self.assertAlmostEqual(written(1.5), 1.5, places=6)
+        self.assertAlmostEqual(written(1.0 / 3.0), 1.0 / 3.0, places=6)
+        # And the inexpressible one is short rather than padded.
+        self.assertLess(written(1.0 / 6.0), 1.0 / 6.0 + 1e-6)
+
+    def test_a_gap_between_notes_is_a_rest_not_a_held_chord(self):
+        """A note is not held across a rest that follows it.
+
+        Bar 4 of "But Not For Me" is a single whole note and bar 5 opens with a
+        quarter rest. The span written for a group is the gap to the *next onset*,
+        which is five quarters here rather than the four the note is written for, so
+        the note was held over the silence into the next bar - and since a step
+        crossing a bar line is tied, bar 5 opened with a tied chord where the score
+        says a rest. The eighth-note skeleton puts a rest at the head of every
+        second bar, so this was not one bar but half the head.
+
+        The fix caps the span at the melody note's own `duration` and writes the
+        remainder as an explicit rest, which is what `None` already means to all
+        three renderers.
+        """
+        # Bar 1 is a whole note, bar 2's first note is a quarter late: the quarter
+        # between them is silence.
+        whole = make_step([-1, -1, 10, 10, 10, 10], "Dm7", "A4",
+                          bar=1, beat=1, duration=1.0)
+        after = make_step([-1, -1, 12, 12, 12, 12], "G7", "B4",
+                          bar=2, beat=2, duration=1.0)
+        events, _pickup = _events(_substitute_steps([whole, after]), 4, True)
+        # The Dm7 fills one bar and does not run into the second; the quarter
+        # before the G7 is a rest rather than more Dm7. The G7 is the *last* group,
+        # so it runs to the end of its own bar - three quarters, not four - which is
+        # the pre-existing rule for a closing event and is not part of this fix.
+        self.assertEqual(
+            [(None if s is None else s.chord, round(length, 6))
+             for s, _strikes, length in events],
+            [("Dm7", 4.0), (None, 1.0), ("G7", 3.0)],
+        )
+
+    def test_a_gap_that_does_not_exist_is_not_turned_into_a_rest(self):
+        """A note written as long as the gap is not shortened by a cap.
+
+        The other direction, and the one that would make the fix above a regression:
+        `duration` may only ever *shorten* a span, never lengthen one, and a head
+        whose notes fill their gaps exactly must come out with no rests at all.
+        """
+        # Both notes are a whole note and the second starts exactly where the first
+        # ends, so there is no silence anywhere.
+        first = make_step([-1, -1, 10, 10, 10, 10], "Dm7", "A4",
+                          bar=1, beat=1, duration=1.0)
+        second = make_step([-1, -1, 12, 12, 12, 12], "G7", "B4",
+                           bar=2, beat=1, duration=1.0)
+        events, _pickup = _events(_substitute_steps([first, second]), 4, True)
+        self.assertEqual([s is None for s, _strikes, _length in events], [False, False])
+        self.assertEqual(
+            [round(length, 6) for _s, _strikes, length in events], [4.0, 4.0]
+        )
+
+    def test_a_step_with_no_timing_keeps_the_gap_it_had(self):
+        """The cap needs a `duration`; a step without one is untouched.
+
+        `duration` is optional on `ArrangementStep`, and a hand-built progression has
+        none, so the whole-gap behaviour has to survive its absence - otherwise the
+        renderers' uniform-grid fallback would start inventing rests.
+        """
+        plain = make_step([-1, -1, 10, 10, 10, 10], "Dm7", "A4")
+        plain2 = make_step([-1, -1, 12, 12, 12, 12], "G7", "B4")
+        # No bar, beat or duration on either: this is the uniform-grid fallback.
+        self.assertIsNone(plain.duration)
+        events, _pickup = _events(_substitute_steps([plain, plain2]), 4, True)
+        self.assertEqual([s is None for s, _strikes, _length in events], [False, False])
+
     def test_a_long_step_is_split_across_a_bar_line_rather_than_stretched(self):
         """A note longer than the bar it starts in is written out, in two measures.
 
@@ -386,9 +499,7 @@ class TestRhythm(GuitarProTestCase):
         than by where the head starts.
         """
         long_step = make_step([-1, -1, 10, 10, 10, 10], "Dm7", "A4",
-                              bar=1, beat=1, duration=1.0)
-        # The length written is the gap to the *next* onset, so the split needs a
-        # following step on the far side of the bar line, not a long duration.
+                              bar=1, beat=1, duration=2.0)
         final = make_step([-1, -1, 12, 12, 12, 12], "G7", "B4",
                           bar=3, beat=1, duration=1.0)
         measures = self.measures(steps=[long_step, final])
@@ -400,6 +511,88 @@ class TestRhythm(GuitarProTestCase):
         self.assertEqual(
             [b.text for m in measures for b in m.voices[0].beats],
             ["Dm7", "Dm7", "G7"],
+        )
+
+    def test_a_held_shape_is_tied_across_a_bar_line_not_re_struck(self):
+        """The two halves of a split step are **tied**, not struck twice.
+
+        The bug this pins. A step that runs across a bar line is written as two
+        notes, one in each bar - that much is forced by the format, since a GP5
+        measure is a fixed-length container. The halves used to be written as two
+        ordinary notes, so a shape held over the bar line was **re-struck** at the
+        head of the next bar. In "But Not For Me" that happened in 14 of the 32
+        bars, and the source score genuinely ties Eb4 across the bar line in bars
+        2-3, so the file contradicted the notation it was exported from.
+
+        The claim that caused it - that a GP tie is "a slur the player has to
+        interpret rather than a hold" - is simply false: `NoteType.tie` is a real
+        GP5 tie and survives a write/parse round trip in PyGuitarPro 0.11. The test
+        parses the file back, because that is the only way to see what the reader
+        gets; asserting on the builder's own objects would pass whether or not the
+        flag reached the bytes.
+        """
+        import guitarpro
+
+        crossing = make_step([-1, -1, 10, 10, 10, 10], "Dm7", "A4",
+                             bar=1, beat=1, duration=2.0)
+        final = make_step([-1, -1, 12, 12, 12, 12], "G7", "B4",
+                          bar=3, beat=1, duration=1.0)
+        song = self.song(steps=[crossing, final])
+        beats = [b for m in song.tracks[0].measures for b in m.voices[0].beats]
+        self.assertEqual([b.text for b in beats], ["Dm7", "Dm7", "G7"])
+        # The attack is an ordinary note; only the continuation is a tie.
+        self.assertEqual(
+            [n.type for b in beats for n in b.notes],
+            [guitarpro.NoteType.normal] * 4
+            + [guitarpro.NoteType.tie] * 4
+            + [guitarpro.NoteType.normal] * 4,
+        )
+        # The same shape on both sides of the bar line, which is what makes the
+        # tie meaningful - a tie between two different shapes would be a slur.
+        first = sorted((n.string, n.value) for n in beats[0].notes)
+        second = sorted((n.string, n.value) for n in beats[1].notes)
+        self.assertEqual(first, second)
+
+    def test_every_split_step_in_a_written_head_is_tied(self):
+        """No bar of a real head opens by re-striking the previous bar's shape.
+
+        The same defect measured over "But Not For Me" rather than a hand-built
+        case: a step crosses a bar line on most bars of this head, so a hand-built
+        fixture would find it while a real export would still be full of them. A
+        bar that opens with a shape identical to the one the previous bar closed on
+        is a re-strike unless the second is a tie, and only the tie makes it a held
+        note.
+        """
+        import guitarpro
+
+        from headxml import arrange_xml_head
+
+        path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "data", "but_not_for_me.mxl"
+        )
+        steps, head, _notes = arrange_xml_head(path, strategy="eighths")
+        song = self.song(
+            steps=steps,
+            beats_per_bar=head.beats_per_bar,
+            beat_type=head.beat_type,
+        )
+        measures = song.tracks[0].measures
+        self.assertEqual(len(measures), 32)
+
+        restruck = []
+        for index in range(1, len(measures)):
+            last = measures[index - 1].voices[0].beats[-1]
+            first = measures[index].voices[0].beats[0]
+            if not last.notes or not first.notes:
+                continue
+            same = sorted((n.string, n.value) for n in last.notes) == sorted(
+                (n.string, n.value) for n in first.notes
+            )
+            if same and not all(n.type == guitarpro.NoteType.tie for n in first.notes):
+                restruck.append(index + 1)
+        self.assertEqual(
+            restruck, [],
+            f"bars {restruck} re-strike the previous bar's shape untied",
         )
 
     def test_a_pickup_is_written_as_a_rest_not_dropped(self):
@@ -428,6 +621,85 @@ class TestRhythm(GuitarProTestCase):
         self.assertAlmostEqual(4.0 / beats[0].duration.value, 1.0, places=6)
         self.assertEqual([b.text for b in beats[1:]], ["Dm7", "G7"])
         self.assertAlmostEqual(self.bar_quarters(song.tracks[0].measures[0]), 4.0, places=6)
+
+    def test_a_rest_beat_is_marked_as_a_rest_not_as_an_empty_chord(self):
+        """The pickup beat says `rest`, which is what the reader keys on.
+
+        The bug this pins, and the only one so far that MuseScore and TuxGuitar
+        disagree about - the file is self-consistent either way, so a round trip
+        through PyGuitarPro passes while a notation program misplaces the rest.
+
+        `gp3.writeBeat` only emits the status byte when the status is not `normal`:
+        `if beat.status != gp.BeatStatus.normal: flags |= 0x40`. So a note-less beat
+        marked `normal` goes out as an *ordinary* beat whose string-flags byte is
+        empty - indistinguishable from a chord on no strings, rather than a rest.
+        MuseScore 3 reads that as a rest in the right place; TuxGuitar does not, and
+        puts the pickup rest on the 4th quarter instead of the 1st. `BeatStatus.rest`
+        is the third member of the enum and was simply never used.
+
+        The assertion is on the parsed-back status, because that is what the reader
+        acts on; asserting that the beat has no notes is not enough, and is exactly
+        what the earlier test did.
+        """
+        import guitarpro
+
+        song = self.song(
+            steps=[
+                make_step([-1, -1, 10, 10, 10, 10], "Dm7", "A4",
+                          bar=1, beat=2, duration=1.0),
+                make_step([-1, -1, 12, 12, 12, 12], "G7", "B4",
+                          bar=1, beat=3, duration=1.0),
+            ],
+            beats_per_bar=4,
+        )
+        beats = song.tracks[0].measures[0].voices[0].beats
+        self.assertEqual(beats[0].status, guitarpro.BeatStatus.rest)
+        # A beat that sounds is `normal`, not `rest` - the fix must not turn every
+        # note into a rest, which would be a worse file than the original.
+        self.assertEqual(beats[1].status, guitarpro.BeatStatus.normal)
+        self.assertEqual(beats[2].status, guitarpro.BeatStatus.normal)
+        # And the rest is still the *first* thing in the bar, which is the whole
+        # point: TuxGuitar put it last.
+        self.assertEqual(beats[0].notes, [])
+
+    def test_every_note_less_beat_in_a_written_head_is_a_rest(self):
+        """No beat in a real head is a note-less chord rather than a rest.
+
+        The same defect over "But Not For Me" rather than a hand-built case, because
+        the head opens with a quarter rest and the pickup is the only place one is
+        written. A rest that is not marked as one still opens the bar here, so the
+        measure count and the beat count are both right and only the *position* is
+        wrong - the class of defect a length assertion cannot catch.
+        """
+        import guitarpro
+
+        from headxml import arrange_xml_head
+
+        path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "data", "but_not_for_me.mxl"
+        )
+        steps, head, _notes = arrange_xml_head(path, strategy="eighths")
+        song = self.song(
+            steps=steps,
+            beats_per_bar=head.beats_per_bar,
+            beat_type=head.beat_type,
+        )
+        unmarked = []
+        for index, measure in enumerate(song.tracks[0].measures, start=1):
+            for position, beat in enumerate(measure.voices[0].beats):
+                if beat.notes:
+                    continue
+                if beat.status != guitarpro.BeatStatus.rest:
+                    unmarked.append((index, position))
+        self.assertEqual(
+            unmarked, [],
+            f"note-less beats not marked as rests: {unmarked}",
+        )
+        # The head does open on its rest, so the fix is exercised rather than
+        # vacuously true.
+        first = song.tracks[0].measures[0].voices[0].beats[0]
+        self.assertEqual(first.status, guitarpro.BeatStatus.rest)
+        self.assertEqual(first.notes, [])
 
     def test_tempo_and_time_signature_reach_the_file(self):
         """The score's tempo and metre are set, not left at the defaults."""

@@ -22,7 +22,7 @@ Sibelius, MuseScore and Final. What the two share is the *placement*: both call
 renderings cannot drift apart. Where they genuinely differ is bar lines - see
 `_measures`.
 
-Five things about the format, each of which cost a failed round trip to find, and
+Six things about the format, each of which cost a failed round trip to find, and
 each of which is a silent corruption rather than an exception. They are recorded
 here because none of them is in the library's documentation and all of them look
 innocent:
@@ -34,8 +34,14 @@ innocent:
   measure built with one voice desyncs the byte stream, so the reader fails later
   with an unrelated-looking error (`count must be less than or equal to 255`).
   Every measure here gets a second, empty `Voice`.
-- **`Beat.status` defaults to `BeatStatus.empty`, which occupies zero duration.**
-  A beat that is meant to sound must say `BeatStatus.normal`.
+- **`Beat.status` is not optional detail, and a note-less beat is a `rest`.** The
+  default is `BeatStatus.empty`, which occupies zero duration, so a beat that is
+  meant to sound must say `normal`. The converse also holds: a beat with *no notes*
+  must say `BeatStatus.rest`, because the writer only emits the status byte when the
+  status is not `normal`. A note-less beat marked `normal` goes out as an ordinary
+  beat with an empty string-flags byte, which MuseScore 3 reads as a rest in the
+  right place and TuxGuitar does not - it puts the pickup rest at the end of the bar
+  rather than the head. See the pickup in `_measures`.
 - **Strings are numbered 1-6 with 1 = high E.** This library indexes 0 = low E, so
   the conversion is `6 - index`, the same flip `tabxml` does for a MusicXML staff.
 - **`Chord` is a chord *diagram*, not a shape.** It carries a name, a root and a
@@ -152,21 +158,21 @@ def _duration_split(
         # thing the format can say, and it is short rather than long - a bar may
         # then end slightly early, which a reader tolerates.
         return [(_MIN_DURATION, None)]
-    if remaining > 1e-6:
-        # A sliver is left over. Put it on the last part by stepping that part up to
-        # the next longer note, so the written total is never *shorter* than the
-        # length asked for - a bar that came out short would silently lose music.
-        value, tuplet = parts[-1]
-        longer = next(
-            (v for e, v, t in reversed(candidates)
-             if v < value and abs(e - (4.0 / value + remaining)) < 1e-6),
-            None,
-        )
-        if longer is not None:
-            parts[-1] = (longer, tuplet)
-        else:
-            # No single note covers the remainder; append the shortest legal one.
-            parts.append((_MIN_DURATION, None))
+    # A sliver may be left over, and it is **dropped**. The parts above already fill
+    # the beat and the format has no note value covering the remainder, so the choice
+    # is between a bar that is short and one that is long, and it must be short: a
+    # reader tolerates a bar ending a little early and rejects one that overruns its
+    # signature outright ("voice 1 is too long") - exactly the error this function
+    # exists to avoid.
+    #
+    # An earlier version closed the sliver by appending the shortest legal note,
+    # reasoning that a short bar "silently loses music". That is backwards: the
+    # music is not lost, the bar is merely a hair long. It was reached by the
+    # gap-as-rest work in `tabxml._events` - a `1/6`-quarter rest, which is a
+    # triplet-eighth divided by the onset, leaves a remainder no single note covers,
+    # and the appended sixteenth made bar 2 of the Weimar head 4.92 quarters of 4.
+    # `test_a_length_the_format_cannot_exact_is_written_short_never_long` is the
+    # regression.
     return parts
 
 
@@ -206,9 +212,9 @@ def _measures(
     pickup: float,
     beats_per_bar: int,
     beat_type: int = 4,
-) -> List[List[Tuple[Optional[ArrangementStep], float]]]:
+) -> List[List[Tuple[Optional[ArrangementStep], float, bool]]]:
     """
-    The events as a list of measures, each a list of (step, length) beats.
+    The events as a list of measures, each a list of (step, length, tie) beats.
 
     **This is where GP5 and MusicXML differ**, and the difference is forced by the
     format rather than chosen. MusicXML has an anacrusis: a measure may simply be
@@ -220,10 +226,19 @@ def _measures(
     gave it.
 
     An event that runs across a bar line is **split**, not stretched and not
-    dropped: the two halves are written in consecutive measures, which is what
-    `_build_part` does with a tie in the XML and gives the same music. A GP tie
-    across a bar line is a slur the player has to interpret rather than a hold, so
-    the halves are written out instead.
+    dropped: the two halves are written in consecutive measures, exactly as
+    `_build_part` splits a MusicXML note and joins the halves with a `<tie>`. The
+    `tie` flag on each beat is what keeps the split from being heard as a
+    re-articulation - the continuation is written with `NoteType.tie`, so the two
+    halves are one held note rather than the same shape struck twice.
+
+    GP5 has a real tie: `guitarpro.models.NoteType.tie`, verified to survive a
+    write/parse round trip in PyGuitarPro 0.11. The earlier code believed a GP tie
+    was "a slur the player has to interpret" and wrote both halves as plain notes
+    instead, which re-struck the shape at the head of every bar a step crossed -
+    14 of the 32 bars of "But Not For Me", and the source score ties Eb4 across
+    the bar line in bars 2-3. A held chord in a chord-melody part is not something
+    to re-finger, so the split has to carry the tie the score already had.
     """
     # The bar in quarter notes: `beats_per_bar` beats of **4 / beat_type**
     # quarters - a 2/2 beat is a *half* note, so two quarters to the beat, not
@@ -232,7 +247,7 @@ def _measures(
     # and makes every cut-time bar a quarter note long, and 4/4 is the one metre
     # where the error is invisible to the whole suite.
     bar_length = float(beats_per_bar) * (4.0 / float(beat_type))
-    measures: List[List[Tuple[Optional[ArrangementStep], float]]] = []
+    measures: List[List[Tuple[Optional[ArrangementStep], float, bool]]] = []
     if pickup > 0:
         # The pickup is written as a **rest** at the head of the first measure, and
         # the cursor below starts at zero, so the music follows it rather than
@@ -245,7 +260,7 @@ def _measures(
         # after it slid forward by the length of the rest to fill the gap. A rest is
         # a beat the format can hold, so writing one keeps every onset where the
         # score puts it, which is the whole claim of this renderer.
-        measures.append([(None, pickup)])
+        measures.append([(None, pickup, False)])
 
     # A running cursor in quarter notes, **offset by the pickup** so the music
     # follows the rest rather than starting on top of it. Whenever the cursor
@@ -255,6 +270,11 @@ def _measures(
     cursor = pickup
     for step, _strikes, length in events:
         remaining = length
+        # Whether any part of this event has already been written. The first chunk
+        # is the attack; every chunk after it is a continuation of a note that began
+        # in an earlier bar, and is flagged so `_build_song` can tie it rather than
+        # strike the shape again.
+        started = False
         while remaining > 1e-9:
             position = cursor % bar_length
             # On a bar line, and the current measure already has something in it:
@@ -271,7 +291,8 @@ def _measures(
             # and leaves the second nothing, and a beat of no length occupies no
             # time at all, so writing it would inflate the bar rather than fill it.
             if chunk > 1e-9:
-                measures[-1].append((step, chunk))
+                measures[-1].append((step, chunk, started))
+                started = True
             cursor += chunk
             remaining -= chunk
             # Exactly filling a bar ends it, so the next beat opens a new measure.
@@ -292,7 +313,7 @@ def _measures(
 
 def _build_song(
     gp: Any,
-    measures: List[List[Tuple[Optional[ArrangementStep], float]]],
+    measures: List[List[Tuple[Optional[ArrangementStep], float, bool]]],
     title: str,
     subtitle: str,
     composer: str,
@@ -335,11 +356,16 @@ def _build_song(
             )
             song.measureHeaders.append(header)
         voice = gp.Voice(None)
-        for step, length in beats:
+        for step, length, tie in beats:
             # One beat per legal Duration. A length the format cannot hold exactly
             # - a dotted half, say - becomes two tied-looking notes rather than one
             # note of the wrong length, which is what made a bar outlast its
             # signature. See `_duration_split`.
+            #
+            # A beat that continues a note begun in an earlier bar is written as a
+            # GP **tie** rather than a second attack, so a shape held across a bar
+            # line is not re-struck at the head of the next one. `tie` carries that
+            # from `_measures`; it is False for the first chunk of every event.
             for value, tuplet in _duration_split(length):
                 duration = gp.Duration(value)
                 if tuplet is not None:
@@ -349,9 +375,16 @@ def _build_song(
                 beat = gp.Beat(
                     voice,
                     duration=duration,
-                    # Without this a beat occupies zero duration and the measure's
-                    # beat count no longer adds up. See the module docstring.
-                    status=gp.BeatStatus.normal,
+                    # A beat with notes is `normal`; a beat with none is a **rest**,
+                    # and it must say so. The writer only emits the status byte when
+                    # the status is not `normal`, so a note-less beat written as
+                    # `normal` goes out as an ordinary beat with an empty string-flags
+                    # byte - which MuseScore reads as a rest in the right place and
+                    # TuxGuitar does not, putting the pickup rest at the end of the
+                    # bar instead of the head. `BeatStatus.rest` sets the flag that
+                    # says rest explicitly. See `_build_song`.
+                    status=(gp.BeatStatus.normal if step is not None
+                            else gp.BeatStatus.rest),
                     text=step.chord if step is not None else None,
                 )
                 if step is not None:
@@ -362,7 +395,10 @@ def _build_song(
                                 value=fret,
                                 string=_GP_STRING_OFFSET - string_index,
                                 velocity=_VELOCITY,
-                                type=gp.NoteType.normal,
+                                # `NoteType.tie` is a real GP5 tie and round-trips
+                                # through PyGuitarPro, so the two halves of a split
+                                # step are one held note.
+                                type=gp.NoteType.tie if tie else gp.NoteType.normal,
                             )
                         )
                 voice.beats.append(beat)
@@ -451,8 +487,9 @@ def format_gp5(
                     if step is not None
                     else None,
                     length,
+                    tie,
                 )
-                for step, length in beats
+                for step, length, tie in beats
             ]
             for beats in measures
         ]

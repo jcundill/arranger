@@ -269,14 +269,49 @@ def _events(
         # express, and music21 refuses the whole export rather than rounding one. Two
         # eighths on the last beat of a bar are two eighths, which is what dividing the
         # beat gives.
-        lengths = [span / len(group)] * len(group)
+        # **A gap is a rest, and a note is only as long as it is written.** The
+        # gap-to-next-onset rule above says how long a group has until the *next
+        # sound*, which is not the same as how long it *sounds*: bar 4 of "But Not
+        # For Me" is one whole note and bar 5 opens with a quarter rest, so the gap
+        # from the note to the next onset is five quarters and the note is held over
+        # the rest into the next bar. In GP5 that reads as a tie, so the bar opens
+        # with a held chord where the score says silence. `duration` is the melody
+        # note's own length in whole notes, so it caps the span - and it is capped
+        # rather than used as the span because it is *not* always expressible, which
+        # is why the gap rule exists at all. Only ever a cap: a `duration` longer than
+        # the gap is ignored, so nothing is stretched, and a note with no duration
+        # keeps the gap exactly as before.
+        #
+        # Only applied when there *is* a next onset. The last group runs to the end
+        # of its own bar by definition, so there is no gap to represent and a cap
+        # would only invent a rest at the end of the head.
+        gap = span
+        if timed and index < len(placed) and any(s.duration for s in group):
+            longest = max(s.duration or 0.0 for s in group) * 4.0
+            span = longest if longest + 1e-9 < gap else gap
+        else:
+            span = gap
+
+        # Divided after the cap, so the group shares the time it actually occupies
+        # and the silence is left over rather than being shared out with the notes.
+        #
+        # The sixteenth floor can push the shares past the gap they came from - three
+        # steps in a quarter of a bar is three sixteenths, not a quarter - and a
+        # group that overruns its own bar is the one thing a reader rejects outright
+        # ("voice 1 is too long"). So the floor is given up when it would do that: the
+        # gap is what the score says, and it wins.
+        share = span / len(group)
+        lengths = [max(share, _MIN_EVENT_LENGTH) for _ in group]
+        if sum(lengths) > gap + 1e-9:
+            lengths = [share] * len(group)
+
+        # The silence is what the group *did not* fill, measured after the floor
+        # rather than from `span` - the floor can make a group longer than the cap,
+        # and taking the rest from the cap rather than from what was written would
+        # then add the two together and run the bar past its signature.
+        rest_length = max(gap - sum(lengths), 0.0)
 
         for step, length in zip(group, lengths):
-            # MusicXML cannot write a duration shorter than a sixteenth, and music21
-            # aborts the whole export rather than rounding one. A floor of a sixteenth
-            # is therefore a floor on the *export*, not on the music: no step this
-            # library generates is shorter than an eighth, so nothing real is affected.
-            length = max(length, _MIN_EVENT_LENGTH)
             if _is_hold(step, events):
                 # Held, not struck: extend what is already ringing rather than
                 # writing a second copy of the same shape.
@@ -284,6 +319,15 @@ def _events(
                 events[-1] = (held_step, held_strikes, held_length + length)
                 continue
             events.append((step, True, length))
+
+        if rest_length > 1e-9:
+            # Silence between this note and the next sound, written as an explicit
+            # rest. `None` is what the renderers already read as "nothing here":
+            # `tabxml._build_part` writes a MusicXML `<rest>`, `tabstaff` leaves the
+            # cell blank and clears the ring, and `tabgp` writes `BeatStatus.rest`.
+            # Without it the bar opens with the previous shape held over the gap,
+            # which is the tie this whole branch exists to prevent.
+            events.append((None, False, rest_length))
     return events, pickup
 
 

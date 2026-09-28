@@ -1071,13 +1071,36 @@ of the two distortions, since the notes and their order are untouched.
 Two more consequences of a fixed-length measure:
 
 - **An event crossing a bar line is split**, written as two notes in consecutive
-  measures. MusicXML ties the halves; a GP file cannot express a tie across a bar
-  without it becoming a slur the player has to interpret, so the halves are written
-  out. Same music, and the only thing the format can say.
+  measures. The second half is written with `NoteType.tie`, so the two are one held
+  note rather than the shape struck twice. This was wrong until it was measured:
+  the code believed a GP tie was "a slur the player has to interpret" and wrote both
+  halves as plain notes, which re-struck the shape at the head of every bar a step
+  crossed - **14 of the 32 bars** of "But Not For Me", whose score genuinely ties
+  Eb4 across the bar line in bars 2-3. `NoteType.tie` is a real GP5 tie and
+  round-trips through PyGuitarPro 0.11.
+  `test_a_held_shape_is_tied_across_a_bar_line_not_re_struck` and
+  `test_every_split_step_in_a_written_head_is_tied` are the regressions; the second
+  measures it over the real head, because a hand-built fixture finds the mechanism
+  while an export can still be full of instances.
 - **A measure opens when the cursor *reaches* a bar line**, not only when a step
   *crosses* one. Testing only for a crossing was a real bug found by the eighth-note
   case: beats landing exactly on the boundary all piled into the first bar, so a
   two-bar head came out as one eight-beat bar.
+- **A beat with no notes must say `BeatStatus.rest`.** `gp3.writeBeat` only emits
+  the status byte when the status is not `normal` (`if beat.status !=
+  gp.BeatStatus.normal: flags |= 0x40`), so a note-less beat marked `normal` goes
+  out as an *ordinary* beat whose string-flags byte is empty — indistinguishable
+  from a chord on no strings rather than a rest. MuseScore 3 reads that as a rest
+  in the right place; **TuxGuitar does not**, and puts the pickup rest on the 4th
+  quarter rather than the 1st. This is the one defect so far that two readers
+  disagree about, which is what made it findable: the file is self-consistent, so
+  the round trip through PyGuitarPro passes while a notation program misplaces the
+  rest. `BeatStatus.rest` is the third member of the enum (`empty`/`normal`/`rest`)
+  and was simply never used.
+  `test_a_rest_beat_is_marked_as_a_rest_not_as_an_empty_chord` and
+  `test_every_note_less_beat_in_a_written_head_is_a_rest` are the regressions. The
+  first asserts on the **parsed-back status** rather than on the beat having no
+  notes, which is what the earlier test did and which this defect passes.
 
 ### Two things the format cannot express, found by TuxGuitar
 
@@ -1105,7 +1128,50 @@ short, which a reader tolerates; it must never be long, which a reader rejects.
 triplet only once no plain note does — so a dotted half stays a half and a quarter
 rather than becoming three triplet eighths.
 
-### Five undocumented traps, each found by a failed round trip
+**A sliver the format cannot express is dropped, not padded.** The code once closed a
+leftover remainder by appending the shortest legal note, reasoning that a short bar
+"silently loses music". That is backwards: the music is not lost, the bar is merely
+a hair long, and a bar that overruns its signature is **rejected**. It was reached
+by the gap-as-rest work in the next section — a `1/6`-quarter rest, which is a
+triplet-eighth divided by the onset, leaves a remainder no single note covers, and
+the appended sixteenth made bar 2 of the Weimar head 4.92 quarters of 4.
+`test_a_length_the_format_cannot_exact_is_written_short_never_long` is the direct
+regression, asserting the ceiling over the exact and the inexpressible alike.
+
+### A gap between two notes is a rest, not a held chord
+
+The harmony is a timeline, not a per-note attribute. **The rhythm is
+one too, and a rest is time.** Bar 4 of "But Not For Me" is a single whole note and
+bar 5 opens with a quarter rest, so the gap from the note to the next onset is five
+quarters while the note is written for four. The span a step is given is the gap to
+the *next sound*, which is not the same as how long it *sounds* — so the note was
+held over the silence into the next bar, and since a step crossing a bar line is
+tied, the bar opened with a tied chord where the score says a rest. The eighth-note
+skeleton puts a rest at the head of every second bar, so this was not one bar but
+half the head.
+
+`tabxml._events` therefore **caps** the span at the melody note's own `duration` and
+writes the remainder as an explicit rest — a `(None, False, length)` event, which is
+already what all three renderers read as "nothing here" (`tabxml` writes a
+`<rest>`, `tabstaff` blanks the cell and clears the ring, `tabgp` writes
+`BeatStatus.rest`). Three properties of the fix are load-bearing, and each was a
+real failure:
+
+- **It is a cap, never a substitute.** A `duration` longer than the gap is ignored,
+  so no step is ever *stretched*, and a step with no `duration` at all keeps the
+  whole-gap behaviour — which is what the renderers' uniform-grid fallback relies
+  on. This is why the gap rule exists in the first place: `duration` is a fraction
+  of a whole note that music21 cannot always write.
+- **The last group is exempt.** It runs to the end of its own bar by definition, so
+  there is no gap to represent and a cap would only invent a rest at the end.
+- **The rest is measured after the sixteenth floor**, from what the group *wrote*
+  rather than from the cap. The floor can make a group longer than the cap, and
+  taking the rest from the cap would then add the two and overrun the bar.
+
+`test_a_gap_between_notes_is_a_rest_not_a_held_chord` and its two companions — one
+for the no-gap direction, one for a step with no timing — are the regressions.
+
+### Six undocumented traps, each found by a failed round trip
 
 None is in PyGuitarPro's documentation, all of them look innocent, and **every one
 is a silent corruption rather than an exception** — the file writes without
