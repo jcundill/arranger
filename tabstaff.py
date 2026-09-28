@@ -663,15 +663,32 @@ def write_tab_html(steps: List[ArrangementStep], path: str, **kwargs: Any) -> st
 # arranger import format_musicxml` - and the re-export is lazy for the same reason
 # and with the same cycle: `tabxml` imports `tabstaff`, so a top-level import here
 # would re-enter a half-initialised `tabxml`.
-_TABXML_EXPORTS = ("format_musicxml", "write_musicxml")
+#
+# The Guitar Pro renderer lives in `tabgp`, which imports this module for the same
+# reason and re-exports through here for the same reason, so there is still one
+# spelling for the whole rendering surface.
+_RENDERER_EXPORTS = (
+    "format_musicxml",
+    "write_musicxml",
+    "format_gp5",
+    "write_gp5",
+)
+# The modules each name lives in, resolved lazily for the same cycle reason.
+_RENDERER_MODULES = {
+    "format_musicxml": "tabxml",
+    "write_musicxml": "tabxml",
+    "format_gp5": "tabgp",
+    "write_gp5": "tabgp",
+}
 
 if TYPE_CHECKING:
     # The names are resolved by `__getattr__` below, which a static checker cannot
     # follow - so without this it would report them as absent from the module and
     # flag the `__all__` entries. The same trick `arranger` uses for these names.
+    from tabgp import format_gp5, write_gp5
     from tabxml import format_musicxml, write_musicxml
 
-# The five names a star-import of this module must carry. Spelled out as one literal
+# The seven names a star-import of this module must carry. Spelled out as one literal
 # rather than `+=`, which a static checker cannot follow.
 __all__ = [
     "format_tab_staff",
@@ -679,14 +696,17 @@ __all__ = [
     "write_tab_html",
     "format_musicxml",
     "write_musicxml",
+    "format_gp5",
+    "write_gp5",
 ]
 
 
 def __getattr__(name: str) -> Any:
-    """Resolves the `tabxml` renderers on first access. See _TABXML_EXPORTS."""
-    if name in _TABXML_EXPORTS:
-        import tabxml
+    """Resolves the score renderers on first access. See _RENDERER_EXPORTS."""
+    module_name = _RENDERER_MODULES.get(name)
+    if module_name is not None:
+        import importlib
 
-        return getattr(tabxml, name)
+        return getattr(importlib.import_module(module_name), name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

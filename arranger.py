@@ -2268,14 +2268,16 @@ def _step_cells(step: ArrangementStep) -> List[str]:
 # the tests and wjazzd all use - without a lazy import at every call site. This is
 # the same lazy-import discipline main() uses for wjazzd, for the same reason.
 _TABSTAFF_EXPORTS = {
-    # name -> the module it lives in. The MusicXML renderers live in `tabxml`, which
-    # `tabstaff` re-exports, so resolving them through `tabstaff` as well keeps one
-    # spelling for the whole rendering surface.
+    # name -> the module it lives in. The MusicXML and Guitar Pro renderers live in
+    # `tabxml` and `tabgp`, which `tabstaff` re-exports, so resolving them through
+    # `tabstaff` as well keeps one spelling for the whole rendering surface.
     "format_tab_staff": "tabstaff",
     "format_tab_html": "tabstaff",
     "write_tab_html": "tabstaff",
     "format_musicxml": "tabstaff",
     "write_musicxml": "tabstaff",
+    "format_gp5": "tabstaff",
+    "write_gp5": "tabstaff",
 }
 
 
@@ -2461,9 +2463,11 @@ if __name__ == "__main__":
 # runtime the names still come from __getattr__ and never trigger an import cycle.
 if TYPE_CHECKING:
     from tabstaff import (
+        format_gp5,
         format_musicxml,
         format_tab_html,
         format_tab_staff,
+        write_gp5,
         write_musicxml,
         write_tab_html,
     )
@@ -2494,6 +2498,7 @@ __all__ = [
     "VoiceLeadingEngine",
     "Voicing",
     "format_progression",
+    "format_gp5",
     "format_musicxml",
     "format_tab_html",
     "format_tab_staff",
@@ -2503,4 +2508,5 @@ __all__ = [
     "supported_string_sets",
     "write_musicxml",
     "write_tab_html",
+    "write_gp5",
 ]

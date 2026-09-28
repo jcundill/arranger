@@ -1411,6 +1411,7 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
         format_progression,
         format_musicxml,
         format_tab_staff,
+        write_gp5,
         write_musicxml,
         write_tab_html,
     )
@@ -1508,6 +1509,14 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
         action="store_true",
         help="with --musicxml, write the tab staff on its own, without the "
              "notation staff above it",
+    )
+    parser.add_argument(
+        "--gp5",
+        default=None,
+        metavar="PATH",
+        help="also write the head to PATH as a Guitar Pro 5 file "
+             "(e.g. --gp5 head.gp5). Needs the optional extra: "
+             "pip install 'jazz-arranger[gp]'",
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -1630,6 +1639,23 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
                 title=solo.title or f"melid {solo.melid}",
                 subtitle=f"{solo.performer} - {solo.key}".strip(" -"),
                 show_notation=not args.no_notation_staff,
+            )
+        except ImportError as error:
+            print(f"\n{error}")
+            return 1
+        print(f"wrote {written}")
+
+    if args.gp5:
+        # Written separately from the other outputs for the same reason, and on its
+        # own extra: a run asking for a GP5 file and a run asking for MusicXML must
+        # not require each other's dependency. A missing PyGuitarPro is a usage
+        # problem rather than a crash, exactly as for music21 above.
+        try:
+            written = write_gp5(
+                arrangement.steps,
+                args.gp5,
+                title=solo.title or f"melid {solo.melid}",
+                subtitle=f"{solo.performer} - {solo.key}".strip(" -"),
             )
         except ImportError as error:
             print(f"\n{error}")
