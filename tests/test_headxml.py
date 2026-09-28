@@ -275,6 +275,34 @@ class TestLoading(unittest.TestCase):
             archive.writestr("score.xml", score(harmony("C", "major") + note("E")))
         self.assertEqual([n.note_name for n in load_musicxml(path).notes], ["E4"])
 
+    def test_a_malformed_container_falls_back_to_the_largest_member(self):
+        """A container that is not well-formed XML still reads rather than raising.
+
+        93 of the 502 scores in the OpenEWLD corpus carry a `META-INF/container.xml`
+        that is not well-formed, because the writer emitted the score's filename
+        into a single-quoted attribute without escaping it - `Core 'ngrato.xml`
+        becomes `<rootfile full-path='Core 'ngrato.xml'/>`, which no parser will
+        accept. Every one of those archives holds a perfectly readable score, so a
+        `ParseError` propagating out of the container read loses a head that is
+        sitting right there, and it is exactly the failure the largest-member
+        fallback exists to prevent.
+
+        The document is built to look like the real thing: a decoy member beside the
+        score, so a reader that just takes the first `.xml` still gets it wrong.
+        """
+        handle, path = tempfile.mkstemp(suffix=".mxl")
+        os.close(handle)
+        self.addCleanup(os.unlink, path)
+        with zipfile.ZipFile(path, "w") as archive:
+            archive.writestr(
+                "META-INF/container.xml",
+                "<?xml version='1.0' encoding='UTF-8'?><container><rootfiles>"
+                "<rootfile full-path='Core 'ngrato.xml'/></rootfiles></container>",
+            )
+            archive.writestr("META-INF/other.xml", "<junk/>")
+            archive.writestr("Core 'ngrato.xml", score(harmony("C", "major") + note("E")))
+        self.assertEqual([n.note_name for n in load_musicxml(path).notes], ["E4"])
+
     def test_a_harmony_holds_until_the_next_one(self):
         """A bar with no harmony at all is ordinary, and the chord carries on.
 
