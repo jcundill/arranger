@@ -1093,7 +1093,7 @@ class Skeleton:
     # Parallel to `triples` by construction: the lift transposes melody notes
     # but never drops or reorders a slot, and the diminished fallback in
     # arrange_head acts per step.
-    timings: Tuple[Tuple[int, float, float], ...] = ()
+    timings: Tuple[Tuple[int, float, Optional[float]], ...] = ()
 
     def __len__(self) -> int:
         return len(self.triples)
@@ -1151,12 +1151,23 @@ def skeleton_slots(
     strategy: str = "beats",
     section: Optional[Tuple[int, int]] = None,
     pick: str = "first",
-) -> List[Tuple[Tuple[str, str, str], int, float, float]]:
+) -> List[Tuple[Tuple[str, str, str], int, float, Optional[float]]]:
     """As `skeleton`, but each slot keeps its timing: (triple, bar, beat, duration).
 
-    The duration is in whole notes, as the database records it. This is the form
-    the tab staff renderer needs, because a tab that spaces every chord evenly is
-    not the tune; `skeleton` is this with the timing discarded.
+    **The slot's `duration` is `None`, deliberately.** The database's
+    `melody.duration` column is a *performance measurement* in beats - a 0.21 is a
+    triplet eighth, a 1.75 a note held through a bar line - and it is not a notated
+    note value. It is not a length any renderer can use, so it is not offered as one:
+    the staff renderer spaces the slots on their own `bar` and `beat`, and the
+    notated rhythm comes from the onsets.
+
+    This matters because `tabxml._events` *caps* a step's span by its `duration` to
+    stop a note being held across a rest, and a cap is only meaningful against a
+    written length. Handing it a performance measurement truncated every corpus step
+    to a fraction of its real length: the 8-bar head of melid 106 came out with 44
+    rests to 31 notes, each chord a sixteenth stub, because a 0.015 whole note is a
+    60-millisecond ornament. `headxml` is the loader whose `duration` is notated, and
+    it is the one that supplies one.
 
     One voicing is generated per *slot*, and the strategy decides what a slot is:
     a chord change, a beat, an eighth, a sixteenth, or a single note. That is the
@@ -1198,14 +1209,18 @@ def skeleton_slots(
             groups.setdefault(_slot_key(note, strategy), []).append(note)
         ordered = sorted(groups)
 
-    slots: List[Tuple[Tuple[str, str, str], int, float, float]] = []
+    slots: List[Tuple[Tuple[str, str, str], int, float, Optional[float]]] = []
     for key in ordered:
         candidates = groups[key]
         chosen = max(candidates, key=lambda n: n.duration) if pick == "longest" else candidates[0]
         chord = chosen.chord
+        # `duration` is None on purpose: the database's own value is a performance
+        # measurement in beats, not a notated length, and `_events` caps a span by
+        # this field. See the docstring.
+        length: Optional[float] = None
         if chord == NO_CHORD:
             slots.append(
-                ((midi_to_note_name(chosen.pitch), NO_CHORD, NO_CHORD), chosen.bar, chosen.beat, chosen.duration)
+                ((midi_to_note_name(chosen.pitch), NO_CHORD, NO_CHORD), chosen.bar, chosen.beat, length)
             )
             continue
         if not chord or chosen.quality is None:
@@ -1216,7 +1231,7 @@ def skeleton_slots(
             continue
         promoted = promote_slash_chord(root, quality, bass)
         slots.append(
-            ((midi_to_note_name(chosen.pitch), promoted, chord), chosen.bar, chosen.beat, chosen.duration)
+            ((midi_to_note_name(chosen.pitch), promoted, chord), chosen.bar, chosen.beat, length)
         )
     return slots
 
@@ -1757,10 +1772,12 @@ def arrange_slots(
     path came to disagree with the library once already.
 
     `timings` is the slots' own `(bar, beat, duration)`, in the renderer's units:
-    a signed bar, the beat within it, and a length in whole notes. It is optional
-    and indexed defensively, so a hand-built sequence without timings still
-    arranges - the step simply has none, and the renderers fall back to a uniform
-    grid.
+    a signed bar, the beat within it, and a length in whole notes. The duration is
+    **optional per slot and `None` in practice** - see `skeleton_slots` for why the
+    Weimar path does not supply one, and `headxml` for the one that does. The whole
+    sequence is optional too and indexed defensively, so a hand-built sequence
+    without timings still arranges - the step simply has none, and the renderers
+    fall back to a uniform grid.
 
     `fallback` may be "diminished", which retries the steps no strategy could
     resolve as Barry Harris dim7 substitutions. It replaces the written chord, so

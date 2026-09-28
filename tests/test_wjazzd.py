@@ -39,6 +39,7 @@ from wjazzd import (
     _arrange_step_with_bass,
     select_head,
     skeleton,
+    skeleton_slots,
     SKELETON_STRATEGIES,
     _is_transposed_repeat,
     _seed_span,
@@ -705,6 +706,36 @@ class TestSkeletonStrategies(unittest.TestCase):
         self.assertEqual(
             len(skeleton(solo, "sixteenths", section)), len(skeleton(solo, "notes", section))
         )
+
+    def test_a_slot_carries_no_notated_duration(self):
+        """The Weimar slots' `duration` is None, and that is deliberate.
+
+        The regression this pins. `melody.duration` in the database is a
+        *performance measurement* in beats - 0.21 for a triplet eighth, 1.75 for a
+        note held through a bar line - and it is not a notated length. It is also
+        not in whole notes, which is the unit `headxml` and every renderer use, so
+        the two loaders were handing the renderers the same field in two different
+        units under one name.
+
+        Nothing was wrong with that while the value went unused. It became a bug
+        when `tabxml._events` began *capping* a step's span by `duration` to stop a
+        note being held across a rest - a cap that only means anything against a
+        written length. Handing it a performance measurement truncated every corpus
+        step to a fraction of its real length: melid 106's 8-bar head came out with
+        44 rests against 31 notes, each chord a sixteenth stub. The corpus path
+        therefore offers no duration, and the rhythm comes from the onsets as it
+        always did.
+        """
+        solo, section = self.head_section(106)
+        slots = skeleton_slots(solo, "eighths", section)
+        self.assertTrue(slots)
+        self.assertTrue(
+            all(slot[3] is None for slot in slots),
+            "a corpus slot offered a performance measurement as a notated duration",
+        )
+        # The `bar` and `beat` the staff renderer spaces on are still there, so the
+        # slot is not left untimed - only its unusable length is dropped.
+        self.assertTrue(all(slot[1] is not None and slot[2] is not None for slot in slots))
 
     def test_unknown_strategy_raises(self):
         """A typo is a usage error, not a silent fallback."""
