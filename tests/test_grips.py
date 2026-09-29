@@ -14,6 +14,7 @@ from musthe import Note
 
 from arranger import (
     DUO_DEGREES,
+    GRIP_MAX_SPAN,
     GRIP_STRING_SETS,
     GRIP_PREFERENCE,
     supported_string_sets,
@@ -380,6 +381,41 @@ class TestSixFourThreeShell(unittest.TestCase):
 
 class TestStringSetTable(unittest.TestCase):
     """The GRIP_STRING_SETS table itself, which the generated paths do not read."""
+
+    def test_every_grip_family_has_a_span_limit(self):
+        """
+        Every family in GRIP_STRING_SETS is also in GRIP_MAX_SPAN, and vice versa.
+
+        The two tables are read independently - the span by `_place_template` and
+        `_place_shell`, the sets by `_string_sets_for` - so a family added to one and
+        not the other would fail with a bare KeyError deep inside placement, naming
+        neither the grip nor the omission. The two-note families are held to 4 rather
+        than 5 for the same reason a duo is: two fingers, no reason to stretch.
+        """
+        self.assertEqual(
+            set(GRIP_STRING_SETS), set(GRIP_MAX_SPAN),
+            "a grip family is missing from one of the two tables",
+        )
+        self.assertEqual(GRIP_MAX_SPAN["duo"], 4)
+        self.assertEqual(GRIP_MAX_SPAN["interval"], 4)
+
+    def test_an_interval_uses_the_same_sets_as_a_duo(self):
+        """
+        The `interval` grip sits on the three adjacent pairs, exactly as a duo does.
+
+        Stated rather than assumed, because the two families differ in the *rule* that
+        builds them and not in where they sit - see `_interval_offsets`. A wider set
+        would be a change to the playability contract, not a detail.
+        """
+        self.assertEqual(
+            [list(s) for s, _ in GRIP_STRING_SETS["interval"]],
+            [list(s) for s, _ in GRIP_STRING_SETS["duo"]],
+        )
+        for strings, soprano in GRIP_STRING_SETS["interval"]:
+            self.assertEqual(len(strings), 2)
+            # String indices run 0 = low E to 5 = high E, so the soprano is the
+            # *first* of a pair and the highest index in it.
+            self.assertEqual(soprano, max(strings))
 
     def test_every_entry_names_its_own_soprano(self):
         """

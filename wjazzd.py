@@ -67,12 +67,18 @@ from arranger import (
     NECK_FRET_MIN,
     NO_CHORD,
     PITCH_CLASS_NAMES,
+    ROLE_FILL,
+    ROLE_TARGET,
+    TEXTURE_GRIPS,
+    TEXTURE_STYLES,
     ArrangementStep,
     ChordParser,
     Note,
     StepPreparation,
     Voicing,
     VoiceLeadingEngine,
+    _metric_weight,
+    _roles_for_slot,
     normalised_harmony,
     sounding_harmony,
 )
@@ -1466,6 +1472,16 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
         help="retry unresolved tensions as dim7 substitutions; replaces the written chord",
     )
     parser.add_argument(
+        "--texture",
+        choices=list(TEXTURE_STYLES),
+        default="uniform",
+        help=(
+            "'targets' states a full chord on beats 1 and 3 and fills the notes "
+            "between with a shell, a 3rd/6th or the melody alone; 'uniform' (the "
+            "default) voices every note in full"
+        ),
+    )
+    parser.add_argument(
         "--fret-min",
         type=int,
         default=NECK_FRET_MIN,
@@ -1583,6 +1599,7 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
         fallback=args.fallback,
         section=section,
         grips=tuple(args.grips),
+        texture=args.texture,
     )
 
     print(f"{solo.title} - {solo.performer} (melid {solo.melid}, {solo.key})")
@@ -1595,6 +1612,13 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
         f"  neck window: frets {args.fret_min}-{args.fret_max}"
         f" (a preference, not a constraint); grips: {', '.join(args.grips)}"
     )
+    if args.texture == "targets":
+        # Reported the way --lift is: the reader should be able to see what the
+        # arrangement did and why, rather than infer it from a thin bar.
+        print(
+            "  texture: targets - a full chord on beats 1 and 3, a shell, a 3rd/6th "
+            "or the melody alone elsewhere"
+        )
     for note in notes:
         print(f"  note: {note}")
     if arrangement.skeleton.rescued and not args.fallback:
@@ -1759,6 +1783,8 @@ def arrange_slots(
     non_chord_tone: str = "extension",
     fallback: Optional[str] = None,
     grips: Tuple[str, ...] = GRIP_PREFERENCE,
+    texture: str = "uniform",
+    beats_per_bar: int = 4,
 ) -> Tuple[List[ArrangementStep], List[int], List[str]]:
     """Voices a list of (note, quality, name) triples, one step per slot.
 
@@ -1784,9 +1810,23 @@ def arrange_slots(
     it is off unless asked for; the count of steps it *would* rescue is always
     returned in the notes.
 
+    `texture` is the arranging guide's target-note rule, applied here by the same
+    `_metric_weight` and `_roles_for_slot` the library uses, so a head read from the
+    database and the same head read from a score are textured identically.
+    "targets" states a full chord on beats 1 and 3 and fills the notes between with
+    a shell, a 3rd/6th interval or the melody alone; "uniform" (the default) voices
+    every slot in full, which is what this function did before textures existed.
+    `beats_per_bar` is the metre that rule reads, and a head in cut time must pass
+    its own - a count without a denominator is not a metre.
+
     Returns the steps, the indexes of the steps the diminished retry actually
     substituted, and any diagnostic notes worth printing.
     """
+    if texture not in TEXTURE_STYLES:
+        raise ValueError(
+            f"Unknown texture {texture!r}; expected one of {TEXTURE_STYLES}"
+        )
+    texture_grips = TEXTURE_GRIPS[texture]
     engine = VoiceLeadingEngine()
     if fallback not in (None, "diminished"):
         raise ValueError(f"Unknown fallback {fallback!r}; expected None or 'diminished'")
@@ -1816,6 +1856,15 @@ def arrange_slots(
         bar, beat, duration = (
             timings[index] if index < len(timings) else (None, None, None)
         )
+        # What this slot is *for*, from where it falls in the bar. The same two
+        # helpers the library uses, so a head textured here and the same head
+        # textured through arranger.arrange_progression cannot disagree. An
+        # unlocated slot (no timing, or a short sequence) weighs -1 and is a target.
+        weight = _metric_weight(bar, beat, beats_per_bar)
+        role = _roles_for_slot(weight, texture)[0]
+        # The texture narrows what may be *played* here; it is not a term in the cost
+        # tuple, so a thin fill can never be outbid for being badly placed.
+        slot_grips = grips if texture == "uniform" else texture_grips[role]
         if index in retry:
             # Re-resolve this step as a dim7 and remember that we did, so the
             # caller can report which chords were substituted.
@@ -1835,6 +1884,7 @@ def arrange_slots(
             step = ArrangementStep(
                 chord=name, melody=melody, voicing=voicing, melody_only=True,
                 bar=bar, beat=beat, duration=duration,
+                role=role, metric_weight=weight,
             )
             steps.append(step)
             previous = voicing
@@ -1844,8 +1894,19 @@ def arrange_slots(
         arranged = _arrange_step_with_bass(
             engine, working, index,
             previous=previous, previous_chord=previous_chord,
-            non_chord_tone=non_chord_tone, grips=grips,
+            non_chord_tone=non_chord_tone, grips=slot_grips,
         )
+        if arranged is None and role == ROLE_FILL and slot_grips != grips:
+            # A fill that cannot be filled must not cost the tune its chord: the
+            # texture is a lighter *texture*, never a missing harmony. Retry as a
+            # principal note, exactly as arrange_progression does.
+            arranged = _arrange_step_with_bass(
+                engine, working, index,
+                previous=previous, previous_chord=previous_chord,
+                non_chord_tone=non_chord_tone, grips=grips,
+            )
+            if arranged is not None:
+                role = ROLE_TARGET
         if arranged is None:
             continue
         voicing, prepared = arranged
@@ -1875,6 +1936,8 @@ def arrange_slots(
             # arranger.arrange_progression.
             grip=voicing.grip,
             partial=len(voicing.active_frets()) < 4,
+            role=role,
+            metric_weight=weight,
         ))
         previous = voicing
         previous_chord = name
@@ -1892,6 +1955,7 @@ def arrange_head(
     fallback: Optional[str] = None,
     section: Optional[Tuple[int, int]] = None,
     grips: Tuple[str, ...] = GRIP_PREFERENCE,
+    texture: str = "uniform",
 ) -> HeadArrangement:
     """Builds a chord-melody arrangement of a head, end to end.
 
@@ -1913,13 +1977,20 @@ def arrange_head(
     The voicing itself is `arrange_slots`, shared with the MusicXML importer in
     `headxml`: which source a head was read from is the loader's business, and
     nothing about the voicings may depend on it.
+
+    `texture` is passed straight through to it. "targets" states a full chord on
+    beats 1 and 3 of the bar and fills the notes between with a shell, a 3rd/6th
+    interval or the melody alone - the arranging guide's method, and the reason a
+    head voiced one note per eighth stops reading as a chord list. "uniform", the
+    default, voices every slot in full, which is what this did before textures
+    existed and is kept so no existing invocation changes.
     """
     if section is None and head is not None:
         section = (head.start, head.end)
     built = build_skeleton(solo, strategy, section, pick, lift, non_chord_tone)
     steps, rescued, arrange_notes = arrange_slots(
         built.triples, built.timings, non_chord_tone=non_chord_tone,
-        fallback=fallback, grips=grips,
+        fallback=fallback, grips=grips, texture=texture,
     )
     # How many steps a diminished retry *would* rescue, whether or not it ran. Set
     # here rather than in arrange_slots, which has no Skeleton to report it on and

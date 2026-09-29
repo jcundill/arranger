@@ -444,7 +444,13 @@ what they are missing without opting in.
   generically, so a caller passing their own `top_string` still works).
 - `SHELL_DEGREES` — the (3rd, 7th) pair per quality, explicit rather than inferred:
   a quality not listed gets no shell rather than a guessed one. `DUO_DEGREES = (0, 7)`
-  — the only soprano degrees a duo is generated for, as a hard rule.
+  — the only soprano degrees a duo is generated for, as a hard rule. The `interval`
+  grip is deliberately **not** gated on it; see
+  [Texture: chords on the beats, fills between](#texture-chords-on-the-beats-fills-between).
+- `ROLE_TARGET` / `ROLE_FILL`, `TEXTURE_STYLES`, `TARGET_BEATS`, `TEXTURE_GRIPS` —
+  the metric layer's whole vocabulary. `TARGET_BEATS = (1, 3)` names *beats*, not
+  an absolute onset, so the rule reads the metre it is given; `_metric_weight` and
+  `_roles_for_slot` are the two functions that apply it.
 - `NECK_FRET_MIN` / `NECK_FRET_MAX` — `2` and `13`. A strong preference, never a
   filter; see the selector below.
 - `HIGH_FRET_LIMIT` — `13`. A melody whose only available position sits above this
@@ -557,13 +563,19 @@ what they are missing without opting in.
     voicing's inner voices and moves only the soprano; `None` when unplayable.
   - `arrange_progression(progression, top_strings=MELODY_STRING_CHOICES_FULL,
     non_chord_tone="extension", fret_min=NECK_FRET_MIN, fret_max=NECK_FRET_MAX,
-    grips=GRIP_PREFERENCE)` — voices each step, applying the selected non-chord-tone
-    strategy where needed, and chooses each shape with `_best_voicing`. An unknown
-    strategy raises `ValueError`. `grips=("drop2",)` with
+    grips=GRIP_PREFERENCE, timings=None, texture="uniform", beats_per_bar=4)`
+    — voices each step, applying the selected non-chord-tone strategy where needed,
+    and chooses each shape with `_best_voicing`. An unknown strategy or texture
+    raises `ValueError`, both before any voicing work. `grips=("drop2",)` with
     `top_strings=MELODY_STRING_CHOICES` reproduces the library's original output
-    exactly, which is what the renderer tests pin their fixture to.
-- `__version__` — the library version string (currently `0.6.0`). `pyproject.toml`
-  reads it as the dynamic project version, so it is the single source of truth.
+    exactly, which is what the renderer tests pin their fixture to. `timings` and
+    `texture` are the metric layer; see
+    [Texture: chords on the beats, fills between](#texture-chords-on-the-beats-fills-between).
+  - `VoiceLeadingEngine.get_interval_voicings(melody_note, chord_type,
+    chord_name=None, top_string=5)` — the two-note `interval` grip, a public entry
+    point like `get_drop2_voicings` so every family is reachable on its own.
+  - `__version__` — the library version string (currently `0.7.0`). `pyproject.toml`
+    reads it as the dynamic project version, so it is the single source of truth.
 - `NO_CHORD` — the string `"NC"`, a bar carrying melody with no harmony.
 - `VoiceLeadingEngine.get_melody_only_voicing(melody_note, prefer=...)` — a
   **single-fret** `Voicing` for an NC step, or `None` if unreachable. It is
@@ -1262,6 +1274,79 @@ still played, just outside it. A filter would silently drop every step whose mel
 has no in-window shape, and losing a chord of the tune is worse than being a fret out
 of position. `tests/test_grips.py::TestFretWindow` pins that.
 
+## Texture: chords on the beats, fills between
+
+`voicing_cost` ranks **completeness above position** and knows nothing about where in
+the bar a note falls, so the `eighths` skeleton — one slot per eighth — produces eight
+re-struck four-note chords per bar. That is a chord list. `tabstaff`'s `collapse`
+hides it in the *drawing*; the selection never made the decision.
+
+`texture="targets"` is that decision. It is the arranging guide's method — full chords
+on the principal melody notes, something lighter in the gaps — expressed as **a change
+to what may be played**, never as a change to what is preferred.
+
+Five decisions are load-bearing:
+
+- **Timing narrows the candidate set; it does not touch the cost tuple.** "Play fewer
+  notes here" is not a preference competing against "stay in position" — it is a
+  change of what is on the table. A term in the cost would let a four-fret position
+  outbid an entire texture, and it would make the "priorities must not be traded
+  against each other" property of `voicing_cost` untrue. `TEXTURE_GRIPS` maps
+  texture → role → permitted grips, and `arrange_progression` passes the role's tuple
+  to `prepare_step`, which already took `grips`. Generation and selection stay
+  separate exactly as they already were.
+- **"No timing" is not "a weak note".** `_metric_weight` returns **-1** when `bar` or
+  `beat` is `None`, and `_roles_for_slot` treats anything below zero as a target. This
+  is the single line that makes the feature opt-in: with `timings=None` every slot is a
+  target and the output is byte-identical to what it always was.
+  `tests/test_texture.py::TestBackwardCompatibility` pins that against the exact tab
+  of the library's own demo cadences, and it was written *before* any behaviour
+  changed so every later step is checked against pre-existing output.
+- **A beat is a counting position, not a quarter note.** `TARGET_BEATS = (1, 3)` names
+  beats, and `beats_per_bar` decides which exist, so a 3/4 head targets 1 and 3 while
+  a 2/2 head has only the downbeat. The comparison uses `_BEAT_EPSILON` because a
+  notated beat is a float — a 3/4 bar's second beat is 1.666… — and the earlier draft
+  of `_metric_weight` compared the *tuple index* against `beats_per_bar`, which let a
+  2/2 bar inherit 4/4's second target. `headxml.arrange_xml_head` passes
+  `head.beats_per_bar` through for this reason, and three of the four committed scores
+  are in cut time.
+- **A fill that cannot be filled becomes a target.** If a weak beat has no shell,
+  interval or melody-alone voicing, the step is re-prepared as a principal note and
+  its `role` is corrected to match. The texture is a lighter *texture*, never a missing
+  harmony — the same argument that makes the neck window a penalty rather than a filter.
+  Measured over melid 218, 2 of 30 weak slots take this path, so the reported role and
+  the sounding shape must be allowed to disagree with `metric_weight` but never with
+  each other.
+- **An `interval` is a texture, not a harmony, so it breaks the duo's hard rule.**
+  `DUO_DEGREES` refuses a two-note shape under a 3rd or 7th because those notes *are*
+  the chord's function. An interval is not claiming the chord, so it is offered under
+  any melody degree — which is exactly the case a fill most often meets, since a
+  passing tone is by definition not a chord tone. Confining it to fill slots via
+  `TEXTURE_GRIPS` is what makes the looser rule safe. Its second voice comes from the
+  chord's own tones, falling back to the **major scale's** pitch classes when the
+  melody is not in the chord: a diatonic note is accompaniment, a chromatic one would
+  be reharmonising.
+
+`_step_annotation` names the interval it actually is ("6th"), not the grip, and it
+takes the existing precedence for free: a non-chord tone's substitution is annotated
+instead, which is the more important fact about the step. `format_tab_staff` has **no**
+annotation channel at all — the line above the staff carries chord names only — so
+there the guarantee is simply that it draws the shape that sounds.
+
+### Measured, over six corpus heads
+
+| texture | mean sounding notes per melody note | share of steps in four voices |
+|---|---|---|
+| `uniform` (before) | 3.86 | 86.7% |
+| `targets` | 3.39 | 50.8% |
+
+Every head moved the same way, and none of them lost a step: melid 218 (Blue Train)
+goes 4.00 → 3.42 notes per note and 100% → 55% four-voice steps, melid 266 3.97 → 3.34
+and 96.6% → 48.3%. The ~50% ceiling is `TARGET_BEATS` itself — two of four beats — plus
+the small number of fills that fall back. That is the trade the guide describes: the
+chord is stated where it counts and the rest of the bar moves, instead of every note
+carrying four voices.
+
 ## Repeated melodies hold the shape
 
 When a step's melody sounds the same pitch as the step before it **and the harmony
@@ -1426,6 +1511,27 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
   other omitted tones (e.g. a root-on-top `13`) have no template yet.
 - If no voicing matches a melody/chord, `arrange_progression` prints a warning
   and **skips** that step (rather than raising).
+- **Texture (`texture="targets"`):**
+  - **The target-note rule is a fixed `(1, 3)`.** There is no way to say "chords on
+    beat 1 only", or "fills on beat 2 as well", or to mark a bar that is all target
+    notes — a cadenza or a shout chorus, say. The rule lives in one function
+    (`_roles_for_slot`) and one table (`TARGET_BEATS`), which is where a change would
+    go, but neither is configurable per call.
+  - **A fill that cannot be filled becomes a target.** Measured over melid 218, 2 of
+    30 weak slots take this path, so a `targets` arrangement is not uniformly thin: a
+    reader looking for "chord on the beat, nothing between" will still find a few
+    full chords between. That is deliberate — see the section above — but it means
+    the texture is a *tendency*, not a guarantee.
+  - **Strong-beat fingerings differ from a `uniform` arrangement.** A target is
+    voice-led from the shape before it, which is now thinner, so it does not keep the
+    same position. Correct, but it means the two textures are not comparable
+    fret-for-fret.
+  - **The `interval` grip's diatonic fallback assumes a major key.** `_interval_offsets`
+    reaches for major-scale pitch classes when the melody is outside the chord, which
+    is right in most standards and wrong in a genuinely modal passage, where a
+    non-diatonic note may be the *point*. The `key` argument the plan anticipated was
+    not added: nothing in the pipeline supplies a key, and inferring one from the
+    chord progression would be a guess.
 - **MusicXML import (`headxml.py`):**
   - A score that changes metre is laid out in its **prevailing** metre — the last
     `<time>` stated — rather than per bar. A head that moves from 4/4 to 3/4
@@ -1464,6 +1570,6 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
   `rel_pitch_class` and `solo_info.tempo`, none of which exist in this database.
   It is not part of the package and is not covered by the corpus work.
 - The public API is packaged as `jazz-arranger` and versioned through
-  `arranger.__version__` (currently `0.6.0`), but there is no CI and nothing has
+  `arranger.__version__` (currently `0.7.0`), but there is no CI and nothing has
   been published to PyPI.
 

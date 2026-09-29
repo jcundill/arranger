@@ -6,10 +6,12 @@ import unittest
 from contextlib import redirect_stdout
 from html.parser import HTMLParser
 
+import arranger
 from arranger import (
     ArrangementStep,
     Voicing,
     VoiceLeadingEngine,
+    _step_annotation,
     format_progression,
     format_tab_staff,
     format_tab_html,
@@ -182,6 +184,110 @@ class TestFormatProgression(unittest.TestCase):
             self.major[0].voicing.tab()
             self.major[0].voicing.tab_block()
         self.assertEqual(buffer.getvalue(), "")
+
+
+class TestTextureAnnotation(unittest.TestCase):
+    """
+    A fill step has to say why it is thin.
+
+    The chord name printed above a two-note shape describes the harmony, not every
+    note sounding, so a reader counting strings would otherwise wonder where the rest
+    of the chord went. That is already true of a shell and a duo; an `interval` fill
+    is the case where it matters most, because the two notes need not both be chord
+    tones at all.
+    """
+
+    def setUp(self):
+        # A bar of running notes under one chord: the strong beats are full, the rest
+        # thin. Every melody note is a **chord tone of Fmaj7** and every one is
+        # different, because both of those matter to what is being tested here: a
+        # repeated note is annotated as a held single note, and a non-chord tone is
+        # annotated with its substitution. Either would take precedence over the
+        # partial-harmonisation note, correctly - see
+        # test_a_non_chord_tone_annotation_takes_precedence_over_the_fill_note.
+        self.steps = VoiceLeadingEngine.arrange_progression(
+            [
+                ("C5", "maj7", "Fmaj7"),
+                ("E5", "maj7", "Fmaj7"),
+                ("A4", "maj7", "Fmaj7"),
+                ("F4", "maj7", "Fmaj7"),
+            ],
+            timings=[(0, 1.0, None), (0, 1.5, None), (0, 2.0, None), (0, 3.0, None)],
+            texture="targets",
+        )
+        self.rendered = format_progression(self.steps)
+
+    def test_a_thin_step_is_annotated_as_partial(self):
+        """Every fill says so, in the shared annotation the staff renderer uses too."""
+        fills = [s for s in self.steps if s.role == arranger.ROLE_FILL]
+        self.assertTrue(fills, "the fixture must contain fills")
+        for step in fills:
+            self.assertTrue(step.partial, f"{step.melody} is a fill but not partial")
+            self.assertIn("partial", _step_annotation(step))
+
+    def test_a_non_chord_tone_annotation_takes_precedence_over_the_fill_note(self):
+        """
+        A substituted chord is named instead of the partial-harmonisation note.
+
+        Both are true of such a step, but the substitution is the more important fact:
+        it says the *chord* changed, and a reader who missed that would be reading
+        the wrong harmony over the tab. This is the pre-existing precedence in
+        `_step_annotation` - a fill does not get its own exception to it.
+        """
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("D5", "maj7", "Fmaj7")], timings=[(0, 2.0, None)], texture="targets"
+        )
+        step = steps[0]
+        self.assertEqual(step.role, arranger.ROLE_FILL)
+        self.assertTrue(step.non_chord_tone)
+        self.assertIn("non-chord tone", _step_annotation(step))
+
+    def test_the_annotation_names_the_interval_not_the_grip(self):
+        """
+        An interval fill names the interval it actually is.
+
+        A player needs to read "6th", not "interval": the first says what to play
+        against the melody, the second only says what the software called it.
+        """
+        intervals = [s for s in self.steps if s.grip == "interval"]
+        if not intervals:
+            self.skipTest("this fixture produced no interval fills")
+        for step in intervals:
+            note = _step_annotation(step)
+            self.assertIn("interval fill", note)
+            self.assertRegex(note, r"interval fill - (3rd|b6|6th|2 notes)")
+
+    def test_the_staff_draws_the_fill_as_the_thin_shape_that_sounds(self):
+        """
+        The staff renders the fill's own shape, not a re-derived full chord.
+
+        `format_tab_staff` has no annotation channel - the line above the staff carries
+        chord names only - so the way it must not mislead a reader is by drawing the
+        shape that actually sounds. For this fixture every shape sits in the top four
+        strings, so the low E row carries no fret at all: a three-note fill leaves it
+        blank, and a four-note drop-2 on the high E would not.
+        """
+        staff = format_tab_staff(self.steps, show_chords=True)
+        low_e = next(line for line in staff.split("\n") if line.startswith("E |"))
+        self.assertFalse(
+            [c for c in low_e if c.isdigit()],
+            f"the low E row should be blank for this fixture: {low_e!r}",
+        )
+        # And the melody row is not blank, or the assertion above would be vacuous.
+        high_e = next(line for line in staff.split("\n") if line.startswith("e"))
+        self.assertTrue([c for c in high_e if c.isdigit()], "the melody row is empty")
+
+    def test_a_uniform_arrangement_carries_no_texture_annotation(self):
+        """
+        The default output is unchanged by all of this.
+
+        Without timings every step is a target, so no fill annotation appears and the
+        rendering is what it always was.
+        """
+        plain = VoiceLeadingEngine.arrange_progression(
+            [("C5", "maj7", "Fmaj7"), ("B4", "maj7", "Fmaj7")]
+        )
+        self.assertNotIn("interval fill", format_progression(plain))
 
 
 if __name__ == "__main__":

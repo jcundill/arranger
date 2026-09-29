@@ -1018,6 +1018,7 @@ def arrange_xml_head(
     fallback: Optional[str] = None,
     section: Optional[Tuple[int, int]] = None,
     grips: Tuple[str, ...] = GRIP_PREFERENCE,
+    texture: str = "uniform",
 ) -> Tuple[List[ArrangementStep], Head, List[str]]:
     """Loads a MusicXML head, reduces it and arranges it, end to end.
 
@@ -1031,13 +1032,21 @@ def arrange_xml_head(
 
     `fallback` may be "diminished"; it replaces the written chord, so it is off
     unless asked for.
+
+    `texture` is the arranging guide's target-note rule, forwarded the same way. It
+    is passed `head.beats_per_bar` because **this** module is where the metre trap
+    bites hardest: three of the four committed scores are in cut time, whose beat is
+    a half note, so a rule that assumed four beats to the bar would put a full chord
+    on a beat that does not exist in a 2/2 head. A count without a denominator is
+    not a metre.
     """
     head = load_musicxml(path, part)
     slots = head_skeleton(head, strategy, section, pick)
     triples = [slot[0] for slot in slots]
     timings = [(slot[1], slot[2], slot[3]) for slot in slots]
     steps, _rescued, notes = arrange_slots(
-        triples, timings, non_chord_tone=non_chord_tone, fallback=fallback, grips=grips
+        triples, timings, non_chord_tone=non_chord_tone, fallback=fallback,
+        grips=grips, texture=texture, beats_per_bar=head.beats_per_bar,
     )
     return steps, head, list(head.report) + notes
 
@@ -1063,6 +1072,7 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     from arranger import (
         NECK_FRET_MAX,
         NECK_FRET_MIN,
+        TEXTURE_STYLES,
         VoiceLeadingEngine,
         format_progression,
         format_tab_staff,
@@ -1097,6 +1107,16 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
         choices=["diminished"],
         default=None,
         help="retry unresolved tensions as dim7 substitutions; replaces the written chord",
+    )
+    parser.add_argument(
+        "--texture",
+        choices=list(TEXTURE_STYLES),
+        default="uniform",
+        help=(
+            "'targets' states a full chord on beats 1 and 3 of the notated bar and "
+            "fills the notes between with a shell, a 3rd/6th or the melody alone; "
+            "'uniform' (the default) voices every note in full"
+        ),
     )
     parser.add_argument("--fret-min", type=int, default=NECK_FRET_MIN)
     parser.add_argument("--fret-max", type=int, default=NECK_FRET_MAX)
@@ -1172,6 +1192,7 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
             fallback=args.fallback,
             section=section,
             grips=tuple(args.grips),
+            texture=args.texture,
         )
     except (ValueError, zipfile.BadZipFile) as error:
         parser.error(str(error))
@@ -1187,6 +1208,13 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     )
     for note in notes:
         print(f"  note: {note}")
+    if args.texture == "targets":
+        # Named in the output because the metre is what the rule reads, and the
+        # metre is not 4/4 in three of the four committed scores.
+        print(
+            f"  texture: targets - a full chord on beats 1 and 3 of {head.beats_per_bar}/"
+            f"{head.beat_type}, a shell, a 3rd/6th or the melody alone elsewhere"
+        )
     if not steps:
         print("  nothing could be voiced from this file")
         return 1

@@ -74,7 +74,66 @@ GRIP_MAX_SPAN: Dict[str, int] = {
     "closed": 5,
     "shell": 5,
     "duo": 4,
+    # Two fingers, like a duo, so it is held to the same tighter four. An interval
+    # is a texture, not a harmony, so it is never wider than a hand needs to be.
+    "interval": 4,
 }
+
+# --- Metric roles and textures ---
+#
+# The arranging guide's method has a shape the cost tuple cannot express: a full
+# chord belongs on the *principal* melody notes, and the notes in between are filled
+# with something lighter. `voicing_cost` ranks completeness above position, so with
+# no rhythm at all a bar of running eighths comes out as eight re-struck four-note
+# chords - a chord list, not an arrangement.
+#
+# These two roles are the fix, and they work by changing *which grips are on the
+# table* rather than by adding a term to the cost tuple. "Play fewer notes here" is
+# not a preference competing against "stay in position"; it is a change of what may
+# be chosen at all, and putting it in the cost would let a four-fret position
+# outbid a whole texture. Generation and selection therefore stay separate exactly
+# as they already are.
+
+# A principal melody note: the chord is spelled out in full.
+ROLE_TARGET = "target"
+# A connecting note: a shell, an interval, or the melody alone.
+ROLE_FILL = "fill"
+
+# Texture styles, in the order that breaks a tie. `uniform` is the historical
+# behaviour - every slot is a target and the cost tuple's completeness criterion
+# decides, which is why it is the default and why existing output is unchanged.
+TEXTURE_STYLES: Tuple[str, ...] = ("uniform", "targets")
+
+# The beats of a bar that carry a full chord under the "targets" texture, counted
+# from 1. Beats 1 and 3 are the guide's rule verbatim: in 4/4 they are the two
+# half-note pulses, and they are where the harmony wants to be stated.
+#
+# Expressed as *beats*, not as an absolute onset, so the rule reads the metre it is
+# given rather than assuming one: a 2/2 bar (two notated beats) gets beat 1 only, and
+# a 3/4 bar gets 1 and 3 as it would in 4/4. A beat is a counting position, not a
+# quarter note - see the cut-time notes in AGENTS.md.
+TARGET_BEATS: Tuple[int, ...] = (1, 3)
+
+# The grip families each role may use, by texture. This is the whole texture policy
+# in one table, and it is read by `_roles_for_slot` and its caller.
+#
+# `drop3` is listed among a target's grips but generates nothing at
+# GRIP_MAX_SPAN["drop3"] == 5, because drop-3 spans a twelfth by construction. That is
+# where the library already stands, so listing it costs nothing and means a future
+# span change takes effect without touching this code.
+TEXTURE_GRIPS: Dict[str, Dict[str, Tuple[str, ...]]] = {
+    "uniform": {"target": GRIP_PREFERENCE, "fill": GRIP_PREFERENCE},
+    "targets": {
+        "target": ("drop2", "drop3"),
+        "fill": ("shell", "interval", "melody"),
+    },
+}
+
+# How close a notated beat has to be to a whole beat to count as it. A 2/2 bar's
+# eighths land on 1.0, 1.5, 2.0, 2.5, and a 3/4 bar's on 1.0, 1.666..., so an exact
+# comparison would call almost none of them downbeats. Measured in beats, not in
+# quarters, so this is the same tolerance in any metre.
+_BEAT_EPSILON = 1e-6
 
 # Every string set a grip may occupy, as (active string indices, soprano string
 # index), ordered by preference. Index 0 = low E ... index 5 = high E, so the
@@ -113,6 +172,12 @@ GRIP_STRING_SETS: Dict[str, Tuple[Tuple[Tuple[int, ...], int], ...]] = {
     ),
     # Duos: 1-2, 2-3 and 3-4, each with the higher note carrying the melody.
     "duo": (((5, 4), 5), ((4, 3), 4), ((3, 2), 3)),
+    # Intervals reuse the three adjacent pairs a duo already declares, for the same
+    # physical reason: a 3rd or a 6th under the melody is two fingers on two
+    # neighbouring strings, and there is nothing to gain from a wider set. What
+    # differs from a duo is the *rule* that builds it, not where it sits - see
+    # _interval_offsets, which is deliberately not gated on DUO_DEGREES.
+    "interval": (((5, 4), 5), ((4, 3), 4), ((3, 2), 3)),
 }
 
 # The two guide tones a shell is built from - the 3rd and the 7th - as semitones above
@@ -188,7 +253,69 @@ HIGH_FRET_LIMIT = 13
 # it via [tool.setuptools.dynamic] instead of duplicating the number.
 # 0.4.0 added the optional Weimar Jazz Database corpus integration (wjazzd.py).
 # 0.5.0 added MusicXML export (tabxml.py), behind the optional `xml` extra.
-__version__ = "0.6.0"
+__version__ = "0.7.0"
+
+
+def _metric_weight(
+    bar: Optional[int], beat: Optional[float], beats_per_bar: int = 4
+) -> int:
+    """
+    How metrically strong a slot is: 2 on beat 1, 1 on beat 3, 0 on any other beat.
+
+    Returns **-1 when there is no timing at all** (`bar` or `beat` is None), which is
+    the load-bearing part. A caller that does not know where its notes fall has not
+    told us the note is weak - it has told us nothing - and treating those two the
+    same would thin out every hand-written progression and every existing test. The
+    -1 is what keeps the default behaviour byte-identical.
+
+    `beats_per_bar` is honoured rather than assumed, because a count without a
+    denominator is not a metre. TARGET_BEATS names *beats*, so in 2/2 (two notated
+    beats) beat 3 does not exist and only the downbeat is a target; in 3/4 beats 1
+    and 3 are targets exactly as they are in 4/4. This is the same reasoning the
+    MusicXML importer needed when it discovered 2/2 is not 2/4.
+
+    A beat is compared with `_BEAT_EPSILON` because a notated beat is a float: a
+    3/4 bar's second beat is 1.666..., and an exact comparison would call almost no
+    real note a downbeat.
+    """
+    if bar is None or beat is None:
+        return -1
+    for index, target in enumerate(TARGET_BEATS):
+        if target > beats_per_bar:
+            # Beyond the end of the bar: a 2/2 signature has two beats, so beat 3
+            # does not exist. Compared as a beat number, not as a position in the
+            # tuple, or a 2/2 bar would inherit 4/4's second target.
+            break
+        if abs(float(beat) - target) <= _BEAT_EPSILON:
+            return 2 - index
+    return 0
+
+
+def _roles_for_slot(weight: int, texture: str) -> List[str]:
+    """
+    The metric roles a slot of the given weight may take under `texture`.
+
+    This is the whole texture policy in one function, so changing the target-note
+    rule is a change here and not a change spread through the selector:
+
+      - an unknown texture is a programming error and raises, rather than silently
+        arranging as `uniform`;
+      - `uniform` makes every slot a target, which is the historical behaviour and
+        the reason `arrange_progression` is unchanged unless a caller opts in;
+      - a weight below zero means no timing was supplied, so the slot is a target;
+      - a strong beat is a target and any other beat is a fill.
+
+    Raises ValueError for an unknown texture, checked before any voicing work so a
+    typo cannot cost a caller a full arrangement before it is reported.
+    """
+    table = TEXTURE_GRIPS.get(texture)
+    if table is None:
+        raise ValueError(
+            f"Unknown texture {texture!r}; expected one of {TEXTURE_STYLES}"
+        )
+    if texture == "uniform" or weight < 0 or weight > 0:
+        return [ROLE_TARGET]
+    return [ROLE_FILL]
 
 
 @dataclass
@@ -206,6 +333,13 @@ class Voicing:
     # Cached so the corpus slash-bass rule (wjazzd.bass_cost) does not have to
     # re-derive it, and so a caller can ask "what is the bass of this grip" directly.
     bass_pc: Optional[int] = None
+    # Which metric role produced this shape, mirroring ArrangementStep.role: ROLE_TARGET
+    # for a shape that is meant to state the chord, ROLE_FILL for one that is only
+    # connecting. Set by whichever generator produced the shape, so a caller
+    # inspecting a candidate directly - rather than a chosen step - can still tell.
+    # Defaulted, so every existing construction and the __getitem__ shim are
+    # unaffected. A plain string rather than an enum, for the same reason `grip` is.
+    role: str = ROLE_TARGET
 
     def tab_string(self) -> str:
         """Returns standard tab representation, e.g. 'x-x-12-13-13-13'."""
@@ -355,6 +489,18 @@ class ArrangementStep:
     # step describes the harmony, not every note sounding under it, so the renderers
     # annotate it. Defaulted, so an ordinary four-note step is unaffected.
     partial: bool = False
+    # Which metric role the texture rules gave this step: ROLE_TARGET on a principal
+    # melody note (a full chord states the harmony there), ROLE_FILL on a connecting
+    # note (a shell, an interval or the melody alone). Set by
+    # VoiceLeadingEngine.arrange_progression from the slot's timing, and defaulted
+    # to target so a hand-built step and every existing construction are unaffected.
+    role: str = ROLE_TARGET
+    # How metrically strong the slot was: 2 on beat 1, 1 on beat 3, 0 on any other
+    # beat, and **-1 when the step carries no timing at all**. The -1 matters: it
+    # separates "we know this note is weak" from "we were never told where it falls",
+    # and it is what makes a progression with no rhythm behave exactly as it did
+    # before this feature existed. See _metric_weight.
+    metric_weight: int = 0
 
     @property
     def has_timing(self) -> bool:
@@ -565,6 +711,82 @@ def _duo_offsets(tones: Tuple[int, ...], melody_midi: int, root_pc: int) -> List
     if pitch is None:
         return []
     return [0, pitch - melody_midi]
+
+
+# The intervals an `interval` grip will pair with the melody, in preference order:
+# a minor 3rd, then a major 6th, then a minor 6th. All three are consonant with any
+# melody note, which is what a *filling* texture needs - unlike a duo, which is
+# claiming to state the chord.
+_INTERVAL_CLASSES = (3, 9, 8)
+
+# How those intervals are named in a printed annotation. Keyed by the size in
+# semitones, modulo 12, so a 10th reads as the 3rd it is a compound form of - which is
+# what a player calls it. "2 notes" is the fallback for a size not in here.
+_INTERVAL_NAMES: Dict[int, str] = {3: "3rd", 8: "b6", 9: "6th"}
+
+
+def _interval_offsets(
+    tones: Tuple[int, ...], melody_midi: int, root_pc: int
+) -> List[List[int]]:
+    """
+    Two-note interval shapes under the melody: a 3rd, a 6th or a 10th, as templates.
+
+    This is the arranging guide's "2-note intervals (3rds or 6ths)" - the texture it
+    calls for in the gaps between a chord on a strong beat and the next one. It is a
+    **texture, not a harmony**, and that distinction is the whole reason it is a
+    separate grip rather than a widening of `_duo_offsets`:
+
+      - It is NOT gated on `DUO_DEGREES`. A duo refuses to sound under a 3rd or a 7th
+        in the melody, because there those two notes *are* the chord's function and a
+        bare pair sounds like a mistake. An interval is not claiming the harmony, so
+        it is free to sit under any melody note - which is exactly the case a fill
+        most often has to cover, since a passing tone is by definition not a chord
+        tone.
+      - Because it is confined to fill slots, the looser rule cannot leak into a
+        position where a chord is being stated. `TEXTURE_GRIPS` is what enforces that,
+        and it is the reason this can safely be more permissive than a duo.
+
+    The second voice is the nearest pitch a 3rd, a 6th or a 10th below the melody that
+    is one of the chord's own tones. When the melody is *not* a chord tone, the walk
+    also considers the diatonic tones of the prevailing key, so a passing note can
+    still be accompanied rather than left naked - and only for the key's own notes,
+    never for a chromatic one. That limit is what keeps a fill from quietly
+    reharmonising the bar.
+
+    Returns an empty list when the chord has no root or no tone set, on the same
+    argument as the shell: an interval named against a chord we cannot identify is a
+    guess, and a guess here is how a wrong note gets in.
+    """
+    if not tones or root_pc is None:
+        return []
+
+    # The major scale's pitch classes, used only as a fallback for a melody that is
+    # not in the chord. A fill under a passing note should still have a bottom note,
+    # but it must be a note the *key* contains - reaching for a chromatic one would be
+    # reharmonising, not filling.
+    key_pcs = {0, 2, 4, 5, 7, 9, 11}
+    chord_pcs = {pc % 12 for pc in tones}
+
+    templates: List[List[int]] = []
+    seen: set = set()
+    for source in (chord_pcs, key_pcs):
+        for size in _INTERVAL_CLASSES:
+            # A 3rd or a 6th may sit either side of the octave line, so both are
+            # tried; a 10th is the same classes an octave lower.
+            for octave in (0, 12):
+                candidate = melody_midi - size - octave
+                if candidate % 12 not in source:
+                    continue
+                offset = candidate - melody_midi
+                if offset in seen:
+                    continue
+                seen.add(offset)
+                templates.append([0, offset])
+        if templates:
+            # The chord's own tones are enough on their own; the key is a fallback
+            # for a melody that is not in the chord, never an addition to it.
+            break
+    return templates
 
 
 def _place_shell(
@@ -1268,6 +1490,8 @@ class VoiceLeadingEngine:
           closed  four voices in close position under the melody
           shell   three voices: the 3rd, the 7th, and one more
           duo     two voices, and only under a root or a 5th (see DUO_DEGREES)
+          interval  two voices a 3rd, 6th or 10th apart - a fill, and under *any*
+                   melody degree (see _interval_offsets for why that is safe)
 
         Candidate generation is *pure*. It does not filter by neck position, does not
         transpose, and does not know what came before - choosing among the results is
@@ -1301,17 +1525,23 @@ class VoiceLeadingEngine:
         valid_voicings: List[Voicing] = []
         for grip in grips:
             for strings in cls._string_sets_for(grip, top_string):
-                if grip in ("shell", "duo"):
-                    # These two are defined by the guide tones, so a chord with no root
+                if grip in ("shell", "duo", "interval"):
+                    # These three are defined by the guide tones, so a chord with no root
                     # to measure them from gets nothing. That is a real limitation
                     # rather than a fallback: a shell is a claim about *this* chord's
                     # 3rd and 7th, and guessing them without a root is how a chord gets
-                    # a wrong note in it.
+                    # a wrong note in it. An interval is measured from the root for the
+                    # same reason - it is placed against a named chord, not a key.
                     if root_pc is None:
                         continue
                     if grip == "duo":
                         duo = _duo_offsets(tones, melody_midi, root_pc)
                         templates = [duo] if duo else []
+                    elif grip == "interval":
+                        # A texture rather than a claim about the chord, so it is built
+                        # from templates and placed like a drop-2 - no search needed,
+                        # because an interval *is* the two notes it names.
+                        templates = _interval_offsets(tones, melody_midi, root_pc)
                     else:
                         # Every shell set is placed by the same search, 6-4-3 included:
                         # a shell's notes are not in descending pitch order down the
@@ -1365,6 +1595,36 @@ class VoiceLeadingEngine:
         """
         return cls.get_grip_voicings(
             melody_note, chord_type, chord_name, top_string, grips=("drop2",)
+        )
+
+    @classmethod
+    def get_interval_voicings(
+        cls,
+        melody_note: Note,
+        chord_type: str,
+        chord_name: Optional[str] = None,
+        top_string: int = 5,
+    ) -> List[Voicing]:
+        """
+        Two-note interval fingerings under the melody: a 3rd, a 6th or a 10th.
+
+        The arranging guide's fill for the notes between a chord on a strong beat and
+        the next one. It is a **texture and not a harmony** - it says nothing about
+        what the chord is, and it is meant to sit on a weak beat - so unlike a duo it
+        is offered under *any* melody degree, including a 3rd or a 7th that a duo
+        refuses. `TEXTURE_GRIPS` is what confines it to fill slots, which is what makes
+        the looser rule safe.
+
+        Kept as a named entry point for the same reason as `get_drop2_voicings`: every
+        grip family is reachable from the public surface, so a caller who wants a
+        single one does not have to know the tuple spelling. It is exactly
+        get_grip_voicings with the grip pinned to "interval".
+
+        Returns an empty list when the chord has no usable root, or when the melody is
+        unreachable on that string - the same limitation every root-measured grip has.
+        """
+        return cls.get_grip_voicings(
+            melody_note, chord_type, chord_name, top_string, grips=("interval",)
         )
 
     @staticmethod
@@ -1980,6 +2240,9 @@ class VoiceLeadingEngine:
         fret_min: int = NECK_FRET_MIN,
         fret_max: int = NECK_FRET_MAX,
         grips: Tuple[str, ...] = GRIP_PREFERENCE,
+        timings: Optional[List[Tuple[int, float, Optional[float]]]] = None,
+        texture: str = "uniform",
+        beats_per_bar: int = 4,
     ) -> List[ArrangementStep]:
         """
         Takes a progression of (Melody Note, Chord Quality, Name) tuples
@@ -2018,17 +2281,62 @@ class VoiceLeadingEngine:
         so it is never reharmonised and never warns; it also does not take part in
         voice-leading minimisation, and being neither a drop-2 voicing nor a
         four-string shape it is exempt from that playability invariant.
+
+        **Texture and rhythm.** `timings` is each slot's own `(bar, beat, duration)`
+        in the caller's units - a signed bar, the beat within it, and a length in
+        whole notes - the same triple `ArrangementStep` already carries. `None`, the
+        default, means the caller has told us nothing about where its notes fall, and
+        then every slot is a principal note and this function behaves exactly as it
+        always has.
+
+        `texture="targets"` uses the timing to arrange the way the guide describes:
+        a full four-note chord on beats 1 and 3 of the bar, and a shell, a 3rd/6th
+        interval or the melody alone in between. `beats_per_bar` is what the rule
+        reads to decide which beats exist, so a 3/4 or 2/2 head is not treated as
+        4/4 (see TARGET_BEATS). The rule changes *which grips are offered*, never
+        the cost tuple, so the selection order and the engine's determinism are
+        untouched.
+
+        A `timings` list shorter than `progression` is not an error: the unlocated
+        trailing steps are simply treated as principal notes, which is the same
+        "we know nothing" rule that governs `timings=None`. The guard is the one
+        `wjazzd.arrange_slots` already applies to its own timings, for the same
+        reason - a hand-built list must not silently shift the rhythm.
         """
         if non_chord_tone not in cls.NON_CHORD_TONE_STRATEGIES:
             raise ValueError(
                 f"Unknown non_chord_tone strategy {non_chord_tone!r}; "
                 f"expected one of {cls.NON_CHORD_TONE_STRATEGIES}"
             )
+        # Checked up front, so a typo costs a message rather than a full arrangement
+        # followed by a surprise.
+        texture_grips = TEXTURE_GRIPS.get(texture)
+        if texture_grips is None:
+            raise ValueError(
+                f"Unknown texture {texture!r}; expected one of {TEXTURE_STYLES}"
+            )
 
         arrangements: List[ArrangementStep] = []
-        
+
         for index, (note_str, chord_type, name) in enumerate(progression):
             melody_note = Note(note_str)
+
+            # Where this slot falls in the bar, and therefore what it is for. Read
+            # defensively, exactly as wjazzd.arrange_slots guards its own timings: a
+            # short list leaves the trailing steps unlocated, and an unlocated step is
+            # a principal note rather than a fill. The bar and beat are also stamped
+            # onto the step, because a caller that supplied the rhythm wants to read it
+            # back off the result rather than have to correlate two lists.
+            slot = timings[index] if timings is not None and index < len(timings) else None
+            bar, beat, duration = slot if slot is not None else (None, None, None)
+            weight = _metric_weight(bar, beat, beats_per_bar)
+            # _roles_for_slot re-validates the texture, which is harmless: the table was
+            # already checked before the loop, so this cannot raise here.
+            role = _roles_for_slot(weight, texture)[0]
+            # The texture decides which grips are *available* on this step. It is not a
+            # term in the cost, so a fill cannot be outbid for being in position - the
+            # point is that fewer notes are played here, not that this shape is better.
+            slot_grips = grips if texture == "uniform" else texture_grips[role]
 
             # A NO_CHORD step carries melody but no harmony: it is voiced as the
             # melody alone. This happens before any chord logic, so there is no
@@ -2060,6 +2368,11 @@ class VoiceLeadingEngine:
                         None if transposed == note_str else note_str
                     ),
                     melody_only=True,
+                    bar=bar,
+                    beat=beat,
+                    duration=duration,
+                    role=role,
+                    metric_weight=weight,
                 ))
                 continue
 
@@ -2074,14 +2387,33 @@ class VoiceLeadingEngine:
                 non_chord_tone=non_chord_tone,
                 fret_min=fret_min,
                 fret_max=fret_max,
-                grips=grips,
+                grips=slot_grips,
             )
             if prepared is None:
-                print(
-                    f"Warning: No valid drop-2 voicing found for {name} "
-                    f"with melody {note_str}"
-                )
-                continue
+                # A fill slot with nothing thin to play must not lose the chord of
+                # the tune - the whole point of the texture is a lighter *texture*,
+                # never a missing harmony. So a fill that cannot be filled is
+                # re-prepared as a principal note before it is reported as missing.
+                # Same argument as NECK_FRET_MIN being a penalty and not a filter.
+                if role == ROLE_FILL and slot_grips != grips:
+                    prepared = cls.prepare_step(
+                        progression, index,
+                        previous=arrangements[-1].voicing if arrangements else None,
+                        previous_chord=arrangements[-1].chord if arrangements else None,
+                        top_strings=top_strings,
+                        non_chord_tone=non_chord_tone,
+                        fret_min=fret_min,
+                        fret_max=fret_max,
+                        grips=grips,
+                    )
+                    if prepared is not None:
+                        role = ROLE_TARGET
+                if prepared is None:
+                    print(
+                        f"Warning: No valid drop-2 voicing found for {name} "
+                        f"with melody {note_str}"
+                    )
+                    continue
             candidates = prepared.candidates
             chord_type = prepared.chord_type
             name = prepared.chord_name
@@ -2149,8 +2481,13 @@ class VoiceLeadingEngine:
                 # printed above the step describes the harmony rather than every note in
                 # it. The renderers annotate this.
                 partial=len(best_voicing.active_frets()) < 4,
+                bar=bar,
+                beat=beat,
+                duration=duration,
+                role=role,
+                metric_weight=weight,
             ))
-            
+
         return arrangements
 
     @classmethod
@@ -2189,6 +2526,13 @@ def _step_annotation(step: ArrangementStep) -> str:
     # describes the harmony, not every note sounding under the melody, so a reader
     # counting strings would otherwise wonder where the rest of the chord went.
     if step.partial and not step.non_chord_tone:
+        if step.grip == "interval":
+            # A fill texture, so name the interval rather than the grip: the reader
+            # needs to know it is a 6th under a passing note rather than that a chord
+            # went missing, and the two notes are right there in the tab.
+            pitches = sorted(step.voicing.midi_notes())
+            size = (pitches[-1] - pitches[0]) % 12 if len(pitches) == 2 else 0
+            return f" (interval fill - {_INTERVAL_NAMES.get(size, '2 notes')}, partial)"
         if step.grip == "duo":
             return " (root & 5th duo - partial)"
         return f" ({step.grip} - 3rd & 7th, partial)"
@@ -2414,7 +2758,31 @@ def main() -> None:
         for step in engine.arrange_progression(low_progression, **kwargs):
             _print_step(step)
 
-    # Example 4: Non-chord melody tones. Bar 2 of "All of Me" moves C5 -> D5 -> C5
+    # Example 4: Texture. The same four melody notes under Fmaj7, arranged twice.
+    # Without timings every slot is a principal note and all four are full chords.
+    # Given the rhythm, the `targets` texture states the harmony on beats 1 and 3 and
+    # fills the notes between with a shell or an interval - the arranging guide's
+    # method, and the difference between an arrangement and a chord list.
+    texture_progression = [
+        ("C5", "maj7", "Fmaj7"),
+        ("E5", "maj7", "Fmaj7"),
+        ("A4", "maj7", "Fmaj7"),
+        ("F4", "maj7", "Fmaj7"),
+    ]
+    texture_timings = [(0, 1.0, None), (0, 1.5, None), (0, 2.0, None), (0, 3.0, None)]
+
+    for label, kwargs in (
+        ("no timing - every note is a chord", {}),
+        (
+            "texture=targets - chords on beats 1 and 3, fills between",
+            {"timings": texture_timings, "texture": "targets"},
+        ),
+    ):
+        print(f"\n--- TEXTURE: one bar of Fmaj7, {label} ---")
+        for step in engine.arrange_progression(texture_progression, **kwargs):
+            _print_step(step)
+
+    # Example 5: Non-chord melody tones. Bar 2 of "All of Me" moves C5 -> D5 -> C5
     # over Cmaj7; D5 is the 9th, not a chord tone, so each strategy harmonises it
     # differently: as an extension (Cmaj9), as a Barry Harris dim7 substitution
     # (Bdim7), by holding the inner voices under the passing tone, or not at all
@@ -2496,9 +2864,14 @@ __all__ = [
     "NECK_FRET_MIN",
     "NO_CHORD",
     "PITCH_CLASS_NAMES",
+    "ROLE_FILL",
+    "ROLE_TARGET",
     "SHELL_DEGREES",
     "STANDARD_TUNING",
     "STRING_NAMES",
+    "TARGET_BEATS",
+    "TEXTURE_GRIPS",
+    "TEXTURE_STYLES",
     "ArrangementStep",
     "ChordParser",
     "GuitarFretboard",

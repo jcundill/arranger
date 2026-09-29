@@ -30,6 +30,7 @@ from wjazzd import (
     parse_section_selector,
     parse_weimar_chord,
     arrange_head,
+    arrange_slots,
     bass_cost,
     build_skeleton,
     corpus_cli,
@@ -924,6 +925,193 @@ class TestArrangeHead(unittest.TestCase):
         result = self.arrange(218)
         self.assertGreater(len(result.steps), 20)
         self.assertTrue(all(step.tab_line() for step in result.steps))
+
+
+@unittest.skipUnless(DEFAULT_DB.is_file(), "wjazzd.db not present")
+class TestHeadTexture(unittest.TestCase):
+    """
+    The target-note texture over a real head, end to end.
+
+    The point of these is not that the flag is accepted but that it does what it says
+    on an actual transcription: the harmony is still stated on the strong beats, and
+    the notes between are thinner. A head voiced one note per eighth is where the
+    difference is audible.
+    """
+
+    def arrange(self, melid, **kwargs):
+        head = select_head(melid)
+        assert head is not None
+        return arrange_head(load_solo(melid), head, **kwargs)
+
+    def test_the_default_texture_is_uniform(self):
+        """
+        With no flag, every step is a principal note whatever its weight.
+
+        Note this is *not* the same as the library's `timings=None` case, and the
+        difference is deliberate: the Weimar skeleton knows where every note falls, so
+        the weight is real information even when the texture declines to act on it.
+        What must hold is that no step is thinned - which is the guarantee that no
+        existing invocation changes.
+        """
+        steps = self.arrange(218).steps
+        self.assertTrue(any(s.metric_weight != -1 for s in steps), "expected timings")
+        for step in steps:
+            self.assertEqual(step.role, "target")
+            self.assertFalse(
+                step.grip == "interval", "a uniform texture must not use a fill grip"
+            )
+
+    def test_targets_thins_the_weak_beats_and_keeps_the_strong_ones(self):
+        """
+        A `targets` head is measurably thinner, with the chords still on the beats.
+
+        The two halves matter equally: thinner everywhere would mean the harmony had
+        been thinned too, which is not an arrangement.
+
+        The strong beats are *not* required to be the same frets as in a uniform
+        arrangement, and the reason is worth stating rather than papering over: a
+        target is voice-led from whatever came before it, and what came before it is
+        now a shell or an interval. Holding the same position through a thinner shape
+        would be the wrong answer, so the claim is about voices and grip - the chord
+        is still stated in full - not about the exact fingering.
+        """
+        uniform = self.arrange(218).steps
+        targets = self.arrange(218, texture="targets").steps
+        self.assertEqual(len(uniform), len(targets))
+
+        def mean_voices(steps):
+            return sum(len(s.voicing.active_frets()) for s in steps) / len(steps)
+
+        self.assertLess(mean_voices(targets), mean_voices(uniform))
+
+        strong = [i for i, s in enumerate(targets) if s.metric_weight > 0]
+        self.assertTrue(strong, "the skeleton must produce strong beats")
+        for index in strong:
+            step = targets[index]
+            self.assertEqual(step.role, "target")
+            self.assertEqual(len(step.voicing.active_frets()), 4, step.tab_line())
+            self.assertEqual(step.grip, "drop2", step.tab_line())
+            self.assertFalse(step.partial)
+
+        thin = 0
+        for index, step in enumerate(targets):
+            if step.metric_weight != 0:
+                continue
+            # A weak beat is either a fill - thin - or a *target*, which is the
+            # documented fallback: a fill slot with nothing thin to play is
+            # re-prepared as a principal note rather than skipped, because a lighter
+            # texture must never cost the tune a chord. Both are correct outcomes; a
+            # weak beat that is neither would mean the fallback reported success while
+            # still sounding four notes.
+            self.assertIn(step.role, ("fill", "target"), f"step {index}")
+            if step.role == "fill":
+                self.assertLess(
+                    len(step.voicing.active_frets()), 4, f"step {index} is not thin"
+                )
+                self.assertNotEqual(step.grip, "drop2", f"step {index}")
+                thin += 1
+        self.assertGreater(thin, 0, "no slot was filled at all")
+        self.assertLess(thin, len(targets) - len(strong), "nothing was thinned")
+
+    def test_every_targeted_step_obeys_the_playability_invariant(self):
+        """
+        The new `interval` grip is as playable as every other.
+
+        Same sweep as TestArrangeHead, over the texture that actually generates it -
+        and built from every GRIP_STRING_SETS family rather than shell and duo alone,
+        so a set the old test could not name cannot slip past.
+        """
+        supported = {frozenset(range(top - 3, top + 1)) for top in (5, 4, 3)}
+        for shapes in GRIP_STRING_SETS.values():
+            supported |= {frozenset(s) for s, _ in shapes}
+        for step in self.arrange(218, texture="targets").steps:
+            if step.melody_only:
+                continue
+            active = step.voicing.active_strings
+            self.assertIn(frozenset(active), supported, step.tab_line())
+            self.assertLessEqual(step.voicing.fret_span(), 5, step.tab_line())
+            self.assertTrue(all(0 <= f <= 18 for f in step.voicing.active_frets()))
+            self.assertEqual(
+                max(step.voicing.midi_notes()),
+                Note(step.melody).midi_note(),
+                step.tab_line(),
+            )
+
+    def test_the_texture_is_reported_by_the_cli(self):
+        """A user can see which texture produced the tab they are looking at."""
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            corpus_cli(["--melid", "218", "--texture", "targets", "--bars", "0-4"])
+        self.assertIn("texture: targets", buffer.getvalue())
+
+    def test_an_unknown_texture_is_a_usage_error(self):
+        """argparse rejects it, so the command exits rather than arranging."""
+        with self.assertRaises(SystemExit):
+            with contextlib.redirect_stderr(io.StringIO()):
+                corpus_cli(["--melid", "218", "--texture", "sorcery"])
+
+
+class TestArrangeSlotsTexture(unittest.TestCase):
+    """
+    The same rules on a hand-built triple list, needing no database.
+
+    `arrange_slots` is the shared step loop both front ends use, so a rule that only
+    worked through the corpus CLI would still be a rule that could drift from the
+    library's. These always run, on a fresh clone with no 42 MB download.
+    """
+
+    TRIPLES = [
+        ("C5", "maj7", "Fmaj7"),
+        ("E5", "maj7", "Fmaj7"),
+        ("A4", "maj7", "Fmaj7"),
+        ("F4", "maj7", "Fmaj7"),
+    ]
+    TIMINGS = [(0, 1.0, None), (0, 1.5, None), (0, 2.0, None), (0, 3.0, None)]
+
+    def test_a_short_timings_sequence_still_arranges(self):
+        """
+        The defensive guard, with no database in sight.
+
+        Same rule as everywhere else: a slot we were never told about is a target, not
+        a fill, so a hand-built sequence cannot silently shift the rhythm.
+        """
+        steps, _rescued, _notes = arrange_slots(
+            self.TRIPLES, [(0, 2.0, None)], texture="targets"
+        )
+        self.assertEqual(len(steps), len(self.TRIPLES))
+        self.assertEqual(steps[0].role, "fill")
+        for step in steps[1:]:
+            self.assertEqual(step.role, "target")
+            self.assertEqual(step.metric_weight, -1)
+
+    def test_an_unknown_texture_raises(self):
+        """A typo is a programming error, reported before any voicing work."""
+        with self.assertRaises(ValueError) as caught:
+            arrange_slots(self.TRIPLES, self.TIMINGS, texture="sorcery")
+        self.assertIn("sorcery", str(caught.exception))
+
+    def test_the_metre_is_read_not_assumed(self):
+        """
+        A 2/2 slot list has no beat 3, so only the downbeat is a target.
+
+        This is the same rule the MusicXML importer depends on, where three of the four
+        committed scores are in cut time.
+        """
+        cut_time = [(0, 1.0, None), (0, 1.5, None), (0, 2.0, None)]
+        steps, _rescued, _notes = arrange_slots(
+            self.TRIPLES[:3], cut_time, texture="targets", beats_per_bar=2
+        )
+        self.assertEqual(steps[0].metric_weight, 2)
+        for step in steps[1:]:
+            self.assertEqual(step.metric_weight, 0)
+            self.assertEqual(step.role, "fill")
+
+    def test_no_timings_means_every_slot_is_a_target(self):
+        """The default: no rhythm supplied, so nothing is thinned."""
+        steps, _rescued, _notes = arrange_slots(self.TRIPLES, texture="targets")
+        for step in steps:
+            self.assertEqual(step.role, "target")
+            self.assertEqual(step.metric_weight, -1)
 
 
 class TestBarRangeParsing(unittest.TestCase):

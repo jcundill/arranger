@@ -902,6 +902,64 @@ class TestReductionAndArranging(unittest.TestCase):
 
 
 
+class TestHeadTexture(unittest.TestCase):
+    """
+    The target-note texture over a real written head.
+
+    `but_not_for_me.mxl` is the fixture that matters here: it is in **cut time**, so
+    a 2/2 bar has two notated beats and beat 3 does not exist. A rule that read the
+    metre as 4/4 would put a full chord on a beat the score does not have - the same
+    class of bug as the cut-time quarter-note errors already fixed in this module, and
+    the reason `arrange_xml_head` passes `head.beats_per_bar` through rather than
+    leaving the renderer to assume.
+    """
+
+    def test_the_notated_metre_decides_which_beats_are_targets(self):
+        """
+        In 2/2 only the downbeat is a target, and the later beats are fills.
+
+        Asserted through the real score rather than a hand-built one, because the metre
+        is the thing under test and a hand-built fixture would supply its own.
+        """
+        steps, head, _notes = arrange_xml_head(BUT_NOT_FOR_ME, texture="targets")
+        self.assertTrue(steps)
+        self.assertEqual(head.beats_per_bar, 2, "this fixture must be in cut time")
+        for step in steps:
+            if step.beat is None:
+                self.assertEqual(step.role, "target")
+            elif abs(step.beat - 1.0) < 1e-6:
+                self.assertEqual(step.metric_weight, 2)
+                self.assertEqual(step.role, "target")
+            else:
+                self.assertEqual(step.metric_weight, 0)
+                self.assertEqual(step.role, "fill")
+
+    def test_the_texture_thins_a_cut_time_head(self):
+        """
+        The flag does what it says on a real head, and the chords survive.
+
+        Thinner overall, with every strong beat still stated in full - the two halves
+        of the claim, since thinning the harmony too would not be an arrangement.
+        """
+        uniform, _head, _n = arrange_xml_head(BUT_NOT_FOR_ME, texture="uniform")
+        targets, _head, _n = arrange_xml_head(BUT_NOT_FOR_ME, texture="targets")
+        self.assertEqual(len(uniform), len(targets))
+
+        def mean_voices(steps):
+            return sum(len(s.voicing.active_frets()) for s in steps) / len(steps)
+
+        self.assertLess(mean_voices(targets), mean_voices(uniform))
+        for step in targets:
+            if step.role == "target" and not step.melody_only:
+                self.assertEqual(len(step.voicing.active_frets()), 4, step.tab_line())
+
+    def test_the_default_is_unchanged(self):
+        """No flag, no texture: every step is a principal note."""
+        steps, _head, _notes = arrange_xml_head(BUT_NOT_FOR_ME)
+        for step in steps:
+            self.assertEqual(step.role, "target")
+
+
 class TestHeadCli(unittest.TestCase):
     """The `head` command, driven as a function over a temporary score."""
 

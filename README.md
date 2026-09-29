@@ -508,9 +508,12 @@ hand already is rather than by preference:
 | `drop2` | 4 | the hand-authored drop-2 tables, on strings 4-3-2-1 or 5-4-3-2 |
 | `shell` | 3 | the 3rd and 7th plus one more: 1-2-3, 2-3-4, 5-4-3, **6-4-3** or **5-3-2** |
 | `duo` | 2 | the root or 5th in the melody plus the 3rd |
+| `interval` | 2 | a 3rd, 6th or 10th below the melody — a *fill*, not a harmony |
 
-`GRIP_PREFERENCE` lists them in tie-break order, so a four-note drop-2 is never
-displaced by a shell when the two cost the same.
+`GRIP_PREFERENCE` lists the first three in tie-break order, so a four-note drop-2 is
+never displaced by a shell when the two cost the same. `interval` is not in it: it is
+offered only by the `targets` texture below, because a two-note fill is never the
+right answer to "state this chord".
 
 **A shell is searched for, never stacked.** A shell's notes are not in descending pitch
 order down the strings, because the tuning is not monotonic in the useful direction: the
@@ -568,6 +571,82 @@ Criterion 4 is what keeps the hand from jumping, and it is measured in *absolute
 fret numbers* rather than in pitches, because fret 8 means the same place on the neck
 whichever string it is on. That is what lets a melody hold its position by moving to a
 different string — a much smaller gesture than moving the hand.
+
+Criterion 3 is what a `targets` texture exists to change, and it is worth being precise
+about why it cannot be changed from inside the cost tuple.
+
+## Texture: chords on the strong beats, fills between
+
+The selection rule above has no idea where in the bar a note falls, and it ranks
+**completeness above position**. So a bar of running eighths comes out as eight
+re-struck four-note chords — a chord list, not an arrangement. The staff renderer's
+`collapse` hides that in the *drawing*, but the selection never made the decision.
+
+`texture="targets"` makes it. Pass each slot's `(bar, beat, duration)` as `timings` and
+the engine states a full four-note chord on beats 1 and 3, filling everything else with
+a shell, a 3rd/6th interval, or the melody alone:
+
+```python
+progression = [
+    ("C5", "maj7", "Fmaj7"),   # beat 1 - the target
+    ("E5", "maj7", "Fmaj7"),   # fill
+    ("A4", "maj7", "Fmaj7"),   # fill
+    ("F4", "maj7", "Fmaj7"),   # beat 3 - the target
+]
+timings = [(0, 1.0, None), (0, 1.5, None), (0, 2.0, None), (0, 3.0, None)]
+
+steps = engine.arrange_progression(progression, timings=timings, texture="targets")
+for step in steps:
+    print(step.beat, step.role, step.voicing.tab_string())
+```
+
+```text
+1.0 target x-x-7-9-6-8
+1.5 fill x-x-x-10-10-12
+2.0 fill x-x-10-9-10-x
+3.0 target x-7-7-5-6-x
+```
+
+**Timing changes which grips are on the table, not the cost.** That is the whole design.
+"Play fewer notes here" is not a preference competing against "stay in position" — it is
+a change of what may be chosen at all, and a term in the cost tuple would let a
+four-fret position outbid an entire texture. Generation and selection therefore stay
+separate exactly as they already were, and the metric rule lives in one function,
+`_roles_for_slot`.
+
+**Nothing changes until you ask.** `timings` defaults to `None`, which means *we were
+never told where these notes fall* — not *these notes are weak*. Every slot is then a
+target and the output is byte-identical to what it has always been. That is pinned by
+`tests/test_texture.py::TestBackwardCompatibility`, which asserts the exact tab of the
+library's own demo cadences.
+
+**The metre is read, not assumed.** `TARGET_BEATS` names *beats*, and `beats_per_bar`
+decides which of them exist: a 3/4 head states its harmony on 1 and 3, while a 2/2
+(cut-time) head has only two beats, so only the downbeat is a target. Three of the four
+committed test scores are in cut time, and `arrange_xml_head` passes
+`head.beats_per_bar` through for exactly this reason.
+
+**A fill never costs the tune a chord.** If a fill slot has nothing thin to play, the
+step is re-prepared as a principal note before anything is skipped. The texture is a
+lighter *texture*, never a missing harmony — the same reasoning that makes the neck
+window a penalty rather than a filter.
+
+Over six corpus heads this takes the mean number of sounding notes per melody note from
+**3.86 to 3.39**, and the share of steps voiced in four voices from **87% to 51%** —
+which is about what beats 1 and 3 of a bar would predict. No head lost a step.
+
+Both front ends expose it:
+
+```bash
+python arranger.py corpus --melid 218 --texture targets --tab staff
+python arranger.py head tests/data/but_not_for_me.mxl --texture targets
+```
+
+`interval` is deliberately **not** gated on `DUO_DEGREES`, so a 3rd or a 6th can sit
+under a melody that is itself the chord's 3rd or 7th — the case a duo refuses and a
+passing tone constantly needs. When the melody is not a chord tone the walk may reach
+for a note of the prevailing *key*, never a chromatic one, so a fill cannot quietly
+reharmonise the bar.
 
 ## High melodies: the octave-down move
 
