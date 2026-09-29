@@ -104,22 +104,36 @@ class TestProgressions(unittest.TestCase):
         # three-note shell instead.
         self.assertEqual(
             [(step.chord, step.voicing.tab_string()) for step in result],
-            [("Dm7", "5-x-3-5-3-x"), ("G7", "3-x-3-4-3-x"), ("Cmaj7", "x-2-2-5-x-x")],
+            [("Dm7", "x-3-3-2-3-x"), ("G7", "3-x-3-4-3-x"), ("Cmaj7", "x-2-2-5-x-x")],
         )
         for step in result:
             self.assertNotEqual(
                 step.voicing.active_strings, [0, 1, 2, 3], step.tab_line()
             )
-        # The first two are complete chords on 6-4-3-2, which is the one default set that
-        # reaches the low E. Cmaj7 is a three-note shell, because a melody that low has
-        # no four-note shape with a legal span at all.
+        # G7 is a complete chord on 6-4-3-2, the one default set that reaches the low E,
+        # and Cmaj7 is a three-note shell, because a melody that low has no four-note
+        # shape with a legal span at all.
         self.assertEqual(
             [step.grip for step in result],
-            ["drop2_6432", "drop2_6432", "shell"],
+            ["drop2", "drop2_6432", "shell"],
         )
-        self.assertEqual(result[0].voicing.active_strings, [0, 2, 3, 4])  # 6-4-3-2
         self.assertEqual(result[1].voicing.active_strings, [0, 2, 3, 4])  # 6-4-3-2
         self.assertEqual(result[2].voicing.active_strings, [1, 2, 3])     # 5-4-3
+        # Dm7 is the one step that changed grip, and it is a real trade rather than a
+        # pure gain. It was 6-4-3-2 (`5-x-3-5-3-x`, span 2, lowest voice A2) and is now
+        # the contiguous 5-4-3-2 (`x-3-3-2-3-x`, span 1, lowest voice C3).
+        #
+        # Span is now ranked above neck position, and the two shapes tie on every
+        # correctness criterion - same four pitch classes, both inside the window, both
+        # complete - so span decides and the narrower one wins. The cost is the bass: C
+        # is the 3rd of Dm7 rather than A the 5th, and 6-4-3-2 is the only default shape
+        # that can put a bass on the low E at all.
+        #
+        # This is the case where promoting span is not free, and it is left visible
+        # rather than tuned away: the bass-function term is a *tie-break* at index 6,
+        # below span, so it cannot recover a shape that span has already rejected.
+        # Recovering it would mean ranking the bass above span, which was measured and
+        # brings back the five-fret `8-x-8-8-13-x` this change exists to remove.
         self.assertEqual(sorted(result[0].voicing.pitch_classes()), [0, 2, 5, 9])
         # G7 gained its root and a fourth voice: it used to be the bare shell F3 B3 D4,
         # and is now a complete G7 with G2 underneath.

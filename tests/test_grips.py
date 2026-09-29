@@ -107,7 +107,7 @@ class TestGripGeneration(unittest.TestCase):
                 for v in candidates:
                     where = f"{chord_name} {melody} {v.grip} {v.tab_string()}"
                     self.assertTrue(set(v.pitch_classes()) <= tones, where)
-                    self.assertLessEqual(v.fret_span(), 5, where)
+                    self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN[v.grip], where)
                     self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()), where)
                     self.assertEqual(max(v.midi_notes()), Note(melody).midi_note(), where)
                     self.assertEqual(v.soprano_string(), max(v.active_strings), where)
@@ -282,7 +282,7 @@ class TestFiveThreeTwoShell(unittest.TestCase):
         self.assertEqual(v.frets[2], -1)
         self.assertEqual(sorted(v.pitch_classes()), [0, 3, 9])
         self.assertEqual(max(v.midi_notes()), Note("Eb4").midi_note())
-        self.assertLessEqual(v.fret_span(), 5)
+        self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN[v.grip])
 
     def test_the_melody_rides_no_higher_than_the_alternatives(self):
         """
@@ -318,7 +318,7 @@ class TestFiveThreeTwoShell(unittest.TestCase):
             any(v.active_strings == [1, 3, 4] for v in shells), "no 5-3-2 offered"
         )
         for v in shells:
-            self.assertLessEqual(v.fret_span(), 5, v.tab_string())
+            self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["shell"], v.tab_string())
 
     def test_it_is_never_offered_under_a_non_chord_melody(self):
         """
@@ -370,7 +370,7 @@ class TestSixFourThreeShell(unittest.TestCase):
         self.assertTrue(shells)
         self.assertTrue(any(v.active_strings == [0, 2, 3] for v in shells), "no 6-4-3")
         for v in shells:
-            self.assertLessEqual(v.fret_span(), 5, v.tab_string())
+            self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["shell"], v.tab_string())
 
     def test_it_is_never_offered_under_a_non_chord_melody(self):
         """
@@ -1215,6 +1215,60 @@ class TestVoicingCost(unittest.TestCase):
         steps = VoiceLeadingEngine.arrange_progression([("D5", "m7", "Dm7")])
         self.assertEqual(len(steps), 1)
         self.assertLessEqual(abs(steps[0].voicing.avg_fret - 9), 4.0)
+
+    def test_span_outranks_neck_position(self):
+        """
+        A tighter shape wins even when it moves the hand.
+
+        This is the one criterion promoted across another, so it is asserted on the
+        cost tuple directly rather than only through a result. Cm7b5 under C5 is the
+        motivating case: with span ranked below position the engine returned
+        `8-x-8-8-13-x`, index at 8 and pinky at 13, because it kept the hand where the
+        previous chord was. The shape that actually gets chosen now spans one fret.
+        """
+        steps = VoiceLeadingEngine.arrange_progression([("C5", "m7b5", "Cm7b5")])
+        self.assertEqual(len(steps), 1)
+        chosen = steps[0].voicing
+        self.assertEqual(chosen.tab_string(), "x-x-8-8-7-8")
+        self.assertEqual(chosen.fret_span(), 1)
+        # The wide shape is still *offered* - the cap is what bounds it, not the
+        # ranking - and the cost tuple is what prefers the narrow one.
+        candidates = self.engine.get_all_grip_voicings(
+            Note("C5"), "m7b5", chord_name="Cm7b5"
+        )
+        self.assertTrue(candidates)
+        best = self.engine._best_voicing(candidates, previous=chosen)
+        assert best is not None  # pyright does not narrow through assertIsNotNone
+        self.assertLessEqual(best.fret_span(), chosen.fret_span())
+
+    def test_span_is_only_promoted_over_position_not_over_correctness(self):
+        """
+        The promotion is a trade between two preferences, not a licence to be wrong.
+
+        A shape sounding a note outside the chord still loses to a correct one, however
+        tight it is, and a partial harmonisation still loses to a complete chord. Both
+        of those criteria sit above span, and this holds it to that.
+        """
+        candidates = self.engine.get_all_grip_voicings(
+            Note("C5"), "m7b5", chord_name="Cm7b5"
+        )
+        self.assertTrue(candidates)
+        tones = set(ChordParser.get_chord_tones("m7b5", "Cm7b5"))
+        clean = [v for v in candidates if set(v.pitch_classes()) <= tones]
+        self.assertTrue(clean)
+        for v in candidates:
+            cost = self.engine.voicing_cost(v, previous=None, allowed_tones=tones)
+            if set(v.pitch_classes()) <= tones:
+                self.assertEqual(cost[0], 0.0, v.tab_string())
+            else:
+                self.assertEqual(cost[0], 1.0, v.tab_string())
+                # A foreign note outranks a tighter span, never the reverse.
+                for good in clean:
+                    self.assertLessEqual(
+                        self.engine.voicing_cost(good, None, allowed_tones=tones)[0],
+                        cost[0],
+                        f"{v.tab_string()} beat the clean {good.tab_string()}",
+                    )
 
 
 class TestVoicingAccessors(unittest.TestCase):

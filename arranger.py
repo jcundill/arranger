@@ -64,16 +64,23 @@ NECK_FRET_MAX = 13
 # `drop3` and `closed` are generated but deliberately *not* listed here, because neither
 # can be played within this library's span limit. A close-position four-note chord
 # under a melody spans a seventh or more, and the four strings below the high E are only
-# five semitones apart in tuning, so the frets come out more than five apart: Cmaj7 in
-# close position under C5 wants frets 8, 12, 12 and 14. Drop-3 is worse, spanning a
+# five semitones apart in tuning, so the frets come out more than five apart: Cmaj7
+# in close position under C5 wants frets 8, 12, 12 and 14. Drop-3 is worse, spanning a
 # twelfth by construction. The generators stay, so a caller who raises GRIP_MAX_SPAN
 # can reach them, but advertising them as a default would be a promise the span
 # invariant cannot keep.
 GRIP_PREFERENCE: Tuple[str, ...] = ("drop2", "drop2_6432", "shell", "duo")
 
-# The maximum distance, in frets, from the soprano to any other finger. Five for every
-# four-note shape and every three-note shell; a duo is only ever two fingers, so it is
-# held to a tighter four.
+# The maximum distance, in frets, from the lowest to the highest active fret. Five for
+# every four-note shape and every three-note shell; a duo is only ever two fingers, so
+# it is held to a tighter four.
+#
+# This is a *distance*, `max(frets) - min(frets)`, not a count of frets touched: a
+# shape on frets 6 and 10 spans four, because the hand reaches four frets from index
+# to pinky. That is the ordinary, comfortable four-finger span - frets 6, 7, 8, 9, 10
+# are five separate frets but the stretch across them is four, which is what a
+# guitarist means by "a four-fret span". Counting the touched frets inclusively
+# instead would make the limit describe something the hand does not do.
 GRIP_MAX_SPAN: Dict[str, int] = {
     "drop2": 5,
     "drop2_6432": 5,
@@ -1779,7 +1786,8 @@ def _place_template(
 
     The voices go on the strings from the top down, so the template's order is the
     order they are heard. Playability is the rule the drop-2 engine has always used:
-    every fret on the board, and a hand that does not stretch - `fret_span() <= 5`.
+    every fret on the board, and a hand that does not stretch -
+    `fret_span() <= GRIP_MAX_SPAN[grip]`.
 
     The span is checked on the frets actually placed, not as "within N of the soprano".
     Those are not the same condition: bounding each finger to five frets either side of
@@ -2401,8 +2409,8 @@ class VoiceLeadingEngine:
         octave-down rescue from having to know about each other.
 
         Every candidate sounds only chord tones, uses 2-4 strings all belonging to one
-        GRIP_STRING_SETS entry, carries the melody on its topmost string, and keeps
-        every finger within GRIP_MAX_SPAN of it.
+        GRIP_STRING_SETS entry, carries the melody on its topmost string, and holds a
+        fret span of at most GRIP_MAX_SPAN[grip].
         """
         melody_midi = melody_note.midi_note()
 
@@ -2707,7 +2715,16 @@ class VoiceLeadingEngine:
                 if 0 <= fret <= HIGH_FRET_LIMIT:
                     frets = [-1] * len(STANDARD_TUNING)
                     frets[string_index] = fret
-                    return Voicing(frets=frets, top_fret=fret, avg_fret=float(fret))
+                    # `grip` is set rather than left at its "drop2" default: this is a
+                    # single-fret shape, and a caller reading `voicing.grip` would
+                    # otherwise conclude a four-note drop-2 had been chosen. The
+                    # playability invariant keys off this field.
+                    return Voicing(
+                        frets=frets,
+                        top_fret=fret,
+                        avg_fret=float(fret),
+                        grip="melody",
+                    )
         return None
 
     # ------------------------------------------------------------------
@@ -2848,13 +2865,13 @@ class VoiceLeadingEngine:
         """
         The whole selection rule as one comparable number, lowest wins.
 
-        It is a *tuple* rather than a weighted sum on purpose. These six priorities are
+        It is a *tuple* rather than a weighted sum on purpose. These priorities are
         genuine trade-offs that must not be traded against each other - "stay in
         position" is not worth a semitone of inner-voice movement, but both are worth
         far more than preferring drop-2 over a shell - and a weighted sum would hide
         that behind magic numbers whose values nobody can defend. Lexicographic order
-        states the ranking directly, so the second criterion is only consulted when the
-        first is exactly tied.
+        states the ranking directly, so each criterion is only consulted when the ones
+        before it are exactly tied.
 
         In order:
 
@@ -2876,14 +2893,40 @@ class VoiceLeadingEngine:
            actually there - a root-and-3rd duo is a real voicing of a root-and-3rd, not a
            Cmaj7. A permitted root-or-5th duo scores zero here, so where two notes really
            are enough it competes on equal terms with a four-note shape.
-        3. distance in neck position from the previous voicing, measured as the
+        3. fret span: a tighter shape is easier to hold and to move, and a five-fret
+           stretch is not always a stretch a hand can take. This sits *above* neck
+           position, which is the one priority it is promoted across, and that is a
+           deliberate trade rather than an oversight.
+
+           The reason is that the two criteria disagree about the same thing. Neck
+           position measures how far the *hand* moves; span measures how far the hand
+           has to *stretch* once it is there. A five-fret shape sitting one fret from
+           where the hand already was wins on position and loses on span, and before
+           this change it was chosen - which is how the engine came to select shapes
+           like `8-x-8-8-13-x` (index at 8, pinky at 13) for a Cm7b5. Keeping the
+           hand still is worth less than being able to play the shape it is holding.
+
+           Promoting span rather than lowering GRIP_MAX_SPAN is what keeps this free.
+           A tightened cap is a hard filter, so it deletes a voicing wherever no
+           tighter one exists - measured, that cost the only Gsus4 fingering
+           (`x-x-5-5-3-8`) and the 6-4-3 shell, the one shape that reaches the low E.
+           Ranking instead only ever chooses between shapes already on the table, so
+           nothing stops being voiceable. It is not a guarantee that every selected
+           shape is narrow: where the only option is wide, span is consulted first and
+           finds every candidate equal, and the wide one is still played. The cap
+           remains the outer bound on that. Promoting it over the bass-function term at
+           index 6 is the one real cost: a low Dm7 under D4 now takes a span-1 shape
+           with C in the bass over a span-2 6-4-3-2 with A. Ranking the bass above span
+           was measured and brings `8-x-8-8-13-x` back, so the two cannot both come
+           first; span wins because an unplayable stretch costs more than a 3rd in the
+           bass. See AGENTS.md, "Span outranks neck position".
+        4. distance in neck position from the previous voicing, measured as the
            difference of average frets. Absolute fret numbers mean the same place on the
            neck whichever string they are on, so this stays meaningful when a melody
            holds its place by moving to a different string - which is the behaviour the
            G-string soprano exists to enable. With no previous chord this becomes the
            long-standing "start near the middle of the neck" rule.
-        4. total pitch movement of the voices, the historical voice-leading measure.
-        5. fret span: a tighter shape is easier to hold and to move.
+        5. total pitch movement of the voices, the historical voice-leading measure.
         6. bass function, when `root_pc` is given: 0 for a root or a 5th in the lowest
            voice, 1 otherwise. This is a *tie-break*, not a priority - it is consulted
            only when two shapes already agree on everything above, which is exactly the
@@ -2936,9 +2979,9 @@ class VoiceLeadingEngine:
             foreign,
             float(outside),
             float(missing),
+            float(voicing.fret_span()),
             position,
             movement,
-            float(voicing.fret_span()),
             bass_root_or_fifth,
             float(grip_rank),
         )
@@ -3361,7 +3404,41 @@ class VoiceLeadingEngine:
             # The texture decides which grips are *available* on this step. It is not a
             # term in the cost, so a fill cannot be outbid for being in position - the
             # point is that fewer notes are played here, not that this shape is better.
-            slot_grips = grips if texture == "uniform" else texture_grips[role]
+            #
+            # `grips` **narrows** the texture's palette; it never widens it and never
+            # silently deletes from it. It used to be discarded outright
+            # (`slot_grips = texture_grips[role]`), so `--grips shell --texture targets`
+            # asked for shell-only and got a four-note drop-2 on every strong beat with
+            # nothing said.
+            #
+            # The default is the case that matters, and it is why this is not a plain
+            # set intersection. `GRIP_PREFERENCE` is the *preference order for callers
+            # who name grips*, and it deliberately does not list `interval`, `melody` or
+            # `drop3` - a `targets` fill is `("shell", "interval", "melody")` and a
+            # target is `("drop2", "drop3")`, so intersecting with GRIP_PREFERENCE would
+            # delete `interval` and `drop3` from the texture and change every default
+            # arrangement. The texture table is the authority on what a role may play;
+            # `GRIP_PREFERENCE` only says what order a *caller* ranks them in.
+            #
+            # So the rule is: an explicit restriction intersects, and the default - which
+            # is not a restriction, just the absence of one - does not.
+            role_grips = texture_grips[role]
+            if grips == GRIP_PREFERENCE:
+                slot_grips = role_grips
+            else:
+                narrowed = tuple(g for g in grips if g in role_grips)
+                if narrowed:
+                    slot_grips = narrowed
+                else:
+                    # The caller asked for grips this role never uses. Losing a chord of
+                    # the tune is worse than ignoring a flag, so the texture's own set
+                    # stands - and the warning says what was ignored.
+                    slot_grips = role_grips
+                    print(
+                        f"Warning: {texture} uses {role_grips or 'no grip'} for a "
+                        f"{role}, none of which is in the requested {grips}; "
+                        f"using the texture's own set"
+                    )
 
             # A walking-bass **fill** is the melody alone, and so is a target no
             # shell can sound. Both take the same route, which is the route an `NC`
@@ -3545,7 +3622,60 @@ class VoiceLeadingEngine:
             # cannot fire. Written as an assertion rather than left to Optional
             # narrowing at every use below.
             assert best_voicing is not None
-                
+
+            # A shape that spans the whole fret budget is technically legal and often
+            # unplayable: a five-fret stretch is a reach many hands cannot make at speed,
+            # and it is chosen because a texture's target role may offer only the
+            # four-note grips - so the alternative was never a candidate to be ranked
+            # against, it simply did not exist. `x-6-5-3-8-x` for Ebmaj under G4 is the
+            # real case: the engine *could* sound `x-x-8-8-8-x` (span 0) on that step,
+            # but a `targets` target is only offered `("drop2", "drop3")`, and the
+            # cost tuple would not have chosen the shell anyway - `missing` is index 2,
+            # above span, so a complete wide shape beats a partial narrow one.
+            #
+            # So this is a *fallback*, not a re-ranking, and it is deliberately the last
+            # thing tried. Lowering GRIP_MAX_SPAN instead is a filter that deletes the
+            # voicing everywhere; so is promoting span above `missing`, which would
+            # dissolve the shell and duo families across the whole library. Here the
+            # complete chord is still what you get whenever it is playable, and only a
+            # shape at the very top of the span budget is demoted.
+            #
+            # The demotion is to the melody alone, which is always playable. Preferring
+            # a shell here instead was measured: it is better as music, but it is only
+            # reachable when the role's palette contains a shell, and where it does not
+            # (a `targets` target) there is nothing to demote *to* - so the route would
+            # fail exactly where it is needed. A single note on the melody string is
+            # available for every reachable melody, and losing a note of the tune is
+            # worse than a thin one: the chord name above the step still describes the
+            # harmony, which is the same convention the shell uses.
+            if (
+                best_voicing.fret_span() >= GRIP_MAX_SPAN["drop2"]
+                and role == ROLE_TARGET
+            ):
+                solo = cls.get_melody_only_voicing(
+                    melody_note, prefer=top_strings
+                )
+                if solo is not None and solo.fret_span() < best_voicing.fret_span():
+                    print(
+                        f"Warning: {name} with melody {note_str} needs a "
+                        f"{best_voicing.fret_span()}-fret stretch "
+                        f"({best_voicing.tab_string()}); playing the melody alone"
+                    )
+                    arrangements.append(ArrangementStep(
+                        chord=name,
+                        melody=note_str,
+                        voicing=solo,
+                        grip="melody",
+                        partial=False,
+                        bar=bar,
+                        beat=beat,
+                        duration=duration,
+                        role=role,
+                        metric_weight=weight,
+                        bass_only=slot.bass_only,
+                    ))
+                    cls._attach_bass(arrangements[-1], slot.bass, arrangements)
+                    continue
             # A melody that repeats the previous step's pitch is a soprano-only
             # re-strike: the shape is held, so the renderers show just the melody
             # string and leave the inner voices ringing. Compared on the sounding

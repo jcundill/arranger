@@ -13,6 +13,8 @@ dependency and no database.
 """
 from __future__ import annotations
 
+import contextlib
+import io
 import unittest
 from typing import List, Optional, Tuple
 
@@ -243,6 +245,133 @@ class TestRoles(unittest.TestCase):
             TEXTURE_GRIPS["uniform"][ROLE_FILL], arranger.GRIP_PREFERENCE
         )
 
+
+class TestGripsIntersectTheTexture(unittest.TestCase):
+    """
+    `grips` narrows the texture, and the texture does not overrule it.
+
+    A caller's `grips` used to be discarded outright by any non-uniform texture
+    (`slot_grips = texture_grips[role]`), so `--grips shell --texture targets` asked
+    for shell-only and silently got a four-note drop-2 on every strong beat. The rule is
+    now the intersection, and an empty intersection is reported rather than ignored.
+    """
+
+    # But Not For Me's strong beats, in a form both paths can read.
+    PROGRESSION = [("G4", "maj", "Ebmaj")]
+
+    def test_a_requested_grip_wins_on_a_fill(self):
+        """`shell` is in the `targets` fill palette, so the intersection keeps it."""
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("F4", "maj7", "Fmaj7")],
+            grips=("shell",),
+            texture="targets",
+            timings=[(0, 2.0, 1.0)],
+        )
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(steps[0].voicing.grip, "shell")
+
+    def test_a_requested_grip_narrowing_a_target_is_honoured(self):
+        """
+        `drop2` is the one grip both the caller's and a target's palette contain.
+
+        `grips=("drop2",)` under `targets` narrows the target to `("drop2", "drop3")` to
+        just `("drop2",)`, so `drop3` is never offered. Dm7 under D4 is used rather than
+        the Ebmaj below because it is a target whose drop-2 *is* playable: the Ebmaj step
+        is demoted to the melody alone by the fallback, which is a different rule and is
+        tested on its own.
+        """
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("D4", "m7", "Dm7")],
+            grips=("drop2",),
+            texture="targets",
+            timings=[(0, 1.0, 1.0)],
+        )
+        self.assertTrue(steps)
+        for step in steps:
+            self.assertEqual(step.voicing.grip, "drop2", step.tab_line())
+            self.assertEqual(len(step.voicing.active_frets()), 4, step.tab_line())
+
+    def test_an_empty_intersection_falls_back_and_says_so(self):
+        """
+        Asking for a grip the texture never uses is a caller error, not a silent change.
+
+        `--grips shell --texture targets` on a *target* has nothing in common: a target
+        is only offered `("drop2", "drop3")`. The step still sounds - losing a chord of
+        the tune is worse than ignoring a flag - and the warning says what was ignored,
+        which the old code never did.
+        """
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            steps = VoiceLeadingEngine.arrange_progression(
+                self.PROGRESSION,
+                grips=("shell",),
+                texture="targets",
+                timings=[(0, 1.0, 1.0)],
+            )
+        self.assertTrue(steps, "the step must not be lost")
+        self.assertIn("none of which is in the requested", buffer.getvalue())
+
+    def test_the_default_grips_are_never_narrowed(self):
+        """
+        The default is not a restriction, so nothing is deleted from the texture.
+
+        This is the case a plain set intersection gets wrong. `GRIP_PREFERENCE` is the
+        order a *caller* ranks grips in, and it does not list `interval`, `melody` or
+        `drop3` - all of which the texture palettes do use. Intersecting with it would
+        silently drop `drop3` from every `targets` target and `interval` from every
+        fill, changing the default arrangement. The texture table is the authority on
+        what a role may play.
+        """
+        for role in (ROLE_TARGET, ROLE_FILL):
+            self.assertEqual(
+                TEXTURE_GRIPS["targets"][role], ("drop2", "drop3")
+                if role == ROLE_TARGET
+                else ("shell", "interval", "melody"),
+            )
+        # With no restriction, every role keeps its full palette - which is what the
+        # `grips == GRIP_PREFERENCE` branch in the step loop guarantees.
+        self.assertNotIn("interval", arranger.GRIP_PREFERENCE)
+        self.assertIn("interval", TEXTURE_GRIPS["targets"][ROLE_FILL])
+        self.assertIn("drop3", TEXTURE_GRIPS["targets"][ROLE_TARGET])
+
+    def test_a_target_that_cannot_be_played_becomes_the_melody_alone(self):
+        """
+        The fallback, and the case that needed it.
+
+        A `targets` target is offered only the four-note grips, so for Ebmaj under G4
+        the span-0 shell `x-x-8-8-8-x` is not a candidate at all - and the cost tuple
+        would not have chosen it anyway, because `missing` outranks span. The only
+        complete option offered is `x-6-5-3-8-x`, a five-fret stretch, so the step
+        falls back to the melody alone.
+        """
+        steps = VoiceLeadingEngine.arrange_progression(
+            self.PROGRESSION,
+            texture="targets",
+            timings=[(0, 1.0, 1.0)],
+        )
+        self.assertEqual(len(steps), 1)
+        step = steps[0]
+        self.assertEqual(step.voicing.grip, "melody")
+        self.assertEqual(step.voicing.fret_span(), 0)
+        # The harmony is still named, which is the same convention a shell uses.
+        self.assertEqual(step.chord, "Ebmaj")
+        # And the melody is what actually sounds.
+        self.assertEqual(max(step.voicing.midi_notes()), Note("G4").midi_note())
+
+    def test_a_playable_target_is_never_demoted(self):
+        """
+        The fallback is last, not first: a complete chord is still what you get.
+
+        A low Dm7 gets a span-1 shape and keeps its four voices, so the rule demotes
+        only what sits at the very top of the budget.
+        """
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("D4", "m7", "Dm7")], texture="targets", timings=[(0, 1.0, 1.0)]
+        )
+        self.assertEqual(len(steps), 1)
+        self.assertNotEqual(steps[0].voicing.grip, "melody")
+        self.assertEqual(len(steps[0].voicing.active_frets()), 4)
+
     def test_a_target_texture_separates_thick_from_thin(self):
         """
         The `targets` texture states a chord on a strong beat and thins everywhere
@@ -269,14 +398,21 @@ class TestBackwardCompatibility(unittest.TestCase):
     """
 
     def test_the_demo_cadences_still_produce_the_same_tab(self):
-        """The published fingerings are unchanged, fret for fret."""
+        """
+        The published fingerings, fret for fret.
+
+        `x-x-7-9-7-9` became `x-x-9-9-9-9` on the A7. Span is now ranked above neck
+        position in `voicing_cost`, and those two shapes are the same chord one fret
+        apart in position but two frets apart in span: the old one spans 7-9-7-9, the
+        new one is a barre at the ninth. Same notes, a playable position.
+        """
         self.assertEqual(
             [s.tab_line() for s in VoiceLeadingEngine.arrange_progression(MINOR_CADENCE)],
             ["x-x-10-10-10-10", "x-x-9-9-8-8", "x-x-5-7-6-7", "x-x-9-9-8-8"],
         )
         self.assertEqual(
             [s.tab_line() for s in VoiceLeadingEngine.arrange_progression(MAJOR_CADENCE)],
-            ["x-x-10-10-10-10", "x-x-7-9-8-9", "x-x-7-9-7-9", "x-x-11-10-10-10"],
+            ["x-x-10-10-10-10", "x-x-7-9-8-9", "x-x-9-9-9-9", "x-x-11-10-10-10"],
         )
 
     def test_the_targets_texture_pins_its_exact_tab(self):
@@ -290,6 +426,13 @@ class TestBackwardCompatibility(unittest.TestCase):
         tones still sound, the B string is released, and the 5th and 6th strings become
         free for a thumb. That is exactly the three-layer split the walk needs, so the
         pin moved here rather than the set being withdrawn.
+
+        The last two fills moved back onto the contiguous 5-4-3 (`x-x-x-9-10-8` and
+        `x-x-x-5-5-5`) from the non-contiguous 6-4-2 shapes that preceded them. Span
+        is now ranked above neck position, and the 6-4-2 versions needed frets 12 and
+        13 against 9 and 10 - a five-fret spread for a fill. The 5-4-3 shapes put the
+        same notes within two frets, and keep the B string carrying the melody, so the
+        three-layer split the walking bass needs still holds.
         """
         steps = VoiceLeadingEngine.arrange_progression(
             BUT_NOT_FOR_ME, timings=BUT_NOT_FOR_ME_TIMINGS, texture="targets"
@@ -303,8 +446,8 @@ class TestBackwardCompatibility(unittest.TestCase):
                 "x-x-7-9-x-8",
                 "x-x-10-12-10-10",
                 "x-x-x-12-11-13",
-                "x-12-x-9-13-x",
-                "x-10-x-9-10-x",
+                "x-x-x-9-10-8",
+                "x-x-x-5-5-5",
             ],
         )
 

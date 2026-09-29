@@ -10,13 +10,22 @@ import io
 import unittest
 from typing import List, Optional, Tuple
 
+import arranger
 from arranger import (
+    GRIP_MAX_SPAN,
     GRIP_STRING_SETS,
     NO_CHORD,
     ChordParser,
     Note,
     VoiceLeadingEngine,
 )
+
+# An arrangement is not one grip: each step picks its own family, so the invariant an
+# arrangement-level test can assert is the loosest limit among the default grips. It
+# is derived rather than written down so a change to GRIP_MAX_SPAN cannot leave these
+# assertions quietly weaker than the library's actual contract.
+MAX_DEFAULT_SPAN = max(GRIP_MAX_SPAN[g] for g in arranger.GRIP_PREFERENCE)
+
 from wjazzd import (
     DEFAULT_DB,
     SECTION_TYPES,
@@ -882,7 +891,7 @@ class TestArrangeHead(unittest.TestCase):
                 active = step.voicing.active_strings
                 self.assertIn(frozenset(active), supported, f"{melid} {step.tab_line()}")
                 self.assertIn(len(active), (2, 3, 4), f"{melid} {step.tab_line()}")
-                self.assertLessEqual(step.voicing.fret_span(), 5, melid)
+                self.assertLessEqual(step.voicing.fret_span(), MAX_DEFAULT_SPAN, melid)
                 self.assertTrue(all(0 <= f <= 18 for f in step.voicing.active_frets()))
                 # The soprano is the melody, and it is one of the three allowed strings.
                 self.assertIn(step.voicing.soprano_string(), (5, 4, 3), melid)
@@ -1033,7 +1042,7 @@ class TestHeadTexture(unittest.TestCase):
                 continue
             active = step.voicing.active_strings
             self.assertIn(frozenset(active), supported, step.tab_line())
-            self.assertLessEqual(step.voicing.fret_span(), 5, step.tab_line())
+            self.assertLessEqual(step.voicing.fret_span(), MAX_DEFAULT_SPAN, step.tab_line())
             self.assertTrue(all(0 <= f <= 18 for f in step.voicing.active_frets()))
             self.assertEqual(
                 max(step.voicing.midi_notes()),

@@ -322,11 +322,25 @@ class TestNonChordToneStrategiesEndToEnd(unittest.TestCase):
 
     def test_legacy_strategy_preserves_the_historical_fallback(self):
         """The legacy strategy reproduces the old wrong-chord shape, which is why it
-        is opt-in rather than the default."""
+        is opt-in rather than the default.
+
+        Both the position and the inversion moved when span was ranked above neck
+        position: `x-x-8-8-8-10` (Bb-Eb-G-D, an Ebmaj7 shape) became `x-x-11-11-10-10`
+        (Db-F#-A-D, a Dbmaj7 shape). Both are wrong-chord fallbacks - the point of the
+        test is that the *strategy* still declines to fix the melody note, not which
+        wrong chord it lands on - so the assertion is that the sounding notes are still
+        outside Cmaj7 and no strategy was recorded, rather than one fixed inversion.
+        """
         result = self.engine.arrange_progression(self.all_of_me, non_chord_tone="legacy")
-        self.assertEqual(result[1].voicing.tab_string(), "x-x-8-8-8-10")
-        self.assertEqual(sorted(result[1].voicing.pitch_classes()), [2, 3, 7, 10])
-        self.assertIsNone(result[1].strategy)
+        step = result[1]
+        self.assertEqual(step.voicing.tab_string(), "x-x-11-11-10-10")
+        # A Cmaj7 is C E G B; nothing the fallback sounds belongs to it.
+        self.assertFalse(set(step.voicing.pitch_classes()) <= {0, 4, 7, 11})
+        # It is a *complete* four-note shape, still the wrong chord, and the melody D5
+        # is on top of it - which is what makes it a plausible-sounding mistake.
+        self.assertEqual(len(step.voicing.active_frets()), 4)
+        self.assertEqual(max(step.voicing.midi_notes()), Note("D5").midi_note())
+        self.assertIsNone(step.strategy)
 
     def test_chord_tone_steps_are_identical_under_every_strategy(self):
         """The strategy only ever affects non-chord melodies."""

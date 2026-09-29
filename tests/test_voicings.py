@@ -1,6 +1,7 @@
 import unittest
 from musthe import Note
 from arranger import (
+    GRIP_MAX_SPAN,
     VoiceLeadingEngine,
     Voicing,
     GuitarFretboard,
@@ -51,8 +52,8 @@ class TestDrop2Voicings(unittest.TestCase):
                 pcs = set(v.pitch_classes())
                 self.assertEqual(pcs, expected_pcs, f"Voicing {v.tab_string()} pitch classes {pcs} != {expected_pcs}")
 
-                # Playability: max span on guitar neck <= 5 frets
-                self.assertLessEqual(v.fret_span(), 5)
+                # Playability: max span on guitar neck <= GRIP_MAX_SPAN["drop2"] frets
+                self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["drop2"])
 
     def test_minor_chord_qualities_supported(self):
         """Verify that all essential minor tune chord qualities return valid fingerings."""
@@ -61,7 +62,7 @@ class TestDrop2Voicings(unittest.TestCase):
             voicings = self.engine.get_drop2_voicings(Note("G5"), q)
             self.assertGreater(len(voicings), 0, f"Expected voicings for quality {q} with melody G5")
             for v in voicings:
-                self.assertLessEqual(v.fret_span(), 5)
+                self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["drop2"])
                 self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()))
 
     def test_major_chord_qualities_supported(self):
@@ -101,7 +102,7 @@ class TestExtendedQualities(unittest.TestCase):
             voicings = self.engine.get_drop2_voicings(Note(melody), quality, chord_name=chord_name)
             self.assertTrue(voicings, f"Expected a voicing for {chord_name} with melody {melody}")
             for v in voicings:
-                self.assertLessEqual(v.fret_span(), 5)
+                self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["drop2"])
                 self.assertTrue(
                     set(v.pitch_classes()) <= tones,
                     f"{v.tab_string()} sounds {sorted(v.pitch_classes())} outside {sorted(tones)}",
@@ -116,7 +117,7 @@ class TestExtendedQualities(unittest.TestCase):
         voicings = self.engine.get_all_drop2_voicings(Note("D5"), "maj9")
         self.assertEqual(len(voicings), 10)  # 5 templates x 2 soprano strings
         for v in voicings:
-            self.assertLessEqual(v.fret_span(), 5)
+            self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["drop2"])
             self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()))
 
     def test_rootless_dominant_root_in_top_inversion(self):
@@ -163,7 +164,7 @@ class TestMelodyStringChoices(unittest.TestCase):
 
         # The melody note itself must sound on the B string
         self.assertEqual(GuitarFretboard.fret_to_midi(4, v.frets[4]), Note("D5").midi_note())
-        self.assertLessEqual(v.fret_span(), 5)
+        self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["drop2"])
 
     def test_both_families_sound_the_same_pitches(self):
         """
@@ -216,7 +217,7 @@ class TestMelodyStringChoices(unittest.TestCase):
         self.assertEqual(len(all_voicings), 8)
         self.assertEqual([v.soprano_string() for v in all_voicings], [5, 5, 5, 5, 4, 4, 4, 4])
         for v in all_voicings:
-            self.assertLessEqual(v.fret_span(), 5)
+            self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["drop2"])
             self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()))
 
     def test_unsupported_quality_returns_nothing_for_every_family(self):
@@ -302,7 +303,7 @@ class TestHighFretOctaveDown(unittest.TestCase):
         """The ordinary drop-2 invariants still hold after the move down the neck."""
         step = self.engine.arrange_progression([("A5", "m7", "Dm7")])[0]
         v = step.voicing
-        self.assertLessEqual(v.fret_span(), 5)
+        self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN[v.grip])
         self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()))
         self.assertEqual(v.soprano_string(), 4)
         self.assertTrue(set(v.pitch_classes()) <= set(ChordParser.get_chord_tones("m7", "Dm7")))
@@ -395,7 +396,7 @@ class TestTriadSusAndAlteredQualities(unittest.TestCase):
             self.assertEqual([v.tab_string() for v in voicings], [expected], chord_name)
             voicing = voicings[0]
             self.assertTrue(set(voicing.pitch_classes()) <= tones, f"{chord_name} {voicing.tab_string()}")
-            self.assertLessEqual(voicing.fret_span(), 5, chord_name)
+            self.assertLessEqual(voicing.fret_span(), GRIP_MAX_SPAN["drop2"], chord_name)
             self.assertTrue(all(0 <= f <= 18 for f in voicing.active_frets()), chord_name)
             self.assertEqual(GuitarFretboard.fret_to_midi(5, voicing.frets[5]), Note(melody).midi_note())
 
@@ -428,7 +429,7 @@ class TestTriadSusAndAlteredQualities(unittest.TestCase):
                     checked += 1
                     for v in matched:
                         self.assertTrue(set(v.pitch_classes()) <= tones, (chord_name, melody, v.tab_string()))
-                        self.assertLessEqual(v.fret_span(), 5, (chord_name, melody))
+                        self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["drop2"], (chord_name, melody))
                         self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()), (chord_name, melody))
                         self.assertIn(v.soprano_string(), (5, 4), (chord_name, melody))
         self.assertGreater(checked, 100)

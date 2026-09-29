@@ -18,6 +18,7 @@ import zipfile
 from typing import List, Optional
 from xml.etree import ElementTree
 
+import arranger
 from arranger import NO_CHORD, ChordParser
 from headxml import (
     Head,
@@ -936,10 +937,23 @@ class TestHeadTexture(unittest.TestCase):
 
     def test_the_texture_thins_a_cut_time_head(self):
         """
-        The flag does what it says on a real head, and the chords survive.
+        The flag does what it says on a real head, and the chords mostly survive.
 
         Thinner overall, with every strong beat still stated in full - the two halves
         of the claim, since thinning the harmony too would not be an arrangement.
+
+        A strong beat is the *exception* where the only complete shape it can be given
+        needs a five-fret stretch: the `targets` target palette is the four-note grips
+        only, so the narrow alternative is never offered, and the step falls back to the
+        melody alone. That is a target with one voice, and it is the whole reason this
+        assertion is not simply "every target has four voices" - see
+        `TestGripsIntersectTheTexture::test_a_target_that_cannot_be_played_becomes_the_melody_alone`.
+
+        So the claim is the property rather than a count: **no target is left holding a
+        full-span stretch**, and every demotion is a single playable note that still
+        names its harmony. The count is 5 on this head and they are all the same musical
+        event - Ebmaj under G4 recurs five times - so pinning a number would be pinning
+        the tune rather than the rule.
         """
         uniform, _head, _n = arrange_xml_head(BUT_NOT_FOR_ME, texture="uniform")
         targets, _head, _n = arrange_xml_head(BUT_NOT_FOR_ME, texture="targets")
@@ -950,8 +964,21 @@ class TestHeadTexture(unittest.TestCase):
 
         self.assertLess(mean_voices(targets), mean_voices(uniform))
         for step in targets:
-            if step.role == "target" and not step.melody_only:
-                self.assertEqual(len(step.voicing.active_frets()), 4, step.tab_line())
+            if step.role != "target" or step.melody_only:
+                continue
+            if step.voicing.grip == "melody":
+                # Demoted: playable, and the harmony is still named above it.
+                self.assertEqual(len(step.voicing.active_frets()), 1, step.tab_line())
+                self.assertTrue(step.chord, "a demoted target still names its harmony")
+                continue
+            self.assertEqual(len(step.voicing.active_frets()), 4, step.tab_line())
+            # The whole point of the fallback: a complete chord survives only while it
+            # stays inside the reach.
+            self.assertLess(
+                step.voicing.fret_span(),
+                arranger.GRIP_MAX_SPAN["drop2"],
+                "a target is still holding a full-span stretch: " + step.tab_line(),
+            )
 
     def test_the_default_is_unchanged(self):
         """No flag, no texture: every step is a principal note."""
@@ -1070,8 +1097,12 @@ class TestHeadCli(unittest.TestCase):
         """--tab staff lays the head on one six-line staff, in the notated metre."""
         output = self.run_cli(self.score_path(), "--tab", "staff", "--melody")
         self.assertIn("Dm7", output)
-        # The staff draws six strings, high E first.
-        self.assertRegex(output, r"e\s*\|")
+        # The staff draws six strings, high E first. The `*` is `_carries_melody`'s
+        # marker, drawn on any string sounding the melody, so it may sit between the
+        # letter and the bar - which it now does, because span being ranked above neck
+        # position moved this head's B4 from the B string to the high E. The letter and
+        # the bar are what this test is about, so the marker is optional.
+        self.assertRegex(output, r"e\s*\*?\s*\|")
 
     def test_it_writes_an_html_page_when_asked(self):
         """--html writes a page and says where."""

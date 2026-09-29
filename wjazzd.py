@@ -61,6 +61,7 @@ from pathlib import Path
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 from arranger import (
+    GRIP_MAX_SPAN,
     GRIP_PREFERENCE,
     MELODY_STRING_CHOICES_FULL,
     NECK_FRET_MAX,
@@ -1934,7 +1935,38 @@ def arrange_slots(
         previous_melody_midi = Note(melody).midi_note()
         # The texture narrows what may be *played* here; it is not a term in the cost
         # tuple, so a thin fill can never be outbid for being badly placed.
-        slot_grips = grips if texture == "uniform" else texture_grips[role]
+        #
+        # `grips` **narrows** the texture's palette; it never widens it and never silently
+        # deletes from it. It used to be discarded outright
+        # (`slot_grips = texture_grips[role]`), so `--grips shell --texture targets` asked
+        # for shell-only and got a four-note drop-2 on every strong beat.
+        #
+        # The default is why this is not a plain set intersection: `GRIP_PREFERENCE` is
+        # the order a *caller* ranks grips in and deliberately does not list `interval`,
+        # `melody` or `drop3`, which the texture palettes do use - so intersecting with it
+        # would delete them and change every default arrangement. An explicit restriction
+        # intersects; the absence of one does not.
+        #
+        # Both copies must agree. A head read from a MusicXML file comes here and a
+        # hand-built progression goes through `arrange_progression`, so fixing only one
+        # leaves the same flag behaving two different ways depending on the entry point.
+        role_grips = texture_grips[role]
+        if grips == GRIP_PREFERENCE:
+            slot_grips = role_grips
+        else:
+            narrowed = tuple(g for g in grips if g in role_grips)
+            if narrowed:
+                slot_grips = narrowed
+            else:
+                # The caller asked for grips this role never uses. Losing a chord of the
+                # tune is worse than ignoring a flag, so the texture's own set stands -
+                # and the warning says what was ignored, which the old code never did.
+                slot_grips = role_grips
+                print(
+                    f"Warning: {texture} uses {role_grips or 'no grip'} for a "
+                    f"{role}, none of which is in the requested {grips}; "
+                    f"using the texture's own set"
+                )
         if index in retry:
             # Re-resolve this step as a dim7 and remember that we did, so the
             # caller can report which chords were substituted.
@@ -2035,6 +2067,44 @@ def arrange_slots(
         if arranged is None:
             continue
         voicing, prepared = arranged
+
+        # A shape that spans the whole fret budget is legal but often unplayable, and a
+        # `targets` target is only offered the four-note grips - so the narrow
+        # alternative was never a candidate to be ranked against, and the cost tuple
+        # would not have picked it anyway (`missing` sits above span, so a complete wide
+        # shape beats a partial narrow one). `x-6-5-3-8-x` for Ebmaj under G4 is the real
+        # case: the engine can sound `x-x-8-8-8-x` there, span 0, but a target is never
+        # offered a shell.
+        #
+        # This is a *fallback*, tried last, and it mirrors the one in
+        # `arrange_progression` - both entry points need it, or the same head would play
+        # differently depending on whether it arrived as a progression or as a file.
+        # Lowering GRIP_MAX_SPAN is a filter that deletes the voicing everywhere;
+        # promoting span above `missing` would dissolve the shell and duo families. Here
+        # a complete chord is still what you get whenever it is playable, and only a
+        # shape at the very top of the budget is demoted to the melody alone, which is
+        # playable for every reachable note. The chord name above the step still
+        # describes the harmony, the same convention a shell uses.
+        if voicing.fret_span() >= GRIP_MAX_SPAN["drop2"] and role == ROLE_TARGET:
+            solo_voicing = engine.get_melody_only_voicing(Note(melody))
+            if solo_voicing is not None and solo_voicing.fret_span() < voicing.fret_span():
+                print(
+                    f"Warning: {name} with melody {melody} needs a "
+                    f"{voicing.fret_span()}-fret stretch "
+                    f"({voicing.tab_string()}); playing the melody alone"
+                )
+                step = ArrangementStep(
+                    chord=name, melody=melody, voicing=solo_voicing,
+                    grip="melody", partial=False,
+                    bar=bar, beat=beat, duration=duration,
+                    role=role, metric_weight=weight,
+                    bass_only=slot.bass_only,
+                )
+                steps.append(step)
+                VoiceLeadingEngine._attach_bass(step, slot.bass, steps)
+                previous = solo_voicing
+                previous_chord = name
+                continue
         # A repeated melody is a soprano-only re-strike, so the renderers hold the
         # inner voices. Mirrors the rule in VoiceLeadingEngine.arrange_progression:
         # the same sounding pitch as the previous step, that step was a real

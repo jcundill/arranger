@@ -564,8 +564,8 @@ what they are missing without opting in.
     transposes. `get_all_drop2_voicings` is this pinned to `grips=("drop2",)`.
   - `voicing_cost(voicing, previous, fret_min, fret_max, allowed_tones)` — the whole
     selection rule as one comparable tuple: notes outside the chord, then frets
-    outside the window, then missing voices, then neck position (the difference of
-    average frets from the previous voicing), then pitch movement, then span, then
+    outside the window, then missing voices, then **span**, then neck position (the
+    difference of average frets from the previous voicing), then pitch movement, then
     grip preference. Lexicographic, not a weighted sum, because these priorities must
     not be traded against each other. `_best_voicing` is its argmin and is stable, so
     the engine is deterministic.
@@ -1257,6 +1257,66 @@ filtering, no transposition) and `_best_voicing` does all the deciding. That spl
 what stops the grip families and the octave-down rescue from having to know about each
 other, and it is asserted in `tests/test_grips.py`.
 
+### Span outranks neck position
+
+`voicing_cost` ranks **fret span above neck position**. This is the only place one
+criterion is promoted across another, and the trade was measured rather than guessed.
+
+**The two criteria disagree about the same thing.** Position measures how far the
+*hand* moves; span measures how far the hand has to *stretch* once it is there. A
+five-fret shape sitting one fret from where the hand already was wins on position and
+loses on span — and with span ranked below position that shape was chosen, which is
+how the engine came to select `8-x-8-8-13-x` (index at 8, pinky at 13) for a Cm7b5.
+Keeping the hand still is worth less than being able to play the shape it is holding.
+
+**Promoting span is free where tightening the cap is not.** The obvious alternative is
+to lower `GRIP_MAX_SPAN` from 5, and it was implemented and measured first. It is a
+*filter*, so it deletes a voicing wherever no tighter one exists, and that cost real
+music:
+
+| cap | voicings kept (of 1008) | what went missing |
+|---|---|---|
+| 5 | 960 | — |
+| 4 | 960 | the only Gsus4 fingering, `x-x-5-5-3-8`; and the **6-4-3** shell |
+
+6-4-3 is the one default shape that reaches the low E, and losing it is a far bigger
+musical cost than a few wide shapes. Ranking instead only ever chooses *between shapes
+already on the table*, so nothing stops being voiceable at all. Over the same 1008
+(melody, quality) pairs, coverage is identical at 960 and the share of selected
+five-fret shapes fell from **4.1% to 0.8%**, with span-1 shapes rising from 27.8% to
+44.4%.
+
+**What it does not promise.** A selected shape can still span five frets, because
+where the only candidate is wide, span is consulted first, finds every candidate
+equal, and the wide one is played. `GRIP_MAX_SPAN` remains the outer bound. The
+promotion is also below the correctness criteria: a shape sounding a foreign note or
+a partial harmonisation still loses to a correct one however tight it is, which
+`tests/test_grips.py::TestVoicingCost` asserts directly on the tuple rather than only
+through a result.
+
+**The one case it costs, and why it is not tuned away.** A low Dm7 under D4 is now
+`x-3-3-2-3-x` (span 1, lowest voice C3) where it was `5-x-3-5-3-x` on 6-4-3-2 (span 2,
+lowest voice A2). Both sound the same four pitch classes, both are inside the window,
+both are complete, so span decides and the narrower one wins — and the cost is the
+bass, since C is the 3rd where A was the 5th, and 6-4-3-2 is the only default set that
+reaches the low E at all.
+
+The obvious repair is to rank the bass-function term above span. That was implemented
+and measured, and it **brings `8-x-8-8-13-x` straight back**: the same ordering that
+rescues the low bass also lets a five-fret shape with a root bass beat a one-fret shape
+without one. The two criteria cannot both come first, so the choice is which to
+favour. Span is favoured because a five-fret stretch is a shape the hand may not be
+able to play at all, while a 3rd in the bass is a musical detail the ear supplies
+around. The regression is asserted explicitly in
+`tests/test_progressions.py::test_low_register_cadence_voices_low_with_a_complete_chord_or_a_shell`
+so it stays visible rather than being quietly re-tuned away.
+
+**Span is a distance, not a count.** `fret_span()` is `max(frets) - min(frets)`, so a
+shape on frets 6 and 10 spans *four*: the stretch from index to pinky is four frets
+even though five fret positions are involved. Counting the touched frets
+inclusively would describe a reach the hand does not make, and would make the limit of
+5 mean a five-finger stretch.
+
 | grip | voices | how it is built |
 |---|---|---|
 | `drop2` | 4 | `DROP2_INTERVAL_SETS`, verbatim — the tables are hand-authored |
@@ -1362,6 +1422,35 @@ Five decisions are load-bearing:
   Measured over melid 218, 2 of 30 weak slots take this path, so the reported role and
   the sounding shape must be allowed to disagree with `metric_weight` but never with
   each other.
+- **A target that cannot be *played* becomes the melody alone.** The mirror of the rule
+  above, and it exists because `targets` offers a target only `("drop2", "drop3")` — so a
+  narrow shell is not merely outranked on such a step, it is **never generated**, and the
+  cost tuple would not have chosen it anyway (`missing` is index 2, above span). Ebmaj
+  under G4 in "But Not For Me" is the real case: the engine can sound `x-x-8-8-8-x`
+  (span 0) there, but the only complete option a target is offered is `x-6-5-3-8-x`, a
+  five-fret stretch. The step falls back to the melody alone, and warns.
+
+  It is a **fallback, not a re-ranking**, and deliberately the last thing tried. Lowering
+  `GRIP_MAX_SPAN` is a filter that deletes the voicing everywhere; promoting span above
+  `missing` would dissolve the shell and duo families across the whole library. Here a
+  complete chord is still what you get whenever it is playable, and only a shape at the
+  very top of the budget is demoted. The demotion target is the melody alone rather than
+  a shell because a shell is only reachable when the role's palette contains one, and
+  where it does not — a `targets` target — there is nothing to demote *to*.
+  `melody_only` stays **False**: the step does have a harmony, it is simply not spelled
+  out, so the flag would make the annotation claim "no chord".
+- **`grips` is an intersection, not an override.** A caller's `grips` used to be
+  discarded outright by any non-uniform texture (`slot_grips = texture_grips[role]`), so
+  `--grips shell --texture targets` asked for shell-only and silently got a four-note
+  drop-2 on every strong beat. It is now the intersection of the caller's restriction and
+  the role's palette, in the caller's order; `GRIP_PREFERENCE` intersects to the full
+  palette, so the default is untouched. An **empty** intersection is a caller asking for
+  a grip the texture never uses: the step still sounds, and says so on stdout.
+
+  Both entry points need this, and they are separate copies of one loop —
+  `arrange_progression` and `wjazzd.arrange_slots` — because a head read from a file
+  takes the second and a hand-built progression the first. Fixing only one leaves the
+  same flag behaving two different ways depending on the entry point.
 - **An `interval` is a texture, not a harmony, so it breaks the duo's hard rule.**
   `DUO_DEGREES` refuses a two-note shape under a 3rd or 7th because those notes *are*
   the chord's function. An interval is not claiming the chord, so it is offered under

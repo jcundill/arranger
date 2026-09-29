@@ -700,7 +700,7 @@ class TestNoRegression(unittest.TestCase):
         )
         self.assertEqual(
             [s.tab_line() for s in VoiceLeadingEngine.arrange_progression(MAJOR_CADENCE)],
-            ["x-x-10-10-10-10", "x-x-7-9-8-9", "x-x-7-9-7-9", "x-x-11-10-10-10"],
+            ["x-x-10-10-10-10", "x-x-7-9-8-9", "x-x-9-9-9-9", "x-x-11-10-10-10"],
         )
 
     def test_adding_a_bass_does_not_change_the_melody(self):
