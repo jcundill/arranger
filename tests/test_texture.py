@@ -243,13 +243,15 @@ class TestBackwardCompatibility(unittest.TestCase):
 
     def test_the_targets_texture_pins_its_exact_tab(self):
         """
-        The `targets` texture's output, pinned before the walking-bass work begins.
+        The `targets` texture's output, pinned against deliberate review.
 
-        This is not redundant with the behaviour tests in TestTargetsTexture: the walk
-        adds a shell string set, `shell` is already in the `targets` fill tuple, and a
-        new candidate can legitimately win on position alone. Pinning the tab here means
-        any such relocation is a visible edit to one list rather than a silent drift,
-        and the rule for it is update-only-where-musically-correct.
+        The first three fills are `x-x-7-9-x-8`, `x-x-7-9-x-7` and `x-x-7-9-x-8` -
+        the (5,3,2) shell added for the walking-bass work, where before the walk landed
+        these on the contiguous 5-4-3 (`x-x-x-9-10-8` and friends). The relocation is
+        the intended one: the melody stays on the high E at the same fret, both guide
+        tones still sound, the B string is released, and the 5th and 6th strings become
+        free for a thumb. That is exactly the three-layer split the walk needs, so the
+        pin moved here rather than the set being withdrawn.
         """
         steps = VoiceLeadingEngine.arrange_progression(
             BUT_NOT_FOR_ME, timings=BUT_NOT_FOR_ME_TIMINGS, texture="targets"
@@ -258,9 +260,9 @@ class TestBackwardCompatibility(unittest.TestCase):
             [s.tab_line() for s in steps],
             [
                 "x-x-7-9-6-8",
-                "x-x-x-9-10-8",
-                "x-x-x-9-10-7",
-                "x-x-x-9-10-8",
+                "x-x-7-9-x-8",
+                "x-x-7-9-x-7",
+                "x-x-7-9-x-8",
                 "x-x-10-12-10-10",
                 "x-x-x-12-11-13",
                 "x-12-x-9-13-x",

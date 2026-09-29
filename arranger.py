@@ -204,9 +204,10 @@ GRIP_STRING_SETS: Dict[str, Tuple[Tuple[Tuple[int, ...], int], ...]] = {
     "drop2_6432": (((0, 2, 3, 4), 4),),
     "drop3": (((2, 3, 4, 5), 5), ((1, 2, 3, 4), 4)),
     "closed": (((2, 3, 4, 5), 5), ((1, 2, 3, 4), 4)),
-    # Three-note shells: 1-2-3, 2-3-4, 5-4-3, the 6-4-3 that skips the A string, and
-    # the 5-3-2 that skips the D string. A G-string melody has two shapes available,
-    # 5-4-3 and 6-4-3, and the selector chooses between them like any other pair.
+    # Three-note shells: 1-2-3, 2-3-4, 5-4-3, the 6-4-3 that skips the A string, the
+    # 5-3-2 that skips the D string, and the 5-3-2 that skips the B. A G-string melody has
+    # two shapes available, 5-4-3 and 6-4-3, and the selector chooses between them like
+    # any other pair.
     #
     # 5-3-2 (A, G, B, melody on the B string) is the only shell whose A-string note
     # sounds *below* its G-string neighbour without the low E: the A is tuned five
@@ -218,9 +219,22 @@ GRIP_STRING_SETS: Dict[str, Tuple[Tuple[Tuple[int, ...], int], ...]] = {
     # melody at B-string fret 2 instead of G-string fret 6. That is the whole point of
     # allowing the melody to hold its place by changing strings. It needs the search
     # in _place_shell, not stacking, for the same reason 6-4-3 does.
+    #
+    # (5, 3, 2) is the *other* 5-3-2: high E, G and D, skipping the B on the way up
+    # rather than the D on the way down. It was added to close an asymmetry in this
+    # table rather than for any grip-specific reason - counting the shell sets by
+    # soprano, the high E had exactly one shape ((5,4,3)) while the B and the G had
+    # two each, and the high E is the *most* used soprano because
+    # MELODY_STRING_CHOICES_FULL puts it first, so every arrangement tries it before
+    # the others. It is also the three-layer split a walking-bass shell wants (melody
+    # on the high E, guide tones on the G and the D, leaving the 5th and 6th strings to
+    # the thumb), so it earns its place twice over. Like the other non-contiguous sets
+    # it needs _place_shell's search, not stacking: its D-string note can sound above
+    # its G-string note, so the voices are not in descending pitch order down the
+    # strings.
     "shell": (
         ((5, 4, 3), 5), ((4, 3, 2), 4), ((1, 2, 3), 3),
-        ((0, 2, 3), 3), ((1, 3, 4), 4),
+        ((0, 2, 3), 3), ((1, 3, 4), 4), ((5, 3, 2), 5),
     ),
     # Duos: 1-2, 2-3 and 3-4, each with the higher note carrying the melody.
     "duo": (((5, 4), 5), ((4, 3), 4), ((3, 2), 3)),

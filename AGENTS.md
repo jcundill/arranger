@@ -457,10 +457,12 @@ what they are missing without opting in.
   deliberately **not** listed: neither can be played within `GRIP_MAX_SPAN`
   (see Known Limitations).
 - `GRIP_STRING_SETS` — for each grip, its supported `(active string indices, soprano
-  index)` pairs: the 4-3-2-1 and 5-4-3-2 four-string blocks, **6-4-3-2**, the five
-  shell shapes (1-2-3, 2-3-4, 5-4-3, **6-4-3** and **5-3-2**), and three duos.
-  `6-4-3`, `5-3-2` and `6-4-3-2` are the three non-contiguous sets, each skipping one
-  string; only 6-4-3-2 skips one going *up* (the A, to reach the B as soprano).
+  index)` pairs: the 4-3-2-1 and 5-4-3-2 four-string blocks, **6-4-3-2**, the six
+  shell shapes (1-2-3, 2-3-4, 5-4-3, **6-4-3**, and the two 5-3-2s — `(1,3,4)`
+  skipping the D going down and `(5,3,2)` skipping the B going up), and three duos.
+  `6-4-3`, both `5-3-2`s and `6-4-3-2` are the four non-contiguous sets, each skipping
+  one string; `6-4-3-2` and `(5,3,2)` skip one going *up* (the A to reach the B as
+  soprano, and the B to reach the high E respectively).
   `supported_string_sets()` is the playability invariant stated in
   one place, and adds the drop-2 blocks for all three sopranos (drop-2 is defined
   generically, so a caller passing their own `top_string` still works).

@@ -381,6 +381,148 @@ class TestSixFourThreeShell(unittest.TestCase):
         self.assertEqual(self.six_four_three("G4", "m7", "Dm7"), [])
 
 
+class TestFiveThreeTwoHighEShell(unittest.TestCase):
+    """
+    The (5,3,2) shell: high E, G and D, with the B string deliberately skipped.
+
+    The *other* 5-3-2 - TestFiveThreeTwoShell covers the (1,3,4) one, which skips the D
+    string going down. This one skips the B going up, and it exists to close an
+    asymmetry rather than for a grip-specific reason: counting the shell sets by soprano,
+    the high E had exactly one shape while the B and the G had two each, and the high E
+    is the most-used soprano of all.
+
+    It is also the three-layer split a walking bass wants, which is why the walking-bass
+    fixture asserts the upper voices really do land on {5,3,2} rather than being
+    approximated with the contiguous shell.
+    """
+
+    def setUp(self):
+        self.engine = VoiceLeadingEngine()
+
+    def shells(self, melody, quality, chord_name, top_string=5):
+        return [
+            v
+            for v in self.engine.get_grip_voicings(
+                Note(melody), quality, chord_name=chord_name, top_string=top_string,
+                grips=("shell",),
+            )
+            if v.active_strings == [2, 3, 5]
+        ]
+
+    def test_it_produces_the_textbook_shape(self):
+        """
+        Fmaj7 under its 5th is x-x-7-9-x-8: the 3rd (A) on the D string, the 7th (E) on
+        the G, the melody (C) on the high E. Both guide tones sound and the root does
+        not, which is what a shell is - so the omission of F is correct, not a gap.
+        """
+        found = self.shells("C5", "maj7", "Fmaj7")
+        self.assertTrue(found, "Fmaj7 should have a (5,3,2) shell under C5")
+        v = found[0]
+        self.assertEqual(v.tab_string(), "x-x-7-9-x-8")
+        self.assertEqual(v.active_strings, [2, 3, 5])
+        # The B string is left alone, which is what makes this a 5-3-2 and not a 5-4-3.
+        self.assertEqual(v.frets[4], -1)
+        # A and E are Fmaj7's 3rd and 7th; the root is deliberately absent.
+        self.assertEqual(sorted(v.pitch_classes()), [0, 4, 9])
+        self.assertEqual(max(v.midi_notes()), Note("C5").midi_note())
+
+    def test_it_is_reachable_across_the_shell_qualities(self):
+        """
+        A tabulated-but-unreachable set is the failure mode the other 5-3-2's own
+        comment warns about, so this sweeps the qualities the library has shells for
+        rather than asserting one lucky example.
+        """
+        found = []
+        for chord_name, quality in QUALITIES:
+            for melody in every_chord_tone(chord_name, quality):
+                for v in self.shells(melody, quality, chord_name):
+                    found.append((chord_name, melody, v.tab_string()))
+        self.assertTrue(found, "no (5,3,2) shell is reachable anywhere")
+
+    def test_every_shape_it_produces_obeys_the_invariant(self):
+        """
+        A non-contiguous set is held to exactly the same contract as a contiguous one:
+        a supported string set, the melody on the soprano and highest, a span within
+        GRIP_MAX_SPAN, and nothing sounding outside the chord.
+        """
+        checked = 0
+        for chord_name, quality in QUALITIES:
+            allowed = set(ChordParser.get_chord_tones(quality, chord_name))
+            for melody in every_chord_tone(chord_name, quality):
+                for v in self.shells(melody, quality, chord_name):
+                    checked += 1
+                    label = f"{chord_name} {melody} {v.tab_string()}"
+                    self.assertEqual(len(v.active_frets()), 3, label)
+                    self.assertIn(
+                        frozenset(v.active_strings), supported_string_sets(), label
+                    )
+                    self.assertEqual(v.soprano_string(), 5, label)
+                    self.assertEqual(max(v.midi_notes()), Note(melody).midi_note(), label)
+                    self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["shell"], label)
+                    self.assertTrue(set(v.pitch_classes()) <= allowed, label)
+        self.assertGreater(checked, 0, "the sweep proved nothing")
+
+    def test_it_is_offered_for_a_high_e_melody(self):
+        """
+        The set is keyed on soprano 5, so a high-E shell now has two shapes to choose
+        between instead of one.
+        """
+        shells = self.engine.get_grip_voicings(
+            Note("C5"), "maj7", chord_name="Fmaj7", top_string=5, grips=("shell",)
+        )
+        self.assertTrue(shells)
+        self.assertTrue(
+            any(v.active_strings == [2, 3, 5] for v in shells), "no (5,3,2) offered"
+        )
+        for v in shells:
+            self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["shell"], v.tab_string())
+
+    def test_it_is_not_offered_for_a_b_or_g_melody(self):
+        """
+        The set is keyed on soprano 5, so it must not leak onto the other two sopranos -
+        otherwise a shape generated for a B-string melody would put the melody on the
+        high E, which is a different grip entirely.
+        """
+        for top_string in (4, 3):
+            for chord_name, quality in QUALITIES:
+                for melody in every_chord_tone(chord_name, quality):
+                    for v in self.engine.get_grip_voicings(
+                        Note(melody), quality, chord_name=chord_name,
+                        top_string=top_string, grips=("shell",),
+                    ):
+                        self.assertNotEqual(
+                            v.active_strings, [2, 3, 5],
+                            f"(5,3,2) offered for top_string={top_string}: "
+                            f"{v.tab_string()}",
+                        )
+
+    def test_it_is_never_offered_under_a_non_chord_melody(self):
+        """
+        A shell states this chord's guide tones, so a melody that is not a chord tone
+        cannot be voiced in one. Db5 over Fmaj7 is its b13 and belongs to an altered
+        substitution, not to a shell with a b13 in it.
+        """
+        self.assertEqual(self.shells("Db5", "maj7", "Fmaj7"), [])
+
+    def test_the_high_e_soprano_is_no_longer_the_only_poorly_served_one(self):
+        """
+        The asymmetry that motivated the set, asserted on the table so a later removal
+        cannot pass unnoticed: before it, soprano 5 had one shell shape while the B and
+        the G sopranos had two each.
+        """
+        by_soprano = {}
+        for strings, soprano in GRIP_STRING_SETS["shell"]:
+            by_soprano.setdefault(soprano, []).append(frozenset(strings))
+        # Compared as sets: the table stores each one low-to-high, and sorting frozensets
+        # would order them by size rather than by content.
+        self.assertEqual(
+            set(by_soprano[5]), {frozenset((2, 3, 5)), frozenset((3, 4, 5))}
+        )
+        self.assertIn(frozenset((2, 3, 5)), supported_string_sets())
+        self.assertEqual(len(by_soprano[4]), 2)
+        self.assertEqual(len(by_soprano[3]), 2)
+
+
 class TestSixFourThreeTwo(unittest.TestCase):
     """
     6-4-3-2: low E, D, G and B, with the A string skipped so the bass can be a root.
