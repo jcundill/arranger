@@ -1,6 +1,13 @@
 # Walking Bass Texture — Implementation Plan
 
-This document is a design plan only. It does not implement any new behavior yet.
+**Status: in progress.** Phases 1-3 are implemented and committed on the
+`walking-bass` branch; phase 4 is next. See the progress table under
+[Phases](#phases) for the per-phase commits, the suite counts, and the two
+findings from the phase 3 measurement. `master` is untouched.
+
+The texture itself is still not reachable: `walking_bass` is not in
+`TEXTURE_STYLES`, so nothing the plan describes below is wired up. The reading
+below is the design as decided, with the three completed phases marked.
 
 It supersedes the earlier draft of this file, which proposed a separate
 `walking_bass=True` flag and a parallel bass pipeline. Both were revised after
@@ -678,10 +685,10 @@ argued over by the placement step.
 
 ### Resolved: the shell string set is added, as a general gap
 
-> **Open decision A — decided: add `(5,3,2)` to `GRIP_STRING_SETS["shell"]`, with
-> soprano 5.** It is a general improvement to the shell family, not a
-> walking-bass workaround, and it is wanted for the same reason the guide's example
-> happens to want it.
+> **Open decision A — decided AND IMPLEMENTED (phase 3, `90bf4e2`): add `(5,3,2)` to
+> `GRIP_STRING_SETS["shell"]`, with soprano 5.** It is a general improvement to the shell
+> family, not a walking-bass workaround, and it is wanted for the same reason the guide's
+> example happens to want it.
 
 **The general argument is an asymmetry in the table.** Counting the shell sets by
 soprano:
@@ -1063,6 +1070,36 @@ notes, not eight of either.
 
 Each ends with the suite green, per the contributing workflow.
 
+### Progress: phases 1-3 done, on branch `walking-bass`
+
+`master` is untouched at `531552e`. All work is on the `walking-bass` branch, one
+commit per phase, in the order below.
+
+| # | phase | commit | suite | notes |
+|---|---|---|---|---|
+| 1 | types only | `02e4860` | 585 OK | inert, as intended |
+| 2 | backward-compat pin | `8ebc904` | 587 OK | fixture hoisted to module level |
+| 3 | the `(5,3,2)` shell set | `90bf4e2` | 594 OK | the one behaviour change so far |
+| 4 | `_walking_bass_line` | — | — | **next** |
+
+Two results worth carrying forward, both from Phase 3's measurement:
+
+- **The one-line claim held.** `_place_shell` and `_string_sets_for` are generic over
+  `GRIP_STRING_SETS`, so `((5,3,2), 5)` really was a single table entry, and
+  `_place_shell`'s docstring already explains the non-contiguous rationale. Decision A
+  needed no new code.
+- **Exactly one pinned tab moved, and it was correct.** 22 shells are now produced on the
+  new set (0 before); all 176 shells swept over `SHELL_DEGREES` obey the invariant. The
+  `targets` fill relocated from the contiguous 5-4-3 (`x-x-x-9-10-8`) to the new set
+  (`x-x-7-9-x-8`): same melody fret, both guide tones still sounding, B string
+  released. `x-x-7-9-x-8` reads as if it lacks Fmaj7's 3rd and does not — D-string 7 is
+  A3 and G-string 9 is E4, so the 3rd and the 7th are both present and the root is
+  deliberately absent, which is what a shell is. The pin was updated with that reasoning
+  written into the test.
+
+`hand_fret` was **not** measured yet — it belongs to Phase 4, and Phase 3 produced no
+evidence for choosing among the three candidates.
+
 **All six decisions are now made** — A (the `(5,3,2)` shell), B (bass-only steps), C (a
 fill is the melody alone), D (beat 4 approaches the next anchor), E (the anchor
 generalises to a mid-bar change) and F (a target where the melody moves, recorded rather
@@ -1078,9 +1115,16 @@ done.
    `Voicing.bass_midi` and `Voicing.bass_string`,
    `__all__`, `__version__` →
    `0.9.0`. Nothing reads them; provably inert.
+   **DONE `02e4860`** — as predicted, inert: `walking_bass` is deliberately *not* in
+   `TEXTURE_STYLES` yet, so no path can reach the new fields. 585 tests green. The
+   editable-install finder was regenerated in the same breath, since the version bump
+   had left it pointing at 0.8.0.
 2. **Backward-compatibility test first**, before any behaviour: exact
    demo-cadence tabs pinned under `uniform` and `targets`. This is what makes
    every later step cheap.
+   **DONE `8ebc904`** — the But Not For Me fixture was hoisted to module level so
+   `TestTargetsTexture` and the pin share one definition, then pinned under both
+   textures. 587 tests green. This is what made Phase 3's one moved tab obvious.
 3. **The `(5,3,2)` shell set**, as its own phase because it is a behaviour change
    rather than an addition. One table entry; then run the full suite and
    **measure** which pinned tabs move, which steps relocate onto the new set, and
@@ -1088,6 +1132,11 @@ done.
    expectations only where the new output is musically correct, and report the
    count either way — "0 of 120 transcriptions" and "14%" are both acceptable
    outcomes, but only one of them is knowable in advance and it is not this one.
+   **DONE `90bf4e2`** — measured, and the report is in the progress table above: 22
+   shells produced on the new set, 176 shells swept clean, one pinned tab moved and
+   it was musically correct. 594 tests green. The measurement was over the test
+   fixtures and the demo, **not** over the corpus — this is the one item here that
+   would be better measured over real transcriptions before it is called settled.
 4. **`_walking_bass_line` + `bass_cost`, pure and unintegrated.** The anchor rule
    on every downbeat including a held chord's second bar, plus the **generalised
    mid-bar anchor of decision E** — one predicate, the one `_roles_for_slot`
