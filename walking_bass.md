@@ -1,13 +1,16 @@
 # Walking Bass Texture — Implementation Plan
 
-**Status: in progress.** Phases 1-3 are implemented and committed on the
-`walking-bass` branch; phase 4 is next. See the progress table under
-[Phases](#phases) for the per-phase commits, the suite counts, and the two
-findings from the phase 3 measurement. `master` is untouched.
+**Status: in progress.** Phases 1-4 are implemented and committed on the
+`walking-bass` branch; phase 5 is next. See the progress table under
+[Phases](#phases) for the per-phase commits, the suite counts, and the findings
+from the phase 3 and phase 4 measurements. `master` is untouched.
 
 The texture itself is still not reachable: `walking_bass` is not in
-`TEXTURE_STYLES`, so nothing the plan describes below is wired up. The reading
-below is the design as decided, with the three completed phases marked.
+`TEXTURE_STYLES`, so nothing the plan describes below is wired into
+`arrange_progression` yet. Phases 1-4 are the pieces that do not need it - the
+types, the compatibility pin, the shell set the example needs, and the pure bass
+generator. The reading below is the design as decided, with the completed phases
+marked.
 
 It supersedes the earlier draft of this file, which proposed a separate
 `walking_bass=True` flag and a parallel bass pipeline. Both were revised after
@@ -1070,7 +1073,7 @@ notes, not eight of either.
 
 Each ends with the suite green, per the contributing workflow.
 
-### Progress: phases 1-3 done, on branch `walking-bass`
+### Progress: phases 1-4 done, on branch `walking-bass`
 
 `master` is untouched at `531552e`. All work is on the `walking-bass` branch, one
 commit per phase, in the order below.
@@ -1080,9 +1083,9 @@ commit per phase, in the order below.
 | 1 | types only | `02e4860` | 585 OK | inert, as intended |
 | 2 | backward-compat pin | `8ebc904` | 587 OK | fixture hoisted to module level |
 | 3 | the `(5,3,2)` shell set | `90bf4e2` | 594 OK | the one behaviour change so far |
-| 4 | `_walking_bass_line` | — | — | **next** |
+| 4 | `_walking_bass_line` | this commit | 620 OK | pure and unintegrated |
 
-Two results worth carrying forward, both from Phase 3's measurement:
+Three results worth carrying forward, from the phase 3 and phase 4 measurements:
 
 - **The one-line claim held.** `_place_shell` and `_string_sets_for` are generic over
   `GRIP_STRING_SETS`, so `((5,3,2), 5)` really was a single table entry, and
@@ -1096,9 +1099,59 @@ Two results worth carrying forward, both from Phase 3's measurement:
   A3 and G-string 9 is E4, so the 3rd and the 7th are both present and the root is
   deliberately absent, which is what a shell is. The pin was updated with that reasoning
   written into the test.
+- **Phase 4 produced no evidence on `hand_fret`, because it could not.** The metric is
+  only comparable against a real upper voicing, and this phase deliberately has none —
+  it returns pitch classes. The measurement is deferred to phase 5, where the placement
+  step exists, and it is the one item from this phase's scope still open.
 
-`hand_fret` was **not** measured yet — it belongs to Phase 4, and Phase 3 produced no
-evidence for choosing among the three candidates.
+#### What phase 4 measured, and the three places the design was wrong
+
+Running the pure pass over the plan's own fixtures produced three findings worth
+recording, because two of them correct decisions this document had already made.
+
+- **"Out-of-chord is a tie-break for a connective note" meant the opposite of what it
+  says.** The cost sketch ranks `out-of-chord` *first* for `connect` and then calls it
+  a "tie-break only", and the two halves contradict each other. Ranked first, the
+  chromatic-approach candidates are **dead code**: a chord tone beats an out-of-chord
+  note at any distance, so nothing outside the permitted set could ever be chosen and
+  the guide's `Ab` over `Dm7` would be unreachable. `motion` is now the first musical
+  criterion and `out-of-chord` the third. Being outside the permitted set is a
+  tie-break in the sense the design meant — a nearer extension beats a more distant
+  chord tone — but a tie-break rather than a veto.
+- **"A repeated note is ranked behind any motion" is a real criterion, and it is what
+  makes a walk a walk.** Without it, zero motion wins on every beat and a bar of four
+  beats under one chord came out `D D D D`. The role table calls `hold` a fallback and
+  says nothing about the connects losing to it, which is the gap.
+- **An ascending tie-break was needed on top of that, and the design does not mention
+  one.** With motion ranked first and repeats penalised, a bar under a single chord
+  still oscillated `D C D C` — C is two semitones from D and two from C. A final
+  preference for *rising* on an exact distance tie fixes it, on the grounds that a
+  walking line ascends towards its next anchor. This is the one criterion in
+  `bass_cost` that is not in the design's cost sketch at all.
+
+Two smaller corrections, both cases where the plan's prose and the library's tables
+disagree and the tables are right:
+
+- **`Bb` over `G7` is the ♭5, not the ♭13.** The `7b13` row of
+  `NON_CHORD_TONE_EXTENSIONS` is keyed on degree 8, which is `Eb` over G. The library
+  follows the table, per the "never guess a chord" rule the notation tables already
+  follow, and the test says so explicitly.
+- **`A` over `Cmaj7` is degree 9, not degree 2.** `maj7` routes degrees 2, 6 and 9;
+  the 2nd is `D`. `A` arrives through the `6/9` row.
+
+The generator's output over the plan's own worked example, for the record:
+
+| bar | walk | roles |
+|---|---|---|
+| 1 | D E A♭ F♯ | anchor, connect, enclosure, approach |
+| 2 | G A B C | anchor, connect, connect, connect |
+
+Bar 1 matches the plan's schematic example — `D` anchored, `E` on beat 2, `A♭` on beat
+4 — except that beat 3 takes the enclosure note rather than the plan's `F`. Bar 2 has
+no following anchor, so its beats 2-4 are connective and rise through the chord's own
+tones and extensions. The published tab's beat-3 `F` is one of the divergences the plan
+already records, and the fixture asserts the **rule** rather than the published note.
+
 
 **All six decisions are now made** — A (the `(5,3,2)` shell), B (bass-only steps), C (a
 fill is the melody alone), D (beat 4 approaches the next anchor), E (the anchor
@@ -1146,6 +1199,15 @@ done.
    `None`. `onsets=None` is asserted here too: the gridless case degrades to one
    note per slot rather than failing. The three `hand_fret` candidates are measured
    here, not chosen.
+   **DONE** — `BassNote`, `_bass_harmony`, `bass_cost` and `_walking_bass_line` in
+   `arranger.py`, with `tests/test_bass.py` (26 tests). 620 green. Provably
+   unintegrated: `TEXTURE_STYLES` is untouched, so nothing reaches the new code and
+   no existing output can move. The `hand_fret` measurement could **not** be done
+   here — the metric needs a real upper voicing and this phase has none by design —
+   so it moves to phase 5 with the placement step, and that is the one item from
+   this phase's scope still open. The three corrections to the cost design are
+   recorded in the measurement section above; two of them are changes of substance,
+   not of wording.
 5. **Integration.** The union of the melody slots with the walked beats (decision
    B), the melody-alone branch for an empty fill tuple *and* for a target with no
    shell (decision C), the conjunction role rule carrying F, the `TEXTURE_GRIPS`
