@@ -50,6 +50,30 @@ MAJOR_CADENCE = [
     ("D5", "mMaj7", "Dm(maj7)"),
 ]
 
+# "But Not For Me" bars 1-2 in F, as the arranging guide writes them: the C target on
+# beat 1, the C-B-C-D run filling the gaps, then the F target of bar 3. Shared by the
+# `targets` behaviour tests and the backward-compatibility pin below, so the two cannot
+# drift apart.
+BUT_NOT_FOR_ME = [
+    ("C5", "maj7", "Fmaj7"),
+    ("C5", "maj7", "Fmaj7"),
+    ("B4", "maj7", "Fmaj7"),
+    ("C5", "maj7", "Fmaj7"),
+    ("D5", "maj7", "Fmaj7"),
+    ("F5", "m7", "Gm7"),
+    ("C5", "maj7", "Fmaj7"),
+    ("A4", "7", "C7"),
+]
+
+# One chord per eighth for a single bar of 4/4, so the eight slots land on beats 1.0,
+# 1.5, 2.0 ... 4.5 and exactly two of them - beats 1 and 3 - are strong. Annotated
+# because a bare list of `(int, float, None)` triples is not assignable to the
+# `List[Tuple[int, float, Optional[float]]]` the signature declares - the tuple is
+# invariant, so the `None` has to be spelled as the optional it is.
+BUT_NOT_FOR_ME_TIMINGS: List[Tuple[int, float, Optional[float]]] = [
+    (0, 1.0 + 0.5 * eighth, None) for eighth in range(8)
+]
+
 
 class TestMetricWeight(unittest.TestCase):
     """How strongly a slot counts, as a function of where it falls in the bar."""
@@ -217,6 +241,58 @@ class TestBackwardCompatibility(unittest.TestCase):
             ["x-x-10-10-10-10", "x-x-7-9-8-9", "x-x-7-9-7-9", "x-x-11-10-10-10"],
         )
 
+    def test_the_targets_texture_pins_its_exact_tab(self):
+        """
+        The `targets` texture's output, pinned before the walking-bass work begins.
+
+        This is not redundant with the behaviour tests in TestTargetsTexture: the walk
+        adds a shell string set, `shell` is already in the `targets` fill tuple, and a
+        new candidate can legitimately win on position alone. Pinning the tab here means
+        any such relocation is a visible edit to one list rather than a silent drift,
+        and the rule for it is update-only-where-musically-correct.
+        """
+        steps = VoiceLeadingEngine.arrange_progression(
+            BUT_NOT_FOR_ME, timings=BUT_NOT_FOR_ME_TIMINGS, texture="targets"
+        )
+        self.assertEqual(
+            [s.tab_line() for s in steps],
+            [
+                "x-x-7-9-6-8",
+                "x-x-x-9-10-8",
+                "x-x-x-9-10-7",
+                "x-x-x-9-10-8",
+                "x-x-10-12-10-10",
+                "x-x-x-12-11-13",
+                "x-12-x-9-13-x",
+                "x-10-x-9-10-x",
+            ],
+        )
+
+    def test_the_uniform_texture_on_the_same_fixture_is_unchanged(self):
+        """
+        The same fixture under `uniform`, pinned alongside the `targets` one.
+
+        A change to the grip tables can reach the default path too, so the two textures
+        are pinned on the same bar rather than the default being trusted to an older
+        fixture that carries no timing at all.
+        """
+        steps = VoiceLeadingEngine.arrange_progression(
+            BUT_NOT_FOR_ME, timings=BUT_NOT_FOR_ME_TIMINGS, texture="uniform"
+        )
+        self.assertEqual(
+            [s.tab_line() for s in steps],
+            [
+                "x-x-7-9-6-8",
+                "x-x-7-9-6-8",
+                "x-x-7-9-6-7",
+                "x-x-7-9-6-8",
+                "x-x-10-12-10-10",
+                "x-x-12-12-11-13",
+                "x-x-7-9-6-8",
+                "8-x-8-9-10-x",
+            ],
+        )
+
     def test_every_step_defaults_to_a_target_with_no_weight(self):
         """No timing means role=target and metric_weight=-1 on every step."""
         for step in VoiceLeadingEngine.arrange_progression(MINOR_CADENCE):
@@ -310,24 +386,10 @@ class TestTargetsTexture(unittest.TestCase):
 
     # "But Not For Me" bars 1-2 in F, as the arranging guide writes them: the C
     # target on beat 1, the C-B-C-D run filling the gaps, then the F target of bar 3.
-    PROGRESSION = [
-        ("C5", "maj7", "Fmaj7"),
-        ("C5", "maj7", "Fmaj7"),
-        ("B4", "maj7", "Fmaj7"),
-        ("C5", "maj7", "Fmaj7"),
-        ("D5", "maj7", "Fmaj7"),
-        ("F5", "m7", "Gm7"),
-        ("C5", "maj7", "Fmaj7"),
-        ("A4", "7", "C7"),
-    ]
+    PROGRESSION = BUT_NOT_FOR_ME
     # One chord per eighth for a single bar of 4/4, so the eight slots land on beats
     # 1.0, 1.5, 2.0 ... 4.5 and exactly two of them - beats 1 and 3 - are strong.
-    # Annotated because a bare list of `(int, float, None)` triples is not assignable
-    # to the `List[Tuple[int, float, Optional[float]]]` the signature declares - the
-    # tuple is invariant, so the `None` has to be spelled as the optional it is.
-    TIMINGS: List[Tuple[int, float, Optional[float]]] = [
-        (0, 1.0 + 0.5 * eighth, None) for eighth in range(8)
-    ]
+    TIMINGS = BUT_NOT_FOR_ME_TIMINGS
 
     def setUp(self):
         self.steps = VoiceLeadingEngine.arrange_progression(
