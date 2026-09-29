@@ -830,4 +830,10 @@ adding a new chord quality.
 
 ## License
 
-No license has been chosen for this project yet.
+MIT. See [LICENSE](LICENSE) for the full text.
+
+The optional `gp` extra pulls in [PyGuitarPro](https://pypi.org/project/PyGuitarPro/),
+which is LGPL-3.0. That is deliberately kept out of the runtime dependencies and
+behind a lazy import, so this project is not a combined work of PyGuitarPro and
+stays permissively licensed. `tabgp` also writes no PyGuitarPro code into this
+repository.

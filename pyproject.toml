@@ -1,5 +1,6 @@
 [build-system]
-requires = ["setuptools>=61"]
+# 77+ for the PEP 639 `license` / `license-files` metadata in [project].
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,6 +9,13 @@ dynamic = ["version"]
 description = "Generate playable jazz guitar chord-melody arrangements from a chord progression."
 readme = "README.md"
 requires-python = ">=3.10"
+# PEP 639. setuptools>=77 understands the SPDX expression and the license-files
+# list; older versions want the legacy {file = "LICENSE"} table and the
+# "License :: OSI Approved :: MIT License" classifier instead. The classifier is
+# deliberately absent - it is deprecated once the SPDX expression is present, and
+# this project builds with 77+.
+license = "MIT"
+license-files = ["LICENSE"]
 keywords = ["jazz", "guitar", "chord-melody", "drop-2", "voicing", "music-theory"]
 classifiers = [
     "Programming Language :: Python :: 3",

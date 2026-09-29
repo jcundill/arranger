@@ -38,7 +38,8 @@ arranger/
 ├── tabgp.py               # Guitar Pro 5 export (optional extra: PyGuitarPro)
 ├── headxml.py             # MusicXML import: read a melody + chord-symbol score
 ├── wjazzd.py              # Optional Weimar Jazz Database glue (stdlib sqlite3 only)
-├── pyproject.toml         # PEP 621 metadata (setuptools backend)
+├── pyproject.toml         # PEP 621 + PEP 639 metadata (setuptools backend)
+├── LICENSE                # MIT
 ├── README.md              # User-facing overview and usage
 ├── Makefile               # install / test / demo / build / clean targets
 ├── .gitignore             # Excludes .venv/, __pycache__/, build artefacts, *.db
@@ -69,6 +70,22 @@ is needed. Packaging metadata lives solely in `pyproject.toml`, which uses the
 setuptools backend, declares `musthe` as its only runtime dependency, offers
 `music21` as the `xml` extra, and reads the version dynamically from
 `arranger.__version__`.
+
+## License
+
+**MIT** (see `LICENSE`), declared as PEP 639 metadata in `pyproject.toml` —
+`license = "MIT"` plus `license-files = ["LICENSE"]` — which is why
+`build-system.requires` is `setuptools>=77`. Do not also add the
+`License :: OSI Approved :: MIT License` classifier: it is deprecated once the SPDX
+expression is present, and adding both makes setuptools warn.
+
+The licence is deliberately permissive, and one dependency is the reason it has to
+be. `PyGuitarPro` (the `gp` extra) is **LGPL-3.0**, so keeping this project clearly
+*not* a combined work of it is load-bearing. The two things that do that are
+already true and must stay true: it is a **runtime** dependency of neither the
+package nor the test suite, and `tabgp` imports it **lazily** so a plain
+`pip install jazz-arranger` never loads it. Copying PyGuitarPro code into the tree
+would change the analysis — don't.
 
 ## Requirements
 
@@ -582,7 +599,7 @@ what they are missing without opting in.
   - `VoiceLeadingEngine.get_interval_voicings(melody_note, chord_type,
     chord_name=None, top_string=5)` — the two-note `interval` grip, a public entry
     point like `get_drop2_voicings` so every family is reachable on its own.
-  - `__version__` — the library version string (currently `0.7.0`). `pyproject.toml`
+  - `__version__` — the library version string (currently `0.8.0`). `pyproject.toml`
     reads it as the dynamic project version, so it is the single source of truth.
 - `NO_CHORD` — the string `"NC"`, a bar carrying melody with no harmony.
 - `VoiceLeadingEngine.get_melody_only_voicing(melody_note, prefer=...)` — a
