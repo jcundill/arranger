@@ -506,6 +506,7 @@ hand already is rather than by preference:
 | grip | voices | what it is |
 |---|---|---|
 | `drop2` | 4 | the hand-authored drop-2 tables, on strings 4-3-2-1 or 5-4-3-2 |
+| `drop2_6432` | 4 | **6-4-3-2** — low E, D, G and B, so the bass can be a root |
 | `shell` | 3 | the 3rd and 7th plus one more: 1-2-3, 2-3-4, 5-4-3, **6-4-3** or **5-3-2** |
 | `duo` | 2 | the root or 5th in the melody plus the 3rd |
 | `interval` | 2 | a 3rd, 6th or 10th below the melody — a *fill*, not a harmony |

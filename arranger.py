@@ -55,6 +55,12 @@ NECK_FRET_MAX = 13
 # Grip families, in the order that breaks an exact tie. A four-note drop-2 shape is
 # listed first so it is never displaced by a shell when the two cost the same.
 #
+# `drop2_6432` is the 6-4-3-2 block (low E, D, G, B), listed second and after the
+# contiguous blocks because it is the *alternative* rather than the default reading of
+# "drop-2": `grips=("drop2",)` still means the contiguous four strings only, which is
+# the idiom that reproduces the library's original output exactly. It is a separate
+# family, not a third string set for `drop2`, precisely so that idiom survives.
+#
 # `drop3` and `closed` are generated but deliberately *not* listed here, because neither
 # can be played within this library's span limit. A close-position four-note chord
 # under a melody spans a seventh or more, and the four strings below the high E are only
@@ -63,13 +69,14 @@ NECK_FRET_MAX = 13
 # twelfth by construction. The generators stay, so a caller who raises GRIP_MAX_SPAN
 # can reach them, but advertising them as a default would be a promise the span
 # invariant cannot keep.
-GRIP_PREFERENCE: Tuple[str, ...] = ("drop2", "shell", "duo")
+GRIP_PREFERENCE: Tuple[str, ...] = ("drop2", "drop2_6432", "shell", "duo")
 
 # The maximum distance, in frets, from the soprano to any other finger. Five for every
 # four-note shape and every three-note shell; a duo is only ever two fingers, so it is
 # held to a tighter four.
 GRIP_MAX_SPAN: Dict[str, int] = {
     "drop2": 5,
+    "drop2_6432": 5,
     "drop3": 5,
     "closed": 5,
     "shell": 5,
@@ -150,6 +157,13 @@ GRIP_STRING_SETS: Dict[str, Tuple[Tuple[Tuple[int, ...], int], ...]] = {
     #   (2, 3, 4, 5) -> strings 4-3-2-1, melody on the high E
     #   (1, 2, 3, 4) -> strings 5-4-3-2, melody on the B string
     "drop2": (((2, 3, 4, 5), 5), ((1, 2, 3, 4), 4)),
+    # 6-4-3-2: low E, D, G and B with the melody on the B string, skipping the A
+    # string so the low E can carry the bass. It is the one default four-note set that
+    # reaches the low E, which is where a root actually lives, so it is what turns a
+    # root bass from a consequence of the string set into a decision. Note it is *not*
+    # the bottom-four block excluded by `_BOTTOM_FOUR`: it swaps the A string out for
+    # the B, and its soprano is the B rather than the G.
+    "drop2_6432": (((0, 2, 3, 4), 4),),
     "drop3": (((2, 3, 4, 5), 5), ((1, 2, 3, 4), 4)),
     "closed": (((2, 3, 4, 5), 5), ((1, 2, 3, 4), 4)),
     # Three-note shells: 1-2-3, 2-3-4, 5-4-3, the 6-4-3 that skips the A string, and
@@ -218,6 +232,16 @@ _BOTTOM_FOUR = frozenset((0, 1, 2, 3))
 # last-resort escape hatch.
 DUO_DEGREES: Tuple[int, int] = (0, 7)
 
+# The degrees the low-E note may take in a 6-4-3-2 shape. The same rule as
+# DUO_DEGREES, applied to the bass rather than to the melody, and for a stronger reason:
+# the lowest voice is what *defines* the chord, so a 3rd or a 7th down there sounds like
+# the wrong harmony rather than a voicing of this one. With no 5-4-3-2, a root in the
+# bass is a consequence of which string set was chosen and never a decision; 6-4-3-2 is
+# the one default shape that reaches the low E, and this rule is what makes it place a
+# root there.
+#   0 = root, 7 = 5th
+BASS_DEGREES_6432: Tuple[int, ...] = (0, 7)
+
 
 def supported_string_sets() -> List[frozenset]:
     """
@@ -253,7 +277,10 @@ HIGH_FRET_LIMIT = 13
 # it via [tool.setuptools.dynamic] instead of duplicating the number.
 # 0.4.0 added the optional Weimar Jazz Database corpus integration (wjazzd.py).
 # 0.5.0 added MusicXML export (tabxml.py), behind the optional `xml` extra.
-__version__ = "0.7.0"
+# 0.7.0 gave the engine metric and textural awareness (TEXTURE_STYLES).
+# 0.8.0 added 6-4-3-2 (grip `drop2_6432`) and a root-or-5th bass tie-break, so the
+# lowest voice can be a root by decision rather than by string-set accident.
+__version__ = "0.8.0"
 
 
 def _metric_weight(
@@ -862,6 +889,84 @@ def _place_shell(
             key = (spread, voicing.avg_fret)
             if best is None or key < best[:2]:
                 best = (spread, voicing.avg_fret, voicing)
+    return best[2] if best else None
+
+
+def _place_drop2_6432(
+    tones: Tuple[int, ...],
+    root_pc: int,
+    melody_midi: int,
+    top_fret: int,
+) -> Optional[Voicing]:
+    """
+    A four-note 6-4-3-2 shape (low E, D, G and the B under the melody), found by
+    searching rather than stacking.
+
+    It needs its own placement for the reason 6-4-3 does, and the reason is
+    structural: **this set skips the A string, so its strings are not in descending
+    pitch order.** The D string is tuned a fifth above the low E, so the low E's note is
+    frequently *not* the lowest sounding pitch - a hand-authored drop-2 table, which lays
+    voices down by interval, cannot express a shape whose bottom string is not the bottom
+    voice. Reusing _place_shell's approach is the answer rather than a second way to
+    place notes: hold the melody, search every combination of frets within the span
+    limit, keep the legal ones. Because the window is exactly the span limit, the search
+    is *exhaustive within the playability invariant*.
+
+    The one extra rule is BASS_DEGREES_6432: the low E carries the chord's root or its
+    5th. That is the entire point of the shape, and it is also why it needs a root at
+    all - a rootless quality has nothing to measure the low E against, and gets nothing.
+
+    Ties are broken by fret spread then by position, matching _place_shell, so the shape
+    a player would pick wins over the first one the search reaches. Ranking the survivors
+    is not cosmetic: an unranked search returns whatever comes first, which is how an
+    earlier measurement concluded this grip "would never be selected".
+    """
+    allowed = {(root_pc + t) % 12 for t in tones}
+    limit = GRIP_MAX_SPAN["drop2_6432"]
+
+    lo = max(0, top_fret - limit)
+    hi = top_fret + limit
+    if hi > 18:
+        return None
+
+    best: Optional[Tuple[int, float, Voicing]] = None
+    for low_e in range(lo, hi + 1):
+        for d_fret in range(lo, hi + 1):
+            for g_fret in range(lo, hi + 1):
+                active = (top_fret, low_e, d_fret, g_fret)
+                spread = max(active) - min(active)
+                if spread > limit:
+                    continue
+                frets = [-1] * len(STANDARD_TUNING)
+                frets[4] = top_fret
+                frets[0] = low_e
+                frets[2] = d_fret
+                frets[3] = g_fret
+                midis = sorted(
+                    GuitarFretboard.fret_to_midi(s, frets[s]) for s in (0, 2, 3, 4)
+                )
+                # The melody stays the top voice, nothing outside the chord sounds, and
+                # the low E carries a root or a 5th.
+                if midis[-1] != melody_midi:
+                    continue
+                if not {m % 12 for m in midis} <= allowed:
+                    continue
+                # The *low E string's* note, which is not the same as the lowest
+                # sounding pitch: the D string is a fifth above it.
+                if (GuitarFretboard.fret_to_midi(0, low_e) % 12 - root_pc) % 12 not in (
+                    BASS_DEGREES_6432
+                ):
+                    continue
+                voicing = Voicing(
+                    frets=frets,
+                    top_fret=top_fret,
+                    avg_fret=sum(active) / len(active),
+                    grip="drop2_6432",
+                    bass_pc=midis[0] % 12,
+                )
+                key = (spread, voicing.avg_fret)
+                if best is None or key < best[:2]:
+                    best = (spread, voicing.avg_fret, voicing)
     return best[2] if best else None
 
 
@@ -1525,7 +1630,7 @@ class VoiceLeadingEngine:
         valid_voicings: List[Voicing] = []
         for grip in grips:
             for strings in cls._string_sets_for(grip, top_string):
-                if grip in ("shell", "duo", "interval"):
+                if grip in ("shell", "duo", "interval", "drop2_6432"):
                     # These three are defined by the guide tones, so a chord with no root
                     # to measure them from gets nothing. That is a real limitation
                     # rather than a fallback: a shell is a claim about *this* chord's
@@ -1537,6 +1642,21 @@ class VoiceLeadingEngine:
                     if grip == "duo":
                         duo = _duo_offsets(tones, melody_midi, root_pc)
                         templates = [duo] if duo else []
+                    elif grip == "drop2_6432":
+                        # Found by its own search, like every other non-contiguous
+                        # shape: a skipped-string set cannot come from a table, and
+                        # the bass rule needs a root to measure against. No inversion
+                        # is narrowed here, because `target_idx` picks a template for a
+                        # contiguous block and has no meaning for a set of four
+                        # strings the voices were not laid on.
+                        if root_pc is None:
+                            continue
+                        found = _place_drop2_6432(
+                            tones, root_pc, melody_midi, top_fret
+                        )
+                        if found is not None:
+                            valid_voicings.append(found)
+                        continue
                     elif grip == "interval":
                         # A texture rather than a claim about the chord, so it is built
                         # from templates and placed like a drop-2 - no search needed,
@@ -1926,6 +2046,7 @@ class VoiceLeadingEngine:
         fret_min: int = NECK_FRET_MIN,
         fret_max: int = NECK_FRET_MAX,
         allowed_tones: Optional[Container[int]] = None,
+        root_pc: Optional[int] = None,
     ) -> Tuple[float, ...]:
         """
         The whole selection rule as one comparable number, lowest wins.
@@ -1966,7 +2087,19 @@ class VoiceLeadingEngine:
            long-standing "start near the middle of the neck" rule.
         4. total pitch movement of the voices, the historical voice-leading measure.
         5. fret span: a tighter shape is easier to hold and to move.
-        6. grip preference, so a four-note drop-2 wins an exact tie against a shell.
+        6. bass function, when `root_pc` is given: 0 for a root or a 5th in the lowest
+           voice, 1 otherwise. This is a *tie-break*, not a priority - it is consulted
+           only when two shapes already agree on everything above, which is exactly the
+           situation 6-4-3-2 creates. Its whole point is to make the low-E root bass
+           reachable at all: the contiguous 5-4-3-2 block places its lowest note on the A
+           string, so a root there is a consequence of the string set and never a
+           decision, and without this term `voicing_cost` declines the alternative on
+           neck position before it ever reaches the bass. Putting it at 6 rather than
+           near the front is deliberate: "the bass should be the root" must not outbid
+           "do not sound a wrong note" or "keep the hand where it is". The same rule as
+           BASS_DEGREES_6432, applied to whatever shape won rather than to one family,
+           so a contiguous shape with a root bass is not penalised either.
+        7. grip preference, so a four-note drop-2 wins an exact tie against a shell.
         """
         active = voicing.active_frets()
         outside = sum(1 for fret in active if not fret_min <= fret <= fret_max)
@@ -1992,6 +2125,15 @@ class VoiceLeadingEngine:
             else len(GRIP_PREFERENCE)
         )
         missing = 4 - len(active)
+        # No root, no claim to make: an unparseable chord name simply does not get this
+        # criterion, which is why it is opt-in per call rather than derived.
+        bass_root_or_fifth = (
+            0.0
+            if root_pc is not None
+            and voicing.bass_pc is not None
+            and (voicing.bass_pc - root_pc) % 12 in BASS_DEGREES_6432
+            else 1.0
+        )
 
         return (
             foreign,
@@ -2000,6 +2142,7 @@ class VoiceLeadingEngine:
             position,
             movement,
             float(voicing.fret_span()),
+            bass_root_or_fifth,
             float(grip_rank),
         )
 
@@ -2011,6 +2154,7 @@ class VoiceLeadingEngine:
         fret_min: int = NECK_FRET_MIN,
         fret_max: int = NECK_FRET_MAX,
         allowed_tones: Optional[Container[int]] = None,
+        root_pc: Optional[int] = None,
     ) -> Optional[Voicing]:
         """
         The candidate voicing_cost likes best, or None when there are no candidates.
@@ -2020,13 +2164,17 @@ class VoiceLeadingEngine:
         within a string. That keeps the whole engine deterministic: the same progression
         always arranges to the same tab, which is what makes its output worth asserting
         on in tests.
+
+        `root_pc` is passed straight through to voicing_cost and is what enables the
+        bass-function tie-break. A caller that does not have a root simply omits it and
+        gets the previous behaviour, unchanged.
         """
         if not candidates:
             return None
         return min(
             candidates,
             key=lambda v: cls.voicing_cost(
-                v, previous, fret_min, fret_max, allowed_tones
+                v, previous, fret_min, fret_max, allowed_tones, root_pc
             ),
         )
 
@@ -2430,6 +2578,9 @@ class VoiceLeadingEngine:
             prev_voicing = arrangements[-1].voicing if arrangements else None
             # The tones the *written* chord allows, so the selector can prefer a
             # shape that is merely out of position over one that sounds a wrong note.
+            # The root enables the bass-function tie-break in voicing_cost; it is None
+            # for a chord whose name cannot be parsed, which simply leaves that
+            # criterion unasked rather than guessing a bass.
             best_voicing = cls._best_voicing(
                 candidates,
                 prev_voicing,
@@ -2438,6 +2589,7 @@ class VoiceLeadingEngine:
                 allowed_tones=ChordParser.get_chord_tones(
                     ChordParser.canonical_quality(chord_type), name
                 ),
+                root_pc=cls._chord_context(chord_type, name)[1],
             )
             # `candidates` is non-empty here (the step is skipped otherwise), so this
             # cannot fire. Written as an assertion rather than left to Optional
@@ -2853,6 +3005,7 @@ if TYPE_CHECKING:
 # renderers from that, so they are listed here explicitly. Keep it in step when
 # adding a public name - test_dunder_all_matches_the_public_surface checks that.
 __all__ = [
+    "BASS_DEGREES_6432",
     "DUO_DEGREES",
     "GRIP_MAX_SPAN",
     "GRIP_PREFERENCE",

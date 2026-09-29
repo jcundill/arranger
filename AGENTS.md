@@ -432,16 +432,24 @@ what they are missing without opting in.
   by *changing strings* rather than by moving the hand. The A string and the low E are
   inner voices only; no grip puts the soprano on either, so the melody floor is `G3`
   while the chord range extends down to `E2` as a bass voice.
-- `GRIP_PREFERENCE = ("drop2", "shell", "duo")` — the grip families and their
-  tie-break order. `drop3` and `closed` are generated but deliberately **not** listed:
-  neither can be played within `GRIP_MAX_SPAN` (see Known Limitations).
+- `GRIP_PREFERENCE = ("drop2", "drop2_6432", "shell", "duo")` — the grip families and
+  their tie-break order. `drop2_6432` (6-4-3-2) is listed second because it is the
+  *alternative* to the contiguous drop-2, not a third string set for it:
+  `grips=("drop2",)` still means the four contiguous strings, which is the idiom that
+  reproduces the original output exactly. `drop3` and `closed` are generated but
+  deliberately **not** listed: neither can be played within `GRIP_MAX_SPAN`
+  (see Known Limitations).
 - `GRIP_STRING_SETS` — for each grip, its supported `(active string indices, soprano
-  index)` pairs: the 4-3-2-1 and 5-4-3-2 four-string blocks, the five shell shapes
-  (1-2-3, 2-3-4, 5-4-3, **6-4-3** and **5-3-2**), and three duos. `6-4-3` and `5-3-2`
-  are the two non-contiguous sets, each skipping one inner string.
+  index)` pairs: the 4-3-2-1 and 5-4-3-2 four-string blocks, **6-4-3-2**, the five
+  shell shapes (1-2-3, 2-3-4, 5-4-3, **6-4-3** and **5-3-2**), and three duos.
+  `6-4-3`, `5-3-2` and `6-4-3-2` are the three non-contiguous sets, each skipping one
+  string; only 6-4-3-2 skips one going *up* (the A, to reach the B as soprano).
   `supported_string_sets()` is the playability invariant stated in
   one place, and adds the drop-2 blocks for all three sopranos (drop-2 is defined
   generically, so a caller passing their own `top_string` still works).
+- `BASS_DEGREES_6432 = (0, 7)` — the degrees the low E may take in a 6-4-3-2 shape, and
+  the analogue of `DUO_DEGREES` for the bass rather than the melody. The lowest voice is
+  what *defines* the chord, so a 3rd or a 7th there sounds like a different harmony.
 - `SHELL_DEGREES` — the (3rd, 7th) pair per quality, explicit rather than inferred:
   a quality not listed gets no shell rather than a guessed one. `DUO_DEGREES = (0, 7)`
   — the only soprano degrees a duo is generated for, as a hard rule. The `interval`
@@ -1233,11 +1241,12 @@ other, and it is asserted in `tests/test_grips.py`.
 | grip | voices | how it is built |
 |---|---|---|
 | `drop2` | 4 | `DROP2_INTERVAL_SETS`, verbatim — the tables are hand-authored |
+| `drop2_6432` | 4 | 6-4-3-2, found by search — the one default set that reaches the low E |
 | `drop3` / `closed` | 4 | derived from a close stack; generated, not offered by default |
 | `shell` | 3 | `SHELL_DEGREES` plus one more note |
 | `duo` | 2 | root or 5th in the melody plus the 3rd |
 
-Four decisions in here were each forced by something measurable:
+Five decisions in here were each forced by something measurable:
 
 - **drop-2's tables are never derived.** The extended qualities are voiced *rootless*
   on purpose, so a 9 or a 13 that fits in four voices without the root is a musical
@@ -1263,7 +1272,24 @@ Four decisions in here were each forced by something measurable:
   the only one available is all of the four lowest strings and that does not sound good —
   four voices in the bottom fourth of the compass. A low melody is harmonised with a
   three-note shell (5-4-3 or 6-4-3) instead, dropping the 5th degree. Stated in one
-  place, `_BOTTOM_FOUR`, and asserted by `TestStringSetTable`.
+  place, `_BOTTOM_FOUR`, and asserted by `TestStringSetTable`. **6-4-3-2 is not an
+  exception to this rule**, which is why the two must not be conflated: it swaps the A
+  string out for the B, so its lowest note is the low E while its soprano is the B, not
+  the G. It is the answer to a different question — a *bass* — and it is the only default
+  set that can reach one.
+- **6-4-3-2 is searched for, and it needed a cost term to be chosen at all.** The same
+  reason as 6-4-3: the set skips a string, so it is not in descending pitch order down
+  the strings, so a hand-authored table cannot express it — the D string is a fifth above
+  the low E, and the low E's note is frequently *not* the lowest sounding pitch.
+  `_place_drop2_6432` therefore reuses `_place_shell`'s exhaustive search rather than
+  inventing a second way to place notes, and ranks the survivors by `(fret_span,
+  avg_fret)`. Two measurements forced the rest. Ranking is not cosmetic: an unranked
+  search returns the first shape it meets, which puts the low E at fret 0–1, below
+  `NECK_FRET_MIN`, and an earlier "0 of 22, never selected" reading was that bug. And
+  ranked correctly it still lost — `voicing_cost` reached the neck-position term first
+  and declined the better bass, so it wins only where the two shapes tie outright. Hence
+  the root-or-5th bass term at index 6, a *tie-break* below every correctness criterion,
+  which is what finally lets `5-x-5-5-5-x` (A2 G3 C4 E4) beat `x-3-5-2-5-x` (A2 E3 C4 E4).
 - **A partial harmonisation is a fallback, not a style.** `missing` voices outranks neck
   position in the cost, so a complete chord wins even when a shell would have held the
   position better. A permitted root-or-5th duo scores zero there and competes on equal
@@ -1458,7 +1484,8 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
 - Voicings use two to four strings, never all six. The melody may be on the high E, B
   or G string; the A string and low E are inner voices only, so no grip puts the
   soprano on either. There are no barres. Fret `0` does appear when a voice happens to
-  land on an open string (e.g. `x-2-3-0-3-x`). 6-4-3 is the one non-contiguous set.
+  land on an open string (e.g. `x-2-3-0-3-x`). 6-4-3, 5-3-2 and 6-4-3-2 are the
+  non-contiguous sets.
 - Melodies are still confined to `G3`–`Bb5`: `G3` is the lowest pitch reachable on the
   G string, `Bb5` the highest on the high E string. The *chord* range reaches further
   down, to `E2` as a bass voice on the low E string in a 6-4-3 shell.

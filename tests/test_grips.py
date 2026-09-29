@@ -13,6 +13,7 @@ import unittest
 from musthe import Note
 
 from arranger import (
+    BASS_DEGREES_6432,
     DUO_DEGREES,
     GRIP_MAX_SPAN,
     GRIP_STRING_SETS,
@@ -24,6 +25,7 @@ from arranger import (
     PITCH_CLASS_NAMES,
     SHELL_DEGREES,
     ChordParser,
+    GuitarFretboard,
     Voicing,
     VoiceLeadingEngine,
     format_progression,
@@ -379,6 +381,187 @@ class TestSixFourThreeShell(unittest.TestCase):
         self.assertEqual(self.six_four_three("G4", "m7", "Dm7"), [])
 
 
+class TestSixFourThreeTwo(unittest.TestCase):
+    """
+    6-4-3-2: low E, D, G and B, with the A string skipped so the bass can be a root.
+
+    This is the one default four-note set that reaches the low E. With 5-4-3-2 the lowest
+    sounding note is always on the A string, so a root bass is a consequence of the
+    string set rather than a decision; here it is chosen, and BASS_DEGREES_6432 is the
+    rule that chooses it.
+    """
+
+    def setUp(self):
+        self.engine = VoiceLeadingEngine()
+
+    def shapes(self, melody, quality, chord_name, grip="drop2_6432"):
+        return [
+            v
+            for v in self.engine.get_grip_voicings(
+                Note(melody), quality, chord_name=chord_name,
+                top_string=4, grips=(grip,),
+            )
+            if v.active_strings == [0, 2, 3, 4]
+        ]
+
+    def test_it_produces_the_textbook_shape(self):
+        """
+        Am7 under an E4 melody on the B string is 5-x-5-5-5-x: A2, G3, C4, E4.
+
+        The A string being absent is the whole point of the shape - it is what frees the
+        low E to play the root - and the four fingers line up, so span is zero.
+        """
+        found = self.shapes("E4", "m7", "Am7")
+        self.assertTrue(found, "Am7 should have a 6-4-3-2 under E4")
+        self.assertEqual(found[0].tab_string(), "5-x-5-5-5-x")
+        self.assertEqual(found[0].frets[1], -1)
+        self.assertEqual(found[0].fret_span(), 0)
+        self.assertEqual(
+            [note_name(m) for m in found[0].midi_notes()], ["A2", "G3", "C4", "E4"]
+        )
+
+    def test_the_bass_rule_holds_everywhere(self):
+        """
+        The low E always carries the chord's root or its 5th, never a 3rd or a 7th.
+
+        Swept across the qualities the library knows, in four roots so the rule is not
+        pinned to one transposition. The lowest voice is what *defines* the chord, so
+        this is the difference between voicing this harmony and sounding a different one.
+        """
+        seen = 0
+        for quality in sorted(ChordParser.CHORD_TONES_FROM_ROOT):
+            canonical = ChordParser.canonical_quality(quality)
+            tones = ChordParser.CHORD_TONES_FROM_ROOT[canonical]
+            for root in ("C", "F#", "Bb", "Eb"):
+                root_pc = Note(root + "4").midi_note() % 12
+                for degree in tones:
+                    for midi in range(48, 76):
+                        if midi % 12 != (root_pc + degree) % 12:
+                            continue
+                        melody = note_name(midi)
+                        chord_name = root + canonical
+                        for v in self.shapes(melody, canonical, chord_name):
+                            seen += 1
+                            bass_pc = GuitarFretboard.fret_to_midi(0, v.frets[0]) % 12
+                            self.assertIn(
+                                (bass_pc - root_pc) % 12, BASS_DEGREES_6432,
+                                f"{chord_name} {melody} {v.tab_string()}",
+                            )
+        self.assertGreater(seen, 100, "the sweep found almost nothing to check")
+
+    def test_it_obeys_every_playability_invariant(self):
+        """
+        The known string set, the melody on the B and on top, a hand's span, and only
+        chord tones - checked over the same sweep, so no single case is special.
+        """
+        for chord_name, quality in QUALITIES:
+            root_pc = root_midi_of(chord_name) % 12
+            allowed = set(ChordParser.get_chord_tones(quality, chord_name))
+            for degree in ChordParser.CHORD_TONES_FROM_ROOT[quality]:
+                for midi in range(48, 76):
+                    if midi % 12 != (root_pc + degree) % 12:
+                        continue
+                    melody = note_name(midi)
+                    for v in self.shapes(melody, quality, chord_name):
+                        where = f"{chord_name} {melody} {v.tab_string()}"
+                        self.assertEqual(v.active_strings, [0, 2, 3, 4], where)
+                        self.assertEqual(v.soprano_string(), 4, where)
+                        self.assertEqual(max(v.midi_notes()), midi, where)
+                        self.assertLessEqual(
+                            v.fret_span(), GRIP_MAX_SPAN["drop2_6432"], where
+                        )
+                        self.assertTrue(set(v.pitch_classes()) <= allowed, where)
+                        self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()), where)
+                        self.assertIn(
+                            frozenset(v.active_strings), supported_string_sets(), where
+                        )
+
+
+    def test_the_search_picks_the_shape_a_player_would(self):
+        """
+        Ties are broken by fret spread, then by position - so the answer is the tightest
+        hand position, not the first one the search reaches.
+
+        This is not cosmetic. An unranked search returns the low-E-first combination it
+        happens to meet, which puts the low E at fret 0-1, below the neck window; ranked
+        properly the same generator answers `5-x-5-5-5-x`. The earlier "0 of 22, never
+        selected" measurement was that bug, not a property of the shape.
+        """
+        for chord_name, quality, melody, expected in (
+            ("Am7", "m7", "E4", "5-x-5-5-5-x"),
+            ("Cmaj7", "maj7", "E4", "3-x-5-4-5-x"),
+            ("Fm7", "m7", "Eb4", "1-x-1-1-4-x"),
+        ):
+            found = self.shapes(melody, quality, chord_name)
+            self.assertTrue(found, chord_name)
+            self.assertEqual(found[0].tab_string(), expected, chord_name)
+
+    def test_it_reaches_melodies_the_contiguous_block_cannot(self):
+        """
+        A B3 melody over Cmaj7, and a C5 over Fm7, are both voicable on 6-4-3-2 and
+        neither is voicable on 5-4-3-2 - the A string at the same position would have to
+        sit outside the span. So the new set is not only a different bass, it is
+        additional coverage.
+        """
+        for chord_name, quality, melody in (
+            ("Cmaj7", "maj7", "B3"),
+            ("Fm7", "m7", "C5"),
+        ):
+            self.assertTrue(self.shapes(melody, quality, chord_name), chord_name)
+            self.assertEqual(
+                [
+                    v
+                    for v in self.engine.get_grip_voicings(
+                        Note(melody), quality, chord_name=chord_name,
+                        top_string=4, grips=("drop2",),
+                    )
+                    if v.active_strings == [0, 2, 3, 4]
+                ],
+                [],
+                chord_name,
+            )
+
+    def test_where_no_root_fits_the_contiguous_block_is_used_instead(self):
+        """
+        A melody the new set cannot serve must cost the step nothing.
+
+        F#4 over Cmaj7 is neither the root nor the 5th, so no low E pitch is legal in
+        any position: the placement returns None and 5-4-3-2 voices the chord as before.
+        This is the negative case that keeps the grip from becoming a filter.
+        """
+        self.assertEqual(self.shapes("F#4", "maj7", "Cmaj7"), [])
+        contig = self.engine.get_grip_voicings(
+            Note("F#4"), "maj7", chord_name="Cmaj7", top_string=4, grips=("drop2",)
+        )
+        self.assertTrue(contig, "the contiguous block must still serve this melody")
+        self.assertTrue(all(v.active_strings == [1, 2, 3, 4] for v in contig))
+
+    def test_a_rootless_chord_gets_nothing(self):
+        """
+        The rule is measured from the root, so a chord with no root to measure against
+        cannot place one - and guessing would be putting an arbitrary note in the bass.
+        """
+        self.assertEqual(
+            self.engine.get_grip_voicings(
+                Note("E4"), "m7", chord_name=None, top_string=4,
+                grips=("drop2_6432",),
+            ),
+            [],
+        )
+
+    def test_it_is_reachable_through_the_public_entry_point(self):
+        """
+        The family needs no bespoke wrapper: `get_grip_voicings(grips=...)` is the same
+        public surface every other family is reached through.
+        """
+        voicings = self.engine.get_all_grip_voicings(
+            Note("E4"), "m7", chord_name="Am7", top_strings=(4,),
+            grips=("drop2_6432",),
+        )
+        self.assertEqual([v.tab_string() for v in voicings], ["5-x-5-5-5-x"])
+        self.assertEqual(voicings[0].grip, "drop2_6432")
+
+
 class TestStringSetTable(unittest.TestCase):
     """The GRIP_STRING_SETS table itself, which the generated paths do not read."""
 
@@ -435,13 +618,23 @@ class TestStringSetTable(unittest.TestCase):
         6-5-4-3 with the melody on top does not sound good, so no four-note grip may
         occupy it. A low melody is harmonised with a three-note shell instead - and
         both shell shapes, 5-4-3 and 6-4-3, are offered so the selector can choose.
+
+        6-4-3-2 is *also* non-contiguous, and is deliberately not caught by this rule:
+        it swaps the A string out for the B, so its lowest note is on the low E while
+        its soprano is the B rather than the G. The two rules must not be conflated by a
+        later reader - 6-4-3-2 is the fix for a bass, not an exception to the exclusion.
         """
         bottom_four = {0, 1, 2, 3}
-        for grip in ("drop2", "drop3", "closed"):
+        for grip in ("drop2", "drop3", "closed", "drop2_6432"):
             for strings, soprano in GRIP_STRING_SETS[grip]:
                 self.assertNotEqual(frozenset(strings), bottom_four, grip)
+        for grip in ("drop2", "drop3", "closed"):
+            for strings, soprano in GRIP_STRING_SETS[grip]:
                 self.assertNotEqual(soprano, 3, f"{grip} still offers a G-string block")
         self.assertNotIn(bottom_four, supported_string_sets())
+        # 6-4-3-2 does reach the low E, which is the entire reason it exists.
+        self.assertEqual(GRIP_STRING_SETS["drop2_6432"], (((0, 2, 3, 4), 4),))
+        self.assertIn(frozenset((0, 2, 3, 4)), supported_string_sets())
 
         # Both G-string shell shapes are on the table, so the selector may choose either.
         g_shells = [
@@ -802,6 +995,72 @@ class TestVoicingCost(unittest.TestCase):
                 self.engine.voicing_cost(best, None),
                 self.engine.voicing_cost(v, None),
             )
+
+    def test_a_root_or_fifth_bass_breaks_an_exact_tie(self):
+        """
+        The bass-function term scores 0 for a root or 5th and 1 otherwise.
+
+        Dm7/F4 is the case that needed it: the contiguous 5-4-3-2 and the 6-4-3-2 tie on
+        every earlier criterion, and without this term the better bass loses on the grip
+        tie-break. It applies to whichever shape won, not to one family, so a contiguous
+        shape with a root bass is not penalised either.
+        """
+        candidates = self.engine.get_grip_voicings(
+            Note("F4"), "m7", chord_name="Dm7", top_string=4,
+            grips=("drop2", "drop2_6432"),
+        )
+        self.assertTrue(candidates)
+        root_pc = Note("D4").midi_note() % 12
+        for v in candidates:
+            bass_ok = (v.bass_pc - root_pc) % 12 in BASS_DEGREES_6432
+            self.assertEqual(
+                self.engine.voicing_cost(v, None, root_pc=root_pc)[6],
+                0.0 if bass_ok else 1.0,
+                v.tab_string(),
+            )
+
+    def test_the_bass_term_is_consulted_last_and_only_when_it_can_be(self):
+        """
+        It sits at index 6, below every criterion that protects correctness, and it is
+        skipped entirely without a root - an unparseable chord name gets the old
+        behaviour rather than a guessed bass.
+        """
+        candidates = self.engine.get_grip_voicings(
+            Note("F4"), "m7", chord_name="Dm7", top_string=4, grips=("drop2",)
+        )
+        self.assertTrue(candidates)
+        v = candidates[0]
+        without_root = self.engine.voicing_cost(v, None)
+        with_root = self.engine.voicing_cost(
+            v, None, root_pc=Note("D4").midi_note() % 12
+        )
+        # The tuple is a fixed width whether or not a root is supplied, so `root_pc`
+        # only ever changes a *value*; it never reshapes the cost or reorders the
+        # criteria above it. That is what keeps `voicing_cost` a total order and the
+        # engine deterministic.
+        self.assertEqual(len(with_root), len(without_root))
+        self.assertEqual(with_root[:6], without_root[:6], v.tab_string())
+        self.assertNotEqual(with_root[6], without_root[6], v.tab_string())
+        # A bass that is a 3rd or a 7th still scores 1.0. No contiguous Dm7 drop-2 has
+        # one - they all put D or A underneath - so this sweeps for a chord that does,
+        # pairing each shape with the chord it was actually generated for, because the
+        # term reads the *root*, not the shape.
+        checked = 0
+        for chord, quality in QUALITIES:
+            root_pc = root_midi_of(chord) % 12
+            for melody in every_chord_tone(chord, quality):
+                for v in self.engine.get_grip_voicings(
+                    Note(melody), quality, chord_name=chord, top_string=4,
+                    grips=("drop2",),
+                ):
+                    bass_ok = (v.bass_pc - root_pc) % 12 in BASS_DEGREES_6432
+                    self.assertEqual(
+                        self.engine.voicing_cost(v, None, root_pc=root_pc)[6],
+                        0.0 if bass_ok else 1.0,
+                        f"{chord} {melody} {v.tab_string()}",
+                    )
+                    checked += 1
+        self.assertGreater(checked, 20, "the sweep found almost nothing to check")
 
     def test_the_first_chord_starts_near_the_middle_of_the_neck(self):
         """With nothing to lead from, "stay in position" becomes "start somewhere sane"."""

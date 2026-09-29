@@ -100,24 +100,30 @@ class TestProgressions(unittest.TestCase):
         result = self.engine.arrange_progression(progression)
 
         # None of these uses 6-5-4-3: a four-note voicing on the four lowest strings
-        # does not sound good, so a low melody is harmonised with a complete chord on
-        # 5-4-3-2 or a three-note shell instead.
+        # does not sound good, so a low melody is harmonised with a complete chord or a
+        # three-note shell instead.
         self.assertEqual(
             [(step.chord, step.voicing.tab_string()) for step in result],
-            [("Dm7", "x-3-3-2-3-x"), ("G7", "x-x-3-4-3-x"), ("Cmaj7", "x-2-2-5-x-x")],
+            [("Dm7", "5-x-3-5-3-x"), ("G7", "3-x-3-4-3-x"), ("Cmaj7", "x-2-2-5-x-x")],
         )
         for step in result:
             self.assertNotEqual(
                 step.voicing.active_strings, [0, 1, 2, 3], step.tab_line()
             )
-        # Dm7 is a complete chord on strings 5-4-3-2. The other two are three-note
-        # shells, because no four-note shape fits under a melody that low without the
-        # bottom-four block, and a shell is the right answer there anyway.
-        self.assertEqual([step.grip for step in result], ["drop2", "shell", "shell"])
-        self.assertEqual(result[1].voicing.active_strings, [2, 3, 4])   # 2-3-4
-        self.assertEqual(result[2].voicing.active_strings, [1, 2, 3])   # 5-4-3
+        # The first two are complete chords on 6-4-3-2, which is the one default set that
+        # reaches the low E. Cmaj7 is a three-note shell, because a melody that low has
+        # no four-note shape with a legal span at all.
+        self.assertEqual(
+            [step.grip for step in result],
+            ["drop2_6432", "drop2_6432", "shell"],
+        )
+        self.assertEqual(result[0].voicing.active_strings, [0, 2, 3, 4])  # 6-4-3-2
+        self.assertEqual(result[1].voicing.active_strings, [0, 2, 3, 4])  # 6-4-3-2
+        self.assertEqual(result[2].voicing.active_strings, [1, 2, 3])     # 5-4-3
         self.assertEqual(sorted(result[0].voicing.pitch_classes()), [0, 2, 5, 9])
-        self.assertEqual(sorted(result[1].voicing.pitch_classes()), [2, 5, 11])  # D F B
+        # G7 gained its root and a fourth voice: it used to be the bare shell F3 B3 D4,
+        # and is now a complete G7 with G2 underneath.
+        self.assertEqual(sorted(result[1].voicing.pitch_classes()), [2, 5, 7, 11])  # G B D F
         self.assertEqual(sorted(result[2].voicing.pitch_classes()), [0, 4, 11])  # C E B
 
     def test_high_e_only_top_strings_still_skips_low_melodies(self):

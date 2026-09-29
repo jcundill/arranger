@@ -866,10 +866,12 @@ class TestArrangeHead(unittest.TestCase):
         """
         # drop-2 is "four contiguous strings under the soprano" for any soprano, so it
         # is generated rather than read from the table; shell and duo are named shapes
-        # and are read from theirs.
+        # and are read from theirs. 6-4-3-2 is a named shape too, and is the one that
+        # skips a string on the way *up* as well as on the way down.
         supported = {frozenset(range(top - 3, top + 1)) for top in (5, 4, 3)}
         supported |= {frozenset(s) for s, _ in GRIP_STRING_SETS["shell"]}
         supported |= {frozenset(s) for s, _ in GRIP_STRING_SETS["duo"]}
+        supported |= {frozenset(s) for s, _ in GRIP_STRING_SETS["drop2_6432"]}
         for melid in (218, 342, 266):
             for step in self.arrange(melid).steps:
                 if step.melody_only:

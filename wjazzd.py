@@ -1771,6 +1771,13 @@ def _arrange_step_with_bass(
         allowed_tones=ChordParser.get_chord_tones(
             ChordParser.canonical_quality(prepared.chord_type), prepared.chord_name
         ),
+        # The root enables the bass-function tie-break, exactly as in
+        # arrange_progression. A slash chord has already been narrowed by rule C above,
+        # and this only breaks a tie *within* the group rule C chose - it cannot pull
+        # a candidate back in that rule C rejected.
+        root_pc=engine._chord_context(
+            prepared.chord_type, prepared.chord_name
+        )[1],
     )
     if voicing is None:
         return None
