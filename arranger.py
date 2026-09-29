@@ -1077,6 +1077,37 @@ class Voicing:
         """Returns tab_block() as a single newline-joined string."""
         return "\n".join(self.tab_block())
 
+    def upper_midi_notes(self) -> List[int]:
+        """
+        Every sounding pitch except the walking-bass thumb note.
+
+        The comparison both renderers use to decide hold-versus-strike reads this
+        rather than `midi_notes()`, because a walking line changes the lowest pitch
+        on every quarter: comparing the full set would break the hold chain
+        permanently and destroy the "held shape, not a chord list" behaviour for the
+        whole arrangement. Excluding the thumb is what lets a `bass_only` step read
+        as a *held* upper shape with a moving thumb.
+
+        The exclusion is by the **recorded string**, not by pitch or by a constant
+        index, because the thumb is placed per note and genuinely moves between the
+        6th, 5th and 4th strings. A step with no bass is unchanged.
+        """
+        if self.bass_midi is None or self.bass_string is None:
+            return self.midi_notes()
+        bass_string = self.bass_string
+        # Filtered by string index, never by position in a filtered list: the two are
+        # different things, and comparing a string number against a list offset drops
+        # whichever voice happens to come first.
+        return [
+            midi
+            for index, midi in enumerate(
+                GuitarFretboard.fret_to_midi(index, fret)
+                for index, fret in enumerate(self.frets)
+                if fret >= 0
+            )
+            if index != bass_string
+        ]
+
     def active_frets(self) -> List[int]:
         """Returns list of fret positions for played strings."""
         return [f for f in self.frets if f >= 0]
@@ -3599,13 +3630,21 @@ def _step_annotation(step: ArrangementStep) -> str:
     transposed note. Empty string for an ordinary chord tone. Shared by
     format_progression and the demonstration so the two renderings cannot drift
     apart.
+    The bass annotation is appended by `_bass_annotation` on **every** path out of
+    this function, including the early returns: a walking step can equally be a
+    melody-only fill, a repeated melody or a partial shell, and a bass note that is
+    only annotated on some of those would be a worse defect than no annotation at
+    all. Steps with no bass - every step of every other texture - come back
+    unchanged.
     """
     if step.melody_only:
-        return " (no chord - melody alone)"
+        return _bass_annotation(step, " (no chord - melody alone)")
     if step.repeated:
-        return " (melody repeated - single note)"
+        return _bass_annotation(step, " (melody repeated - single note)")
     if step.original_melody is not None:
-        return f" (transposed down an octave from {step.original_melody})"
+        return _bass_annotation(
+            step, f" (transposed down an octave from {step.original_melody})"
+        )
     # A partial harmonisation is worth saying out loud: the chord name above the step
     # describes the harmony, not every note sounding under the melody, so a reader
     # counting strings would otherwise wonder where the rest of the chord went.
@@ -3614,17 +3653,50 @@ def _step_annotation(step: ArrangementStep) -> str:
             # A fill texture, so name the interval rather than the grip: the reader
             # needs to know it is a 6th under a passing note rather than that a chord
             # went missing, and the two notes are right there in the tab.
-            pitches = sorted(step.voicing.midi_notes())
-            size = (pitches[-1] - pitches[0]) % 12 if len(pitches) == 2 else 0
-            return f" (interval fill - {_INTERVAL_NAMES.get(size, '2 notes')}, partial)"
+            #
+            # The **upper** voices, because the thumb is not part of the interval - it
+            # is a walking line underneath, and counting it would turn every
+            # two-note fill under a bass into a seven-note "interval" that has no
+            # name in the table and would silently render as "2 notes".
+            upper = sorted(step.voicing.upper_midi_notes())
+            size = (upper[-1] - upper[0]) % 12 if len(upper) == 2 else 0
+            return _bass_annotation(
+                step, f" (interval fill - {_INTERVAL_NAMES.get(size, '2 notes')}, partial)"
+            )
         if step.grip == "duo":
-            return " (root & 5th duo - partial)"
-        return f" ({step.grip} - 3rd & 7th, partial)"
+            return _bass_annotation(step, " (root & 5th duo - partial)")
+        return _bass_annotation(step, f" ({step.grip} - 3rd & 7th, partial)")
     if not step.non_chord_tone:
-        return ""
+        return _bass_annotation(step)
     if step.harmonized_as:
-        return f" (non-chord tone -> {step.harmonized_as} via {step.strategy})"
-    return " (non-chord tone)"
+        return _bass_annotation(
+            step, f" (non-chord tone -> {step.harmonized_as} via {step.strategy})"
+        )
+    return _bass_annotation(step, " (non-chord tone)")
+
+
+def _bass_annotation(step: ArrangementStep, existing: str = "") -> str:
+    """Appends the walking-bass role and motion to another step's annotation.
+
+    The role is worth printing because the thumb line is no longer uniformly chord
+    tones - two thirds of the notes in a textbook walk are extensions or chromatic
+    approaches - so a reader counting strings would otherwise wonder why the bass is
+    not playing the chord the name above it says.
+
+    The motion needs the *previous* step, which `_step_annotation` is not given, so
+    it is spelled from the step alone as `Ab (approach)`: enough to say what the note
+    is for, which is the part that is not visible in the tab. `format_progression`
+    prints one step per line and the chord name is already there, so a reader can
+    see the descent by eye.
+
+    Returns `existing` unchanged when the step carries no bass, which is every step
+    of every other texture - so this cannot affect existing output.
+    """
+    if step.bass is None:
+        return existing
+    spelled = _note_name(step.bass)
+    role = step.bass_role or "walk"
+    return f"{existing} (bass: {spelled}, {role})"
 
 
 # --- Standard six-line staff tab ---
@@ -3666,24 +3738,39 @@ def _tab_block_from_cells(cells: List[str]) -> List[str]:
 
 
 def _step_cells(step: ArrangementStep) -> List[str]:
-    """The tab cells for one step, honouring step.repeated.
+    """The tab cells for one step, honouring step.repeated and step.bass_only.
 
     A repeated melody is played as a **single note**: only the soprano string is
     struck. Every other string is left blank rather than marked 'x', because the
     player is not being asked to mute anything - the other strings are simply not
     part of this step, and 'x' on five strings says more than the gesture does.
 
+    `bass_only` is the mirror image and the same reasoning: the thumb alone strikes
+    and every voice above it is held from the previous shape. A step that is *both*
+    is a walking bass under a re-articulated melody, and it plays the soprano and
+    the thumb - so the two rules compose rather than override one another, which is
+    the case an `elif` chain would silently drop.
+
     The step still carries a full drop-2 `voicing`: the engine voice-leads from
     it and a caller wanting the literal shape still has `step.tab_line()`.
     """
     frets = step.voicing.frets
-    if not step.repeated or step.melody_only:
+    partial = (step.repeated or step.bass_only) and not step.melody_only
+    if not partial:
         return _cells_from_frets(frets)
-    soprano = step.voicing.soprano_string()
-    if soprano < 0:
-        return _cells_from_frets(frets)
+    struck = set()
+    if step.bass_only:
+        struck.add(step.voicing.bass_string)
+    if step.repeated:
+        struck.add(step.voicing.soprano_string())
+        # A repeated melody still moves the thumb: the bass is a moving voice, not a
+        # held one, so blanking it here would silently delete the walking line.
+        if step.voicing.bass_midi is not None:
+            struck.add(step.voicing.bass_string)
     cells = [_BLANK_CELL] * len(frets)
-    cells[soprano] = str(frets[soprano])
+    for string_index in struck:
+        if string_index is not None and 0 <= string_index < len(frets):
+            cells[string_index] = str(frets[string_index])
     return cells
 
 

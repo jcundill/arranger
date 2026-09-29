@@ -1,18 +1,16 @@
 # Walking Bass Texture — Implementation Plan
 
-**Status: in progress.** Phases 1-5 are implemented and committed on the
-`walking-bass` branch; phase 6 (rendering) is next. See the progress table under
-[Phases](#phases) for the per-phase commits, the suite counts, and the findings
-from the phase 3 to phase 5 measurements. `master` is untouched.
+**Status: in progress.** Phases 1-6 are implemented and committed on the
+`walking-bass` branch; phase 7 (front ends and docs) is next. See the progress table
+under [Phases](#phases) for the per-phase commits, the suite counts, and the
+findings from the phase 3 to phase 6 measurements. `master` is untouched.
 
-The texture is reachable and `arrange_progression` can produce a walking bass, but
-it does not yet **render** one: `tabstaff` still holds a walking line as a chain of
-re-strikes, because the `collapse` comparison includes the thumb, and `bass_only`
-has no cell behaviour yet. Phase 6 is that, and it is the phase where the output
-can finally be looked at. Phases 1-5 are the pieces that do not need it - the
-types, the compatibility pin, the shell set the example needs, the pure bass
-generator, and the integration. The reading below is the design as decided, with the
-completed phases marked.
+The texture is now **rendered**. Phases 1-5 built it and phase 6 drew it: the
+`collapse` fix, the `bass_only` cell behaviour, the annotation, and the GP5 tie.
+MusicXML remains its own later phase, named below rather than mistaken for a gap.
+Phases 1-5 are the pieces that do not need rendering - the types, the compatibility
+pin, the shell set the example needs, the pure bass generator, and the integration.
+The reading below is the design as decided, with the completed phases marked.
 
 It supersedes the earlier draft of this file, which proposed a separate
 `walking_bass=True` flag and a parallel bass pipeline. Both were revised after
@@ -1075,7 +1073,7 @@ notes, not eight of either.
 
 Each ends with the suite green, per the contributing workflow.
 
-### Progress: phases 1-4 done, on branch `walking-bass`
+### Progress: phases 1-6 done, on branch `walking-bass`
 
 `master` is untouched at `531552e`. All work is on the `walking-bass` branch, one
 commit per phase, in the order below.
@@ -1086,7 +1084,8 @@ commit per phase, in the order below.
 | 2 | backward-compat pin | `8ebc904` | 587 OK | fixture hoisted to module level |
 | 3 | the `(5,3,2)` shell set | `90bf4e2` | 594 OK | the one behaviour change so far |
 | 4 | `_walking_bass_line` | `9b0071d` | 620 OK | pure and unintegrated |
-| 5 | integration | this commit | 653 OK | the texture is reachable |
+| 5 | integration | `bb09831` | 653 OK | the texture is reachable |
+| 6 | rendering | this commit | 667 OK | the texture draws |
 Phase 5 makes `texture="walking_bass"` reachable: the union of the melody slots
 with the walked beats (decision B), the melody-alone branch for an empty fill tuple
 *and* for a target no shell can sound (decision C), the conjunction role rule
@@ -1143,6 +1142,58 @@ Three results worth carrying forward, from the phase 3 and phase 4 measurements:
   only comparable against a real upper voicing, and this phase deliberately has none —
   it returns pitch classes. The measurement is deferred to phase 5, where the placement
   step exists, and it is the one item from this phase's scope still open.
+
+#### What phase 6 measured, and the two places the rendering design was wrong
+
+The phase that finally let the output be **looked at** found four things, two of them
+corrections of decisions this document had already made.
+
+- **The thumb moves strings *within a single bar*, which the plan never said and which
+  every renderer had to be written to survive.** Bar 1 of the worked example puts the
+  anchor on the **5th** string at fret 8 and the three connecting notes on the **6th**,
+  because the proximity rule measures to `hand_fret` and the shell's own A-string voice
+  is then in the way. The plan's string table is about *which* strings are candidates;
+  it had nothing to say about a line that changes string between beats. Two consequences
+  were real:
+
+  - `Voicing.upper_midi_notes` excludes the thumb **by its recorded string**, and the
+    `bass_only` cell predicate compares against `step.voicing.bass_string` per step.
+    Reading the recorded string is what the design already insisted on, and this is the
+    case that makes the insistence load-bearing rather than merely tidy.
+  - the first draft of the renderer tests asserted a *fixed* string for the thumb, and
+    failed. A test written from the plan's prose rather than from the output would have
+    encoded the assumption and hidden the behaviour.
+- **GP5 cannot express "held", so the held upper voices must be *written*.** An ASCII
+  cell is blank and an HTML cell is empty, but a GP beat either has notes or it has
+  none — writing only the thumb produces a file that reads as **silence above a moving
+  bass**, and nothing raises. The upper voices go out as `NoteType.tie` continuations,
+  which is the one way the format says "still ringing". Verified by round trip, because
+  as this module's own docstring records, that class of defect writes cleanly and is
+  only wrong on read.
+- **A GP5 tie needs the shape from the last *strike*, not from the bass-only step's own
+  frets.** The first implementation read them off the step itself and wrote a single
+  tied note, because under decision C a bass-only step's voicing is the **melody alone**
+  — its own frets describe a one-note shape, which is precisely not what is ringing.
+  `_build_song` now threads the last struck shape across the whole song, barline
+  included. It is the same pitch-class-style lesson as the octave decision, one level
+  up: *what* sounds and *where it came from* are different questions.
+- **A mute is an absence, not a partial attack.** The first `_strikes_here` filtered
+  unsounded strings out, which silently disabled `show_mutes` and the `x`s a
+  melody-only step spells out — two existing tests, and a defect with no relation to
+  walking bass at all. The predicate now says only which strings are *struck*, and the
+  fret check stays with the caller. Worth recording because the failure was in the
+  *unchanged* textures, which is exactly what a phase scoped to the new one is least
+  likely to check; the suite caught it only because those tests already existed.
+
+One thing this phase did **not** do, and it is the plan's own item rather than an
+oversight: MusicXML still assumes one voice per step, so a five-note walking chord has
+nowhere to put the held shape. `tabxml._sounding` and `_is_hold` read the full pitch
+set, which means a walking line breaks the score's hold chain in the same way it
+broke the staff's — harmless rather than wrong-looking, but it is the reason the
+MusicXML half is still named as its own phase rather than assumed to come free with
+`_staff_columns`.
+
+#### What phase 4 measured, and the three places the design was wrong
 
 #### What phase 4 measured, and the three places the design was wrong
 
@@ -1268,6 +1319,10 @@ done.
    MusicXML stays its own later phase — a five-note chord needs a second voice and
    `_build_part` assumes one — but it is named here so it is not mistaken for a gap.
    Assert existing render output byte-identical when the texture is unchanged.
+   **DONE** — `Voicing.upper_midi_notes`, the `collapse` fix and `_strikes_here` in
+   `tabstaff`, `_bass_annotation` in `arranger.py`, and the GP5 tie. 667 tests green,
+   pyright clean. Four findings, of which two correct decisions this document had
+   already made — see the phase 6 measurements above.
 7. **Front ends and docs.** `--texture walking_bass`, an AGENTS.md section,
    README, `implementation_plan.md` closed, version bump.
 

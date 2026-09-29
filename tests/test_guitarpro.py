@@ -20,6 +20,7 @@ the assertions check the *semantics a reader acts on* (note type, beat status),
 not merely that the round trip is lossless.
 """
 
+import io
 import os
 import tempfile
 import unittest
@@ -28,6 +29,7 @@ from arranger import ArrangementStep, Voicing, VoiceLeadingEngine
 
 # The shared placement core, reached directly: these tests are about where events
 # land, which is decided in `tabxml` and only turned into beats by `tabgp`.
+from tabgp import format_gp5
 from tabxml import _events, _substitute_steps
 
 try:
@@ -53,6 +55,18 @@ def _parse(stream):
 
 # guitarpro numbers the strings 1..6 with 1 = high E; this library indexes 0 = low E.
 _GP_STRING_OFFSET = 6
+
+
+def bass_string(step) -> int:
+    """The string carrying the walking thumb, narrowed from Optional.
+
+    The same helper `tests/test_walking_bass.py` has, written out again rather than
+    imported: these two files are deliberately independent, and a walking step is
+    the only thing in this file that needs the narrowing at all.
+    """
+    value = step.voicing.bass_string
+    assert value is not None, "this step carries no bass"
+    return value
 
 
 def make_step(frets, chord="Cmaj7", melody="B4", **kwargs):
@@ -858,6 +872,115 @@ class TestOptions(GuitarProTestCase):
             format_gp5(self.steps)
             self.assertEqual(os.listdir(directory), [])
         self.assertEqual(format_gp5(self.steps), format_gp5(self.steps))
+
+
+@requires_guitarpro
+class TestWalkingBass(GuitarProTestCase):
+    """A walking line through the round trip, which is the only check that finds this.
+
+    GP5 cannot express "held" as an empty cell: a beat either has notes or it has
+    none. So a bass-only beat has to *write* the shape still ringing above the thumb,
+    as ties. Omitting those strings would not raise and would not fail a comparison
+    against the arrangement - it would write a clean file in which the bar reads as
+    **silence above a moving bass**, which is precisely the corruption this file's
+    round trip exists to find.
+
+    The fixture is the plan's own bar 1: a held whole note under one chord, which the
+    union turns into one strike and three thumb-only beats.
+    """
+
+    def setUp(self):
+        super().setUp()
+        # Imported locally for the same reason the rest of this file does: the
+        # module-level name is bound inside a `try`, so a checker reads every use of
+        # it as possibly unbound even inside a `skipUnless`-guarded class.
+        import guitarpro
+
+        self.gp = guitarpro
+        self.walk_steps = VoiceLeadingEngine.arrange_progression(
+            [("F5", "maj7", "Fmaj7")],
+            timings=[(0, 1.0, None)],
+            texture="walking_bass",
+        )
+        self.walk_song = _parse(io.BytesIO(format_gp5(self.walk_steps)))
+        self.walk_beats = [
+            beat
+            for measure in self.walk_song.tracks[0].measures
+            for beat in measure.voices[0].beats
+        ]
+
+    def test_every_walked_beat_reaches_the_file(self):
+        """The union's four steps are four beats, not one held shape plus three rests."""
+        self.assertEqual(len(self.walk_beats), 4)
+        for beat in self.walk_beats:
+            self.assertNotEqual(beat.status, self.gp.BeatStatus.rest)
+
+    def test_a_bass_only_beat_carries_the_held_shape_as_ties(self):
+        """
+        The regression. Each thumb-only beat writes the upper voices **tied**, so the
+        shape is not re-struck and is not absent.
+
+        Asserted on the parsed-back note *types* rather than on the frets, because the
+        frets are the same on every beat: only the tie flag says whether this is one
+        held shape or four attacks.
+
+        The strings come from the arrangement's own `bass_string`, never assumed to be
+        the low E - the thumb follows the hand and moves between the 6th, 5th and 4th,
+        so a hardcoded string 6 would silently pass on a fixture where it happened to
+        be right and fail to check anything at all where it was not.
+        """
+        struck = self.walk_beats[0]
+        upper = sorted(
+            _GP_STRING_OFFSET - index
+            for index in range(6)
+            if self.walk_steps[0].voicing.frets[index] >= 0
+            and index != self.walk_steps[0].voicing.bass_string
+        )
+        for step, beat in zip(self.walk_steps[1:], self.walk_beats[1:]):
+            thumb = _GP_STRING_OFFSET - bass_string(step)
+            self.assertEqual(
+                [n.type for n in beat.notes if n.string in upper],
+                [self.gp.NoteType.tie] * len(upper),
+                "the held shape was not tied across a bass-only beat",
+            )
+            self.assertEqual(
+                [n.type for n in beat.notes if n.string == thumb],
+                [self.gp.NoteType.normal],
+                "the thumb was tied rather than struck",
+            )
+            # Every string the first beat sounded is still accounted for, plus the
+            # thumb. A missing one is the silence this whole branch prevents.
+            self.assertEqual(
+                sorted(n.string for n in beat.notes),
+                sorted({thumb} | set(n.string for n in struck.notes)),
+            )
+
+    def test_the_thumb_moves_and_the_shape_does_not(self):
+        """The audible claim of the texture, read out of the file."""
+        thumbs = [
+            [n.value for n in beat.notes
+             if n.string == _GP_STRING_OFFSET - bass_string(step)]
+            for step, beat in zip(self.walk_steps, self.walk_beats)
+        ]
+        self.assertTrue(all(thumbs), f"a beat lost its thumb note: {thumbs}")
+        self.assertGreater(
+            len(set(tuple(v) for v in thumbs)), 1, "the thumb never moved"
+        )
+        melody_string = _GP_STRING_OFFSET - self.walk_steps[0].voicing.soprano_string()
+        held = [
+            [n.value for n in beat.notes if n.string == melody_string]
+            for beat in self.walk_beats
+        ]
+        self.assertEqual(len(set(tuple(v) for v in held)), 1, "the melody moved")
+
+    def test_no_written_bar_is_longer_than_its_signature(self):
+        """
+        The four thumb beats plus the strike are five quarters of events in a 4/4 bar,
+        so the measure machinery has to place them without overrunning - the standing
+        rule for every bar this renderer writes.
+        """
+        for measure in self.walk_song.tracks[0].measures:
+            self.assertAlmostEqual(self.bar_quarters(measure), 4.0, places=6)
 
 
 class TestModuleSurface(unittest.TestCase):

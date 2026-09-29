@@ -1154,6 +1154,11 @@ class TestVoicingCost(unittest.TestCase):
         self.assertTrue(candidates)
         root_pc = Note("D4").midi_note() % 12
         for v in candidates:
+            # `bass_pc` is Optional on the dataclass - it is None for an all-muted
+            # shape - so it is narrowed here rather than at each of the two call
+            # sites that subtract from it. Every candidate this grip returns has a
+            # lowest voice, which the assert states.
+            assert v.bass_pc is not None, f"{v.tab_string()} has no bass"
             bass_ok = (v.bass_pc - root_pc) % 12 in BASS_DEGREES_6432
             self.assertEqual(
                 self.engine.voicing_cost(v, None, root_pc=root_pc)[6],
@@ -1195,6 +1200,7 @@ class TestVoicingCost(unittest.TestCase):
                     Note(melody), quality, chord_name=chord, top_string=4,
                     grips=("drop2",),
                 ):
+                    assert v.bass_pc is not None, f"{v.tab_string()} has no bass"
                     bass_ok = (v.bass_pc - root_pc) % 12 in BASS_DEGREES_6432
                     self.assertEqual(
                         self.engine.voicing_cost(v, None, root_pc=root_pc)[6],

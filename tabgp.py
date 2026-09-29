@@ -199,12 +199,58 @@ def _sounding_frets(step: ArrangementStep) -> List[Tuple[int, int]]:
     other renderers: the held shape belongs to the chord the hold began on and the
     player is not re-fingering it. A muted string is an *absence* of a note, which
     is what leaves the other strings blank in the other renderers too.
+
+    A **bass-only** step is the mirror image: the thumb alone is a new attack, and the
+    upper voices are not re-struck. Unlike the ASCII and HTML renderers, GP5 cannot
+    express "held" as an empty cell - a beat either has notes or it has none, so
+    writing only the thumb would read as **silence above a moving bass**. The upper
+    voices are therefore written as `NoteType.tie` continuations by `_build_song`,
+    which is the one way this format says "still ringing, do not re-attack". Omitting
+    them instead is silent corruption rather than an error, which is why it is not
+    left to the caller.
     """
     voicing = step.voicing
+    if step.melody_only:
+        return [(index, fret) for index, fret in enumerate(voicing.frets) if fret >= 0]
+    if step.bass_only:
+        # Only the thumb. The upper voices are the caller's to add as ties, because
+        # they are not this step's frets - they belong to the shape already ringing.
+        bass_string = voicing.bass_string
+        if bass_string is None:
+            return []
+        return [(bass_string, voicing.frets[bass_string])]
     if step.repeated:
-        soprano = voicing.soprano_string()
-        return [(soprano, voicing.frets[soprano])] if soprano >= 0 else []
+        struck = [voicing.soprano_string()]
+        # The thumb keeps moving under a repeated melody: it is a walking line, not
+        # part of the held shape, and dropping it would delete the bass on that beat.
+        if voicing.bass_midi is not None and voicing.bass_string is not None:
+            struck.append(voicing.bass_string)
+        return [
+            (index, voicing.frets[index])
+            for index in struck
+            if index >= 0 and voicing.frets[index] >= 0
+        ]
     return [(index, fret) for index, fret in enumerate(voicing.frets) if fret >= 0]
+
+
+def _held_upper_frets(frets: List[int], bass_string: Optional[int]) -> List[Tuple[int, int]]:
+    """The upper voices of a *held* fret vector, as (string_index, fret).
+
+    `frets` is the shape still ringing, which is **not** the bass-only step's own
+    fret vector: under decision C a fill is the melody alone, so a bass-only step
+    carries just the melody and the thumb and would re-state a one-note "shape"
+    above the bass. The shape to hold is the one from the last strike, so this takes
+    it as an argument and `_build_song` is what remembers it.
+
+    The thumb's own string is excluded, so a tie and the new bass note never collide
+    on one string - which would be the silent corruption of writing two notes for one
+    string in one beat.
+    """
+    return [
+        (index, fret)
+        for index, fret in enumerate(frets)
+        if fret >= 0 and index != bass_string
+    ]
 
 
 def _measures(
@@ -348,6 +394,14 @@ def _build_song(
     track.name = "Lead"
     track.measures = []
 
+    # The shape currently ringing above the thumb, as a fret vector. A GP5 beat
+    # cannot express "held" as an empty string the way a tab cell can, so a
+    # bass-only beat has to *write* the held shape as tied notes - and the shape to
+    # write is the one from the last strike, not the bass-only step's own frets,
+    # which under decision C hold only the melody. Threaded through every measure
+    # rather than per measure, because a held shape routinely spans a barline.
+    ringing: Optional[List[int]] = None
+
     for index, beats in enumerate(measures, start=1):
         if index > 1:
             header = gp.MeasureHeader(
@@ -401,6 +455,33 @@ def _build_song(
                                 type=gp.NoteType.tie if tie else gp.NoteType.normal,
                             )
                         )
+                    # A bass-only beat still has to *say* the shape that is ringing
+                    # above the thumb, because a GP beat cannot have an empty string
+                    # in the way a tab cell can. Written as ties, so it reads as held
+                    # rather than re-struck - see `_sounding_frets`. Skipped on a
+                    # continuation chunk, which already carries the tie from the
+                    # chunk that began it.
+                    if step.bass_only and not tie and ringing is not None:
+                        for string_index, fret in _held_upper_frets(
+                            ringing, step.voicing.bass_string
+                        ):
+                            beat.notes.append(
+                                gp.Note(
+                                    beat,
+                                    value=fret,
+                                    string=_GP_STRING_OFFSET - string_index,
+                                    velocity=_VELOCITY,
+                                    type=gp.NoteType.tie,
+                                )
+                            )
+                    elif step is not None and not step.bass_only:
+                        # Any other step re-states the shape in full, so it becomes
+                        # the one ringing. A `repeated` step strikes the soprano
+                        # alone over the shape already sounding, which is why it is
+                        # excluded: taking its one-fret vector would erase the held
+                        # shape for the bass-only beats that follow.
+                        if not step.repeated:
+                            ringing = list(step.voicing.frets)
                 voice.beats.append(beat)
         # maxVoices is 2 and the writer emits every voice; one would desync the
         # file. See the module docstring.

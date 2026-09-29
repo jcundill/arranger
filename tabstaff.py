@@ -54,6 +54,13 @@ def _staff_columns(
     times a bar. Comparing sounding pitches rather than fret numbers is what makes
     this work: the same shape reached by a different route is still the same hold.
 
+    The comparison is of the **upper** voices, so a walking bass does not destroy
+    it. A thumb line changes the lowest pitch on every quarter, so comparing the
+    full pitch set would mark every column a strike and turn the whole arrangement
+    back into the chord list the 0.7.0 collapse behaviour exists to prevent.
+    `Voicing.upper_midi_notes` does the exclusion, by the recorded bass string
+    rather than a constant index, because the thumb moves between strings.
+
     Without timing - a hand-written progression, or `rhythm=False` - each step
     simply takes the next beat, reproducing a one-chord-per-cell grid.
     """
@@ -97,15 +104,59 @@ def _staff_columns(
             held = None
             collapsed.append((onset, None, False))
             continue
-        pitches = tuple(sorted(step.voicing.midi_notes()))
+        # The **upper** voices decide the hold: a walking bass moves the lowest pitch
+        # every quarter, and comparing the full set would break the chain permanently.
+        pitches = tuple(sorted(step.voicing.upper_midi_notes()))
         # A repeated melody still strikes: the soprano is re-articulated even when the
         # shape underneath is the one already ringing, so the note is heard again. The
-        # renderers show the soprano alone and blank the held inner voices.
-        strikes = pitches != held or step.repeated
+        # renderers show the soprano alone and blank the held inner voices. A
+        # `bass_only` step is the other half of that rule and is a strike for the
+        # opposite reason: its *upper* voices are held while the thumb moves, so it
+        # would otherwise be collapsed away entirely and the walking line with it.
+        strikes = pitches != held or step.repeated or step.bass_only
         collapsed.append((onset, step, strikes))
         if strikes:
             held = pitches
     return collapsed
+
+
+def _strikes_here(step: ArrangementStep, string_index: int) -> bool:
+    """True when this step sounds a string, given the two partial-attack cases.
+
+    Three states, and the difference between the last two is the whole texture:
+
+    - **ordinary** - every sounding string is struck;
+    - **`repeated`** - the melody re-articulates under an unchanged harmony, so the
+      soprano alone strikes and the inner voices are held;
+    - **`bass_only`** - the slot exists for the thumb, so the bass alone strikes and
+      every voice above it is held from the previous shape.
+
+    A `repeated` step under a walking bass is the intersection: the soprano **and**
+    the thumb both strike, and only the inner voices are held. The two rules are
+    opposites rather than variants - one holds everything above the thumb, the other
+    everything below the soprano - and a step that is both must honour both, which is
+    why this is a union of two sets rather than a chain of `elif`.
+
+    Shared by the ASCII cell and the HTML cell so the two renderings cannot disagree
+    about which strings sound; both go through `_staff_columns`, and this is the
+    other half of that guarantee.
+
+    This says nothing about whether an unsounded string is drawn as `x`: a mute is
+    an **absence** of a note rather than an attack withheld, which is why an ordinary
+    step returns True here and leaves the fret check to the caller. Filtering muted
+    strings out of this predicate is what would silence `show_mutes` and the `x`s a
+    melody-only step spells out.
+    """
+    if step.melody_only:
+        return True
+    if step.bass_only:
+        return string_index == step.voicing.bass_string
+    if step.repeated:
+        struck = {step.voicing.soprano_string()}
+        if step.voicing.bass_midi is not None:
+            struck.add(step.voicing.bass_string)  # type: ignore[arg-type]
+        return string_index in struck
+    return True
 
 
 def _carries_melody(steps: List[ArrangementStep], string_index: int) -> bool:
@@ -207,10 +258,7 @@ def format_tab_staff(
         """One fret cell: a fret number, a mute marker, or a blank."""
         if step is None or not strikes:
             return ""
-        # A repeated melody is a single note: the soprano alone is struck, and the
-        # other strings are simply not played. They stay blank rather than 'x',
-        # because the player is not muting them.
-        if step.repeated and string_index != step.voicing.soprano_string():
+        if not _strikes_here(step, string_index):
             return ""
         fret = step.voicing.frets[string_index]
         if fret < 0:
@@ -310,6 +358,11 @@ _CLASS_BARNUM = "barnum"
 # without this a repeated note reads as a gap in the music rather than as a deliberate
 # single note.
 _CLASS_REPEAT = "repeat"
+# Marks every cell of a `bass_only` column, for the same reason `_CLASS_REPEAT`
+# exists and it is the mirror image of it: those cells are empty too, and a thumb
+# note with a blank column above it has to read as a deliberate held shape rather
+# than as silence under a moving bass.
+_CLASS_BASS = "bass"
 
 _HTML_STYLESHEET = """
 :root { color-scheme: light dark; --ink: #1b1b1b; --rule: #b8b8b8;
@@ -355,6 +408,9 @@ td.mute { color: var(--mute); }
    the column is tinted, so it reads as a deliberate single note rather than as a gap
    in the music. */
 td.repeat { background: var(--strike); border-radius: 2px; }
+/* The mirror image of td.repeat: a bass-only column holds every voice above the thumb
+   and moves only the thumb, so its empty cells are tinted for the same reason. */
+td.bass { background: var(--strike); border-radius: 2px; }
 .notes { margin: 2.5rem 0 0; font-size: .78rem; color: var(--faint); }
 .notes li { margin: .2rem 0; }
 @media print { body { padding: 0; } .system { overflow: visible; } }
@@ -501,24 +557,25 @@ def _html_string_row(
         if step is None or not strikes:
             cells.append(_html_cell())
             continue
-        # A repeated melody is a single note, so the other strings are not played at
-        # all and their cells stay empty, while the struck one is still marked. The
-        # whole column is tinted by that single class either way, which is what keeps
-        # a repeated note visible as such rather than looking like a gap.
-        if step.repeated and string_index != step.voicing.soprano_string():
-            cells.append(_html_cell(class_name=_CLASS_REPEAT))
+        # A `repeated` or `bass_only` column sounds only some of its strings, and the
+        # rest stay empty. The whole column is tinted by that single class either way,
+        # which is what keeps such a column visible as deliberate rather than as a gap
+        # in the music. Which strings sound is `_strikes_here`'s decision - the same
+        # one the ASCII cell makes - so the two renderings cannot disagree.
+        partial_column = step.repeated or step.bass_only
+        column_class = _CLASS_REPEAT if step.repeated else _CLASS_BASS
+        if partial_column and not _strikes_here(step, string_index):
+            cells.append(_html_cell(class_name=column_class))
             continue
         fret = step.voicing.frets[string_index]
         if fret < 0:
             cells.append(
                 _html_cell("x", _CLASS_MUTE)
                 if (show_mutes or step.melody_only)
-                else _html_cell()
+                else _html_cell(column_class if partial_column else "")
             )
         else:
-            cells.append(
-                _html_cell(str(fret), _CLASS_REPEAT if step.repeated else "")
-            )
+            cells.append(_html_cell(str(fret), column_class if partial_column else ""))
     return _html_row(_CLASS_STRING, cells)
 
 
