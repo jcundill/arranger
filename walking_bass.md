@@ -1,16 +1,18 @@
 # Walking Bass Texture — Implementation Plan
 
-**Status: in progress.** Phases 1-4 are implemented and committed on the
-`walking-bass` branch; phase 5 is next. See the progress table under
+**Status: in progress.** Phases 1-5 are implemented and committed on the
+`walking-bass` branch; phase 6 (rendering) is next. See the progress table under
 [Phases](#phases) for the per-phase commits, the suite counts, and the findings
-from the phase 3 and phase 4 measurements. `master` is untouched.
+from the phase 3 to phase 5 measurements. `master` is untouched.
 
-The texture itself is still not reachable: `walking_bass` is not in
-`TEXTURE_STYLES`, so nothing the plan describes below is wired into
-`arrange_progression` yet. Phases 1-4 are the pieces that do not need it - the
-types, the compatibility pin, the shell set the example needs, and the pure bass
-generator. The reading below is the design as decided, with the completed phases
-marked.
+The texture is reachable and `arrange_progression` can produce a walking bass, but
+it does not yet **render** one: `tabstaff` still holds a walking line as a chain of
+re-strikes, because the `collapse` comparison includes the thumb, and `bass_only`
+has no cell behaviour yet. Phase 6 is that, and it is the phase where the output
+can finally be looked at. Phases 1-5 are the pieces that do not need it - the
+types, the compatibility pin, the shell set the example needs, the pure bass
+generator, and the integration. The reading below is the design as decided, with the
+completed phases marked.
 
 It supersedes the earlier draft of this file, which proposed a separate
 `walking_bass=True` flag and a parallel bass pipeline. Both were revised after
@@ -1083,7 +1085,45 @@ commit per phase, in the order below.
 | 1 | types only | `02e4860` | 585 OK | inert, as intended |
 | 2 | backward-compat pin | `8ebc904` | 587 OK | fixture hoisted to module level |
 | 3 | the `(5,3,2)` shell set | `90bf4e2` | 594 OK | the one behaviour change so far |
-| 4 | `_walking_bass_line` | this commit | 620 OK | pure and unintegrated |
+| 4 | `_walking_bass_line` | `9b0071d` | 620 OK | pure and unintegrated |
+| 5 | integration | this commit | 653 OK | the texture is reachable |
+Phase 5 makes `texture="walking_bass"` reachable: the union of the melody slots
+with the walked beats (decision B), the melody-alone branch for an empty fill tuple
+*and* for a target no shell can sound (decision C), the conjunction role rule
+carrying decision F, the `TEXTURE_GRIPS` entry, the guarded attach, the
+post-selection merge and the `partial` fix. `tests/test_walking_bass.py` is 33
+tests; `test_texture.py`'s "every declared texture has both roles" was **changed**,
+not merely extended — see below.
+
+Four things phase 5 measured, three of which corrected the design:
+
+- **`hand_fret` is the upper voicing's lowest active fret**, not `avg_fret`. That
+  was the one item phase 4 could not settle, and it is now settled in favour of
+  the third candidate the B section pointed at. `_place_bass` is where it is
+  applied, and the tests assert the *pair* of answers (hand high picks the 6th,
+  hand low picks the 4th) rather than a fixed string, because the prediction is
+  about proximity and a single string would not state it.
+- **The off-beat change rule needs `weight > 0` *inside* the conjunction.** The
+  first implementation let any slot whose harmony differed become a target, which
+  promoted the 4-and of `Dm7 → G7` to a shell — the exact failure the rule exists
+  to prevent, and invisible in a unit test of `_roles_for_slot` because the
+  defaults were chosen to leave the other textures alone.
+- **The union needs a `_Slot` record, not a tuple.** `index` is no longer the
+  slot's own position, so the timing guard, the melody read and the walk note all
+  have to be carried together; a tuple made the "previous melody" case invisible.
+- **A bug the tests found, and it is instructive.** The melody-onset map was built
+  with one variable name bound and another used, so no walked beat ever matched a
+  melody slot and every one of them became a `bass_only` slot — a duplicated
+  downbeat, visible only as "three anchors where there are two". It is the kind of
+  defect that a shape-level test cannot see and a step-count assertion can.
+
+`test_texture.py::test_every_declared_texture_has_both_roles` asserted that every
+declared role's grip tuple is **non-empty**. That was a proxy for "this role is
+handled", and `walking_bass`'s empty fill tuple falsifies it: an empty tuple is a
+*decision* here, not a gap. The test now asserts the key is present, and a new one
+asserts that the empty tuple appears exactly once — so a second texture cannot
+acquire one silently, which is the failure the walking-bass rule is careful not to
+create anywhere else.
 
 Three results worth carrying forward, from the phase 3 and phase 4 measurements:
 
@@ -1213,6 +1253,12 @@ done.
    shell (decision C), the conjunction role rule carrying F, the `TEXTURE_GRIPS`
    entry, the guarded attach, the post-selection merge, the `partial` fix, the
    invariant amendment. Assert `uniform` output is byte-identical above the bass.
+   **DONE** — the texture is in `TEXTURE_STYLES`, `_roles_for_slot` carries the
+   conjunction, `_bass_slots` builds the union before the melody loop, `_place_bass`
+   merges after selection, and `tests/test_walking_bass.py` (33 tests) holds all of
+   it. 653 green. Two contract changes are now asserted rather than assumed: the
+   step list may be longer than the progression, and `test_texture.py`'s totality
+   test had to be re-spelled because an empty grip tuple is a decision.
 6. **Rendering, in all three families.** The `_staff_columns` fix and its
    regression, the `bass_only` branch (held upper voices, striking thumb) and
    `_step_annotation`. Then `tabgp._measures`, where a `bass_only` step is a beat

@@ -185,11 +185,49 @@ class TestRoles(unittest.TestCase):
         """
         TEXTURE_GRIPS is a total table: a texture with a missing role would raise
         KeyError deep inside the selector instead of at the call site.
+
+        The **key** is what must be present, not a non-empty tuple. `walking_bass`
+        declares `fill: ()` on purpose - an empty tuple means the left hand plays
+        nothing there and the melody is voiced alone - so "non-empty" was a proxy for
+        "this role is handled" that the texture itself falsifies. What has to hold is
+        that the key exists, and that a texture which does mean to be thin says so the
+        same way every time: by being the empty tuple, never by being absent.
         """
         for texture in TEXTURE_STYLES:
             for role in (ROLE_TARGET, ROLE_FILL):
                 self.assertIn(role, TEXTURE_GRIPS[texture])
-                self.assertTrue(TEXTURE_GRIPS[texture][role])
+
+    def test_only_the_walking_bass_fill_is_empty(self):
+        """
+        An empty grip tuple is a decision, so it is asserted to be exactly one.
+
+        `arrange_progression` treats `()` as "the left hand plays nothing" and routes
+        the step through the melody-alone path. Any *other* texture reaching that branch
+        would silently lose its harmony, which is the failure the walking-bass rule is
+        careful not to create anywhere else.
+        """
+        empty = [
+            (texture, role)
+            for texture in TEXTURE_STYLES
+            for role in (ROLE_TARGET, ROLE_FILL)
+            if not TEXTURE_GRIPS[texture][role]
+        ]
+        self.assertEqual(empty, [("walking_bass", ROLE_FILL)])
+
+    def test_the_walking_bass_texture_is_declared(self):
+        """
+        `walking_bass` is a texture like any other: in TEXTURE_STYLES, validated by
+        `arrange_progression` before any voicing work, and policy in TEXTURE_GRIPS.
+        """
+        self.assertIn("walking_bass", TEXTURE_STYLES)
+        # A shell (3rd & 7th) on a target and nothing above the melody between them.
+        self.assertEqual(TEXTURE_GRIPS["walking_bass"][ROLE_TARGET], ("shell",))
+        self.assertEqual(TEXTURE_GRIPS["walking_bass"][ROLE_FILL], ())
+        # No grip is shared between the two roles, or the texture would do nothing.
+        self.assertFalse(
+            set(TEXTURE_GRIPS["walking_bass"][ROLE_TARGET])
+            & set(TEXTURE_GRIPS["walking_bass"][ROLE_FILL])
+        )
 
     def test_a_uniform_texture_offers_exactly_the_default_grips(self):
         """
