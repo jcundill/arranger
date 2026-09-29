@@ -4,14 +4,17 @@
 PYTHON ?= .venv/bin/python
 PYRIGHT ?= .venv/bin/pyright
 
-.PHONY: help install install-extra install-extra-gp test typecheck demo build clean
+.PHONY: help install install-extra install-extra-gp test typecheck demo build clean chart chart-audit
 
 help:
 	@echo "Available targets:"
+	@echo "  make help      Show this message"
 	@echo "  make install   Install the package into the local virtualenv (editable)"
 	@echo "  make test      Run the full unittest suite (verbose)"
 	@echo "  make typecheck Run pyright over the modules and tests/ (dev-only tool)"
 	@echo "  make demo      Run the built-in demonstration arrangements"
+	@echo "  make chart     Regenerate common_grips.md from the engine's tables"
+	@echo "  make chart-audit  Check common_grips.md against those tables"
 	@echo "  make build     Build a wheel into dist/ (no extra tooling required)"
 	@echo "  make clean     Remove caches and build artefacts"
 	@echo ""
@@ -39,6 +42,16 @@ typecheck:
 
 demo:
 	$(PYTHON) arranger.py
+
+# The drop-2 shape chart is generated from the engine's own tables, never written
+# by hand: a hand-written chart is what this replaced, and its fret numbers
+# disagreed with its own labels. `chart-audit` is the check that would have caught
+# it, and it is cheap enough to run after any change to the voicing tables.
+chart:
+	$(PYTHON) grip_chart.py --write common_grips.md
+
+chart-audit:
+	$(PYTHON) grip_chart.py --audit common_grips.md
 
 build:
 	$(PYTHON) -m pip wheel . -w dist --no-deps
