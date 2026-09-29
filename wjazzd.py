@@ -79,6 +79,8 @@ from arranger import (
     VoiceLeadingEngine,
     _metric_weight,
     _roles_for_slot,
+    _Slot,
+    _walking_slots,
     normalised_harmony,
     sounding_harmony,
 )
@@ -1856,19 +1858,80 @@ def arrange_slots(
     # substituted triple. Worked on a copy, because `triples` is what the caller
     # gets back and must keep reporting what was written.
     working = list(triples)
-    for index, (melody, quality, name) in enumerate(triples):
+
+    # Walking bass iterates over the **slot union** rather than over `triples`, because
+    # the bass grid may be finer than the melody grid (decision B): a bar whose melody
+    # is one whole note still has four beats to walk, and the extra slots are what the
+    # thumb plays on. `_walking_slots` is the engine's own union builder, shared with
+    # `arrange_progression`, so both paths walk the same line from the same harmony.
+    #
+    # Every texture then iterates over `_Slot`s, which is what makes the loop body
+    # shared rather than branched: for `uniform` and `targets` the list below is one
+    # slot per triple, in order, carrying the timings this function already read - so
+    # those two textures reach exactly the code they reached before.
+    # Normalised to the shape `_Slot` and `_walking_slots` take: a
+    # `(bar, beat, duration)` triple per triple, with `(None, None, None)` for a slot
+    # the caller never located. Written out rather than reused from `timings` because
+    # that sequence is `Sequence` and may be shorter than `triples`, and pyright will
+    # not narrow an index it cannot see - the guard is spelled once, here.
+    typed_timings: List[Tuple[Optional[int], Optional[float], Optional[float]]] = [
+        (bar, beat, duration)
+        if index < len(timings) else (None, None, None)
+        for index, (bar, beat, duration) in enumerate(timings)
+    ]
+    typed_timings.extend(
+        [(None, None, None)] * (len(triples) - len(typed_timings))
+    )
+    if texture == "walking_bass":
+        loop_slots = _walking_slots(list(triples), typed_timings, beats_per_bar)
+    else:
+        loop_slots = [
+            _Slot(
+                index=index,
+                bar=typed_timings[index][0],
+                beat=typed_timings[index][1],
+                duration=typed_timings[index][2],
+            )
+            for index in range(len(triples))
+        ]
+
+    # Harmony and melody state for the walking-bass role rule, read from what
+    # actually sounds so a substituted chord compares as itself - the same
+    # `normalised_harmony` the `repeated` hold below uses.
+    last_target_harmony: Optional[Tuple[Optional[str], Optional[str]]] = None
+    previous_melody_midi: Optional[int] = None
+
+    for slot in loop_slots:
+        index = slot.index
+        melody, quality, name = triples[index]
         # The slot's own (bar, beat, duration), so the staff renderer can lay the
-        # chords on their real beats. Lengths match by construction; the guard is
-        # so a hand-built Skeleton cannot shift the timings onto the wrong step.
-        bar, beat, duration = (
-            timings[index] if index < len(timings) else (None, None, None)
-        )
+        # chords on their real beats. Read off the `_Slot` rather than off `timings`,
+        # because under walking bass a slot's onset is the *walked* beat, which for a
+        # bass-only slot is an onset the caller's timings never listed. Lengths still
+        # match by construction for the melody slots.
+        bar, beat, duration = slot.bar, slot.beat, slot.duration
         # What this slot is *for*, from where it falls in the bar. The same two
         # helpers the library uses, so a head textured here and the same head
         # textured through arranger.arrange_progression cannot disagree. An
         # unlocated slot (no timing, or a short sequence) weighs -1 and is a target.
         weight = _metric_weight(bar, beat, beats_per_bar)
-        role = _roles_for_slot(weight, texture)[0]
+        # Under walking bass the role carries the extra condition - a strong beat is a
+        # target only when the harmony has moved since the last target, or the melody
+        # moves onto it (the off-beat-change rule and decision F). Read from what
+        # sounds, so a substituted chord compares as itself. `_roles_for_slot`
+        # ignores both arguments for the other textures, so they stay unchanged.
+        harmony_key = normalised_harmony(name)
+        role = _roles_for_slot(
+            weight,
+            texture,
+            harmony_changed=(last_target_harmony is None
+                             or harmony_key != last_target_harmony),
+            melody_moves=(previous_melody_midi is None
+                          or Note(melody).midi_note() != previous_melody_midi),
+        )[0]
+        if role == ROLE_TARGET:
+            last_target_harmony = harmony_key
+        previous_melody_midi = Note(melody).midi_note()
         # The texture narrows what may be *played* here; it is not a term in the cost
         # tuple, so a thin fill can never be outbid for being badly placed.
         slot_grips = grips if texture == "uniform" else texture_grips[role]
@@ -1892,11 +1955,43 @@ def arrange_slots(
                 chord=name, melody=melody, voicing=voicing, melody_only=True,
                 bar=bar, beat=beat, duration=duration,
                 role=role, metric_weight=weight,
+                # An `NC` bar is still a place the thumb walks: the walk reads the last
+                # known harmony, and a melody-alone shape leaves every bass string free.
+                bass_only=slot.bass_only,
             )
             steps.append(step)
+            VoiceLeadingEngine._attach_bass(step, slot.bass, steps)
             previous = voicing
             previous_chord = name
             continue
+
+        # A walking-bass **fill** is the melody alone, and so is a target no shell can
+        # sound. Both take the route an `NC` step already takes -
+        # `get_melody_only_voicing` rather than grip lookup - and `melody_only` stays
+        # **False**, because the step does have a harmony; it is simply not being spelled
+        # out, and the flag would make the annotation claim "no chord".
+        #
+        # This has to be a branch rather than a missing case for two reasons. The fill's
+        # grip tuple is empty, so the generic path below would read "no candidates" as a
+        # failure and promote the fill to a target - the exact opposite of the texture.
+        # And `("shell",)` is the whole target tuple, so a melody no shell can sound
+        # (D over Bbm7, the B section's bar-10 appoggiatura) would be dropped with only a
+        # warning. Losing a note of the tune is worse than a thin one.
+        if texture == "walking_bass" and (role == ROLE_FILL or slot_grips == ()):
+            solo_voicing = engine.get_melody_only_voicing(Note(melody))
+            if solo_voicing is not None:
+                step = ArrangementStep(
+                    chord=name, melody=melody, voicing=solo_voicing,
+                    grip="melody", partial=False,
+                    bar=bar, beat=beat, duration=duration,
+                    role=role, metric_weight=weight,
+                    bass_only=slot.bass_only,
+                )
+                steps.append(step)
+                VoiceLeadingEngine._attach_bass(step, slot.bass, steps)
+                previous = solo_voicing
+                previous_chord = name
+                continue
 
         arranged = _arrange_step_with_bass(
             engine, working, index,
@@ -1907,13 +2002,36 @@ def arrange_slots(
             # A fill that cannot be filled must not cost the tune its chord: the
             # texture is a lighter *texture*, never a missing harmony. Retry as a
             # principal note, exactly as arrange_progression does.
-            arranged = _arrange_step_with_bass(
-                engine, working, index,
-                previous=previous, previous_chord=previous_chord,
-                non_chord_tone=non_chord_tone, grips=grips,
-            )
-            if arranged is not None:
-                role = ROLE_TARGET
+            #
+            # Disabled for walking bass, where a fill is *meant* to be empty: the
+            # branch above has already given it the melody alone, so promoting it here
+            # would undo the texture one step at a time.
+            if texture != "walking_bass":
+                arranged = _arrange_step_with_bass(
+                    engine, working, index,
+                    previous=previous, previous_chord=previous_chord,
+                    non_chord_tone=non_chord_tone, grips=grips,
+                )
+                if arranged is not None:
+                    role = ROLE_TARGET
+        if arranged is None and texture == "walking_bass":
+            # A walking-bass target whose one grip yields nothing falls back to the
+            # melody alone too, so the note of the tune survives and the thumb still
+            # walks. Same argument as the fill above, one role over.
+            solo_voicing = engine.get_melody_only_voicing(Note(melody))
+            if solo_voicing is not None:
+                step = ArrangementStep(
+                    chord=name, melody=melody, voicing=solo_voicing,
+                    grip="melody", partial=False,
+                    bar=bar, beat=beat, duration=duration,
+                    role=role, metric_weight=weight,
+                    bass_only=slot.bass_only,
+                )
+                steps.append(step)
+                VoiceLeadingEngine._attach_bass(step, slot.bass, steps)
+                previous = solo_voicing
+                previous_chord = name
+                continue
         if arranged is None:
             continue
         voicing, prepared = arranged
@@ -1941,11 +2059,22 @@ def arrange_slots(
             # Carried from the voicing rather than defaulted, so a head built here
             # reports the same grip and partial flag as the same chord arranged through
             # arranger.arrange_progression.
+            #
+            # `partial` counts the **upper** voices, and the thumb is merged after this,
+            # so a shell plus a bass note is still a shell and stays annotated
+            # "(shell - 3rd & 7th, partial)". The ordering is what makes that true.
             grip=voicing.grip,
             partial=len(voicing.active_frets()) < 4,
             role=role,
             metric_weight=weight,
+            # Decision B: this slot exists for the thumb. The renderers hold the upper
+            # voices across it rather than re-striking them, and the melody is not
+            # re-attacked - the opposite of `repeated`, and never set together.
+            bass_only=slot.bass_only,
         ))
+        # Select first, merge after: the thumb is written into the fret vector only
+        # once the shape is chosen, so it cannot enter the cost tuple at all.
+        VoiceLeadingEngine._attach_bass(steps[-1], slot.bass, steps)
         previous = voicing
         previous_chord = name
 

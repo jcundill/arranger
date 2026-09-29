@@ -734,9 +734,62 @@ class _Slot:
     bass_only: bool = False
 
 
+def _walking_slots(
+    progression: List[Tuple[str, str, str]],
+    # `Sequence`, not `List`, and that is load-bearing rather than stylistic: the two
+    # callers hold *different* timing types. `arrange_progression` supplies
+    # `Tuple[int, float, ...]`, while `arrange_slots` builds
+    # `Tuple[Optional[int], Optional[float], ...]` placeholders for slots it could not
+    # place. `List` is invariant, so neither is assignable to the other and the two
+    # paths cannot share one function at all; `Sequence` is covariant, so both are
+    # accepted and the unplaced placeholders are filtered out below. This is the third
+    # time list invariance in a signature has cost this library something - see also
+    # `BUT_NOT_FOR_ME_TIMINGS` in test_texture.py and `arrange_slots` itself.
+    timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
+    beats_per_bar: int = 4,
+) -> List[_Slot]:
+    """
+    The walking-bass slot union: the melody grid plus the walked beats.
+
+    **The one place the union is built.** Both step loops reach it -
+    `VoiceLeadingEngine.arrange_progression` and `wjazzd.arrange_slots` - because a
+    second copy is exactly the failure this module documents having had once already:
+    the corpus path was built separately, drifted from the library, and shipped a
+    voiced `Am7` under a written `Bbm7` for twenty-five transcriptions before anyone
+    noticed. Walking bass is the same trap with the same stakes, since it is the
+    texture whose whole output is the thumb line: a path that arranged the shells but
+    not the walk would look plausible and be wrong.
+
+    Reads harmony only, never the melody pitches - the melody is read when the slot is
+    voiced, and a slot's `index` says which melody is sounding under it. That is what
+    lets the walked beats be discovered before any voicing exists.
+
+    With `timings=None` there is no beat grid to place four quarters on, so this
+    degrades to one note per slot: the documented gridless case.
+    """
+    chords: List[Tuple[Optional[str], str, str]] = []
+    for _note, _quality, name in progression:
+        root, quality = ChordParser.parse_chord_name(name)
+        chords.append((root, quality or "", name))
+
+    onsets: List[Optional[Tuple[int, float]]] = []
+    for index in range(len(progression)):
+        timing = timings[index] if timings is not None and index < len(timings) else None
+        bar = timing[0] if timing is not None else None
+        beat = timing[1] if timing is not None else None
+        # A slot with no beat has no place on the grid, which is what the walk needs
+        # to know: an onset it cannot locate is a beat it does not invent one for.
+        onsets.append(
+            (bar, float(beat)) if bar is not None and beat is not None else None
+        )
+
+    bass_line = _walking_bass_line(chords, onsets, beats_per_bar)
+    return _bass_slots(progression, timings, bass_line)
+
+
 def _bass_slots(
     progression: List[Tuple[str, str, str]],
-    timings: Optional[List[Tuple[int, float, Optional[float]]]],
+    timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
     bass_line: List[BassNote],
 ) -> List[_Slot]:
     """
@@ -747,6 +800,13 @@ def _bass_slots(
     beat that has no melody slot becomes an extra slot carrying the previous melody
     pitch, marked `bass_only` - the renderer holds the upper voices across it and
     strikes only the thumb.
+
+    `timings` is `(bar, beat, duration)` per slot and a slot the caller never located
+    arrives as `(None, None, None)`: the corpus path supplies no timings at all, and
+    the head path supplies them for every note but not for the rests it skips. Such a
+    slot is skipped here, exactly as `arrange_slots` skips it - an unlocated slot has
+    no place on a grid, and inventing one would be the "a count without a denominator
+    is not a metre" mistake wearing a different hat.
 
     Two properties are load-bearing and both are about ordering:
 
@@ -767,6 +827,12 @@ def _bass_slots(
         if timing is None:
             continue
         bar, beat, duration = timing
+        # A `(None, None, None)` placeholder is a slot the caller could not place, not
+        # a timing. Testing the tuple rather than the reference is what catches it -
+        # the head path builds those placeholders explicitly, and an unplaced slot
+        # reaching the grid arithmetic below would place a note at bar None.
+        if bar is None or beat is None:
+            continue
         located.append((index, bar, beat, duration))
 
     if not located:
@@ -3228,31 +3294,14 @@ class VoiceLeadingEngine:
         # string: neither the octave nor the string can be decided before an upper
         # voicing exists, and only this function is downstream of one. `_place_bass`
         # resolves both together, after selection.
-        bass_line: List[BassNote] = []
         slots: Optional[List[_Slot]] = None
         if texture == "walking_bass":
-            # `parse_chord_name` gives (root, quality); the name rides along only for
-            # the caller's benefit, since the walk reads harmony and never the melody.
-            # An unspeakable name leaves the quality None, and it is spelled as an
-            # empty string rather than narrowed away: `_bass_harmony` returns None for
-            # it, the walk contributes no notes, and nothing is guessed - which is the
-            # "never guess a chord" rule the notation tables already follow.
-            chords: List[Tuple[Optional[str], str, str]] = []
-            for _note, _quality, name in progression:
-                root, quality = ChordParser.parse_chord_name(name)
-                chords.append((root, quality or "", name))
-            onsets: List[Optional[Tuple[int, float]]] = [
-                (timing[0], float(timing[1]))
-                if timings is not None and index < len(timings) and timing is not None
-                else None
-                for index, timing in enumerate(timings or [])
-            ]
-            if len(onsets) < len(progression):
-                onsets.extend([None] * (len(progression) - len(onsets)))
-            bass_line = _walking_bass_line(chords, onsets, beats_per_bar)
             # Decision B: the union is built here, before the melody loop, so the
-            # loop's index still indexes the skeleton it was given.
-            slots = _bass_slots(progression, timings, bass_line)
+            # loop's index still indexes the skeleton it was given. `_walking_slots`
+            # is shared with `wjazzd.arrange_slots`, so the corpus and head paths
+            # cannot walk a different line from this one - see its docstring for why
+            # that duplication has already cost this project one bug.
+            slots = _walking_slots(progression, timings, beats_per_bar)
 
         # Harmony and melody state for the walking-bass role rule. Both are read from
         # what actually sounds, not from the written chord, so a substituted chord

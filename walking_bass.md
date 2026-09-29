@@ -1,16 +1,18 @@
 # Walking Bass Texture — Implementation Plan
 
-**Status: in progress.** Phases 1-6 are implemented and committed on the
-`walking-bass` branch; phase 7 (front ends and docs) is next. See the progress table
+**Status: in progress.** Phases 1-6 are implemented, and the **head path is wired**
+(this commit); phase 7 (front ends and docs) is what remains. See the progress table
 under [Phases](#phases) for the per-phase commits, the suite counts, and the
 findings from the phase 3 to phase 6 measurements. `master` is untouched.
 
-The texture is now **rendered**. Phases 1-5 built it and phase 6 drew it: the
-`collapse` fix, the `bass_only` cell behaviour, the annotation, and the GP5 tie.
-MusicXML remains its own later phase, named below rather than mistaken for a gap.
-Phases 1-5 are the pieces that do not need rendering - the types, the compatibility
-pin, the shell set the example needs, the pure bass generator, and the integration.
-The reading below is the design as decided, with the completed phases marked.
+The texture is now **rendered** *and* reachable from the MusicXML and corpus CLIs.
+Phases 1-5 built it, phase 6 drew it — the `collapse` fix, the `bass_only` cell
+behaviour, the annotation and the GP5 tie — and this commit closed the gap between the
+two step loops, without which `--texture walking_bass` produced a sparse arrangement
+with **no thumb line at all** on a real head. What remains thin is the metre: a 2/2
+score numbers its beats past `beats_per_bar`, and the walker is built for four
+quarters. That is recorded as a known limitation rather than patched, because it is
+the same undecided question the plan already flags for 3/4.
 
 It supersedes the earlier draft of this file, which proposed a separate
 `walking_bass=True` flag and a parallel bass pipeline. Both were revised after
@@ -1589,6 +1591,29 @@ enclosures, and pedal points as a sustained device rather than a role, are not.
   the metre it was given (`TARGET_BEATS = (1, 3)` means beats 1 and 3 in a 3/4 bar) — but
   what replaces the approach role in a three-beat bar is undecided, and 3/4 will need its
   own thought.
+- **A cut-time head numbers its beats past `beats_per_bar`, which is worse than the
+  missing approach above.** Measured on the committed `but_not_for_me.mxl` once the
+  texture was wired into the head path. `headxml` computes
+  `beat = 1 + onset / divisions * beats_per_bar / 4`, so a **quarter-note pulse** in a
+  2/2 bar advances the beat number by 0.5: one bar of this score carries melody on
+  beats **1.0, 1.5, 2.0 and 2.5** while `beats_per_bar` is 2.
+
+  That breaks the walker's grid twice over. `_walking_bass_line` builds its walked
+  beats as `range(1, beats_per_bar + 1)` — `{1, 2}` — so beat 1.5 is off the grid
+  entirely and beat 2.5 is past the end of the bar the walker believes in. And the
+  anchor, which is the downbeat by definition, then lands on a beat with **no harmony
+  behind it yet**: the forward fill has not reached the first melody note, so it
+  contributes nothing and the root is never stated. Over bars 0–2 this yields one thumb
+  note where four were expected.
+
+  This is the same rule the rest of this file keeps re-learning — **a count without a
+  denominator is not a metre** — applied to the *pulse* rather than to the bar length.
+  The number of walked beats in a bar is `beats_per_bar * 4 / beat_type` (four in this
+  2/2), and `_metric_weight` has the same gap: `TARGET_BEATS = (1, 3)` is asked about a
+  beat numbering that runs to 2.5. Both want `beat_type`, which neither currently
+  receives. Recorded rather than fixed here, because deciding how many beats to walk and
+  where the approach sits in a metre that is not four quarters is the undecided question
+  two bullets up, and it should be answered once for both rather than patched twice.
 - The left hand anchors on target beats only, so a long held chord gets no
   re-strike even where a player might punctuate it. The **thumb** does re-anchor,
   so the bar is still marked.

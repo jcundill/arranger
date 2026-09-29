@@ -8,12 +8,14 @@ table, the record types, the selector parser) always run.
 import contextlib
 import io
 import unittest
+from typing import List, Optional, Tuple
 
 from arranger import (
     GRIP_STRING_SETS,
     NO_CHORD,
     ChordParser,
     Note,
+    VoiceLeadingEngine,
 )
 from wjazzd import (
     DEFAULT_DB,
@@ -1114,6 +1116,124 @@ class TestArrangeSlotsTexture(unittest.TestCase):
         for step in steps:
             self.assertEqual(step.role, "target")
             self.assertEqual(step.metric_weight, -1)
+
+
+class TestWalkingBassReachesTheHeadPath(unittest.TestCase):
+    """
+    Walking bass through `arrange_slots`, which is what both front ends call.
+
+    This class exists because of a real defect, not a hypothetical one. Phases 5 and 6
+    built the whole texture inside `VoiceLeadingEngine.arrange_progression`, while the
+    MusicXML and corpus front ends reach the engine through `wjazzd.arrange_slots` -
+    a **second** step loop. `--texture walking_bass` was therefore *accepted* on both
+    CLIs (argparse builds its choices from `TEXTURE_STYLES`) and produced a sparse
+    arrangement with **no thumb line at all**, because the shells and melody-alone
+    fills come from the shared `TEXTURE_GRIPS` table but the walk, the union and the
+    merge lived only in the other loop.
+
+    That is precisely the failure this project has already paid for once: `AGENTS.md`
+    records the corpus path being built separately, drifting, and voicing an `Am7`
+    under a written `Bbm7` across twenty-five transcriptions. The guard against it is
+    that both paths call the *same* code - so the test is **agreement**, not the
+    library's own output, which a drifted second loop would pass on its own.
+    """
+
+    TRIPLES = [
+        ("F4", "7", "Bb7"),
+        ("G4", "7", "Bb7"),
+        ("G4", "maj", "Ebmaj"),
+        ("F4", "maj", "Ebmaj"),
+    ]
+    # Annotated rather than inferred, because `Tuple` is invariant: a list of
+    # `(int, float, None)` triples is not a `List[Tuple[int, float, Optional[float]]]`
+    # and pyright rejects it for exactly that reason - the same trap
+    # `BUT_NOT_FOR_ME_TIMINGS` in test_texture.py documents.
+    TIMINGS: List[Tuple[int, float, Optional[float]]] = [
+        (1, 1.0, None), (1, 2.0, None), (2, 1.0, None), (2, 2.0, None),
+    ]
+
+    def both(self, beats_per_bar: int):
+        """The library's arrangement and the head path's, over the same input."""
+        library = VoiceLeadingEngine.arrange_progression(
+            self.TRIPLES, timings=self.TIMINGS, texture="walking_bass",
+            beats_per_bar=beats_per_bar,
+        )
+        head, _rescued, _notes = arrange_slots(
+            self.TRIPLES, self.TIMINGS, texture="walking_bass",
+            beats_per_bar=beats_per_bar,
+        )
+        return library, head
+
+    def test_the_head_path_produces_a_walking_line(self):
+        """
+        The regression itself: every walked beat carries a thumb note.
+
+        Asserted as "the thumb is there" rather than as exact pitches, because the
+        *rule* is `test_bass.py`'s to own; what is being pinned here is that the head
+        path reaches the walk at all.
+        """
+        _library, head = self.both(4)
+        self.assertTrue(head, "the head path produced no steps")
+        self.assertTrue(
+            all(step.bass is not None for step in head),
+            f"a walked beat has no thumb: {[s.bass_role for s in head]}",
+        )
+        self.assertIn("anchor", [step.bass_role for step in head])
+
+    def test_the_two_paths_walk_the_same_line(self):
+        """
+        The shared-implementation guard, asserted on both metres.
+
+        `beats_per_bar` is passed to both on purpose. An earlier draft of this check
+        compared a `beats_per_bar=2` head against a default-4 library call and read the
+        resulting disagreement as a bug in the wiring - it was the metre differing, the
+        exact "a count without a denominator is not a metre" trap this repository
+        documents twice. Both calls now state the metre, and a real disagreement is a
+        real disagreement.
+        """
+        for beats_per_bar in (2, 4):
+            with self.subTest(beats_per_bar=beats_per_bar):
+                library, head = self.both(beats_per_bar)
+                self.assertEqual(
+                    [s.bass_role for s in library],
+                    [s.bass_role for s in head],
+                    f"the two paths walked different lines in {beats_per_bar}",
+                )
+                self.assertEqual(len(library), len(head))
+
+    def test_the_four_quarter_walk_comes_from_the_union(self):
+        """
+        Decision B through the head path: the step list outgrows the melody grid.
+
+        Four melody notes over two bars in 4/4 give eight walked beats, so the head
+        path returns more steps than triples - the one contract this texture changes,
+        now asserted on the path a real head actually takes.
+        """
+        _library, head = self.both(4)
+        self.assertGreater(len(head), len(self.TRIPLES))
+        self.assertTrue(any(step.bass_only for step in head),
+                        "no slot was invented for the thumb alone")
+
+    def test_a_musical_xml_head_reaches_the_texture(self):
+        """
+        End to end on the committed 2/2 score, with no database involved.
+
+        The committed head is the test that matters for the metre: "But Not For Me"
+        is in cut time, so its bar has two beats and there is no beat 4 for the
+        `approach` role - the documented non-4/4 limitation. Asserting only that a
+        thumb reaches the file, rather than four notes a bar, is what keeps this a
+        test of the wiring instead of a test of the metre.
+        """
+        from headxml import arrange_xml_head
+
+        steps, _head, _notes = arrange_xml_head(
+            "tests/data/but_not_for_me.mxl", section=(0, 2), texture="walking_bass"
+        )
+        self.assertTrue(steps)
+        self.assertTrue(
+            any(step.bass is not None for step in steps),
+            "a real head produced no thumb notes under walking_bass",
+        )
 
 
 class TestBarRangeParsing(unittest.TestCase):
