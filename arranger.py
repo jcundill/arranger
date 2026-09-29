@@ -142,6 +142,44 @@ TEXTURE_GRIPS: Dict[str, Dict[str, Tuple[str, ...]]] = {
 # quarters, so this is the same tolerance in any metre.
 _BEAT_EPSILON = 1e-6
 
+# --- Walking bass ---
+#
+# The three strings a thumb line may use: the low E, the A and the D. All three are in
+# play, and which one carries a given note is decided *per note* rather than fixed.
+#
+# The reason is that the thumb is part of the hand. Adjacent strings are five semitones
+# apart, so the same pitch sits five frets lower on each string you move up - D3 is fret
+# 10 on the low E, fret 5 on the A, and the open D string itself - which puts "prefer the
+# lowest string" and "stay where the hand already is" in direct opposition, always, by
+# exactly five frets. A hand sitting at fret 5 plays D3 on the A string under the
+# position it is already in; on the low E the same D3 is five frets of travel for an
+# identical pitch.
+#
+# So the placement step orders by fret proximity to the upper voicing and takes the
+# nearest, the same economy `voicing_cost` already applies to the upper voices. The 4th
+# string is therefore used only when the hand is genuinely low, and the 6th only when the
+# note is below the A string's open A2 or when the A and the D are both occupied by the
+# upper shape - the two cases the upper strings cannot cover.
+BASS_STRING_INDICES: Tuple[int, ...] = (0, 1, 2)
+
+# The roles a walking-bass note may take, for annotation and tests. Plain strings rather
+# than an enum, for the same reason `grip` and `role` are: the module has no `enum`
+# import and pyright must stay clean.
+#
+# "target" is deliberately **not** reused for beat 4, because that word already means the
+# *left hand's* principal note (ROLE_TARGET) and one word cannot carry both:
+#
+#   anchor    beat 1, or any strong beat where the harmony changes: the root, always
+#   connect   beats 2 and 3: a chord tone, an extension, or passing motion
+#   approach  beat 4: a half step from the next bar's anchor
+#   enclosure beat 3 or 4: half step above, then half step below the next anchor
+#   hold      any beat: the previous note repeated, when nothing better is reachable
+BASS_ROLE_ANCHOR = "anchor"
+BASS_ROLE_CONNECT = "connect"
+BASS_ROLE_APPROACH = "approach"
+BASS_ROLE_ENCLOSURE = "enclosure"
+BASS_ROLE_HOLD = "hold"
+
 # Every string set a grip may occupy, as (active string indices, soprano string
 # index), ordered by preference. Index 0 = low E ... index 5 = high E, so the
 # conventional string number is 6 - index.
@@ -280,7 +318,9 @@ HIGH_FRET_LIMIT = 13
 # 0.7.0 gave the engine metric and textural awareness (TEXTURE_STYLES).
 # 0.8.0 added 6-4-3-2 (grip `drop2_6432`) and a root-or-5th bass tie-break, so the
 # lowest voice can be a root by decision rather than by string-set accident.
-__version__ = "0.8.0"
+# 0.9.0 adds the walking-bass texture: a thumb line on the bass strings under a light
+# left hand. The types land first and are inert until the texture is wired up.
+__version__ = "0.9.0"
 
 
 def _metric_weight(
@@ -367,6 +407,20 @@ class Voicing:
     # Defaulted, so every existing construction and the __getitem__ shim are
     # unaffected. A plain string rather than an enum, for the same reason `grip` is.
     role: str = ROLE_TARGET
+    # A walking-bass thumb note merged into the fret vector, and the string carrying it.
+    # Set **only after** `_best_voicing` has chosen the upper shape, never as a
+    # candidate: `voicing_cost`'s `missing = 4 - len(active)` counts the voices that
+    # sound, and a merged fifth voice would corrupt it. Selecting first and merging
+    # after is what keeps the bass out of the cost tuple by construction rather than by
+    # discipline.
+    #
+    # `bass_string` is recorded rather than assumed to be the low E, because the string
+    # is chosen per note by proximity to the hand and the thumb genuinely moves between
+    # strings as the left hand moves up the neck. `tabstaff` reads it to exclude the
+    # bass from its hold comparison, and any renderer that wants to know which voice is
+    # the thumb reads it here rather than guessing index 0.
+    bass_midi: Optional[int] = None
+    bass_string: Optional[int] = None
 
     def tab_string(self) -> str:
         """Returns standard tab representation, e.g. 'x-x-12-13-13-13'."""
@@ -528,6 +582,27 @@ class ArrangementStep:
     # and it is what makes a progression with no rhythm behave exactly as it did
     # before this feature existed. See _metric_weight.
     metric_weight: int = 0
+    # --- Walking bass (texture="walking_bass") ---
+    #
+    # MIDI pitch of the thumb note under this step, or None when there is none. Like
+    # Voicing.bass_midi it is attached only after the upper shape has been chosen, so it
+    # never enters the voicing cost.
+    bass: Optional[int] = None
+    # The bass note's role, one of the BASS_ROLE_* constants. Defaulted and a plain
+    # string, like `grip` and `role`.
+    bass_role: Optional[str] = None
+    # The step exists for the thumb and **nothing above it strikes**: the upper voices
+    # are held from the previous strike and the melody is not re-attacked. This is the
+    # opposite of `repeated`, not a variant of it - `repeated` marks a melody that *is*
+    # re-articulated (the soprano strikes, the inner voices are held) - so setting one
+    # never sets the other, and an NC step is never marked either.
+    #
+    # It is what lets the bass grid be finer than the melody grid: a bar whose melody is
+    # a single whole note still gets four thumb notes, one of them on the step that
+    # carries the melody and three bass-only. `arrange_progression` therefore returns
+    # more steps than the progression it was given under this texture, and this field is
+    # how a renderer tells which is which.
+    bass_only: bool = False
 
     @property
     def has_timing(self) -> bool:
@@ -3006,6 +3081,12 @@ if TYPE_CHECKING:
 # adding a public name - test_dunder_all_matches_the_public_surface checks that.
 __all__ = [
     "BASS_DEGREES_6432",
+    "BASS_ROLE_ANCHOR",
+    "BASS_ROLE_APPROACH",
+    "BASS_ROLE_CONNECT",
+    "BASS_ROLE_ENCLOSURE",
+    "BASS_ROLE_HOLD",
+    "BASS_STRING_INDICES",
     "DUO_DEGREES",
     "GRIP_MAX_SPAN",
     "GRIP_PREFERENCE",
