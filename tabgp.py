@@ -59,7 +59,7 @@ from __future__ import annotations
 import io
 from typing import Any, List, Optional, Tuple
 
-from arranger import ArrangementStep
+from arranger.tuning import ArrangementStep
 from tabxml import _events, _substitute_steps
 
 # The GP file version written. (5, 1, 0) is the 5.1 format, which Guitar Pro 5 and

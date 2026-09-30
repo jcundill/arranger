@@ -49,7 +49,7 @@ import re
 from typing import Any, List, Optional, Sequence, Tuple
 from xml.etree import ElementTree
 
-from arranger import NO_CHORD, PITCH_CLASS_NAMES, ArrangementStep, GuitarFretboard
+from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES, ArrangementStep, GuitarFretboard
 
 # The shortest event MusicXML can write, in quarter lengths: a sixteenth. See the
 # duration floor in `_events`.
@@ -616,7 +616,7 @@ def _chord_symbol(name: str) -> Any:
     try:
         symbol = harmony.ChordSymbol(name)
     except Exception:
-        from arranger import ChordParser
+        from arranger.chords import ChordParser
 
         root, _ = ChordParser.parse_chord_name(name)
         symbol = harmony.ChordSymbol()

@@ -19,9 +19,32 @@ except for the public re-exports at the bottom - see the note there.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Tuple
+from typing import Any, List, Optional, Sequence, Tuple
 
-from arranger import _MUTED_CELL, STRING_NAMES, ArrangementStep
+from arranger.tuning import _MUTED_CELL, STRING_NAMES, ArrangementStep
+
+# The MusicXML and Guitar Pro renderers are ordinary top-level imports, re-exported
+# from `arranger` so that `from arranger import format_musicxml` - the spelling in
+# the README, the tests and `wjazzd` - keeps working.
+#
+# They used to be resolved through a module-level `__getattr__`, on the stated
+# grounds that `tabxml` and `tabgp` "import this module" and would therefore
+# re-enter a half-initialised one. **That stopped being true in Phase 5**: both now
+# import `arranger.tuning` - a leaf module with no dependencies of its own - and
+# `tabgp` imports `tabxml`, not the reverse. Nothing here imports `tabstaff`.
+#
+# Nor is the laziness buying anything. `tabxml` needs music21 and `tabgp` needs
+# PyGuitarPro, but each imports its extra *inside* the functions that use it, so
+# importing either module is free on a machine that has neither. That was
+# measured - both import cleanly with `sys.modules['music21'] = None` - rather than
+# assumed, because the lazy import was originally added to make the extras
+# optional and it is worth knowing whether that is still the reason it exists.
+#
+# Re-exporting here is what keeps one spelling for the whole rendering surface:
+# `from arranger import format_musicxml` resolves through this module, and
+# `arranger/__init__.py` re-exports *this* module's names.
+from tabgp import format_gp5, write_gp5
+from tabxml import format_musicxml, write_musicxml
 
 # The width every fret cell is padded to. Two characters covers frets 0-18, the
 # whole range the library allows, and matches the convention `Voicing.tab_block()`
@@ -709,44 +732,8 @@ def write_tab_html(steps: List[ArrangementStep], path: str, **kwargs: Any) -> st
     return str(path)
 
 
-# The renderers are re-exported from `arranger` rather than imported at its top, so
-# that `from arranger import format_tab_html` - the spelling in the README, the
-# tests and `wjazzd` - keeps working. A plain top-level `from tabstaff import ...`
-# in `arranger` would be a genuine import cycle: importing `tabstaff` first would
-# re-enter a half-initialised `arranger` and fail to find these names. The lazy
-# `__getattr__` in `arranger` breaks it without a lazy import at every call site.
-# The MusicXML renderer lives in `tabxml`, which imports this module. Re-exporting it
-# here is what keeps one spelling for the whole staff-rendering surface - `from
-# arranger import format_musicxml` - and the re-export is lazy for the same reason
-# and with the same cycle: `tabxml` imports `tabstaff`, so a top-level import here
-# would re-enter a half-initialised `tabxml`.
-#
-# The Guitar Pro renderer lives in `tabgp`, which imports this module for the same
-# reason and re-exports through here for the same reason, so there is still one
-# spelling for the whole rendering surface.
-_RENDERER_EXPORTS = (
-    "format_musicxml",
-    "write_musicxml",
-    "format_gp5",
-    "write_gp5",
-)
-# The modules each name lives in, resolved lazily for the same cycle reason.
-_RENDERER_MODULES = {
-    "format_musicxml": "tabxml",
-    "write_musicxml": "tabxml",
-    "format_gp5": "tabgp",
-    "write_gp5": "tabgp",
-}
-
-if TYPE_CHECKING:
-    # The names are resolved by `__getattr__` below, which a static checker cannot
-    # follow - so without this it would report them as absent from the module and
-    # flag the `__all__` entries. The same trick `arranger` uses for these names.
-    from tabgp import format_gp5, write_gp5
-    from tabxml import format_musicxml, write_musicxml
-
-# The seven names a star-import of this module must carry. Spelled out as one literal
-# rather than `+=`, which a static checker cannot follow.
+# The seven names a star-import of this module must carry. Spelled out as one
+# literal rather than `+=`, which a static checker cannot follow.
 __all__ = [
     "format_tab_staff",
     "format_tab_html",
@@ -756,14 +743,4 @@ __all__ = [
     "format_gp5",
     "write_gp5",
 ]
-
-
-def __getattr__(name: str) -> Any:
-    """Resolves the score renderers on first access. See _RENDERER_EXPORTS."""
-    module_name = _RENDERER_MODULES.get(name)
-    if module_name is not None:
-        import importlib
-
-        return getattr(importlib.import_module(module_name), name)
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

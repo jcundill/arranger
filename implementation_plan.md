@@ -5,7 +5,8 @@ comments currently carry in prose — because the maintainers are LLM agents, wh
 edit what they can find and cannot infer that a decision documented in one place is
 duplicated in another.
 
-**Status: Phases 0–4 done. Phase 5 (the package split) is next.**
+**Status: Phases 0–5 done. Phase 6 is next, and it cannot be done as written —
+see [Phase 6](#phase-6-the-import-cycle-cannot-be-deleted).**
 
 | phase | what | state | tests |
 |---|---|---|---|
@@ -14,11 +15,15 @@ duplicated in another.
 | 2 | `Diagnostics`; no `print()` in the library | **done** `b4d51f4` | 694 |
 | 3 | one implementation of each shared decision | **done** `9d3c7a1` | 702 |
 | 4 | `ArrangeOptions`; `arrange_slots` delegates | **done** `b834cbf` | 714 |
-| 5 | split `arranger.py` into a package | **next** | — |
-| 6 | delete the import cycle | pending | — |
-| 7 | CLI de-duplication | pending | — |
-| 8 | docs (`AGENTS.md` is stale) | pending | — |
+| 5 | split `arranger.py` into a package | **done** `6aba38b` | 719 |
+| 6 | import cycle | **partly done** `c289879`; rest is a decision | 719 |
+| 7 | CLI de-duplication | pending — but see the note on 8 | — |
+| 8 | docs (`AGENTS.md` is now actively wrong) | **recommended next** | — |
 | 9 | CI and cleanup | pending | — |
+
+**Suggested order from here: 8, then 7, then 9.** Phase 8 is not bookkeeping — see
+the note under "The six defects" for why `AGENTS.md` contradicting the tree is now
+the most expensive thing left in the repository.
 
 Supersedes `docs/history/texture-plan.md` (the completed `texture="targets"` plan).
 
@@ -58,12 +63,30 @@ no longer valid JSON.
 make check      # lint + typecheck + test, in that order
 ```
 
-Current measured state, all green: **714 tests OK (skipped=2)**, pyright **0 errors
+Current measured state, all green: **719 tests OK (skipped=2)**, pyright **0 errors
 0 warnings**, ruff **0 errors**. If your change moves any of those numbers, that is
-the signal — not the absence of an error message.
+the signal — not the absence of an error message. (714 was the count before Phase 5;
+the 5 extra are `tests/test_package_dag.py`.)
 
 `make check` exists because two things were wrong before it did: a linter was
 absent, and `pyright` silently failed to find the virtualenv. See "Traps" below.
+
+### Where the code is now
+
+`arranger.py` is **gone** — it is a package. If you are reading this cold, the two
+facts that matter most:
+
+```
+arranger/tuning.py      the instrument; Voicing and ArrangementStep live here
+arranger/cost.py        voicing_cost - the library's central invariant
+arranger/steps.py       VoiceLeadingEngine and the one step loop
+arranger/__init__.py    a facade: re-exports, __version__, main()
+```
+
+`tests/test_package_dag.py` asserts the layering, so a module that imports one
+below it fails the suite. Read its `ORDER` list before adding a module. `AGENTS.md`
+still describes the old single-module layout and is **wrong** — that is Phase 8, and
+it is the one document here that will actively mislead you.
 
 ### The six defects this refactor is for
 
@@ -76,8 +99,22 @@ absent, and `pyright` silently failed to find the virtualenv. See "Traps" below.
 | 5 | test fixtures copy-pasted | `make_step` ×2, `make_voicing` ×2, `bass_string` ×2 | divergent fixtures; a test passes for the wrong reason |
 | 6 | docs stale and unenforced | `AGENTS.md` 1710 lines, says version `0.8.0` *and* `0.7.0` while `__version__` is `0.9.0`; **zero** mention of walking bass, which ships in 0.9.0 | an agent reads it as ground truth and acts on stale facts. **Phase 8.** |
 
+**Defect 6 got worse in Phase 5, not better.** `AGENTS.md` now describes a
+single 4290-line `arranger.py`, a repository layout with no `arranger/` directory,
+and `pyright arranger.py ...` as the typecheck command — all of which became false
+in `6aba38b`. It is now the single most misleading document in the repository, and
+it is the one every agent reads first. **Phase 8 should be treated as the next
+phase, ahead of 7**, for that reason alone: until it lands, this plan and
+`AGENTS.md` give contradictory answers to "where does the cost tuple live".
 
-## The target module layout (Phase 5's spec)
+
+## The target module layout (Phase 5's spec — superseded, kept for the reasoning)
+
+> **Read this as history, not as instructions.** Phase 5 shipped a different
+> layout, because three entries below cannot form a DAG. The table is left in place
+> because *why* each moved is the useful part, and that is written up under
+> [Phase 5](#phase-5-the-package-split). The authoritative order is the `ORDER`
+> list in `tests/test_package_dag.py`, which the suite enforces.
 
 `arranger.py` → a package named `arranger`, so `from arranger import
 VoiceLeadingEngine` and the `jazz-arranger` console script are unchanged. Twelve
@@ -141,7 +178,7 @@ Also in step 5: delete the second definition of `_STAFF_CELL_WIDTH`, which
 ---
 
 
-## What Phases 0–4 actually shipped
+## What Phases 0–5 actually shipped
 
 Read this rather than the phase descriptions: several things diverged from the
 original plan, and the divergence is the interesting part.
@@ -243,6 +280,119 @@ has cost this library something, and the first time as a runtime crash rather th
 signature pyright rejected. The parameter's type now states what it always had to
 accept.
 
+### Phase 5 — the package split
+
+`arranger.py` (4290 lines) → eleven modules in a strict order, re-exported through
+`arranger/__init__.py`, so `from arranger import X` and the `jazz-arranger` console
+script are unchanged. 719 tests, pyright 0/0, ruff 0.
+
+```
+tuning -> diagnostics -> chords -> grips -> cost -> textures
+                                                   |
+                            bass <- options -----+----> decisions
+                                                   |
+                                                 steps -> render -> (facade)
+```
+
+**Every module body was moved by line range, never retyped.** A 4000-line move is
+only safe if the text is copied rather than re-entered, so the split ran through a
+generator that sliced the original by line number. The only hand-written parts are
+the import headers, the facade, and the delegates — a docstring, a fret number or
+a comment cannot change in a move that copies bytes.
+
+**Three placements in the plan's table could not be a DAG, and each is forced by a
+concrete edge:**
+
+- `Voicing` and `ArrangementStep` are in **`tuning`**, not `steps`. `grips`
+  *constructs* a `Voicing`, so it must be below `grips`; and both dataclasses
+  default `role` to `ROLE_TARGET`, so the role vocabulary must be below that too.
+  The tab-cell primitives follow for the same reason — `Voicing.tab_block` calls
+  them. This also deleted the second `_STAFF_CELL_WIDTH` definition.
+- The non-chord-tone machinery is in **`chords`**, which the plan did not mention.
+  Routing a melody note to an extension is chord theory, and `bass._bass_harmony`
+  needs `NON_CHORD_TONE_EXTENSIONS` — leaving it on the engine would have made
+  `bass` import `steps`.
+- **`bass_cost` is in `bass`, not `cost`.** It ranks over `BASS_ROLE_*` and is
+  called by `_walking_bass_line`; in `cost` the two modules would need each other.
+
+**Both function-local imports are gone**, which is the one thing Phase 5 was
+certain to buy. `steps` used `from decisions import (...)` and
+`from options import ArrangeOptions` *inside* `arrange_progression` to dodge
+cycles that existed only because all four were one module. They are ordinary
+top-level imports now, and `decisions.select_step_voicing` calls
+`cost._best_voicing` directly instead of reaching through the engine.
+
+**`X = classmethod(f)` is unsatisfiable, and the plan's trap #5 predicted it.**
+Assigning a classmethod to satisfy pyright trips ruff's `B010`, which wants
+`setattr`; `setattr` is invisible to a type checker. The delegates are written out
+as real one-line methods instead — ~180 lines rather than ~20, and the only version
+both tools accept. *This is trap #5's "look for a seam worth extracting", and the
+seam was: the delegate needs a real signature anyway.*
+
+Verified behaviour-preserving rather than merely green:
+
+- **719 tests OK** (skipped=2) — 714 plus 5 new. The 54 hardcoded tab strings are
+  untouched.
+- **`.baseline_capture.py` before/after are byte-identical across all 40
+  configurations** — 30 hand-built and 5 real Weimar heads, every caller-readable
+  field plus the tab string. Not one voicing *or warning* changed. (Regenerate the
+  "before" from `HEAD` in a worktree; the stale `/tmp/before.json` on this machine
+  predates Phase 4 and shows 6 false differences.)
+- A clean install of the built wheel imports and arranges outside the repo, the
+  console script runs, and `import arranger` still works with music21 blocked.
+
+Two incidental fixes, both forced by the split: `make demo` runs `-m arranger`
+with a three-line `__main__.py` (a package cannot be executed directly), and the
+stray paste artefact committed in `bb09831` inside the `TEXTURE_STYLES` comment is
+corrected.
+
+
+### Phase 6 — the import cycle cannot be deleted
+
+**The phase as specified is not achievable, and the reason is worth more than the
+work would have been.** The plan assumed that once the engine was a package, the
+facade could import the renderers eagerly and the PEP 562 `__getattr__` could go.
+Tried, measured, reverted:
+
+1. Repoint `tabstaff` / `tabxml` / `tabgp` at `arranger.tuning` instead of the
+   facade — they only need `_MUTED_CELL`, `STRING_NAMES`, `ArrangementStep`,
+   `GuitarFretboard`, `NO_CHORD` and `PITCH_CLASS_NAMES`, all of which are in
+   `tuning`. **This works**, and on its own is a genuine improvement: the
+   renderers now depend on the layer below the facade rather than on the facade.
+2. Make `tabstaff` import `tabxml` and `tabgp` eagerly. **This also works** — both
+   import cleanly with `sys.modules['music21'] = None`, because they defer their
+   extras to function-local imports.
+3. Make the facade import the renderers eagerly. **This fails, and ordering cannot
+   fix it.** Importing *any* submodule of a package executes that package's
+   `__init__.py`, so `import tabstaff` → `arranger.tuning` → the whole facade →
+   `from tabstaff import format_gp5`, against a `tabstaff` that is mid-import and
+   has not defined it yet.
+
+So the `__getattr__` is load-bearing, and the cycle is not "the engine and the
+renderers importing each other" — it is **the facade re-exporting names from a
+module that imports the package the facade lives in.** Steps 1 and 2 remove two of
+the three lazy layers and are worth committing on their own; step 3 is impossible
+while the facade re-exports.
+
+The way out is a design decision, not a refactor:
+
+- **Move the renderers *into* the package** (`arranger/render/`), which removes the
+  cycle outright — but re-introduces why they live outside: `tabxml`/`tabgp` are
+  optional-extra modules and `arranger` must import on a machine with neither.
+- **Drop the facade re-export** and require `from tabstaff import format_tab_staff`.
+  One line per call site, and it makes the one-way dependency honest — but it
+  breaks the spelling the README, the tests and `wjazzd` all use, which is the one
+  thing Phase 5 was careful to preserve.
+- **Accept the `__getattr__`**, and keep what the split already bought: one
+  definition per decision, a testable DAG, and a facade that is a facade rather
+  than 4000 lines of music theory. Take the identity assertion Phase 6 wanted,
+  which is the part with actual value.
+
+The third is the recommendation. The assertion is worth having on its own merits
+and is already written as `test_the_facade_reexports_the_public_surface`; the
+`__getattr__` is ~15 lines the phase wanted deleted for tidiness, and deleting it
+costs a public spelling.
+
 ### Where the plan was wrong
 
 Recorded because the next phase will hit the same thing:
@@ -254,6 +404,13 @@ Recorded because the next phase will hit the same thing:
   five extracted functions covered it.
 - The equivalence test was to be added in Phase 4; it went in Phase 3, because that
   is where the shared decisions made it meaningful.
+- Phase 5's module table put `Voicing`, the non-chord-tone machinery and
+  `bass_cost` in places that cannot be a DAG. The table was a *shape*; the edges
+  are the constraint, and three entries had to move.
+- Phase 6's premise — that the split makes the import cycle deletable — is false,
+  and no amount of repointing reaches it. *A cycle through a package `__init__` is
+  not the same as a cycle between two modules, and only the second can be fixed by
+  moving imports.*
 
 ---
 
@@ -273,10 +430,12 @@ Each of these cost real time, or nearly shipped a defect.
    were installed and importing fine. A checker that cannot see the venv reports
    import failures that look exactly like type failures. `make typecheck` pins it.
 
-3. **A new runtime module must be added to `pyproject.toml`'s `py-modules`.**
-   `diagnostics` was missed once; `import arranger` would have failed on a clean
-   install. `decisions` and `options` are the same kind — imported *by* `arranger`,
-   not optional extras.
+3. **A new runtime module must be added to `pyproject.toml`.** `diagnostics` was
+   missed once; `import arranger` would have failed on a clean install. Phase 5
+   changed the shape of this: the engine is now `packages = ["arranger"]` and
+   `py-modules` holds only the renderers and front ends. **A new module inside the
+   package needs no `pyproject.toml` change**; a new *top-level* module needs a
+   `py-modules` entry.
 
 4. **Do not run `ruff format`.** It rewrote 24 files and inflated `SHELL_DEGREES`
    from 10 lines to 31, one pair per line. Those tables are aligned so they can be
@@ -303,6 +462,26 @@ Each of these cost real time, or nearly shipped a defect.
 
 7. **Never `git push` or otherwise touch the remote.** This repo is on branch
    `walking-bass`; the user commits and pushes.
+
+8. **A large mechanical move must copy text, not retyping it.** Phase 5 moved 4290
+   lines into eleven modules, and the thing that made it safe was generating the
+   modules by *slicing the original by line number* — so a docstring, a fret number
+   or a comment provably cannot change in the move. The same instinct applies to
+   any bulk edit here. The corollary: **generate into a script you keep until the
+   suite is green**, because a half-applied regeneration over a good tree is much
+   harder to unpick than a wrong line is to find. The Phase 5 generator is
+   deliberately not committed — it read from a temp copy of the original and is
+   one-shot scaffolding.
+
+9. **A stale "before" baseline will invent differences that are not there.** The
+   `/tmp/before.json` on this machine predated Phase 4, and comparing against it
+   showed 6 configurations differing. All 6 were artefacts of the stale file;
+   regenerating the baseline from `HEAD` in a `git worktree` showed the split was
+   byte-identical across all 40. **Before believing a regression, check the
+   baseline is from the commit you think it is:**
+   `git worktree add /tmp/pre HEAD && cd /tmp/pre && python .baseline_capture.py
+   /tmp/before.json`. The database is 42 MB and gitignored, so copy `wjazzd.db`
+   across or the corpus half of the capture comes back empty.
 
 
 
@@ -332,18 +511,19 @@ are pure additions.
 
 ## Phases 6–9, in brief
 
-- **6 — delete the import cycle.** `tabstaff` imports `arranger` while `arranger`
-  re-exports `tabstaff`'s names, which is why there is a PEP 562 `__getattr__`, a
-  hand-maintained `__all__`, a `TYPE_CHECKING` re-import, and a
-  `test_dunder_all_matches_the_public_surface` test. Once Phase 5 has made those
-  imports ordinary, **all four are deleted** rather than maintained. Replace the
-  test with `tests/test_public_surface.py`, which asserts each of the 45 public
-  names resolves and is the *same object* as its home module — the assertion the
-  deleted `__getattr__` made untestable.
+- **6 — import cycle. Partly done; the rest is a decision, not a task.** `c289879`
+  took the two parts that work (the renderers now import `arranger.tuning` rather
+  than the facade, and `tabstaff`'s own `__getattr__` is gone). The third — deleting
+  the facade's `__getattr__` — **is not achievable while the facade re-exports**;
+  the measurement and the three costed options are in
+  [Phase 6](#phase-6-the-import-cycle-cannot-be-deleted). Do not re-attempt it
+  without reading that section. The identity assertion Phase 6 wanted is already in
+  as `test_the_facade_reexports_the_public_surface`.
 - **7 — CLI de-duplication.** `arranger/cli.py` gets `add_common_arguments` (the ~25
   duplicated `add_argument` calls) and `render_and_write` (the duplicated
   `--html` / `--musicxml` / `--gp5` dispatch). `corpus_cli` 280 → ~120,
-  `head_cli` 221 → ~140.
+  `head_cli` 221 → ~140. Note `arranger/cli.py` does not exist yet — Phase 5
+  created `arranger/` but not this module, so it is a new file in the package.
 - **8 — docs.** `AGENTS.md` 1710 → ~400, version read from `__version__` rather than
   typed by hand, a **routing table** ("changing X? read Y") at the top, and
   `tests/test_docs.py::TestDocsMatchTheCode` asserting the stated version equals
