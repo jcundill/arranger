@@ -5,6 +5,12 @@ PYTHON ?= .venv/bin/python
 PYRIGHT ?= .venv/bin/pyright
 RUFF ?= .venv/bin/ruff
 
+# Every source file the gate runs over, spelled once. A new module that is not
+# listed here is silently unlinted and untypechecked, which is how `diagnostics.py`
+# nearly shipped unchecked - so lint and format share the one list, and typecheck
+# names its own (pyright is given the library, not the dev tools).
+MODULES = arranger.py diagnostics.py tabstaff.py tabxml.py tabgp.py wjazzd.py headxml.py grip_chart.py tests
+
 .PHONY: help install install-extra install-extra-gp install-dev test typecheck lint format check demo build clean chart chart-audit
 
 help:
@@ -48,17 +54,17 @@ test:
 
 typecheck:
 	@command -v $(PYRIGHT) >/dev/null 2>&1 || { echo "make typecheck needs pyright: $(PYTHON) -m pip install pyright"; exit 1; }
-	$(PYRIGHT) --pythonpath $(PYTHON) arranger.py tabstaff.py tabxml.py tabgp.py wjazzd.py headxml.py tests
+	$(PYRIGHT) --pythonpath $(PYTHON) arranger.py diagnostics.py tabstaff.py tabxml.py tabgp.py wjazzd.py headxml.py tests
 
 # The rule set is configured in pyproject.toml ([tool.ruff]), and it is
 # deliberately narrow - see the comment there for why UP*/E501/B905 are off.
 lint:
 	@command -v $(RUFF) >/dev/null 2>&1 || { echo "make lint needs ruff: $(PYTHON) -m pip install ruff"; exit 1; }
-	$(RUFF) check arranger.py tabstaff.py tabxml.py tabgp.py wjazzd.py headxml.py grip_chart.py tests
+	$(RUFF) check $(MODULES)
 
 format:
 	@command -v $(RUFF) >/dev/null 2>&1 || { echo "make format needs ruff: $(PYTHON) -m pip install ruff"; exit 1; }
-	$(RUFF) format arranger.py tabstaff.py tabxml.py tabgp.py wjazzd.py headxml.py grip_chart.py tests
+	$(RUFF) format $(MODULES)
 
 # What a change has to pass, and what CI runs. Ordered cheapest-first so a lint
 # failure is reported before the 80-second suite is spent.

@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING, Any, Container, Dict, List, Optional, Sequence
 
 from musthe import Note
 
+from diagnostics import Diagnostics, default_diagnostics
+
 # Standard tuning pitches in MIDI / Pitch class equivalents
 # String 6 (Low E, index 0) to String 1 (High E, index 5)
 STANDARD_TUNING = [
@@ -3105,6 +3107,7 @@ class VoiceLeadingEngine:
         fret_min: int = NECK_FRET_MIN,
         fret_max: int = NECK_FRET_MAX,
         grips: Tuple[str, ...] = GRIP_PREFERENCE,
+        diagnostics: Optional[Diagnostics] = None,
     ) -> Optional[StepPreparation]:
         """
         Builds one step's candidates, leaving the choice of shape to the caller.
@@ -3118,7 +3121,13 @@ class VoiceLeadingEngine:
         Returns None when the step has no voicing at all. `previous` is only read
         by the `sustain` strategy, and `previous_chord` is what that strategy
         reports as `harmonized_as`.
+
+        `diagnostics` receives the one warning this function can raise - a
+        non-chord tone no strategy could resolve. It defaults to printing, which
+        is what this function always did; see `diagnostics.Diagnostics`.
         """
+        if diagnostics is None:
+            diagnostics = default_diagnostics()
         note_str, chord_type, name = progression[index]
         melody_note = Note(note_str)
 
@@ -3194,7 +3203,7 @@ class VoiceLeadingEngine:
                         harmonized_as = substitute_name
 
             if strategy_used is None:
-                print(
+                diagnostics.warn(
                     f"Warning: melody {note_str} is not a chord tone of {name} and the "
                     f"'{non_chord_tone}' strategy found no voicing; keeping the fallback"
                 )
@@ -3232,6 +3241,7 @@ class VoiceLeadingEngine:
         timings: Optional[List[Tuple[int, float, Optional[float]]]] = None,
         texture: str = "uniform",
         beats_per_bar: int = 4,
+        diagnostics: Optional[Diagnostics] = None,
     ) -> List[ArrangementStep]:
         """
         Takes a progression of (Melody Note, Chord Quality, Name) tuples
@@ -3317,6 +3327,14 @@ class VoiceLeadingEngine:
         `supported_string_sets()`: the playability invariant applies to the upper
         voices, with exactly one `BASS_STRING_INDICES` string outside that set carrying
         the thumb below it.
+
+        `diagnostics` collects this function's warnings - a melody that reaches no
+        voicing, a step demoted to the melody alone, a fill promoted to a target, an
+        unresolvable non-chord tone, a thumb with nowhere to go. It defaults to
+        printing each one, which is what this function has always done, so a caller
+        that passes nothing sees no change. Pass a `Diagnostics()` to collect them
+        silently instead; see the `diagnostics` module for why that is a value
+        rather than a logging call.
         """
         if non_chord_tone not in cls.NON_CHORD_TONE_STRATEGIES:
             raise ValueError(
@@ -3330,6 +3348,11 @@ class VoiceLeadingEngine:
             raise ValueError(
                 f"Unknown texture {texture!r}; expected one of {TEXTURE_STYLES}"
             )
+        # Resolved once, here, and passed down: every warning this function reaches
+        # goes to the one collector, so a caller that passed one sees all of them
+        # rather than the first few. Defaults to printing, as this always did.
+        if diagnostics is None:
+            diagnostics = default_diagnostics()
 
         arrangements: List[ArrangementStep] = []
 
@@ -3435,7 +3458,7 @@ class VoiceLeadingEngine:
                     # the tune is worse than ignoring a flag, so the texture's own set
                     # stands - and the warning says what was ignored.
                     slot_grips = role_grips
-                    print(
+                    diagnostics.warn(
                         f"Warning: {texture} uses {role_grips or 'no grip'} for a "
                         f"{role}, none of which is in the requested {grips}; "
                         f"using the texture's own set"
@@ -3475,7 +3498,7 @@ class VoiceLeadingEngine:
                         metric_weight=weight,
                         bass_only=slot.bass_only,
                     )
-                    cls._attach_bass(fill, slot.bass, arrangements)
+                    cls._attach_bass(fill, slot.bass, arrangements, diagnostics)
                     arrangements.append(fill)
                     continue
                 # An unreachable melody is genuinely unplayable, so fall through to
@@ -3487,7 +3510,7 @@ class VoiceLeadingEngine:
             if chord_type == NO_CHORD or name == NO_CHORD:
                 solo_voicing = cls.get_melody_only_voicing(melody_note, prefer=top_strings)
                 if solo_voicing is None:
-                    print(
+                    diagnostics.warn(
                         f"Warning: melody {note_str} is unreachable on any string; "
                         f"skipping the no-chord step"
                     )
@@ -3522,7 +3545,7 @@ class VoiceLeadingEngine:
                 # string free. Attaching it here rather than only on harmonised steps is
                 # what keeps a bar of no-chord melody from being a hole in the walk.
                 arrangements[-1].bass_only = slot.bass_only
-                cls._attach_bass(arrangements[-1], slot.bass, arrangements)
+                cls._attach_bass(arrangements[-1], slot.bass, arrangements, diagnostics)
                 continue
 
             # Everything up to choosing a shape is shared with the corpus loader,
@@ -3537,6 +3560,7 @@ class VoiceLeadingEngine:
                 fret_min=fret_min,
                 fret_max=fret_max,
                 grips=slot_grips,
+                diagnostics=diagnostics,
             )
             if prepared is None:
                 # A target under walking_bass has one grip and no second option, so a
@@ -3563,7 +3587,7 @@ class VoiceLeadingEngine:
                             metric_weight=weight,
                             bass_only=slot.bass_only,
                         )
-                        cls._attach_bass(step, slot.bass, arrangements)
+                        cls._attach_bass(step, slot.bass, arrangements, diagnostics)
                         arrangements.append(step)
                         continue
                 # A fill slot with nothing thin to play must not lose the chord of
@@ -3581,11 +3605,12 @@ class VoiceLeadingEngine:
                         fret_min=fret_min,
                         fret_max=fret_max,
                         grips=grips,
+                        diagnostics=diagnostics,
                     )
                     if prepared is not None:
                         role = ROLE_TARGET
                 if prepared is None:
-                    print(
+                    diagnostics.warn(
                         f"Warning: No valid drop-2 voicing found for {name} "
                         f"with melody {note_str}"
                     )
@@ -3657,7 +3682,7 @@ class VoiceLeadingEngine:
                     melody_note, prefer=top_strings
                 )
                 if solo is not None and solo.fret_span() < best_voicing.fret_span():
-                    print(
+                    diagnostics.warn(
                         f"Warning: {name} with melody {note_str} needs a "
                         f"{best_voicing.fret_span()}-fret stretch "
                         f"({best_voicing.tab_string()}); playing the melody alone"
@@ -3675,7 +3700,7 @@ class VoiceLeadingEngine:
                         metric_weight=weight,
                         bass_only=slot.bass_only,
                     ))
-                    cls._attach_bass(arrangements[-1], slot.bass, arrangements)
+                    cls._attach_bass(arrangements[-1], slot.bass, arrangements, diagnostics)
                     continue
             # A melody that repeats the previous step's pitch is a soprano-only
             # re-strike: the shape is held, so the renderers show just the melody
@@ -3732,7 +3757,7 @@ class VoiceLeadingEngine:
             # Select first, merge after: the bass is written into the fret vector only
             # once `_best_voicing` has returned, so it cannot enter the cost tuple by
             # construction rather than by discipline.
-            cls._attach_bass(arrangements[-1], slot.bass, arrangements)
+            cls._attach_bass(arrangements[-1], slot.bass, arrangements, diagnostics)
 
         return arrangements
 
@@ -3742,6 +3767,7 @@ class VoiceLeadingEngine:
         step: ArrangementStep,
         note: Optional[BassNote],
         arrangements: List[ArrangementStep],
+        diagnostics: Optional[Diagnostics] = None,
     ) -> None:
         """
         Merges one walked beat into a step: records it, then places it on a string.
@@ -3770,7 +3796,7 @@ class VoiceLeadingEngine:
             previous_bass=_previous_bass(arrangements),
         )
         if placed is None:
-            print(
+            (diagnostics or default_diagnostics()).warn(
                 f"Warning: no bass string free below the melody for bass "
                 f"{PITCH_CLASS_NAMES[note.pitch_class % 12]}; "
                 f"the step keeps its upper voicing"
@@ -4233,11 +4259,13 @@ __all__ = [
     "TEXTURE_STYLES",
     "ArrangementStep",
     "ChordParser",
+    "Diagnostics",
     "GuitarFretboard",
     "StepPreparation",
     "VoiceLeadingEngine",
     "Voicing",
     "bass_cost",
+    "default_diagnostics",
     "format_progression",
     "format_gp5",
     "format_musicxml",

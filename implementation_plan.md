@@ -1,20 +1,33 @@
 # Implementation Plan
 
-**Status:** Phases 0 and 1 **done** (commits `1ae20af`, `b4cadc7`). Phase 2 next.
+**Status:** Phases 0–2 **done** (commits `1ae20af`, `b4cadc7`, `b4d51f4`). Phase 3 next.
 **Supersedes:** `docs/history/texture-plan.md` (the completed `texture="targets"` plan, 0.7.0).
 
 | phase | what | state |
 |---|---|---|
 | 0 | baseline + lint gate | **done** — 677 tests OK, pyright 0/0, ruff 0/0 |
 | 1 | `tests/support.py` + `tests/__init__.py` | **done** — 6 helpers de-duplicated, −101 lines |
-| 2 | `Diagnostics`, delete `print` from the library | next |
-| 3 | extract the six duplicated decisions | pending |
+| 2 | `Diagnostics`, delete `print` from the library | **done** — 8 print sites → a collector; 694 tests |
+| 3 | extract the six duplicated decisions | next |
 | 4 | `ArrangeOptions` + the equivalence test | pending |
 | 5 | split `arranger.py` into a package | pending |
 | 6 | delete the import cycle | pending |
 | 7 | CLI de-duplication | pending |
 | 8 | docs | pending |
 | 9 | CI and cleanup | pending |
+
+**Phase 2 note.** `Diagnostics` shipped as a flat `diagnostics.py` so the Phase 5
+package split is a `git mv` rather than a second rewrite. It is a **runtime** module of
+the distribution (in `py-modules`), not an extra — `import arranger` would fail on a
+clean install without it.
+
+**Two defects found while doing Phase 2**, both of which would have shipped:
+
+- `diagnostics` was missing from `pyproject.toml`'s `py-modules`.
+- The Makefile named each source file in three places, so the new module was
+  silently unlinted and untypechecked. `lint` and `format` now share one `MODULES`
+  list, with a comment saying why. **This is the generalisable lesson: a gate that
+  enumerates its inputs by hand will silently skip whatever was added last.**
 
 ---
 

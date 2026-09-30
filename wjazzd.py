@@ -85,6 +85,7 @@ from arranger import (
     normalised_harmony,
     sounding_harmony,
 )
+from diagnostics import Diagnostics, default_diagnostics
 
 __all__ = [
     "DEFAULT_DB",
@@ -1710,6 +1711,7 @@ def _arrange_step_with_bass(
     top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
     grips: Tuple[str, ...] = GRIP_PREFERENCE,
     bass: Optional[str] = None,
+    diagnostics: Optional[Diagnostics] = None,
 ) -> Optional[Tuple[Voicing, StepPreparation]]:
     """Arranges one step, preferring candidates whose lowest note is the bass.
 
@@ -1739,6 +1741,7 @@ def _arrange_step_with_bass(
         top_strings=top_strings,
         non_chord_tone=non_chord_tone,
         grips=grips,
+        diagnostics=diagnostics,
     )
     if prepared is None:
         return None
@@ -1794,6 +1797,7 @@ def arrange_slots(
     grips: Tuple[str, ...] = GRIP_PREFERENCE,
     texture: str = "uniform",
     beats_per_bar: int = 4,
+    diagnostics: Optional[Diagnostics] = None,
 ) -> Tuple[List[ArrangementStep], List[int], List[str]]:
     """Voices a list of (note, quality, name) triples, one step per slot.
 
@@ -1837,6 +1841,11 @@ def arrange_slots(
         )
     texture_grips = TEXTURE_GRIPS[texture]
     engine = VoiceLeadingEngine()
+    # Resolved once, here, so the engine, the slash-bass helper and the bass
+    # attachment all report to the same collector. Defaults to printing, which is
+    # what this function has always done.
+    if diagnostics is None:
+        diagnostics = default_diagnostics()
     if fallback not in (None, "diminished"):
         raise ValueError(f"Unknown fallback {fallback!r}; expected None or 'diminished'")
 
@@ -1961,7 +1970,7 @@ def arrange_slots(
                 # tune is worse than ignoring a flag, so the texture's own set stands -
                 # and the warning says what was ignored, which the old code never did.
                 slot_grips = role_grips
-                print(
+                diagnostics.warn(
                     f"Warning: {texture} uses {role_grips or 'no grip'} for a "
                     f"{role}, none of which is in the requested {grips}; "
                     f"using the texture's own set"
@@ -1991,7 +2000,7 @@ def arrange_slots(
                 bass_only=slot.bass_only,
             )
             steps.append(step)
-            VoiceLeadingEngine._attach_bass(step, slot.bass, steps)
+            VoiceLeadingEngine._attach_bass(step, slot.bass, steps, diagnostics)
             previous = voicing
             previous_chord = name
             continue
@@ -2019,7 +2028,7 @@ def arrange_slots(
                     bass_only=slot.bass_only,
                 )
                 steps.append(step)
-                VoiceLeadingEngine._attach_bass(step, slot.bass, steps)
+                VoiceLeadingEngine._attach_bass(step, slot.bass, steps, diagnostics)
                 previous = solo_voicing
                 previous_chord = name
                 continue
@@ -2028,6 +2037,7 @@ def arrange_slots(
             engine, working, index,
             previous=previous, previous_chord=previous_chord,
             non_chord_tone=non_chord_tone, grips=slot_grips,
+            diagnostics=diagnostics,
         )
         if arranged is None and role == ROLE_FILL and slot_grips != grips:
             # A fill that cannot be filled must not cost the tune its chord: the
@@ -2042,6 +2052,7 @@ def arrange_slots(
                     engine, working, index,
                     previous=previous, previous_chord=previous_chord,
                     non_chord_tone=non_chord_tone, grips=grips,
+                    diagnostics=diagnostics,
                 )
                 if arranged is not None:
                     role = ROLE_TARGET
@@ -2059,7 +2070,7 @@ def arrange_slots(
                     bass_only=slot.bass_only,
                 )
                 steps.append(step)
-                VoiceLeadingEngine._attach_bass(step, slot.bass, steps)
+                VoiceLeadingEngine._attach_bass(step, slot.bass, steps, diagnostics)
                 previous = solo_voicing
                 previous_chord = name
                 continue
@@ -2087,7 +2098,7 @@ def arrange_slots(
         if voicing.fret_span() >= GRIP_MAX_SPAN["drop2"] and role == ROLE_TARGET:
             solo_voicing = engine.get_melody_only_voicing(Note(melody))
             if solo_voicing is not None and solo_voicing.fret_span() < voicing.fret_span():
-                print(
+                diagnostics.warn(
                     f"Warning: {name} with melody {melody} needs a "
                     f"{voicing.fret_span()}-fret stretch "
                     f"({voicing.tab_string()}); playing the melody alone"
@@ -2100,7 +2111,7 @@ def arrange_slots(
                     bass_only=slot.bass_only,
                 )
                 steps.append(step)
-                VoiceLeadingEngine._attach_bass(step, slot.bass, steps)
+                VoiceLeadingEngine._attach_bass(step, slot.bass, steps, diagnostics)
                 previous = solo_voicing
                 previous_chord = name
                 continue
@@ -2143,7 +2154,7 @@ def arrange_slots(
         ))
         # Select first, merge after: the thumb is written into the fret vector only
         # once the shape is chosen, so it cannot enter the cost tuple at all.
-        VoiceLeadingEngine._attach_bass(steps[-1], slot.bass, steps)
+        VoiceLeadingEngine._attach_bass(steps[-1], slot.bass, steps, diagnostics)
         previous = voicing
         previous_chord = name
 

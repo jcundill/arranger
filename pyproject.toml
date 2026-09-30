@@ -55,7 +55,21 @@ jazz-arranger = "arranger:main"
 # `tabgp` each import both, and are independent of one another. `headxml` is the
 # MusicXML *importer* and imports `arranger` and `wjazzd`; it is stdlib-only, so
 # unlike `tabxml` it needs no optional extra to work.
-py-modules = ["arranger", "tabstaff", "tabxml", "tabgp", "wjazzd", "headxml"]
+#
+# `diagnostics` is imported *by* `arranger` and by `wjazzd` - it holds the warning
+# collector the engine reports to - so it is a runtime module of the distribution
+# and not an optional extra alongside it. Omitting it would break `import arranger`
+# on a clean install, which is why it is spelled out here rather than left to
+# auto-discovery.
+py-modules = [
+    "arranger",
+    "diagnostics",
+    "tabstaff",
+    "tabxml",
+    "tabgp",
+    "wjazzd",
+    "headxml",
+]
 
 [tool.setuptools.dynamic]
 # Single source of truth: the version lives in arranger.__version__.
