@@ -5,8 +5,9 @@ comments currently carry in prose — because the maintainers are LLM agents, wh
 edit what they can find and cannot infer that a decision documented in one place is
 duplicated in another.
 
-**Status: Phases 0–5 done. Phase 6 is next, and it cannot be done as written —
-see [Phase 6](#phase-6-the-import-cycle-cannot-be-deleted).**
+**Status: Phases 0–6 and 8 done. Phase 7 (CLI de-duplication) is next; Phase 9 (CI)
+last. Phase 6 is partly done and its remainder is a *decision*, not a task — see
+[Phase 6](#phase-6--the-import-cycle-cannot-be-deleted).**
 
 | phase | what | state | tests |
 |---|---|---|---|
@@ -17,13 +18,13 @@ see [Phase 6](#phase-6-the-import-cycle-cannot-be-deleted).**
 | 4 | `ArrangeOptions`; `arrange_slots` delegates | **done** `b834cbf` | 714 |
 | 5 | split `arranger.py` into a package | **done** `6aba38b` | 719 |
 | 6 | import cycle | **partly done** `c289879`; rest is a decision | 719 |
-| 7 | CLI de-duplication | pending — but see the note on 8 | — |
-| 8 | docs (`AGENTS.md` is now actively wrong) | **recommended next** | — |
+| 7 | CLI de-duplication | **next** — see [Phase 7](#phase-7--cli-de-duplication-next) | — |
+| 8 | docs: `AGENTS.md` was actively wrong | **done** | 724 |
 | 9 | CI and cleanup | pending | — |
 
-**Suggested order from here: 8, then 7, then 9.** Phase 8 is not bookkeeping — see
-the note under "The six defects" for why `AGENTS.md` contradicting the tree is now
-the most expensive thing left in the repository.
+**Suggested order from here: 7, then 9.** Phase 8 shipped `AGENTS.md` at 402 lines with
+a routing table, moved the reasoning into `docs/`, and added `tests/test_docs.py` so
+drift fails the suite.
 
 Supersedes `docs/history/texture-plan.md` (the completed `texture="targets"` plan).
 
@@ -63,10 +64,10 @@ no longer valid JSON.
 make check      # lint + typecheck + test, in that order
 ```
 
-Current measured state, all green: **719 tests OK (skipped=2)**, pyright **0 errors
+Current measured state, all green: **724 tests OK (skipped=2)**, pyright **0 errors
 0 warnings**, ruff **0 errors**. If your change moves any of those numbers, that is
-the signal — not the absence of an error message. (714 was the count before Phase 5;
-the 5 extra are `tests/test_package_dag.py`.)
+the signal — not the absence of an error message. (719 was the count before Phase 8;
+the 5 extra are `tests/test_docs.py`.)
 
 `make check` exists because two things were wrong before it did: a linter was
 absent, and `pyright` silently failed to find the virtualenv. See "Traps" below.
@@ -84,9 +85,13 @@ arranger/__init__.py    a facade: re-exports, __version__, main()
 ```
 
 `tests/test_package_dag.py` asserts the layering, so a module that imports one
-below it fails the suite. Read its `ORDER` list before adding a module. `AGENTS.md`
-still describes the old single-module layout and is **wrong** — that is Phase 8, and
-it is the one document here that will actively mislead you.
+below it fails the suite. Read its `ORDER` list before adding a module.
+
+**`AGENTS.md` is now accurate and short (402 lines).** Phase 8 rewrote it as a
+*routing table* and moved the reasoning into `docs/engine.md`, `docs/renderers.md`
+and `docs/corpus.md`. If you are here cold, read `AGENTS.md` first and follow the
+table — do not work from this plan's layout section, which is Phase 5's *spec* and
+is marked as superseded.
 
 ### The six defects this refactor is for
 
@@ -99,13 +104,18 @@ it is the one document here that will actively mislead you.
 | 5 | test fixtures copy-pasted | `make_step` ×2, `make_voicing` ×2, `bass_string` ×2 | divergent fixtures; a test passes for the wrong reason |
 | 6 | docs stale and unenforced | `AGENTS.md` 1710 lines, says version `0.8.0` *and* `0.7.0` while `__version__` is `0.9.0`; **zero** mention of walking bass, which ships in 0.9.0 | an agent reads it as ground truth and acts on stale facts. **Phase 8.** |
 
-**Defect 6 got worse in Phase 5, not better.** `AGENTS.md` now describes a
-single 4290-line `arranger.py`, a repository layout with no `arranger/` directory,
-and `pyright arranger.py ...` as the typecheck command — all of which became false
-in `6aba38b`. It is now the single most misleading document in the repository, and
-it is the one every agent reads first. **Phase 8 should be treated as the next
-phase, ahead of 7**, for that reason alone: until it lands, this plan and
-`AGENTS.md` give contradictory answers to "where does the cost tuple live".
+**Defect 6 got worse in Phase 5, not better, and Phase 8 fixed it.** `AGENTS.md`
+described a single 4290-line `arranger.py`, a layout with no `arranger/` directory,
+and `pyright arranger.py ...` as the typecheck command — all false from `6aba38b`
+onward. It is now 402 lines, routes to `docs/`, and `tests/test_docs.py` fails the
+suite if it stops describing the tree.
+
+**But the drift was not where this plan said it was.** Phase 8's own test found
+**19 stale `arranger.py` invocations in `README.md`** — the user-facing document this
+plan had never listed. The lesson is recorded under
+[Phase 8](#phase-8--the-docs-and-a-false-premise-found-while-doing-them) and it
+applies to the remaining phases: *measure which documents are stale; do not fix the
+one you already suspect.*
 
 
 ## The target module layout (Phase 5's spec — superseded, kept for the reasoning)
@@ -113,7 +123,7 @@ phase, ahead of 7**, for that reason alone: until it lands, this plan and
 > **Read this as history, not as instructions.** Phase 5 shipped a different
 > layout, because three entries below cannot form a DAG. The table is left in place
 > because *why* each moved is the useful part, and that is written up under
-> [Phase 5](#phase-5-the-package-split). The authoritative order is the `ORDER`
+> [Phase 5](#phase-5--the-package-split). The authoritative order is the `ORDER`
 > list in `tests/test_package_dag.py`, which the suite enforces.
 
 `arranger.py` → a package named `arranger`, so `from arranger import
@@ -393,6 +403,59 @@ and is already written as `test_the_facade_reexports_the_public_surface`; the
 `__getattr__` is ~15 lines the phase wanted deleted for tidiness, and deleting it
 costs a public spelling.
 
+### Phase 8 — the docs, and a false premise found while doing them
+
+`AGENTS.md` was 1710 lines and had gone stale in ways an agent would act on: it
+described a single 4290-line `arranger.py` (it is a package of eleven), gave
+`pyright arranger.py` as the typecheck command, and stated the version as both
+`0.8.0` and `0.7.0` while `__version__` was `0.9.0`.
+
+It is now **402 lines**, opening with a routing table — *changing X? read Y* — and the
+reasoning moved into three documents that own a subsystem each:
+
+| document | what moved into it |
+|---|---|
+| `docs/engine.md` | the architecture, the grips and the selector, texture, the octaves |
+| `docs/renderers.md` | `tabstaff` / `tabxml` / `tabgp` / `headxml` and their traps |
+| `docs/corpus.md` | the Weimar integration and head selection |
+| `docs/open-issues.md` | the diagnosed-but-unfixed bugs (was `walking_bass_issues.md`) |
+| `docs/history/` | `walking-bass.md`, `corpus-plan.md`, `bass-lines.md`, `texture-plan.md` |
+
+**Every relocated block was moved by line range, never retyped** — trap #8 again, for
+the same reason. A fret number or a measured percentage provably cannot change in a
+move that copies bytes.
+
+**The test found drift nobody had noticed, including in a file the plan had not
+listed.** `tests/test_docs.py::TestDocsMatchTheCode` asserts five things, and on its
+first run three failed:
+
+- **19 stale `arranger.py` invocations in `README.md`** — every CLI example in the
+  user-facing document. The plan had flagged `AGENTS.md` as the misleading one and
+  never checked the README.
+- `AGENTS.md` itself named `.baseline_capture.py` nowhere in its layout, so a
+  committed script was undocumented.
+- The version assertions caught `0.8.0` still quoted in the relocated engine prose.
+
+That is the phase's whole argument in one measurement: **the drift was not where the
+plan said it was.** A checklist derived from the plan's own beliefs would have fixed
+`AGENTS.md` and left the README telling users to run a command that no longer exists.
+
+### The false premise: `lead_sheet.py` is not stale
+
+The plan specified deleting `lead_sheet.py` — "208 lines querying tables that do not
+exist", on `AGENTS.md`'s authority. **Checked before deleting, and it is false.** It
+queries `beats`, `solo_info` and `melody`, all three of which exist, and its 12 tests
+pass against the real 42 MB database:
+
+```
+Ran 12 tests in 0.309s
+OK
+```
+
+The `AGENTS.md` sentence asserting it was stale was itself the stale thing. The file
+is kept, its test is kept, and the false claim is deleted rather than propagated.
+*The document that reports drift is not thereby authoritative about it.*
+
 ### Where the plan was wrong
 
 Recorded because the next phase will hit the same thing:
@@ -411,8 +474,35 @@ Recorded because the next phase will hit the same thing:
   and no amount of repointing reaches it. *A cycle through a package `__init__` is
   not the same as a cycle between two modules, and only the second can be fixed by
   moving imports.*
+- Phase 8's premise — that `AGENTS.md` is the document that is wrong — was **half**
+  wrong. `README.md` was worse, and it is the one a user reads. *Fixing the document
+  you already know about is bookkeeping; measure which documents are stale instead.*
+- And `lead_sheet.py` was to be deleted for a reason that measurement refuted. *Do
+  not delete working code on a document's authority; run its tests.*
 
 ---
+
+## Open decisions — not to be taken by the next agent without asking
+
+These are real design forks, not tasks. Each is spelled out where it arises; none has
+been decided, and **picking one silently is the failure mode this plan keeps
+recording.**
+
+1. **The facade's lazy `__getattr__` stays or goes.** It is ~15 lines, and deleting it
+   costs either the renderers moving into the package (which re-breaks the optional
+   extras) or the public spelling `from arranger import format_tab_html` (which the
+   README, the tests and `wjazzd` all use). Phase 6 measured that the cycle cannot be
+   removed by moving imports. **The plan's recommendation is to keep it**; the
+   assertion it wanted already exists as
+   `test_the_facade_reexports_the_public_surface`.
+2. **`__version__` bump to `0.10.0`** rides with Phase 9. Note `tests/test_docs.py`
+   then fails until every document that states a version is updated — deliberate.
+3. **The walking-bass metre gap.** A 2/2 score numbers its beats past
+   `beats_per_bar` and the walker is built for four quarters. Recorded in
+   `docs/open-issues.md` rather than patched, because it is the same undecided
+   question 3/4 raises. Do not "fix" it incidentally.
+4. **`drop3` and `closed` remain unplayable** at `GRIP_MAX_SPAN = 5`. Raising the span
+   to admit them changes the library's playability contract; it is not a tuning knob.
 
 ## Traps
 
@@ -482,6 +572,18 @@ Each of these cost real time, or nearly shipped a defect.
    `git worktree add /tmp/pre HEAD && cd /tmp/pre && python .baseline_capture.py
    /tmp/before.json`. The database is 42 MB and gitignored, so copy `wjazzd.db`
    across or the corpus half of the capture comes back empty.
+10. **Stale documentation is rarely where you were told to look.** Phase 8 was
+    specified as "`AGENTS.md` is wrong". `AGENTS.md` *was* wrong — and `README.md` was
+    worse, with 19 invocations of a module deleted two phases earlier, in the document
+    a user actually reads. Both CLIs' `prog=` strings named the same dead module, so
+    every usage message and parse error pointed at it. *Before fixing the document you
+    already suspect, grep the tree for the thing it got wrong:*
+    `grep -rn 'arranger\.py' --include=*.md --include=*.py`.
+11. **A document's claim that code is stale is not evidence — running the tests
+    settles it in under a second.** This plan said to delete `lead_sheet.py` because
+    it "queries tables that do not exist", sourced entirely from a sentence in
+    `AGENTS.md`. Every table it queries exists and its 12 tests pass. *Never delete
+    working code on a document's authority; run its tests first.*
 
 
 
@@ -509,36 +611,86 @@ Every phase is one commit with a green suite behind it. Phase 3 is the one with 
 semantic risk; if it ever proves intractable it reverts without touching 0–2, which
 are pure additions.
 
-## Phases 6–9, in brief
+## Remaining phases at a glance
 
 - **6 — import cycle. Partly done; the rest is a decision, not a task.** `c289879`
   took the two parts that work (the renderers now import `arranger.tuning` rather
   than the facade, and `tabstaff`'s own `__getattr__` is gone). The third — deleting
   the facade's `__getattr__` — **is not achievable while the facade re-exports**;
   the measurement and the three costed options are in
-  [Phase 6](#phase-6-the-import-cycle-cannot-be-deleted). Do not re-attempt it
+  [Phase 6](#phase-6--the-import-cycle-cannot-be-deleted). Do not re-attempt it
   without reading that section. The identity assertion Phase 6 wanted is already in
-  as `test_the_facade_reexports_the_public_surface`.
-- **7 — CLI de-duplication.** `arranger/cli.py` gets `add_common_arguments` (the ~25
-  duplicated `add_argument` calls) and `render_and_write` (the duplicated
-  `--html` / `--musicxml` / `--gp5` dispatch). `corpus_cli` 280 → ~120,
-  `head_cli` 221 → ~140. Note `arranger/cli.py` does not exist yet — Phase 5
-  created `arranger/` but not this module, so it is a new file in the package.
-- **8 — docs.** `AGENTS.md` 1710 → ~400, version read from `__version__` rather than
-  typed by hand, a **routing table** ("changing X? read Y") at the top, and
-  `tests/test_docs.py::TestDocsMatchTheCode` asserting the stated version equals
-  `arranger.__version__` and that every module appears in the layout block. That
-  test *is* the fix for defect #6: documentation drift fails the suite instead of
-  misleading the next agent. Also archive `walking_bass.md`, `CORPUS_PLAN.md`,
-  `bass_lines.md` to `docs/history/`, and delete the stale `lead_sheet.py` (208
-  lines querying tables that do not exist, which `AGENTS.md` already declares
-  stale) with its test.
-- **9 — CI.** `.github/workflows/ci.yml` running `make check` on push across
-  3.10–3.14 with the `xml` and `gp` extras — so the two `skipUnless` guards are
-  exercised every push, which is exactly the class of defect this repo documents
-  having shipped (the MusicXML 3.1 `kind` problem was invisible to a round trip).
-  `wjazzd.db` is 42 MB and gitignored, so a manual-dispatch job downloads it and
-  runs the full suite; say so in the workflow header so an agent does not assume the
-  database tests ran. Bump `__version__` to `0.10.0`.
+  as `test_the_facade_reexports_the_public_surface`. **8 is done** — see
+  [Phase 8](#phase-8--the-docs-and-a-false-premise-found-while-doing-them).
+
+The two phases still to do are written up in full below, because both have an
+acceptance gate that is easy to miss.
+
+### Phase 7 — CLI de-duplication (next)
+
+**One bug found and fixed while preparing this brief.** Both CLIs passed
+`prog="arranger.py corpus"` / `prog="arranger.py head"` to argparse, so every usage
+message and every parse error told the user to run a module that has not existed
+since Phase 5. It is now `arranger corpus` / `arranger head`. Worth knowing because
+it is the same class as the `README.md` drift: **the split left the old name in the
+one place a user is guaranteed to read it.** Nothing asserted it, so the suite was
+blind to it — grep for `prog=` before assuming a CLI is clean.
+
+The two CLIs hand-copy the same argparse block. Measured on the current tree:
+
+| | `wjazzd.corpus_cli` | `headxml.head_cli` |
+|---|---|---|
+| length | 531 lines (from `wjazzd.py:1411`) | 221 lines (from `headxml.py:1059`) |
+| `add_argument` calls | 21 | 18 |
+| **flags in both** | **17 shared** | |
+
+The 17 shared flags, measured: `--bars`, `--bars-per-line`, `--fallback`,
+`--fret-max`, `--fret-min`, `--gp5`, `--grips`, `--html`, `--melody`,
+`--musicxml`, `--mutes`, `--non-chord-tone`, `--pick`, `--skeleton`, `--tab`,
+`--texture`, `--vertical`. This is defect #4 in the table above, and it is the one
+defect still open — a flag added to one CLI is silently missing from the other.
+
+**Ship `arranger/cli.py`** with `add_common_arguments(parser)` and
+`render_and_write(args)`. It is a **new file in the package**, so it needs no
+`pyproject.toml` change (`packages = ["arranger"]` already covers it) and no
+`MODULES` change (the Makefile names the directory). It must sit **below `steps`**
+in `test_package_dag.py`'s `ORDER` or be added to `ALLOWED_EDGES` with a reason —
+read that file's `ORDER` before creating it.
+
+What must **not** change, and is the acceptance gate:
+
+- **The two CLIs' output is not being unified.** They legitimately differ: the corpus
+  prints a performer/key subtitle, `head` prints the notated metre. Only the shared
+  argparse and dispatch move.
+- Every flag keeps its current spelling, default, and `--help` text. The parser's
+  *behaviour* is already pinned — `tests/test_wjazzd.py::TestCorpusCli` asserts
+  `SystemExit` for a missing `--melid` and for an unknown choice, and
+  `tests/test_headxml.py` drives `head_cli` through argv — so a flag that changes
+  meaning fails. **The `--help` text itself is not asserted anywhere.** Capture both
+  CLIs' help output before touching them, so a changed default is visible in the diff
+  rather than discovered later.
+- `corpus_cli` and `head_cli` keep their signatures and their `int` return; `main()`
+  calls both.
+- `headxml` imports `argparse` and the renderers *lazily inside* `head_cli` so
+  `load_musicxml` costs nothing. If `cli.py` makes those eager, the import cost
+  moves to module import — measure it before doing that, and keep laziness if you can.
+
+Expect `corpus_cli` 531 → ~250 and `head_cli` 221 → ~140. The remainder is
+corpus-specific (`--section`, `--list`, `--lift`, `--fallback`) or importer-specific,
+and is not duplication.
+
+### Phase 9 — CI (last)
+
+`.github/workflows/ci.yml` running `make check` on push across 3.10–3.14 with the
+`xml` and `gp` extras — so the two `skipUnless` guards are exercised every push,
+which is exactly the class of defect this repo documents having shipped (the MusicXML
+3.1 `kind` problem was invisible to a round trip). `wjazzd.db` is 42 MB and
+gitignored, so a manual-dispatch job downloads it and runs the full suite; **say so
+in the workflow header** so an agent does not assume the database tests ran. Bump
+`__version__` to `0.10.0` — and note that `tests/test_docs.py` will then fail until
+the version is updated in any document that states one, which is the point.
+
+There is no CI config today. Phase 9 is also the natural place to sweep the loose
+`*.gp5` files in the repository root, which are export artefacts rather than source.
 
 ---

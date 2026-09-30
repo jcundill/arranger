@@ -15,7 +15,7 @@ It provides:
 * `load_musicxml` - a file to a `Head`: the melody, its timing, and the chord in
   force under each note.
 * `head_skeleton` / `arrange_xml_head` - the reduction and the arrangement.
-* `head_cli` - the `arranger.py head FILE` command.
+* `head_cli` - the `arranger head FILE` command.
 
 **The harmony is a timeline, not a per-note attribute.** A `<harmony>` element
 precedes the note it governs, several can share a bar, and - routinely - a bar can
@@ -1083,7 +1083,7 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     from wjazzd import parse_bar_range
 
     parser = argparse.ArgumentParser(
-        prog="arranger.py head",
+        prog="arranger head",
         description="Render the melody and chord symbols of a MusicXML file as chord-melody.",
     )
     parser.add_argument("file", help="a .musicxml document or a zipped .mxl container")
