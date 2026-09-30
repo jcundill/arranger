@@ -20,12 +20,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Mapping, Optional, Sequence, Tuple
 
-from arranger import (
-    GRIP_PREFERENCE,
-    MELODY_STRING_CHOICES_FULL,
-    NECK_FRET_MAX,
-    NECK_FRET_MIN,
-)
+from .grips import GRIP_PREFERENCE
+from .tuning import MELODY_STRING_CHOICES_FULL, NECK_FRET_MAX, NECK_FRET_MIN
 
 # `(bar, beat, duration)` for one slot. `bar` is signed - a pickup is negative -
 # `beat` is within the bar, and both are Optional because a caller may simply not

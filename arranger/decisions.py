@@ -31,30 +31,25 @@ delegate. It is not extracted in this phase because it is not a *duplicated*
 decision - only the corpus has it - and extracting it here would mean reaching
 back into `wjazzd` for `bass_cost`, which would close an import cycle.
 
-**Why this module imports `arranger` and `arranger` does not import this module.**
-The dependency runs one way: `decisions` needs the engine's own vocabulary
-(`GRIP_PREFERENCE`, `ROLE_FILL`, `GRIP_MAX_SPAN`, `sounding_harmony`), while the
-engine needs the decisions. So `arranger` imports this module *inside* its step
-loop, where the cost is a `sys.modules` lookup on a path that already does far more
-work per slot. When Phase 5 splits the engine into a package this becomes an
-ordinary top-level import between two modules in the same DAG.
+**Why this module imports the engine's vocabulary and the engine imports this
+module.** The dependency runs one way: `decisions` needs the engine's own
+constants (`GRIP_PREFERENCE`, `ROLE_FILL`, `GRIP_MAX_SPAN`, `sounding_harmony`)
+and the engine needs the decisions. So `steps` imports this module, and this
+module imports `grips`, `chords`, `cost` and `tuning` - all of which sit *below*
+`steps` in the package's DAG. When the engine was one module, that meant a
+function-local `from arranger import ...` to dodge a cycle; inside the package the
+imports are ordinary top-level ones, and there is no cycle left to dodge.
 """
 
 from __future__ import annotations
 
 from typing import Any, Callable, Container, List, Optional, Sequence, Tuple
 
-from arranger import (
-    GRIP_MAX_SPAN,
-    GRIP_PREFERENCE,
-    NO_CHORD,
-    ROLE_FILL,
-    ROLE_TARGET,
-    ArrangementStep,
-    Voicing,
-    sounding_harmony,
-)
-from diagnostics import Diagnostics
+from .chords import sounding_harmony
+from .cost import _best_voicing
+from .diagnostics import Diagnostics
+from .grips import GRIP_MAX_SPAN, GRIP_PREFERENCE
+from .tuning import NO_CHORD, ROLE_FILL, ROLE_TARGET, ArrangementStep, Voicing
 
 # The three answers to "how is this slot played". Named rather than a bool because
 # the two non-default routes build different steps - see `melody_alone_case`.
@@ -264,9 +259,7 @@ def select_step_voicing(
         if best <= 2:
             candidates = [v for v, c in zip(candidates, costs) if c == best]
 
-    from arranger import VoiceLeadingEngine  # local: avoids a cycle
-
-    return VoiceLeadingEngine._best_voicing(
+    return _best_voicing(
         candidates,
         previous,
         fret_min,

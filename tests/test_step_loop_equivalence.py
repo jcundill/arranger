@@ -178,9 +178,9 @@ class TestTheDecisionsAreActuallyShared(unittest.TestCase):
     """
 
     def test_each_decision_is_defined_once_in_decisions(self):
-        import decisions
+        import arranger.decisions as decisions
 
-        source = source_of("decisions")
+        source = source_of("arranger.decisions")
         for name in DECISIONS:
             with self.subTest(decision=name):
                 self.assertEqual(
@@ -199,7 +199,7 @@ class TestTheDecisionsAreActuallyShared(unittest.TestCase):
             'fret_span() >= GRIP_MAX_SPAN["drop2"]',
             "sounding_harmony(previous_step)",
         )
-        for module_name in ("arranger", "wjazzd"):
+        for module_name in ("arranger", "arranger.steps", "wjazzd"):
             source = source_of(module_name)
             for snippet in snippets:
                 with self.subTest(module=module_name, snippet=snippet):
@@ -214,14 +214,18 @@ class TestTheDecisionsAreActuallyShared(unittest.TestCase):
 
         This class used to assert that *both* loops called each decision. That
         premise is now false by design - `wjazzd` delegates rather than looping -
-        so the assertion is inverted: the decisions are called from `arranger`, and
+        so the assertion is inverted: the decisions are called from the engine, and
         `wjazzd` must not have grown a loop of its own. A test that keeps asserting
         the old shape would be a test resisting the refactor it exists to protect.
+
+        The engine is `arranger.steps` rather than `arranger`: Phase 5 made
+        `__init__.py` a facade, so reading *its* source would pass on a package
+        whose step loop had been deleted outright.
         """
-        engine = source_of("arranger")
+        engine = source_of("arranger.steps")
         for name in DECISIONS:
             with self.subTest(decision=name):
-                self.assertIn(f"{name}(", engine, f"arranger does not call {name}")
+                self.assertIn(f"{name}(", engine, f"the engine does not call {name}")
 
     def test_the_corpus_does_not_contain_a_step_loop(self):
         """`wjazzd` asks the engine for an arrangement; it does not build one."""

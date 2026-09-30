@@ -72,8 +72,8 @@ from arranger import (
     Note,
     VoiceLeadingEngine,
 )
-from diagnostics import Diagnostics, default_diagnostics
-from options import ArrangeOptions
+from arranger.diagnostics import Diagnostics, default_diagnostics
+from arranger.options import ArrangeOptions
 
 __all__ = [
     "DEFAULT_DB",

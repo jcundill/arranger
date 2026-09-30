@@ -48,26 +48,24 @@ dev = ["pyright>=1.1", "ruff>=0.6"]
 jazz-arranger = "arranger:main"
 
 [tool.setuptools]
-# The library is two top-level modules plus the optional corpus and MusicXML-import
-# front ends. Listing them explicitly keeps flat-layout auto-discovery from
-# tripping over the non-package `tests/` dir. `tabstaff` holds the whole-progression
-# staff renderers and imports `arranger`, so it is listed after it. `tabxml` and
-# `tabgp` each import both, and are independent of one another. `headxml` is the
-# MusicXML *importer* and imports `arranger` and `wjazzd`; it is stdlib-only, so
-# unlike `tabxml` it needs no optional extra to work.
+# `arranger` is a **package** (Phase 5): the engine was one 4290-line module and is
+# now eight modules in a dependency-ordered DAG, re-exported through
+# `arranger/__init__.py`. `packages` must be listed explicitly here, or a clean
+# install ships no engine at all - the same failure `diagnostics` had once.
 #
-# `diagnostics` is imported *by* `arranger` and by `wjazzd` - it holds the warning
-# collector the engine reports to - `options` holds the knobs the engine reads, and
-# `decisions` is imported by `arranger` and
-# `wjazzd` alike - it holds the step-loop decisions both share. Both are runtime
-# modules of the distribution, not optional extras alongside it. Omitting either
-# would break `import arranger` on a clean install, which is why they are spelled
-# out here rather than left to auto-discovery.
+# The remaining top-level modules are the renderers and the two front ends.
+# `tabstaff` holds the whole-progression staff renderers and imports `arranger`,
+# so it is listed after it. `tabxml` and `tabgp` each import both, and are
+# independent of one another. `headxml` is the MusicXML *importer* and imports
+# `arranger` and `wjazzd`; it is stdlib-only, so unlike `tabxml` it needs no
+# optional extra to work.
+#
+# `arranger.diagnostics` holds the warning collector the engine reports to,
+# `arranger.options` the knobs the engine reads, and `arranger.decisions` the
+# step-loop decisions both `arranger` and `wjazzd` share. All three are runtime
+# modules *of* the distribution, not optional extras alongside it.
+packages = ["arranger"]
 py-modules = [
-    "arranger",
-    "decisions",
-    "diagnostics",
-    "options",
     "tabstaff",
     "tabxml",
     "tabgp",
@@ -113,6 +111,15 @@ ignore = ["E501", "B905", "SIM102", "SIM117"]
 # clone with neither a 42 MB database nor an optional extra installed.
 "tests/test_wjazzd.py" = ["E402"]
 "tests/test_lead_sheet.py" = ["E402"]
+# `arranger/__init__.py` is a facade, so most of what it imports is a
+# re-export rather than a use. F401 is the rule that says "you imported
+# something and never mentioned it again", which is precisely what a re-export
+# is - so the whole module is exempt rather than carrying a `noqa` on each of
+# the ~40 names. The DAG test `test_the_facade_reexports_the_public_surface`
+# is what holds this honest instead: it asserts each public name resolves *and*
+# is the same object as its home module, so a stale re-export fails there rather
+# than sitting here unnoticed. Adding a name to `__all__` still updates it.
+"arranger/__init__.py" = ["F401"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["arranger", "tabstaff", "tabxml", "tabgp", "wjazzd", "headxml", "grip_chart", "tests"]
