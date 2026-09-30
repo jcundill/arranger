@@ -15,14 +15,13 @@ import os
 import tempfile
 import unittest
 import zipfile
-from typing import List, Optional
+from typing import Optional
 from xml.etree import ElementTree
 
 import arranger
 from arranger import NO_CHORD, ChordParser
 from headxml import (
     Head,
-    HeadNote,
     _part_is_tab,
     arrange_xml_head,
     head_cli,
@@ -423,17 +422,10 @@ class TestLoading(unittest.TestCase):
         self.assertIn("Neapolitan", " ".join(head.unmapped))
         self.assertTrue(any("cannot voice" in note for note in head.report))
 
-    def test_a_measure_number_that_is_not_an_integer_is_kept(self):
-        """A bar labelled "12a" is still a bar; losing it over the label is a
-        poor trade, so it is read at its running index and reported."""
-        document = f"""<?xml version="1.0"?>
-<score-partwise version="3.1"><part-list><score-part id="P1"/></part-list><part id="P1">
-<measure number="12a"><attributes><divisions>4</divisions></attributes>
-  {harmony("C", "major")}{note("E")}
-</measure></part></score-partwise>"""
-        path = write_score(document)
-        self.addCleanup(os.unlink, path)
-        head = load_musicxml(path)
+    # A "12a"-labelled measure used to have a stub test here that built the
+    # fixture, loaded it, and asserted nothing - it could not fail, and so read
+    # as coverage the suite did not have. It is removed rather than completed,
+    # because TestLoadingTail already holds the real assertions for this case.
 
 
 class TestRealScores(unittest.TestCase):

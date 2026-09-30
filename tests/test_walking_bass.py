@@ -33,16 +33,15 @@ from musthe import Note
 
 import arranger
 from arranger import (
-    ArrangementStep,
     BASS_STRING_INDICES,
     GRIP_MAX_SPAN,
     PITCH_CLASS_NAMES,
     ROLE_FILL,
     ROLE_TARGET,
     STANDARD_TUNING,
-    Voicing,
+    ArrangementStep,
     VoiceLeadingEngine,
-    _note_name,
+    Voicing,
     _place_bass,
     _step_annotation,
     format_progression,
@@ -50,7 +49,7 @@ from arranger import (
     format_tab_staff,
     supported_string_sets,
 )
-from tabgp import _held_upper_frets, _sounding_frets
+from tabgp import _sounding_frets
 from tabstaff import _strikes_here
 
 # A staff string row, as opposed to the chord-name or melody line above it. Anchored

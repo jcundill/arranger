@@ -9,12 +9,12 @@ from html.parser import HTMLParser
 import arranger
 from arranger import (
     ArrangementStep,
-    Voicing,
     VoiceLeadingEngine,
+    Voicing,
     _step_annotation,
     format_progression,
-    format_tab_staff,
     format_tab_html,
+    format_tab_staff,
     write_tab_html,
 )
 
@@ -327,7 +327,7 @@ class TestStaffTab(unittest.TestCase):
         is a faithful picture of the voicing rather than a restatement of tab_string.
         """
         lines = self.staff_lines(self.steps)
-        for step, row in zip(self.steps, lines):
+        for step, _row in zip(self.steps, lines):
             # Dm7 is x-x-10-10-10-10, so the top four staff lines all carry a 10.
             for string_index in (5, 4, 3, 2):
                 self.assertIn(str(step.voicing.frets[string_index]), lines[5 - string_index])

@@ -39,6 +39,10 @@ dependencies = ["musthe>=1.0.0"]
 [project.optional-dependencies]
 xml = ["music21>=9.1"]
 gp = ["PyGuitarPro>=0.11"]
+# Dev-only, and deliberately not reachable from a plain install: these are the two
+# tools the contributing workflow runs (`make check`). Kept out of `dependencies`
+# so a `pip install jazz-arranger` can never pull a type checker or a linter.
+dev = ["pyright>=1.1", "ruff>=0.6"]
 
 [project.scripts]
 jazz-arranger = "arranger:main"
@@ -56,3 +60,41 @@ py-modules = ["arranger", "tabstaff", "tabxml", "tabgp", "wjazzd", "headxml"]
 [tool.setuptools.dynamic]
 # Single source of truth: the version lives in arranger.__version__.
 version = {attr = "arranger.__version__"}
+
+# Linting and formatting. Dev-only, like pyright - never a runtime dependency.
+#
+# The rule selection is deliberately NARROWER than ruff's defaults, and each
+# exclusion is a decision rather than an oversight:
+#
+#   UP* is off. AGENTS.md mandates the `typing.List` / `Optional[...]` style
+#   consistently across the file, so enabling pyupgrade would demand rewriting
+#   ~770 annotations in a codebase whose stated convention is the opposite. That
+#   is a house style, not a defect, and a linter that fights the documented
+#   convention gets disabled within a week.
+#   E501 is off. The formatter owns line length; a linter that re-reports what
+#   `ruff format` already fixed is noise.
+#   B905 is off. `zip(strict=...)` would be a *behaviour* change - it turns a
+#   silent length mismatch into a ValueError - and several call sites here
+#   deliberately zip a candidate list against a cost list. Not a lint decision.
+#   SIM102/SIM117 are stylistic collapses that reduce readability in the long
+#   explanatory branches that are the point of this codebase.
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+# The venv, the build tree and the export artefacts the CLIs write are not source.
+extend-exclude = [".venv", "build", "dist", "*.egg-info", "__pycache__"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "SIM"]
+ignore = ["E501", "B905", "SIM102", "SIM117"]
+
+[tool.ruff.lint.per-file-ignores]
+# `tests/test_wjazzd.py` computes its DEFAULT_DB before importing, and
+# `tests/test_guitarpro.py` imports PyGuitarPro lazily inside the guarded
+# classes. Both are deliberate: they are what lets the suite run on a fresh
+# clone with neither a 42 MB database nor an optional extra installed.
+"tests/test_wjazzd.py" = ["E402"]
+"tests/test_lead_sheet.py" = ["E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["arranger", "tabstaff", "tabxml", "tabgp", "wjazzd", "headxml", "grip_chart", "tests"]

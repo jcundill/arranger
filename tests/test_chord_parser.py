@@ -1,5 +1,7 @@
 import unittest
+
 from musthe import Note
+
 from arranger import ChordParser
 
 
@@ -8,6 +10,10 @@ class TestChordParser(unittest.TestCase):
 
     def test_parse_simple_roots_and_qualities(self):
         """Should parse natural, sharp, and flat roots with standard jazz qualities."""
+        # Each case is (name, (root, quality)) as parse_chord_name should read it.
+        # The Cm6 row is the interesting one: "Cm" could be read as a C minor triad
+        # whose root is spelled "Cm", but the regex takes the letter as the root and
+        # leaves "m6" as the quality, which is how the library spells it.
         cases = [
             ("Cmaj7", ("C", "maj7")),
             ("Dm7", ("D", "m7")),
@@ -19,24 +25,12 @@ class TestChordParser(unittest.TestCase):
             ("Abdim7", ("Ab", "dim7")),
             ("C#7alt", ("C#", "7alt")),
             ("G7b9", ("G", "7b9")),
-            ("Cm6", ("Cm", "6")),  # wait: "Cm" or "C" + "m6"? Let's test
+            ("Bb7b9", ("Bb", "7b9")),
+            ("Cm6", ("C", "m6")),
         ]
-        # For Cm6: Root is C, quality is m6
-        root, qual = ChordParser.parse_chord_name("Cm6")
-        self.assertEqual(root, "C")
-        self.assertEqual(qual, "m6")
-
-        root, qual = ChordParser.parse_chord_name("Dm7b5")
-        self.assertEqual(root, "D")
-        self.assertEqual(qual, "m7b5")
-
-        root, qual = ChordParser.parse_chord_name("F#m7b5")
-        self.assertEqual(root, "F#")
-        self.assertEqual(qual, "m7b5")
-
-        root, qual = ChordParser.parse_chord_name("Bb7b9")
-        self.assertEqual(root, "Bb")
-        self.assertEqual(qual, "7b9")
+        for name, expected in cases:
+            with self.subTest(chord=name):
+                self.assertEqual(ChordParser.parse_chord_name(name), expected)
 
     def test_parse_empty_or_invalid(self):
         """Empty or unparseable chord names should return (None, None)."""

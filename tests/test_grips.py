@@ -16,9 +16,8 @@ from arranger import (
     BASS_DEGREES_6432,
     DUO_DEGREES,
     GRIP_MAX_SPAN,
-    GRIP_STRING_SETS,
     GRIP_PREFERENCE,
-    supported_string_sets,
+    GRIP_STRING_SETS,
     MELODY_STRING_CHOICES_FULL,
     NECK_FRET_MAX,
     NECK_FRET_MIN,
@@ -26,9 +25,10 @@ from arranger import (
     SHELL_DEGREES,
     ChordParser,
     GuitarFretboard,
-    Voicing,
     VoiceLeadingEngine,
+    Voicing,
     format_progression,
+    supported_string_sets,
 )
 
 # A representative spread of the families the library voices well: sevenths, sixths,
@@ -768,10 +768,10 @@ class TestStringSetTable(unittest.TestCase):
         """
         bottom_four = {0, 1, 2, 3}
         for grip in ("drop2", "drop3", "closed", "drop2_6432"):
-            for strings, soprano in GRIP_STRING_SETS[grip]:
+            for strings, _soprano in GRIP_STRING_SETS[grip]:
                 self.assertNotEqual(frozenset(strings), bottom_four, grip)
         for grip in ("drop2", "drop3", "closed"):
-            for strings, soprano in GRIP_STRING_SETS[grip]:
+            for _strings, soprano in GRIP_STRING_SETS[grip]:
                 self.assertNotEqual(soprano, 3, f"{grip} still offers a G-string block")
         self.assertNotIn(bottom_four, supported_string_sets())
         # 6-4-3-2 does reach the low E, which is the entire reason it exists.

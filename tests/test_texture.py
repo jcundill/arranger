@@ -35,7 +35,6 @@ from arranger import (
     supported_string_sets,
 )
 
-
 # The library's own demonstration cadences. These are the progressions whose tab is
 # already asserted elsewhere in the suite, so they double as the fixture here: if the
 # metric layer ever leaked into the default path, these strings would move.

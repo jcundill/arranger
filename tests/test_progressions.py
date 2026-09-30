@@ -1,5 +1,6 @@
 import unittest
-from arranger import VoiceLeadingEngine, ArrangementStep
+
+from arranger import VoiceLeadingEngine
 
 
 class TestProgressions(unittest.TestCase):
@@ -20,7 +21,7 @@ class TestProgressions(unittest.TestCase):
             ("Eb5", "m7", "Cm7")
         ]
         result = self.engine.arrange_progression(progression)
-        
+
         self.assertEqual(len(result), 3)
         self.assertEqual(result[0].chord, "Dm7b5")
         self.assertEqual(result[1].chord, "G7b9")
@@ -53,7 +54,7 @@ class TestProgressions(unittest.TestCase):
         ]
         result = self.engine.arrange_progression(progression)
         self.assertEqual(len(result), 3)
-        
+
         # Check tabs. All three are complete four-note chords: the selector treats a
         # partial harmonisation as a fallback rather than a style, so a shell only wins
         # where no full shape fits. Every note still belongs to its own chord.
@@ -77,7 +78,7 @@ class TestProgressions(unittest.TestCase):
         ]
         result = self.engine.arrange_progression(progression)
         self.assertEqual(len(result), 3)
-        
+
         # Verify dictionary indexing works on ArrangementStep
         self.assertEqual(result[0]["chord"], "Dm7")
         self.assertEqual(result[0]["voicing"]["frets"], [-1, -1, 10, 10, 10, 10])

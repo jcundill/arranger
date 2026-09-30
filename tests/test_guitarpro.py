@@ -25,7 +25,7 @@ import os
 import tempfile
 import unittest
 
-from arranger import ArrangementStep, Voicing, VoiceLeadingEngine
+from arranger import ArrangementStep, VoiceLeadingEngine, Voicing
 
 # The shared placement core, reached directly: these tests are about where events
 # land, which is decided in `tabxml` and only turned into beats by `tabgp`.
@@ -102,6 +102,7 @@ class GuitarProTestCase(unittest.TestCase):
     def song(self, steps=None, **kwargs):
         """The written file, parsed back into guitarpro's model."""
         import io
+
         from tabgp import format_gp5
         return _parse(
             io.BytesIO(
@@ -855,6 +856,7 @@ class TestOptions(GuitarProTestCase):
 
     def test_write_gp5_writes_a_file_the_parser_accepts(self):
         import io
+
         from tabgp import write_gp5
         with tempfile.TemporaryDirectory() as directory:
             path = os.path.join(directory, "arrangement.gp5")

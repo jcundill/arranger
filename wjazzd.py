@@ -76,8 +76,8 @@ from arranger import (
     ChordParser,
     Note,
     StepPreparation,
-    Voicing,
     VoiceLeadingEngine,
+    Voicing,
     _metric_weight,
     _roles_for_slot,
     _Slot,
@@ -1434,7 +1434,6 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
 
     from arranger import (
         format_progression,
-        format_musicxml,
         format_tab_staff,
         write_gp5,
         write_musicxml,

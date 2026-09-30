@@ -4,13 +4,14 @@ import importlib
 import re
 import sys
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Container, List, Optional, Sequence, Tuple, Dict, Any
-from musthe import Note, Chord, Interval
+from typing import TYPE_CHECKING, Any, Container, Dict, List, Optional, Sequence, Tuple
+
+from musthe import Note
 
 # Standard tuning pitches in MIDI / Pitch class equivalents
 # String 6 (Low E, index 0) to String 1 (High E, index 5)
 STANDARD_TUNING = [
-    Note("E2"), Note("A2"), Note("D3"), 
+    Note("E2"), Note("A2"), Note("D3"),
     Note("G3"), Note("B3"), Note("E4")
 ]
 
@@ -1359,7 +1360,7 @@ class ArrangementStep:
 
 class GuitarFretboard:
     """Handles mapping notes to physical guitar fretboard positions."""
-    
+
     @staticmethod
     def note_to_fret(string_index: int, note: Note) -> int:
         """Calculates the fret number for a given note on a specific string (0 = Low E)."""
@@ -2023,7 +2024,7 @@ def sounding_harmony(step: ArrangementStep) -> Tuple[Optional[str], Optional[str
 
 class VoiceLeadingEngine:
     """Generates and voice-leads jazz guitar voicings dynamically."""
-    
+
     # Accurate Drop-2 interval structures relative to top melody voice for top 4 strings (Strings 4-3-2-1: D, G, B, E).
     # Semitone offsets from the soprano (String 1 / High E) down to String 2 (B), String 3 (G), and String 4 (D).
     DROP2_INTERVAL_SETS = {

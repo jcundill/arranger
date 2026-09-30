@@ -95,8 +95,26 @@ class TestGeneratedChart(unittest.TestCase):
                     )
 
     def test_every_sounding_pitch_is_a_chord_tone(self):
+        """No shape in the chart may sound a note the chord does not contain.
+
+        This is the property the hand-written chart broke: one of its cells held
+        an A under a Cmaj7 heading. Tones are compared relative to the cell's own
+        root, so the test is `(pitch - root) % 12` against the quality's relative
+        tone set - the same table the engine steers by.
+        """
         for quality in grip_chart.DEFAULT_QUALITIES:
             tones = {t % 12 for t in ChordParser.get_chord_tones(quality)}
+            for soprano in (5, 4):
+                for cell in grip_chart.cells_for(quality, soprano):
+                    if cell is None:
+                        continue
+                    for midi in cell.voicing.midi_notes():
+                        self.assertIn(
+                            (midi - cell.root_pc) % 12,
+                            tones,
+                            f"{quality} on string {soprano}: {cell.tab} "
+                            f"sounds a pitch the chord does not contain",
+                        )
 
 
 class TestAuditFindsRealDefects(unittest.TestCase):

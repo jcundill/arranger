@@ -26,9 +26,10 @@ from arranger import (
     BASS_ROLE_HOLD,
     NO_CHORD,
     PITCH_CLASS_NAMES,
+    _bass_harmony,
+    _walking_bass_line,
     bass_cost,
 )
-from arranger import _bass_harmony, _walking_bass_line
 
 
 def line(chords, onsets, beats_per_bar=4):

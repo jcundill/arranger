@@ -10,8 +10,10 @@ import tempfile
 import unittest
 from typing import List
 from xml.etree import ElementTree
-from arranger import ArrangementStep, Voicing, VoiceLeadingEngine
+
+from arranger import ArrangementStep, VoiceLeadingEngine, Voicing
 from tabxml import _READABLE_KINDS, _downgrade_kinds, _sounding
+
 try:
     import music21  # noqa: F401
     HAS_MUSIC21 = True
@@ -308,7 +310,6 @@ class TestMusicXMLRhythm(MusicXMLTestCase):
         test for "is this an anacrusis", and a complete-looking first bar would
         otherwise claim a downbeat that is not there.
         """
-        from arranger import format_musicxml
 
         for step in self.steps:
             # Bar 0, starting on the third beat: two beats of pickup, filled exactly.
@@ -490,6 +491,7 @@ class TestMusicXMLFileOutput(unittest.TestCase):
     def test_writes_a_document_that_re_parses(self):
         """The path is returned, the file holds a score, and the score is readable."""
         from music21 import converter
+
         from arranger import write_musicxml
         engine = VoiceLeadingEngine()
         steps = engine.arrange_progression(

@@ -1,5 +1,7 @@
 import unittest
+
 from musthe import Note
+
 from arranger import (
     NO_CHORD,
     ArrangementStep,

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Tuple
 
-from arranger import STRING_NAMES, ArrangementStep, _MUTED_CELL
+from arranger import _MUTED_CELL, STRING_NAMES, ArrangementStep
 
 # The width every fret cell is padded to. Two characters covers frets 0-18, the
 # whole range the library allows, and matches the convention `Voicing.tab_block()`
@@ -470,7 +470,7 @@ def _staff_lines(
     """
     lines: List[List[int]] = []
     current: List[int] = []
-    for index, (onset, _, _) in enumerate(columns):
+    for index, _column in enumerate(columns):
         if index in breaks and current:
             lines.append(current)
             current = []

@@ -1,6 +1,8 @@
 import unittest
+
 from musthe import Note
-from arranger import GuitarFretboard, STANDARD_TUNING
+
+from arranger import STANDARD_TUNING, GuitarFretboard
 
 
 class TestGuitarFretboard(unittest.TestCase):
@@ -21,7 +23,7 @@ class TestGuitarFretboard(unittest.TestCase):
     def test_octave_frets(self):
         """An octave above the open string should resolve to fret 12."""
         octave_notes = [
-            Note("E3"), Note("A3"), Note("D4"), 
+            Note("E3"), Note("A3"), Note("D4"),
             Note("G4"), Note("B4"), Note("E5")
         ]
         for string_idx, note in enumerate(octave_notes):

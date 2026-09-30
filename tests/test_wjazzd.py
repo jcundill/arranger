@@ -29,32 +29,32 @@ MAX_DEFAULT_SPAN = max(GRIP_MAX_SPAN[g] for g in arranger.GRIP_PREFERENCE)
 from wjazzd import (
     DEFAULT_DB,
     SECTION_TYPES,
+    SKELETON_STRATEGIES,
     WEIMAR_QUALITY_ALIASES,
     NoteEvent,
     Section,
     Solo,
+    _arrange_step_with_bass,
+    _is_transposed_repeat,
+    _seed_span,
+    arrange_head,
+    arrange_slots,
+    bass_cost,
+    bass_pitch_class,
+    build_skeleton,
+    corpus_cli,
     list_sections,
     list_solos,
     load_section,
     load_solo,
     matching_sections,
+    parse_bar_range,
     parse_section_selector,
     parse_weimar_chord,
-    arrange_head,
-    arrange_slots,
-    bass_cost,
-    build_skeleton,
-    corpus_cli,
-    parse_bar_range,
     promote_slash_chord,
-    bass_pitch_class,
-    _arrange_step_with_bass,
     select_head,
     skeleton,
     skeleton_slots,
-    SKELETON_STRATEGIES,
-    _is_transposed_repeat,
-    _seed_span,
 )
 
 HAS_DB = DEFAULT_DB.is_file()
@@ -780,7 +780,7 @@ class TestSkeletonStrategies(unittest.TestCase):
     def test_every_triple_carries_a_usable_quality(self):
         """No step reaches the engine with a quality it cannot voice."""
         solo, section = self.head_section(218)
-        for melody, quality, name in skeleton(solo, "eighths", section):
+        for _melody, quality, name in skeleton(solo, "eighths", section):
             if quality == NO_CHORD:
                 continue
             self.assertIn(quality, ChordParser.CHORD_TONES_FROM_ROOT, name)
@@ -1321,8 +1321,8 @@ class TestCorpusCli(unittest.TestCase):
         solo = load_solo(266)
         arrangement = arrange_head(solo)
         triples = list(arrangement.skeleton.triples)
-        import io
         import contextlib
+        import io
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
             library = Engine.arrange_progression(triples)

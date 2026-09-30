@@ -38,3 +38,7 @@ dist/
 leadsheet_export.json
 
 *.pdf
+
+# Local helper for running long commands in the background with a completion
+# sentinel; used during development only.
+.bg.sh

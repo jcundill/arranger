@@ -1,13 +1,15 @@
 import unittest
+
 from musthe import Note
+
 from arranger import (
     GRIP_MAX_SPAN,
+    HIGH_FRET_LIMIT,
+    PITCH_CLASS_NAMES,
+    ChordParser,
+    GuitarFretboard,
     VoiceLeadingEngine,
     Voicing,
-    GuitarFretboard,
-    ChordParser,
-    PITCH_CLASS_NAMES,
-    HIGH_FRET_LIMIT,
     format_progression,
 )
 
@@ -25,7 +27,7 @@ class TestDrop2Voicings(unittest.TestCase):
         All 4 inversions should contain exactly these 4 pitch classes.
         """
         expected_pcs = {2, 5, 8, 0}
-        
+
         test_melodies = [
             ("D5", 0),   # Root on top
             ("F5", 3),   # b3 on top
@@ -36,7 +38,7 @@ class TestDrop2Voicings(unittest.TestCase):
         for mel_str, _ in test_melodies:
             voicings = self.engine.get_drop2_voicings(Note(mel_str), "m7b5", chord_name="Dm7b5")
             self.assertTrue(len(voicings) >= 1, f"Expected at least 1 voicing for Dm7b5 with melody {mel_str}")
-            
+
             for v in voicings:
                 # Top string (High E) must match melody
                 top_midi = GuitarFretboard.fret_to_midi(5, v.frets[5])
