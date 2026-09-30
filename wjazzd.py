@@ -61,14 +61,12 @@ from pathlib import Path
 from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 from arranger import (
-    GRIP_MAX_SPAN,
     GRIP_PREFERENCE,
     MELODY_STRING_CHOICES_FULL,
     NECK_FRET_MAX,
     NECK_FRET_MIN,
     NO_CHORD,
     PITCH_CLASS_NAMES,
-    ROLE_FILL,
     ROLE_TARGET,
     TEXTURE_GRIPS,
     TEXTURE_STYLES,
@@ -83,7 +81,15 @@ from arranger import (
     _Slot,
     _walking_slots,
     normalised_harmony,
-    sounding_harmony,
+)
+from decisions import (
+    MELODY_ALONE_NO_CHORD,
+    MELODY_ALONE_TEXTURE,
+    is_repeated_step,
+    melody_alone_case,
+    resolve_texture_grips,
+    should_demote_to_melody_alone,
+    should_promote_fill,
 )
 from diagnostics import Diagnostics, default_diagnostics
 
@@ -1955,26 +1961,21 @@ def arrange_slots(
         # would delete them and change every default arrangement. An explicit restriction
         # intersects; the absence of one does not.
         #
-        # Both copies must agree. A head read from a MusicXML file comes here and a
-        # hand-built progression goes through `arrange_progression`, so fixing only one
-        # leaves the same flag behaving two different ways depending on the entry point.
-        role_grips = texture_grips[role]
-        if grips == GRIP_PREFERENCE:
-            slot_grips = role_grips
-        else:
-            narrowed = tuple(g for g in grips if g in role_grips)
-            if narrowed:
-                slot_grips = narrowed
-            else:
-                # The caller asked for grips this role never uses. Losing a chord of the
-                # tune is worse than ignoring a flag, so the texture's own set stands -
-                # and the warning says what was ignored, which the old code never did.
-                slot_grips = role_grips
-                diagnostics.warn(
-                    f"Warning: {texture} uses {role_grips or 'no grip'} for a "
-                    f"{role}, none of which is in the requested {grips}; "
-                    f"using the texture's own set"
-                )
+        # Shared with VoiceLeadingEngine.arrange_progression. It used to be a second
+        # copy, under a comment reading "both copies must agree" - a comment asking two
+        # implementations to stay in step, which works until someone edits one of them.
+        # The narrowing rule is documented once, in decisions.resolve_texture_grips.
+        slot_grips = resolve_texture_grips(
+            role, texture, texture_grips, grips, diagnostics
+        )
+
+        # Which of the three "play this as a single note" routes this slot takes.
+        # Shared with arrange_progression; it returns a *kind* because the two
+        # non-default routes build different steps - an NC bar sets melody_only,
+        # a texture case must not. See decisions.melody_alone_case.
+        melody_alone = melody_alone_case(
+            texture, role, slot_grips, quality, name
+        )
         if index in retry:
             # Re-resolve this step as a dim7 and remember that we did, so the
             # caller can report which chords were substituted.
@@ -1987,7 +1988,7 @@ def arrange_slots(
                 working[index] = (melody, quality, name)
                 rescued.append(index)
 
-        if quality == NO_CHORD:
+        if melody_alone == MELODY_ALONE_NO_CHORD:
             voicing = engine.get_melody_only_voicing(Note(melody))
             if voicing is None:
                 continue
@@ -2017,7 +2018,7 @@ def arrange_slots(
         # And `("shell",)` is the whole target tuple, so a melody no shell can sound
         # (D over Bbm7, the B section's bar-10 appoggiatura) would be dropped with only a
         # warning. Losing a note of the tune is worse than a thin one.
-        if texture == "walking_bass" and (role == ROLE_FILL or slot_grips == ()):
+        if melody_alone == MELODY_ALONE_TEXTURE:
             solo_voicing = engine.get_melody_only_voicing(Note(melody))
             if solo_voicing is not None:
                 step = ArrangementStep(
@@ -2039,7 +2040,9 @@ def arrange_slots(
             non_chord_tone=non_chord_tone, grips=slot_grips,
             diagnostics=diagnostics,
         )
-        if arranged is None and role == ROLE_FILL and slot_grips != grips:
+        if should_promote_fill(
+            texture, role, arranged is None, slot_grips, grips
+        ):
             # A fill that cannot be filled must not cost the tune its chord: the
             # texture is a lighter *texture*, never a missing harmony. Retry as a
             # principal note, exactly as arrange_progression does.
@@ -2086,16 +2089,9 @@ def arrange_slots(
         # case: the engine can sound `x-x-8-8-8-x` there, span 0, but a target is never
         # offered a shell.
         #
-        # This is a *fallback*, tried last, and it mirrors the one in
-        # `arrange_progression` - both entry points need it, or the same head would play
-        # differently depending on whether it arrived as a progression or as a file.
-        # Lowering GRIP_MAX_SPAN is a filter that deletes the voicing everywhere;
-        # promoting span above `missing` would dissolve the shell and duo families. Here
-        # a complete chord is still what you get whenever it is playable, and only a
-        # shape at the very top of the budget is demoted to the melody alone, which is
-        # playable for every reachable note. The chord name above the step still
-        # describes the harmony, the same convention a shell uses.
-        if voicing.fret_span() >= GRIP_MAX_SPAN["drop2"] and role == ROLE_TARGET:
+        # Shared with `arrange_progression`, which had its own copy. Why the demotion
+        # is a fallback rather than a re-ranking is decisions.should_demote_to_melody_alone.
+        if should_demote_to_melody_alone(voicing, role):
             solo_voicing = engine.get_melody_only_voicing(Note(melody))
             if solo_voicing is not None and solo_voicing.fret_span() < voicing.fret_span():
                 diagnostics.warn(
@@ -2116,18 +2112,13 @@ def arrange_slots(
                 previous_chord = name
                 continue
         # A repeated melody is a soprano-only re-strike, so the renderers hold the
-        # inner voices. Mirrors the rule in VoiceLeadingEngine.arrange_progression:
-        # the same sounding pitch as the previous step, that step was a real
-        # voicing rather than a melody-only bar, and the harmony under the note has
-        # not changed. Across a chord change there is nothing to hold - the ringing
-        # voices belong to the chord the hold began on - so the new chord is sounded.
-        previous_step = steps[-1] if steps else None
-        repeated = bool(
-            previous_step is not None
-            and not previous_step.melody_only
-            and max(previous_step.voicing.midi_notes()) == max(voicing.midi_notes())
-            and sounding_harmony(previous_step)
-            == normalised_harmony(name, prepared.harmonized_as)
+        # inner voices. Shared with `arrange_progression`; the rule, including the
+        # across-a-chord-change case that is *not* a hold, is
+        # decisions.is_repeated_step.
+        repeated = is_repeated_step(
+            steps[-1] if steps else None,
+            voicing,
+            normalised_harmony(name, prepared.harmonized_as),
         )
         steps.append(ArrangementStep(
             chord=name, melody=prepared.melody, voicing=voicing,

@@ -3353,6 +3353,19 @@ class VoiceLeadingEngine:
         # rather than the first few. Defaults to printing, as this always did.
         if diagnostics is None:
             diagnostics = default_diagnostics()
+        # Imported here, not at module scope: `decisions` needs this module's
+        # vocabulary (GRIP_PREFERENCE, ROLE_FILL, GRIP_MAX_SPAN, sounding_harmony),
+        # so a top-level import in either direction would be a cycle. See the
+        # `decisions` module docstring.
+        from decisions import (
+            MELODY_ALONE_NO_CHORD,
+            MELODY_ALONE_TEXTURE,
+            is_repeated_step,
+            melody_alone_case,
+            resolve_texture_grips,
+            should_demote_to_melody_alone,
+            should_promote_fill,
+        )
 
         arrangements: List[ArrangementStep] = []
 
@@ -3428,59 +3441,21 @@ class VoiceLeadingEngine:
             # The texture decides which grips are *available* on this step. It is not a
             # term in the cost, so a fill cannot be outbid for being in position - the
             # point is that fewer notes are played here, not that this shape is better.
-            #
-            # `grips` **narrows** the texture's palette; it never widens it and never
-            # silently deletes from it. It used to be discarded outright
-            # (`slot_grips = texture_grips[role]`), so `--grips shell --texture targets`
-            # asked for shell-only and got a four-note drop-2 on every strong beat with
-            # nothing said.
-            #
-            # The default is the case that matters, and it is why this is not a plain
-            # set intersection. `GRIP_PREFERENCE` is the *preference order for callers
-            # who name grips*, and it deliberately does not list `interval`, `melody` or
-            # `drop3` - a `targets` fill is `("shell", "interval", "melody")` and a
-            # target is `("drop2", "drop3")`, so intersecting with GRIP_PREFERENCE would
-            # delete `interval` and `drop3` from the texture and change every default
-            # arrangement. The texture table is the authority on what a role may play;
-            # `GRIP_PREFERENCE` only says what order a *caller* ranks them in.
-            #
-            # So the rule is: an explicit restriction intersects, and the default - which
-            # is not a restriction, just the absence of one - does not.
-            role_grips = texture_grips[role]
-            if grips == GRIP_PREFERENCE:
-                slot_grips = role_grips
-            else:
-                narrowed = tuple(g for g in grips if g in role_grips)
-                if narrowed:
-                    slot_grips = narrowed
-                else:
-                    # The caller asked for grips this role never uses. Losing a chord of
-                    # the tune is worse than ignoring a flag, so the texture's own set
-                    # stands - and the warning says what was ignored.
-                    slot_grips = role_grips
-                    diagnostics.warn(
-                        f"Warning: {texture} uses {role_grips or 'no grip'} for a "
-                        f"{role}, none of which is in the requested {grips}; "
-                        f"using the texture's own set"
-                    )
+            # The narrowing rule itself, and why the default is not an intersection,
+            # are documented once in decisions.resolve_texture_grips.
+            slot_grips = resolve_texture_grips(
+                role, texture, texture_grips, grips, diagnostics
+            )
 
-            # A walking-bass **fill** is the melody alone, and so is a target no
-            # shell can sound. Both take the same route, which is the route an `NC`
-            # step already takes - `get_melody_only_voicing` rather than grip lookup.
-            # Two things make it a branch rather than a missing case:
-            #
-            # - the fill's grip tuple is *empty*, so the generic path would read "no
-            #   candidates" as a failure and promote the fill to a target, which is
-            #   the exact opposite of the texture ("nothing under the passing note");
-            # - `grips=("shell",)` is the whole target tuple, so a melody with no
-            #   shell - D over Bbm7, the B section's bar-10 appoggiatura - would be
-            #   dropped with only a warning. Losing a note of the tune is worse than
-            #   a thin one, so the step survives as melody plus thumb.
-            #
-            # `melody_only` stays **False** here: the step does have a harmony, it is
-            # simply not being spelled out. Setting it would make the annotation read
-            # "(no chord - melody alone)" and claim a lie.
-            if texture == "walking_bass" and role == ROLE_FILL:
+            # A slot that is played as a single note rather than looked up. Which
+            # slots those are, and why each is a branch rather than a missing case,
+            # is decisions.melody_alone_case. It returns a *kind*, because the two
+            # non-default routes build different steps: an NC bar sets
+            # `melody_only=True`, a texture case must not.
+            melody_alone = melody_alone_case(
+                texture, role, slot_grips, chord_type, name
+            )
+            if melody_alone == MELODY_ALONE_TEXTURE:
                 solo_voicing = cls.get_melody_only_voicing(
                     melody_note, prefer=top_strings
                 )
@@ -3506,8 +3481,10 @@ class VoiceLeadingEngine:
 
             # A NO_CHORD step carries melody but no harmony: it is voiced as the
             # melody alone. This happens before any chord logic, so there is no
-            # non-chord-tone strategy, no substitute chord and no warning.
-            if chord_type == NO_CHORD or name == NO_CHORD:
+            # non-chord-tone strategy, no substitute chord and no warning. The
+            # `melody_only` flag is set here and *only* here; a texture case above
+            # reaches the same route deliberately without it.
+            if melody_alone == MELODY_ALONE_NO_CHORD:
                 solo_voicing = cls.get_melody_only_voicing(melody_note, prefer=top_strings)
                 if solo_voicing is None:
                     diagnostics.warn(
@@ -3595,7 +3572,9 @@ class VoiceLeadingEngine:
                 # never a missing harmony. So a fill that cannot be filled is
                 # re-prepared as a principal note before it is reported as missing.
                 # Same argument as NECK_FRET_MIN being a penalty and not a filter.
-                if role == ROLE_FILL and slot_grips != grips:
+                if should_promote_fill(
+                    texture, role, True, slot_grips, grips
+                ):
                     prepared = cls.prepare_step(
                         progression, index,
                         previous=arrangements[-1].voicing if arrangements else None,
@@ -3649,35 +3628,10 @@ class VoiceLeadingEngine:
             # narrowing at every use below.
             assert best_voicing is not None
 
-            # A shape that spans the whole fret budget is technically legal and often
-            # unplayable: a five-fret stretch is a reach many hands cannot make at speed,
-            # and it is chosen because a texture's target role may offer only the
-            # four-note grips - so the alternative was never a candidate to be ranked
-            # against, it simply did not exist. `x-6-5-3-8-x` for Ebmaj under G4 is the
-            # real case: the engine *could* sound `x-x-8-8-8-x` (span 0) on that step,
-            # but a `targets` target is only offered `("drop2", "drop3")`, and the
-            # cost tuple would not have chosen the shell anyway - `missing` is index 2,
-            # above span, so a complete wide shape beats a partial narrow one.
-            #
-            # So this is a *fallback*, not a re-ranking, and it is deliberately the last
-            # thing tried. Lowering GRIP_MAX_SPAN instead is a filter that deletes the
-            # voicing everywhere; so is promoting span above `missing`, which would
-            # dissolve the shell and duo families across the whole library. Here the
-            # complete chord is still what you get whenever it is playable, and only a
-            # shape at the very top of the span budget is demoted.
-            #
-            # The demotion is to the melody alone, which is always playable. Preferring
-            # a shell here instead was measured: it is better as music, but it is only
-            # reachable when the role's palette contains a shell, and where it does not
-            # (a `targets` target) there is nothing to demote *to* - so the route would
-            # fail exactly where it is needed. A single note on the melody string is
-            # available for every reachable melody, and losing a note of the tune is
-            # worse than a thin one: the chord name above the step still describes the
-            # harmony, which is the same convention the shell uses.
-            if (
-                best_voicing.fret_span() >= GRIP_MAX_SPAN["drop2"]
-                and role == ROLE_TARGET
-            ):
+            # A complete chord at the very top of the span budget is demoted to
+            # the melody alone. Why that is a fallback rather than a re-ranking is
+            # documented once in decisions.should_demote_to_melody_alone.
+            if should_demote_to_melody_alone(best_voicing, role):
                 solo = cls.get_melody_only_voicing(
                     melody_note, prefer=top_strings
                 )
@@ -3702,25 +3656,13 @@ class VoiceLeadingEngine:
                     ))
                     cls._attach_bass(arrangements[-1], slot.bass, arrangements, diagnostics)
                     continue
-            # A melody that repeats the previous step's pitch is a soprano-only
-            # re-strike: the shape is held, so the renderers show just the melody
-            # string and leave the inner voices ringing. Compared on the sounding
-            # pitch rather than the written name, because a step either side of this
-            # may itself have been transposed down an octave.
-            #
-            # The harmony must be unchanged too. A note repeating across a *chord
-            # change* is not a hold: the inner voices ringing belong to the chord
-            # the hold started on, so printing the new chord's name over a single
-            # note claims a harmony that is not sounding. Those steps are
-            # harmonised against the new chord instead, which is what the voicing
-            # already does - only the rendering was discarding it.
-            previous_step = arrangements[-1] if arrangements else None
-            repeated = bool(
-                previous_step is not None
-                and not previous_step.melody_only
-                and max(previous_step.voicing.midi_notes()) == max(best_voicing.midi_notes())
-                and sounding_harmony(previous_step)
-                == normalised_harmony(name, harmonized_as)
+            # A repeated melody is a soprano-only re-strike, so the renderers hold
+            # the inner voices. The rule - and the harmony-change case that is not
+            # a hold - is decisions.is_repeated_step.
+            repeated = is_repeated_step(
+                arrangements[-1] if arrangements else None,
+                best_voicing,
+                normalised_harmony(name, harmonized_as),
             )
 
             arrangements.append(ArrangementStep(

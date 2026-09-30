@@ -1,0 +1,226 @@
+"""The decisions both step loops make, in one implementation each.
+
+`VoiceLeadingEngine.arrange_progression` and `wjazzd.arrange_slots` are two loops
+over the same slots, and between them they used to hold **two copies** of six
+decisions. The code said so itself, in comments that are the most honest thing in
+the repository:
+
+    "Both copies must agree. A head read from a MusicXML file comes here and a
+     hand-built progression goes through `arrange_progression`, so fixing only one
+     leaves the same flag behaving two different ways depending on the entry
+     point."
+
+    "This is a *fallback*, tried last, and it mirrors the one in
+     `arrange_progression`."
+
+A comment asking two copies to stay in step is not a mechanism. It works until
+someone edits one of them on a Tuesday. The project has already paid for that once:
+the corpus path was built separately from the library, drifted, and voiced an
+`Am7` under a written `Bbm7` for twenty-five transcriptions before anyone noticed -
+which is why `prepare_step` was extracted in the first place.
+
+So the decisions live here, and each loop calls them. Nothing in this module knows
+about slots, textures or arrangements; it is one function per decision, each taking
+the few values it needs and returning the answer.
+
+**The one place the two loops genuinely differ is not here.** The corpus honours a
+slash bass by partitioning candidates before selection, and the library does not.
+That difference is a filter over a list rather than a control-flow fork, and it is
+folded into one `select_step_voicing` when Phase 4 rewrites `arrange_slots` to
+delegate. It is not extracted in this phase because it is not a *duplicated*
+decision - only the corpus has it - and extracting it here would mean reaching
+back into `wjazzd` for `bass_cost`, which would close an import cycle.
+
+**Why this module imports `arranger` and `arranger` does not import this module.**
+The dependency runs one way: `decisions` needs the engine's own vocabulary
+(`GRIP_PREFERENCE`, `ROLE_FILL`, `GRIP_MAX_SPAN`, `sounding_harmony`), while the
+engine needs the decisions. So `arranger` imports this module *inside* its step
+loop, where the cost is a `sys.modules` lookup on a path that already does far more
+work per slot. When Phase 5 splits the engine into a package this becomes an
+ordinary top-level import between two modules in the same DAG.
+"""
+
+from __future__ import annotations
+
+from typing import Any, Optional, Tuple
+
+from arranger import (
+    GRIP_MAX_SPAN,
+    GRIP_PREFERENCE,
+    NO_CHORD,
+    ROLE_FILL,
+    ROLE_TARGET,
+    ArrangementStep,
+    Voicing,
+    sounding_harmony,
+)
+from diagnostics import Diagnostics
+
+# The three answers to "how is this slot played". Named rather than a bool because
+# the two non-default routes build different steps - see `melody_alone_case`.
+MELODY_ALONE_NONE = "none"        # look it up through the grips, as usual
+MELODY_ALONE_TEXTURE = "texture"  # a texture case: has a harmony, not spelled out
+MELODY_ALONE_NO_CHORD = "nc"      # an NC bar: no harmony to voice at all
+
+
+def resolve_texture_grips(
+    role: str,
+    texture: str,
+    texture_grips: Any,
+    requested: Tuple[str, ...],
+    diagnostics: Diagnostics,
+) -> Tuple[str, ...]:
+    """Which grips this slot may use: the role's palette, narrowed by the caller.
+
+    `requested` **narrows** the texture's palette; it never widens it and never
+    silently deletes from it. It used to be discarded outright
+    (`slot_grips = texture_grips[role]`), so `--grips shell --texture targets` asked
+    for shell-only and got a four-note drop-2 on every strong beat with nothing said.
+
+    The default is the case that matters, and it is why this is **not** a plain set
+    intersection. `GRIP_PREFERENCE` is the order a *caller* ranks grips in, and it
+    deliberately does not list `interval`, `melody` or `drop3` - a `targets` fill is
+    `("shell", "interval", "melody")` and a target is `("drop2", "drop3")`, so
+    intersecting with it would delete `interval` and `drop3` from the texture and
+    change every default arrangement. The texture table is the authority on what a
+    role may play; `GRIP_PREFERENCE` only says what order a caller ranks them in.
+
+    So the rule is: an explicit restriction intersects, and the default - which is
+    not a restriction, just the absence of one - does not.
+
+    An empty intersection is a caller asking for a grip the texture never uses. The
+    step still sounds, and says so: losing a chord of the tune is worse than
+    ignoring a flag, so the texture's own set stands.
+    """
+    role_grips: Tuple[str, ...] = texture_grips[role]
+    if requested == GRIP_PREFERENCE:
+        return role_grips
+    narrowed = tuple(g for g in requested if g in role_grips)
+    if narrowed:
+        return narrowed
+    diagnostics.warn(
+        f"Warning: {texture} uses {role_grips or 'no grip'} for a "
+        f"{role}, none of which is in the requested {requested}; "
+        f"using the texture's own set"
+    )
+    return role_grips
+
+
+def melody_alone_case(
+    texture: str,
+    role: str,
+    slot_grips: Tuple[str, ...],
+    quality: str,
+    name: str,
+) -> str:
+    """Which of the three "play this as a single note" routes this slot takes.
+
+    Returns one of `MELODY_ALONE_NONE`, `MELODY_ALONE_TEXTURE` or
+    `MELODY_ALONE_NO_CHORD`. The two non-default answers reach the same *route* -
+    `get_melody_only_voicing` rather than grip lookup - but they build different
+    steps, which is why this returns a kind rather than a bool: an `NC` bar sets
+    `melody_only=True`, and a texture case must **not**, because the step does have
+    a harmony, it is simply not being spelled out, and the flag would make the
+    annotation read "(no chord - melody alone)" and claim a lie.
+
+    Why each is a branch rather than a missing case:
+
+    - **an `NC` bar** carries melody but no harmony, so there is nothing to voice.
+      Taken before any chord logic, so it is never reharmonised and never warns.
+    - **a walking-bass fill**, and **a walking-bass target no shell can sound.** A
+      fill is *meant* to be thin, and a target that cannot be voiced must not be
+      dropped: the note of the tune survives and the harmony is stated at the next
+      target. Both are branches because the fill's grip tuple is *empty* - the
+      generic path would read "no candidates" as a failure and promote the fill to a
+      target, the exact opposite of the texture - and because `grips=("shell",)` is
+      the whole target tuple, so a melody with no shell (D over Bbm7) would be
+      dropped with only a warning.
+    """
+    if quality == NO_CHORD or name == NO_CHORD:
+        return MELODY_ALONE_NO_CHORD
+    if texture == "walking_bass" and (role == ROLE_FILL or slot_grips == ()):
+        return MELODY_ALONE_TEXTURE
+    return MELODY_ALONE_NONE
+
+
+def should_promote_fill(
+    texture: str,
+    role: str,
+    prepared_is_none: bool,
+    slot_grips: Tuple[str, ...],
+    requested: Tuple[str, ...],
+) -> bool:
+    """Whether a fill that produced nothing should be re-prepared as a principal note.
+
+    A fill that cannot be filled must not cost the tune its chord: the texture is a
+    lighter *texture*, never a missing harmony. So the step is retried as a target
+    before it is reported as missing - the same argument that makes `NECK_FRET_MIN`
+    a penalty rather than a filter.
+
+    Disabled under `walking_bass`, where a fill is *meant* to be empty: the
+    melody-alone branch has already handled it, so promoting here would undo the
+    texture one step at a time.
+
+    `slot_grips != requested` is the "the role narrowed the caller's grips" case. If
+    the two are equal the retry would ask for exactly what just failed, so it is
+    skipped rather than repeated.
+    """
+    if texture == "walking_bass":
+        return False
+    return prepared_is_none and role == ROLE_FILL and slot_grips != requested
+
+
+def should_demote_to_melody_alone(voicing: Voicing, role: str) -> bool:
+    """Whether a complete chord at the very top of the span budget is demoted.
+
+    A shape that spans the whole fret budget is legal and often unplayable, and a
+    texture's *target* role may offer only the four-note grips - so the narrow
+    alternative was never a candidate to be ranked against, and the cost tuple would
+    not have chosen it anyway (`missing` sits above span, so a complete wide shape
+    beats a partial narrow one). `x-6-5-3-8-x` for Ebmaj under G4 is the real case:
+    the engine *could* sound `x-x-8-8-8-x` there, span 0, but a `targets` target is
+    never offered a shell.
+
+    This is a **fallback, not a re-ranking**, and it is deliberately last. Lowering
+    `GRIP_MAX_SPAN` is a filter that deletes the voicing everywhere; promoting span
+    above `missing` would dissolve the shell and duo families across the whole
+    library. Here a complete chord is still what you get whenever it is playable,
+    and only a shape at the very top of the budget is demoted.
+
+    The demotion is to the melody alone, which is playable for every reachable
+    melody. Preferring a shell was measured: it is better as music, but it is only
+    reachable when the role's palette contains a shell, and where it does not - a
+    `targets` target - there is nothing to demote *to*. Losing a note of the tune is
+    worse than a thin one.
+    """
+    return voicing.fret_span() >= GRIP_MAX_SPAN["drop2"] and role == ROLE_TARGET
+
+
+def is_repeated_step(
+    previous_step: Optional[ArrangementStep],
+    voicing: Voicing,
+    harmony: Tuple[Optional[str], Optional[str]],
+) -> bool:
+    """Whether this step is a soprano-only re-strike of the step before it.
+
+    The melody sounds the same pitch, under an unchanged harmony. Compared on the
+    **sounding** pitch rather than the written name, because a step either side of
+    this may itself have been transposed down an octave by the `HIGH_FRET_LIMIT`
+    rule.
+
+    The harmony must also be unchanged, and that is the half that is easy to get
+    wrong. A note repeating across a *chord change* is not a hold: the inner voices
+    still ringing belong to the chord the hold began on, so printing the new chord's
+    name over a single struck note claims a harmony that is not sounding. Those
+    steps are harmonised against the new chord instead, which is what the voicing
+    already does - only the rendering was discarding it.
+
+    A melody-only (`NC`) step is never marked: it has one active fret and no inner
+    voices to hold, so the flag would mean nothing.
+    """
+    if previous_step is None or previous_step.melody_only:
+        return False
+    if max(previous_step.voicing.midi_notes()) != max(voicing.midi_notes()):
+        return False
+    return sounding_harmony(previous_step) == harmony
+

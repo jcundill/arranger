@@ -57,12 +57,14 @@ jazz-arranger = "arranger:main"
 # unlike `tabxml` it needs no optional extra to work.
 #
 # `diagnostics` is imported *by* `arranger` and by `wjazzd` - it holds the warning
-# collector the engine reports to - so it is a runtime module of the distribution
-# and not an optional extra alongside it. Omitting it would break `import arranger`
-# on a clean install, which is why it is spelled out here rather than left to
-# auto-discovery.
+# collector the engine reports to - and `decisions` is imported by `arranger` and
+# `wjazzd` alike - it holds the step-loop decisions both share. Both are runtime
+# modules of the distribution, not optional extras alongside it. Omitting either
+# would break `import arranger` on a clean install, which is why they are spelled
+# out here rather than left to auto-discovery.
 py-modules = [
     "arranger",
+    "decisions",
     "diagnostics",
     "tabstaff",
     "tabxml",

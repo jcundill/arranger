@@ -1,6 +1,7 @@
 # Implementation Plan
 
-**Status:** Phases 0–2 **done** (commits `1ae20af`, `b4cadc7`, `b4d51f4`). Phase 3 next.
+**Status:** Phases 0–3 **done** (commits `1ae20af`, `b4cadc7`, `b4d51f4`, `9d3c7a1`).
+Phase 4 next.
 **Supersedes:** `docs/history/texture-plan.md` (the completed `texture="targets"` plan, 0.7.0).
 
 | phase | what | state |
@@ -8,26 +9,38 @@
 | 0 | baseline + lint gate | **done** — 677 tests OK, pyright 0/0, ruff 0/0 |
 | 1 | `tests/support.py` + `tests/__init__.py` | **done** — 6 helpers de-duplicated, −101 lines |
 | 2 | `Diagnostics`, delete `print` from the library | **done** — 8 print sites → a collector; 694 tests |
-| 3 | extract the six duplicated decisions | next |
-| 4 | `ArrangeOptions` + the equivalence test | pending |
+| 3 | extract the duplicated decisions | **done** — 5 decisions, one implementation each; 702 tests |
+| 4 | `ArrangeOptions` + `arrange_slots` delegates | next |
 | 5 | split `arranger.py` into a package | pending |
 | 6 | delete the import cycle | pending |
 | 7 | CLI de-duplication | pending |
 | 8 | docs | pending |
 | 9 | CI and cleanup | pending |
 
-**Phase 2 note.** `Diagnostics` shipped as a flat `diagnostics.py` so the Phase 5
-package split is a `git mv` rather than a second rewrite. It is a **runtime** module of
-the distribution (in `py-modules`), not an extra — `import arranger` would fail on a
-clean install without it.
+**Phase 3 note — what shipped, and what moved to Phase 4.** Five of the six
+decisions moved to `decisions.py` and are now called from both loops. The sixth,
+`select_step_voicing` (the corpus's slash-bass partition), did **not**: it is not a
+*duplicated* decision — only the corpus has it — and folding it in here would mean
+reaching back into `wjazzd` for `bass_cost`, closing an import cycle. It lands in
+Phase 4, when `arrange_slots` is rewritten to delegate and `_arrange_step_with_bass`
+(84 lines) is deleted.
 
-**Two defects found while doing Phase 2**, both of which would have shipped:
+**The two loops had not drifted on behaviour.** The divergences flagged while
+planning (`wjazzd`'s `or slot_grips == ()`) turned out to be unreachable in the
+fixtures. `tests/test_step_loop_equivalence.py` now compares the two entry points
+over a texture × fixture matrix, and a second class asserts the *mechanism* — each
+decision defined once, called by both loops, and neither loop's source containing
+the old inline code. Without that second class the first could be coincidence on
+the fixtures chosen.
 
-- `diagnostics` was missing from `pyproject.toml`'s `py-modules`.
-- The Makefile named each source file in three places, so the new module was
-  silently unlinted and untypechecked. `lint` and `format` now share one `MODULES`
-  list, with a comment saying why. **This is the generalisable lesson: a gate that
-  enumerates its inputs by hand will silently skip whatever was added last.**
+**A bug this phase nearly shipped, recorded because the shape will recur.**
+`melody_alone_case` first returned a `bool`, and merging the `NC` branch into the
+walking-bass branch on that boolean would have set `melody_only=False` on an `NC`
+bar — making the renderer annotate a step *"(no chord - melody alone)"* that
+claims to have a chord. The two routes call the same function but build different
+steps, so the predicate returns a **kind**. The general rule: when consolidating
+two branches, check whether their *outputs* differ before unifying their
+*predicates*.
 
 ---
 
