@@ -7,14 +7,23 @@ project had already paid for that once: the corpus path was built separately,
 drifted, and voiced an `Am7` under a written `Bbm7` for twenty-five transcriptions
 before anyone noticed.
 
-Phase 3 moved those six decisions into `decisions`, so each has one implementation.
-This file is the regression test for that: it runs the *same* material through both
-entry points and requires the same answer.
+Phase 3 moved five of those decisions into `decisions`, so each had one
+implementation. Phase 4 then removed the second loop outright: `arrange_slots` is
+now a pre-pass plus a call.
 
-It cannot be written as a test of a single function, because the property is about
-two of them agreeing. That is also why it is a property over a matrix rather than a
-handful of cases: the point is that no combination of texture, chord quality and
-melody degree is served differently by the two paths.
+**What this file tests changed with that, and it is worth being explicit about.**
+"Both entry points produce the same arrangement" is now true *by construction* -
+there is one implementation - so as a statement about the engine it is close to
+vacuous. It is not vacuous as a statement about the **adapter**: `arrange_slots`
+still has to pass the right texture, the right grips, the right metre, the right
+timings and the right slash bass, and a wrong request produces a wrong arrangement
+while every unit test inside the engine still passes. That is what the matrix below
+catches, and it is a real failure mode rather than a formality.
+
+The second class guards the *structure* instead: that each decision still has one
+definition, that the engine still calls it, and that `wjazzd` has not grown a loop
+of its own. That is the check that would catch a well-meaning future "small
+optimisation" that reintroduces a second copy.
 
 No `skipUnless` here. These are hand-built fixtures with no database and no optional
 dependency, so this file always runs - which is the property that makes it worth
@@ -200,11 +209,31 @@ class TestTheDecisionsAreActuallyShared(unittest.TestCase):
                         f"{module_name} reimplements a decision that lives in `decisions`",
                     )
 
-    def test_both_loops_call_the_shared_decisions(self):
-        for module_name in ("arranger", "wjazzd"):
-            source = source_of(module_name)
-            for name in DECISIONS:
-                with self.subTest(module=module_name, decision=name):
-                    self.assertIn(
-                        f"{name}(", source, f"{module_name} does not call {name}"
-                    )
+    def test_the_engine_is_the_only_step_loop(self):
+        """Since Phase 4 there is one loop, and it is the engine's.
+
+        This class used to assert that *both* loops called each decision. That
+        premise is now false by design - `wjazzd` delegates rather than looping -
+        so the assertion is inverted: the decisions are called from `arranger`, and
+        `wjazzd` must not have grown a loop of its own. A test that keeps asserting
+        the old shape would be a test resisting the refactor it exists to protect.
+        """
+        engine = source_of("arranger")
+        for name in DECISIONS:
+            with self.subTest(decision=name):
+                self.assertIn(f"{name}(", engine, f"arranger does not call {name}")
+
+    def test_the_corpus_does_not_contain_a_step_loop(self):
+        """`wjazzd` asks the engine for an arrangement; it does not build one."""
+        corpus = source_of("wjazzd")
+        for snippet in (
+            "prepare_step(",
+            "_best_voicing(",
+            "ArrangementStep(",
+        ):
+            with self.subTest(snippet=snippet):
+                self.assertNotIn(
+                    snippet,
+                    corpus,
+                    "wjazzd has grown a step loop again; it should delegate",
+                )

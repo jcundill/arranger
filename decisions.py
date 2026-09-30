@@ -42,7 +42,7 @@ ordinary top-level import between two modules in the same DAG.
 
 from __future__ import annotations
 
-from typing import Any, Optional, Tuple
+from typing import Any, Callable, Container, List, Optional, Sequence, Tuple
 
 from arranger import (
     GRIP_MAX_SPAN,
@@ -224,3 +224,53 @@ def is_repeated_step(
         return False
     return sounding_harmony(previous_step) == harmony
 
+
+
+def select_step_voicing(
+    candidates: List[Voicing],
+    previous: Optional[Voicing],
+    fret_min: int,
+    fret_max: int,
+    allowed_tones: Optional[Container[int]],
+    root_pc: Optional[int],
+    bass_pc: Optional[int] = None,
+    bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]] = None,
+) -> Optional[Voicing]:
+    """The candidate the engine's own rule prefers, honouring a slash bass first.
+
+    This is the Weimar corpus's rule C, and it is what lets `wjazzd.arrange_slots`
+    delegate to `arrange_progression` instead of running a second step loop. The
+    library passes no `bass_pc` and gets exactly the behaviour it always had.
+
+    The two rules that select a candidate - the slash bass and voice leading - are
+    **combined, not applied in sequence**. The candidates are partitioned by how
+    well they honour the bass, and the engine's own selection rule then decides
+    *within the best group*. Applying them one after the other would let whichever
+    ran last always override the other, which is precisely the bug that was fixed
+    by writing them this way in the first place.
+
+    The partition is skipped when the bass is unsatisfiable (`best > 2`), so an
+    unachievable slash chord behaves exactly as if it had not been written - which
+    is the same "never guess" rule the rest of this module follows.
+
+    `bass_cost` is passed in rather than imported because it lives in `wjazzd` and
+    `wjazzd` imports this module; a module-level import either way would be a cycle.
+    Passing it also makes the dependency visible at the call site, which is the
+    point: the corpus is the only caller that supplies one.
+    """
+    if bass_pc is not None and bass_cost is not None and candidates:
+        costs = [bass_cost(v.midi_notes(), bass_pc) for v in candidates]
+        best = min(costs)
+        if best <= 2:
+            candidates = [v for v, c in zip(candidates, costs) if c == best]
+
+    from arranger import VoiceLeadingEngine  # local: avoids a cycle
+
+    return VoiceLeadingEngine._best_voicing(
+        candidates,
+        previous,
+        fret_min,
+        fret_max,
+        allowed_tones=allowed_tones,
+        root_pc=root_pc,
+    )

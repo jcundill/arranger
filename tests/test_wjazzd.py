@@ -26,6 +26,7 @@ from arranger import (
 # assertions quietly weaker than the library's actual contract.
 MAX_DEFAULT_SPAN = max(GRIP_MAX_SPAN[g] for g in arranger.GRIP_PREFERENCE)
 
+import wjazzd
 from wjazzd import (
     DEFAULT_DB,
     SECTION_TYPES,
@@ -34,7 +35,6 @@ from wjazzd import (
     NoteEvent,
     Section,
     Solo,
-    _arrange_step_with_bass,
     _is_transposed_repeat,
     _seed_span,
     arrange_head,
@@ -661,15 +661,13 @@ class TestSlashChordRules(unittest.TestCase):
             VoiceLeadingEngine.get_all_drop2_voicings(Note(melody), promoted, chord_name=name),
             key=lambda v: abs(v.avg_fret - 9),
         )
-        with_bass = _arrange_step_with_bass(
-            VoiceLeadingEngine(),
-            [(melody, promoted, name)],
-            0,
-            bass=bass,
-        )
-        self.assertIsNotNone(with_bass)
-        assert with_bass is not None
-        with_bass, _prepared = with_bass
+        # Through `arrange_slots`, the public path a head actually takes, rather
+        # than through the helper that used to exist. The rule did not move into
+        # the corpus: it is a candidate filter the engine applies when the caller
+        # supplies a bass pitch class, so this is now the only way to ask for it.
+        steps, _rescued, _notes = arrange_slots([(melody, promoted, f"{name}/{bass}")])
+        self.assertEqual(len(steps), 1)
+        with_bass = steps[0].voicing
         self.assertNotEqual(plain.tab_string(), with_bass.tab_string())
         self.assertEqual(bass_cost(with_bass.midi_notes(), bass_pitch_class(bass)), 0)
 
@@ -1463,3 +1461,137 @@ class TestCorpusCli(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheCorpusPathDelegates(unittest.TestCase):
+    """`arrange_slots` is a pre-pass plus a call, not a second step loop.
+
+    What the corpus does now is decide *what to ask the engine for*, so the contract
+    worth testing is that request. It is read through `wjazzd._corpus_options`, a
+    named seam rather than a monkeypatched call: the arrangement that comes back is
+    already covered by `tests/test_step_loop_equivalence.py` and by the rest of
+    this file.
+    """
+
+    TRIPLES = [("C5", "maj7", "Cmaj7"), ("D5", "maj7", "Cmaj7"), ("E5", "maj7", "Cmaj7")]
+    TIMINGS = [(0, 1.0, None), (0, 2.0, None), (0, 3.0, None)]
+
+    def options_for(
+        self,
+        triples=None,
+        timings=None,
+        non_chord_tone: str = "extension",
+        grips=None,
+        texture: str = "uniform",
+        beats_per_bar: int = 4,
+    ):
+        """`wjazzd._corpus_options` with this class's defaults.
+
+        Written out rather than taking `**overrides` because a `dict` erases the
+        types a checker needs to see, and the point of the seam is that the request
+        is typed.
+        """
+        from wjazzd import _corpus_options
+
+        return _corpus_options(
+            triples=self.TRIPLES if triples is None else triples,
+            timings=self.TIMINGS if timings is None else timings,
+            non_chord_tone=non_chord_tone,
+            grips=wjazzd.GRIP_PREFERENCE if grips is None else grips,
+            texture=texture,
+            beats_per_bar=beats_per_bar,
+        )
+
+    def test_the_texture_grips_and_metre_reach_the_engine(self):
+        options = self.options_for(
+            texture="targets", grips=("shell",), beats_per_bar=3
+        )
+        self.assertEqual(options.texture, "targets")
+        self.assertEqual(options.grips, ("shell",))
+        self.assertEqual(options.beats_per_bar, 3)
+
+    def test_the_timings_are_passed_through_unchanged(self):
+        self.assertEqual(list(self.options_for().timings or ()), self.TIMINGS)
+
+    def test_short_timings_are_padded_to_one_entry_per_triple(self):
+        """A short sequence must not shift the rhythm of the trailing steps."""
+        options = self.options_for(timings=[(0, 2.0, None)])
+        self.assertEqual(
+            list(options.timings or ()),
+            [(0, 2.0, None), (None, None, None), (None, None, None)],
+        )
+
+    def test_a_slash_bass_becomes_a_pitch_class_per_index(self):
+        """Rule C is not a branch any more; it is data, plus the ranking to read it."""
+        options = self.options_for(
+            triples=[("F4", "maj7", "Cmaj7/G"), ("F4", "7", "G7")], timings=[]
+        )
+        self.assertEqual(options.bass_pcs, {0: 7})
+        self.assertIsNotNone(options.bass_cost, "the ranking must come with the pitch")
+
+    def test_no_slash_chord_means_no_bass_preference(self):
+        options = self.options_for(timings=[])
+        self.assertIsNone(options.bass_pcs)
+
+    def test_a_promoted_slash_chord_keeps_its_bass(self):
+        """Rule B rewrites the *quality* and the name; the bass must survive it, or
+        the promotion would silently drop the note it was promoting for."""
+        from wjazzd import promote_slash_chord
+
+        promoted = promote_slash_chord("C", "m", "Bb")
+        self.assertEqual(promoted, "m7")
+        options = self.options_for(
+            triples=[("F4", promoted, "Cm7/Bb")], timings=[]
+        )
+        self.assertEqual(options.bass_pcs, {0: 10})
+
+    def test_a_step_the_engine_cannot_voice_is_now_reported(self):
+        """The behaviour change of this phase, pinned deliberately.
+
+        The corpus loop used to skip a step it could not voice *silently* - it read
+        `None` from its own step helper and moved on. Delegating means the engine's
+        own rule applies, and the engine warns. The voicings are unchanged; what
+        changed is that losing a note of the tune is now visible, which is the
+        outcome this codebase calls the worst thing that can happen and so the one
+        thing that must never happen quietly.
+
+        Db6 is above the library's Bb5 ceiling, so it is unvoiceable by
+        construction - the clearest possible case of a step that must be reported.
+        """
+        from arranger import Diagnostics
+
+        diagnostics = Diagnostics()
+        steps, _rescued, _notes = arrange_slots(
+            [("Db6", "maj7", "Cmaj7")], diagnostics=diagnostics
+        )
+        self.assertEqual(steps, [])
+        self.assertTrue(
+            any("No valid drop-2 voicing found" in w for w in diagnostics.warnings),
+            diagnostics.warnings,
+        )
+
+    def test_the_retry_pre_pass_reports_what_it_replaced(self):
+        """`fallback="diminished"` rewrites triples before the engine sees them."""
+        steps, rescued, notes = arrange_slots(
+            [("C5", "m7b5", "Dm7b5"), ("Gb4", "m7b5", "Dm7b5")],
+            fallback="diminished",
+        )
+        self.assertTrue(rescued, "expected at least one step to be rescued")
+        self.assertTrue(any("diminished fallback replaced" in n for n in notes))
+        self.assertTrue(
+            any("dim7" in step.chord for step in steps), [s.chord for s in steps]
+        )
+
+    def test_the_retry_does_not_mutate_the_caller_s_triples(self):
+        triples = [("C5", "m7b5", "Dm7b5"), ("Gb4", "m7b5", "Dm7b5")]
+        original = list(triples)
+        arrange_slots(triples, fallback="diminished")
+        self.assertEqual(triples, original)
+
+    def test_an_unknown_texture_is_rejected_before_anything_else(self):
+        with self.assertRaises(ValueError):
+            arrange_slots(self.TRIPLES, texture="nonsense")
+
+    def test_an_unknown_fallback_is_rejected(self):
+        with self.assertRaises(ValueError):
+            arrange_slots(self.TRIPLES, fallback="nonsense")

@@ -3238,10 +3238,18 @@ class VoiceLeadingEngine:
         fret_min: int = NECK_FRET_MIN,
         fret_max: int = NECK_FRET_MAX,
         grips: Tuple[str, ...] = GRIP_PREFERENCE,
-        timings: Optional[List[Tuple[int, float, Optional[float]]]] = None,
+        # `Sequence` and Optional *bar* and *beat*, not `List[Tuple[int, float, ...]]`:
+        # the corpus supplies `(None, None, None)` for a slot it could not place, so
+        # the two entry points genuinely hold different types. This is the fourth
+        # time that has cost this library something, and previously it showed up as a
+        # signature that would not typecheck rather than as a crash at runtime - the
+        # `float(beat)` below had assumed a non-None beat until the corpus was first
+        # allowed to delegate here.
+        timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]] = None,
         texture: str = "uniform",
         beats_per_bar: int = 4,
         diagnostics: Optional[Diagnostics] = None,
+        options: Optional[ArrangeOptions] = None,
     ) -> List[ArrangementStep]:
         """
         Takes a progression of (Melody Note, Chord Quality, Name) tuples
@@ -3336,6 +3344,46 @@ class VoiceLeadingEngine:
         silently instead; see the `diagnostics` module for why that is a value
         rather than a logging call.
         """
+        # `options` and the keywords are two spellings of the same knobs. An
+        # `options` wins outright rather than being merged field by field: a partial
+        # merge would make it impossible to tell which of two conflicting values won,
+        # and there is no use case for "the options, but with one keyword overridden".
+        # It raises instead of silently preferring one, because a caller who passes
+        # both has a bug and would otherwise spend an afternoon finding out why their
+        # keyword had no effect.
+        if options is not None:
+            from options import ArrangeOptions  # local: options imports this module
+
+            given = {
+                name: value
+                for name, value in (
+                    ("top_strings", top_strings),
+                    ("non_chord_tone", non_chord_tone),
+                    ("fret_min", fret_min),
+                    ("fret_max", fret_max),
+                    ("grips", grips),
+                    ("texture", texture),
+                    ("beats_per_bar", beats_per_bar),
+                )
+                if value != ArrangeOptions.__dataclass_fields__[name].default
+            }
+            if given:
+                raise ValueError(
+                    f"arrange_progression got both options= and the keyword(s) "
+                    f"{sorted(given)}; pass one or the other, not both"
+                )
+            top_strings = options.top_strings
+            non_chord_tone = options.non_chord_tone
+            fret_min = options.fret_min
+            fret_max = options.fret_max
+            grips = options.grips
+            texture = options.texture
+            beats_per_bar = options.beats_per_bar
+            if options.timings is not None:
+                timings = list(options.timings)
+        bass_pcs = options.bass_pcs if options is not None else None
+        bass_cost_for = options.bass_cost if options is not None else None
+
         if non_chord_tone not in cls.NON_CHORD_TONE_STRATEGIES:
             raise ValueError(
                 f"Unknown non_chord_tone strategy {non_chord_tone!r}; "
@@ -3363,6 +3411,7 @@ class VoiceLeadingEngine:
             is_repeated_step,
             melody_alone_case,
             resolve_texture_grips,
+            select_step_voicing,
             should_demote_to_melody_alone,
             should_promote_fill,
         )
@@ -3389,19 +3438,31 @@ class VoiceLeadingEngine:
         last_target_harmony: Optional[Tuple[Optional[str], Optional[str]]] = None
         previous_melody_midi: Optional[int] = None
 
+        # One slot per triple, carrying that triple's own `(bar, beat, duration)` or
+        # None for a slot nobody located. Read defensively - a short `timings` leaves
+        # the trailing steps unlocated - and, importantly, tolerating a *present but
+        # empty* entry: the corpus normalises its unplaced slots to `(None, None, None)`,
+        # so `float(beat)` here has to cope with None or the head path raises the
+        # moment it is allowed to delegate. That is the fourth time the two paths'
+        # differing timing types have cost something, and the first time it was a
+        # crash rather than a signature that would not typecheck.
+        def _timing(index: int) -> Tuple[Optional[int], Optional[float], Optional[float]]:
+            if timings is None or index >= len(timings):
+                return (None, None, None)
+            bar, beat, duration = timings[index]
+            return (
+                bar,
+                None if beat is None else float(beat),
+                duration,
+            )
+
         loop: List[_Slot] = (
             slots if slots is not None
             else [
-                _Slot(
-                    index=index,
-                    bar=(timings[index][0]
-                         if timings is not None and index < len(timings) else None),
-                    beat=(float(timings[index][1])
-                          if timings is not None and index < len(timings) else None),
-                    duration=(timings[index][2]
-                              if timings is not None and index < len(timings) else None),
+                _Slot(index=index, bar=bar, beat=beat, duration=duration)
+                for index, (bar, beat, duration) in enumerate(
+                    _timing(i) for i in range(len(progression))
                 )
-                for index in range(len(progression))
             ]
         )
 
@@ -3613,7 +3674,7 @@ class VoiceLeadingEngine:
             # The root enables the bass-function tie-break in voicing_cost; it is None
             # for a chord whose name cannot be parsed, which simply leaves that
             # criterion unasked rather than guessing a bass.
-            best_voicing = cls._best_voicing(
+            best_voicing = select_step_voicing(
                 candidates,
                 prev_voicing,
                 fret_min,
@@ -3622,6 +3683,8 @@ class VoiceLeadingEngine:
                     ChordParser.canonical_quality(chord_type), name
                 ),
                 root_pc=cls._chord_context(chord_type, name)[1],
+                bass_pc=None if bass_pcs is None else bass_pcs.get(index),
+                bass_cost=bass_cost_for,
             )
             # `candidates` is non-empty here (the step is skipped otherwise), so this
             # cannot fire. Written as an assertion rather than left to Optional
@@ -4157,6 +4220,10 @@ if __name__ == "__main__":
 # `from arranger import format_tab_html` type-checks and IDEs resolve it, while at
 # runtime the names still come from __getattr__ and never trigger an import cycle.
 if TYPE_CHECKING:
+    # `options` imports this module for its defaults, so a module-level import here
+    # would be a cycle. Under TYPE_CHECKING it is not executed, and the annotation on
+    # `arrange_progression` still resolves for a checker and an IDE.
+    from options import ArrangeOptions
     from tabstaff import (
         format_gp5,
         format_musicxml,

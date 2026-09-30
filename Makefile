@@ -9,7 +9,7 @@ RUFF ?= .venv/bin/ruff
 # listed here is silently unlinted and untypechecked, which is how `diagnostics.py`
 # nearly shipped unchecked - so lint and format share the one list, and typecheck
 # names its own (pyright is given the library, not the dev tools).
-MODULES = arranger.py decisions.py diagnostics.py tabstaff.py tabxml.py tabgp.py wjazzd.py headxml.py grip_chart.py tests
+MODULES = arranger.py decisions.py diagnostics.py options.py tabstaff.py tabxml.py tabgp.py wjazzd.py headxml.py grip_chart.py tests
 
 .PHONY: help install install-extra install-extra-gp install-dev test typecheck lint format check demo build clean chart chart-audit
 
@@ -54,7 +54,7 @@ test:
 
 typecheck:
 	@command -v $(PYRIGHT) >/dev/null 2>&1 || { echo "make typecheck needs pyright: $(PYTHON) -m pip install pyright"; exit 1; }
-	$(PYRIGHT) --pythonpath $(PYTHON) arranger.py decisions.py diagnostics.py tabstaff.py tabxml.py tabgp.py wjazzd.py headxml.py tests
+	$(PYRIGHT) --pythonpath $(PYTHON) arranger.py decisions.py diagnostics.py options.py tabstaff.py tabxml.py tabgp.py wjazzd.py headxml.py tests
 
 # The rule set is configured in pyproject.toml ([tool.ruff]), and it is
 # deliberately narrow - see the comment there for why UP*/E501/B905 are off.

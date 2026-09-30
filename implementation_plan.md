@@ -1,7 +1,7 @@
 # Implementation Plan
 
-**Status:** Phases 0–3 **done** (commits `1ae20af`, `b4cadc7`, `b4d51f4`, `9d3c7a1`).
-Phase 4 next.
+**Status:** Phases 0–4 **done** (commits `1ae20af`, `b4cadc7`, `b4d51f4`, `9d3c7a1`,
+`b834cbf`). Phase 5 next.
 **Supersedes:** `docs/history/texture-plan.md` (the completed `texture="targets"` plan, 0.7.0).
 
 | phase | what | state |
@@ -10,12 +10,52 @@ Phase 4 next.
 | 1 | `tests/support.py` + `tests/__init__.py` | **done** — 6 helpers de-duplicated, −101 lines |
 | 2 | `Diagnostics`, delete `print` from the library | **done** — 8 print sites → a collector; 694 tests |
 | 3 | extract the duplicated decisions | **done** — 5 decisions, one implementation each; 702 tests |
-| 4 | `ArrangeOptions` + `arrange_slots` delegates | next |
-| 5 | split `arranger.py` into a package | pending |
+| 4 | `ArrangeOptions`; `arrange_slots` delegates | **done** — `wjazzd.py` 2225 → 1941; 714 tests |
+| 5 | split `arranger.py` into a package | next |
 | 6 | delete the import cycle | pending |
 | 7 | CLI de-duplication | pending |
 | 8 | docs | pending |
 | 9 | CI and cleanup | pending |
+
+**Phase 4 — the one behavioural change in the whole refactor, and it is
+deliberate.** Measured over 40 configurations (30 hand-built: 3 textures × 4 grip
+settings × timed/untimed, plus 6 `fallback="diminished"` cases; and 5 real Weimar
+heads, 470 steps), fingerprinted on every caller-readable field plus the tab
+string:
+
+- **0 voicing differences.**
+- **6 configurations gained warnings** — 48 extra, all one kind: steps the engine
+  cannot voice, which the old corpus loop **skipped silently** (it read `None`
+  from its own step helper and moved on). Delegating applies the engine's
+  documented rule, and the engine warns.
+
+The music is unchanged; what changed is that losing a note of the tune is now
+visible. This codebase calls that the worst outcome that can happen and so the
+one thing that must never happen quietly. Pinned by
+`test_a_step_the_engine_cannot_voice_is_now_reported`. `.baseline_capture.py` is
+committed so the claim is checkable.
+
+**A crash the merge exposed — worth remembering.** `arrange_progression` built each
+slot with `float(timings[index][1])`, assuming a non-`None` beat. The corpus has
+*always* supplied `(None, None, None)` for a slot it could not place — the two entry
+points hold genuinely different timing types — but nothing had ever called that
+line with one. The first delegation crashed on it. This is the **fourth** time that
+difference has cost this library something, and the first time it surfaced as a
+runtime crash rather than a signature pyright rejected. The parameter's type now
+says what it always had to accept.
+
+**Two tests had to change shape, not just content:**
+
+- `test_both_loops_call_the_shared_decisions` asserted *both* loops call each
+  decision. That premise is false by design now. It is **inverted**: the engine
+  calls the decisions, and `wjazzd` must not contain `prepare_step`,
+  `_best_voicing` or `ArrangementStep` at all.
+- The first attempt at the new corpus tests monkeypatched `arrange_progression`,
+  which trips `ruff B010` and pyright in *opposite* directions — unsatisfiable
+  without a suppression. Replaced with a named seam, `wjazzd._corpus_options`: the
+  corpus's remaining job is deciding *what to ask for*, and that is now a function
+  a test can read rather than a call it must intercept. **The general rule: when a
+  test needs to intercept, look for a seam worth extracting first.**
 
 **Phase 3 note — what shipped, and what moved to Phase 4.** Five of the six
 decisions moved to `decisions.py` and are now called from both loops. The sixth,

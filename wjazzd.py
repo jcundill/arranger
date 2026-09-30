@@ -62,36 +62,18 @@ from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 from arranger import (
     GRIP_PREFERENCE,
-    MELODY_STRING_CHOICES_FULL,
     NECK_FRET_MAX,
     NECK_FRET_MIN,
     NO_CHORD,
     PITCH_CLASS_NAMES,
-    ROLE_TARGET,
-    TEXTURE_GRIPS,
     TEXTURE_STYLES,
     ArrangementStep,
     ChordParser,
     Note,
-    StepPreparation,
     VoiceLeadingEngine,
-    Voicing,
-    _metric_weight,
-    _roles_for_slot,
-    _Slot,
-    _walking_slots,
-    normalised_harmony,
-)
-from decisions import (
-    MELODY_ALONE_NO_CHORD,
-    MELODY_ALONE_TEXTURE,
-    is_repeated_step,
-    melody_alone_case,
-    resolve_texture_grips,
-    should_demote_to_melody_alone,
-    should_promote_fill,
 )
 from diagnostics import Diagnostics, default_diagnostics
+from options import ArrangeOptions
 
 __all__ = [
     "DEFAULT_DB",
@@ -1706,95 +1688,6 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
         print(f"wrote {written}")
     return 0
 
-
-def _arrange_step_with_bass(
-    engine: VoiceLeadingEngine,
-    progression: Sequence[Tuple[str, str, str]],
-    index: int,
-    previous: Optional[Voicing] = None,
-    previous_chord: Optional[str] = None,
-    non_chord_tone: str = "extension",
-    top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
-    grips: Tuple[str, ...] = GRIP_PREFERENCE,
-    bass: Optional[str] = None,
-    diagnostics: Optional[Diagnostics] = None,
-) -> Optional[Tuple[Voicing, StepPreparation]]:
-    """Arranges one step, preferring candidates whose lowest note is the bass.
-
-    This is rule C, and it lives here rather than in the engine so the engine's
-    public surface stays frozen. The two rules that select a candidate - the
-    slash bass and voice leading - are *combined*, not applied in sequence: the
-    candidates are partitioned by how well they honour the bass, and the engine's
-    own selection rule then decides within the best group. Applying them one
-    after the other would let whichever ran last always override the other.
-
-    The candidates come from the engine's own `prepare_step`, so a head gets the
-    same non-chord-tone strategies, the same octave-down rescue and the same
-    tone-purity criterion as the library. This function used to build candidates
-    itself and call `_best_voicing` with no `allowed_tones`, which silently
-    dropped all three: across a 25-transcription sample 0 non-chord tones were
-    flagged, and 41.6% of steps sounded an inner voice outside the written chord
-    against 23.0% for the same progression through the library.
-
-    The final choice is the engine's `_best_voicing`, the same function
-    arrange_progression uses, so a head arranged here and the same head arranged
-    through the library cannot disagree about which shape is better.
-    """
-    prepared = engine.prepare_step(
-        list(progression), index,
-        previous=previous,
-        previous_chord=previous_chord,
-        top_strings=top_strings,
-        non_chord_tone=non_chord_tone,
-        grips=grips,
-        diagnostics=diagnostics,
-    )
-    if prepared is None:
-        return None
-
-    candidates = prepared.candidates
-    # The slash bass normally rides along in the chord name, which skeleton_slots
-    # keeps intact. `bass` is the override for a caller that knows it out of band -
-    # rule B promotion, for instance, turns `C-/Bb` into a plain `m7` and would
-    # otherwise lose the Bb.
-    if bass is None:
-        bass = parse_weimar_chord(progression[index][2])[2]
-    bass_pc = bass_pitch_class(bass)
-    if bass_pc is None:
-        preferred = candidates
-    else:
-        costs = [bass_cost(v.midi_notes(), bass_pc) for v in candidates]
-        best = min(costs)
-        # Only restrict when the bass is actually satisfiable; when it is not,
-        # behaviour is exactly what it would be with no slash chord at all.
-        preferred = (
-            [v for v, c in zip(candidates, costs) if c == best]
-            if best <= 2
-            else candidates
-        )
-
-    voicing = engine._best_voicing(
-        list(preferred), previous,
-        NECK_FRET_MIN, NECK_FRET_MAX,
-        # The tones the *written* chord allows, matching arrange_progression: the
-        # selector prefers a shape that is merely out of position over one that
-        # sounds a wrong note.
-        allowed_tones=ChordParser.get_chord_tones(
-            ChordParser.canonical_quality(prepared.chord_type), prepared.chord_name
-        ),
-        # The root enables the bass-function tie-break, exactly as in
-        # arrange_progression. A slash chord has already been narrowed by rule C above,
-        # and this only breaks a tie *within* the group rule C chose - it cannot pull
-        # a candidate back in that rule C rejected.
-        root_pc=engine._chord_context(
-            prepared.chord_type, prepared.chord_name
-        )[1],
-    )
-    if voicing is None:
-        return None
-    return voicing, prepared
-
-
 def arrange_slots(
     triples: Sequence[Tuple[str, str, str]],
     timings: Sequence[Tuple[Optional[int], Optional[float], Optional[float]]] = (),
@@ -1807,17 +1700,29 @@ def arrange_slots(
 ) -> Tuple[List[ArrangementStep], List[int], List[str]]:
     """Voices a list of (note, quality, name) triples, one step per slot.
 
-    This is the arrangement engine's step loop, and it is deliberately **not**
-    duplicated per input source. The Weimar corpus path and the MusicXML path in
-    `headxml` both reach the voicings through here, so a head imported from a score
-    is voiced by exactly the same code as the same head read out of the database -
-    the same non-chord-tone strategies, the same opt-in diminished retry, the same
-    repeated-melody hold, the same slash-bass rule and the same
-    `HIGH_FRET_LIMIT` rescue. A second implementation is precisely how the corpus
-    path came to disagree with the library once already.
+    **This no longer contains a step loop.** It is a pre-pass over the triples
+    followed by a call to `VoiceLeadingEngine.arrange_progression`. It used to be
+    a second, near-verbatim copy of that loop - 366 lines, carrying its own copies
+    of six decisions under a comment reading *"Both copies must agree"*. The Weimar
+    corpus path and the MusicXML path in `headxml` both reach the voicings through
+    here, so a head imported from a score is voiced by exactly the same code as the
+    same head read out of the database. That was the intention before; now it is a
+    property of the structure rather than a promise in a comment.
 
-    `timings` is the slots' own `(bar, beat, duration)`, in the renderer's units:
-    a signed bar, the beat within it, and a length in whole notes. The duration is
+    What the corpus needs that the library does not, and how each is passed:
+
+    - **a slash bass** (Weimar rule C) becomes `ArrangeOptions.bass_pcs`, a mapping
+      from triple index to the pitch class the caller wants in the bass. It narrows
+      *which candidates are considered*, and `decisions.select_step_voicing`
+      applies the engine's own rule within that narrowed set - so the two selection
+      rules stay combined rather than sequential, which is the whole point of rule C.
+    - **the diminished retry** becomes a pre-pass below, rewriting the triples
+      before the engine sees them.
+    - **the timing** becomes `ArrangeOptions.timings`, normalised to one entry per
+      triple so the engine's defensive indexing is the only one that runs.
+
+    `timings` is the slots' own `(bar, beat, duration)`, in the renderer's units: a
+    signed bar, the beat within it, and a length in whole notes. The duration is
     **optional per slot and `None` in practice** - see `skeleton_slots` for why the
     Weimar path does not supply one, and `headxml` for the one that does. The whole
     sequence is optional too and indexed defensively, so a hand-built sequence
@@ -1829,66 +1734,112 @@ def arrange_slots(
     it is off unless asked for; the count of steps it *would* rescue is always
     returned in the notes.
 
-    `texture` is the arranging guide's target-note rule, applied here by the same
-    `_metric_weight` and `_roles_for_slot` the library uses, so a head read from the
-    database and the same head read from a score are textured identically.
-    "targets" states a full chord on beats 1 and 3 and fills the notes between with
-    a shell, a 3rd/6th interval or the melody alone; "uniform" (the default) voices
-    every slot in full, which is what this function did before textures existed.
+    `texture` is the arranging guide's target-note rule, applied by the engine's own
+    `_metric_weight` and `_roles_for_slot`, so a head read from the database and the
+    same head read from a score are textured identically. "targets" states a full
+    chord on beats 1 and 3 and fills the notes between with a shell, a 3rd/6th
+    interval or the melody alone; "uniform" (the default) voices every slot in full.
     `beats_per_bar` is the metre that rule reads, and a head in cut time must pass
     its own - a count without a denominator is not a metre.
 
     Returns the steps, the indexes of the steps the diminished retry actually
-    substituted, and any diagnostic notes worth printing.
+    substituted, and any diagnostic notes worth printing. The `notes` are *not* the
+    `diagnostics` warnings: they are arrangement-level remarks the caller is
+    expected to print itself.
     """
     if texture not in TEXTURE_STYLES:
         raise ValueError(
             f"Unknown texture {texture!r}; expected one of {TEXTURE_STYLES}"
         )
-    texture_grips = TEXTURE_GRIPS[texture]
-    engine = VoiceLeadingEngine()
-    # Resolved once, here, so the engine, the slash-bass helper and the bass
-    # attachment all report to the same collector. Defaults to printing, which is
-    # what this function has always done.
-    if diagnostics is None:
-        diagnostics = default_diagnostics()
     if fallback not in (None, "diminished"):
         raise ValueError(f"Unknown fallback {fallback!r}; expected None or 'diminished'")
+    if diagnostics is None:
+        diagnostics = default_diagnostics()
 
-    unresolved = unresolved_steps(list(triples), non_chord_tone)
-    retry = list(unresolved) if fallback == "diminished" else []
-    rescued: List[int] = []
+    engine = VoiceLeadingEngine()
     notes: List[str] = []
+
+    # --- the diminished retry, as a pre-pass -------------------------------------
+    #
+    # A pre-pass rather than something inside a loop, because there is no loop here
+    # any more. The engine must see the substituted chord, and it sees whatever
+    # triples it is handed.
+    #
+    # It used to be applied *after* the slot's role had been computed from the
+    # written chord. Under `targets` the role does not read the harmony, so nothing
+    # moved; under `walking_bass` it does. That ordering change is measured rather
+    # than assumed - see the `fallback=` cases in `.baseline_capture.py`, and
+    # `tests/test_wjazzd.py::TestTheRetryReordersNothingVisible`.
+    unresolved = unresolved_steps(list(triples), non_chord_tone)
+    retry = set(unresolved) if fallback == "diminished" else set()
+    rescued: List[int] = []
+    working = list(triples)
     if retry:
         notes.append(
             f"diminished fallback replaced the written chord on {len(retry)} step(s)"
         )
+        for index in sorted(retry):
+            melody, quality, name = triples[index]
+            resolved = engine.resolve_non_chord_tone(
+                Note(melody), quality, name, "diminished",
+                next_melody=_next_chord_tone_melody(triples, index),
+            )
+            if resolved is not None:
+                working[index] = (melody, resolved[0], resolved[1])
+                rescued.append(index)
 
-    steps: List[ArrangementStep] = []
-    previous: Optional[Voicing] = None
-    # What the `sustain` strategy reports as harmonized_as: the previous step's
-    # *written* chord, matching arrange_progression.
-    previous_chord: Optional[str] = None
-    # The diminished retry rewrites a step's chord, so the engine has to see the
-    # substituted triple. Worked on a copy, because `triples` is what the caller
-    # gets back and must keep reporting what was written.
-    working = list(triples)
+    options = _corpus_options(
+        triples=working,
+        timings=timings,
+        non_chord_tone=non_chord_tone,
+        grips=grips,
+        texture=texture,
+        beats_per_bar=beats_per_bar,
+    )
 
-    # Walking bass iterates over the **slot union** rather than over `triples`, because
-    # the bass grid may be finer than the melody grid (decision B): a bar whose melody
-    # is one whole note still has four beats to walk, and the extra slots are what the
-    # thumb plays on. `_walking_slots` is the engine's own union builder, shared with
-    # `arrange_progression`, so both paths walk the same line from the same harmony.
+    steps = engine.arrange_progression(
+        list(working), options=options, diagnostics=diagnostics
+    )
+    return steps, rescued, notes
+
+
+def _corpus_options(
+    triples: Sequence[Tuple[str, str, str]],
+    timings: Sequence[Tuple[Optional[int], Optional[float], Optional[float]]],
+    non_chord_tone: str,
+    grips: Tuple[str, ...],
+    texture: str,
+    beats_per_bar: int,
+) -> ArrangeOptions:
+    """The request `arrange_slots` makes of the engine, as one value.
+
+    Extracted from `arrange_slots` so the corpus's whole remaining job - deciding
+    *what to ask for*, rather than deciding the voicing itself - is a named thing a
+    test can read. It is a seam, not a public API: the function is private and the
+    arrangement it produces is tested through `arrange_slots`.
+
+    Two things happen here that used to be scattered through the loop.
+
+    **The timings are normalised to one entry per triple.** Written out rather than
+    reusing `timings` because that sequence is a `Sequence` and may be shorter than
+    `triples`, and pyright will not narrow an index it cannot see. The engine guards
+    its own indexing too, but establishing the length invariant once is better than
+    defending it twice.
+
+    **The slash bass becomes a pitch class per index.** `None` for a triple with no
+    slash, which is every triple of a score-imported head and most of a corpus one.
+    The bass note normally rides along in the chord name, which `skeleton_slots`
+    keeps intact; `promote_slash_chord` is the case where it does not, and it has
+    already written the promoted quality into the name. `bass_cost` is supplied
+    alongside because the pitch class says *what* is wanted and the cost says *how
+    near* a candidate is to it; neither alone narrows anything.
+    """
+    # --- the timings, normalised to one entry per triple -------------------------
     #
-    # Every texture then iterates over `_Slot`s, which is what makes the loop body
-    # shared rather than branched: for `uniform` and `targets` the list below is one
-    # slot per triple, in order, carrying the timings this function already read - so
-    # those two textures reach exactly the code they reached before.
-    # Normalised to the shape `_Slot` and `_walking_slots` take: a
-    # `(bar, beat, duration)` triple per triple, with `(None, None, None)` for a slot
-    # the caller never located. Written out rather than reused from `timings` because
-    # that sequence is `Sequence` and may be shorter than `triples`, and pyright will
-    # not narrow an index it cannot see - the guard is spelled once, here.
+    # Written out rather than reusing `timings` because that sequence is a `Sequence`
+    # and may be shorter than `triples`, and pyright will not narrow an index it
+    # cannot see. The engine guards its own indexing too, but doing it here means the
+    # length invariant is established once rather than defended twice.
     typed_timings: List[Tuple[Optional[int], Optional[float], Optional[float]]] = [
         (bar, beat, duration)
         if index < len(timings) else (None, None, None)
@@ -1897,259 +1848,23 @@ def arrange_slots(
     typed_timings.extend(
         [(None, None, None)] * (len(triples) - len(typed_timings))
     )
-    if texture == "walking_bass":
-        loop_slots = _walking_slots(list(triples), typed_timings, beats_per_bar)
-    else:
-        loop_slots = [
-            _Slot(
-                index=index,
-                bar=typed_timings[index][0],
-                beat=typed_timings[index][1],
-                duration=typed_timings[index][2],
-            )
-            for index in range(len(triples))
-        ]
 
-    # Harmony and melody state for the walking-bass role rule, read from what
-    # actually sounds so a substituted chord compares as itself - the same
-    # `normalised_harmony` the `repeated` hold below uses.
-    last_target_harmony: Optional[Tuple[Optional[str], Optional[str]]] = None
-    previous_melody_midi: Optional[int] = None
+    # --- the slash bass, as data -------------------------------------------------
+    bass_pcs: Dict[int, Optional[int]] = {}
+    for index, (_melody, _quality, name) in enumerate(triples):
+        bass = parse_weimar_chord(name)[2]
+        if bass is not None:
+            bass_pcs[index] = bass_pitch_class(bass)
 
-    for slot in loop_slots:
-        index = slot.index
-        melody, quality, name = triples[index]
-        # The slot's own (bar, beat, duration), so the staff renderer can lay the
-        # chords on their real beats. Read off the `_Slot` rather than off `timings`,
-        # because under walking bass a slot's onset is the *walked* beat, which for a
-        # bass-only slot is an onset the caller's timings never listed. Lengths still
-        # match by construction for the melody slots.
-        bar, beat, duration = slot.bar, slot.beat, slot.duration
-        # What this slot is *for*, from where it falls in the bar. The same two
-        # helpers the library uses, so a head textured here and the same head
-        # textured through arranger.arrange_progression cannot disagree. An
-        # unlocated slot (no timing, or a short sequence) weighs -1 and is a target.
-        weight = _metric_weight(bar, beat, beats_per_bar)
-        # Under walking bass the role carries the extra condition - a strong beat is a
-        # target only when the harmony has moved since the last target, or the melody
-        # moves onto it (the off-beat-change rule and decision F). Read from what
-        # sounds, so a substituted chord compares as itself. `_roles_for_slot`
-        # ignores both arguments for the other textures, so they stay unchanged.
-        harmony_key = normalised_harmony(name)
-        role = _roles_for_slot(
-            weight,
-            texture,
-            harmony_changed=(last_target_harmony is None
-                             or harmony_key != last_target_harmony),
-            melody_moves=(previous_melody_midi is None
-                          or Note(melody).midi_note() != previous_melody_midi),
-        )[0]
-        if role == ROLE_TARGET:
-            last_target_harmony = harmony_key
-        previous_melody_midi = Note(melody).midi_note()
-        # The texture narrows what may be *played* here; it is not a term in the cost
-        # tuple, so a thin fill can never be outbid for being badly placed.
-        #
-        # `grips` **narrows** the texture's palette; it never widens it and never silently
-        # deletes from it. It used to be discarded outright
-        # (`slot_grips = texture_grips[role]`), so `--grips shell --texture targets` asked
-        # for shell-only and got a four-note drop-2 on every strong beat.
-        #
-        # The default is why this is not a plain set intersection: `GRIP_PREFERENCE` is
-        # the order a *caller* ranks grips in and deliberately does not list `interval`,
-        # `melody` or `drop3`, which the texture palettes do use - so intersecting with it
-        # would delete them and change every default arrangement. An explicit restriction
-        # intersects; the absence of one does not.
-        #
-        # Shared with VoiceLeadingEngine.arrange_progression. It used to be a second
-        # copy, under a comment reading "both copies must agree" - a comment asking two
-        # implementations to stay in step, which works until someone edits one of them.
-        # The narrowing rule is documented once, in decisions.resolve_texture_grips.
-        slot_grips = resolve_texture_grips(
-            role, texture, texture_grips, grips, diagnostics
-        )
-
-        # Which of the three "play this as a single note" routes this slot takes.
-        # Shared with arrange_progression; it returns a *kind* because the two
-        # non-default routes build different steps - an NC bar sets melody_only,
-        # a texture case must not. See decisions.melody_alone_case.
-        melody_alone = melody_alone_case(
-            texture, role, slot_grips, quality, name
-        )
-        if index in retry:
-            # Re-resolve this step as a dim7 and remember that we did, so the
-            # caller can report which chords were substituted.
-            resolved = engine.resolve_non_chord_tone(
-                Note(melody), quality, name, "diminished",
-                next_melody=_next_chord_tone_melody(triples, index),
-            )
-            if resolved is not None:
-                quality, name = resolved
-                working[index] = (melody, quality, name)
-                rescued.append(index)
-
-        if melody_alone == MELODY_ALONE_NO_CHORD:
-            voicing = engine.get_melody_only_voicing(Note(melody))
-            if voicing is None:
-                continue
-            step = ArrangementStep(
-                chord=name, melody=melody, voicing=voicing, melody_only=True,
-                bar=bar, beat=beat, duration=duration,
-                role=role, metric_weight=weight,
-                # An `NC` bar is still a place the thumb walks: the walk reads the last
-                # known harmony, and a melody-alone shape leaves every bass string free.
-                bass_only=slot.bass_only,
-            )
-            steps.append(step)
-            VoiceLeadingEngine._attach_bass(step, slot.bass, steps, diagnostics)
-            previous = voicing
-            previous_chord = name
-            continue
-
-        # A walking-bass **fill** is the melody alone, and so is a target no shell can
-        # sound. Both take the route an `NC` step already takes -
-        # `get_melody_only_voicing` rather than grip lookup - and `melody_only` stays
-        # **False**, because the step does have a harmony; it is simply not being spelled
-        # out, and the flag would make the annotation claim "no chord".
-        #
-        # This has to be a branch rather than a missing case for two reasons. The fill's
-        # grip tuple is empty, so the generic path below would read "no candidates" as a
-        # failure and promote the fill to a target - the exact opposite of the texture.
-        # And `("shell",)` is the whole target tuple, so a melody no shell can sound
-        # (D over Bbm7, the B section's bar-10 appoggiatura) would be dropped with only a
-        # warning. Losing a note of the tune is worse than a thin one.
-        if melody_alone == MELODY_ALONE_TEXTURE:
-            solo_voicing = engine.get_melody_only_voicing(Note(melody))
-            if solo_voicing is not None:
-                step = ArrangementStep(
-                    chord=name, melody=melody, voicing=solo_voicing,
-                    grip="melody", partial=False,
-                    bar=bar, beat=beat, duration=duration,
-                    role=role, metric_weight=weight,
-                    bass_only=slot.bass_only,
-                )
-                steps.append(step)
-                VoiceLeadingEngine._attach_bass(step, slot.bass, steps, diagnostics)
-                previous = solo_voicing
-                previous_chord = name
-                continue
-
-        arranged = _arrange_step_with_bass(
-            engine, working, index,
-            previous=previous, previous_chord=previous_chord,
-            non_chord_tone=non_chord_tone, grips=slot_grips,
-            diagnostics=diagnostics,
-        )
-        if should_promote_fill(
-            texture, role, arranged is None, slot_grips, grips
-        ):
-            # A fill that cannot be filled must not cost the tune its chord: the
-            # texture is a lighter *texture*, never a missing harmony. Retry as a
-            # principal note, exactly as arrange_progression does.
-            #
-            # Disabled for walking bass, where a fill is *meant* to be empty: the
-            # branch above has already given it the melody alone, so promoting it here
-            # would undo the texture one step at a time.
-            if texture != "walking_bass":
-                arranged = _arrange_step_with_bass(
-                    engine, working, index,
-                    previous=previous, previous_chord=previous_chord,
-                    non_chord_tone=non_chord_tone, grips=grips,
-                    diagnostics=diagnostics,
-                )
-                if arranged is not None:
-                    role = ROLE_TARGET
-        if arranged is None and texture == "walking_bass":
-            # A walking-bass target whose one grip yields nothing falls back to the
-            # melody alone too, so the note of the tune survives and the thumb still
-            # walks. Same argument as the fill above, one role over.
-            solo_voicing = engine.get_melody_only_voicing(Note(melody))
-            if solo_voicing is not None:
-                step = ArrangementStep(
-                    chord=name, melody=melody, voicing=solo_voicing,
-                    grip="melody", partial=False,
-                    bar=bar, beat=beat, duration=duration,
-                    role=role, metric_weight=weight,
-                    bass_only=slot.bass_only,
-                )
-                steps.append(step)
-                VoiceLeadingEngine._attach_bass(step, slot.bass, steps, diagnostics)
-                previous = solo_voicing
-                previous_chord = name
-                continue
-        if arranged is None:
-            continue
-        voicing, prepared = arranged
-
-        # A shape that spans the whole fret budget is legal but often unplayable, and a
-        # `targets` target is only offered the four-note grips - so the narrow
-        # alternative was never a candidate to be ranked against, and the cost tuple
-        # would not have picked it anyway (`missing` sits above span, so a complete wide
-        # shape beats a partial narrow one). `x-6-5-3-8-x` for Ebmaj under G4 is the real
-        # case: the engine can sound `x-x-8-8-8-x` there, span 0, but a target is never
-        # offered a shell.
-        #
-        # Shared with `arrange_progression`, which had its own copy. Why the demotion
-        # is a fallback rather than a re-ranking is decisions.should_demote_to_melody_alone.
-        if should_demote_to_melody_alone(voicing, role):
-            solo_voicing = engine.get_melody_only_voicing(Note(melody))
-            if solo_voicing is not None and solo_voicing.fret_span() < voicing.fret_span():
-                diagnostics.warn(
-                    f"Warning: {name} with melody {melody} needs a "
-                    f"{voicing.fret_span()}-fret stretch "
-                    f"({voicing.tab_string()}); playing the melody alone"
-                )
-                step = ArrangementStep(
-                    chord=name, melody=melody, voicing=solo_voicing,
-                    grip="melody", partial=False,
-                    bar=bar, beat=beat, duration=duration,
-                    role=role, metric_weight=weight,
-                    bass_only=slot.bass_only,
-                )
-                steps.append(step)
-                VoiceLeadingEngine._attach_bass(step, slot.bass, steps, diagnostics)
-                previous = solo_voicing
-                previous_chord = name
-                continue
-        # A repeated melody is a soprano-only re-strike, so the renderers hold the
-        # inner voices. Shared with `arrange_progression`; the rule, including the
-        # across-a-chord-change case that is *not* a hold, is
-        # decisions.is_repeated_step.
-        repeated = is_repeated_step(
-            steps[-1] if steps else None,
-            voicing,
-            normalised_harmony(name, prepared.harmonized_as),
-        )
-        steps.append(ArrangementStep(
-            chord=name, melody=prepared.melody, voicing=voicing,
-            non_chord_tone=prepared.is_non_chord_tone,
-            strategy=prepared.strategy,
-            harmonized_as=prepared.harmonized_as,
-            original_melody=prepared.original_melody,
-            bar=bar, beat=beat, duration=duration, repeated=repeated,
-            # Carried from the voicing rather than defaulted, so a head built here
-            # reports the same grip and partial flag as the same chord arranged through
-            # arranger.arrange_progression.
-            #
-            # `partial` counts the **upper** voices, and the thumb is merged after this,
-            # so a shell plus a bass note is still a shell and stays annotated
-            # "(shell - 3rd & 7th, partial)". The ordering is what makes that true.
-            grip=voicing.grip,
-            partial=len(voicing.active_frets()) < 4,
-            role=role,
-            metric_weight=weight,
-            # Decision B: this slot exists for the thumb. The renderers hold the upper
-            # voices across it rather than re-striking them, and the melody is not
-            # re-attacked - the opposite of `repeated`, and never set together.
-            bass_only=slot.bass_only,
-        ))
-        # Select first, merge after: the thumb is written into the fret vector only
-        # once the shape is chosen, so it cannot enter the cost tuple at all.
-        VoiceLeadingEngine._attach_bass(steps[-1], slot.bass, steps, diagnostics)
-        previous = voicing
-        previous_chord = name
-
-    return steps, rescued, notes
+    return ArrangeOptions(
+        non_chord_tone=non_chord_tone,
+        grips=grips,
+        texture=texture,
+        beats_per_bar=beats_per_bar,
+        timings=typed_timings,
+        bass_pcs=bass_pcs or None,
+        bass_cost=bass_cost,
+    )
 
 
 def arrange_head(
