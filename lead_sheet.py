@@ -33,7 +33,7 @@ import sqlite3
 from typing import Any, Optional
 
 # The database's marker for a bar with melody but no harmony. Such a note is
-# played alone -- see CORPUS_PLAN.md section 5.
+# played alone -- see docs/history/corpus-plan.md section 5.
 NO_CHORD = "NC"
 
 #: The twelve pitch classes, in the spelling the note names use.

@@ -45,7 +45,7 @@ numbers are recorded here because they are the reason for the defaults:
   measured on the untrimmed 79-bar A-block, where those few low notes were
   diluted across 845 notes.
 
-See `CORPUS_PLAN.md` for the measurements the design decisions rest on.
+See `docs/history/corpus-plan.md` for the measurements the design decisions rest on.
 """
 
 from __future__ import annotations
@@ -902,7 +902,7 @@ def select_head(melid: int, db_path: Optional[Union[str, Path]] = None) -> Optio
     fewer changes than the head has bars. Across the corpus 434 of 456
     transcriptions yield a head and the median length is 8 bars, which is what a
     head should be, but a user wanting a specific tune should pass an explicit bar
-    range. This is the open question CORPUS_PLAN.md section 12 records about how
+    range. This is the open question docs/history/corpus-plan.md section 12 records about how
     aggressive the progression trim should be.
     """
     forms = _form_sections(melid, db_path)
@@ -1412,7 +1412,7 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
     """The `corpus` command: render a head from the Weimar Jazz Database.
 
     Returns a process exit code. Defaults follow the decisions in
-    CORPUS_PLAN.md: the head is the default selection, the register is decided
+    docs/history/corpus-plan.md: the head is the default selection, the register is decided
     by measured coverage, the non-chord-tone strategy is `extension`, and the
     diminished retry is off because it replaces the written chord.
 
@@ -1430,7 +1430,7 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
     )
 
     parser = argparse.ArgumentParser(
-        prog="arranger.py corpus",
+        prog="arranger corpus",
         description="Render the head of a Weimar Jazz Database transcription as chord-melody.",
     )
     parser.add_argument("--melid", type=int, default=None, help="transcription id (melid)")

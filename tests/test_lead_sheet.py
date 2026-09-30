@@ -3,7 +3,7 @@
 Everything here is guarded by ``skipUnless`` on the presence of the 42 MB
 ``wjazzd.db`` (ignored via ``.gitignore``), so the suite still passes without it.
 
-The expectations are the ground-truth rows of ``CORPUS_PLAN.md`` section 1.3.
+The expectations are the ground-truth rows of ``docs/history/corpus-plan.md`` section 1.3.
 """
 
 import json
@@ -34,7 +34,7 @@ class TestLeadSheet(unittest.TestCase):
     def test_forward_fill_ground_truth(self):
         """Should bind each note to the last chord at or before its (bar, beat).
 
-        These are the verified rows of CORPUS_PLAN.md section 1.3.
+        These are the verified rows of docs/history/corpus-plan.md section 1.3.
         """
         sheet = export_wjd_leadsheet(str(DB_PATH), 1)
         by_bar = {m["measure"]: m for m in sheet["measures"]}
@@ -137,7 +137,7 @@ class TestMidiToNoteName(unittest.TestCase):
         """Should compute the octave as (midi // 12) - 1, i.e. C4 is MIDI 60.
 
         59 -> B3 and 94 -> Bb6 are the two ends of the library's melody window
-        (CORPUS_PLAN.md section 1.4); the 16th fret of the high E string is Bb5,
+        (docs/history/corpus-plan.md section 1.4); the 16th fret of the high E string is Bb5,
         MIDI 82.
         """
         self.assertEqual(midi_to_note_name(60), "C4")

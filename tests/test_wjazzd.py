@@ -240,7 +240,7 @@ class TestSoloRecord(unittest.TestCase):
 
 @requires_db
 class TestDatabaseContents(unittest.TestCase):
-    """The real schema, checked against the figures in CORPUS_PLAN.md."""
+    """The real schema, checked against the figures in docs/history/corpus-plan.md."""
 
     def test_the_database_has_456_transcriptions(self):
         """list_solos returns the whole solo_info table."""
@@ -301,7 +301,7 @@ class TestChordForwardFill(unittest.TestCase):
         return {n.chord for n in solo.notes if n.bar == bar and n.beat == beat}
 
     def test_ground_truth_melid_1(self):
-        """The three checked positions in CORPUS_PLAN.md section 1.3."""
+        """The three checked positions in docs/history/corpus-plan.md section 1.3."""
         self.assertEqual(self.chords_at(self.solo_1, 0, 1), {"Bb6"})
         self.assertEqual(self.chords_at(self.solo_1, 3, 3), {"G-7"})
         self.assertEqual(self.chords_at(self.solo_1, 4, 3), {"F7"})

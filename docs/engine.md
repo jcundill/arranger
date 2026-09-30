@@ -1,0 +1,640 @@
+# Engine reference
+
+The voicing engine: what shapes exist, how one is chosen, and what the tables
+behind them mean. Read this before touching anything under `arranger/` except
+`options.py`.
+
+The module map and the dependency order that holds it are in
+[../AGENTS.md](../AGENTS.md); this document is the reasoning behind the decisions,
+not the map. Where a rule was measured, the measurement is kept - it is what tells
+you whether a change is an improvement or a different library.
+## Architecture and key types
+
+- `STANDARD_TUNING` — six open-string `Note`s, index `0` = low E (string 6)
+  through index `5` = high E (string 1). `STRING_NAMES` mirrors these.
+- `MELODY_STRING_CHOICES` — `(5, 4)`: the soprano string indices the *drop-2* path may
+  be pinned to (`5` → D-G-B-E, `4` → A-D-G-B). Kept as the default of
+  `get_drop2_voicings` so its published output is unchanged. Index `0` = low E ...
+  `5` = high E, so the conventional guitar string number is `6 - index` (index
+  `5` = string 1).
+- `MELODY_STRING_CHOICES_FULL = (5, 4, 3)` — the default soprano set: the high E, the
+  B **and the G** string. Adding the G string is what lets a melodic position be held
+  by *changing strings* rather than by moving the hand. The A string and the low E are
+  inner voices only; no grip puts the soprano on either, so the melody floor is `G3`
+  while the chord range extends down to `E2` as a bass voice.
+- `GRIP_PREFERENCE = ("drop2", "drop2_6432", "shell", "duo")` — the grip families and
+  their tie-break order. `drop2_6432` (6-4-3-2) is listed second because it is the
+  *alternative* to the contiguous drop-2, not a third string set for it:
+  `grips=("drop2",)` still means the four contiguous strings, which is the idiom that
+  reproduces the original output exactly. `drop3` and `closed` are generated but
+  deliberately **not** listed: neither can be played within `GRIP_MAX_SPAN`
+  (see Known Limitations).
+- `GRIP_STRING_SETS` — for each grip, its supported `(active string indices, soprano
+  index)` pairs: the 4-3-2-1 and 5-4-3-2 four-string blocks, **6-4-3-2**, the six
+  shell shapes (1-2-3, 2-3-4, 5-4-3, **6-4-3**, and the two 5-3-2s — `(1,3,4)`
+  skipping the D going down and `(5,3,2)` skipping the B going up), and three duos.
+  `6-4-3`, both `5-3-2`s and `6-4-3-2` are the four non-contiguous sets, each skipping
+  one string; `6-4-3-2` and `(5,3,2)` skip one going *up* (the A to reach the B as
+  soprano, and the B to reach the high E respectively).
+  `supported_string_sets()` is the playability invariant stated in
+  one place, and adds the drop-2 blocks for all three sopranos (drop-2 is defined
+  generically, so a caller passing their own `top_string` still works).
+- `BASS_DEGREES_6432 = (0, 7)` — the degrees the low E may take in a 6-4-3-2 shape, and
+  the analogue of `DUO_DEGREES` for the bass rather than the melody. The lowest voice is
+  what *defines* the chord, so a 3rd or a 7th there sounds like a different harmony.
+- `SHELL_DEGREES` — the (3rd, 7th) pair per quality, explicit rather than inferred:
+  a quality not listed gets no shell rather than a guessed one. `DUO_DEGREES = (0, 7)`
+  — the only soprano degrees a duo is generated for, as a hard rule. The `interval`
+  grip is deliberately **not** gated on it; see
+  [Texture: chords on the beats, fills between](#texture-chords-on-the-beats-fills-between).
+- `ROLE_TARGET` / `ROLE_FILL`, `TEXTURE_STYLES`, `TARGET_BEATS`, `TEXTURE_GRIPS` —
+  the metric layer's whole vocabulary. `TARGET_BEATS = (1, 3)` names *beats*, not
+  an absolute onset, so the rule reads the metre it is given; `_metric_weight` and
+  `_roles_for_slot` are the two functions that apply it.
+- `NECK_FRET_MIN` / `NECK_FRET_MAX` — `2` and `13`. A strong preference, never a
+  filter; see the selector below.
+- `HIGH_FRET_LIMIT` — `13`. A melody whose only available position sits above this
+  fret is re-voiced an octave down on the B string. See
+  [High melodies move down an octave](#high-melodies-move-down-an-octave).
+- `Voicing` — a dataclass for one fretboard shape: `frets` (6 entries,
+  `-1` = muted), `top_fret`, `avg_fret`. Helpers: `tab_string()` (one-line
+  `x-x-12-13-13-13`, frozen: ~40 call sites in tests and docs depend on it),
+  `tab_block()` (six-line vertical tab, high E first, two-char right-aligned
+  cells, highest string labelled lowercase `e`), `tab()` (`tab_block()` joined
+  with newlines), `active_frets()`, `fret_span()`, `midi_notes()`,
+  `pitch_classes()`, `soprano_string()` (index of the highest sounding string;
+  `-1` if all muted). Supports legacy dict-style access (`v["frets"]`).
+- Tab rendering is **pure**: every renderer returns a string (or list of
+  strings) and prints nothing, so callers control display. Only `main()` and the
+  `arrange_progression` warning paths write to stdout.
+- `ArrangementStep` — a dataclass of `chord`, `melody`, `voicing` plus the
+  non-chord-tone bookkeeping `non_chord_tone` (bool), `strategy` (which strategy
+  handled the step) and `harmonized_as` (the substitute chord name). Also
+  `tab_line()` / `tab_block()`, which delegate to the `Voicing` renderers.
+  Supports legacy dict-style access (`step["chord"]`).
+  The optional `bar` / `beat` / `duration` (all default `None`) carry the timing the
+  staff renderer needs; `has_timing` reports whether a step can be placed on a grid.
+  `repeated` (default `False`) marks a step whose melody repeats the previous step's
+  pitch **under an unchanged harmony**: the voicing is still generated in full, but the
+  renderers show only the soprano and hold the inner voices. A repeat across a chord
+  change is not a hold and is not marked. See
+  [Repeated melodies hold the shape](#repeated-melodies-hold-the-shape).
+- `format_progression(steps, vertical=False)` — module-level renderer for a
+  whole arrangement: one line per step by default, six-line tab blocks when
+  `vertical=True`. Non-chord-tone steps are annotated via the shared
+  `_step_annotation()` helper, which `_print_step()` also uses so the two
+  renderings cannot drift.
+- `format_tab_staff`, `format_tab_html` and `write_tab_html` **live in
+  `tabstaff.py`**, not here, and are re-exported below. See
+  [The staff renderers live in `tabstaff.py`](#the-staff-renderers-live-in-tabstaffpy).
+- `format_tab_staff(steps, beats_per_bar=4, rhythm=True, show_chords=True,
+  show_melody=False, show_melody_string=True, show_mutes=False, collapse=True,
+  measures_per_line=4)` — renders the **whole progression along one six-line
+  staff** in reading order (high E on top), which is the standard tab layout and
+  unlike `format_progression` is not one block per chord. Chord names go on a line
+  above, each starting in the column where its shape is struck. Three decisions are
+  load-bearing and were each forced by looking at the output:
+  - **Fret cells are left-aligned in a fixed-width column.** A right-aligned cell
+    looks tidy on its own but puts the fret at the far end of the column, so the
+    chord name and its frets no longer share a column. The column width widens to
+    the longest chord name rather than letting the chord line drift out of step
+    with the frets under it.
+  - **`collapse` compares sounding pitches, not fret numbers.** The skeleton voices
+    one step per eighth, so without it a held chord is restruck eight times a bar and
+    the staff is a chord list rather than a held shape. A rest clears the held
+    pitches, because a rest genuinely stops the ringing.
+  - **Barlines are every `measures_per_line` bars, not every bar**, and the grid
+    starts at the first step's own onset so a head selected from bar 1 (or from a
+    negative pickup bar) is not preceded by empty bars.
+  Muted strings are blank by default (a ringing voice is not restruck);
+  `show_mutes` spells them out, and a melody-only step always shows its `x`s.
+  With no step timing, `rhythm=True` falls back to a uniform one-chord-per-beat
+  grid rather than failing.
+- `GuitarFretboard` — static helpers `note_to_fret(string_index, note)` and
+  `fret_to_midi(string_index, fret)`. Out-of-range inputs return `-1`.
+- `ChordParser` — `parse_chord_name(name) -> (root, quality)`,
+  `get_melody_degree(root, melody_note) -> 0..11`, `canonical_quality(quality)`
+  (case-sensitive alias resolution: `M7` -> `maj7`, `M` -> `maj`, `m7` stays `m7`)
+  and
+  `get_chord_tones(quality, chord_name=None)` -> every pitch class in the chord.
+  `CHORD_TONES_FROM_ROOT` is the full tone set per quality, deliberately distinct
+  from `DEGREE_OFFSETS_FROM_ROOT`, which lists only the four notes a drop-2 shape
+  voices — so the root of a rootless `7b9` still counts as a chord tone.
+- `VoiceLeadingEngine` — the core engine:
+  - `DROP2_INTERVAL_SETS`: semitone offsets from the soprano voice for each
+    supported chord quality (seventh, extended, triad, suspended and altered
+    families) plus aliases.
+  - `DEGREE_OFFSETS_FROM_ROOT`: which chord tone each inversion places on top.
+  - `get_drop2_voicings(melody_note, chord_type, chord_name=None, top_string=5)`
+    — one string block; `top_string=4` pins the melody to the B string.
+  - `get_grip_voicings(melody_note, chord_type, chord_name=None, top_string=5,
+    grips=GRIP_PREFERENCE)` — candidates for one soprano string across every grip
+    family, the general form of `get_drop2_voicings`.
+  - `get_all_grip_voicings(melody_note, chord_type, chord_name=None,
+    top_strings=MELODY_STRING_CHOICES_FULL, grips=GRIP_PREFERENCE)` — candidates
+    across every allowed soprano string, high-E first, applying the chord-tone match
+    then the quality-only fallback. **Pure**: it neither filters by fret nor
+    transposes. `get_all_drop2_voicings` is this pinned to `grips=("drop2",)`.
+  - `voicing_cost(voicing, previous, fret_min, fret_max, allowed_tones)` — the whole
+    selection rule as one comparable tuple: notes outside the chord, then frets
+    outside the window, then missing voices, then **span**, then neck position (the
+    difference of average frets from the previous voicing), then pitch movement, then
+    grip preference. Lexicographic, not a weighted sum, because these priorities must
+    not be traded against each other. `_best_voicing` is its argmin and is stable, so
+    the engine is deterministic.
+  - `get_octave_down_candidates(melody_note, chord_type, chord_name=None,
+    top_strings=MELODY_STRING_CHOICES)` — the same for the melody an octave lower,
+    on the strings below the high E. Empty when the transposed melody is unvoiceable,
+    so the caller keeps its original candidates.
+  - `calculate_voice_leading_distance(voicing_a, voicing_b)` — per-string fret
+    movement, kept for backward compatibility (only meaningful within one block).
+  - `calculate_pitch_leading_distance(voicing_a, voicing_b)` — movement in
+    semitones between sorted sounding pitches; identical to the fret metric within
+    one block, and the metric `arrange_progression` uses across blocks.
+  - `NON_CHORD_TONE_EXTENSIONS` — canonical quality → `{melody degree: extension
+    quality}`, the routing used by the `extension` strategy.
+  - `NON_CHORD_TONE_STRATEGIES` — the accepted `non_chord_tone` values.
+  - `is_chord_tone(melody_note, chord_type, chord_name)` — chord-tone detection
+    using `ChordParser.CHORD_TONES_FROM_ROOT`; `False` for unknown qualities.
+  - `resolve_non_chord_tone(melody_note, chord_type, chord_name, strategy,
+    next_melody=None)` -> `(quality, name)` for a substitute chord, or `None` when
+    the strategy cannot help (the caller then keeps its fallback).
+  - `sustain_inner_voices(previous_voicing, melody_note)` — holds the previous
+    voicing's inner voices and moves only the soprano; `None` when unplayable.
+  - `arrange_progression(progression, top_strings=MELODY_STRING_CHOICES_FULL,
+    non_chord_tone="extension", fret_min=NECK_FRET_MIN, fret_max=NECK_FRET_MAX,
+    grips=GRIP_PREFERENCE, timings=None, texture="uniform", beats_per_bar=4)`
+    — voices each step, applying the selected non-chord-tone strategy where needed,
+    and chooses each shape with `_best_voicing`. An unknown strategy or texture
+    raises `ValueError`, both before any voicing work. `grips=("drop2",)` with
+    `top_strings=MELODY_STRING_CHOICES` reproduces the library's original output
+    exactly, which is what the renderer tests pin their fixture to. `timings` and
+    `texture` are the metric layer; see
+    [Texture: chords on the beats, fills between](#texture-chords-on-the-beats-fills-between).
+  - `VoiceLeadingEngine.get_interval_voicings(melody_note, chord_type,
+    chord_name=None, top_string=5)` — the two-note `interval` grip, a public entry
+    point like `get_drop2_voicings` so every family is reachable on its own.
+  - `__version__` — the library version string, the single source of truth that
+    `pyproject.toml` reads as the dynamic project version. No document may state a
+    different one: `tests/test_docs.py` fails the suite if one does.
+- `NO_CHORD` — the string `"NC"`, a bar carrying melody with no harmony.
+- `VoiceLeadingEngine.get_melody_only_voicing(melody_note, prefer=...)` — a
+  **single-fret** `Voicing` for an NC step, or `None` if unreachable. It is
+  explicitly *not* a harmonised voicing and is exempt from the string-set invariant.
+- `ArrangementStep.melody_only` — defaulted flag set on NC steps.
+- `main()` — with no arguments, prints the built-in demonstrations; with `corpus`
+  as the first argument, delegates to `wjazzd.corpus_cli` and with `head` to
+  `headxml.head_cli`, both through a **lazy** import inside the branch, so
+  `import arranger` never depends on the database module or the importer.
+- `main()` — prints the built-in demonstration arrangements; exposed as the
+  `jazz-arranger` console script via `[project.scripts]`.
+
+### Adding a new chord quality
+
+1. Add a template list to `DROP2_INTERVAL_SETS` (one inversion template per voiced
+   tone, each `[0, offset2, offset3, offset4]` in semitones below the soprano).
+   Derive each template from the close-position stack under the melody: with
+   `d1 < d2 < d3` the **cumulative** semitone distances down from the top voice to
+   the next three chord tones (each the nearest chord tone below), the drop-2 shape
+   is `[0, -d2, -d3, -(d1 + 12)]` — the second voice from the top lowered an octave.
+   A triad needs a fourth voice, so its templates double the root an octave below the
+   stack; ninth/13th qualities are voiced rootless (root, or 5th when the root is on
+   top, omitted) so the extra tone still fits four strings.
+2. Add the matching entry to `DEGREE_OFFSETS_FROM_ROOT` **in the same order** as
+   the templates, so each melody note is matched to the correct inversion.
+3. Add the quality's full tone set to `ChordParser.CHORD_TONES_FROM_ROOT`. This is also
+   what `drop3`, `closed`, `shell` and `duo` build themselves from, so it is required
+   for the new grips to reach the quality at all. If the quality should also get a
+   shell, add it to `SHELL_DEGREES` — the default drop-2 and the derived grips work
+   without one.
+4. Add aliases to `ChordParser.QUALITY_ALIASES` (and, for backward compatibility,
+   optionally to the `DROP2_INTERVAL_SETS[...] = ...` block).
+5. To make the quality reachable by the `extension` strategy, add it to
+   `NON_CHORD_TONE_EXTENSIONS`.
+6. **If the Weimar Jazz Database should be able to spell it**, add the matching
+   suffix to `WEIMAR_QUALITY_ALIASES` in `wjazzd.py`. The database has 108
+   distinct suffixes in its own notation, and one that is absent resolves to
+   `None` and is *counted and reported* rather than guessed - so a new quality
+   the corpus cannot reach is silent until this step is done.
+7. **If a MusicXML file should be able to spell it**, add the matching
+   `kind-value` to `MUSICXML_KIND_QUALITIES` in `headxml.py`, and any `<degree>`
+   alteration that reaches it to `_DEGREE_REFINEMENTS`. The same rule applies: an
+   absent kind resolves to `None` and is counted in `Head.unmapped`, so a new
+   quality MusicXML cannot spell stays silent until this step is done. Note the
+   table is keyed on the *library* quality, so a `kind` that only a `<degree>`
+   reaches (a 7b5, say) needs a degree entry rather than a kind entry.
+8. Add tests to `tests/test_voicings.py` for the drop-2 fingerings and to
+   `tests/test_grips.py` for the other grips: exact fingerings, pitch classes a subset
+   of `ChordParser.get_chord_tones(...)`, `fret_span() <= 5`, and the sounding strings
+   a member of `supported_string_sets()`.
+   `TestQualityTableInvariants` checks the template and degree lists stay the same
+   length, and `tests/test_non_chord_tones.py` covers any new
+   `NON_CHORD_TONE_EXTENSIONS` route. `tests/test_wjazzd.py` asserts every
+   `WEIMAR_QUALITY_ALIASES` entry resolves to a quality the library can voice, so
+   a table entry naming an unvoiceable quality fails the suite.
+   `tests/test_headxml.py::TestChordParsing::test_every_kind_the_table_names_is_voiceable`
+   is the same assertion for `MUSICXML_KIND_QUALITIES`.
+
+## Grips, and the position-aware selector
+
+The engine generates several grip families and then chooses between them, rather than
+generating one kind and voice-leading it. Generation and selection are deliberately
+separate: `get_grip_voicings` and `get_all_grip_voicings` are *pure* (no position
+filtering, no transposition) and `_best_voicing` does all the deciding. That split is
+what stops the grip families and the octave-down rescue from having to know about each
+other, and it is asserted in `tests/test_grips.py`.
+
+### Span outranks neck position
+
+`voicing_cost` ranks **fret span above neck position**. This is the only place one
+criterion is promoted across another, and the trade was measured rather than guessed.
+
+**The two criteria disagree about the same thing.** Position measures how far the
+*hand* moves; span measures how far the hand has to *stretch* once it is there. A
+five-fret shape sitting one fret from where the hand already was wins on position and
+loses on span — and with span ranked below position that shape was chosen, which is
+how the engine came to select `8-x-8-8-13-x` (index at 8, pinky at 13) for a Cm7b5.
+Keeping the hand still is worth less than being able to play the shape it is holding.
+
+**Promoting span is free where tightening the cap is not.** The obvious alternative is
+to lower `GRIP_MAX_SPAN` from 5, and it was implemented and measured first. It is a
+*filter*, so it deletes a voicing wherever no tighter one exists, and that cost real
+music:
+
+| cap | voicings kept (of 1008) | what went missing |
+|---|---|---|
+| 5 | 960 | — |
+| 4 | 960 | the only Gsus4 fingering, `x-x-5-5-3-8`; and the **6-4-3** shell |
+
+6-4-3 is the one default shape that reaches the low E, and losing it is a far bigger
+musical cost than a few wide shapes. Ranking instead only ever chooses *between shapes
+already on the table*, so nothing stops being voiceable at all. Over the same 1008
+(melody, quality) pairs, coverage is identical at 960 and the share of selected
+five-fret shapes fell from **4.1% to 0.8%**, with span-1 shapes rising from 27.8% to
+44.4%.
+
+**What it does not promise.** A selected shape can still span five frets, because
+where the only candidate is wide, span is consulted first, finds every candidate
+equal, and the wide one is played. `GRIP_MAX_SPAN` remains the outer bound. The
+promotion is also below the correctness criteria: a shape sounding a foreign note or
+a partial harmonisation still loses to a correct one however tight it is, which
+`tests/test_grips.py::TestVoicingCost` asserts directly on the tuple rather than only
+through a result.
+
+**The one case it costs, and why it is not tuned away.** A low Dm7 under D4 is now
+`x-3-3-2-3-x` (span 1, lowest voice C3) where it was `5-x-3-5-3-x` on 6-4-3-2 (span 2,
+lowest voice A2). Both sound the same four pitch classes, both are inside the window,
+both are complete, so span decides and the narrower one wins — and the cost is the
+bass, since C is the 3rd where A was the 5th, and 6-4-3-2 is the only default set that
+reaches the low E at all.
+
+The obvious repair is to rank the bass-function term above span. That was implemented
+and measured, and it **brings `8-x-8-8-13-x` straight back**: the same ordering that
+rescues the low bass also lets a five-fret shape with a root bass beat a one-fret shape
+without one. The two criteria cannot both come first, so the choice is which to
+favour. Span is favoured because a five-fret stretch is a shape the hand may not be
+able to play at all, while a 3rd in the bass is a musical detail the ear supplies
+around. The regression is asserted explicitly in
+`tests/test_progressions.py::test_low_register_cadence_voices_low_with_a_complete_chord_or_a_shell`
+so it stays visible rather than being quietly re-tuned away.
+
+**Span is a distance, not a count.** `fret_span()` is `max(frets) - min(frets)`, so a
+shape on frets 6 and 10 spans *four*: the stretch from index to pinky is four frets
+even though five fret positions are involved. Counting the touched frets
+inclusively would describe a reach the hand does not make, and would make the limit of
+5 mean a five-finger stretch.
+
+| grip | voices | how it is built |
+|---|---|---|
+| `drop2` | 4 | `DROP2_INTERVAL_SETS`, verbatim — the tables are hand-authored |
+| `drop2_6432` | 4 | 6-4-3-2, found by search — the one default set that reaches the low E |
+| `drop3` / `closed` | 4 | derived from a close stack; generated, not offered by default |
+| `shell` | 3 | `SHELL_DEGREES` plus one more note |
+| `duo` | 2 | root or 5th in the melody plus the 3rd |
+
+Five decisions in here were each forced by something measurable:
+
+- **drop-2's tables are never derived.** The extended qualities are voiced *rootless*
+  on purpose, so a 9 or a 13 that fits in four voices without the root is a musical
+  decision. Deriving drop-3 and close position from the same chord tones gives a
+  *fuller* chord — a legitimate but different voicing — which is exactly why drop-2 is
+  left alone.
+- **Duos are a hard rule, not a cost preference.** Under a root or 5th the ear supplies
+  the guide tones, so two notes carry the harmony; under a 3rd or 7th they *are* the
+  chord's function and a bare duo there is the voicing that sounds wrong. So
+  `get_grip_voicings` returns nothing for those, with no escape hatch. The test that
+  pins this is `TestDuoHardRule`, because a 3/7 duo consists of genuine chord tones and
+  the "only chord tones" check would not catch it.
+- **A shell is searched for, never stacked.** A shell's notes are not in descending pitch
+  order down the strings, because the tuning is not monotonic in the useful direction: the
+  A string is tuned five semitones *above* the D string. A G7 shell under G3 is
+  `2-3-0-x-x-x` — B2 on the A string, F3 on the D string, G3 on the G — where the A string
+  carries the *lower* note while being the higher string; Gm7 in 6-4-3 is `3-x-3-3-x-x`,
+  with G3 on the D string below A2 on the low E. A model that stacks voices by pitch gets
+  both backwards and finds nothing, so `_place_shell` holds the melody and searches every
+  combination of frets inside the span limit. That makes the search *exhaustive within the
+  playability invariant*: if a playable shell exists in that position, it is found.
+- **No four-note voicing on 6-5-4-3.** A G-string soprano has no four-note block, because
+  the only one available is all of the four lowest strings and that does not sound good —
+  four voices in the bottom fourth of the compass. A low melody is harmonised with a
+  three-note shell (5-4-3 or 6-4-3) instead, dropping the 5th degree. Stated in one
+  place, `_BOTTOM_FOUR`, and asserted by `TestStringSetTable`. **6-4-3-2 is not an
+  exception to this rule**, which is why the two must not be conflated: it swaps the A
+  string out for the B, so its lowest note is the low E while its soprano is the B, not
+  the G. It is the answer to a different question — a *bass* — and it is the only default
+  set that can reach one.
+- **6-4-3-2 is searched for, and it needed a cost term to be chosen at all.** The same
+  reason as 6-4-3: the set skips a string, so it is not in descending pitch order down
+  the strings, so a hand-authored table cannot express it — the D string is a fifth above
+  the low E, and the low E's note is frequently *not* the lowest sounding pitch.
+  `_place_drop2_6432` therefore reuses `_place_shell`'s exhaustive search rather than
+  inventing a second way to place notes, and ranks the survivors by `(fret_span,
+  avg_fret)`. Two measurements forced the rest. Ranking is not cosmetic: an unranked
+  search returns the first shape it meets, which puts the low E at fret 0–1, below
+  `NECK_FRET_MIN`, and an earlier "0 of 22, never selected" reading was that bug. And
+  ranked correctly it still lost — `voicing_cost` reached the neck-position term first
+  and declined the better bass, so it wins only where the two shapes tie outright. Hence
+  the root-or-5th bass term at index 6, a *tie-break* below every correctness criterion,
+  which is what finally lets `5-x-5-5-5-x` (A2 G3 C4 E4) beat `x-3-5-2-5-x` (A2 E3 C4 E4).
+- **A partial harmonisation is a fallback, not a style.** `missing` voices outranks neck
+  position in the cost, so a complete chord wins even when a shell would have held the
+  position better. A permitted root-or-5th duo scores zero there and competes on equal
+  terms; a shell scores one; a bare 3/7 duo is not generated at all.
+
+The window is a **penalty, not a filter**: a step with no voicing inside frets 2–13 is
+still played, just outside it. A filter would silently drop every step whose melody
+has no in-window shape, and losing a chord of the tune is worse than being a fret out
+of position. `tests/test_grips.py::TestFretWindow` pins that.
+
+## Texture: chords on the beats, fills between
+
+`voicing_cost` ranks **completeness above position** and knows nothing about where in
+the bar a note falls, so the `eighths` skeleton — one slot per eighth — produces eight
+re-struck four-note chords per bar. That is a chord list. `tabstaff`'s `collapse`
+hides it in the *drawing*; the selection never made the decision.
+
+`texture="targets"` is that decision. It is the arranging guide's method — full chords
+on the principal melody notes, something lighter in the gaps — expressed as **a change
+to what may be played**, never as a change to what is preferred.
+
+Five decisions are load-bearing:
+
+- **Timing narrows the candidate set; it does not touch the cost tuple.** "Play fewer
+  notes here" is not a preference competing against "stay in position" — it is a
+  change of what is on the table. A term in the cost would let a four-fret position
+  outbid an entire texture, and it would make the "priorities must not be traded
+  against each other" property of `voicing_cost` untrue. `TEXTURE_GRIPS` maps
+  texture → role → permitted grips, and `arrange_progression` passes the role's tuple
+  to `prepare_step`, which already took `grips`. Generation and selection stay
+  separate exactly as they already were.
+- **"No timing" is not "a weak note".** `_metric_weight` returns **-1** when `bar` or
+  `beat` is `None`, and `_roles_for_slot` treats anything below zero as a target. This
+  is the single line that makes the feature opt-in: with `timings=None` every slot is a
+  target and the output is byte-identical to what it always was.
+  `tests/test_texture.py::TestBackwardCompatibility` pins that against the exact tab
+  of the library's own demo cadences, and it was written *before* any behaviour
+  changed so every later step is checked against pre-existing output.
+- **A beat is a counting position, not a quarter note.** `TARGET_BEATS = (1, 3)` names
+  beats, and `beats_per_bar` decides which exist, so a 3/4 head targets 1 and 3 while
+  a 2/2 head has only the downbeat. The comparison uses `_BEAT_EPSILON` because a
+  notated beat is a float — a 3/4 bar's second beat is 1.666… — and the earlier draft
+  of `_metric_weight` compared the *tuple index* against `beats_per_bar`, which let a
+  2/2 bar inherit 4/4's second target. `headxml.arrange_xml_head` passes
+  `head.beats_per_bar` through for this reason, and three of the four committed scores
+  are in cut time.
+- **A fill that cannot be filled becomes a target.** If a weak beat has no shell,
+  interval or melody-alone voicing, the step is re-prepared as a principal note and
+  its `role` is corrected to match. The texture is a lighter *texture*, never a missing
+  harmony — the same argument that makes the neck window a penalty rather than a filter.
+  Measured over melid 218, 2 of 30 weak slots take this path, so the reported role and
+  the sounding shape must be allowed to disagree with `metric_weight` but never with
+  each other.
+- **A target that cannot be *played* becomes the melody alone.** The mirror of the rule
+  above, and it exists because `targets` offers a target only `("drop2", "drop3")` — so a
+  narrow shell is not merely outranked on such a step, it is **never generated**, and the
+  cost tuple would not have chosen it anyway (`missing` is index 2, above span). Ebmaj
+  under G4 in "But Not For Me" is the real case: the engine can sound `x-x-8-8-8-x`
+  (span 0) there, but the only complete option a target is offered is `x-6-5-3-8-x`, a
+  five-fret stretch. The step falls back to the melody alone, and warns.
+
+  It is a **fallback, not a re-ranking**, and deliberately the last thing tried. Lowering
+  `GRIP_MAX_SPAN` is a filter that deletes the voicing everywhere; promoting span above
+  `missing` would dissolve the shell and duo families across the whole library. Here a
+  complete chord is still what you get whenever it is playable, and only a shape at the
+  very top of the budget is demoted. The demotion target is the melody alone rather than
+  a shell because a shell is only reachable when the role's palette contains one, and
+  where it does not — a `targets` target — there is nothing to demote *to*.
+  `melody_only` stays **False**: the step does have a harmony, it is simply not spelled
+  out, so the flag would make the annotation claim "no chord".
+- **`grips` is an intersection, not an override.** A caller's `grips` used to be
+  discarded outright by any non-uniform texture (`slot_grips = texture_grips[role]`), so
+  `--grips shell --texture targets` asked for shell-only and silently got a four-note
+  drop-2 on every strong beat. It is now the intersection of the caller's restriction and
+  the role's palette, in the caller's order; `GRIP_PREFERENCE` intersects to the full
+  palette, so the default is untouched. An **empty** intersection is a caller asking for
+  a grip the texture never uses: the step still sounds, and says so on stdout.
+
+  Both entry points need this, and they are separate copies of one loop —
+  `arrange_progression` and `wjazzd.arrange_slots` — because a head read from a file
+  takes the second and a hand-built progression the first. Fixing only one leaves the
+  same flag behaving two different ways depending on the entry point.
+- **An `interval` is a texture, not a harmony, so it breaks the duo's hard rule.**
+  `DUO_DEGREES` refuses a two-note shape under a 3rd or 7th because those notes *are*
+  the chord's function. An interval is not claiming the chord, so it is offered under
+  any melody degree — which is exactly the case a fill most often meets, since a
+  passing tone is by definition not a chord tone. Confining it to fill slots via
+  `TEXTURE_GRIPS` is what makes the looser rule safe. Its second voice comes from the
+  chord's own tones, falling back to the **major scale's** pitch classes when the
+  melody is not in the chord: a diatonic note is accompaniment, a chromatic one would
+  be reharmonising.
+
+`_step_annotation` names the interval it actually is ("6th"), not the grip, and it
+takes the existing precedence for free: a non-chord tone's substitution is annotated
+instead, which is the more important fact about the step. `format_tab_staff` has **no**
+annotation channel at all — the line above the staff carries chord names only — so
+there the guarantee is simply that it draws the shape that sounds.
+
+### Measured, over six corpus heads
+
+| texture | mean sounding notes per melody note | share of steps in four voices |
+|---|---|---|
+| `uniform` (before) | 3.86 | 86.7% |
+| `targets` | 3.39 | 50.8% |
+
+Every head moved the same way, and none of them lost a step: melid 218 (Blue Train)
+goes 4.00 → 3.42 notes per note and 100% → 55% four-voice steps, melid 266 3.97 → 3.34
+and 96.6% → 48.3%. The ~50% ceiling is `TARGET_BEATS` itself — two of four beats — plus
+the small number of fills that fall back. That is the trade the guide describes: the
+chord is stated where it counts and the rest of the bar moves, instead of every note
+carrying four voices.
+
+## Repeated melodies hold the shape
+
+When a step's melody sounds the same pitch as the step before it **and the harmony
+under it is unchanged**, the step is played as a **single note**: the soprano string is
+struck alone and every other string is left blank. Restriking the whole chord is harder
+than the music needs, and it is how a player actually reads a held melody.
+
+The Weimar transcription of "All the Things You Are" is the motivating case: at bars
+61–63 it holds C4 across three chord changes (F-7, Bb-7, Eb7). The repeated Eb7 is a
+genuine hold — one strike, then the note alone. The two *changes* underneath it are not.
+
+The decision is deliberately **presentational, not a voicing change**:
+
+- `arrange_progression` still generates a full `Voicing` for every step. The
+  engine voice-leads from it, `midi_notes()` reports it, and a caller wanting the
+  literal shape still has it via `step.tab_line()`. What changes is that
+  `ArrangementStep.repeated` is set, and the renderers honour it.
+- The flag is set by comparing **sounding pitches** (`max(midi_notes())`), not written
+  note names, because either step may itself have been transposed down an octave by
+  the `HIGH_FRET_LIMIT` rule. A run of four identical notes under one chord yields
+  `[False, True, True, True]`.
+- **The harmony must also be unchanged.** A note repeating across a *chord change* is
+  not a hold: the ringing inner voices belong to the chord the hold began on, so
+  printing the new chord's name over a single struck note claims a harmony that is not
+  sounding. Those steps are harmonised against the new chord and struck in full, which
+  is what the engine already does — only the rendering used to discard it.
+  `normalised_harmony()` supplies the comparison: `harmonized_as` when a strategy
+  substituted a chord, otherwise the written name, canonicalised to `(root, quality)`
+  so `D-7` and `Dm7` are one chord rather than two. The `-7` suffix is an alias of
+  `m7` for exactly this reason.
+- A **melody-only (`NC`) step is never marked repeated**: it has one active fret and
+  no inner voices to hold, so the flag would mean nothing.
+- `collapse` in the staff renderer compares sounding pitches, so an unchanged shape
+  is normally suppressed entirely as a *hold*. A repeated step overrides that and still
+  strikes, because the melody is genuinely re-articulated.
+- `_step_annotation()` adds `(melody repeated - single note)`, because the
+  chord name printed above a single note would otherwise imply a full voicing. The
+  annotation is shared with `format_progression`, so the two cannot disagree.
+
+The other strings are **left blank**, not marked `x`. The player is not being asked
+to mute anything — the strings are simply not part of this step, and five `x` say more
+than the gesture does. This reuses the blank the staff and HTML already use for a voice
+that is not struck. Two earlier drafts were both wrong: `~` ("let ring") across a chord
+change, and then `x`, which overstates the instruction.
+
+The HTML marks the whole column with `_CLASS_REPEAT` (`td.repeat`) and tints it. The
+cells are otherwise empty, so without the tint a repeated note reads as a gap in the
+music rather than as a deliberate single note. The ASCII staff needed no equivalent,
+because a gap in a fixed-width cell is already legible.
+
+## High melodies move down an octave
+
+The user requirement was "anything over the 13th fret, play the soprano on the B
+string and move the harmonisation down". The trap is that this is **not** a
+re-stringing: the B string is five semitones below the high E, so the same written
+pitch sits five frets *higher* on it (`D5` is fret 10 on the high E, fret 15 on the
+B). Simply choosing the B string would move the voicing *up* the neck, and for
+anything above `F5` the B string cannot reach the pitch at all (`B3` + 18 frets =
+`F5`). Dropping the melody an octave is the only thing that actually lowers the
+position — it lands a major tenth below where the note sat on the high E.
+
+| name | role |
+|---|---|
+| `HIGH_FRET_LIMIT = 13` | the neck position above which the move happens |
+| `get_octave_down_candidates(...)` | candidates for the melody an octave down, B string only |
+| `_lower_soprano_strings(top_strings)` | the soprano strings below the high E, so the transposed note is not put straight back on the high E |
+| `ArrangementStep.original_melody` | the written pitch, when the step was transposed |
+| `_note_name(midi)` | spells a MIDI number (`Bb5`); `musthe.Note` parses strings only, so a transposed pitch must be spelled before it can be rebuilt as a `Note` |
+
+Three decisions are load-bearing:
+
+- **`get_all_drop2_voicings` stays pure.** It neither filters by fret nor
+  transposes, so it and `get_octave_down_candidates` cannot recurse into each other.
+  Filtering it was tried first and broke the documented "both families are offered"
+  contract that `tests/test_voicings.py::TestMelodyStringChoices` asserts.
+- **The guard requires candidates to exist.** This repositions a voicing that is
+  playable but too high; a melody unreachable at the written pitch (`B5` is fret 19,
+  `C6` is fret 20 — past the end of the board) is still skipped with a warning.
+  Silently respelling it would hide a real problem behind a plausible-looking tab.
+- **The transposition is reported from the sounding pitch, not the fret.** The
+  octave-down note lands at a *lower* fret, so a fret comparison would read it as
+  untransposed. `max(voicing.midi_notes())` is the reliable test.
+
+**Known limitation.** The decision is per step and applies to the melody only, so a
+melody leaping across the limit can arrive an octave apart from its neighbour. This
+is deliberately unlike `wjazzd.py`'s `--lift auto`, which transposes a whole head at
+once; `--lift auto` cannot tear the line apart, and this can. The trade is
+deliberate: no step is ever left unplayable, at the cost of one melodic interval.
+
+
+## Known limitations
+
+- Voicings use two to four strings, never all six. The melody may be on the high E, B
+  or G string; the A string and low E are inner voices only, so no grip puts the
+  soprano on either. There are no barres. Fret `0` does appear when a voice happens to
+  land on an open string (e.g. `x-2-3-0-3-x`). 6-4-3, 5-3-2 and 6-4-3-2 are the
+  non-contiguous sets.
+- Melodies are still confined to `G3`–`Bb5`: `G3` is the lowest pitch reachable on the
+  G string, `Bb5` the highest on the high E string. The *chord* range reaches further
+  down, to `E2` as a bass voice on the low E string in a 6-4-3 shell.
+- **A fixed max fret span of 5 rules out close position and drop-3 entirely.** A
+  close-position four-note chord under a melody spans a seventh or more, and the four
+  strings below the high E are only five semitones apart in tuning, so the frets come
+  out more than five apart (Cmaj7 close under C5 wants frets 8, 12, 12, 14); drop-3
+  spans a twelfth by construction. The generators exist for a caller who widens
+  `GRIP_MAX_SPAN`, but neither is offered by default because the span invariant could
+  never keep the promise. Raising the span to admit them is a real change to the
+  library's playability contract, not a tuning knob.
+- **A chord tone with no matching inversion in the drop-2 tables falls through to the
+  quality-only fallback**, which can sound a note the chord does not contain — a 9th in
+  the melody of a 13 chord, for example. `voicing_cost`'s first criterion rejects such a
+  shape whenever a correct one exists, so an *arrangement* only hears one when nothing
+  else is playable, but `get_drop2_voicings` still offers it. Completing the tables is
+  a separate piece of work and would change the published drop-2 output.
+  `tests/test_grips.py::TestKnownTableGaps` pins the gap so it stays visible.
+  Measured over 25 transcriptions after the head-path fix, **26.0%** of head steps still
+  carry an inner voice outside the sounding chord, against **23.0%** for the same
+  progressions through the library. The two are close, which is the point: the head
+  path is no longer a second, weaker implementation of the same rule.
+- A melody that can only be voiced above `HIGH_FRET_LIMIT` is moved down an octave,
+  so `step.melody` can be an octave below the written note. The decision is per step
+  and applies to the melody alone, so a leap across the limit can leave one melodic
+  interval an octave wide — unlike `wjazzd.py --lift auto`, which transposes a whole
+  head at once. See
+  [High melodies move down an octave](#high-melodies-move-down-an-octave).
+- A fixed max fret span of 5 and fret range 0–18 is assumed.
+- Non-chord melody notes are only covered for the mappings in
+  `NON_CHORD_TONE_EXTENSIONS` (9ths, 6/9s, 11ths, #11s, b13s, 13ths and the
+  half-diminished 9th) plus the dim7 substitution. An unmapped non-chord tone prints
+  a warning and keeps the legacy quality-only fallback, which can sound the melody
+  over a different chord's shape.
+- A handful of low melodies (around `G3`–`C4`) reach no chord-tone-matched inversion
+  and therefore use the quality-only fallback. Triad shapes double the root, so their
+  second voice can sit up to 10 semitones below the melody — the same span limit, not a
+  new failure mode.
+- **A partial harmonisation means the printed chord name is not every note sounding.**
+  Where a shell or a duo is used, the chord describes the harmony rather than the full
+  voicing, and `_step_annotation` says so (`(shell - 3rd & 7th, partial)`). The full
+  shape is still in `step.voicing`. This is a consequence of the user's own brief —
+  "just harmonising with the 3rd and 7th is fine" — not a defect, but it is a real
+  thing to know before reading a tab.
+- The `sustain` strategy is structural, not rhythmic: `arrange_progression` takes
+  only `(note, quality, name)` triples, so it cannot tell a brief passing note from
+  an accented tension. Holding the inner voices is applied whenever the shape can
+  physically stay put.
+- `7b9`/`7alt` are voiced rootless apart from their new root-in-top inversion;
+  other omitted tones (e.g. a root-on-top `13`) have no template yet.
+- If no voicing matches a melody/chord, `arrange_progression` prints a warning
+  and **skips** that step (rather than raising).
+- **Texture (`texture="targets"`):**
+  - **The target-note rule is a fixed `(1, 3)`.** There is no way to say "chords on
+    beat 1 only", or "fills on beat 2 as well", or to mark a bar that is all target
+    notes — a cadenza or a shout chorus, say. The rule lives in one function
+    (`_roles_for_slot`) and one table (`TARGET_BEATS`), which is where a change would
+    go, but neither is configurable per call.
+  - **A fill that cannot be filled becomes a target.** Measured over melid 218, 2 of
+    30 weak slots take this path, so a `targets` arrangement is not uniformly thin: a
+    reader looking for "chord on the beat, nothing between" will still find a few
+    full chords between. That is deliberate — see the section above — but it means
+    the texture is a *tendency*, not a guarantee.
+  - **Strong-beat fingerings differ from a `uniform` arrangement.** A target is
+    voice-led from the shape before it, which is now thinner, so it does not keep the
+    same position. Correct, but it means the two textures are not comparable
+    fret-for-fret.
+  - **The `interval` grip's diatonic fallback assumes a major key.** `_interval_offsets`
+    reaches for major-scale pitch classes when the melody is outside the chord, which
+    is right in most standards and wrong in a genuinely modal passage, where a
+    non-diatonic note may be the *point*. The `key` argument the plan anticipated was
+    not added: nothing in the pipeline supplies a key, and inferring one from the
+    chord progression would be a guess.

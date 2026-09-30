@@ -45,7 +45,7 @@ Or, without installing, just run everything from the repository root — the mod
 imports directly:
 
 ```bash
-python arranger.py      # built-in demonstration arrangements
+python -m arranger      # built-in demonstration arrangements
 ```
 
 ## Quick start
@@ -83,11 +83,11 @@ string — so `x-x-12-13-13-13` is a voicing on D-G-B-E with the melody on the h
 
 ## Reading a head from a MusicXML file
 
-`arranger.py head` does the same job from a **written melody and chord symbols** —
+`arranger head` does the same job from a **written melody and chord symbols** —
 a lead sheet, a melody-only score, or anything else in MusicXML:
 
 ```bash
-python arranger.py head tests/data/but_not_for_me.mxl --bars 1-5
+python -m arranger head tests/data/but_not_for_me.mxl --bars 1-5
 ```
 
 ```text
@@ -114,8 +114,8 @@ wants `zipfile` and `xml.etree`, which are in the standard library. A plain
 so a clone runs the whole thing.
 
 ```bash
-python arranger.py head tests/data/heres_that_rainy_day.musicxml --tab staff --melody
-python arranger.py head tests/data/i_was_doing_all_right.mxl --bars 1-3 --html head.html
+python -m arranger head tests/data/heres_that_rainy_day.musicxml --tab staff --melody
+python -m arranger head tests/data/i_was_doing_all_right.mxl --bars 1-3 --html head.html
 ```
 
 | flag | default | |
@@ -174,11 +174,11 @@ for triple, bar, beat, duration in head_skeleton(head, "eighths"):
 
 ## Rendering a head from the Weimar Jazz Database
 
-The database holds 456 jazz transcriptions. `arranger.py corpus` turns the **head**
+The database holds 456 jazz transcriptions. `arranger corpus` turns the **head**
 — the tune — of any of them into a chord-melody arrangement:
 
 ```bash
-python arranger.py corpus --melid 218     # Coltrane, "Blue Train"
+python -m arranger corpus --melid 218     # Coltrane, "Blue Train"
 ```
 
 ```text
@@ -197,14 +197,14 @@ Eb7      E5   x-x-12-13-12-12
 ```
 
 This needs `wjazzd.db` (42 MB) from [jazzomat.hfm-weimar.de](http://jazzomat.hfm-weimar.de/),
-placed beside `arranger.py` or pointed at by `WJAZZD_DB`. It is not committed, and
+placed beside the package or pointed at by `WJAZZD_DB`. It is not committed, and
 nothing in the library requires it.
 
 ```bash
-python arranger.py corpus --list                        # the 456 transcriptions
-python arranger.py corpus --melid 342 --vertical        # "All the Things You Are", Metheny
-python arranger.py corpus --melid 266 --bars -4-1       # the pickups, below bar 0
-python arranger.py corpus --melid 218 --section chorus:1  # a solo chorus instead
+python -m arranger corpus --list                        # the 456 transcriptions
+python -m arranger corpus --melid 342 --vertical        # "All the Things You Are", Metheny
+python -m arranger corpus --melid 266 --bars -4-1       # the pickups, below bar 0
+python -m arranger corpus --melid 218 --section chorus:1  # a solo chorus instead
 ```
 
 | flag | default | |
@@ -375,7 +375,7 @@ really are silent.
 From the command line, the same renderer is `--tab staff`:
 
 ```bash
-python arranger.py corpus --melid 218 --tab staff --melody --bars-per-line 4
+python -m arranger corpus --melid 218 --tab staff --melody --bars-per-line 4
 ```
 
 For a single voicing, `Voicing.tab_string()` gives the one-line form while
@@ -419,7 +419,7 @@ Two options shape the output:
 From the command line it is `--musicxml PATH`:
 
 ```bash
-python arranger.py corpus --melid 218 --musicxml head.musicxml
+python -m arranger corpus --melid 218 --musicxml head.musicxml
 ```
 
 A chord name music21 cannot classify — the Weimar notation produces several — is
@@ -437,7 +437,7 @@ write_gp5(steps, "head.gp5", title="Blue Train", subtitle="John Coltrane")
 ```
 
 ```bash
-python arranger.py corpus --melid 218 --gp5 head.gp5
+python -m arranger corpus --melid 218 --gp5 head.gp5
 ```
 
 GP5 is a *tab* format, so every note carries its own fret and string and a shape
@@ -639,8 +639,8 @@ which is about what beats 1 and 3 of a bar would predict. No head lost a step.
 Both front ends expose it:
 
 ```bash
-python arranger.py corpus --melid 218 --texture targets --tab staff
-python arranger.py head tests/data/but_not_for_me.mxl --texture targets
+python -m arranger corpus --melid 218 --texture targets --tab staff
+python -m arranger head tests/data/but_not_for_me.mxl --texture targets
 ```
 
 `interval` is deliberately **not** gated on `DUO_DEGREES`, so a 3rd or a 6th can sit
@@ -778,8 +778,8 @@ framework (there is no pytest dependency). Type checking uses
 with `.venv/bin/pip install pyright` (it is deliberately not a package dependency).
 
 ```bash
-make test       # .venv/bin/python -m unittest discover -s tests -v
-make typecheck  # .venv/bin/pyright arranger.py tests (must report 0 errors)
+make test       # .venv/bin/python -m unittest discover -s tests -t . -v
+make typecheck  # pyright over the modules and tests (must report 0 errors)
 make demo       # run the built-in demonstration
 make build      # build a wheel into dist/
 make clean      # remove caches and build artefacts
@@ -787,13 +787,14 @@ make clean      # remove caches and build artefacts
 
 `make` prefers the repository's `.venv/bin/python`; override it with
 `make test PYTHON=python3`. The equivalent long form is
-`.venv/bin/python -m unittest discover -s tests -v` run from the repository root.
+`.venv/bin/python -m unittest discover -s tests -t . -v` run from the repository
+root (`-t .` is what lets `tests.support` import as a package module).
 
-The library itself lives in a single module, `arranger.py`. `wjazzd.py` is
-separate, optional glue over the Weimar Jazz Database that nothing in the library
-imports, so the library still works with no database present. See `AGENTS.md` for
-the architecture, the corpus design, the coding conventions, and the recipe for
-adding a new chord quality.
+The engine lives in the `arranger` package, eleven modules in a strict dependency
+order. `wjazzd.py` is separate, optional glue over the Weimar Jazz Database that
+nothing in the package imports, so the library still works with no database present.
+See `AGENTS.md` for the module map and the gate, and [docs/](docs/) for the reasoning
+behind the engine and the renderers.
 
 ## Known limitations
 
