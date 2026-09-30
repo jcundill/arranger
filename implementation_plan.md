@@ -1,7 +1,20 @@
 # Implementation Plan
 
-**Status:** in progress. Phase 0 (baseline + tooling) started 2026-09-30.
+**Status:** Phases 0 and 1 **done** (commits `1ae20af`, `b4cadc7`). Phase 2 next.
 **Supersedes:** `docs/history/texture-plan.md` (the completed `texture="targets"` plan, 0.7.0).
+
+| phase | what | state |
+|---|---|---|
+| 0 | baseline + lint gate | **done** — 677 tests OK, pyright 0/0, ruff 0/0 |
+| 1 | `tests/support.py` + `tests/__init__.py` | **done** — 6 helpers de-duplicated, −101 lines |
+| 2 | `Diagnostics`, delete `print` from the library | next |
+| 3 | extract the six duplicated decisions | pending |
+| 4 | `ArrangeOptions` + the equivalence test | pending |
+| 5 | split `arranger.py` into a package | pending |
+| 6 | delete the import cycle | pending |
+| 7 | CLI de-duplication | pending |
+| 8 | docs | pending |
+| 9 | CI and cleanup | pending |
 
 ---
 

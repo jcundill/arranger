@@ -21,7 +21,6 @@ from arranger import (
     MELODY_STRING_CHOICES_FULL,
     NECK_FRET_MAX,
     NECK_FRET_MIN,
-    PITCH_CLASS_NAMES,
     SHELL_DEGREES,
     ChordParser,
     GuitarFretboard,
@@ -30,6 +29,7 @@ from arranger import (
     format_progression,
     supported_string_sets,
 )
+from tests.support import note_name
 
 # A representative spread of the families the library voices well: sevenths, sixths,
 # ninths, a half-diminished and a plain triad.
@@ -46,11 +46,6 @@ QUALITIES = [
     ("Cmaj", "maj"),
     ("C7sus4", "7sus4"),
 ]
-
-
-def note_name(midi):
-    """Spells a MIDI number the way the library spells its own transpositions."""
-    return f"{PITCH_CLASS_NAMES[midi % 12]}{midi // 12 - 1}"
 
 
 def root_midi_of(chord_name):

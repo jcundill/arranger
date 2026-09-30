@@ -10,23 +10,13 @@ import arranger
 from arranger import (
     ArrangementStep,
     VoiceLeadingEngine,
-    Voicing,
     _step_annotation,
     format_progression,
     format_tab_html,
     format_tab_staff,
     write_tab_html,
 )
-
-
-def make_voicing(frets):
-    """Builds a Voicing from raw frets, deriving top_fret/avg_fret as the engine does."""
-    active = [f for f in frets if f >= 0]
-    return Voicing(
-        frets=list(frets),
-        top_fret=max(active) if active else 0,
-        avg_fret=sum(active) / len(active) if active else 0.0,
-    )
+from tests.support import make_voicing
 
 
 class TestVoicingTabBlock(unittest.TestCase):

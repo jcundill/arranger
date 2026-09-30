@@ -44,7 +44,7 @@ install-dev:
 	$(PYTHON) -m pip install -e '.[dev]'
 
 test:
-	$(PYTHON) -m unittest discover -s tests -v
+	$(PYTHON) -m unittest discover -s tests -t . -v
 
 typecheck:
 	@command -v $(PYRIGHT) >/dev/null 2>&1 || { echo "make typecheck needs pyright: $(PYTHON) -m pip install pyright"; exit 1; }

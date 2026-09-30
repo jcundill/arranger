@@ -11,8 +11,9 @@ import unittest
 from typing import List
 from xml.etree import ElementTree
 
-from arranger import ArrangementStep, VoiceLeadingEngine, Voicing
+from arranger import VoiceLeadingEngine
 from tabxml import _READABLE_KINDS, _downgrade_kinds, _sounding
+from tests.support import make_step
 
 try:
     import music21  # noqa: F401
@@ -21,19 +22,6 @@ except ImportError:  # pragma: no cover - depends on the environment
     HAS_MUSIC21 = False
 requires_music21 = unittest.skipUnless(HAS_MUSIC21, "music21 not installed")
 
-def make_step(frets, chord="Cmaj7", melody="B4", **kwargs):
-    """An ArrangementStep over a raw fret list, with the derived voicing fields."""
-    active = [f for f in frets if f >= 0]
-    return ArrangementStep(
-        chord=chord,
-        melody=melody,
-        voicing=Voicing(
-            frets=list(frets),
-            top_fret=max(active) if active else 0,
-            avg_fret=sum(active) / len(active) if active else 0.0,
-        ),
-        **kwargs,
-    )
 
 def _midi(note_element):
     """The MIDI number of a written `<note>`, or None for one with no pitch."""

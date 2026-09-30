@@ -41,7 +41,6 @@ from arranger import (
     STANDARD_TUNING,
     ArrangementStep,
     VoiceLeadingEngine,
-    Voicing,
     _place_bass,
     _step_annotation,
     format_progression,
@@ -51,6 +50,7 @@ from arranger import (
 )
 from tabgp import _sounding_frets
 from tabstaff import _strikes_here
+from tests.support import bass_string, make_voicing, pc, upper_shape
 
 # A staff string row, as opposed to the chord-name or melody line above it. Anchored
 # on the label and the barline the renderer puts right after it (`e*|`, `B |`, ...),
@@ -61,24 +61,6 @@ from tabstaff import _strikes_here
 # the top row is labelled lowercase `e` (the usual tab convention, so the two E rows
 # stay distinct) while the bottom row keeps the uppercase `E` of `STRING_NAMES`.
 _STRING_ROW = re.compile(r"^[eBGDAE][* ]?\|")
-
-
-def make_voicing(frets, bass_midi=None, bass_string=None) -> Voicing:
-    """A `Voicing` over a raw fret list, with the derived fields, and a bass if given.
-
-    Written here rather than imported so this file's hand-built steps carry the same
-    derived values the engine would; `tests/test_guitarpro.py` has its own copy for
-    the same reason, and a shared helper would couple two files that are otherwise
-    independent.
-    """
-    active = [f for f in frets if f >= 0]
-    return Voicing(
-        frets=list(frets),
-        top_fret=max(active) if active else 0,
-        avg_fret=sum(active) / len(active) if active else 0.0,
-        bass_midi=bass_midi,
-        bass_string=bass_string,
-    )
 
 
 def walk(
@@ -96,20 +78,6 @@ def walk(
     return VoiceLeadingEngine.arrange_progression(
         progression, timings=timings, texture="walking_bass"
     )
-
-
-def bass_string(step: arranger.ArrangementStep) -> int:
-    """The string carrying the thumb, narrowed from Optional.
-
-    A plain `int(...)` at the call site satisfies pyright only if it can see the
-    value is not None, and it cannot through a `self.assertIsNotNone` - a checker
-    narrows through a bare `assert`, not through unittest's. Going through one
-    function keeps that narrowing in a single place instead of scattering a cast
-    across every renderer test.
-    """
-    value = step.voicing.bass_string
-    assert value is not None, "this step carries no bass"
-    return value
 
 
 def upper_pitches(step: arranger.ArrangementStep) -> List[int]:
@@ -136,22 +104,6 @@ def names(step: arranger.ArrangementStep) -> str:
     if step.bass is None:
         return "-"
     return PITCH_CLASS_NAMES[step.bass % 12]
-
-
-def upper_shape(frets: List[int], grip: str = "shell") -> Voicing:
-    """A hand-built upper shape, which is what the placement rules are stated against."""
-    active = [fret for fret in frets if fret >= 0]
-    return Voicing(
-        frets=list(frets),
-        top_fret=max(active) if active else 0,
-        avg_fret=sum(active) / len(active) if active else 0.0,
-        grip=grip,
-    )
-
-
-def pc(name: str) -> int:
-    """A pitch class by name, so a test can read as the chord rather than as numbers."""
-    return PITCH_CLASS_NAMES.index(name)
 
 
 class TestValidation(unittest.TestCase):

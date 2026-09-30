@@ -25,12 +25,13 @@ import os
 import tempfile
 import unittest
 
-from arranger import ArrangementStep, VoiceLeadingEngine, Voicing
+from arranger import ArrangementStep, VoiceLeadingEngine
 
 # The shared placement core, reached directly: these tests are about where events
 # land, which is decided in `tabxml` and only turned into beats by `tabgp`.
 from tabgp import format_gp5
 from tabxml import _events, _substitute_steps
+from tests.support import bass_string, make_step
 
 try:
     import guitarpro  # noqa: F401
@@ -55,33 +56,6 @@ def _parse(stream):
 
 # guitarpro numbers the strings 1..6 with 1 = high E; this library indexes 0 = low E.
 _GP_STRING_OFFSET = 6
-
-
-def bass_string(step) -> int:
-    """The string carrying the walking thumb, narrowed from Optional.
-
-    The same helper `tests/test_walking_bass.py` has, written out again rather than
-    imported: these two files are deliberately independent, and a walking step is
-    the only thing in this file that needs the narrowing at all.
-    """
-    value = step.voicing.bass_string
-    assert value is not None, "this step carries no bass"
-    return value
-
-
-def make_step(frets, chord="Cmaj7", melody="B4", **kwargs):
-    """An ArrangementStep over a raw fret list, with the derived voicing fields."""
-    active = [f for f in frets if f >= 0]
-    return ArrangementStep(
-        chord=chord,
-        melody=melody,
-        voicing=Voicing(
-            frets=list(frets),
-            top_fret=max(active) if active else 0,
-            avg_fret=sum(active) / len(active) if active else 0.0,
-        ),
-        **kwargs,
-    )
 
 
 class GuitarProTestCase(unittest.TestCase):
