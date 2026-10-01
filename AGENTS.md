@@ -38,10 +38,10 @@ treat a contradiction between them as a bug in one of them.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **724 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **737 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 5 of those 724, and it is the one that fails if this
+(`tests/test_docs.py` is 5 of those 737, and it is the one that fails if this
 document stops describing the tree.)
 
 Individually:
@@ -64,7 +64,8 @@ arranger/
 │   ├── options.py       #   ArrangeOptions - the knobs as one value
 │   ├── decisions.py     #   decisions both step loops share
 │   ├── steps.py         #   VoiceLeadingEngine and the one step loop
-│   └── render.py        #   format_progression and per-step rendering
+│   ├── render.py        #   format_progression and per-step rendering
+│   └── cli.py           #   the two CLIs' shared flags and output dispatch
 ├── tabstaff.py          # whole-progression staff renderers (ASCII + HTML)
 ├── tabxml.py            # MusicXML export (optional extra: music21)
 ├── tabgp.py             # Guitar Pro 5 export (optional extra: PyGuitarPro)
@@ -91,14 +92,16 @@ dynamically from `arranger.__version__` — that is the single source of truth, 
 ### The engine is a package, and the order is enforced
 
 The engine was one 4290-line module until Phase 5 of
-`implementation_plan.md`. It is now eleven modules in a strict dependency order:
+`implementation_plan.md`. It is now twelve modules in a strict dependency order:
 
 ```
 tuning -> diagnostics -> chords -> grips -> cost -> textures
                                                    |
                             bass <- options -----+----> decisions
                                                    |
-                                                 steps -> render -> (facade)
+                                                 steps -> render -> cli
+                                                            |
+                                                          (facade)
 ```
 
 A module may import only what is *below* it, and

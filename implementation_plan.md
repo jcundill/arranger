@@ -18,13 +18,16 @@ last. Phase 6 is partly done and its remainder is a *decision*, not a task — s
 | 4 | `ArrangeOptions`; `arrange_slots` delegates | **done** `b834cbf` | 714 |
 | 5 | split `arranger.py` into a package | **done** `6aba38b` | 719 |
 | 6 | import cycle | **partly done** `c289879`; rest is a decision | 719 |
-| 7 | CLI de-duplication | **next** — see [Phase 7](#phase-7--cli-de-duplication-next) | — |
+| 7 | CLI de-duplication | **done** | 737 |
 | 8 | docs: `AGENTS.md` was actively wrong | **done** | 724 |
 | 9 | CI and cleanup | pending | — |
 
-**Suggested order from here: 7, then 9.** Phase 8 shipped `AGENTS.md` at 402 lines with
-a routing table, moved the reasoning into `docs/`, and added `tests/test_docs.py` so
-drift fails the suite.
+**Suggested order from here: 9.** Phase 7 shipped `arranger/cli.py`; Phase 6's
+remainder is a *decision*, not a task — see
+[Phase 6](#phase-6--the-import-cycle-cannot-be-deleted).
+
+Phase 8 shipped `AGENTS.md` at 402 lines with a routing table, moved the reasoning
+into `docs/`, and added `tests/test_docs.py` so drift fails the suite.
 
 Supersedes `docs/history/texture-plan.md` (the completed `texture="targets"` plan).
 
@@ -64,10 +67,10 @@ no longer valid JSON.
 make check      # lint + typecheck + test, in that order
 ```
 
-Current measured state, all green: **724 tests OK (skipped=2)**, pyright **0 errors
+Current measured state, all green: **737 tests OK (skipped=2)**, pyright **0 errors
 0 warnings**, ruff **0 errors**. If your change moves any of those numbers, that is
-the signal — not the absence of an error message. (719 was the count before Phase 8;
-the 5 extra are `tests/test_docs.py`.)
+the signal — not the absence of an error message. (724 was the count after Phase 8;
+the 13 extra are `tests/test_cli.py`, added by Phase 7.)
 
 `make check` exists because two things were wrong before it did: a linter was
 absent, and `pyright` silently failed to find the virtualenv. See "Traps" below.
@@ -584,6 +587,24 @@ Each of these cost real time, or nearly shipped a defect.
     it "queries tables that do not exist", sourced entirely from a sentence in
     `AGENTS.md`. Every table it queries exists and its 12 tests pass. *Never delete
     working code on a document's authority; run its tests first.*
+12. **`delattr` on a module attribute is only safe for a lazily synthesised name.**
+    Phase 7 moved a test's stub from `arranger.write_musicxml` to
+    `tabxml.write_musicxml` and kept the old `addCleanup(delattr, ...)`. The first
+    run passed; the **next** run failed six unrelated tests with "cannot import name
+    'write_musicxml' from 'tabxml'", because `tabxml` genuinely *defines* that
+    function and the cleanup had removed it from the module for the rest of the
+    process. The previous patch target was safe only because the facade created the
+    attribute on demand, so deleting it re-armed the fallback. *Restore a stub with
+    `setattr(module, name, original)`, never `delattr` — and note that a cleanup bug
+    is order-dependent, so it presents as intermittent failures in tests that never
+    touched it.*
+13. **Assert the property a function owns, not a downstream artefact of it.** The
+    metre test first checked the rendered HTML for `2/2`; `format_tab_html` does not
+    put the metre on the page at all, so there was nothing to find. Asserting the
+    *arguments the dispatch forwards* is both true and the actual contract. *When an
+    assertion fails because the artefact does not contain what you expected, the
+    premise is usually the thing that is wrong — check whether the property exists
+    before concluding the code is.*
 
 
 
@@ -622,11 +643,14 @@ are pure additions.
   without reading that section. The identity assertion Phase 6 wanted is already in
   as `test_the_facade_reexports_the_public_surface`. **8 is done** — see
   [Phase 8](#phase-8--the-docs-and-a-false-premise-found-while-doing-them).
+  **7 is done** — see
+  [Phase 7](#phase-7--cli-de-duplication-done).
 
-The two phases still to do are written up in full below, because both have an
-acceptance gate that is easy to miss.
+**One phase remains: 9 (CI).** Phase 6's remainder is a decision, not a task. Both
+are written up in full below, because each has an acceptance gate that is easy to
+miss.
 
-### Phase 7 — CLI de-duplication (next)
+### Phase 7 — CLI de-duplication (done)
 
 **One bug found and fixed while preparing this brief.** Both CLIs passed
 `prog="arranger.py corpus"` / `prog="arranger.py head"` to argparse, so every usage
@@ -636,48 +660,102 @@ it is the same class as the `README.md` drift: **the split left the old name in 
 one place a user is guaranteed to read it.** Nothing asserted it, so the suite was
 blind to it — grep for `prog=` before assuming a CLI is clean.
 
-The two CLIs hand-copy the same argparse block. Measured on the current tree:
+**What shipped.** `arranger/cli.py`, holding `add_common_arguments` and
+`render_and_write`, plus `tests/test_cli.py` (13 tests). Measured after:
 
-| | `wjazzd.corpus_cli` | `headxml.head_cli` |
+| | before | after |
 |---|---|---|
-| length | 531 lines (from `wjazzd.py:1411`) | 221 lines (from `headxml.py:1059`) |
-| `add_argument` calls | 21 | 18 |
-| **flags in both** | **17 shared** | |
+| `corpus_cli` | 531 lines | **136** |
+| `head_cli` | 221 lines | **108** |
 
-The 17 shared flags, measured: `--bars`, `--bars-per-line`, `--fallback`,
-`--fret-max`, `--fret-min`, `--gp5`, `--grips`, `--html`, `--melody`,
-`--musicxml`, `--mutes`, `--non-chord-tone`, `--pick`, `--skeleton`, `--tab`,
-`--texture`, `--vertical`. This is defect #4 in the table above, and it is the one
-defect still open — a flag added to one CLI is silently missing from the other.
+Both better than the "~250 / ~140" this brief predicted, because the duplication
+was in the *output dispatch* as much as the argparse block — the html/musicxml/gp5
+tail was ~60 near-identical lines per CLI, which the brief did not count.
 
-**Ship `arranger/cli.py`** with `add_common_arguments(parser)` and
-`render_and_write(args)`. It is a **new file in the package**, so it needs no
-`pyproject.toml` change (`packages = ["arranger"]` already covers it) and no
-`MODULES` change (the Makefile names the directory). It must sit **below `steps`**
-in `test_package_dag.py`'s `ORDER` or be added to `ALLOWED_EDGES` with a reason —
-read that file's `ORDER` before creating it.
+**The measurement that decided the design, which the brief did not have.** The 17
+shared flags were compared field by field, and the result was not what the brief
+assumed:
 
-What must **not** change, and is the acceptance gate:
+- **All 17 agreed on every field of meaning** — `type`, `choices`, `default`,
+  `nargs`, `metavar`. Zero mismatches. So the defect really was only the copy.
+- **11 of the 17 disagreed on their `--help` string.** `--fret-min` and
+  `--fret-max` carry help text in `corpus` and *none at all* in `head`. The two
+  commands also word `--bars`, `--bars-per-line`, `--tab`, `--melody`, `--mutes`,
+  `--html`, `--musicxml`, `--gp5` and `--texture` differently.
 
-- **The two CLIs' output is not being unified.** They legitimately differ: the corpus
-  prints a performer/key subtitle, `head` prints the notated metre. Only the shared
-  argparse and dispatch move.
-- Every flag keeps its current spelling, default, and `--help` text. The parser's
-  *behaviour* is already pinned — `tests/test_wjazzd.py::TestCorpusCli` asserts
-  `SystemExit` for a missing `--melid` and for an unknown choice, and
-  `tests/test_headxml.py` drives `head_cli` through argv — so a flag that changes
-  meaning fails. **The `--help` text itself is not asserted anywhere.** Capture both
-  CLIs' help output before touching them, so a changed default is visible in the diff
-  rather than discovered later.
-- `corpus_cli` and `head_cli` keep their signatures and their `int` return; `main()`
-  calls both.
-- `headxml` imports `argparse` and the renderers *lazily inside* `head_cli` so
-  `load_musicxml` costs nothing. If `cli.py` makes those eager, the import cost
-  moves to module import — measure it before doing that, and keep laziness if you can.
+So the specified `add_common_arguments(parser)` — one argument, no help parameter —
+**could not have preserved both commands' output**, and nothing asserted any of the
+help text, so it would have changed silently. Hence `CommonHelp`: a frozen
+dataclass with a field per *differing* flag, instantiated once per command. The six
+flags the two agree on are written once in the function, and `tests/test_cli.py`
+asserts that the six-and-eleven split still matches the measured difference — so a
+seventh flag cannot drift into the table without a test noticing.
 
-Expect `corpus_cli` 531 → ~250 and `head_cli` 221 → ~140. The remainder is
-corpus-specific (`--section`, `--list`, `--lift`, `--fallback`) or importer-specific,
-and is not duplication.
+**The acceptance gate, and how it was met.** Both CLIs' `--help` output was
+captured to a file *before* any edit and diffed after:
+
+- `head`'s is **byte-identical**.
+- `corpus`'s differs by exactly five lines, all of them `--lift` moving up beside
+  `--section` so the corpus-specific flags are contiguous. No help text, default,
+  spelling or choice list changed anywhere.
+
+That reorder is the phase's only user-visible difference, and it is documented in
+`add_common_arguments`' docstring.
+
+**Placed in `ORDER` last, needing no `ALLOWED_EDGES` entry.** It reads `tuning`,
+`chords`, `grips`, `textures` and `render`, so it goes below `render` and above the
+facade. The brief said "below `steps`" — placement by edges, not by the brief, is
+what the DAG test enforces, and `cli` needs `render`, which is above `steps`.
+
+**The reduction vocabularies are parameters, not imports.** `SKELETON_STRATEGIES`
+and `SLOT_PICKS` belong to `wjazzd`, a top-level module outside the package's DAG.
+Importing them would reach out of the package and make `import arranger.cli` depend
+on the database module. Both CLIs pass them in — `headxml` already borrowed both
+from `wjazzd` — and `tests/test_cli.py` reads the module's AST to assert it never
+imports `wjazzd`.
+
+**Laziness was kept, and it was load-bearing twice.** `argparse` is now imported
+only under `TYPE_CHECKING` (the annotations are strings, so nothing at runtime
+needs it) and the renderers are imported *inside* `render_and_write`. The second
+was not optional: importing `tabstaff` at module scope executes the package
+`__init__` through `arranger.tuning`, which is exactly the cycle Phase 6 measured.
+`headxml`'s `load_musicxml` is as cheap as it was.
+
+**Two test failures the phase caused, both instructive.**
+
+1. `test_a_missing_optional_extra_is_reported_not_raised` stubbed
+   `arranger.write_musicxml`, which only worked because the facade resolves it
+   lazily and an attribute assignment there is what `from arranger import` saw. With
+   the dispatch importing the writer from its real home, the stub no longer
+   intercepted. **The premise was unchanged, so the assertion was kept and the seam
+   moved** — it now patches `tabxml`, which is where the extra is actually checked.
+   *A test's premise can be invalidated by the refactor it exists to protect;
+   invert the assertion, do not delete the test.*
+2. That same test then broke **six other tests** on the following run. Its cleanup
+   was `delattr`, and `tabxml` *defines* `write_musicxml`, so deleting the name
+   removed it from the module permanently — every later import failed with "cannot
+   import name". Restored with `setattr` instead. *`delattr` on a module attribute
+   is only safe when the name was lazily synthesised; against a real definition it
+   is a process-wide, order-dependent bug that reads as a product failure.*
+3. `_imports_of` in `tests/test_package_dag.py` missed `from . import X`, the form
+   the facade uses to bind a submodule without importing a name from it — so the
+   new module read as "imported by nothing". Fixed in the helper rather than by
+   exempting the module, since the same gap would mis-report any future one.
+
+**A test whose premise was wrong, caught before it shipped.** The first attempt at
+asserting the notated metre checked the rendered HTML for `2/2`. It failed — and
+`format_tab_html` does not put the metre on the page at all, so there was nothing
+to assert against. The assertion was rewritten to check the arguments the dispatch
+*forwards*, which is the property it actually owns and which needs neither a
+fixture nor an optional extra. Recorded because "make the test pass" would have
+meant asserting something about the HTML that was never true.
+
+**Three `ALLOWED_EDGES`-worthy surprises that were *not* edges.** No new entry was
+needed, and that is the finding: `cli` sits above everything it imports, the
+vocabularies are passed in rather than reached for, and the renderers are imported
+inside a function. Each was a way the phase could have forced a seventh edge, and
+each was avoided by putting something in the right place rather than by listing an
+exception.
 
 ### Phase 9 — CI (last)
 
@@ -690,7 +768,15 @@ in the workflow header** so an agent does not assume the database tests ran. Bum
 `__version__` to `0.10.0` — and note that `tests/test_docs.py` will then fail until
 the version is updated in any document that states one, which is the point.
 
-There is no CI config today. Phase 9 is also the natural place to sweep the loose
-`*.gp5` files in the repository root, which are export artefacts rather than source.
+There is no CI config today.
+
+**One item in this brief turned out to be already done.** It suggested sweeping the
+loose `*.gp5` files in the repository root as export artefacts. Checked before
+acting, per the `lead_sheet.py` lesson: `.gitignore` has carried `*.gp5` since
+before this plan, and `git status` reports the root-level ones as untracked and
+ignored — never committed. They are already out of the repository, so deleting them
+is a local tidy with no effect on what is tracked. Left alone rather than done for
+appearances. *A cleanup task is also a claim about the tree; verify it before
+performing it.*
 
 ---

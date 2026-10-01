@@ -790,7 +790,7 @@ make clean      # remove caches and build artefacts
 `.venv/bin/python -m unittest discover -s tests -t . -v` run from the repository
 root (`-t .` is what lets `tests.support` import as a package module).
 
-The engine lives in the `arranger` package, eleven modules in a strict dependency
+The engine lives in the `arranger` package, twelve modules in a strict dependency
 order. `wjazzd.py` is separate, optional glue over the Weimar Jazz Database that
 nothing in the package imports, so the library still works with no database present.
 See `AGENTS.md` for the module map and the gate, and [docs/](docs/) for the reasoning

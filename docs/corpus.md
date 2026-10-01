@@ -184,9 +184,17 @@ what they are missing without opting in.
   rather than splitting on a hyphen, which cannot tell a separator from a minus
   sign when both bounds are negative (`-8--1`).
 - **Imports are lazy where they keep `arranger` clean** — `corpus_cli` imports
-  `argparse` and `format_progression` inside the function, and `main()` imports
+  `argparse` and `arranger.cli` inside the function, and `main()` imports
   `wjazzd` inside the branch. `headxml.head_cli` does the same, importing
-  `argparse` *and* every renderer, so `load_musicxml` costs nothing.
+  `argparse` *and* the shared CLI module, so `load_musicxml` costs nothing.
+  `arranger.cli` in turn imports the renderers *inside* `render_and_write`, which
+  is what keeps `tabstaff` — and therefore the package `__init__` — out of
+  `import headxml`.
+- **Both commands take the same seventeen flags**, built by one
+  `add_common_arguments` in `arranger/cli.py`. Their `--help` prose differs on
+  eleven of them, which is why that module carries a `CommonHelp` table per
+  command; `tests/test_cli.py` asserts both that the semantics agree and that the
+  wording still differs where it is meant to.
 - **Tests are guarded** by `skipUnless(DEFAULT_DB.is_file())` so the suite passes
   on a fresh clone with no 42 MB download. Tests needing no database (the
   notation table, the record types, the selector and range parsers) always run.
