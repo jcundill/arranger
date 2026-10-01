@@ -62,8 +62,6 @@ from typing import Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 from arranger import (
     GRIP_PREFERENCE,
-    NECK_FRET_MAX,
-    NECK_FRET_MIN,
     NO_CHORD,
     PITCH_CLASS_NAMES,
     TEXTURE_STYLES,
@@ -1421,13 +1419,7 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
     """
     import argparse
 
-    from arranger import (
-        format_progression,
-        format_tab_staff,
-        write_gp5,
-        write_musicxml,
-        write_tab_html,
-    )
+    from arranger.cli import CORPUS_HELP, add_common_arguments, render_and_write
 
     parser = argparse.ArgumentParser(
         prog="arranger corpus",
@@ -1443,98 +1435,13 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
         help="a span selector such as form:A1, chorus:1, phrase:2, idea:lick; "
              "a * glob is allowed. Defaults to the head.",
     )
-    parser.add_argument(
-        "--bars",
-        default=None,
-        help="narrow to a half-open LO-HI bar range; bounds may be negative for pickups",
-    )
-    parser.add_argument("--skeleton", choices=SKELETON_STRATEGIES, default="eighths")
-    parser.add_argument("--pick", choices=SLOT_PICKS, default="first")
     parser.add_argument("--lift", choices=LIFT_MODES, default="auto")
-    parser.add_argument(
-        "--non-chord-tone",
-        choices=VoiceLeadingEngine.NON_CHORD_TONE_STRATEGIES,
-        default="extension",
-    )
-    parser.add_argument(
-        "--fallback",
-        choices=["diminished"],
-        default=None,
-        help="retry unresolved tensions as dim7 substitutions; replaces the written chord",
-    )
-    parser.add_argument(
-        "--texture",
-        choices=list(TEXTURE_STYLES),
-        default="uniform",
-        help=(
-            "'targets' states a full chord on beats 1 and 3 and fills the notes "
-            "between with a shell, a 3rd/6th or the melody alone; 'uniform' (the "
-            "default) voices every note in full"
-        ),
-    )
-    parser.add_argument(
-        "--fret-min",
-        type=int,
-        default=NECK_FRET_MIN,
-        help=f"lowest fret the selector aims for (default {NECK_FRET_MIN})",
-    )
-    parser.add_argument(
-        "--fret-max",
-        type=int,
-        default=NECK_FRET_MAX,
-        help=f"highest fret the selector aims for (default {NECK_FRET_MAX})",
-    )
-    parser.add_argument(
-        "--grips",
-        nargs="+",
-        choices=GRIP_PREFERENCE,
-        default=list(GRIP_PREFERENCE),
-        help="grip families to use, most preferred first (default: all of them)",
-    )
-    parser.add_argument("--vertical", action="store_true", help="six-line tab per step")
-    parser.add_argument(
-        "--tab",
-        choices=["line", "staff"],
-        default="line",
-        help="'staff' lays the head on one six-line staff, spaced on its real "
-             "rhythm; 'line' (the default) keeps one line per chord",
-    )
-    parser.add_argument(
-        "--melody",
-        action="store_true",
-        help="with --tab staff, add a line of melody note names",
-    )
-    parser.add_argument(
-        "--mutes",
-        action="store_true",
-        help="with --tab staff, spell out the unsounded strings as x",
-    )
-    parser.add_argument(
-        "--bars-per-line", type=int, default=4, help="with --tab staff, bars per line"
-    )
-    parser.add_argument(
-        "--html",
-        default=None,
-        metavar="PATH",
-        help="also write the head to PATH as a self-contained HTML page "
-             "(e.g. --html head.html), and say where it went",
-    )
-    parser.add_argument(
-        "--musicxml",
-        default=None,
-        metavar="PATH",
-        help="also write the head to PATH as MusicXML, for a notation program "
-             "(e.g. --musicxml head.musicxml). A notation staff only; for the "
-             "fingering use --gp5. Needs the optional extra: "
-             "pip install 'jazz-arranger[xml]'",
-    )
-    parser.add_argument(
-        "--gp5",
-        default=None,
-        metavar="PATH",
-        help="also write the head to PATH as a Guitar Pro 5 file "
-             "(e.g. --gp5 head.gp5). Needs the optional extra: "
-             "pip install 'jazz-arranger[gp]'",
+    # The seventeen flags both commands take, with `corpus`'s own help wording.
+    add_common_arguments(
+        parser,
+        CORPUS_HELP,
+        skeleton_strategies=SKELETON_STRATEGIES,
+        slot_picks=SLOT_PICKS,
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -1617,76 +1524,24 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
             f"  note: {arrangement.skeleton.rescued} unresolved tension(s) could be "
             f"rescued with --fallback diminished, which replaces the written chord"
         )
-    print()
-    if args.tab == "staff":
-        # The staff is the only renderer that uses the step timing, so it is the
-        # one that can show where a chord actually falls in the bar.
-        print(
-            format_tab_staff(
-                arrangement.steps,
-                measures_per_line=args.bars_per_line,
-                show_melody=args.melody,
-                show_mutes=args.mutes,
-            )
+    # The HTML page carries the diagnostics the terminal output prints above, so
+    # the saved file explains itself without this run's log.
+    provenance = list(arrangement.notes)
+    if arrangement.skeleton.rescued and not args.fallback:
+        provenance.append(
+            f"{arrangement.skeleton.rescued} unresolved tension(s) could be "
+            f"rescued with --fallback diminished, which replaces the written chord"
         )
-    else:
-        print(format_progression(arrangement.steps, vertical=args.vertical))
-
-    if args.html:
-        # The HTML page carries the diagnostics the terminal output prints above,
-        # so the saved file explains itself without this run's log.
-        provenance = list(arrangement.notes)
-        if arrangement.skeleton.rescued and not args.fallback:
-            provenance.append(
-                f"{arrangement.skeleton.rescued} unresolved tension(s) could be "
-                f"rescued with --fallback diminished, which replaces the written chord"
-            )
-        written = write_tab_html(
-            arrangement.steps,
-            args.html,
-            title=solo.title or f"melid {solo.melid}",
-            subtitle=f"{solo.performer} - {solo.key}".strip(" -"),
-            measures_per_line=args.bars_per_line,
-            show_melody=args.melody,
-            show_mutes=args.mutes,
-            notes=provenance,
-        )
-        print(f"\nwrote {written}")
-
-    if args.musicxml:
-        # The score is written separately from the HTML rather than inside it, so a
-        # run that asks for both produces both, and a run that asks for neither is
-        # unaffected by the optional extra. A missing music21 is a usage problem,
-        # not a crash: the message says which install command fixes it.
-        try:
-            written = write_musicxml(
-                arrangement.steps,
-                args.musicxml,
-                title=solo.title or f"melid {solo.melid}",
-                subtitle=f"{solo.performer} - {solo.key}".strip(" -"),
-            )
-        except ImportError as error:
-            print(f"\n{error}")
-            return 1
-        print(f"wrote {written}")
-
-    if args.gp5:
-        # Written separately from the other outputs for the same reason, and on its
-        # own extra: a run asking for a GP5 file and a run asking for MusicXML must
-        # not require each other's dependency. A missing PyGuitarPro is a usage
-        # problem rather than a crash, exactly as for music21 above.
-        try:
-            written = write_gp5(
-                arrangement.steps,
-                args.gp5,
-                title=solo.title or f"melid {solo.melid}",
-                subtitle=f"{solo.performer} - {solo.key}".strip(" -"),
-            )
-        except ImportError as error:
-            print(f"\n{error}")
-            return 1
-        print(f"wrote {written}")
-    return 0
+    # No metre is passed: a Weimar transcription is 4/4, which is what every
+    # writer's own default already assumed, and the score command in `headxml`
+    # is the one that has a notated metre to pass.
+    return render_and_write(
+        args,
+        arrangement.steps,
+        title=solo.title or f"melid {solo.melid}",
+        subtitle=f"{solo.performer} - {solo.key}".strip(" -"),
+        notes=provenance,
+    )
 
 def arrange_slots(
     triples: Sequence[Tuple[str, str, str]],

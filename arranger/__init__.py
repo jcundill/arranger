@@ -45,7 +45,7 @@ from typing import TYPE_CHECKING, Any, List
 
 from musthe import Note  # re-exported: `from arranger import Note` is used by tests
 
-from . import cost, decisions, options
+from . import cli, cost, decisions, options
 from .bass import (
     BASS_ROLE_ANCHOR,
     BASS_ROLE_APPROACH,
@@ -363,6 +363,7 @@ __all__ = [
     "bass",
     "bass_cost",
     "chords",
+    "cli",
     "cost",
     "decisions",
     "default_diagnostics",

@@ -1135,10 +1135,19 @@ class TestHeadCli(unittest.TestCase):
         `headxml` needs nothing optional at all, so this is about the *export* it
         was also asked for: the command must still print the tab it had already
         produced rather than dying on the way out. The writer is stubbed rather
-        than uninstalled, because `arranger` resolves it lazily through
-        `__getattr__` and patching that is the test's business, not the code's.
+        than uninstalled, so the test says what it means on a machine that has
+        music21 installed.
+
+        **The stub moved with the code.** It used to patch `arranger`, because
+        `head_cli` reached the writer through the facade's lazy `__getattr__` and
+        an attribute assignment there was what `from arranger import` then saw.
+        Phase 7 moved the dispatch into `arranger.cli`, which imports the writer
+        from its real home in `tabxml` - which is where the extra is actually
+        checked. The property under test is untouched; only the seam the test
+        hooks onto changed, and the new seam is the better one: it does not depend
+        on the facade's resolution strategy staying the same.
         """
-        import arranger
+        import tabxml
 
         def refuse(*args, **kwargs):
             raise ImportError(
@@ -1146,10 +1155,15 @@ class TestHeadCli(unittest.TestCase):
                 "Install it with: pip install 'jazz-arranger[xml]'"
             )
 
-        # `arranger` publishes the renderers through a module-level `__getattr__`,
-        # so a plain attribute assignment is what `from arranger import` then sees.
-        arranger.write_musicxml = refuse
-        self.addCleanup(delattr, arranger, "write_musicxml")
+        original = tabxml.write_musicxml
+        tabxml.write_musicxml = refuse
+        # Restored with `setattr`, never `delattr`. `tabxml` *defines* this
+        # function, so deleting the name removes it from the module for good and
+        # every later test in the process fails with "cannot import name". The
+        # previous version of this test patched `arranger`, where the name came
+        # from a lazy `__getattr__` and `delattr` simply re-armed the fallback -
+        # which is why the mistake only became possible once the seam moved.
+        self.addCleanup(setattr, tabxml, "write_musicxml", original)
 
         handle, out = tempfile.mkstemp(suffix=".musicxml")
         os.close(handle)

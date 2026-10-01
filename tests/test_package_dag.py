@@ -47,6 +47,7 @@ ORDER = [
     "decisions",    # the decisions both step loops share
     "steps",        # the engine and the one step loop
     "render",       # per-step rendering
+    "cli",          # the two front ends' shared argparse block and output dispatch
 ]
 
 # The edges the split could not avoid, each with the reason it is sound. Anything
@@ -76,13 +77,23 @@ def _imports_of(module: str) -> Set[str]:
     Read from the source rather than from `sys.modules`: a function-local import
     shows up here, which is exactly what should be caught, and it does not depend
     on what some other test happened to import first.
+
+    Two spellings bind the same sibling, and both are counted. `from .cost import
+    x` names the module outright; `from . import cost` binds it as a submodule
+    instead, and that is the form the facade uses for the modules it re-exports
+    without importing a name from them. Reading only the first would report
+    `cost` and `cli` as modules nothing imports.
     """
     tree = ast.parse((PACKAGE / f"{module}.py").read_text())
-    return {
-        node.module
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ImportFrom) and node.level == 1 and node.module
-    }
+    named: Set[str] = set()
+    bound: Set[str] = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.level == 1:
+            if node.module:
+                named.add(node.module)
+            else:
+                bound.update(alias.name for alias in node.names)
+    return named | bound
 
 
 

@@ -1069,18 +1069,8 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     """
     import argparse
 
-    from arranger import (
-        NECK_FRET_MAX,
-        NECK_FRET_MIN,
-        TEXTURE_STYLES,
-        VoiceLeadingEngine,
-        format_progression,
-        format_tab_staff,
-        write_gp5,
-        write_musicxml,
-        write_tab_html,
-    )
-    from wjazzd import parse_bar_range
+    from arranger.cli import HEAD_HELP, add_common_arguments, render_and_write
+    from wjazzd import SKELETON_STRATEGIES, SLOT_PICKS, parse_bar_range
 
     parser = argparse.ArgumentParser(
         prog="arranger head",
@@ -1090,73 +1080,12 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument(
         "--part", default=None, help="score-part id to read (default: the melody part)"
     )
-    parser.add_argument(
-        "--bars",
-        default=None,
-        help="narrow to a half-open LO-HI bar range; bounds may be negative",
-    )
-    parser.add_argument("--skeleton", choices=SKELETON_STRATEGIES, default="eighths")
-    parser.add_argument("--pick", choices=SLOT_PICKS, default="first")
-    parser.add_argument(
-        "--non-chord-tone",
-        choices=VoiceLeadingEngine.NON_CHORD_TONE_STRATEGIES,
-        default="extension",
-    )
-    parser.add_argument(
-        "--fallback",
-        choices=["diminished"],
-        default=None,
-        help="retry unresolved tensions as dim7 substitutions; replaces the written chord",
-    )
-    parser.add_argument(
-        "--texture",
-        choices=list(TEXTURE_STYLES),
-        default="uniform",
-        help=(
-            "'targets' states a full chord on beats 1 and 3 of the notated bar and "
-            "fills the notes between with a shell, a 3rd/6th or the melody alone; "
-            "'uniform' (the default) voices every note in full"
-        ),
-    )
-    parser.add_argument("--fret-min", type=int, default=NECK_FRET_MIN)
-    parser.add_argument("--fret-max", type=int, default=NECK_FRET_MAX)
-    parser.add_argument(
-        "--grips",
-        nargs="+",
-        choices=GRIP_PREFERENCE,
-        default=list(GRIP_PREFERENCE),
-        help="grip families to use, most preferred first (default: all of them)",
-    )
-    parser.add_argument("--vertical", action="store_true", help="six-line tab per step")
-    parser.add_argument(
-        "--tab",
-        choices=["line", "staff"],
-        default="line",
-        help="'staff' lays the head on one six-line staff, spaced on its real rhythm",
-    )
-    parser.add_argument(
-        "--melody", action="store_true", help="with --tab staff, add melody note names"
-    )
-    parser.add_argument(
-        "--mutes", action="store_true", help="with --tab staff, spell out the unsounded strings"
-    )
-    parser.add_argument(
-        "--bars-per-line", type=int, default=4, help="bars per system on the staff"
-    )
-    parser.add_argument(
-        "--html", default=None, metavar="PATH", help="also write a self-contained HTML page"
-    )
-    parser.add_argument(
-        "--musicxml",
-        default=None,
-        metavar="PATH",
-        help="also write a MusicXML score (needs: pip install 'jazz-arranger[xml]')",
-    )
-    parser.add_argument(
-        "--gp5",
-        default=None,
-        metavar="PATH",
-        help="also write a Guitar Pro 5 file (needs: pip install 'jazz-arranger[gp]')",
+    # The seventeen flags both commands take, with `head`'s own help wording.
+    add_common_arguments(
+        parser,
+        HEAD_HELP,
+        skeleton_strategies=SKELETON_STRATEGIES,
+        slot_picks=SLOT_PICKS,
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -1219,61 +1148,19 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
         print("  nothing could be voiced from this file")
         return 1
     print()
-    if args.tab == "staff":
-        # The staff is the only renderer that uses the step timing, so it is the
-        # one that can show where a chord actually falls in the bar.
-        print(
-            format_tab_staff(
-                steps,
-                beats_per_bar=head.beats_per_bar,
-                measures_per_line=args.bars_per_line,
-                show_melody=args.melody,
-                show_mutes=args.mutes,
-            )
-        )
-    elif args.vertical:
-        print(format_progression(steps, vertical=True))
-    else:
-        print(format_progression(steps))
-
-    if args.html:
-        written = write_tab_html(
-            steps,
-            args.html,
-            title=title,
-            beats_per_bar=head.beats_per_bar,
-            measures_per_line=args.bars_per_line,
-            show_melody=args.melody,
-            show_mutes=args.mutes,
-            notes=notes,
-        )
-        print(f"\nwrote {written}")
-
-    # The two optional renderers are written separately from each other and from
-    # the HTML, so a run asking for one does not need the others' dependency, and
-    # a missing one is a usage problem rather than a crash - exactly as in
-    # `wjazzd.corpus_cli`.
-    #
-    # The notated metre goes to both, as it does to the staff and the HTML above.
-    # Omitting it left each writer on its own `beats_per_bar=4` default, so a head
-    # in cut time was written as 4/4: every bar's contents laid out against the
-    # wrong grid, and a tune notated 2/2 displayed as common time. `beat_type` is
-    # what makes it 2/2 rather than 2/4 - the bar length is the same either way, so
-    # this is the difference between the right metre and a wrong-looking one.
-    for flag, writer in (("musicxml", write_musicxml), ("gp5", write_gp5)):
-        target = getattr(args, flag)
-        if not target:
-            continue
-        try:
-            written = writer(
-                steps,
-                target,
-                title=title,
-                beats_per_bar=head.beats_per_bar,
-                beat_type=head.beat_type,
-            )
-        except ImportError as error:
-            print(f"\n{error}")
-            return 1
-        print(f"wrote {written}")
-    return 0
+    # The notated metre goes to every renderer, as it does to the terminal output
+    # above. Omitting it left each writer on its own `beats_per_bar=4` default, so
+    # a head in cut time was written as 4/4: every bar's contents laid out against
+    # the wrong grid, and a tune notated 2/2 displayed as common time. `beat_type`
+    # is what makes it 2/2 rather than 2/4 - the bar length is the same either
+    # way, so this is the difference between the right metre and a wrong-looking
+    # one. The corpus command passes nothing here, because a Weimar transcription
+    # is 4/4 and every writer already assumes that.
+    return render_and_write(
+        args,
+        steps,
+        title=title,
+        notes=notes,
+        beats_per_bar=head.beats_per_bar,
+        beat_type=head.beat_type,
+    )
