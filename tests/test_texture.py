@@ -45,6 +45,31 @@ MINOR_CADENCE = [
     ("B4", "7", "G7"),
     ("C5", "maj7", "Cmaj7"),
 ]
+def minor_cadence_tabs():
+    """
+    The published fingerings for MINOR_CADENCE, as the library produces them now.
+
+    Defined here as a function rather than a literal in each test, because two files
+    assert this tab and a second copy of the literals is a second thing to forget when
+    a change is deliberate. Callers compare against it rather than typing it.
+
+    The G7 is a drop-3 on strings 5-3-2-1 (`x-8-x-7-8-7`) where it was a drop-2 at
+    `x-x-5-7-6-7` - the same G7, span 1 against span 2. See
+    `test_the_demo_cadences_still_produce_the_same_tab`, which pins both cadences and
+    says why each shape moved.
+    """
+    return [
+        "x-x-10-10-10-10", "x-x-9-9-8-8", "x-8-x-7-8-7", "x-x-9-9-8-8",
+    ]
+
+
+def major_cadence_tabs():
+    """The published fingerings for MAJOR_CADENCE. See `minor_cadence_tabs`."""
+    return [
+        "x-x-10-10-10-10", "x-10-x-9-10-9", "x-10-10-x-10-9", "x-x-11-10-10-10",
+    ]
+
+
 MAJOR_CADENCE = [
     ("D5", "m7", "Dm7"),
     ("C#5", "7", "A7"),
@@ -423,15 +448,30 @@ class TestBackwardCompatibility(unittest.TestCase):
         position in `voicing_cost`, and those two shapes are the same chord one fret
         apart in position but two frets apart in span: the old one spans 7-9-7-9, the
         new one is a barre at the ninth. Same notes, a playable position.
+
+        The G7 in the minor cadence moved again, to `x-8-x-7-8-7` - a drop-3 on strings
+        5-3-2-1 where it was a drop-2 at `x-x-5-7-6-7`. Both sound G7 (F3 D4 G4 B4 is the
+        same 3, 5, b7 and root the drop-2 carried) and both sit under the B4 melody; the
+        drop-3 is span 1 against the drop-2's 2, and span outranks position by design.
+        `drop3` is in GRIP_PREFERENCE, so it is a candidate, and criterion 0 now counts
+        wrong notes instead of flagging them.
         """
         self.assertEqual(
             [s.tab_line() for s in VoiceLeadingEngine.arrange_progression(MINOR_CADENCE)],
-            ["x-x-10-10-10-10", "x-x-9-9-8-8", "x-x-5-7-6-7", "x-x-9-9-8-8"],
+            minor_cadence_tabs(),
         )
         self.assertEqual(
             [s.tab_line() for s in VoiceLeadingEngine.arrange_progression(MAJOR_CADENCE)],
-            ["x-x-10-10-10-10", "x-x-7-9-8-9", "x-x-9-9-9-9", "x-x-11-10-10-10"],
+            major_cadence_tabs(),
         )
+        # Three of the four moved, all for the same reason: `drop3` and `drop24` are in
+        # the palette now, so a complete chord can be built on the skipped-bass sets and
+        # a tighter shape outranks the old one. The A7 is a drop-3 (G3 E4 A4 Db5) where it
+        # was a drop-2 at `x-x-7-9-8-9` - the same A7, span 1 against span 2. The Am7
+        # likewise. The Dm(maj7) is unchanged, and staying that way was not automatic:
+        # that spelling does not parse, so it has no tone set, and counting wrong notes
+        # against an empty set made a two-note duo look *better* than a four-note chord.
+        # An unreadable chord now leaves the criterion unasked - see cost.voicing_cost.
 
     def test_the_targets_texture_pins_its_exact_tab(self):
         """
@@ -476,6 +516,12 @@ class TestBackwardCompatibility(unittest.TestCase):
         A change to the grip tables can reach the default path too, so the two textures
         are pinned on the same bar rather than the default being trusted to an older
         fixture that carries no timing at all.
+
+        Seven of the eight moved to `drop24` on the skipped-bass set. `x-x-7-9-6-8`
+        (F-A-C-F over Fmaj7) became `x-7-7-x-6-8` on strings 5-4-2-1 - the same four
+        pitches, span 1 against span 2, because a four-note shape may now put its bass
+        on a lower string than the contiguous block. `targets` is unchanged: its fills
+        are shells and its targets are drop-2, neither of which takes the new set.
         """
         steps = VoiceLeadingEngine.arrange_progression(
             BUT_NOT_FOR_ME, timings=BUT_NOT_FOR_ME_TIMINGS, texture="uniform"
@@ -483,14 +529,14 @@ class TestBackwardCompatibility(unittest.TestCase):
         self.assertEqual(
             [s.tab_line() for s in steps],
             [
-                "x-x-7-9-6-8",
-                "x-x-7-9-6-8",
-                "x-x-7-9-6-7",
-                "x-x-7-9-6-8",
-                "x-x-10-12-10-10",
+                "x-7-7-x-6-8",
+                "x-7-7-x-6-8",
+                "x-7-7-x-6-7",
+                "x-7-7-x-6-8",
+                "x-10-10-x-10-10",
                 "x-x-12-12-11-13",
-                "x-x-7-9-6-8",
-                "8-x-8-9-10-x",
+                "x-7-7-x-6-8",
+                "x-5-5-x-5-5",
             ],
         )
 
@@ -660,13 +706,20 @@ class TestTargetsTexture(unittest.TestCase):
         # are deliberately not compared: a target is voice-led from the shape before
         # it, and that shape is now a shell or an interval, so the same position
         # would be the wrong answer. What must not vary is the voice count and grip.
+        FOUR_NOTE_GRIPS = ("drop2", "drop3", "drop24", "drop2_6432")
         for plain, thin in zip(uniform, targets):
             if thin.metric_weight > 0:
                 self.assertEqual(
                     len(plain.voicing.active_frets()),
                     len(thin.voicing.active_frets()),
                 )
-                self.assertEqual(plain.grip, thin.grip)
+                # Both are complete four-note chords; *which* family supplied one is the
+                # selector's business, and with `drop3` and `drop24` in the palette the
+                # two textures need not agree - a target is voice-led from the shape
+                # before it, which is thinner, and a different string set can follow
+                # from that. What must hold is that a target never drops below four notes.
+                self.assertIn(thin.grip, FOUR_NOTE_GRIPS, thin.tab_line())
+                self.assertIn(plain.grip, FOUR_NOTE_GRIPS, plain.tab_line())
 
     def test_a_weak_beat_never_sounds_a_note_outside_the_chord(self):
         """

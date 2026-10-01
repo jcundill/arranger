@@ -45,20 +45,31 @@ from .tuning import (
 # the idiom that reproduces the library's original output exactly. It is a separate
 # family, not a third string set for `drop2`, precisely so that idiom survives.
 #
-# `drop3` and `closed` are generated but deliberately *not* listed here, because at
-# this span limit neither produces a playable shape in practice. A close-position
-# four-note chord under a melody spans a seventh or more, and the four strings below
-# the high E are only five semitones apart in tuning, so the frets come out more than
-# five apart: Cmaj7 in close position under C5 wants frets 8, 12, 12 and 14. Drop-3 is
-# wider still, reaching an octave below close position's bass.
+# `drop3` and `drop24` are offered; `closed` still is not.
 #
-# The generators stay and are correct, so a caller who raises GRIP_MAX_SPAN reaches
-# them - but they were *unreachable rather than merely unplayable* until the string
-# order and the drop-3 derivation were fixed, so "a caller can widen the span" was a
-# claim this comment made and the code did not honour. Both defects are now pinned by
-# tests/test_grips.py::TestDerivedGripShapes. Advertising either as a default would
-# still be a promise the span invariant cannot keep.
-GRIP_PREFERENCE: Tuple[str, ...] = ("drop2", "drop2_6432", "shell", "duo")
+# Drop-3 and close position were originally excluded because neither produces a playable
+# shape at this span limit: a close-position four-note chord under a melody spans a
+# seventh or more, and the four strings below the high E are only five semitones apart,
+# so the frets come out more than five apart. **That was true of the contiguous block and
+# stopped being true of the shape.** With a bass permitted to skip to a lower string,
+# drop-3 is playable across most of the register and drop-2 & 4 across nearly all of it,
+# and measured on the Weimar corpus both are as tight as drop-2 - frequently span 0 to 2.
+#
+# They are here for a second reason too, which is the one that matters. A melody that is
+# *not* a chord tone leaves drop-2 with no template and no shell, so its quality-only
+# fallback offers shapes carrying two to four notes the chord does not contain. Drop-3 and
+# drop-2 & 4 derive from the close stack under the melody, which keeps every *other*
+# voice a chord tone: measured over every quality and every melody, they produce zero
+# wrong notes where drop-2 produces hundreds. Offering them is what puts a correct
+# voicing in the candidate set for the selector to find - see `cost.voicing_cost`, whose
+# first criterion counts wrong notes rather than flagging them. `closed` stays out
+# because it is the one of the three that still cannot be fretted inside the budget.
+#
+# Ordered after drop-2 so the idiomatic four-note reading wins a tie, and before the
+# shells so a complete chord is preferred to a partial harmonisation.
+GRIP_PREFERENCE: Tuple[str, ...] = (
+    "drop2", "drop3", "drop24", "drop2_6432", "shell", "duo",
+)
 
 # The maximum distance, in frets, from the lowest to the highest active fret. Five for
 # every four-note shape and every three-note shell; a duo is only ever two fingers, so
@@ -74,6 +85,7 @@ GRIP_MAX_SPAN: Dict[str, int] = {
     "drop2": 5,
     "drop2_6432": 5,
     "drop3": 5,
+    "drop24": 5,
     "closed": 5,
     "shell": 5,
     "duo": 4,
@@ -121,6 +133,34 @@ GRIP_STRING_SETS: Dict[str, Tuple[Tuple[Tuple[int, ...], int], ...]] = {
     "drop2": (
         ((2, 3, 4, 5), 5), ((1, 3, 4, 5), 5),
         ((1, 2, 3, 4), 4), ((0, 2, 3, 4), 4),
+    ),
+    # Drop-2 & 4: the second and fourth voices of a close stack each lowered an octave.
+    #
+    # The widest four-note shape there is - twenty semitones from the melody to the bass
+    # for a Cmaj7 - and it is *unplayable on four neighbouring strings*: the low voice
+    # lands more than an octave below where a contiguous block can put it. What makes it
+    # playable is the same bass-skipping rule as everywhere else, and here it has to skip
+    # an **inner** string as well, because the shape is not just deeper but differently
+    # spaced. Measured across sevenths, ninths and sixths over the whole working register,
+    # two sets win essentially every melody:
+    #
+    #   (1, 2, 4, 5)  strings 1-2-4-5   skip the G; 49 wins at span 2, 47 at span 1
+    #   (2, 3, 5, 6)  strings 2-3-5-6   skip the B; 24 wins at span 1, 11 at span 2
+    #
+    # against 1 win for everything else combined. Both keep the melody on a long string
+    # and put the two dropped voices on strings whose tuning suits their spacing. The
+    # contiguous blocks are offered too, so a shape that does fit one is still reachable
+    # and the selector can prefer the familiar layout on a tie.
+    #
+    # Stored as **string indices**, high to low, like every other entry - so the
+    # conventional numbers above read 1-2-4-5 as (5, 4, 2, 1). Written the other way
+    # round these produced a set containing string index 6, which does not exist, and
+    # `_place_template` indexed off the end of the fret list.
+    "drop24": (
+        ((5, 4, 2, 1), 5), ((5, 3, 2, 0), 5),
+        ((5, 4, 3, 2), 5), ((5, 4, 3, 1), 5),
+        ((4, 3, 1, 0), 4), ((4, 2, 1, 0), 4),
+        ((4, 3, 2, 1), 4), ((4, 3, 2, 0), 4),
     ),
     # 6-4-3-2: low E, D, G and B with the melody on the B string, skipping the A
     # string so the low E can carry the bass. It is the one default four-note set that
@@ -617,7 +657,7 @@ def _interval_set_for_grip(
     if grip == "drop2":
         return DROP2_INTERVAL_SETS.get(quality, [])
 
-    if grip not in ("drop3", "closed"):
+    if grip not in ("drop3", "closed", "drop24"):
         return []
 
     stack = _close_stack_offsets(tones, melody_midi, root_pc)
@@ -630,6 +670,21 @@ def _interval_set_for_grip(
     _, v1, v2, v3 = stack
     if grip == "closed":
         return [[0, v1, v2, v3]]
+
+    # Drop 2 & 4: the SECOND and FOURTH voices each drop an octave. In the names below
+    # `v1` is the *second* voice (stack[1]), `v2` the third and `v3` the fourth - which is
+    # the source of the confusion this shape invites. So the two that drop are `v1` and
+    # `v3`, and `v2` is the one that stays, nearest the melody. The sounding order top to
+    # bottom is therefore v2, then v1 and v3 an octave down: `[0, v2, v1 - 12, v3 - 12]`.
+    if grip == "drop24":
+        # The same root-doubled triad problem as drop-3, and worse: a triad's fourth
+        # voice is the doubled root, and dropping *it* as well as v1 puts the chord's
+        # identity a further octave down while the third voice keeps the one it has.
+        # The doubled root stays where the stack put it.
+        if root_pc is not None and (melody_midi + v3) % 12 == root_pc % 12:
+            return [[0, v2, v1 - 12, v3]]
+        return [[0, v2, v1 - 12, v3 - 12]]
+
     # Drop 3: the THIRD voice from the top drops an octave. It therefore lands below
     # the bottom voice, so it is the *last* note in the template rather than the
     # third - the shape closes with a 2nd at the bottom. Writing [0, v1, v2 - 12, v3]
@@ -1344,6 +1399,7 @@ def get_grip_voicings(
 
       drop2   four voices, from the hand-authored tables
       drop3   four voices, a close stack with the third voice dropped
+      drop24  four voices, a close stack with the second *and* fourth dropped
       closed  four voices in close position under the melody
       shell   three voices: the 3rd, the 7th, and one more
       duo     two voices, and only under a root or a 5th (see DUO_DEGREES)

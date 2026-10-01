@@ -643,15 +643,23 @@ class TestNoRegression(unittest.TestCase):
         now goes through `_Slot`, the union and the walking-bass role rule, and the
         guarantee is that none of that is visible unless the texture asks for it.
         """
-        from tests.test_texture import MAJOR_CADENCE, MINOR_CADENCE
+        from tests.test_texture import (
+            MAJOR_CADENCE,
+            MINOR_CADENCE,
+            major_cadence_tabs,
+            minor_cadence_tabs,
+        )
 
+        # Imported, not re-typed. The docstring above says the point is that these tabs
+        # are defined once; a second copy of the literals is a second thing to forget
+        # to update, and it is how a stale pin survives a deliberate change.
         self.assertEqual(
             [s.tab_line() for s in VoiceLeadingEngine.arrange_progression(MINOR_CADENCE)],
-            ["x-x-10-10-10-10", "x-x-9-9-8-8", "x-x-5-7-6-7", "x-x-9-9-8-8"],
+            minor_cadence_tabs(),
         )
         self.assertEqual(
             [s.tab_line() for s in VoiceLeadingEngine.arrange_progression(MAJOR_CADENCE)],
-            ["x-x-10-10-10-10", "x-x-7-9-8-9", "x-x-9-9-9-9", "x-x-11-10-10-10"],
+            major_cadence_tabs(),
         )
 
     def test_adding_a_bass_does_not_change_the_melody(self):

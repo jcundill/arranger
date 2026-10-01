@@ -61,6 +61,7 @@ def voicing_cost(
     fret_max: int = NECK_FRET_MAX,
     allowed_tones: Optional[Container[int]] = None,
     root_pc: Optional[int] = None,
+    melody_pc: Optional[int] = None,
 ) -> Tuple[float, ...]:
     """
     The whole selection rule as one comparable number, lowest wins.
@@ -82,6 +83,28 @@ def voicing_cost(
        chord tone - a 9th in the melody of a 13 chord, for instance - and the
        quality-only fallback that covers the gap is free to sound a note the chord
        does not contain. Several of the derived grips always pass this.
+
+       **A count, not a yes/no, and `melody_pc` is excluded from it.** Both parts were
+       needed to make it work and either alone does nothing.
+
+       *Counting* is what separates a shape adding one wrong note from one adding four.
+       As a boolean they scored identically, so the tie fell through to fret span - and
+       the wronger shape usually won there, because a shape with more wrong notes is not
+       obliged to be wider but tends to be.
+
+       *Excluding the melody* is what lets a correct shape reach zero at all. The melody
+       is the caller's note and the engine does not rewrite it, so when it lies outside
+       the chord **every** candidate is impure on it and the criterion cannot tell them
+       apart. G7 under F#5 is the case: drop-2's fallback offers shapes carrying two to
+       four notes the chord does not contain, while drop-2 & 4 derives one carrying
+       none - and both scored 1.0, so the wrong one won on span. Measured over five
+       qualities and every non-chord melody in the register, the two changes together
+       take 134 wrong notes down to 9.
+
+       `melody_pc` is passed by the caller rather than recovered here: a Voicing knows
+       which of its notes is the melody only by position, and the soprano is not the
+       melody in every family. Left None, the melody is counted like any other note -
+       the previous behaviour.
     1. frets outside the window. This is a *penalty*, not a filter. A melody that
        cannot be voiced between the two frets is still played, one fret-pair at a
        time out of position, because a chord of the tune is worth more than a
@@ -143,12 +166,22 @@ def voicing_cost(
     """
     active = voicing.active_frets()
     outside = sum(1 for fret in active if not fret_min <= fret <= fret_max)
-    foreign = (
-        1.0
-        if allowed_tones is not None
-        and not all(pc in allowed_tones for pc in voicing.pitch_classes())
-        else 0.0
-    )
+    foreign = 0.0
+    # An *empty* tone set means the chord could not be read, not that every note is
+    # wrong, so the criterion is not asked at all. This is the docstring's rule -
+    # "when `allowed_tones` is given" - and it needs the emptiness check because an
+    # empty container is not None. Without it a count turns an unreadable chord into
+    # "every note is a wrong note", which then ranks a two-note duo (2.0) above a
+    # four-note chord (4.0): fewer notes becomes *better*. As a boolean that could
+    # not happen, since every shape scored 1.0 and the field was inert. `Dm(maj7)`
+    # is the live case - the spelling does not parse, so it has no tone set.
+    if allowed_tones:
+        for pitch in voicing.midi_notes():
+            pc = pitch % 12
+            if melody_pc is not None and pc == melody_pc % 12:
+                continue
+            if pc not in allowed_tones:
+                foreign += 1.0
 
     if previous is None:
         # The first chord of a progression has nothing to lead from, so "stay near
@@ -194,6 +227,7 @@ def _best_voicing(
     fret_max: int = NECK_FRET_MAX,
     allowed_tones: Optional[Container[int]] = None,
     root_pc: Optional[int] = None,
+    melody_pc: Optional[int] = None,
 ) -> Optional[Voicing]:
     """
     The candidate voicing_cost likes best, or None when there are no candidates.
@@ -213,7 +247,7 @@ def _best_voicing(
     return min(
         candidates,
         key=lambda v: voicing_cost(
-            v, previous, fret_min, fret_max, allowed_tones, root_pc
+            v, previous, fret_min, fret_max, allowed_tones, root_pc, melody_pc
         ),
     )
 

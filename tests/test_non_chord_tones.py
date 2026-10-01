@@ -303,10 +303,17 @@ class TestNonChordToneStrategiesEndToEnd(unittest.TestCase):
             [step.voicing.tab_string() for step in result],
             ["x-x-9-9-8-8", "x-x-9-10-9-10", "x-x-9-9-8-8"],
         )
-        self.assertEqual([step.grip for step in result], ["drop2"] * 3)
         self.assertEqual(result[1].strategy, "diminished")
         self.assertEqual(result[1].harmonized_as, "Bdim7")
         self.assertEqual(sorted(result[1].voicing.pitch_classes()), [2, 5, 8, 11])
+        # Still a complete four-note Bdim7, not a shell. It briefly was one while
+        # criterion 0 was scoring the *substituted* voicing against the *written*
+        # Cmaj7: every Bdim7 candidate was then three foreign notes, so purity could not
+        # separate them and `missing` picked a three-note shell. Purity is now asked
+        # about the chord that is sounding - see steps.py, where `allowed_tones` comes
+        # from `harmonized_as` when a strategy substituted one.
+        self.assertEqual(result[1].grip, "drop2")
+        self.assertEqual(len(result[1].voicing.active_frets()), 4)
         # Two inner voices move one fret each way: 4 semitones of total movement
         self.assertEqual(
             VoiceLeadingEngine.calculate_pitch_leading_distance(result[0].voicing, result[1].voicing),
@@ -338,7 +345,14 @@ class TestNonChordToneStrategiesEndToEnd(unittest.TestCase):
         """
         result = self.engine.arrange_progression(self.all_of_me, non_chord_tone="legacy")
         step = result[1]
-        self.assertEqual(step.voicing.tab_string(), "x-x-11-11-10-10")
+        # The exact inversion is not asserted, and the docstring above says why: with
+        # `drop24` in the palette the fallback now lands on `x-10-10-x-12-10`
+        # (G-C-B-D) rather than `x-x-11-11-10-10` (Db-F#-A-D). Both are complete
+        # four-note shapes under a written Cmaj7, both put D5 on top, and both are
+        # wrong chords - which is the whole point of the `legacy` strategy. What is
+        # asserted below is that the strategy still declines to fix the melody.
+        self.assertEqual(step.voicing.grip, "drop24")
+        self.assertEqual(max(step.voicing.midi_notes()), Note("D5").midi_note())
         # A Cmaj7 is C E G B; nothing the fallback sounds belongs to it.
         self.assertFalse(set(step.voicing.pitch_classes()) <= {0, 4, 7, 11})
         # It is a *complete* four-note shape, still the wrong chord, and the melody D5

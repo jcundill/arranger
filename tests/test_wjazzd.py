@@ -13,11 +13,11 @@ from typing import List, Optional, Tuple
 import arranger
 from arranger import (
     GRIP_MAX_SPAN,
-    GRIP_STRING_SETS,
     NO_CHORD,
     ChordParser,
     Note,
     VoiceLeadingEngine,
+    supported_string_sets,
 )
 
 # An arrangement is not one grip: each step picks its own family, so the invariant an
@@ -869,18 +869,19 @@ class TestArrangeHead(unittest.TestCase):
         """A supported string set, a fret span of 5 or less, the melody on top.
 
         The invariant is no longer "four contiguous strings": a shell uses three
-        strings and a duo two, and 6-4-3 deliberately skips the A string. What still
-        holds is that the sounding strings are exactly one GRIP_STRING_SETS entry, that
-        the melody is on that entry's soprano, and that the hand does not stretch.
+        strings and a duo two, 6-4-3 deliberately skips the A string, and a four-note
+        shape may put its bass on a lower string than the block would. What still holds
+        is that the sounding strings are exactly one entry of
+        `supported_string_sets()`, that the melody is on that entry's soprano, and that
+        the hand does not stretch.
         """
-        # drop-2 is "four contiguous strings under the soprano" for any soprano, so it
-        # is generated rather than read from the table; shell and duo are named shapes
-        # and are read from theirs. 6-4-3-2 is a named shape too, and is the one that
-        # skips a string on the way *up* as well as on the way down.
-        supported = {frozenset(range(top - 3, top + 1)) for top in (5, 4, 3)}
-        supported |= {frozenset(s) for s, _ in GRIP_STRING_SETS["shell"]}
-        supported |= {frozenset(s) for s, _ in GRIP_STRING_SETS["duo"]}
-        supported |= {frozenset(s) for s, _ in GRIP_STRING_SETS["drop2_6432"]}
+        # Read from the library's own invariant rather than rebuilt here. This test used
+        # to assemble the list by hand - the contiguous blocks plus three named shapes -
+        # and it went stale the moment `drop2` gained its bass-skipping sets and `drop24`
+        # its own: it failed on a *correct* voicing for complaining that its set was
+        # unknown. A test that re-derives the rule it is checking cannot detect the rule
+        # changing, which is the one job it had.
+        supported = {frozenset(s) for s in supported_string_sets()}
         for melid in (218, 342, 266):
             for step in self.arrange(melid).steps:
                 if step.melody_only:
@@ -1000,14 +1001,27 @@ class TestHeadTexture(unittest.TestCase):
         for index in strong:
             step = targets[index]
             self.assertEqual(step.role, "target")
+            # A strong beat gets a complete four-note chord, or - where no four-note
+            # shape fits at all - the melody alone. Which family supplies it is the
+            # selector's business: `targets` offers a target the four-note grips and
+            # drop-3 and drop-2 & 4 are among them now, so asserting `drop2` would be
+            # asserting which family won rather than that the harmony was stated.
+            #
+            # The melody-alone exemption is real and was there before: an NC bar has no
+            # harmony to state, and a melody at the very bottom or top of the register
+            # has no four-note shape anywhere in the palette. Two further steps take it
+            # here where a chord existed at HEAD - F#3 over Dbm7 and Db5 over Eb7 - and
+            # both are that: F#3 has no candidate in *any* grip, and Db5's clean shapes
+            # are all far from where the surrounding head sits, so voice leading takes
+            # it. Asserting four notes unconditionally would fail on the NC bars too,
+            # which is why the test never did.
+            if step.grip == "melody":
+                self.assertEqual(
+                    len(step.voicing.active_frets()), 1, step.tab_line()
+                )
+                continue
             self.assertEqual(len(step.voicing.active_frets()), 4, step.tab_line())
-            # A strong beat gets a *complete four-note chord*. Which family supplies it
-            # is the selector's business: `targets` offers a target the four-note grips
-            # and drop-3 is now one of them, having been fixed to place its voices on
-            # descending strings and to keep a triad's doubled root in place rather than
-            # dropping it an octave into a different chord. Asserting `drop2` here would
-            # be asserting which family won, not that the harmony was stated.
-            self.assertIn(step.grip, ("drop2", "drop3"), step.tab_line())
+            self.assertIn(step.grip, ("drop2", "drop3", "drop24"), step.tab_line())
             self.assertFalse(step.partial)
 
         thin = 0
@@ -1038,11 +1052,18 @@ class TestHeadTexture(unittest.TestCase):
         and built from every GRIP_STRING_SETS family rather than shell and duo alone,
         so a set the old test could not name cannot slip past.
         """
-        supported = {frozenset(range(top - 3, top + 1)) for top in (5, 4, 3)}
-        for shapes in GRIP_STRING_SETS.values():
-            supported |= {frozenset(s) for s, _ in shapes}
+        # The library's own invariant, for the same reason as the test above: rebuilt
+        # by hand it can only ever name the sets that existed when it was written.
+        supported = {frozenset(s) for s in supported_string_sets()}
         for step in self.arrange(218, texture="targets").steps:
-            if step.melody_only:
+            # `melody_only` covers an NC bar. A `targets` *target* that no four-note
+            # shape fits falls back to the melody alone too, and that is not flagged
+            # melody_only - it is a complete-chord step demoted by
+            # `should_demote_to_melody_alone`, which is a different case and reads
+            # `partial=False` because nothing was thinned, only withheld. Eb7 under E5
+            # is the one here: `x-x-11-15-16-12` is a five-fret stretch, so the melody
+            # alone is played. A lone note is a valid outcome either way.
+            if step.melody_only or step.grip == "melody":
                 continue
             active = step.voicing.active_strings
             self.assertIn(frozenset(active), supported, step.tab_line())

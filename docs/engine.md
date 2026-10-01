@@ -313,6 +313,7 @@ inclusively would describe a reach the hand does not make, and would make the li
 | `drop2` | 4 | `DROP2_INTERVAL_SETS`, verbatim — the tables are hand-authored |
 | `drop2_6432` | 4 | 6-4-3-2, found by search — the one default set that reaches the low E |
 | `drop3` / `closed` | 4 | derived from a close stack; not offered by default |
+| `drop24` | 4 | **drop-2 & 4** — the second *and* fourth voices lowered an octave; not offered by default |
 | `shell` | 3 | `SHELL_DEGREES` plus one more note |
 | `duo` | 2 | root or 5th in the melody plus the 3rd |
 
@@ -327,6 +328,20 @@ the rule is enforced where a table has no entry for the melody's degree, and
 `_drop2_for_untabled_degree` derives that shape from the close stack under *this*
 melody, falling back to `_guide_tone_drop2` if the derivation drops a guide tone. An
 empty result offers nothing rather than borrowing another degree's template.
+
+**Drop-2 & 4** lowers the second and fourth voices of a close stack an octave each — the
+widest four-note shape there is, twenty semitones from melody to bass for a Cmaj7. It
+is unplayable on four neighbouring strings and becomes frettable only through the
+skipping rule below, and it needs to skip an *inner* string as well as the bass. Across
+sevenths, ninths and sixths over the working register, two sets win essentially every
+melody: **1-2-4-5** (skip the G) and **2-3-5-6** (skip the B), against one win for
+everything else combined. Not in `GRIP_PREFERENCE`: it is reachable, but it spans
+nearly two octaves and is a colour rather than the default four-note reading.
+
+Note the local names, which cost a wrong answer here: in `_, v1, v2, v3 = stack`, `v1`
+is the **second** voice. So drop-2 & 4 drops `v1` and `v3` and keeps `v2` beside the
+melody — `[0, v2, v1 - 12, v3 - 12]`. The other order sounds four chord tones too, and
+so passes a tone-purity check while being the wrong shape.
 
 **A four-note shape need not occupy four neighbouring strings.** The lowest voice may
 skip to a lower string — what `drop2_6432` does with the low E, generalised. The

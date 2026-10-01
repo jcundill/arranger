@@ -228,6 +228,7 @@ def select_step_voicing(
     fret_max: int,
     allowed_tones: Optional[Container[int]],
     root_pc: Optional[int],
+    melody_pc: Optional[int] = None,
     bass_pc: Optional[int] = None,
     bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]] = None,
 ) -> Optional[Voicing]:
@@ -266,4 +267,5 @@ def select_step_voicing(
         fret_max,
         allowed_tones=allowed_tones,
         root_pc=root_pc,
+        melody_pc=melody_pc,
     )

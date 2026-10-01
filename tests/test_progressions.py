@@ -39,7 +39,13 @@ class TestProgressions(unittest.TestCase):
         # Verify tabs match expected smooth shapes
         self.assertEqual(result[0].voicing.tab_string(), "x-x-12-13-13-13")
         self.assertEqual(result[1].voicing.tab_string(), "x-x-12-13-12-13")
-        self.assertEqual(result[2].voicing.tab_string(), "x-x-10-12-11-11")
+        self.assertEqual(result[2].voicing.tab_string(), "x-10-10-x-11-11")
+        # The Cm7 is a drop-2 & 4 where it used to be a drop-2 on a lower block. Both
+        # sound Cm7 - Eb3 Ab3 Bb4 Eb5 is b3 and b7 plus the root and 5th, the same four
+        # notes - but this one keeps the hand where the previous two left it. `drop24` is
+        # in GRIP_PREFERENCE and criterion 0 now counts wrong notes rather than flagging
+        # them, so a clean shape that used to tie with a wrong one on span wins outright.
+        self.assertEqual(result[2].voicing.grip, "drop24")
 
     def test_autumn_leaves_minor_cadence(self):
         """
@@ -60,9 +66,15 @@ class TestProgressions(unittest.TestCase):
         # where no full shape fits. Every note still belongs to its own chord.
         self.assertEqual(
             [step.voicing.tab_string() for step in result],
-            ["x-x-7-8-8-8", "x-x-7-8-7-8", "x-x-5-7-5-6"],
+            ["x-x-7-8-8-8", "x-x-7-8-7-8", "x-5-5-x-5-6"],
         )
-        self.assertEqual([step.grip for step in result], ["drop2"] * 3)
+        # The Gm6 is a drop-2 & 4 where it used to be a drop-2 at `x-x-5-7-5-6`. Same
+        # four notes of Gm6 in both, and the drop-2 & 4 keeps the hand where the first
+        # two chords left it rather than dropping three frets to follow the melody onto
+        # a lower string.
+        self.assertEqual(
+            [step.grip for step in result], ["drop2", "drop2", "drop24"]
+        )
         self.assertTrue(not any(step.partial for step in result))
 
     def test_major_ii_v_i_progression(self):

@@ -301,10 +301,11 @@ class VoiceLeadingEngine:
         fret_max: int = NECK_FRET_MAX,
         allowed_tones: Optional[Container[int]] = None,
         root_pc: Optional[int] = None,
+        melody_pc: Optional[int] = None,
     ) -> Tuple[float, ...]:
         """See `cost.voicing_cost` - the library's central invariant is there."""
         return _cost.voicing_cost(
-            voicing, previous, fret_min, fret_max, allowed_tones, root_pc
+            voicing, previous, fret_min, fret_max, allowed_tones, root_pc, melody_pc
         )
 
     @classmethod
@@ -316,10 +317,11 @@ class VoiceLeadingEngine:
         fret_max: int = NECK_FRET_MAX,
         allowed_tones: Optional[Container[int]] = None,
         root_pc: Optional[int] = None,
+        melody_pc: Optional[int] = None,
     ) -> Optional[Voicing]:
         """See `cost._best_voicing`."""
         return _cost._best_voicing(
-            candidates, previous, fret_min, fret_max, allowed_tones, root_pc
+            candidates, previous, fret_min, fret_max, allowed_tones, root_pc, melody_pc
         )
 
     @staticmethod
@@ -902,15 +904,40 @@ class VoiceLeadingEngine:
             # The root enables the bass-function tie-break in voicing_cost; it is None
             # for a chord whose name cannot be parsed, which simply leaves that
             # criterion unasked rather than guessing a bass.
+            #
+            # The tones are those of the chord **actually sounding**, which is
+            # `harmonized_as` where a non-chord-tone strategy substituted one. Scoring
+            # the substitute against the written chord asked the wrong question: a
+            # Bdim7 voicing under a written Cmaj7 is three foreign notes and every
+            # candidate alike, so criterion 0 could not separate them and `missing` then
+            # picked a three-note shell over the complete Bdim7 drop-2 that was
+            # generated and correct. The step sounded D4-Ab4-D5 - two tones of Bdim7
+            # rather than four - under a strategy whose whole purpose is to state the
+            # substituted chord.
+            #
+            # `harmonized_as` is a chord *name* ("Bdim7"), not a quality, so it is
+            # parsed rather than passed to `canonical_quality` directly: that returns
+            # the whole name unchanged for an unrecognised spelling, and
+            # `get_chord_tones` then yields an empty set, which silently switches the
+            # criterion off rather than asking it the right question.
+            substitute = harmonized_as if harmonized_as is not None else name
+            _sub_root, sub_quality = ChordParser.parse_chord_name(substitute)
+            if sub_quality is None:
+                sub_quality = ChordParser.canonical_quality(chord_type)
+                substitute = name
             best_voicing = select_step_voicing(
                 candidates,
                 prev_voicing,
                 fret_min,
                 fret_max,
-                allowed_tones=ChordParser.get_chord_tones(
-                    ChordParser.canonical_quality(chord_type), name
-                ),
+                allowed_tones=ChordParser.get_chord_tones(sub_quality, substitute),
                 root_pc=cls._chord_context(chord_type, name)[1],
+                # The melody is the caller's note and is never rewritten, so when it
+                # lies outside the chord every candidate is impure on it. Excluding it
+                # lets a shape that adds no *other* wrong note reach zero - see
+                # cost.voicing_cost, where counting rather than flagging makes the
+                # difference between one wrong note and four.
+                melody_pc=melody_note.midi_note() % 12,
                 bass_pc=None if bass_pcs is None else bass_pcs.get(index),
                 bass_cost=bass_cost_for,
             )

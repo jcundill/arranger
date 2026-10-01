@@ -57,9 +57,15 @@ class TestVoiceLeading(unittest.TestCase):
 
     def test_arranged_chord_movement_is_the_same_under_both_metrics(self):
         """
-        For a same-family arrangement (the existing minor ii-V-i) both metrics report
-        identical movement, confirming the pitch metric did not disturb existing
-        voice leading.
+        Within one string set the two movement metrics agree, and on a contiguous
+        four-string block the fret deltas *are* the semitone deltas.
+
+        The third chord is now a drop-2 & 4 on strings 5-4-2-1, so the second pair
+        spans two different string sets and the metrics part company: fret-distance 5,
+        pitch-distance 18. That is the documented behaviour, not a regression -
+        `calculate_pitch_leading_distance` exists precisely because a skipped string
+        makes a fret delta a different quantity from a semitone delta, and this
+        arrangement now contains one.
         """
         progression = [
             ("F5", "m7b5", "Dm7b5"),
@@ -70,10 +76,25 @@ class TestVoiceLeading(unittest.TestCase):
 
         self.assertEqual(len(result), 3)
         for previous, current in zip(result, result[1:]):
-            self.assertEqual(
-                VoiceLeadingEngine.calculate_voice_leading_distance(previous.voicing, current.voicing),
-                VoiceLeadingEngine.calculate_pitch_leading_distance(previous.voicing, current.voicing),
+            same_strings = (
+                previous.voicing.active_strings == current.voicing.active_strings
             )
+            fret = VoiceLeadingEngine.calculate_voice_leading_distance(
+                previous.voicing, current.voicing
+            )
+            pitch = VoiceLeadingEngine.calculate_pitch_leading_distance(
+                previous.voicing, current.voicing
+            )
+            if same_strings:
+                self.assertEqual(fret, pitch, f"{previous.tab_line()} -> {current.tab_line()}")
+            else:
+                # Different string sets: the pitch metric is the meaningful one, and
+                # the fret metric is only a proxy for it.
+                self.assertNotEqual(
+                    fret, pitch,
+                    f"{previous.tab_line()} -> {current.tab_line()} spans two "
+                    "string sets yet the metrics still agree - check the pitch metric",
+                )
 
 
 if __name__ == "__main__":
