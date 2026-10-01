@@ -16,6 +16,15 @@ would have quietly changed one command's `--help`, which nothing asserts. Hence
 the split below: **the six flags whose help is identical are written once here**,
 and the eleven that differ are `CommonHelp` values named for their command.
 
+**Sixteen now, because `--vertical` was removed.** It was one of the six whose
+help is identical, and it is gone: the six-line block per chord it selected is
+`format_progression`'s former second branch, and a whole-progression staff is what
+a player reads, so `tabstaff` covers it. The eleven that differ are untouched, so
+the count only fell on this side of the split - five flags are now written once
+here. The measurement above is kept as the record of what it was; `tests/
+test_cli.py` asserts the current split in both directions, so the removal cannot
+silently leave one of the two sides stale.
+
 That is the design constraint worth stating: the duplication this fixes is the
 *argument*, not the *prose*. Prose that genuinely differs - `corpus`'s `--bars`
 mentions pickups because a Weimar transcription has an anacrusis, `head`'s
@@ -73,8 +82,9 @@ class CommonHelp:
     One field per flag that `corpus` and `head` spell differently. A flag absent
     from this dataclass has its help written once in `add_common_arguments`,
     because the two commands agree on it - `fallback`, `grips`, `non_chord_tone`,
-    `pick`, `skeleton` and `vertical` are those six, and there is deliberately no
-    way to add a seventh without stating the new text twice.
+    `pick` and `skeleton` are those five, and there is deliberately no way to add a
+    sixth without stating the new text twice. (`vertical` was the sixth until it
+    was removed along with the branch of `format_progression` it selected.)
 
     `Optional` rather than `str` because `head` gives `--fret-min` and
     `--fret-max` no help at all, and `argparse`'s own default for `help` is
@@ -160,17 +170,17 @@ def add_common_arguments(
     skeleton_strategies: Sequence[str],
     slot_picks: Sequence[str],
 ) -> None:
-    """Add the 17 flags both front ends take, to `parser`.
+    """Add the 16 flags both front ends take, to `parser`.
 
     `help_text` supplies the prose for the eleven flags whose wording differs
-    between the commands; the other six are written once here because the two
+    between the commands; the other five are written once here because the two
     agree on them. `skeleton_strategies` and `slot_picks` are the reduction
     vocabularies, passed in because they belong to `wjazzd` - see the module
     docstring for why they are not imported.
 
     The order the flags are added in is the order they appear in `--help`. Each
     command now adds its own flags first and this block after, so the shared
-    seventeen appear in the same relative order in both. `head`'s listing is
+    sixteen appear in the same relative order in both. `head`'s listing is
     unchanged by this; `corpus`'s moves `--lift` up to sit with its other
     corpus-specific flags rather than between `--pick` and `--non-chord-tone`,
     which is the only visible difference either command's `--help` has.
@@ -214,7 +224,6 @@ def add_common_arguments(
         default=list(GRIP_PREFERENCE),
         help="grip families to use, most preferred first (default: all of them)",
     )
-    parser.add_argument("--vertical", action="store_true", help="six-line tab per step")
     parser.add_argument(
         "--tab",
         choices=["line", "staff"],
@@ -281,18 +290,22 @@ def render_and_write(
 
     if args.tab == "staff":
         # The staff is the only renderer that uses the step timing, so it is the
-        # one that can show where a chord actually falls in the bar.
+        # one that can show where a chord actually falls in the bar - and, with its
+        # `show_timing` rows, the only one that says how long it sounds. `beat_type`
+        # reaches it for the same reason it reaches the two score writers: a head
+        # in cut time is 2/2, and a count without a denominator is not a metre.
         print(
             format_tab_staff(
                 steps,
                 beats_per_bar=bars,
+                beat_type=beat,
                 measures_per_line=args.bars_per_line,
                 show_melody=args.melody,
                 show_mutes=args.mutes,
             )
         )
     else:
-        print(format_progression(steps, vertical=args.vertical))
+        print(format_progression(steps))
 
     if args.html:
         written = write_tab_html(
@@ -301,6 +314,7 @@ def render_and_write(
             title=title,
             subtitle=subtitle,
             beats_per_bar=bars,
+            beat_type=beat,
             measures_per_line=args.bars_per_line,
             show_melody=args.melody,
             show_mutes=args.mutes,

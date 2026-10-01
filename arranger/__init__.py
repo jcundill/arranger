@@ -260,19 +260,20 @@ def main() -> None:
             _print_step(step)
 
     # Example 8: Tab rendering. format_progression() returns the tab as a string
-    # and prints nothing itself, so callers choose what to do with it. Here it is
-    # used once horizontally and once as vertical six-line tab blocks.
+    # and prints nothing itself, so callers choose what to do with it. It is the
+    # compact form - one line per chord. (It also rendered a six-line block per
+    # chord behind `vertical=True`, reachable from the CLI as --vertical; both
+    # were removed, because the staff below is what a player actually reads.)
     print("\n--- TAB RENDERING: format_progression(), one line per chord ---")
     print(format_progression(result_major))
 
-    print("\n--- TAB RENDERING: format_progression(vertical=True), six lines per chord ---")
-    print(format_progression(result_major, vertical=True))
-
     # Example 8: The whole progression on one six-line staff. format_tab_staff()
     # is the standard reading order - high E on top, chord names above, barlines
-    # between bars - so it is what a player would actually read off the page. These
-    # steps carry no timing, so the chords fall on consecutive beats; a transcribed
-    # head (see `arranger.py corpus --tab staff`) is spaced on its real rhythm.
+    # between bars - so it is what a player would actually read off the page. With
+    # `show_timing` (the default) it also states the metre and the note value of
+    # every column; these steps carry no timing, so there is no rhythm to state and
+    # only the metre is drawn. A transcribed head (see `arranger corpus --tab
+    # staff`) has a written rhythm and gets the note values too.
     # The renderer is reached through the module's lazy export rather than imported
     # at the top, which is what keeps tabstaff importable on its own; see __getattr__.
     import tabstaff
@@ -281,7 +282,8 @@ def main() -> None:
     print(tabstaff.format_tab_staff(result_major, show_melody=True))
 
     # Example 8: The same cadence with the timing the corpus loader supplies, so the
-    # chords sit on their own beats and a barline falls between the two bars.
+    # chords sit on their own beats, a barline falls between the two bars, and the
+    # note-value row has something to say.
     timed_major = engine.arrange_progression(major_progression)
     for index, step in enumerate(timed_major):
         step.bar, step.beat, step.duration = index, 1.0, 1.0

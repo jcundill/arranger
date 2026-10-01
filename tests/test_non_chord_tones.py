@@ -1,3 +1,5 @@
+import contextlib
+import io
 import unittest
 
 from musthe import Note
@@ -8,6 +10,7 @@ from arranger import (
     ChordParser,
     VoiceLeadingEngine,
     Voicing,
+    _print_step,
     _step_annotation,
     format_progression,
 )
@@ -410,12 +413,27 @@ class TestNoChordSteps(unittest.TestCase):
         self.assertEqual(self.engine.arrange_progression([("D2", NO_CHORD, NO_CHORD)]), [])
 
     def test_annotation_is_shared_by_both_renderings(self):
-        """format_progression and _step_annotation report the same text."""
+        """format_progression and _print_step report the same text.
+
+        The second assertion used to be the `vertical=True` block, which printed the
+        same annotation over a six-line header. That renderer is gone, and the two
+        consumers of `_step_annotation` that remain are `format_progression` and
+        `_print_step` - the compact line and the demo's one-line summary. They share
+        the function precisely so a melody-only step cannot read one way in the
+        library and another in `make demo`.
+
+        Note it is *not* `tab_line()`: that is the voicing's own cells with no room
+        for an annotation, which is why the pairing is the two renderers rather than
+        the renderer and its own step method.
+        """
         steps = self.engine.arrange_progression([("F4", NO_CHORD, NO_CHORD)])
         expected = _step_annotation(steps[0])
         self.assertEqual(expected, " (no chord - melody alone)")
         self.assertIn(expected, format_progression(steps))
-        self.assertIn(expected, format_progression(steps, vertical=True))
+        printed = io.StringIO()
+        with contextlib.redirect_stdout(printed):
+            _print_step(steps[0])
+        self.assertIn(expected, printed.getvalue())
 
     def test_ordinary_step_annotation_is_unchanged(self):
         """A chord tone still gets an empty annotation."""

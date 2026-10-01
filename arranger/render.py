@@ -1,20 +1,28 @@
-"""Per-step rendering: one line per chord, or a six-line vertical block.
+"""Per-step rendering: one compact line per chord.
 
 `format_progression` is the compact renderer, and it is **pure** - it returns a
 string and prints nothing, so the caller stays in control of the output. The
 whole-progression staff renderers are a different shape of output and live in
 `tabstaff`.
 
+It used to render a six-line vertical block per step too, behind a `vertical`
+argument that the `--vertical` CLI flag existed only to reach. Both were removed:
+the staff in `tabstaff` is what a player reads, and this is now the one-line
+summary alone. The vertical form survives on a single voicing -
+`Voicing.tab_block()` - which is not the same surface.
+
 `_step_annotation` is shared by `format_progression` and the demonstration, so the
 two renderings cannot drift apart. A step can be several things at once - a
 non-chord tone, a repeated melody, a partial shell, a thumb note - and the
 precedence between them is the whole content of that function.
 
-The tab-cell primitives (`_MUTED_CELL`, `_cells_from_frets`,
-`_tab_block_from_cells`) are **not** defined here: `Voicing.tab_block` calls them
-and `Voicing` sits below this module, so they live in `tuning` and are imported
-from there. `_STAFF_CELL_WIDTH` was the second of two identical definitions of one
-constant - `tabstaff` had the other - and is imported for the same reason.
+The tab-cell primitives (`_MUTED_CELL`, `_cells_from_frets`) are **not** defined
+here: `Voicing.tab_block` calls them and `Voicing` sits below this module, so they
+live in `tuning` and are imported from there. `_STAFF_CELL_WIDTH` was the second of
+two identical definitions of one constant - `tabstaff` had the other - and is
+imported for the same reason. `_tab_block_from_cells` is still in `tuning` for
+`Voicing.tab_block`, but this module no longer renders a block, so it no longer
+imports it.
 """
 
 from __future__ import annotations
@@ -29,7 +37,6 @@ from .tuning import (
     ArrangementStep,
     _cells_from_frets,
     _note_name,
-    _tab_block_from_cells,
 )
 
 __all__ = ["_MUTED_CELL", "_STAFF_CELL_WIDTH", "format_progression"]
@@ -151,41 +158,40 @@ def _step_cells(step: ArrangementStep) -> List[str]:
     return cells
 
 
-def format_progression(steps: List[ArrangementStep], vertical: bool = False) -> str:
+def format_progression(steps: List[ArrangementStep]) -> str:
     """
     Renders an arranged progression as tab and returns it as a string.
 
     This is a pure renderer: it prints nothing and writes nothing to stdout, so
-    the caller stays in control of the output.
-
-    With vertical=False (the default) each step is one line, most compact first:
+    the caller stays in control of the output. Each step is one line, most compact
+    first:
 
         Dm7      D5  x-x-10-10-10-10
         G7       B4  x-x-5-7-6-7
         Cmaj7    C5  x-x-9-9-8-8
 
-    With vertical=True each step is rendered as a full six-line vertical tab
-    block, preceded by its chord, melody and any non-chord-tone annotation.
+    This used to take `vertical=True` to render each step as a six-line vertical
+    block, and the `--vertical` CLI flag existed only to reach it. Both are gone:
+    a whole-progression staff is what a player reads, and `format_tab_staff` in
+    `tabstaff` renders one, with the chords on their real beats. **This renderer is
+    now the compact one-line summary and nothing else**, which is the shape the
+    demo and `make demo` print.
+
+    The six-line form is not gone from the library, only from here: a single
+    voicing still renders vertically through `Voicing.tab_block()` / `.tab()` and
+    `ArrangementStep.tab_block()`, which is where `_tab_block_from_cells` lives.
 
     Args:
         steps: arrangement steps, typically from VoiceLeadingEngine.arrange_progression.
-        vertical: render the six-line vertical tab instead of the one-line form.
 
     Returns:
         The rendered tab, with steps separated by newlines.
     """
-    if not vertical:
-        return "\n".join(
-            f"{step.chord:<8} {step.melody:<3} "
-            f"{_step_annotation(step)} {'-'.join(_step_cells(step))}".rstrip()
-            for step in steps
-        )
-
-    blocks = []
-    for step in steps:
-        header = f"{step.chord} ({step.melody}){_step_annotation(step)}"
-        blocks.append("\n".join([header, *_tab_block_from_cells(_step_cells(step))]))
-    return "\n\n".join(blocks)
+    return "\n".join(
+        f"{step.chord:<8} {step.melody:<3} "
+        f"{_step_annotation(step)} {'-'.join(_step_cells(step))}".rstrip()
+        for step in steps
+    )
 
 
 def _print_step(step: ArrangementStep) -> None:

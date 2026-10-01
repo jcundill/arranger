@@ -13,9 +13,15 @@ reintroduces a bug that was found the hard way.
 `format_tab_staff`, `format_tab_html` and `write_tab_html` are the renderers that
 lay an arrangement along **one staff in reading order**, and they live outside the
 `arranger` package so the engine can be read without them. `format_progression`
-(one line or one block *per chord*) and the vertical `tab_block()` stay in
-`arranger/render.py` and `arranger/tuning.py`: they are a different shape of output,
-and `Voicing.tab_block()` is called from the dataclass itself.
+(one line *per chord*) stays in `arranger/render.py`, and the vertical
+`tab_block()` in `arranger/tuning.py`: they are a different shape of output, and
+`Voicing.tab_block()` is called from the dataclass itself.
+
+`format_progression` also rendered a six-line block per chord, behind a `vertical`
+argument that `--vertical` existed only to reach. Both were removed: a staff with
+the chords on their real beats is what a player reads, and this module renders one.
+`format_progression` is now the compact one-line summary and nothing else, and the
+vertical form survives only as `Voicing.tab_block()` for a single voicing.
 
 **They are split together, never separately**, because the two renderings share
 `_staff_columns` — which places each step on an absolute beat and decides what is a
@@ -31,6 +37,7 @@ duplicated or imported across the boundary.
 | `tabstaff.format_tab_html` | a self-contained HTML page for a browser |
 | `tabstaff.write_tab_html` | the only function in the module that touches the filesystem |
 | `_staff_columns` / `_staff_breaks` | the shared layout core, both renderers call these |
+| `_staff_rhythm` / `_note_value` / `_meter_label` | the timing core: note values, rests and ties, the metre |
 | `_carries_melody` | which strings carry the melody, for the `*` marker |
 
 `format_musicxml` and `write_musicxml` are the same rendering decision in a different
@@ -154,8 +161,58 @@ measure's durations back to a bar length, which is what
 So `beat_type` is now a parameter of `format_musicxml` and `format_gp5` (and of
 `_events`, `_measures`, `_build_part`, `_build_song`), it is what makes a 2/2 head
 read as **2/2 rather than 2/4** in the file, and `head_cli` passes
-`head.beats_per_bar` and `head.beat_type` to every renderer. `tabstaff` needs
-neither: it works in *beats* throughout and never converts to a length.
+`head.beats_per_bar` and `head.beat_type` to every renderer.
+
+**`tabstaff` needs it too, and stopped claiming otherwise.** It used to work in
+*beats* throughout and never converted to a length — which was true, and is why
+`docs/renderers.md` said so: the staff placed a chord on a beat and drew a fret
+under it, and never said how long the chord sounded. A whole note and a quarter
+were drawn identically, because on that grid both were one column of frets. Adding
+the **metre row** and the **note-value row** (`show_timing`) ended it: naming a
+length means measuring it, a length is measured in quarters, and quarters come from
+`4 / beat_type`. So `beat_type` is now a parameter of `format_tab_staff` and
+`format_tab_html` too, and `head_cli` passes it to all four renderers.
+
+### What the staff's timing rows are, and what they are not
+
+`show_timing` (on by default) adds two rows above the chord names:
+
+```
+  |4/4                    |                      |     |
+  |w ~   ~   ~   q e    |q     r     r     r   |w    |
+  |Dm7                    |G7                    |Cmaj7|
+  |D5                     |B4                    |C5   |
+e*|10   -     -     -     |7    -     -     -    |8    |
+```
+
+- the **metre** over the first bar, and nowhere else — a signature holds until it
+  changes, which is the same reason `tabxml` writes `<time>` into the first measure
+  only;
+- a **note value** per column: `w h q e s`, dotted (`q.`), triplet (`3q`), `~` for a
+  shape still held from an earlier column, and `r` for a rest.
+
+Two decisions in that row were measured rather than chosen:
+
+- **A note runs to the next *sounding* column, not to the next column.** The `None`
+  columns are rests `_staff_columns` invented to fill a gap, and stopping at the
+  first of them printed a quarter note where `tabxml` writes a whole one. The length
+  is then capped at the end of its own bar, because sounding past the barline is a
+  tie and this grid has no tie to draw. Measured on melid 451, whose head has a
+  four-beat hole in it: without the cap a six-quarter "note" went into one cell and
+  widened the whole staff to fit it.
+- **A length nothing names prints its quarter count** (`0.67q`), not the nearest legal
+  note. A transcribed head does contain onsets that are not a clean power of two, and
+  rounding one to a neighbouring value would print a note that is not being played.
+  It also widens the grid, which is the `width` computation doing its job.
+
+`_staff_rhythm` is computed from the **column grid**, not from `tabxml._events`,
+because the two grids are deliberately different: `_events` keeps every step sharing
+an onset and divides the span between them, while `_staff_columns` gives the column
+to the first and drops the rest. What is shared is the *rule* — a note lasts until
+the next sound, capped by its written `duration`. Where two steps share one onset the
+two renderers therefore disagree about the length, and that is the column grid's own
+documented lossiness rather than a third convention;
+`TestStaffRhythmAgreesWithTheScore` checks the cases where the grids line up.
 
 ### A rest is not a note, but it is time
 

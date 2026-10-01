@@ -79,21 +79,25 @@ you whether a change is an improvement or a different library.
   renderers show only the soprano and hold the inner voices. A repeat across a chord
   change is not a hold and is not marked. See
   [Repeated melodies hold the shape](#repeated-melodies-hold-the-shape).
-- `format_progression(steps, vertical=False)` — module-level renderer for a
-  whole arrangement: one line per step by default, six-line tab blocks when
-  `vertical=True`. Non-chord-tone steps are annotated via the shared
+- `format_progression(steps)` — module-level renderer for a whole
+  arrangement: one line per step. Non-chord-tone steps are annotated via the shared
   `_step_annotation()` helper, which `_print_step()` also uses so the two
-  renderings cannot drift.
+  renderings cannot drift. It used to take `vertical=True` for a six-line block per
+  chord, and the `--vertical` flag existed only to reach it; both are removed, so
+  this is the compact one-line form alone and `format_tab_staff` is the six-line
+  rendering. `Voicing.tab_block()` still renders a single voicing vertically.
 - `format_tab_staff`, `format_tab_html` and `write_tab_html` **live in
   `tabstaff.py`**, not here, and are re-exported below. See
   [The staff renderers live in `tabstaff.py`](#the-staff-renderers-live-in-tabstaffpy).
-- `format_tab_staff(steps, beats_per_bar=4, rhythm=True, show_chords=True,
-  show_melody=False, show_melody_string=True, show_mutes=False, collapse=True,
-  measures_per_line=4)` — renders the **whole progression along one six-line
-  staff** in reading order (high E on top), which is the standard tab layout and
-  unlike `format_progression` is not one block per chord. Chord names go on a line
-  above, each starting in the column where its shape is struck. Three decisions are
-  load-bearing and were each forced by looking at the output:
+- `format_tab_staff(steps, beats_per_bar=4, beat_type=4, rhythm=True,
+  show_chords=True, show_melody=False, show_melody_string=True, show_mutes=False,
+  collapse=True, measures_per_line=4, show_timing=True)` — renders the **whole
+  progression along one six-line staff** in reading order (high E on top), which is
+  the standard tab layout and unlike `format_progression` is not one block per chord.
+  Chord names go on a line above, each starting in the column where its shape is
+  struck, and `show_timing` (default) adds the **metre** and a **note value per
+  column** above them — see [docs/renderers.md](renderers.md#what-the-staffs-timing-rows-are-and-what-they-are-not).
+  Three decisions are load-bearing and were each forced by looking at the output:
   - **Fret cells are left-aligned in a fixed-width column.** A right-aligned cell
     looks tidy on its own but puts the fret at the far end of the column, so the
     chord name and its frets no longer share a column. The column width widens to

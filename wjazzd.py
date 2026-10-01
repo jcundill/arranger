@@ -1436,7 +1436,7 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
              "a * glob is allowed. Defaults to the head.",
     )
     parser.add_argument("--lift", choices=LIFT_MODES, default="auto")
-    # The seventeen flags both commands take, with `corpus`'s own help wording.
+    # The sixteen flags both commands take, with `corpus`'s own help wording.
     add_common_arguments(
         parser,
         CORPUS_HELP,

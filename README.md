@@ -126,7 +126,6 @@ python -m arranger head tests/data/i_was_doing_all_right.mxl --bars 1-3 --html h
 | `--pick` | `first` | `first` or `longest`, for slots holding several notes |
 | `--non-chord-tone` | `extension` | `extension`, `diminished`, `sustain`, `legacy` |
 | `--fallback` | off | `diminished` — see the trade-off below |
-| `--vertical` | off | six-line tab per step |
 | `--tab` | `line` | `staff` lays the head on one six-line staff, spaced on its real rhythm |
 | `--melody` / `--mutes` | off | as for `corpus` |
 | `--html` / `--musicxml` / `--gp5` | off | the same renderers `corpus` offers |
@@ -202,7 +201,7 @@ nothing in the library requires it.
 
 ```bash
 python -m arranger corpus --list                        # the 456 transcriptions
-python -m arranger corpus --melid 342 --vertical        # "All the Things You Are", Metheny
+python -m arranger corpus --melid 342 --tab staff       # "All the Things You Are", Metheny
 python -m arranger corpus --melid 266 --bars -4-1       # the pickups, below bar 0
 python -m arranger corpus --melid 218 --section chorus:1  # a solo chorus instead
 ```
@@ -216,7 +215,6 @@ python -m arranger corpus --melid 218 --section chorus:1  # a solo chorus instea
 | `--lift` | `auto` | `auto`, `none`, `always`, `per-note` |
 | `--non-chord-tone` | `extension` | `extension`, `diminished`, `sustain`, `legacy` |
 | `--fallback` | off | `diminished` — see the trade-off below |
-| `--vertical` | off | six-line tab per step |
 | `--tab` | `line` | `staff` lays the head on one six-line staff, spaced on its real rhythm |
 | `--melody` | off | with `--tab staff`, add a line of melody note names |
 | `--mutes` | off | with `--tab staff`, spell out the unsounded strings as `x` |
@@ -294,44 +292,18 @@ G7       B4   x-x-5-7-6-7
 Cmaj7    C5   x-x-9-9-8-8
 ```
 
-Pass `vertical=True` for real six-line tab, one block per chord:
-
-```python
-print(format_progression(steps, vertical=True))
-```
-
-```text
-Dm7 (D5)
-e|10-|
-B|10-|
-G|10-|
-D|10-|
-A| x-|
-E| x-|
-
-G7 (B4)
-e| 7-|
-B| 6-|
-G| 7-|
-D| 5-|
-A| x-|
-E| x-|
-
-Cmaj7 (C5)
-e| 8-|
-B| 8-|
-G| 9-|
-D| 9-|
-A| x-|
-E| x-|
-```
+This is the compact one-line form, and it is the only shape
+`format_progression` has. (It also took `vertical=True` for a six-line block per
+chord, and the `--vertical` flag existed to reach it; both are gone, because
+`format_tab_staff` below renders a whole progression as real six-line tab — with
+the chords on their real beats, which the block never could.)
 
 Steps whose melody is a non-chord tone are annotated with the substitution that
 was applied, so a reharmonised passing tone is never silent about itself.
 
 ### A whole progression on one staff
 
-`format_progression` gives one line — or one block — *per chord*. For something
+`format_progression` gives one line *per chord*. For something
 you could read off a page, `format_tab_staff` lays the entire progression along a
 single six-line staff, in reading order:
 
@@ -342,18 +314,29 @@ print(format_tab_staff(steps, show_melody=True))
 ```
 
 ```text
-   Dm7  |G7   |Cmaj7
-   D5   |B4   |C5
-e*|10   |7    |8    |
-B |10   |6    |8    |
-G |10   |7    |9    |
-D |10   |5    |9    |
-A |     |     |     |
-E |     |     |     |
+  |4/4                    |                       |     |
+  |w     r     r     r    |w     r     r     r    |w    |
+  |Dm7                    |G7                     |Cmaj7|
+  |D5                     |B4                     |C5   |
+e*|10   -     -     -     |     -     -     -     |8    |
+B*|10   -     -     -     |12   -     -     -     |8    |
+G |10   -     -     -     |10   -     -     -     |9    |
+D |10   -     -     -     |12   -     -     -     |9    |
+A |     -     -     -     |10   -     -     -     |     |
+E |     -     -     -     |     -     -     -     |     |
 ```
 
 The chord names sit on a line above, each starting in the column where its shape is
 struck, and `e*` marks the string carrying the melody.
+
+Above the chords are two more rows. The **metre** (`4/4`) is written over the first
+bar and nowhere else — a time signature holds until it changes. Under it, the **note
+value** of every column: `w` for a whole note, `r` for a rest, `~` for a shape still
+held from an earlier column. Without that row a whole note and a quarter were drawn
+identically, since on this grid both were one column of frets; it is what makes the
+staff a score rather than a chord list. Pass `show_timing=False` for the staff
+without them, and `beat_type` to state the metre properly — 2/2 is 2/2, not 2/4, and
+its beat is a half note rather than a quarter.
 
 Two options do most of the work:
 

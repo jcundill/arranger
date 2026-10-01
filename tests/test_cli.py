@@ -17,6 +17,10 @@ directly rather than trusting the refactor:
   a "simplification" that unified the prose would have silently changed what both
   commands print. `CommonHelp` exists to keep the difference visible.
 
+`--vertical` was removed after that measurement, taking the shared count to 16; it
+was one of the six whose help both commands agreed on, so the eleven are
+unchanged. The counts are asserted in both directions below.
+
 `head_cli` builds its parser from a fixture score and never touches the database,
 so none of this needs `wjazzd.db`; `corpus_cli`'s parser is read without arranging
 anything, for the same reason.
@@ -116,7 +120,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         other simply has no such option.
         """
         corpus, head, shared = self.parsers()
-        self.assertEqual(len(shared), 17, "the shared flag count moved")
+        self.assertEqual(len(shared), 16, "the shared flag count moved")
 
         disagreeing = [
             f"{dest}: corpus={_semantics(corpus[dest])!r} head={_semantics(head[dest])!r}"
@@ -148,8 +152,16 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         silently changed what both commands print, with nothing to catch it.
 
         So the difference is asserted in both directions: each of the eleven is
-        different, and the six that are identical are named, so a seventh drifting
+        different, and the five that are identical are named, so a sixth drifting
         into `CommonHelp` fails here instead of being noticed by a user.
+
+        The counts are sixteen and eleven now, not seventeen and eleven:
+        `--vertical` was removed along with the `format_progression` branch it
+        selected, and it was one of the six whose help the commands spelled
+        identically. Only that side of the split moved, which is why the eleven are
+        named one by one below rather than counted - a flag leaving the *differing*
+        set would change what both commands print, and one leaving the *identical*
+        set only changes the number.
         """
         corpus, head, shared = self.parsers()
         differing = sorted(d for d in shared if corpus[d].help != head[d].help)
@@ -162,7 +174,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         )
         self.assertEqual(
             sorted(set(shared) - set(differing)),
-            ["fallback", "grips", "non_chord_tone", "pick", "skeleton", "vertical"],
+            ["fallback", "grips", "non_chord_tone", "pick", "skeleton"],
             "a flag gained or lost its differing help - remeasure before editing",
         )
 
@@ -203,6 +215,25 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         self.assertIsNone(HEAD_HELP.fret_min)
         self.assertIsNotNone(CORPUS_HELP.fret_max)
         self.assertIsNone(HEAD_HELP.fret_max)
+
+    def test_vertical_is_no_longer_a_shared_flag(self):
+        """`--vertical` was removed, and the removal is asserted rather than assumed.
+
+        It selected a six-line block per chord from `format_progression`, which is
+        a branch that no longer exists. A whole-progression staff is what a player
+        reads, and `--tab staff` renders one. The flag used to be one of the six
+        whose help both commands spelled identically, so leaving it in place would
+        have been a flag reaching a parameter that had gone - a `TypeError` at the
+        first run rather than a parser error, which is the worse of the two.
+
+        So the assertion is the opposite of the one it replaces: neither parser
+        offers it, which is what "both commands agree" now means for a flag neither
+        of them has.
+        """
+        corpus, head, shared = self.parsers()
+        for name, flags in (("corpus", corpus), ("head", head)):
+            self.assertNotIn("--vertical", flags, name)
+        self.assertNotIn("vertical", shared)
 
 class TestTheSharedDispatch(unittest.TestCase):
     """`render_and_write` is one function, and it serves both commands.
@@ -245,20 +276,6 @@ class TestTheSharedDispatch(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn("Dm7", printed)
         self.assertNotIn("wrote", printed)
-
-    def test_the_vertical_flag_reaches_the_progression_renderer(self):
-        """`--vertical` is a shared flag, so it has to work here for both commands.
-
-        Before this phase it was read twice, once in each CLI. Reading it once is
-        only correct if the two readings were equivalent, and they differed in
-        shape though not in effect: `head` branched to `vertical=True` or to no
-        argument at all, `corpus` passed `vertical=args.vertical` either way.
-        """
-        buffer = io.StringIO()
-        with contextlib.redirect_stdout(buffer):
-            render_and_write(self.args(vertical=True), self.steps(), title="T")
-        # The vertical form is a six-line block per step, not one line per chord.
-        self.assertGreaterEqual(buffer.getvalue().count("e|"), 2)
 
     def test_a_missing_extra_is_reported_after_the_tab_is_printed(self):
         """A run that asked for a GP5 file keeps the tab it had already produced.
@@ -357,14 +374,16 @@ class TestTheSharedDispatch(unittest.TestCase):
         calls = self.captured_calls(beats_per_bar=2, beat_type=2)
         for name in ("staff", "html", "musicxml", "gp5"):
             self.assertEqual(calls[name]["beats_per_bar"], 2, name)
-        # Only the two score writers take a denominator, and that is not an
-        # oversight: `beat_type` is what distinguishes 2/2 from 2/4, which differ
-        # only in how the bar is notated - and neither the ASCII staff nor the HTML
-        # page writes a time signature at all, so both take the bar length alone.
-        for name in ("musicxml", "gp5"):
+        # `beat_type` used to reach only the two score writers, and this test asserted
+        # the staff and the HTML did *not* take it - on the stated grounds that
+        # "neither the ASCII staff nor the HTML page writes a time signature at all".
+        # Both now do, from `show_timing`: a staff that shows where a chord falls but
+        # not how long it sounds, and prints no metre, is half a score. So the
+        # assertion is inverted rather than dropped: all four renderers must now
+        # carry the notated metre, or a 2/2 head is laid out on the wrong grid and
+        # displayed as common time.
+        for name in ("staff", "html", "musicxml", "gp5"):
             self.assertEqual(calls[name]["beat_type"], 2, name)
-        for name in ("staff", "html"):
-            self.assertNotIn("beat_type", calls[name], name)
 
     def test_the_metre_defaults_to_the_writers_own_four(self):
         """`corpus` passes no metre, because a Weimar transcription is 4/4.
@@ -376,7 +395,6 @@ class TestTheSharedDispatch(unittest.TestCase):
         calls = self.captured_calls()
         for name in ("staff", "html", "musicxml", "gp5"):
             self.assertEqual(calls[name]["beats_per_bar"], 4, name)
-        for name in ("musicxml", "gp5"):
             self.assertEqual(calls[name]["beat_type"], 4, name)
 
     def test_the_subtitle_reaches_the_renderers_that_have_one(self):

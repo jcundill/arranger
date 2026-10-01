@@ -1416,11 +1416,23 @@ class TestCorpusCli(unittest.TestCase):
         self.assertIn("All the Things You Are", output)
         self.assertIn("x-", output)
 
-    def test_vertical_rendering(self):
-        """--vertical switches to six-line tab blocks."""
-        _, output = self.run_cli("--melid", "218", "--bars", "1-2", "--vertical")
-        self.assertIn("e|", output)
-        self.assertIn("B|", output)
+    def test_vertical_is_rejected_as_an_unknown_flag(self):
+        """`--vertical` is no longer a flag, so the parser says so.
+
+        The inversion of the test this replaces. It used to assert that `--vertical`
+        switched to six-line tab blocks; the branch of `format_progression` it
+        selected is gone, so the honest assertion is that asking for it is a usage
+        error rather than a silent fall-through to the one-line form.
+
+        Argparse exits 2 on an unrecognised argument, and the message names the
+        offending flag, so a user who has the old invocation in a script is told
+        what happened instead of quietly getting different output.
+        """
+        with self.assertRaises(SystemExit) as caught:
+            self.run_cli("--melid", "218", "--bars", "1-2", "--vertical")
+        self.assertEqual(caught.exception.code, 2)
+        _, output = self.run_cli("--melid", "218", "--bars", "1-2")
+        self.assertNotIn("e|", output)
 
     def test_the_diminished_offer_is_reported_without_the_flag(self):
         """The user is told what the opt-in would buy before opting in."""

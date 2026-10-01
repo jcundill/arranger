@@ -190,7 +190,7 @@ what they are missing without opting in.
   `arranger.cli` in turn imports the renderers *inside* `render_and_write`, which
   is what keeps `tabstaff` — and therefore the package `__init__` — out of
   `import headxml`.
-- **Both commands take the same seventeen flags**, built by one
+- **Both commands take the same sixteen flags**, built by one
   `add_common_arguments` in `arranger/cli.py`. Their `--help` prose differs on
   eleven of them, which is why that module carries a `CommonHelp` table per
   command; `tests/test_cli.py` asserts both that the semantics agree and that the

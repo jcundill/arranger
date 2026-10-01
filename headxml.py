@@ -1080,7 +1080,7 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument(
         "--part", default=None, help="score-part id to read (default: the melody part)"
     )
-    # The seventeen flags both commands take, with `head`'s own help wording.
+    # The sixteen flags both commands take, with `head`'s own help wording.
     add_common_arguments(
         parser,
         HEAD_HELP,

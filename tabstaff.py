@@ -87,7 +87,7 @@ def _staff_columns(
     Without timing - a hand-written progression, or `rhythm=False` - each step
     simply takes the next beat, reproducing a one-chord-per-cell grid.
     """
-    if rhythm and steps and all(step.has_timing for step in steps):
+    if _is_timed(steps, rhythm):
         placed: List[Tuple[float, ArrangementStep]] = [
             (step.bar * beats_per_bar + (step.beat - 1), step)  # type: ignore[operator]
             for step in steps
@@ -141,6 +141,185 @@ def _staff_columns(
         if strikes:
             held = pitches
     return collapsed
+
+def _is_timed(steps: List[ArrangementStep], rhythm: bool) -> bool:
+    """
+    True when these steps carry a rhythm worth placing and worth printing.
+
+    The single predicate both the column grid and the rhythm row go through, so the
+    rhythm row can never claim a written rhythm the columns were not laid out by. A
+    progression of hand-built steps carries no `bar`/`beat`, and then the grid is
+    one chord per beat - which is also why there is no rhythm to print.
+    """
+    return bool(rhythm) and bool(steps) and all(step.has_timing for step in steps)
+
+
+def _beat_in_quarters(beat_type: int) -> float:
+    """
+    How many quarter notes one **beat** is: `4 / beat_type`.
+
+    The divisor is the load-bearing part, and `docs/renderers.md` records four
+    separate bugs caused by getting it wrong. A 2/2 beat is a **half** note - two
+    quarters - so the tempting `beat_type / 4` is right in 4/4 and four times too
+    small in 2/2, which is the one metre that cannot catch it.
+
+    The staff renderers worked in *beats* throughout and never converted to a
+    length, which is why they took no `beat_type` at all. Printing note values is
+    what ended that: naming a length means measuring it, and a length is measured
+    in quarters.
+    """
+    return 4.0 / float(beat_type)
+
+
+# The note values a rhythm row can print, as (quarters, label). A whole note down
+# to a thirty-second, then the dotted and triplet forms of the same, so the common
+# cases are two characters and fit the fret cell width without widening the grid.
+_NOTE_VALUES: Tuple[Tuple[float, str], ...] = (
+    (4.0, "w"), (2.0, "h"), (1.0, "q"), (0.5, "e"), (0.25, "s"), (0.125, "32"),
+    (3.0, "w."), (1.5, "h."), (0.75, "q."), (1.25, "e."),
+    (4.0 / 3.0, "3w"), (2.0 / 3.0, "3h"), (1.0 / 3.0, "3q"), (0.5 / 3.0, "3e"),
+)
+
+# Printed in a rhythm row for a column that continues a note begun earlier - a held
+# shape, or the space a longer note occupies. `~` is the tie, which is what the
+# MusicXML and GP5 renderers write for the same event.
+_HOLD_LABEL = "~"
+
+# Printed for a column with no step on it: the silence is a rest, and it is time.
+_REST_LABEL = "r"
+
+
+def _note_value(quarters: float) -> str:
+    """
+    One note value as the two-or-three characters a rhythm cell can hold.
+
+    The nearest nameable value wins, within a small tolerance - so a triplet eighth
+    is `3e` and a dotted quarter is `q.`, the two the score renderers write for the
+    same length, rather than something this module invented.
+
+    A length nothing names falls back to **the number of quarters**, e.g. `0.67q`,
+    rather than to the nearest legal note. That is the honest answer: a transcribed
+    head does contain onsets that are not a clean power of two, and rounding one to
+    a neighbouring note value would print a note that is not being played. It is
+    also wider than a fret cell, so it widens the grid through the same `width`
+    computation every other label goes through - which is the point of that being
+    one calculation.
+    """
+    for length, label in _NOTE_VALUES:
+        if abs(length - quarters) < 1e-6:
+            return label
+    return f"{quarters:.2f}q"
+
+
+def _staff_rhythm(
+    columns: List[Tuple[float, Optional[ArrangementStep], bool]],
+    beats_per_bar: int,
+    beat_type: int,
+    timed: bool,
+) -> List[Tuple[str, str]]:
+    """
+    The note value of every column, as (label, kind) parallel to `columns`.
+
+    `kind` is `note`, `hold` or `rest`, and it is what makes a rhythm row readable
+    rather than a row of letters: a held shape and a rest both print something in
+    a column with no new attack, and they mean opposite things.
+
+    **A column's length runs to the next column that has a step on it**, which is
+    the same rule `tabxml._events` applies to a score - a note lasts until the next
+    sound - and the `None` columns in between are *not* the next sound. They are
+    rests `_staff_columns` invented to fill a gap, and treating the first of them
+    as an ending is what made this print a quarter note where the score writes a
+    whole one. The length is then capped at **the end of its own bar**: a note is
+    written in the bar it starts in, and sounding past the barline is a tie, which
+    this grid has no way to draw.
+
+    Two further consequences of sharing the rule rather than inventing one:
+
+    - the transcribed `duration` **caps** the gap and is never stretched to it. A
+      note written as a quarter followed by a quarter of silence is `q` and then a
+      rest, not `h`. `duration` is in whole notes, so it is scaled by 4 here.
+    - a column whose step is a *hold* prints the tie rather than a note value,
+      because the note it belongs to began in an earlier column. `tabxml` writes
+      that as a `<tie>` and `tabgp` as `NoteType.tie`; this is the same event.
+
+    It is computed from the **column grid**, not from `tabxml._events`, because the
+    two grids are deliberately different: `_events` keeps every step sharing an
+    onset and divides the span between them, while `_staff_columns` gives the column
+    to the first and drops the rest. Sharing the tuple would be lossy in one
+    direction or the other. What is shared is the *rule* above - and where a step
+    does share its onset, the two renderers will therefore disagree about the
+    length, because the staff has one column for two notes and the score has two
+    notes. That is the column grid's own documented lossiness, not a third
+    convention, and `TestStaffRhythmAgreesWithTheScore` checks the cases where the
+    grids do line up.
+
+    `timed` false means there is no rhythm to state: a hand-written progression, or
+    `rhythm=False`, puts one chord on every beat, so every value would be the same
+    letter and the row would say nothing. The caller drops it in that case.
+    """
+    if not timed or not columns:
+        return []
+
+    beat_in_quarters = _beat_in_quarters(beat_type)
+    bar_length = float(beats_per_bar)
+    rhythm: List[Tuple[str, str]] = []
+    for index, (onset, step, strikes) in enumerate(columns):
+        if step is None:
+            # Silence, one beat of it. `_staff_columns` fills holes one beat at a
+            # time, so the next column is a whole beat away.
+            rhythm.append((_REST_LABEL, "rest"))
+            continue
+        if not strikes:
+            # A held shape: the note began in an earlier column and is still
+            # sounding, so this column is the tie rather than a fresh note value.
+            rhythm.append((_HOLD_LABEL, "hold"))
+            continue
+        # The next **sounding** column, skipping the rests in between. Those rests are
+        # gap-filling, not music: `_staff_columns` invents a column wherever onsets
+        # skip a beat, and treating the first as an ending is what made this print a
+        # quarter note where the score writes a whole one.
+        following = next(
+            (later for later in range(index + 1, len(columns))
+             if columns[later][1] is not None),
+            None,
+        )
+        if following is not None:
+            span = (columns[following][0] - onset) * beat_in_quarters
+        else:
+            # No next sound at all: the note runs to the end of its own bar, which is
+            # the same default `tabxml` uses for the last group. Left at zero it would
+            # print `0.00q`.
+            span = float("inf")
+        # **Capped at the end of its own bar.** A note is written in the bar it starts
+        # in: sounding past the barline is a tie in a score, and this grid has no tie
+        # to draw - the columns after the barline are its own. Without the cap a
+        # transcription with a four-beat hole in it printed a six-quarter "note" in one
+        # cell and widened the whole staff to fit it.
+        bar_end = (int(onset // bar_length) + 1) * bar_length
+        span = min(span, max(bar_end - onset, 1.0) * beat_in_quarters)
+        # The transcribed duration caps it further, and is never stretched to.
+        # A hand-built step has none, and then the gap stands on its own.
+        if step.duration:
+            span = min(span, step.duration * 4.0)
+        rhythm.append((_note_value(span), "note"))
+    return rhythm
+
+
+def _meter_label(beats_per_bar: int, beat_type: int) -> str:
+    """
+    The written metre as it is notated: `4/4`, `2/2`, `3/4`.
+
+    **A count without a denominator is not a metre.** 2/2 and 2/4 are both two beats
+    to the bar and the same bar length, so `beats_per_bar` alone cannot say which
+    one a head is in - and a tune in cut time displayed as common time is the kind
+    of error that reads as a rendering bug rather than as a misreading of the score.
+    Three of the four committed test scores are 2/2.
+
+    It is the same string `tabxml` writes into `<time>` and `tabgp` into its
+    `TimeSignature`, from the same two arguments, so the three renderers cannot
+    state three different metres for one arrangement.
+    """
+    return f"{beats_per_bar}/{beat_type}"
 
 
 def _strikes_here(step: ArrangementStep, string_index: int) -> bool:
@@ -223,6 +402,7 @@ def _staff_breaks(
 def format_tab_staff(
     steps: List[ArrangementStep],
     beats_per_bar: int = 4,
+    beat_type: int = 4,
     rhythm: bool = True,
     show_chords: bool = True,
     show_melody: bool = False,
@@ -230,6 +410,7 @@ def format_tab_staff(
     show_mutes: bool = False,
     collapse: bool = True,
     measures_per_line: int = 4,
+    show_timing: bool = True,
 ) -> str:
     """
     Renders a whole progression as a standard six-line guitar staff.
@@ -248,9 +429,22 @@ def format_tab_staff(
     melody-only (no chord) step always shows its `x`s, because there the other
     strings really are silent.
 
+    Above the chord names sit two more rows, both from `show_timing`: the **metre**
+    (`4/4`) over the first bar, and a **rhythm** row naming the note value in every
+    column - `w` for a whole note, `~` for a shape still held from an earlier
+    column, `r` for a rest. Without them the grid shows *where* a chord falls but
+    never *how long it sounds*, so a whole note and a quarter are drawn identically
+    - which is the one thing the MusicXML and GP5 renderers both get right and this
+    one did not. `beat_type` is what the metre needs: a 2/2 beat is a half note, so
+    2/2 reads `h` where 4/4 reads `q` on the same grid.
+
     Args:
         steps: arranged steps, typically from arrange_progression().
         beats_per_bar: beats in a bar, used to place the barlines.
+        beat_type: the denominator of that metre. Pass the notated value, so a head
+            in cut time reads `2/2` rather than being restated as `2/4`, and its
+            beat is a half note rather than a quarter. The bar length is identical
+            either way; only the displayed metre and the note values differ.
         rhythm: space the steps on their real beats. This needs every step to
             carry `bar` and `beat`; if any does not, the uniform grid is used, so
             a hand-written progression still renders sensibly.
@@ -262,13 +456,23 @@ def format_tab_staff(
             same pitches, instead of restriking it on every step. This is the
             default, and it is what makes a held chord read as a held chord.
         measures_per_line: bars per staff line; the last line may be shorter.
+        show_timing: draw the metre and the note-value rows. On by default, because
+            a staff that shows the position of a chord but not its length is
+            half a score; `False` restores the two-row output this renderer had
+            before them.
 
     Returns:
         The rendered staff as a newline-joined string, or "" for no steps. Pure:
         nothing is printed, so the caller stays in control of the output.
+
+    Raises:
+        ValueError: if `beats_per_bar` or `beat_type` is below 1, or
+            `measures_per_line` is below 1.
     """
     if beats_per_bar < 1:
         raise ValueError(f"beats_per_bar must be at least 1, got {beats_per_bar!r}")
+    if beat_type < 1:
+        raise ValueError(f"beat_type must be at least 1, got {beat_type!r}")
     if measures_per_line < 1:
         raise ValueError(f"measures_per_line must be at least 1, got {measures_per_line!r}")
     if not steps:
@@ -276,6 +480,10 @@ def format_tab_staff(
 
     columns = _staff_columns(steps, beats_per_bar, rhythm, collapse)
     breaks = _staff_breaks(columns, beats_per_bar, measures_per_line)
+    # The rhythm row and the column grid go through one predicate, so the row can
+    # never claim a written rhythm the columns were not laid out by.
+    timed = _is_timed(steps, rhythm)
+    values = _staff_rhythm(columns, beats_per_bar, beat_type, timed)
 
     def cell(step: Optional[ArrangementStep], string_index: int, strikes: bool) -> str:
         """One fret cell: a fret number, a mute marker, or a blank."""
@@ -290,21 +498,50 @@ def format_tab_staff(
 
     # Every line shares one column width. A chord name is wider than two
     # characters, so the grid widens to the longest label rather than letting the
-    # chord line push itself out of step with the frets underneath it.
+    # chord line push itself out of step with the frets underneath it. The metre and
+    # the note values go through the same calculation: a `4/4` or an `0.67q`
+    # fallback is wider than a fret, and truncating either would print a note value
+    # that is not the one being played.
     width = _STAFF_CELL_WIDTH
     for _, step, _ in columns:
         if step is None:
             continue
         for text in (step.chord, step.melody):
             width = max(width, len(text))
+    if show_timing:
+        width = max(width, len(_meter_label(beats_per_bar, beat_type)))
+    for label, _kind in values:
+        width = max(width, len(label))
 
-    def line(text_for: Any, when_struck: bool, dedupe: bool = False) -> str:
-        """Renders a chord or melody line on the staff's own column grid.
+    def _meter_cells(count: int) -> List[str]:
+        """The metre in the first column and nothing elsewhere.
+
+        A time signature is written once, at the head of the staff, and the
+        signature holds until it changes - so printing it over every bar would say
+        something the score does not. That is the same decision `tabxml` makes when
+        it writes `<time>` in the first measure only, and for the same reason: a
+        signature over every bar reads as a new one at each, and the bar stops
+        reading as a continuation of the one before.
+        """
+        return [_meter_label(beats_per_bar, beat_type)] + [""] * (count - 1)
+
+    def line(text_for: Any, when_struck: bool, dedupe: bool = False,
+             cells: Optional[Sequence[str]] = None) -> str:
+        """
+        Renders a chord, melody, metre or rhythm line on the staff's own column grid.
 
         `when_struck` is False for the melody line, which must label every step:
         the melody moves on even while the shape underneath it is being held.
         `dedupe` prints a label only where it changes from the previous one, which
         is how a lead sheet spells a chord held across several slots.
+
+        `cells` supplies the text **by column index** instead of from the step, and
+        that is what the metre and rhythm rows need: a held column has a step but no
+        note of its own, and a rest column has neither a step nor anything to
+        derive a value from. Routing both through this one function is what keeps
+        the new rows ruled identically to the string rows - the alignment
+        `TestStaffBarlineAlignment` asserts, which would otherwise only hold for the
+        two rows that existed when it was written.
         """
         # Two spaces then a barline, which is the same three-character offset the
         # string lines use (string label, melody marker, '|'), so a chord name
@@ -318,7 +555,10 @@ def format_tab_staff(
                 out.append("|")
             elif index:
                 out.append(" ")
-            text = text_for(step) if (strikes or not when_struck) else ""
+            if cells is not None:
+                text = cells[index] if index < len(cells) else ""
+            else:
+                text = text_for(step) if (strikes or not when_struck) else ""
             if dedupe and text and text == previous:
                 text = ""
             if text:
@@ -346,6 +586,19 @@ def format_tab_staff(
         return f"{name}{''.join(out)}"
 
     lines: List[str] = []
+    if show_timing:
+        # The metre goes in the first column, over the bar it governs, which is
+        # where a printed score puts a time signature.
+        lines.append(line(lambda step: "", when_struck=True,
+                         cells=_meter_cells(len(columns))))
+        # The rhythm row is dropped when there is no rhythm to state. An untimed
+        # progression is one chord per beat, so every cell would be the same letter
+        # and the row would be a blank line that looks like a missing one.
+        if values:
+            lines.append(
+                line(lambda step: "", when_struck=True,
+                     cells=[label for label, _kind in values])
+            )
     if show_chords:
         lines.append(
             line(lambda step: step.chord if step else "", when_struck=True, dedupe=True)
@@ -386,6 +639,13 @@ _CLASS_REPEAT = "repeat"
 # note with a blank column above it has to read as a deliberate held shape rather
 # than as silence under a moving bass.
 _CLASS_BASS = "bass"
+# The written metre, and the note value of every column. Both sit above the chord
+# row, where a score puts them, and both are the ASCII staff's `show_timing` rows -
+# named here for the same reason as the rest, so a rename cannot half-apply.
+_CLASS_METER = "meter"
+_CLASS_RHYTHM = "rhythm"
+_CLASS_HOLD = "hold"
+_CLASS_REST = "rest"
 
 _HTML_STYLESHEET = """
 :root { color-scheme: light dark; --ink: #1b1b1b; --rule: #b8b8b8;
@@ -418,6 +678,18 @@ th, td { padding: .05rem .28rem; text-align: left; white-space: nowrap; }
 tr.chord td { font-family: ui-sans-serif, system-ui, sans-serif; font-weight: 600;
               color: var(--accent); font-size: .82rem; padding-bottom: .15rem; }
 tr.melody td { font-size: .72rem; color: var(--faint); padding-bottom: .3rem; }
+/* The metre and the note values, which are the two rows the ASCII staff draws from
+   `show_timing`. They are small and quiet because they are read once and then the
+   eye goes to the chords; the metre is a touch stronger since it is the one piece
+   of information a reader cannot infer from the tab. */
+tr.meter td { font-size: .78rem; font-weight: 600; color: var(--ink);
+              padding-bottom: .1rem; }
+tr.rhythm td { font-size: .68rem; color: var(--faint); padding-bottom: .25rem;
+               font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; }
+/* A tie and a rest both sit in a column with no new attack, and they mean opposite
+   things: `~` is the note begun earlier still sounding, `r` is silence. They are
+   dimmed rather than blanked so neither reads as a missing cell. */
+td.hold, td.rest { color: var(--mute); }
 tr.string th { font-weight: 500; font-size: .72rem; color: var(--faint); width: 1ch;
                padding-right: .5rem; }
 tr.string th.soprano { color: var(--accent); }
@@ -453,6 +725,49 @@ def _escape(text: str) -> str:
         .replace(">", "&gt;")
         .replace('"', "&quot;")
     )
+
+
+def _html_timing_rows(
+    columns: List[Tuple[float, Optional[ArrangementStep], bool]],
+    measure: List[int],
+    values: Sequence[Tuple[str, str]],
+    meter: str,
+    show_meter: bool,
+) -> List[str]:
+    """
+    The metre and note-value rows for one measure, in that order.
+
+    **The metre appears on the first measure only.** A time signature holds until
+    it changes, so writing one over every bar says something the score does not -
+    and the same reasoning is why `tabxml` writes `<time>` into the first measure
+    alone, since MuseScore draws a repeated signature over every bar and the bar
+    stops reading as a continuation of the one before. `show_meter` is the page's
+    "is this the first measure" flag.
+
+    The note-value row repeats on every measure, because a rhythm is per-measure
+    and a bar of rests is not the same information twice. It is omitted entirely
+    when `values` is empty - an untimed progression has no written rhythm to show,
+    and an empty row would read as a rendering failure rather than as an absence.
+
+    The cells come from the shared `_staff_rhythm`, which the ASCII staff also
+    reads, so the page and the terminal cannot disagree about how long a note is.
+    """
+    rows: List[str] = []
+    if show_meter:
+        meter_cells = [_html_cell(tag="th")]
+        meter_cells += [
+            _html_cell(_escape(meter) if position == 0 else "")
+            for position in range(len(measure))
+        ]
+        rows.append(_html_row(_CLASS_METER, meter_cells))
+    if values:
+        cells = [_html_cell(tag="th")]
+        for index in measure:
+            label, kind = values[index] if index < len(values) else ("", "note")
+            css = _CLASS_HOLD if kind == "hold" else _CLASS_REST if kind == "rest" else ""
+            cells.append(_html_cell(_escape(label), css))
+        rows.append(_html_row(_CLASS_RHYTHM, cells))
+    return rows
 
 
 def _html_cell(text: str = "", class_name: str = "", tag: str = "td") -> str:
@@ -607,12 +922,14 @@ def format_tab_html(
     title: str = "Chord-melody arrangement",
     subtitle: str = "",
     beats_per_bar: int = 4,
+    beat_type: int = 4,
     rhythm: bool = True,
     show_melody: bool = True,
     show_mutes: bool = False,
     collapse: bool = True,
     measures_per_line: int = 4,
     notes: Optional[Sequence[str]] = None,
+    show_timing: bool = True,
 ) -> str:
     """
     Renders a whole progression as a self-contained HTML tab page.
@@ -623,11 +940,19 @@ def format_tab_html(
     its own stylesheet (including a dark-mode one), so it needs no network access
     and no sibling files.
 
+    `show_timing` adds the two rows the score renderers both carry and this page
+    used to omit: the **metre** over the first measure, and a **note value** per
+    column. They are the same rows `format_tab_staff` draws and come from the same
+    `_staff_rhythm`, so the page and the terminal cannot disagree about the rhythm.
+
     Args:
         steps: arranged steps, typically from arrange_progression().
         title: the page heading, and the browser window title.
         subtitle: an optional line under the heading, e.g. the performer.
         beats_per_bar: beats in a bar, used to place the barlines.
+        beat_type: the denominator of that metre. Pass the notated value, so a head
+            in cut time reads `2/2` rather than being restated as `2/4`, and its
+            beat is a half note rather than a quarter.
         rhythm: space the chords on their real beats. Falls back to a uniform grid
             when the steps carry no timing, exactly as format_tab_staff does.
         show_melody: draw the melody-note line.
@@ -637,13 +962,21 @@ def format_tab_html(
             an unchanged shape on every step.
         measures_per_line: bars per system of music.
         notes: optional lines of provenance, e.g. the register lift decision.
+        show_timing: draw the metre and the note-value rows. On by default; `False`
+            restores the page this renderer produced before them.
 
     Returns:
         A complete HTML document as a string, or "" for no steps. Pure: nothing is
         printed and no file is written, so the caller stays in control.
+
+    Raises:
+        ValueError: if `beats_per_bar` or `beat_type` is below 1, or
+            `measures_per_line` is below 1.
     """
     if beats_per_bar < 1:
         raise ValueError(f"beats_per_bar must be at least 1, got {beats_per_bar!r}")
+    if beat_type < 1:
+        raise ValueError(f"beat_type must be at least 1, got {beat_type!r}")
     if measures_per_line < 1:
         raise ValueError(f"measures_per_line must be at least 1, got {measures_per_line!r}")
     if not steps:
@@ -651,6 +984,12 @@ def format_tab_html(
 
     columns = _staff_columns(steps, beats_per_bar, rhythm, collapse)
     breaks = _staff_breaks(columns, beats_per_bar, measures_per_line)
+    # The same predicate and the same rhythm the ASCII staff reads, so the page and
+    # the terminal cannot disagree about how long a note is.
+    values = _staff_rhythm(
+        columns, beats_per_bar, beat_type, _is_timed(steps, rhythm)
+    )
+    meter = _meter_label(beats_per_bar, beat_type)
     # Which strings carry the melody somewhere in the progression, so those rows
     # can be marked once for the whole page rather than per chord.
     sopranos = {index for index in range(6) if _carries_melody(steps, index)}
@@ -670,7 +1009,8 @@ def format_tab_html(
     if subtitle:
         parts.append(f'<p class="sub">{_escape(subtitle)}</p>')
     parts.append(
-        f'<p class="meta">{len(steps)} step{"" if len(steps) == 1 else "s"}</p>'
+        f'<p class="meta">{len(steps)} step{"" if len(steps) == 1 else "s"}'
+        f'{" · " + _escape(meter) if show_timing else ""}</p>'
     )
     parts.append('<div class="systems">')
 
@@ -678,6 +1018,9 @@ def format_tab_html(
     # The chord in force, carried across systems so a chord held over a system
     # break is not named a second time.
     in_force: Optional[str] = None
+    # Only the first measure of the page carries the metre; a signature holds until
+    # it changes. See `_html_timing_rows`.
+    first_measure = True
 
     def bar_of(index: int) -> int:
         return int(columns[index][0] // beats_per_bar) - start_bar
@@ -695,6 +1038,11 @@ def format_tab_html(
                 measures.append([index])
         for measure in measures:
             parts.append(f'<div class="{_CLASS_MEASURE}"><table>')
+            if show_timing:
+                parts.extend(
+                    _html_timing_rows(columns, measure, values, meter, first_measure)
+                )
+                first_measure = False
             chord_row, in_force = _html_chord_row(columns, measure, in_force)
             parts.append(chord_row)
             if show_melody:
