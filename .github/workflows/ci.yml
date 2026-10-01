@@ -6,7 +6,7 @@ name: CI
 # silently.
 #
 # THE DATABASE DOES NOT RUN HERE. `wjazzd.db` is 42 MB and gitignored, so on a
-# clean clone the corpus tests are SKIPPED: **85 skipped, 737 run** - of which 83
+# clean clone the corpus tests are SKIPPED: **85 skipped, 692 run** - of which 83
 # are database-guarded, 77 of them `@requires_db` classes in `test_wjazzd.py` and
 # `test_lead_sheet.py` and the rest individual guards in `test_guitarpro.py`. A
 # green check here does NOT mean the corpus path was exercised. The `corpus` job at
