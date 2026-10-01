@@ -20,14 +20,21 @@ last. Phase 6 is partly done and its remainder is a *decision*, not a task — s
 | 6 | import cycle | **partly done** `c289879`; rest is a decision | 719 |
 | 7 | CLI de-duplication | **done** | 737 |
 | 8 | docs: `AGENTS.md` was actively wrong | **done** | 724 |
-| 9 | CI and cleanup | pending | — |
+| 9 | CI and cleanup | **done**, minus the version bump | 742 |
 
-**Suggested order from here: 9.** Phase 7 shipped `arranger/cli.py`; Phase 6's
-remainder is a *decision*, not a task — see
-[Phase 6](#phase-6--the-import-cycle-cannot-be-deleted).
+**The refactor is complete.** All six defects are closed; Phases 0–5, 7, 8 and 9
+are done and Phase 6's remainder is a *decision* rather than a task — see
+[Phase 6](#phase-6--the-import-cycle-cannot-be-deleted). The only work left is a
+release decision (the `0.10.0` bump) and the three undecided forks under "Open
+decisions".
 
-Phase 8 shipped `AGENTS.md` at 402 lines with a routing table, moved the reasoning
-into `docs/`, and added `tests/test_docs.py` so drift fails the suite.
+**Suggested order from here: nothing.** Phase 7 shipped `arranger/cli.py` and
+Phase 9 shipped `.github/workflows/ci.yml`; the refactor has closed all six
+defects. What remains is a release decision and the four open forks below, none of
+which is a task. Phase 8 shipped `AGENTS.md` at 402 lines with a routing table,
+moved the reasoning into `docs/`, and added `tests/test_docs.py` so drift fails
+the suite — which by Phase 9 had also been extended to the CI workflow, for the
+same reason.
 
 Supersedes `docs/history/texture-plan.md` (the completed `texture="targets"` plan).
 
@@ -67,10 +74,11 @@ no longer valid JSON.
 make check      # lint + typecheck + test, in that order
 ```
 
-Current measured state, all green: **737 tests OK (skipped=2)**, pyright **0 errors
+Current measured state, all green: **742 tests OK (skipped=2)**, pyright **0 errors
 0 warnings**, ruff **0 errors**. If your change moves any of those numbers, that is
-the signal — not the absence of an error message. (724 was the count after Phase 8;
-the 13 extra are `tests/test_cli.py`, added by Phase 7.)
+the signal — not the absence of an error message. (724 was the count after Phase 8,
+737 after Phase 7; the 5 newest are the CI-workflow assertions in
+`tests/test_docs.py`.)
 
 `make check` exists because two things were wrong before it did: a linter was
 absent, and `pyright` silently failed to find the virtualenv. See "Traps" below.
@@ -605,6 +613,14 @@ Each of these cost real time, or nearly shipped a defect.
     assertion fails because the artefact does not contain what you expected, the
     premise is usually the thing that is wrong — check whether the property exists
     before concluding the code is.*
+14. **A Makefile variable that is both a command to run and a path to hand a tool
+    cannot be overridden with one string.** Phase 9 wrote
+    `make check PYTHON=python` for a CI runner with no `.venv`. It runs the tests
+    perfectly and makes pyright report **37 spurious import errors**, because
+    `--pythonpath` is a *filesystem path* and pyright does not resolve a bare name
+    through `PATH`. That is trap #2 recreated by the file written to enforce it.
+    *When overriding a variable, check whether every consumer wants a command or a
+    path — the two need different strings, and only one of them fails loudly.*
 
 
 
@@ -757,18 +773,80 @@ inside a function. Each was a way the phase could have forced a seventh edge, an
 each was avoided by putting something in the right place rather than by listing an
 exception.
 
-### Phase 9 — CI (last)
+### Phase 9 — CI (done, minus the version bump)
 
-`.github/workflows/ci.yml` running `make check` on push across 3.10–3.14 with the
-`xml` and `gp` extras — so the two `skipUnless` guards are exercised every push,
-which is exactly the class of defect this repo documents having shipped (the MusicXML
-3.1 `kind` problem was invisible to a round trip). `wjazzd.db` is 42 MB and
-gitignored, so a manual-dispatch job downloads it and runs the full suite; **say so
-in the workflow header** so an agent does not assume the database tests ran. Bump
-`__version__` to `0.10.0` — and note that `tests/test_docs.py` will then fail until
-the version is updated in any document that states one, which is the point.
+**Shipped:** `.github/workflows/ci.yml`. Two jobs.
 
-There is no CI config today.
+- **`check`** — `make check` on push and pull request, matrixed over Python
+  3.10–3.14 (which is exactly `requires-python` and the classifier list), with
+  `.[xml,gp,dev]` installed in one editable step. The extras are the point:
+  without `music21` and `PyGuitarPro` every `skipUnless` guard skips silently, and
+  the MusicXML 3.1 `kind` problem this repo documents having shipped is exactly
+  the class of defect a round trip would not catch.
+- **`corpus`** — manual dispatch only, gated on a `vars.WJAZZD_DB_URL` repository
+  variable, which downloads `wjazzd.db` into the repository root (where
+  `DEFAULT_DB` looks) and runs the full suite again.
+
+**`tests/test_docs.py` gained five assertions about the workflow** — the matrix
+matches the classifiers, the extras are installed, `PYTHON` is a filesystem path,
+the header states the skip count, and the gated job exits non-zero when its
+variable is unset. A CI file is read far less often than it is trusted, which is
+the same failure mode Phase 8 was about, so it is held to the same standard.
+
+**The workflow header states that the corpus tests do not run**, because a green
+check would otherwise be read as covering the Weimar path. Measured on a clean
+clone: **85 skipped, 737 run**; with the database present, **2 skipped**. Both
+numbers are in the file.
+
+#### Three things the brief got wrong, all found by running the thing
+
+1. **The `0.10.0` bump would not have broken `test_docs` at all.** The brief says
+   it "will then fail until the version is updated in any document that states
+   one." Grepped all six documents that test checks: **none of them state a
+   version.** The only `0.9.0` in the tree is in `docs/history/walking-bass.md`,
+   which the test deliberately excludes. The bump is a *release* decision rather
+   than a CI one, so it was left alone rather than taken silently; `AGENTS.md` now
+   carries the real count.
+2. **The database URL does not exist to be hardcoded.** The brief says the job
+   "downloads `wjazzd.db`". There is no stable URL anywhere in the repo —
+   `wjazzd.py` only points a user at jazzomat.hfm-weimar.de, and `.gitignore`
+   excludes `*.db`. So the job reads a repository variable and **fails loudly**
+   when it is unset rather than skipping: a corpus job that quietly no-ops looks
+   identical to one that ran, which is the exact confusion the header warns about.
+3. **The `.gp5` sweep was already done** (recorded below).
+
+#### Trap #2 reproduced by the file written to enforce it
+
+The brief's "run `make check` on a runner" needs the Makefile's `.venv/bin/...`
+defaults overridden, and the obvious override is `PYTHON=python`. **That silently
+breaks typechecking.** `make typecheck` runs `pyright --pythonpath $(PYTHON)`, and
+pyright reads that as a *filesystem path to an interpreter* — it does not resolve a
+bare name through `PATH`. Measured: `PYTHON=python` runs the suite perfectly and
+makes pyright report **37 spurious `reportMissingImports` errors**, every one of
+them `musthe` / `music21` / `guitarpro` for packages that were installed and
+importing fine.
+
+This is trap #2 — the one `make typecheck` exists to prevent — recreated by the
+workflow whose whole job is to run the gate. The fix is
+`PYTHON="$(command -v python)"`, and there is now a test asserting it, because the
+failure mode is *a CI job that is red on a clean checkout*, which teaches everyone
+to ignore the gate. `PYRIGHT` and `RUFF` stay bare names: they are run through a
+shell, where `PATH` resolution is correct.
+
+*The generalisation: a Makefile variable that is both a command to execute and a
+path to hand to a tool cannot be overridden with the same string for both. Check
+which of the two a consumer needs before choosing the override.*
+
+#### What is deliberately not done
+
+- **No `0.10.0` bump.** It rides with a release, not with CI, and the premise that
+  it would break `test_docs` turned out to be false. Taken deliberately, with the
+  reasoning above, rather than by reflex.
+- **No hardcoded database URL.** The variable is unset until a maintainer fills it
+  in, and the job fails with an actionable message until then. That is the honest
+  state: a URL invented here would look complete and rot silently.
+- **No `on: schedule`.** The brief asks for push; a nightly run would need the
+  database too, and there is no way to get it without the same variable.
 
 **One item in this brief turned out to be already done.** It suggested sweeping the
 loose `*.gp5` files in the repository root as export artefacts. Checked before

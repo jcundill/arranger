@@ -1,0 +1,155 @@
+name: CI
+
+# `make check` on every push, across every Python version the package claims to
+# support, with **both optional extras installed** - see the note under the
+# install step below, because getting this wrong is how a real defect shipped
+# silently.
+#
+# THE DATABASE DOES NOT RUN HERE. `wjazzd.db` is 42 MB and gitignored, so on a
+# clean clone the corpus tests are SKIPPED: **85 skipped, 737 run** - of which 83
+# are database-guarded, 77 of them `@requires_db` classes in `test_wjazzd.py` and
+# `test_lead_sheet.py` and the rest individual guards in `test_guitarpro.py`. A
+# green check here does NOT mean the corpus path was exercised. The `corpus` job at
+# the bottom does that, and only on manual dispatch.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref: the suite takes ~45s locally and
+# several minutes across five versions, so a five-commit push would otherwise
+# spend most of its time re-running work already superseded.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: check (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      # A failure on one version is the interesting signal; cancelling the rest
+      # loses the information about *which* versions are affected.
+      fail-fast: false
+      matrix:
+        # `requires-python = ">=3.10"` and the classifiers say 3.10-3.14, so the
+        # matrix is exactly that range. `3.14` is the version the local
+        # development virtualenv runs, which is how the claim was ever made.
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # One editable install carrying all three extras. `make install-extra`
+      # and `install-extra-gp` are separate targets on purpose (PyGuitarPro is
+      # LGPL-3.0, so a developer who only needs MusicXML should not pull it in),
+
+      # `make check` is lint + typecheck + test, in that order, so a lint failure
+      # is reported before the suite is spent. The Makefile's defaults point at
+      # `.venv/bin/...`, which does not exist on a runner, so all three variables
+      # are overridden. There is no venv on a runner, and creating one purely to
+      # satisfy a path would be a second thing to keep in sync.
+      #
+      # **`PYTHON` is passed as an absolute path, and that is not incidental.**
+      # `make typecheck` runs `pyright --pythonpath $(PYTHON)`, and pyright
+      # treats that argument as a *filesystem path* to an interpreter - it does
+      # not resolve a bare name through `PATH`. Passing `PYTHON=python`, which
+      # works perfectly well for actually running the tests, therefore makes
+      # pyright blind to every installed package: measured here, 37 spurious
+      # `reportMissingImports` errors, all of them `musthe` / `music21` /
+      # `guitarpro` for packages that were installed and importing fine.
+      #
+      # That is trap #2 from AGENTS.md reproduced by the very workflow written to
+      # enforce the gate, and it is worth the extra `command -v`: a CI job that
+      # reports 37 import errors on a clean tree teaches everyone to ignore it.
+      # `PYRIGHT` and `RUFF` *are* bare names, because they are executed through
+      # a shell and `PATH` resolution is correct there.
+      - name: make check
+        run: make check PYTHON="$(command -v python)" PYRIGHT=pyright RUFF=ruff
+
+      # Printed so a matrix job's interpreter is never a guess from the job name.
+      - name: Report the interpreter
+        if: always()
+        run: python -VV
+
+  # The corpus half. Manual dispatch only, and gated on a repository variable
+  # holding the download URL - see the note in the step itself.
+  corpus:
+    name: corpus (database present)
+    # Manual only. The database is 42 MB, and pulling it over a network on every
+    # commit is a poor trade for tests that only need it on demand.
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Install the package with every extra
+        run: |
+          python -m pip install --upgrade pip
+
+      # THE REPOSITORY VARIABLE. Set `vars.WJAZZD_DB_URL` to a URL serving
+      # `wjazzd.db` (the Weimar Jazz Database, 42 MB) and this step fetches it.
+      # Until it is set the job **fails loudly rather than skipping**, because a
+      # corpus job that quietly no-ops looks identical in the UI to one that ran -
+      # and the point of running it is the few hundred tests the main job skips.
+      # There is deliberately no default URL: the database is not distributed
+      # from a stable location this repository can name, and a hardcoded one
+      # would rot into a 404 that reads as a network failure.
+      #
+      # `docs/corpus.md` is where a user looks for where the database comes from;
+      # if the URL is set, that document should gain it too.
+      - name: Fetch the Weimar Jazz Database
+        env:
+          WJAZZD_DB_URL: ${{ vars.WJAZZD_DB_URL }}
+        run: |
+          if [ -z "$WJAZZD_DB_URL" ]; then
+            echo "::error::vars.WJAZZD_DB_URL is not set."
+            echo "Set it to a URL serving wjazzd.db, or run without dispatching"
+            echo "this workflow - the main 'check' job does not need the database."
+            exit 1
+          fi
+          curl --fail --location --silent --show-error \
+               "$WJAZZD_DB_URL" --output wjazzd.db
+          ls -l wjazzd.db
+
+      # `make check` again, now with the database in place. `DEFAULT_DB` resolves
+      # to a `wjazzd.db` beside `wjazzd.py`, which is the repository root, so
+      # downloading it there is all the setup this needs - no environment
+      # variable and no `WJAZZD_DB` override. Note the guard reads the *file*,
+      # not the variable, so the download has to be in the default location.
+      #
+      # The tail is why the suite runs twice here rather than trusting the result
+      # above: the skip count drops from 85 to 2 once the guards stop skipping,
+      # and that difference is the whole point of this job. It is printed rather
+      # than asserted, because an exact figure would fail every time an unrelated
+      # test is added.
+      - name: make check (with the database)
+        run: |
+          make check PYTHON="$(command -v python)" PYRIGHT=pyright RUFF=ruff
+          echo "--- the corpus tests ran this time; the skipped count is below ---"
+          python -m unittest discover -s tests -t . 2>&1 | tail -3
+
+          python -m pip install -e '.[xml,gp,dev]'
+
+      # but **a CI run wants every combination exercised**, so that separation is
+      # not reproduced here.
+      #
+      # The extras are the point of the job, not an optimisation. Without them
+      # every `skipUnless(HAS_MUSIC21)` and `skipUnless(HAS_GUITARPRO)` guard
+      # silently skips, and the MusicXML 3.1 `kind` problem this repository
+      # documents having shipped is precisely the class of defect that was
+      # invisible to a round trip. The other half of the asymmetry - that a
+      # *missing* extra must be a reported usage error rather than a crash - is
+      # asserted by stubbing the writer, so it runs with or without them.
+      - name: Install the package with every extra
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e '.[xml,gp,dev]'

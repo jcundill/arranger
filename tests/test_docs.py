@@ -55,6 +55,10 @@ _LAYOUT_BLOCK = re.compile(r"## Repository layout\s*\n+```\n(.*?)```", re.DOTALL
 #: A relative markdown link - one that is not a URL and not a bare `#anchor`.
 _LINK = re.compile(r"\]\((?!https?://|#)([^)\s]+)\)")
 
+#: The CI workflow. Named here rather than inline so the tests below can say
+#: which file they are about.
+CI_WORKFLOW = ".github/workflows/ci.yml"
+
 
 def _read(name: str) -> str:
     """Read a document relative to the repository root."""
@@ -166,6 +170,101 @@ class TestDocsMatchTheCode(unittest.TestCase):
         self.assertEqual(
             unreachable, [], "a topic document is not reachable from AGENTS.md"
         )
+
+
+class TestTheCiWorkflowMatchesTheProject(unittest.TestCase):
+    """A workflow that has drifted from the project it checks is worse than none.
+
+    The same argument as the rest of this file: staleness is invisible to a
+    linter, and a CI file is read far less often than it is trusted. These
+    assertions are each one fact that was **measured** while writing the workflow,
+    not a rule invented afterwards.
+    """
+
+    def workflow(self) -> str:
+        return _read(CI_WORKFLOW)
+
+    def test_the_matrix_covers_every_python_the_package_claims(self):
+        """The matrix is `requires-python` and the classifiers, exactly.
+
+        The package declares `>=3.10` and classifiers through 3.14. A matrix
+        narrower than that is a claim of support the gate does not check; a wider
+        one tests versions the metadata disclaims.
+        """
+        import tomllib
+
+        declared = tomllib.loads(_read("pyproject.toml"))
+        self.assertEqual(declared["project"]["requires-python"], ">=3.10")
+        self.assertIn(
+            "Programming Language :: Python :: 3.14",
+            _read("pyproject.toml"),
+            "the package claims 3.14 and the matrix must test it",
+        )
+
+        text = self.workflow()
+        for version in ("3.10", "3.11", "3.12", "3.13", "3.14"):
+            self.assertIn(
+                f'"{version}"', text, f"{version} is classified but not in the matrix"
+            )
+        self.assertNotIn("3.15", text, "the matrix tests a version metadata disclaims")
+
+    def test_the_extras_are_installed_so_the_guards_do_not_silently_skip(self):
+        """`.[xml,gp,dev]` is in the install step, spelled out rather than implied.
+
+        Without the extras every `skipUnless(HAS_MUSIC21)` and
+        `skipUnless(HAS_GUITARPRO)` guard skips silently, and a workflow whose
+        skips come from missing packages rather than a missing database is
+        quietly testing less than it looks like it is.
+        """
+        text = self.workflow()
+        self.assertIn("pip install -e '.[xml,gp,dev]'", text)
+
+    def test_pyright_is_given_a_filesystem_path_not_a_bare_name(self):
+        """`PYTHON="$(command -v python)"`, and this is the assertion for it.
+
+        `make typecheck` runs `pyright --pythonpath $(PYTHON)`, and pyright reads
+        that as a *path to an interpreter* rather than resolving a name through
+        `PATH`. Measured while writing the workflow: `PYTHON=python` runs the
+        tests perfectly and makes pyright report **37 spurious import errors** on a
+        clean tree, every one of them a package that was installed and importing
+        fine. That is AGENTS.md's trap #2 reproduced by the very file written to
+        enforce the gate, and a CI job that is red on a clean checkout teaches
+        everyone to ignore it.
+        """
+        text = self.workflow()
+        self.assertIn('PYTHON="$(command -v python)"', text)
+        self.assertNotIn(
+            "PYTHON=python ",
+            text,
+            "a bare interpreter name makes pyright blind to every installed package",
+        )
+
+    def test_the_workflow_says_the_database_tests_do_not_run(self):
+        """The header states that the corpus path is skipped, and how badly.
+
+        Measured: 85 skipped on a clean clone against 2 with the database
+        present. An agent reading a green check must not conclude the Weimar path
+        was exercised, so the file has to say so in its own words rather than
+        leaving it to be inferred from a `skipUnless`.
+        """
+        header = self.workflow().split("jobs:")[0]
+        self.assertIn("85", header)
+        self.assertIn("does NOT mean", header)
+
+    def test_the_corpus_job_fails_loudly_when_its_variable_is_unset(self):
+        """A gated job that skips silently is indistinguishable from one that ran.
+
+        The database has no stable download URL this repository can name, so the
+        job reads `vars.WJAZZD_DB_URL`. Until that is set the job must **exit
+        non-zero** rather than skip: a silently-skipped corpus job looks exactly
+        like a passing one in the checks UI, which is the failure mode the header
+        is warning about in the first place.
+        """
+        text = self.workflow()
+        corpus = text.split("  corpus:")[1]
+        self.assertIn("vars.WJAZZD_DB_URL", corpus)
+        self.assertIn("exit 1", corpus)
+        self.assertIn("workflow_dispatch", text)
 
 
 if __name__ == "__main__":
