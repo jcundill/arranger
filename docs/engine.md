@@ -312,9 +312,29 @@ inclusively would describe a reach the hand does not make, and would make the li
 |---|---|---|
 | `drop2` | 4 | `DROP2_INTERVAL_SETS`, verbatim — the tables are hand-authored |
 | `drop2_6432` | 4 | 6-4-3-2, found by search — the one default set that reaches the low E |
-| `drop3` / `closed` | 4 | derived from a close stack; generated, not offered by default |
+| `drop3` / `closed` | 4 | derived from a close stack; not offered by default |
 | `shell` | 3 | `SHELL_DEGREES` plus one more note |
 | `duo` | 2 | root or 5th in the melody plus the 3rd |
+
+**Every four-note voicing sounds the chord's 3rd and 7th**, and so does every three-note
+one — except a suspended chord, which has no 3rd and whose guide tone is therefore the
+**4th**. `Dsus7` is 1 4 5 b7 and its pair is (4, b7); `sus2`'s is the 9th. `SHELL_DEGREES`
+already said so, and `tests/test_grips.py::TestGuideTones` holds the three tables to
+the same answer. Those two notes are what decide whether the ear hears a major or minor chord, and
+a dominant or a minor 7th, so a shape without them is a different chord rather than a
+thinner one. All 109 hand-authored drop-2 templates keep both in all four inversions;
+the rule is enforced where a table has no entry for the melody's degree, and
+`_drop2_for_untabled_degree` derives that shape from the close stack under *this*
+melody, falling back to `_guide_tone_drop2` if the derivation drops a guide tone. An
+empty result offers nothing rather than borrowing another degree's template.
+
+**A four-note shape need not occupy four neighbouring strings.** The lowest voice may
+skip to a lower string — what `drop2_6432` does with the low E, generalised. The
+strings are tuned higher than the one below, so a deep bass runs out of board on a
+contiguous block long before the low E would; skipping moves the shape down the neck as
+a unit instead of stretching it. `GRIP_STRING_SETS` carries the skipping set for each
+four-string block, and `_place_template` still assigns the voices soprano-first, so a
+set is ordered descending with the gap at the bottom.
 
 Five decisions in here were each forced by something measurable:
 

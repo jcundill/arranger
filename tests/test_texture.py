@@ -28,6 +28,7 @@ from arranger import (
     ROLE_TARGET,
     TEXTURE_GRIPS,
     TEXTURE_STYLES,
+    ChordParser,
     VoiceLeadingEngine,
     _interval_offsets,
     _metric_weight,
@@ -335,13 +336,23 @@ class TestGripsIntersectTheTexture(unittest.TestCase):
 
     def test_a_target_that_cannot_be_played_becomes_the_melody_alone(self):
         """
-        The fallback, and the case that needed it.
+        The fallback, and the case that no longer needs it for this melody.
 
         A `targets` target is offered only the four-note grips, so for Ebmaj under G4
-        the span-0 shell `x-x-8-8-8-x` is not a candidate at all - and the cost tuple
-        would not have chosen it anyway, because `missing` outranks span. The only
-        complete option offered is `x-6-5-3-8-x`, a five-fret stretch, so the step
-        falls back to the melody alone.
+        the span-0 shell `x-x-8-8-8-x` is not a candidate - and the cost tuple would not
+        have chosen it anyway, because `missing` outranks span. Drop-2's only complete
+        option is `x-6-5-3-8-x`, a five-fret stretch, so this step used to fall back to
+        the melody alone.
+
+        It no longer does. Drop-3 is offered to a target and is now correct: it places
+        its voices on descending strings, and it leaves a triad's doubled root where the
+        stack put it instead of dropping it an octave into a b3 - which is what used to
+        make Ebmaj sound as Eb minor. So the step now gets a real four-note chord,
+        `3-x-1-3-4-x`, and the melody-alone fallback has nothing to do here.
+
+        What is asserted is the *rule*, not the old answer: a `targets` target is always
+        either a complete chord or the melody alone, never a partial one, and never a
+        melody with a stale chord name.
         """
         steps = VoiceLeadingEngine.arrange_progression(
             self.PROGRESSION,
@@ -350,12 +361,20 @@ class TestGripsIntersectTheTexture(unittest.TestCase):
         )
         self.assertEqual(len(steps), 1)
         step = steps[0]
-        self.assertEqual(step.voicing.grip, "melody")
-        self.assertEqual(step.voicing.fret_span(), 0)
-        # The harmony is still named, which is the same convention a shell uses.
+        # Either the complete chord drop-3 now provides, or the melody alone - but
+        # never a partial harmonisation, which is what this texture exists to avoid.
+        self.assertIn(step.voicing.grip, ("drop3", "drop2", "melody"), step.tab_line())
         self.assertEqual(step.chord, "Ebmaj")
-        # And the melody is what actually sounds.
         self.assertEqual(max(step.voicing.midi_notes()), Note("G4").midi_note())
+        if step.voicing.grip == "melody":
+            self.assertEqual(step.voicing.fret_span(), 0)
+        else:
+            # A complete chord, and every note is a tone of Ebmaj.
+            self.assertEqual(len(step.voicing.active_frets()), 4, step.tab_line())
+            tones = {t % 12 for t in ChordParser.get_chord_tones("maj", "Ebmaj")}
+            self.assertLessEqual(
+                {p % 12 for p in step.voicing.midi_notes()}, tones, step.tab_line()
+            )
 
     def test_a_playable_target_is_never_demoted(self):
         """

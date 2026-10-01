@@ -1001,7 +1001,13 @@ class TestHeadTexture(unittest.TestCase):
             step = targets[index]
             self.assertEqual(step.role, "target")
             self.assertEqual(len(step.voicing.active_frets()), 4, step.tab_line())
-            self.assertEqual(step.grip, "drop2", step.tab_line())
+            # A strong beat gets a *complete four-note chord*. Which family supplies it
+            # is the selector's business: `targets` offers a target the four-note grips
+            # and drop-3 is now one of them, having been fixed to place its voices on
+            # descending strings and to keep a triad's doubled root in place rather than
+            # dropping it an octave into a different chord. Asserting `drop2` here would
+            # be asserting which family won, not that the harmony was stated.
+            self.assertIn(step.grip, ("drop2", "drop3"), step.tab_line())
             self.assertFalse(step.partial)
 
         thin = 0

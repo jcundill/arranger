@@ -11,6 +11,7 @@ from arranger import (
     VoiceLeadingEngine,
     Voicing,
     format_progression,
+    supported_string_sets,
 )
 
 
@@ -44,11 +45,18 @@ class TestDrop2Voicings(unittest.TestCase):
                 top_midi = GuitarFretboard.fret_to_midi(5, v.frets[5])
                 self.assertEqual(top_midi, Note(mel_str).midi_note())
 
-                # Active strings must be strings 2, 3, 4, 5 (D, G, B, E)
+                # The low E is never part of a four-note drop-2, on any string set.
                 self.assertEqual(v.frets[0], -1)  # Low E muted
-                self.assertEqual(v.frets[1], -1)  # A string muted
-                for s in range(2, 6):
-                    self.assertGreaterEqual(v.frets[s], 0)
+                # The A string *may* sound: a four-note shape is not required to use
+                # four neighbouring strings, so the bass may skip down onto it. What is
+                # required is that the shape is one of the supported string sets and
+                # that the low E stays out of it.
+                self.assertIn(
+                    frozenset(s for s, f in enumerate(v.frets) if f >= 0),
+                    supported_string_sets(),
+                    f"{v.tab_string()} is not a supported string set",
+                )
+                self.assertGreaterEqual(len(v.active_frets()), 2)
 
                 # Pitch classes must match chord tones {D, F, Ab, C}
                 pcs = set(v.pitch_classes())
@@ -112,15 +120,23 @@ class TestExtendedQualities(unittest.TestCase):
 
     def test_extension_quality_without_chord_name_offers_every_inversion(self):
         """
-        Without a chord name all five inversions are offered. D5 is reachable on both
-        blocks (fret 10 on the high E, fret 15 on the B), so both are listed: candidate
-        generation is pure and does not reposition anything.
+        Without a chord name all five inversions are offered, on every string block the
+        melody can reach. D5 is reachable on the high E (fret 10) and on the B (fret 15),
+        and each block now also offers a bass-skipping set, so the total is larger than
+        five templates times two blocks. The count is therefore not pinned: what is
+        pinned is that every template appears on both blocks, which is the property the
+        count was standing in for.
         """
         voicings = self.engine.get_all_drop2_voicings(Note("D5"), "maj9")
-        self.assertEqual(len(voicings), 10)  # 5 templates x 2 soprano strings
-        for v in voicings:
-            self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["drop2"])
-            self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()))
+        self.assertTrue(voicings)
+        for soprano in (5, 4):
+            on_block = [v for v in voicings if v.soprano_string() == soprano]
+            self.assertTrue(on_block, f"nothing offered on string {soprano}")
+            # Every template reachable on the block appears there.
+            self.assertGreaterEqual(len(on_block), 5, f"string {soprano}")
+            for v in on_block:
+                self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["drop2"])
+                self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()))
 
     def test_rootless_dominant_root_in_top_inversion(self):
         """7b9 and 7alt are voiced rootless, so a root melody used to fall through to
@@ -133,11 +149,20 @@ class TestExtendedQualities(unittest.TestCase):
             self.assertIn(7, voicings[0].pitch_classes())  # the root sounds
 
     def test_quality_alias_selects_the_same_inversion_as_the_canonical_spelling(self):
-        """M7 must behave like maj7 - it used to be read as m7."""
+        """
+        M7 must behave like maj7 - it used to be read as m7.
+
+        The *first* candidate is compared rather than the whole list, because the bass
+        may also be offered on a lower string than the block uses; the alias has to
+        select the same shapes as the canonical spelling, and the idiom is the first one.
+        """
         canonical = self.engine.get_drop2_voicings(Note("B4"), "maj7", chord_name="Cmaj7")
         alias = self.engine.get_drop2_voicings(Note("B4"), "M7", chord_name="Cmaj7")
-        self.assertEqual([v.tab_string() for v in canonical], ["x-x-5-5-5-7"])
-        self.assertEqual([v.tab_string() for v in alias], [v.tab_string() for v in canonical])
+        self.assertEqual(canonical[0].tab_string(), "x-x-5-5-5-7")
+        self.assertEqual(
+            [v.tab_string() for v in alias],
+            [v.tab_string() for v in canonical],
+        )
 
 
 class TestMelodyStringChoices(unittest.TestCase):
@@ -192,32 +217,54 @@ class TestMelodyStringChoices(unittest.TestCase):
 
     def test_get_all_drop2_voicings_lists_high_e_first(self):
         """
-        get_all_drop2_voicings offers the high-E candidate before the B-string one, so a
+        get_all_drop2_voicings offers the high-E candidates before the B-string ones, so a
         caller that simply takes the first result keeps the traditional fingering.
+
+        The high-E block now yields two shapes rather than one - the block itself and the
+        bass-skipping set - so the ordering is asserted as "every high-E shape precedes
+        every B-string shape", which is the property the exact list was standing for.
         """
         all_voicings = self.engine.get_all_drop2_voicings(Note("D5"), "m7", chord_name="Dm7")
-        self.assertEqual(
-            [(v.tab_string(), v.soprano_string()) for v in all_voicings],
-            [("x-x-10-10-10-10", 5), ("x-15-15-14-15-x", 4)],
-        )
+        self.assertEqual(all_voicings[0].tab_string(), "x-x-10-10-10-10")
+        self.assertEqual(all_voicings[0].soprano_string(), 5)
+        sopranos = [v.soprano_string() for v in all_voicings]
+        self.assertEqual(sopranos, sorted(sopranos, reverse=True), sopranos)
+        self.assertIn(4, sopranos, "the B-string block is no longer offered at all")
 
     def test_get_all_drop2_voicings_can_be_restricted_to_high_e(self):
         """
-        Passing top_strings=(5,) reproduces the original high-E-only behaviour, so callers
-        can opt out of the B string entirely.
+        Passing top_strings=(5,) keeps every candidate on the high E, so callers can opt
+        out of the B string entirely. It does not mean one shape: the high-E block still
+        offers its bass-skipping variant, which is also on string 5.
         """
         all_voicings = self.engine.get_all_drop2_voicings(
             Note("D5"), "m7", chord_name="Dm7", top_strings=(5,)
         )
-        self.assertEqual([v.tab_string() for v in all_voicings], ["x-x-10-10-10-10"])
+        self.assertEqual(all_voicings[0].tab_string(), "x-x-10-10-10-10")
         self.assertEqual({v.soprano_string() for v in all_voicings}, {5})
+        for v in all_voicings:
+            self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["drop2"])
 
     def test_get_all_drop2_voicings_without_chord_name_returns_all_inversions(self):
-        """Without a chord name every inversion of every family is offered: 4 shapes x 2 families."""
+        """
+        Without a chord name every inversion is offered on every block, high E before B.
+
+        The count is not pinned, because each block now also offers a bass-skipping set;
+        what is asserted is that all four inversions appear on both blocks and that the
+        high E still comes first.
+        """
         all_voicings = self.engine.get_all_drop2_voicings(Note("D5"), "m7")
 
-        self.assertEqual(len(all_voicings), 8)
-        self.assertEqual([v.soprano_string() for v in all_voicings], [5, 5, 5, 5, 4, 4, 4, 4])
+        self.assertTrue(all_voicings)
+        sopranos = [v.soprano_string() for v in all_voicings]
+        self.assertEqual(sopranos, sorted(sopranos, reverse=True))
+        for soprano in (5, 4):
+            shapes = {
+                tuple(v.midi_notes())
+                for v in all_voicings
+                if v.soprano_string() == soprano
+            }
+            self.assertGreaterEqual(len(shapes), 4, f"only {len(shapes)} on string {soprano}")
         for v in all_voicings:
             self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["drop2"])
             self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()))
@@ -388,19 +435,39 @@ class TestTriadSusAndAlteredQualities(unittest.TestCase):
         self.engine = VoiceLeadingEngine()
 
     def test_exact_fingering_and_chord_tone_purity(self):
-        """Each new quality offers one chord-tone-matched inversion per melody,
-        and that shape sounds only pitches of its own chord."""
+        """
+        Each quality offers the traditional shape first, and every shape it offers is
+        correct.
+
+        The *first* voicing is pinned exactly, because that is what a caller who takes
+        `[0]` gets and it is the idiomatic fingering. The full list is no longer pinned:
+        a four-note shape may place its bass on a lower string than the block would
+        (the bass-skipping sets in GRIP_STRING_SETS), which adds a second, equally
+        correct candidate for the same melody. Asserting the whole list would make this
+        test a lock on the string-set table rather than on the music, so it checks that
+        every candidate is a real voicing of the chord instead.
+        """
         for chord_name, melody, expected in self.CASES:
             quality = ChordParser.parse_chord_name(chord_name)[1]
             assert quality is not None
             tones = set(ChordParser.get_chord_tones(quality, chord_name))
             voicings = self.engine.get_drop2_voicings(Note(melody), quality, chord_name=chord_name)
-            self.assertEqual([v.tab_string() for v in voicings], [expected], chord_name)
-            voicing = voicings[0]
-            self.assertTrue(set(voicing.pitch_classes()) <= tones, f"{chord_name} {voicing.tab_string()}")
-            self.assertLessEqual(voicing.fret_span(), GRIP_MAX_SPAN["drop2"], chord_name)
-            self.assertTrue(all(0 <= f <= 18 for f in voicing.active_frets()), chord_name)
-            self.assertEqual(GuitarFretboard.fret_to_midi(5, voicing.frets[5]), Note(melody).midi_note())
+            self.assertTrue(voicings, chord_name)
+            self.assertEqual(voicings[0].tab_string(), expected, chord_name)
+            for voicing in voicings:
+                label = f"{chord_name} {voicing.tab_string()}"
+                self.assertTrue(
+                    set(voicing.pitch_classes()) <= tones, label
+                )
+                self.assertLessEqual(
+                    voicing.fret_span(), GRIP_MAX_SPAN["drop2"], label
+                )
+                self.assertTrue(all(0 <= f <= 18 for f in voicing.active_frets()), label)
+                self.assertEqual(
+                    GuitarFretboard.fret_to_midi(5, voicing.frets[5]),
+                    Note(melody).midi_note(),
+                    label,
+                )
 
     def test_every_chord_tone_is_voiceable_in_the_working_register(self):
         """In the E4-Bb5 register each chord tone of each new quality gets a pure,

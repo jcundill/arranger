@@ -488,11 +488,22 @@ hand already is rather than by preference:
 
 | grip | voices | what it is |
 |---|---|---|
-| `drop2` | 4 | the hand-authored drop-2 tables, on strings 4-3-2-1 or 5-4-3-2 |
+| `drop2` | 4 | the hand-authored drop-2 tables, on 4-3-2-1 or 5-4-3-2 — or 5-4-3-2 / 6-4-3-2 with the bass on a lower string |
 | `drop2_6432` | 4 | **6-4-3-2** — low E, D, G and B, so the bass can be a root |
 | `shell` | 3 | the 3rd and 7th plus one more: 1-2-3, 2-3-4, 5-4-3, **6-4-3** or **5-3-2** |
 | `duo` | 2 | the root or 5th in the melody plus the 3rd |
 | `interval` | 2 | a 3rd, 6th or 10th below the melody — a *fill*, not a harmony |
+
+Every four-note voicing sounds the chord's **3rd and 7th**, and so does every
+three-note one — the two notes that decide whether the ear hears a major or minor
+chord, and a dominant or a minor 7th. A sus chord has no 3rd, so its guide tone is the
+**4th**: `Dsus7` states the 4th and the b7. Where a chord tone has no inversion in the
+tables the shape is derived from the close stack under that melody, and the guide
+tones are checked rather than assumed.
+
+A four-note shape need not use four **neighbouring** strings: the lowest voice may skip
+to a lower one, which is what lets a deep bass be fretted at all instead of running off
+the end of a contiguous block.
 
 `GRIP_PREFERENCE` lists the first three in tie-break order, so a four-note drop-2 is
 never displaced by a shell when the two cost the same. `interval` is not in it: it is
@@ -788,11 +799,11 @@ behind the engine and the renderers.
 - Melodies are confined to `G3`–`Bb5`.
 - A fixed maximum fret span of 5 and fret range 0–18 are assumed. That span limit is
   what makes drop-2 the natural four-note grip, and it also rules out close position
-  and drop-3 entirely: a close-position chord under a melody spans a seventh or more,
-  while the four strings below the high E are only five semitones apart in tuning. The
-  `drop3` and `closed` generators still exist for a caller who widens
-  `GRIP_MAX_SPAN`, but they are not offered by default because they could never be
-  played.
+  and drop-3 at the default budget: a close-position chord under a melody spans a
+  seventh or more, while the four strings below the high E are only five semitones
+  apart in tuning. The `drop3` and `closed` generators work and a caller who widens
+  `GRIP_MAX_SPAN` reaches them, but they are not offered by default because they are
+  not playable as generated.
 - Non-chord melody notes are handled only for the mappings in
   `NON_CHORD_TONE_EXTENSIONS` (9ths, 6/9s, 11ths, #11s, b13s, 13ths and the
   half-diminished 9th) plus dim7; anything else keeps the legacy quality-only
