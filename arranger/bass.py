@@ -242,8 +242,38 @@ def _previous_bass(arrangements: List[ArrangementStep]) -> Optional[int]:
     return None
 
 
+def _held_shape(
+    arrangements: List[ArrangementStep],
+) -> Optional[Tuple[List[int], Optional[int]]]:
+    """The shape the left hand is still holding, and which of its strings the thumb
+    last played, or None when nothing has been struck yet.
+
+    A `bass_only` step re-states nothing above the thumb - the upper voices are held
+    from the last **struck** step - so the shape that is physically still down there is
+    the previous strike's, not this step's own thinned vector. This is the same rule
+    `tabgp._build_song` threads as `ringing`, and it is here for the same reason: both
+    need to know what the hand is holding rather than what the current step carries.
+
+    The thumb's string comes back too, because that note is **not** part of the shape
+    the fingers are holding - see `_place_bass`. Identifying it by string rather than by
+    pitch is what makes that exclusion exact: the thumb moves between beats, so the
+    note it played two beats ago is not the one in the shape now being held.
+
+    A `repeated` step is excluded for the reason it strikes only its soprano: taking
+    its one-fret vector would erase the shape for every thumb note after it.
+    """
+    for step in reversed(arrangements):
+        if step.bass_only or step.repeated or step.melody_only:
+            continue
+        return list(step.voicing.frets), step.voicing.bass_string
+    return None
+
+
 def _place_bass(
-    upper: Voicing, pitch_class: int, previous_bass: Optional[int] = None
+    upper: Voicing,
+    pitch_class: int,
+    previous_bass: Optional[int] = None,
+    held: Optional[Tuple[Sequence[int], Optional[int]]] = None,
 ) -> Optional[Tuple[int, int, int]]:
     """
     Resolves one thumb note's octave and string against an upper voicing.
@@ -254,6 +284,17 @@ def _place_bass(
     and in that order, because a note an octave away is a different fret on every
     string.
 
+    `held` is the shape still ringing under a `bass_only` step - see `_held_shape`.
+    It matters for **three** of the questions below at once, and passing it is the
+    fix for the unplayable walking bass in `docs/open-issues.md` item 1. A `bass_only`
+    step's own vector holds only the melody, so measuring against it alone gets all
+    three wrong: the thumb is placed on a string the hand is already fingering, it is
+    allowed to sound *above* the held shape's bottom note, and its proximity is
+    measured from a fret the hand is not at. On "But Not For Me" bar 5 that put the
+    thumb on the D string at fret 1 while the hand held frets 6-8 - a seven-fret
+    stretch that no per-step span check can see, because every individual step is
+    tidy.
+
     The rule is proximity, not string order. The thumb is part of the hand, and
     adjacent strings are five semitones apart, so "play the lowest string" and "stay
     where the fingers already are" differ by exactly five frets on every note. A hand
@@ -261,25 +302,29 @@ def _place_bass(
     10 and the hand moves for an identical pitch. So the survivors are ranked by
     `abs(fret - hand_fret)` and the nearest wins.
 
-    `hand_fret` is the upper voicing's **lowest active fret**, not `avg_fret` and not
-    `top_fret`. That is the measured choice: over the plan's own worked example,
+    `hand_fret` is the **lowest active fret of the shape the hand is holding** - the
+    held one where there is one, otherwise the upper voicing's. Not `avg_fret` and
+    not `top_fret`. That is the measured choice: over the plan's own worked example,
     measuring to the lowest active fret matches 26 of the 28 readable bass notes
     against 24 for the average, because a shell's low voice is the note the thumb is
     trying to join. `avg_fret` and `top_fret` agree with each other on every one of
     those notes, so neither is contradicted by the evidence - the average is simply
     dragged up by the melody, which is up an octave from the position the hand is in.
 
-    Two filters are **not** tie-breaks, because each rejects candidates that would be
-    wrong rather than merely further away:
+    Three filters are **not** tie-breaks, because each rejects candidates that would
+    be wrong rather than merely further away:
 
-    - the string must not already sound in the upper voicing;
-    - the note must sound below it. This is required rather than preferred because
-      the tuning is not monotonic in the useful direction - the A string is five
-      semitones *above* the D string it may neighbour, and a 5-3-2 shell's A-string
-      note can sound below its G-string note - so a candidate can be reachable, can
-      be at the hand, and still belong above the chord it is meant to support.
+    - the string must not already sound, in the upper voicing **or in the held
+      shape** - one string cannot play two frets at once, and this is the same
+      collision that made the GP5 export write a tie resolving to the wrong pitch;
+    - the note must sound below both, for the same reason. This is required rather
+      than preferred because the tuning is not monotonic in the useful direction -
+      the A string is five semitones *above* the D string it may neighbour, and a
+      5-3-2 shell's A-string note can sound below its G-string note - so a candidate
+      can be reachable, can be at the hand, and still belong above the chord it is
+      meant to support.
 
-    Reach (`0..18`) is a third, separate test: `note_to_fret` returning a fret says
+    Reach (`0..18`) is a fourth, separate test: `note_to_fret` returning a fret says
     the pitch is playable and says nothing at all about where it lands.
 
     With no survivor the caller leaves the step without a bass and reports it, which
@@ -295,9 +340,44 @@ def _place_bass(
         return None
     hand_fret = float(min(active))
 
+    # The held shape widens "is this string free" and "what is the lowest note
+    # sounding", and supplies the hand position, because the melody alone is up an
+    # octave from where the fingers are.
+    #
+    # One note in the held vector is *not* structure: the thumb's own previous note.
+    # A target folds the thumb into its fret vector, so the shape being held already
+    # carries the last bass note, and treating it as a voice to stay beneath and not
+    # share a string with would forbid every repeated and ascending walk note - a
+    # walking bass is mostly repeated and ascending notes. It is excluded by pitch,
+    # which is unambiguous, and the hand position still counts it: the thumb is part
+    # of the hand whatever it last played.
+    sounding_frets = list(upper.frets)
+    if held is not None:
+        held_frets, held_thumb = held
+        structure = [
+            -1 if index == held_thumb else fret
+            for index, fret in enumerate(held_frets)
+        ]
+        structure_midis = [
+            STANDARD_TUNING[index].midi_note() + fret
+            for index, fret in enumerate(structure)
+            if 0 <= index < len(STANDARD_TUNING) and fret >= 0
+        ]
+        if structure_midis:
+            lowest_upper = min(lowest_upper, min(structure_midis))
+        held_active = [fret for fret in held_frets if fret >= 0]
+        if held_active:
+            hand_fret = float(min(held_active))
+        sounding_frets = [
+            upper.frets[index] if upper.frets[index] >= 0 else (
+                structure[index] if index < len(structure) else -1
+            )
+            for index in range(len(upper.frets))
+        ]
+
     best: Optional[Tuple[Tuple[float, int, int], Tuple[int, int, int]]] = None
     for string_index in BASS_STRING_INDICES:
-        if 0 <= string_index < len(upper.frets) and upper.frets[string_index] >= 0:
+        if 0 <= string_index < len(sounding_frets) and sounding_frets[string_index] >= 0:
             continue  # the upper shape already speaks on this string
         open_midi = STANDARD_TUNING[string_index].midi_note()
         # Every fret on this string that sounds the wanted pitch class: the class

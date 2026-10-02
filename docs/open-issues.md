@@ -11,7 +11,7 @@ Reproduce all of it with the commands in [Reproducing](#reproducing).
 
 ## 1. The thumb is placed against the wrong reference point (walking bass)
 
-**Status:** diagnosed, not fixed. This is the item worth doing first.
+**Status:** FIXED (stage 3). See "Stage 3" below.
 
 ### The symptom
 
@@ -117,6 +117,59 @@ keep holding when other between-step cases turn up.
   playable — every thumb note in it is within the shell's span budget of
   `hand_fret`". That claim was measured with an upper voicing present. It does
   **not** hold for `bass_only` steps, which is how the bug got through.
+
+### Stage 3 — fixed
+
+The third candidate was the right one, and it turned out to be **the same fix as
+item 2's root cause**: both were the thumb being placed against the current
+step's thinned voicing instead of the shape the hand is holding. Fixing it here
+removes the collision that made the GP5 tie resolve to the wrong fret, so the
+two items were one bug wearing two coats.
+
+`_place_bass` takes `held` — the last **struck** step's fret vector and which of
+its strings the thumb played — and it corrects three things at once, all of which
+the melody-only vector got wrong:
+
+- **which strings are free** — one string cannot sound two frets, so a string the
+  held shape occupies is not available. This was the item 2 collision;
+- **what the lowest sounding note is** — the thumb must sound below the held
+  structure, not merely below the melody;
+- **`hand_fret`** — the proximity ranking now measures from where the fingers
+  actually are, which is the original complaint.
+
+One subtlety cost a correction mid-implementation. The held vector contains the
+thumb's *own* previous note, because a target folds the thumb into its fret
+vector. Treating that as structure to stay beneath forbids every repeated and
+ascending walk note — and a walking bass is mostly those. An early version lost
+6 of 22 thumb notes this way. It is now excluded **by string**, identified from
+the held step's own `bass_string`, which is exact: the thumb moves between beats,
+so the note it played two beats ago is not the one in the shape being held.
+
+Measured over "But Not For Me", walking bass:
+
+| | before | after |
+|---|---|---|
+| thumb on a finger's string, at a different fret | 6 | **0** |
+| hand reach, thumb vs held shape (worst) | 8 frets | **3 frets** |
+| hand reach (median) | — | **1 fret** |
+| bar 5's thumb, reported as a 7-fret stretch | D string fret 1 | **A string fret 6**, where the hand already is |
+| anchors with no reachable string | 1 | 1 (unchanged — pre-existing, see below) |
+
+The one remaining gap is **not** a cost of this change: bar 15 beat 1.0 had no
+reachable string before it either, because the step's own upper voicing already
+sounds F3 on the low E and a thumb note must sound strictly below the structure
+it supports. Verified by measurement against the pre-change tree rather than
+assumed, and the test asserts that exact set so a *second* gap would fail.
+
+- `tests/test_walking_bass.py::TestTheThumbReachesTheHandHoldingTheShape` — four
+  tests, all on between-step properties: no shared string, bounded reach, the
+  specific bar from the report, and the anchor set. All four fail on the
+  pre-change tree and pass after.
+- The weak assertion at `test_walking_bass.py:577` (`fret_span() <= shell + 5`)
+  is left alone deliberately. `fret_span()` on a `bass_only` step measures
+  melody-to-thumb, and those are different limbs — it rose from 3 to 11 with this
+  fix and is not a playability measure. The reach test is the one that measures
+  the hand.
 
 ---
 

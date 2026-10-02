@@ -356,6 +356,154 @@ class TestDecisionFTheSecondBarOfAHeldChord(unittest.TestCase):
         self.assertIsNotNone(second.bass)
 
 
+class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
+    """
+    The between-step invariant `fret_span()` cannot see, from item 1.
+
+    Every per-step span in "But Not For Me" is at most 3, and the arrangement is still
+    unplayable: one bar puts the hand at frets 6-8 and the next needs the D string at
+    fret 1. Nothing spans seven frets; the *hand* does. A per-step number cannot catch
+    that, so what is asserted here is a property of **consecutive** steps - the reach
+    between where the thumb plays and where the fingers are holding.
+    """
+
+    def _arrangement(self):
+        """The committed head that produced the defect, as a walking bass."""
+        import contextlib
+        import io
+
+        from headxml import arrange_xml_head
+        from tests.test_headxml import BUT_NOT_FOR_ME
+
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            steps, _, _ = arrange_xml_head(
+                BUT_NOT_FOR_ME, grips=("shell",), texture="walking_bass"
+            )
+        return steps
+
+    def test_the_thumb_never_shares_a_string_with_a_finger(self):
+        """
+        One string cannot sound two frets at once.
+
+        This is the collision behind both item 1 and the item 2 GP5 corruption: the
+        engine picked the thumb's string from the current step's thinned voicing rather
+        than from the shape still ringing, so it could place the thumb where a finger
+        already was.
+        """
+        steps = self._arrangement()
+        held = None
+        held_thumb = None
+        checked = 0
+        for step in steps:
+            voicing = step.voicing
+            if step.bass_only and held is not None and voicing.bass_string is not None:
+                thumb = voicing.bass_string
+                # The thumb's own previous note is not a finger: a walking bass moves
+                # along one string constantly, and that string is its to reuse.
+                if thumb != held_thumb:
+                    checked += 1
+                    self.assertLess(
+                        held[thumb],
+                        0,
+                        f"bar {step.bar} beat {step.beat}: the thumb plays string "
+                        f"{thumb} while the held shape has it at fret {held[thumb]}",
+                    )
+            if not step.bass_only and not step.repeated:
+                held = list(voicing.frets)
+                held_thumb = voicing.bass_string
+        self.assertGreater(checked, 0, "no thumb was checked")
+
+    def test_the_thumb_stays_within_reach_of_the_fingers(self):
+        """
+        The hand is one unit, so the thumb's fret and the held shape's fret range are
+        not independent choices.
+
+        Measured over the whole head the worst reach is 3 frets and the median 1,
+        against the 7 the defect produced. The bound is deliberately loose: it guards
+        against the shape of the bug returning, not a claim about how far a thumb can
+        actually stretch, which is not this library's business to legislate.
+        """
+        steps = self._arrangement()
+        held = None
+        reaches = []
+        for step in steps:
+            voicing = step.voicing
+            if step.bass_only and held is not None and step.bass is not None:
+                thumb_fret = voicing.frets[bass_string(step)]
+                fingers = [fret for fret in held if fret >= 0]
+                if fingers:
+                    low, high = min(fingers), max(fingers)
+                    reaches.append(
+                        low - thumb_fret if thumb_fret <= low else thumb_fret - high
+                    )
+            if not step.bass_only and not step.repeated:
+                held = list(voicing.frets)
+        self.assertGreater(len(reaches), 0, "no thumb note was checked")
+        self.assertLessEqual(
+            max(reaches),
+            4,
+            f"the thumb reaches {max(reaches)} frets from the held shape: "
+            f"{sorted(reaches, reverse=True)[:5]}",
+        )
+
+    def test_the_documented_bar_no_longer_asks_for_a_seven_fret_stretch(self):
+        """
+        The exact pair from the report: bar 4 holds frets 6-8 and bar 5 needs the D
+        string at fret 1.
+
+        Asserted on the arrangement rather than on a summary, so that a future change
+        which reintroduces it names the bar and the frets in the failure.
+        """
+        steps = self._arrangement()
+        bars = {
+            step.bar: step
+            for step in steps
+            if step.bar in (4, 5) and step.beat == 1.0
+        }
+        self.assertIn(4, bars, "the fixture no longer has the bar the report names")
+        self.assertIn(5, bars)
+        held_frets = [f for f in bars[4].voicing.frets if f >= 0]
+        thumb_fret = bars[5].voicing.frets[bass_string(bars[5])]
+        reach = (
+            min(held_frets) - thumb_fret
+            if thumb_fret <= min(held_frets)
+            else thumb_fret - max(held_frets)
+        )
+        self.assertLessEqual(
+            reach,
+            4,
+            f"bar 5's thumb at fret {thumb_fret} against bar 4's shape at "
+            f"{min(held_frets)}-{max(held_frets)}",
+        )
+
+    def test_the_walk_loses_no_anchor_the_fix_did_not_already_lose(self):
+        """
+        The cost of the fix, asserted so it cannot be paid silently.
+
+        Telling the thumb about the held shape removes candidate strings, so a naive
+        version of this change loses thumb notes - and a walking bass with a gap in it
+        is not a walking bass. **One** anchor in this head already had no reachable
+        string before the fix (bar 15: the step's own upper voicing already sounds F3
+        on the low E, and a thumb note must sound strictly below the structure it
+        supports), so the assertion is that exact set rather than an empty one. A
+        second entry here means this change cost a note.
+        """
+        steps = self._arrangement()
+        anchors = [
+            step
+            for step in steps
+            if step.bass_only and step.bass_role == arranger.BASS_ROLE_ANCHOR
+        ]
+        self.assertGreater(len(anchors), 0)
+        missing = [(step.bar, step.beat) for step in anchors if step.bass is None]
+        self.assertEqual(
+            [(15, 1.0)],
+            missing,
+            "the set of anchors with no thumb note changed",
+        )
+
+
 class TestBassPlacement(unittest.TestCase):
     """
     `_place_bass`: the octave and the string, decided together against the hand.
