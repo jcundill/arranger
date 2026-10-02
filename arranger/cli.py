@@ -11,10 +11,11 @@ defect #4 in `implementation_plan.md`, and the last of the six open.
 the tree before this module existed: 17 flags in both parsers, and all 17 agreed
 exactly on `type`, `choices`, `default`, `nargs` and `metavar`. Eleven of the 17
 disagreed on their `--help` string - `--fret-min` and `--fret-max` had help text in
-`corpus` and none at all in `head`. So a bare `add_common_arguments(parser)`
-would have quietly changed one command's `--help`, which nothing asserts. Hence
-the split below: **the six flags whose help is identical are written once here**,
-and the eleven that differ are `CommonHelp` values named for their command.
+`corpus` and none at all in `head` (that last one has since been filled; see
+below). So a bare `add_common_arguments(parser)` would have quietly changed one
+command's `--help`, which nothing asserts. Hence the split below: **the six flags
+whose help is identical are written once here**, and the eleven that differ are
+`CommonHelp` values named for their command.
 
 **Sixteen now, because `--vertical` was removed.** It was one of the six whose
 help is identical, and it is gone: the six-line block per chord it selected is
@@ -24,6 +25,14 @@ the count only fell on this side of the split - five flags are now written once
 here. The measurement above is kept as the record of what it was; `tests/
 test_cli.py` asserts the current split in both directions, so the removal cannot
 silently leave one of the two sides stale.
+
+**The one omission has since been filled.** `--fret-min`/`--fret-max` were help
+text in `corpus` and `None` in `head`, and `tests/test_cli.py` pinned that as a
+*deliberate* difference so a future agent would have to look before tidying it.
+They did, and it was still worth closing: a flag the reader can pass but not
+understand is worse than either state. `HEAD_HELP` now states it, worded
+differently so the pair stays in the differing set - `Optional[str]` remains the
+type because the asymmetry the test guards is now one of *wording*, not presence.
 
 That is the design constraint worth stating: the duplication this fixes is the
 *argument*, not the *prose*. Prose that genuinely differs - `corpus`'s `--bars`
@@ -144,12 +153,27 @@ CORPUS_HELP = CommonHelp(
 
 #: The `arranger head` wording. Says "of the notated bar" where the corpus cannot:
 #: three of the four committed scores are in cut time, so the bar the `targets`
-#: rule fills is not four beats long, and the help is where that is first stated.
+#: rule fills is not four beats long, and the help is where this is first stated.
+#:
+#: `--fret-min`/`--fret-max` used to be `None` here - the one flag pair `corpus`
+#: explained and `head` did not. That was deliberate, and `tests/test_cli.py`
+#: pinned it as a deliberate difference rather than an oversight so a future agent
+#: would have to look before "tidying" it. Filling it was still the right call: a
+#: flag the reader can pass but not understand is worse than either state. The
+#: wording stays *different* from `corpus`'s on purpose, because these two remain
+#: in the differing set that `test_the_help_text_is_not_one_shared_string` asserts
+#: - a copy of `CORPUS_HELP`'s text here would move them into the identical set
+#: and fail the test. So each says what `corpus`'s cannot: that the window is an
+#: aim, not a filter, and that a head read from a score may want a narrower one
+#: than a solo.
 HEAD_HELP = CommonHelp(
     bars="narrow to a half-open LO-HI bar range; bounds may be negative",
     bars_per_line="bars per system on the staff",
-    fret_min=None,
-    fret_max=None,
+    fret_min=f"lowest fret to aim for (default {NECK_FRET_MIN}; an aim, not a filter)",
+    fret_max=(
+        f"highest fret to aim for (default {NECK_FRET_MAX}; a chord with no "
+        f"voicing inside the window is still played, outside it)"
+    ),
     gp5="also write a Guitar Pro 5 file (needs: pip install 'jazz-arranger[gp]')",
     html="also write a self-contained HTML page",
     melody="with --tab staff, add melody note names",

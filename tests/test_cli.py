@@ -45,6 +45,7 @@ from arranger.cli import (
     add_common_arguments,
     render_and_write,
 )
+from arranger.tuning import NECK_FRET_MAX, NECK_FRET_MIN
 from wjazzd import SKELETON_STRATEGIES, SLOT_PICKS, corpus_cli
 
 
@@ -202,19 +203,37 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
             "CommonHelp and the measured difference disagree",
         )
 
-    def test_head_states_the_fret_window_and_corpus_does_not(self):
-        """The one omission, preserved rather than quietly filled.
+    def test_head_states_the_fret_window_too(self):
+        """The one omission, filled deliberately rather than quietly preserved.
 
-        `corpus` tells the user what its fret window defaults to; `head` says
-        nothing. That reads like an oversight and a future agent will want to fix
-        it - so it is pinned as a *deliberate* difference (`Optional[str]` in
-        `CommonHelp` exists for exactly it), which turns "tidying it up" into a
-        change someone has to look at rather than one they make by reflex.
+        `corpus` told the user what its fret window defaulted to and `head` said
+        nothing. That read like an oversight, so it was pinned as a *deliberate*
+        difference (`Optional[str]` in `CommonHelp` exists for exactly it), which
+        turned "tidying it up" into a change someone had to look at.
+
+        Someone looked, and filled it: a flag the reader can pass but cannot
+        understand is worse than either state. The gap is closed here.
+
+        So this asserts the *new* deliberate difference rather than deleting the
+        test. Both commands state the window now, so what must be pinned is the
+        remaining asymmetry - the two spellings are **not** the same text, because
+        `head`'s has to say what `corpus`'s cannot (that the window is an aim
+        rather than a filter). If someone copies `CORPUS_HELP`'s wording across to
+        make them "consistent", the two move into the identical set and
+        `test_the_help_text_is_not_one_shared_string` fails - which is the point.
+        The warning survives the fix: still remeasure before editing.
         """
-        self.assertIsNotNone(CORPUS_HELP.fret_min)
-        self.assertIsNone(HEAD_HELP.fret_min)
-        self.assertIsNotNone(CORPUS_HELP.fret_max)
-        self.assertIsNone(HEAD_HELP.fret_max)
+        for help_text in (CORPUS_HELP, HEAD_HELP):
+            self.assertIsNotNone(help_text.fret_min)
+            self.assertIsNotNone(help_text.fret_max)
+        self.assertNotEqual(CORPUS_HELP.fret_min, HEAD_HELP.fret_min)
+        self.assertNotEqual(CORPUS_HELP.fret_max, HEAD_HELP.fret_max)
+        # Both state the window, and both say it is an aim rather than a filter -
+        # the one thing a reader cannot infer from the flag name.
+        for help_text in (CORPUS_HELP, HEAD_HELP):
+            self.assertIn(str(NECK_FRET_MIN), str(help_text.fret_min))
+            self.assertIn(str(NECK_FRET_MAX), str(help_text.fret_max))
+        self.assertIn("filter", str(HEAD_HELP.fret_min))
 
     def test_vertical_is_no_longer_a_shared_flag(self):
         """`--vertical` was removed, and the removal is asserted rather than assumed.
