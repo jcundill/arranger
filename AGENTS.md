@@ -100,8 +100,8 @@ dynamically from `arranger.__version__` — that is the single source of truth, 
 
 ### The engine is a package, and the order is enforced
 
-The engine was one 4290-line module until Phase 5 of
-`implementation_plan.md`. It is now twelve modules in a strict dependency order:
+The engine was one 4290-line module until Phase 5 of the package refactor. It is
+now twelve modules in a strict dependency order:
 
 ```
 tuning -> diagnostics -> chords -> grips -> cost -> textures
@@ -368,8 +368,7 @@ Each of these cost real time, or nearly shipped a defect.
 | [docs/renderers.md](docs/renderers.md) | tab staff, MusicXML import/export, GP5, and their traps |
 | [docs/corpus.md](docs/corpus.md) | the Weimar database, head selection, skeletons |
 | [docs/open-issues.md](docs/open-issues.md) | diagnosed but unfixed bugs, with measurements |
-| [docs/history/](docs/history/) | completed plans: corpus, walking bass, texture |
-| [implementation_plan.md](implementation_plan.md) | the completed refactor, phase by phase |
+| [docs/history/](docs/history/) | completed plans: corpus, walking bass, texture, arranging guide |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | what CI runs, and which tests it does *not* run |
 
 `common_grips.md` is generated from the engine's own tables by `grip_chart.py` and
