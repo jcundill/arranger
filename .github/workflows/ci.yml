@@ -47,6 +47,25 @@ jobs:
       # One editable install carrying all three extras. `make install-extra`
       # and `install-extra-gp` are separate targets on purpose (PyGuitarPro is
       # LGPL-3.0, so a developer who only needs MusicXML should not pull it in),
+      # but **a CI run wants every combination exercised**, so that separation is
+      # not reproduced here.
+      #
+      # The extras are the point of the job, not an optimisation. Without them
+      # every `skipUnless(HAS_MUSIC21)` and `skipUnless(HAS_GUITARPRO)` guard
+      # silently skips, and the MusicXML 3.1 `kind` problem this repository
+      # documents having shipped is precisely the class of defect that was
+      # invisible to a round trip. The other half of the asymmetry - that a
+      # *missing* extra must be a reported usage error rather than a crash - is
+      # asserted by stubbing the writer, so it runs with or without them.
+      #
+      # `dev` is the third: `make check` is lint + typecheck + test, and the first
+      # two run `ruff` and `pyright` by bare name. Without the extra those targets
+      # exit with the Makefile's own "needs pyright/ruff" message, so the job
+      # would fail before a single test ran.
+      - name: Install the package with every extra
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e '.[xml,gp,dev]'
 
       # `make check` is lint + typecheck + test, in that order, so a lint failure
       # is reported before the suite is spent. The Makefile's defaults point at
@@ -91,9 +110,13 @@ jobs:
         with:
           python-version: "3.14"
 
+      # Same install as the `check` job: the gate this runs is the same gate, so a
+      # corpus run that skipped the extras would report a different suite than the
+      # push did. See the note there for why all three are wanted at once.
       - name: Install the package with every extra
         run: |
           python -m pip install --upgrade pip
+          python -m pip install -e '.[xml,gp,dev]'
 
       # THE REPOSITORY VARIABLE. Set `vars.WJAZZD_DB_URL` to a URL serving
       # `wjazzd.db` (the Weimar Jazz Database, 42 MB) and this step fetches it.
@@ -136,20 +159,3 @@ jobs:
           make check PYTHON="$(command -v python)" PYRIGHT=pyright RUFF=ruff
           echo "--- the corpus tests ran this time; the skipped count is below ---"
           python -m unittest discover -s tests -t . 2>&1 | tail -3
-
-          python -m pip install -e '.[xml,gp,dev]'
-
-      # but **a CI run wants every combination exercised**, so that separation is
-      # not reproduced here.
-      #
-      # The extras are the point of the job, not an optimisation. Without them
-      # every `skipUnless(HAS_MUSIC21)` and `skipUnless(HAS_GUITARPRO)` guard
-      # silently skips, and the MusicXML 3.1 `kind` problem this repository
-      # documents having shipped is precisely the class of defect that was
-      # invisible to a round trip. The other half of the asymmetry - that a
-      # *missing* extra must be a reported usage error rather than a crash - is
-      # asserted by stubbing the writer, so it runs with or without them.
-      - name: Install the package with every extra
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e '.[xml,gp,dev]'
