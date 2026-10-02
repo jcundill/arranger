@@ -20,6 +20,7 @@ the assertions check the *semantics a reader acts on* (note type, beat status),
 not merely that the round trip is lossless.
 """
 
+import contextlib
 import io
 import os
 import tempfile
@@ -957,6 +958,110 @@ class TestWalkingBass(GuitarProTestCase):
         """
         for measure in self.walk_song.tracks[0].measures:
             self.assertAlmostEqual(self.bar_quarters(measure), 4.0, places=6)
+
+    def test_a_tie_never_asserts_a_pitch_the_string_is_not_sounding(self):
+        """
+        The regression, and it is a **fret** assertion where the tests above are a
+        **type** assertion - which is why it got through. A tie is not "held" in the
+        abstract: PyGuitarPro writes no fret for one and the reader reconstructs it from
+        the last note on that string, so a tie claims "same pitch as last time here".
+
+        Walking bass falsifies that claim. The engine picks the thumb's string from the
+        *current* step's thinned voicing rather than the shape still ringing, so on a
+        `bass_only` step it can put the thumb on a string the held shape occupies. The
+        tie then resolves to the thumb's fret, and the file states a pitch the engine
+        never produced - an A5 where the arrangement holds A6, silently.
+
+        The fixture is a committed head rather than a synthetic one because the defect
+        needs the engine to actually collide, which the simple single-chord fixtures
+        never do.
+        """
+        import tabgp
+        from headxml import arrange_xml_head
+        from tests.test_headxml import BUT_NOT_FOR_ME
+
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            steps, _, _ = arrange_xml_head(
+                BUT_NOT_FOR_ME, grips=("shell",), texture="walking_bass"
+            )
+        song = _parse(
+            io.BytesIO(format_gp5(steps, beats_per_bar=2, beat_type=2))
+        )
+
+        # Rebuild what the writer *meant* to say, from the builder's own model rather
+        # than from the parsed file: that is the only way to see the corruption, since
+        # the file agrees with itself either way.
+        holder = {}
+        real_build = tabgp._build_song
+
+        def capture(gp_module, measures, *args, **kwargs):
+            built = real_build(gp_module, measures, *args, **kwargs)
+            holder["song"] = built
+            return built
+
+        tabgp._build_song = capture
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                format_gp5(steps, beats_per_bar=2, beat_type=2)
+        finally:
+            tabgp._build_song = real_build
+
+        built = holder["song"].tracks[0].measures
+        parsed = song.tracks[0].measures
+        self.assertEqual(len(built), len(parsed))
+
+        compared = 0
+        for index, (memory_measure, file_measure) in enumerate(zip(built, parsed)):
+            memory_beats = memory_measure.voices[0].beats
+            file_beats = file_measure.voices[0].beats
+            self.assertEqual(len(memory_beats), len(file_beats), f"bar {index + 1}")
+            for memory_beat, file_beat in zip(memory_beats, file_beats):
+                wanted = sorted((n.string, n.value) for n in memory_beat.notes)
+                got = sorted((n.string, n.value) for n in file_beat.notes)
+                compared += 1
+                self.assertEqual(
+                    wanted,
+                    got,
+                    f"bar {index + 1}: the file's pitches differ from the "
+                    f"arrangement's, so a tie resolved to the wrong fret",
+                )
+        self.assertGreater(compared, 0, "the fixture produced no beats to compare")
+
+    def test_the_fixture_actually_collides(self):
+        """
+        The premise of the test above, asserted so it cannot pass by going vacuous.
+
+        If the engine stopped putting the thumb on a string the held shape occupies -
+        which is the better fix, and is worth doing - the round trip above would pass
+        trivially. This says whether the collision is still present, so the tie
+        handling is known to be exercised rather than merely unexercised.
+        """
+        from headxml import arrange_xml_head
+        from tests.test_headxml import BUT_NOT_FOR_ME
+
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            steps, _, _ = arrange_xml_head(
+                BUT_NOT_FOR_ME, grips=("shell",), texture="walking_bass"
+            )
+
+        ringing = None
+        collisions = 0
+        for step in steps:
+            voicing = step.voicing
+            if step.bass_only and ringing is not None:
+                thumb = voicing.bass_string
+                if thumb is not None and ringing[thumb] >= 0:
+                    collisions += 1
+            if not step.bass_only and not step.repeated:
+                ringing = list(voicing.frets)
+        self.assertGreater(
+            collisions,
+            0,
+            "no thumb now shares a string with the held shape, so the tie "
+            "handling above is no longer being exercised",
+        )
 
 
 class TestModuleSurface(unittest.TestCase):
