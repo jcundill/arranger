@@ -366,6 +366,13 @@ class ArrangementStep:
     # carries the melody and three bass-only. `arrange_progression` therefore returns
     # more steps than the progression it was given under this texture, and this field is
     # how a renderer tells which is which.
+    #
+    # It is a statement about the **left hand**, so it never coexists with
+    # `role == ROLE_TARGET`: a target states the harmony, and a step that re-states a
+    # chord cannot also be one that holds the previous shape. `decisions.is_bass_only`
+    # is what keeps the two apart - see `docs/open-issues.md` item 4, where a
+    # walk-invented downbeat the melody moved onto arrived carrying both and every
+    # renderer obeyed the flag and dropped the chord.
     bass_only: bool = False
 
     @property

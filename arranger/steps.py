@@ -48,6 +48,7 @@ from .chords import (
 from .decisions import (
     MELODY_ALONE_NO_CHORD,
     MELODY_ALONE_TEXTURE,
+    is_bass_only,
     is_repeated_step,
     melody_alone_case,
     resolve_texture_grips,
@@ -573,7 +574,10 @@ class VoiceLeadingEngine:
           one carrying the melody and three marked `bass_only`, whose upper voices are
           held rather than re-struck. Callers that zip their progression against the
           result, or derive a bar count from `len(steps)`, are wrong under this texture
-          only; `uniform` and `targets` are untouched.
+          only; `uniform` and `targets` are untouched. A step the walk invented can be
+          promoted to a **target** when the melody moves onto it, and then it states
+          its harmony rather than holding - which is `decisions.is_bass_only`, and the
+          reason a `bass_only` step is always a fill.
         - **A fill is the melody alone**, and so is a target no shell can sound. The
           chord name above such a step describes the harmony rather than everything
           sounding, which is the texture rather than a defect - the harmony is stated
@@ -769,7 +773,7 @@ class VoiceLeadingEngine:
                         duration=duration,
                         role=role,
                         metric_weight=weight,
-                        bass_only=slot.bass_only,
+                        bass_only=is_bass_only(slot.bass_only, role),
                     )
                     cls._attach_bass(fill, slot.bass, arrangements, diagnostics)
                     arrangements.append(fill)
@@ -819,7 +823,7 @@ class VoiceLeadingEngine:
                 # known harmony (or skips), and the melody-alone shape leaves every bass
                 # string free. Attaching it here rather than only on harmonised steps is
                 # what keeps a bar of no-chord melody from being a hole in the walk.
-                arrangements[-1].bass_only = slot.bass_only
+                arrangements[-1].bass_only = is_bass_only(slot.bass_only, role)
                 cls._attach_bass(arrangements[-1], slot.bass, arrangements, diagnostics)
                 continue
 
@@ -860,7 +864,7 @@ class VoiceLeadingEngine:
                             duration=duration,
                             role=role,
                             metric_weight=weight,
-                            bass_only=slot.bass_only,
+                            bass_only=is_bass_only(slot.bass_only, role),
                         )
                         cls._attach_bass(step, slot.bass, arrangements, diagnostics)
                         arrangements.append(step)
@@ -977,7 +981,7 @@ class VoiceLeadingEngine:
                         duration=duration,
                         role=role,
                         metric_weight=weight,
-                        bass_only=slot.bass_only,
+                        bass_only=is_bass_only(slot.bass_only, role),
                     ))
                     cls._attach_bass(arrangements[-1], slot.bass, arrangements, diagnostics)
                     continue
@@ -1019,7 +1023,14 @@ class VoiceLeadingEngine:
                 # Decision B: this slot exists for the thumb. The upper voices are held
                 # across it by the renderers rather than re-struck, and the melody is
                 # not re-attacked - the opposite of `repeated`, and never set together.
-                bass_only=slot.bass_only,
+                #
+                # `is_bass_only` and not the slot's own flag: the bass grid invented
+                # this beat, but a strong beat the melody moves onto is a **target**,
+                # and a target states the harmony rather than holding it. Passing the
+                # slot's flag straight through marked such a step both bass-only and a
+                # target, which silenced the chord this line had just voiced - see
+                # `docs/open-issues.md` item 4.
+                bass_only=is_bass_only(slot.bass_only, role),
             ))
             # Select first, merge after: the bass is written into the fret vector only
             # once `_best_voicing` has returned, so it cannot enter the cost tuple by

@@ -488,12 +488,20 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
         on the low E, and a thumb note must sound strictly below the structure it
         supports), so the assertion is that exact set rather than an empty one. A
         second entry here means this change cost a note.
+
+        The anchors are selected by `bass_role` alone, and deliberately **not** by
+        `bass_only` as well. They used to be filtered by both, and `docs/open-issues.md`
+        item 4 is what made that wrong: a walk-invented downbeat the melody moves onto
+        is a **target**, so it stopped being `bass_only` while remaining an anchor -
+        and the filter quietly dropped it from this assertion, turning the test into
+        one that could not fail. An anchor is an anchor whether or not the left hand
+        holds across it, which is what makes `bass_role` the honest population.
         """
         steps = self._arrangement()
         anchors = [
             step
             for step in steps
-            if step.bass_only and step.bass_role == arranger.BASS_ROLE_ANCHOR
+            if step.bass_role == arranger.BASS_ROLE_ANCHOR
         ]
         self.assertGreater(len(anchors), 0)
         missing = [(step.bar, step.beat) for step in anchors if step.bass is None]
@@ -502,6 +510,102 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
             missing,
             "the set of anchors with no thumb note changed",
         )
+
+
+class TestABassOnlyStepIsNeverATarget(unittest.TestCase):
+    """
+    The invariant item 4 was really about, from `docs/open-issues.md`.
+
+    `bass_only` and `role == ROLE_TARGET` are not two descriptions of one state, they
+    are contradictory ones: the first means "nothing above the thumb strikes, the
+    upper voices are held from the last shape", the second means "a full chord
+    states the harmony here". A walk-invented downbeat the melody moves onto is
+    promoted to a target by `_roles_for_slot`, so a slot could arrive carrying both,
+    and the engine voiced a real `shell` or `melody` on it that every renderer then
+    suppressed. The chord of the tune was in the arrangement and in none of the
+    output.
+
+    Asserted as a property of the flags rather than as a tab string, because the flag
+    is what the four renderers read and the tab is four renderings of it.
+    """
+
+    def _walking_arrangement(self):
+        """The committed head that produced the defect, as a walking bass."""
+        import contextlib
+        import io
+
+        from headxml import arrange_xml_head
+        from tests.test_headxml import BUT_NOT_FOR_ME
+
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            steps, _, _ = arrange_xml_head(
+                BUT_NOT_FOR_ME, grips=("shell",), texture="walking_bass"
+            )
+        return steps
+
+    def test_no_step_is_both_bass_only_and_a_target(self):
+        """
+        The contradiction itself. Nine steps in "But Not For Me" carried both flags
+        before the fix, every one of them a walk-invented downbeat.
+        """
+        offenders = [
+            (step.bar, step.beat)
+            for step in self._walking_arrangement()
+            if step.bass_only and step.role == ROLE_TARGET
+        ]
+        self.assertEqual(offenders, [], "a step is both bass-only and a target")
+
+    def test_the_fills_are_still_bass_only(self):
+        """
+        The other half, and the reason the fix is a role test rather than a blanket
+        one. Under decision C a fill is the melody alone and the melody it carries is
+        the one already sounding, so holding it is correct and must survive.
+        """
+        steps = self._walking_arrangement()
+        fills = [step for step in steps if step.bass_only and step.role == ROLE_FILL]
+        self.assertEqual(len(fills), 13, "the held fills changed")
+
+    def test_every_target_states_its_chord_in_every_renderer(self):
+        """
+        What the flags are *for*: a target's upper voices reach the output.
+
+        Checked against all four renderers rather than one, because they disagreed -
+        `tabxml` showed the chord and the other three hid it - and agreement between
+        them is the property that was actually broken.
+        """
+        import tabxml
+        from arranger.render import _step_cells
+
+        checked = 0
+        for step in self._walking_arrangement():
+            if step.role != ROLE_TARGET or step.melody_only:
+                continue
+            checked += 1
+            frets = step.voicing.frets
+            upper = [i for i, f in enumerate(frets) if f >= 0 and i != step.voicing.bass_string]
+            self.assertTrue(
+                upper, f"bar {step.bar} beat {step.beat}: a target sounds no upper voice"
+            )
+            sounded = [
+                i for i, cell in enumerate(_step_cells(step)) if cell.isdigit()
+            ]
+            self.assertEqual(
+                sorted(sounded),
+                sorted(i for i, f in enumerate(frets) if f >= 0),
+                f"bar {step.bar} beat {step.beat}: the tab drops a target's voices",
+            )
+            self.assertEqual(
+                sorted(i for i, _fret in _sounding_frets(step)),
+                sorted(i for i, f in enumerate(frets) if f >= 0),
+                f"bar {step.bar} beat {step.beat}: the GP5 drops a target's voices",
+            )
+            self.assertEqual(
+                len(tabxml._sounding(step)),
+                len([f for f in frets if f >= 0]),
+                f"bar {step.bar} beat {step.beat}: the score drops a target's voices",
+            )
+        self.assertGreater(checked, 0, "no targets were checked")
 
 
 class TestBassPlacement(unittest.TestCase):

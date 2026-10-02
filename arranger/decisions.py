@@ -148,6 +148,41 @@ def melody_alone_case(
     return MELODY_ALONE_NONE
 
 
+def is_bass_only(slot_bass_only: bool, role: str) -> bool:
+    """
+    Whether this step's upper voices really are held across it.
+
+    `slot_bass_only` is what the **bass grid** said: the walk invented this beat,
+    because the bass moves on a finer grid than the melody does (decision B). That
+    is a statement about where the beat came from, not about what the left hand
+    plays, and the two come apart.
+
+    A **target** is the case that matters. `_roles_for_slot` promotes a strong beat to
+    a target when the melody moves onto it, and under `walking_bass` the walk
+    invents downbeats the melody grid never had - so a slot can arrive with
+    `bass_only=True` *and* `role == ROLE_TARGET` at the same time. Those two flags
+    contradict each other: `bass_only` means "nothing above the thumb strikes, the
+    upper voices are held from the last shape", while a target means "a full chord
+    states the harmony here". The engine voices a real `shell` or `melody` grip on
+    such a step, and then `bass_only` told all four renderers to suppress it - so the
+    chord of the tune vanished from the tab, the GP5 file and the score while existing
+    in the engine's own output. `tabxml` was the only renderer that showed it, and
+    only because `_sounding` filters on `fret >= 0` and never applies the rule at all.
+
+    A **fill** is the other half and is untouched: under decision C a fill is the
+    melody alone, and the melody it carries is the one already sounding, so holding it
+    is exactly right. That is why this is a role test rather than a pitch comparison -
+    on "But Not For Me" 13 of the 22 `bass_only` steps are fills that are correctly
+    held, and 9 are targets that were wrongly silenced.
+
+    The answer is a flag the renderers read, so it has to be right here rather than in
+    four renderers that would each have to re-derive it - and it also has to be right
+    before `_attach_bass` reads it, because a target measures its thumb against its own
+    voicing rather than against a shape it is holding.
+    """
+    return slot_bass_only and role != ROLE_TARGET
+
+
 def should_promote_fill(
     texture: str,
     role: str,

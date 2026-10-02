@@ -1,9 +1,15 @@
 # Open issues: playability of held shapes, and one GP5 discrepancy
 
 Written at the end of the 2026-09-29 session, after the `GRIP_MAX_SPAN` /
-`voicing_cost` / `grips`-intersection work. **Nothing in here is fixed.** The
-three items below are open, with the measurements that produced them, so the
-work can be picked up without re-deriving anything.
+`voicing_cost` / `grips`-intersection work. **All four items below are now fixed**;
+each carries the measurement that produced it and the stage that closed it, so the
+work can be read rather than re-derived. Items 1-3 were fixed in stages 1-3 the same
+day; item 4 needed a corrected diagnosis first, which is recorded in full.
+
+The header of each section states its status, and **item 4's original diagnosis was
+wrong** - it blamed the renderers and the fill rule, when the engine was emitting two
+contradictory flags at once. Read its "Stage 4" before acting on the section above
+it.
 
 Reproduce all of it with the commands in [Reproducing](#reproducing).
 
@@ -288,12 +294,16 @@ went with it, since a palette that is empty can no longer reach the warning.
 
 ---
 
-## 4. A `bass_only` melody that is not already ringing is dropped by every renderer
+## 4. A target the walk invented was silenced by the `bass_only` flag
 
-**Status:** found while fixing item 2 (stage 2), diagnosed, **NOT fixed**. Newly
-added — it was not in the original list, and it is larger than any of the three.
+**Status:** FIXED. See "Stage 4" below.
 
-### The symptom
+> **The diagnosis in this section was wrong when it was written, and the fix is
+> smaller than the one proposed here.** It is kept below with its original reasoning
+> because that reasoning is what pointed at the right file. Read "Stage 4" for what
+> the defect actually was.
+
+### The symptom as first diagnosed
 
 Walking bass fills are "the melody alone plus the thumb" (decision C). When the
 melody note on such a fill is **not** already sounding in the held shape, it is a
@@ -342,6 +352,71 @@ should not be taken as a side effect of a rendering fix:
 
 Recommended as its own piece of work, after item 1, since item 1's fix changes
 what the engine hands the renderers anyway.
+
+### Stage 4 — fixed, and the diagnosis above was wrong twice
+
+The premise was "a fill whose melody is not held". **The affected steps were not
+fills at all**, and two of the three numbers above were wrong.
+
+**One: the count is 9 of 22, not 17.** Comparing by *string* — is this melody's
+string in the held shape's? — wrongly counts a step whose melody is already
+sounding *on a different string*. Bar 4 beat 2.0 re-voices a held G4 from
+B-string-8 to high-E-3, which sounds identical and is not a dropped note.
+Comparing by **pitch** splits the 22 three ways:
+
+| | count | renderers correct? |
+|---|---|---|
+| `role == ROLE_FILL`, melody already ringing | 13 | **yes** — decision C working |
+| `role == ROLE_TARGET`, melody genuinely new | **9** | **no** |
+
+**Two: the premise "walking-bass fills are the melody alone" pointed at the wrong
+third of the texture.** The 13 fills are correct by construction and were never
+touched. The 9 are all `ROLE_TARGET`, and each one is:
+
+- a **walk-invented slot** — the bass grid created a downbeat the melody grid never
+  had (decision B);
+- carrying **`role == ROLE_TARGET`**, because `_roles_for_slot` promotes a strong
+  beat when the melody moves onto it;
+- carrying a **`shell` or `melody` grip** — the engine deliberately voiced a chord.
+
+So `bass_only=True` and `role == ROLE_TARGET` arrived **together**, and they are
+contradictory states: the first means "nothing above the thumb strikes", the second
+means "a full chord states the harmony here". The engine voiced the chord and then
+told the renderers to suppress it. The engine was right and the flag was wrong.
+
+**Three: the fix is not in the renderers.** `bass_only` is already documented
+correctly in `arranger/tuning.py`; the engine is what violated it. So the repair is
+`decisions.is_bass_only(slot.bass_only, role)`, applied where the step is built —
+which needs **no renderer change at all**, and `tabxml`'s accidental correctness
+becomes deliberate agreement:
+
+```
+bar 11, frets [-1, 11, 13, 13, 13, -1], before:
+  tabstaff -> [1]                render -> ['', '11', '', '', '', '']
+  tabgp    -> [(1, 11)]          tabxml -> [56, 63, 68, 72]
+bar 11, after:
+  tabstaff -> [0, 1, 2, 3, 4, 5] render -> ['x', '11', '13', '13', '13', 'x']
+  tabgp    -> [(1, 11), (2, 13), (3, 13), (4, 13)]
+  tabxml   -> [56, 63, 68, 72]
+renderer disagreements on sounding strings: 0
+```
+
+It also composes with item 1's fix: `_attach_bass` only narrows to the held shape
+`if step.bass_only`, so a target measures its thumb against its own voicing — which
+is right, because a target *is* the shape being played. At bar 29 that moved the
+thumb off the low E at fret 15 and onto the D at fret 5, beside the melody, so the
+fix improved playability as well as correctness.
+
+- `tests/test_walking_bass.py::TestABassOnlyStepIsNeverATarget` — three tests: the
+  contradiction does not occur, the 13 fills are still held, and every target's
+  voices reach all four renderers. The first and third fail on the pre-change tree
+  and pass after.
+- `test_the_walk_loses_no_anchor_the_fix_did_not_already_lose` selected its
+  population with `bass_only and bass_role == ANCHOR`. Bar 15 stopped being
+  `bass_only` while remaining an anchor, so the filter quietly dropped it and the
+  test could no longer fail. It now selects by `bass_role` alone — an anchor is an
+  anchor whether or not the left hand holds across it. The bar-15 gap itself is
+  **unchanged**: it still has no thumb note.
 
 ---
 
