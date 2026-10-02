@@ -31,7 +31,14 @@ from musthe import Note
 from . import chords as _chords
 from . import cost as _cost
 from . import grips as _grips
-from .bass import BassNote, _place_bass, _previous_bass, _Slot, _walking_slots
+from .bass import (
+    BassNote,
+    _held_shape,
+    _place_bass,
+    _previous_bass,
+    _Slot,
+    _walking_slots,
+)
 from .chords import (
     NON_CHORD_TONE_EXTENSIONS,
     NON_CHORD_TONE_STRATEGIES,
@@ -1051,10 +1058,22 @@ class VoiceLeadingEngine:
         step.bass_role = note.role
         if step.bass is not None:
             return
+        # A `bass_only` step re-states nothing above the thumb, so the shape the hand is
+        # holding is the last **struck** one, not this step's own thinned vector.
+        # Measured against the thinned vector the thumb is placed on a string the hand
+        # is already fingering and ranked from a fret the hand is not at - the
+        # unplayable bar in `docs/open-issues.md` item 1. For any other step the current
+        # voicing *is* the shape, so `held` must not narrow it.
+        held = (
+            _held_shape(arrangements)
+            if step.bass_only and not step.melody_only
+            else None
+        )
         placed = _place_bass(
             step.voicing,
             note.pitch_class,
             previous_bass=_previous_bass(arrangements),
+            held=held,
         )
         if placed is None:
             (diagnostics or default_diagnostics()).warn(

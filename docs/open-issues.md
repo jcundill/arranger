@@ -11,7 +11,7 @@ Reproduce all of it with the commands in [Reproducing](#reproducing).
 
 ## 1. The thumb is placed against the wrong reference point (walking bass)
 
-**Status:** diagnosed, not fixed. This is the item worth doing first.
+**Status:** FIXED (stage 3). See "Stage 3" below.
 
 ### The symptom
 
@@ -118,14 +118,68 @@ keep holding when other between-step cases turn up.
   `hand_fret`". That claim was measured with an upper voicing present. It does
   **not** hold for `bass_only` steps, which is how the bug got through.
 
+### Stage 3 — fixed
+
+The third candidate was the right one, and it turned out to be **the same fix as
+item 2's root cause**: both were the thumb being placed against the current
+step's thinned voicing instead of the shape the hand is holding. Fixing it here
+removes the collision that made the GP5 tie resolve to the wrong fret, so the
+two items were one bug wearing two coats.
+
+`_place_bass` takes `held` — the last **struck** step's fret vector and which of
+its strings the thumb played — and it corrects three things at once, all of which
+the melody-only vector got wrong:
+
+- **which strings are free** — one string cannot sound two frets, so a string the
+  held shape occupies is not available. This was the item 2 collision;
+- **what the lowest sounding note is** — the thumb must sound below the held
+  structure, not merely below the melody;
+- **`hand_fret`** — the proximity ranking now measures from where the fingers
+  actually are, which is the original complaint.
+
+One subtlety cost a correction mid-implementation. The held vector contains the
+thumb's *own* previous note, because a target folds the thumb into its fret
+vector. Treating that as structure to stay beneath forbids every repeated and
+ascending walk note — and a walking bass is mostly those. An early version lost
+6 of 22 thumb notes this way. It is now excluded **by string**, identified from
+the held step's own `bass_string`, which is exact: the thumb moves between beats,
+so the note it played two beats ago is not the one in the shape being held.
+
+Measured over "But Not For Me", walking bass:
+
+| | before | after |
+|---|---|---|
+| thumb on a finger's string, at a different fret | 6 | **0** |
+| hand reach, thumb vs held shape (worst) | 8 frets | **3 frets** |
+| hand reach (median) | — | **1 fret** |
+| bar 5's thumb, reported as a 7-fret stretch | D string fret 1 | **A string fret 6**, where the hand already is |
+| anchors with no reachable string | 1 | 1 (unchanged — pre-existing, see below) |
+
+The one remaining gap is **not** a cost of this change: bar 15 beat 1.0 had no
+reachable string before it either, because the step's own upper voicing already
+sounds F3 on the low E and a thumb note must sound strictly below the structure
+it supports. Verified by measurement against the pre-change tree rather than
+assumed, and the test asserts that exact set so a *second* gap would fail.
+
+- `tests/test_walking_bass.py::TestTheThumbReachesTheHandHoldingTheShape` — four
+  tests, all on between-step properties: no shared string, bounded reach, the
+  specific bar from the report, and the anchor set. All four fail on the
+  pre-change tree and pass after.
+- The weak assertion at `test_walking_bass.py:577` (`fret_span() <= shell + 5`)
+  is left alone deliberately. `fret_span()` on a `bass_only` step measures
+  melody-to-thumb, and those are different limbs — it rose from 3 to 11 with this
+  fix and is not a playability measure. The reach test is the one that measures
+  the hand.
+
 ---
 
 ## 2. GP5 bar 5 contains notes the engine never produced
 
-**Status:** unexplained. Treat the walking-bass GP5 export as untrustworthy
-until this is resolved, independently of item 1.
+**Status:** the A5 is FIXED and the cause is known. The missing melody turned out to
+be a **different and much larger** defect that is shared by every renderer — see
+[Stage 2](#stage-2--fixed-and-what-it-uncovered) and the new item 4 below.
 
-The file's bar 5 beat 0 is `(2,8) (3,8) (4,1) (5,5)` — B8, G8, D1, A5.
+The file's bar 5 beat 0 was `(2,8) (3,8) (4,1) (5,5)` — B8, G8, D1, A5.
 Cross-checking against the engine's steps for that bar:
 
 - **D1** matches. It is the thumb (Eb3, `bass_midi=51`). ✔
@@ -139,22 +193,59 @@ This is not a bar-number offset: the other beats line up exactly (file beat 1 =
 F4 on high E fret 1 = engine beat 1.5; file beat 2 = D2 + E3 = engine beat
 2.0), and 2/2 maps `1.0 → beat0, 1.5 → beat1, 2.0 → beat2, 2.5 → beat3`.
 
-So the file's beat 0 is not a faithful rendering of any single engine step:
-one note is unexplained and one is missing. **Worth checking whether the tie
-writer in `tabgp` is dropping the melody note of a tied step and borrowing a
-fret from the wrong voice**, but that is a hypothesis, not a finding.
+### Stage 2 — fixed, and what it uncovered
 
-The two items may well be one bug. The A5 looks like the bar-4 A-string voice
-displaced by a fret, and a displaced voice is exactly what a tie/split that
-writes the wrong `Note` would produce.
+The hypothesis recorded above ("the tie writer drops the melody note and
+borrows a fret from the wrong voice") was **half right**, and the half that was
+right is the interesting part.
+
+**A GP5 tie carries no fret at all.** PyGuitarPro's writer emits
+`fret = note.value if note.type != NoteType.tie else 0`, and the reader
+reconstructs one in `getTiedNoteValue` by scanning backwards for the most
+recent note on the same string. So a tie is not "held" in the abstract — it is
+the claim *"same pitch as the last note on this string"*, and the file is
+correct only while that claim is true.
+
+Walking bass falsifies it. `_place_bass` chooses the thumb's string from the
+**current step's thinned voicing**, not from the shape still ringing, so on a
+`bass_only` step it can put the thumb on a string the held shape occupies —
+**6 of the 22** `bass_only` steps in this head do, at a *different* fret. The
+tie written for that string then resolves to the thumb's fret instead of the
+shape's. Bar 5 beat 0 is the case in the file: the shape holds A6, the tie
+resolved to the A5 written one beat earlier.
+
+Isolated to a single note, the round trip is wrong even alone
+(`string5 tie at fret 6` reads back as 5), and changing the in-memory fret to
+5/6/7/8 changes nothing while flipping it to `NoteType.normal` writes 6
+correctly. **Three beats in the file were wrong, not one** — bars 5, 17 and 21;
+bar 17 turned a fret 6 into a fret 2.
+
+The fix makes the renderer honest rather than the format: a tie is written only
+where the claim holds, and the note is struck normally where it does not. A
+re-struck note is a performance difference the player can hear and forgive; a
+silently wrong pitch in a file read note-for-note is not. Round trip is now
+lossless across all six committed heads × three textures.
+
+- `tests/test_guitarpro.py::test_a_tie_never_asserts_a_pitch_the_string_is_not_sounding`
+  — a **fret** assertion, where the existing bass-only test is a **type**
+  assertion. That is precisely why this got through: the existing test says so
+  in its own docstring ("Asserted on the parsed-back note *types* rather than on
+  the frets"), which was a reasonable choice for the silence it guarded and left
+  the fret channel untested.
+- `test_the_fixture_actually_collides` asserts the premise, so the test above
+  cannot go vacuous if the collision is ever fixed at the source.
+
+**The right long-term fix is upstream**, and is item 1: if `_place_bass` measured
+against the held position rather than the thinned voicing, the thumb would never
+land on an occupied string and this could not arise.
 
 ---
 
 ## 3. `--grips` with a texture whose palette is legitimately empty
 
-**Status:** regression I introduced on 2026-09-29, known, unfixed.
+**Status:** FIXED. See "Stage 1" below.
 
-`--grips shell --texture walking_bass` prints **30+ copies** of:
+`--grips shell --texture walking_bass` printed **76 copies** of:
 
 ```
 Warning: walking_bass uses no grip for a fill, none of which is in the
@@ -170,17 +261,87 @@ warning fires on all of them.
 The logic is right and the case is not a user error, so the fix is to suppress
 the warning when the role's palette is **legitimately empty** (`role_grips` is
 `()`), and keep it for the case where the caller asked for a grip the texture
-genuinely never uses. Both copies of the rule need it:
-
-- `arranger/steps.py`, in `arrange_progression`
-- `wjazzd.py`, in `arrange_slots`
-
-`tests/test_texture.py::test_an_empty_intersection_falls_back_and_says_so`
-asserts the warning is printed, so it will need a companion case asserting it
-is *not* printed for an empty palette.
+genuinely never uses.
 
 Output that unusable on a legitimate flag combination is a defect in its own
 right, independent of the playability work.
+
+### Stage 1 — fixed
+
+The rule turned out to have **one** implementation, not the two this document
+listed: `wjazzd.arrange_slots` routes through
+`decisions.resolve_texture_grips` like `arrange_progression` does, so the
+suppression is one `if` in `arranger/decisions.py` and both CLIs get it.
+
+The distinction is between a texture that *cannot* use the grip and one that
+means to *play nothing*; only the former is worth interrupting output to
+mention. The now-unreachable `role_grips or 'no grip'` fallback in the message
+went with it, since a palette that is empty can no longer reach the warning.
+
+- `tests/test_texture.py::test_an_empty_palette_is_not_reported` — asserts the
+  premise (the palette really is `()`), that the walking-bass run is silent,
+  and that the non-empty `targets` case still warns, so this suppresses one
+  case rather than the diagnostics path.
+- Verified the arrangement is byte-identical before and after (step fingerprint
+  `d2f53ccf47c13f80` over "But Not For Me", walking bass): the fix touches
+  diagnostics and nothing else.
+
+---
+
+## 4. A `bass_only` melody that is not already ringing is dropped by every renderer
+
+**Status:** found while fixing item 2 (stage 2), diagnosed, **NOT fixed**. Newly
+added — it was not in the original list, and it is larger than any of the three.
+
+### The symptom
+
+Walking bass fills are "the melody alone plus the thumb" (decision C). When the
+melody note on such a fill is **not** already sounding in the held shape, it is a
+*new* note — and every renderer omits it. In "But Not For Me", **17 of the 22**
+`bass_only` steps have a melody that is not held, so seventeen melody notes are
+missing from the output.
+
+All four renderers agree on the omission, which is what makes it a defect rather
+than a difference of opinion. For bar 5 beat 1.0, whose frets are
+`[-1,-1,1,-1,-1,3]` (thumb D1, melody G4 on the high E):
+
+```
+tabstaff._strikes_here  -> [2]          # thumb only; string 5 not drawn
+tabgp._sounding_frets   -> [(2, 1)]     # thumb only
+render._step_cells      -> ['','','1','','','']
+tabxml._sounding        -> [51, 67]     # the odd one out: keeps both
+```
+
+`tabxml` happens to keep the melody because `_sounding` filters on `fret >= 0`
+and so takes the whole vector rather than applying the `bass_only` rule at all —
+which is a happy accident, not a decision, and it means the MusicXML score and
+the tab disagree about which notes sound.
+
+### Why it went unnoticed
+
+Every committed fixture has a melody that is *already ringing*, so the rule and
+the melody coincide. Measured over the single-chord fixtures and the demo
+cadence, the number of affected steps is **0**. It only appears when the melody
+_moves_ between melody slots, which a held-note head mostly does not do.
+
+### Why it was not fixed here
+
+This is a **musical and architectural** decision, not a localized patch, and it
+should not be taken as a side effect of a rendering fix:
+
+- The rule lives in `_strikes_here` (`tabstaff`), `_step_cells`
+  (`arranger/render`), `_sounding_frets` (`tabgp`) and `_sounding` (`tabxml`) —
+  four implementations that must agree, and the documented consequence of the
+  current rule is that a `bass_only` column shows *only* the thumb.
+- The likely fix — strike the melody too when it is not held — changes the
+  **meaning of `bass_only`** from "the thumb alone strikes" to "the thumb and any
+  new melody strike", which is a texture-level decision.
+- It would move the tab strings pinned in the tests, which AGENTS.md calls the
+  acceptance gate, so it needs the decision made deliberately rather than
+  absorbed into stage 2.
+
+Recommended as its own piece of work, after item 1, since item 1's fix changes
+what the engine hands the renderers anyway.
 
 ---
 

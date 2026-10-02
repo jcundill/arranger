@@ -86,6 +86,14 @@ def resolve_texture_grips(
     An empty intersection is a caller asking for a grip the texture never uses. The
     step still sounds, and says so: losing a chord of the tune is worse than
     ignoring a flag, so the texture's own set stands.
+
+    A palette that is **itself** empty is the one case that is not a caller error, and
+    it is not reported. `walking_bass`'s fill palette is `()` deliberately - it means
+    "the left hand plays nothing between the anchors" - so `--grips shell --texture
+    walking_bass` intersects to nothing on *every* fill, and warning on each printed
+    the same line 76 times over one arrangement. The distinction is the difference
+    between a texture that cannot use the grip and a texture that means to play
+    nothing: only the former is worth interrupting the output to mention.
     """
     role_grips: Tuple[str, ...] = texture_grips[role]
     if requested == GRIP_PREFERENCE:
@@ -93,8 +101,10 @@ def resolve_texture_grips(
     narrowed = tuple(g for g in requested if g in role_grips)
     if narrowed:
         return narrowed
+    if not role_grips:
+        return role_grips  # nothing to fall back *from*, and nothing to say
     diagnostics.warn(
-        f"Warning: {texture} uses {role_grips or 'no grip'} for a "
+        f"Warning: {texture} uses {role_grips} for a "
         f"{role}, none of which is in the requested {requested}; "
         f"using the texture's own set"
     )

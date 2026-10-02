@@ -57,7 +57,7 @@ imported inside the functions, never at module level, so the library keeps worki
 from __future__ import annotations
 
 import io
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from arranger.tuning import ArrangementStep
 from tabxml import _events, _substitute_steps
@@ -402,6 +402,29 @@ def _build_song(
     # rather than per measure, because a held shape routinely spans a barline.
     ringing: Optional[List[int]] = None
 
+    # The fret last written on each **GP string** (1 = high E), over the whole file.
+    #
+    # This exists because of what a GP5 tie means in the format, which is not "held"
+    # in the abstract but a specific claim about the bytes. PyGuitarPro's writer
+    # deliberately emits **no fret at all** for a `NoteType.tie` note
+    # (`gp5.writeNote`: `fret = note.value if note.type != NoteType.tie else 0`), and
+    # the reader reconstructs one by scanning backwards for the most recent note on the
+    # same string (`getTiedNoteValue`). So a tie does not carry a pitch - it asserts
+    # "same pitch as the last note on this string", and the file agrees only while that
+    # assertion is true.
+    #
+    # Walking bass breaks it, because the thumb may be placed on a string the held shape
+    # is still sounding. The engine only knows the *current* step's thinned voicing when
+    # it picks that string (see `arranger/bass.py`), so on a `bass_only` step it can put
+    # the thumb on a string the ringing shape occupies. The tie written for that string
+    # then resolves to the thumb's fret rather than the shape's, and the file says a
+    # pitch the engine never produced - an A5 where the arrangement has an A6.
+    #
+    # So the tie is written only where the claim holds, and the note is struck normally
+    # where it does not. A re-struck note is a performance difference the player can
+    # hear and forgive; a wrong pitch in a file they are reading note-for-note is not.
+    last_on_string: Dict[int, int] = {}
+
     for index, beats in enumerate(measures, start=1):
         if index > 1:
             header = gp.MeasureHeader(
@@ -443,18 +466,23 @@ def _build_song(
                 )
                 if step is not None:
                     for string_index, fret in _sounding_frets(step):
+                        gp_string = _GP_STRING_OFFSET - string_index
                         beat.notes.append(
                             gp.Note(
                                 beat,
                                 value=fret,
-                                string=_GP_STRING_OFFSET - string_index,
+                                string=gp_string,
                                 velocity=_VELOCITY,
                                 # `NoteType.tie` is a real GP5 tie and round-trips
                                 # through PyGuitarPro, so the two halves of a split
-                                # step are one held note.
+                                # step are one held note. A split writes the same frets
+                                # as the chunk before it on the same strings, so the
+                                # "same pitch as the last note here" claim a tie makes
+                                # is true by construction - see `last_on_string`.
                                 type=gp.NoteType.tie if tie else gp.NoteType.normal,
                             )
                         )
+                        last_on_string[gp_string] = fret
                     # A bass-only beat still has to *say* the shape that is ringing
                     # above the thumb, because a GP beat cannot have an empty string
                     # in the way a tab cell can. Written as ties, so it reads as held
@@ -465,15 +493,28 @@ def _build_song(
                         for string_index, fret in _held_upper_frets(
                             ringing, step.voicing.bass_string
                         ):
+                            gp_string = _GP_STRING_OFFSET - string_index
+                            # A tie here says "this string is still sounding what it
+                            # sounded last", which holds only while nothing else has
+                            # been written on it since. The thumb is written first and
+                            # may well be on this string (the engine picks it from the
+                            # current step's thinned voicing, not the ringing shape), in
+                            # which case a tie would resolve to the thumb's fret and
+                            # the file would carry a pitch the engine never produced.
+                            # Struck normally instead: an audible re-strike is a far
+                            # smaller fault than a silently wrong note.
+                            held = last_on_string.get(gp_string) == fret
                             beat.notes.append(
                                 gp.Note(
                                     beat,
                                     value=fret,
-                                    string=_GP_STRING_OFFSET - string_index,
+                                    string=gp_string,
                                     velocity=_VELOCITY,
-                                    type=gp.NoteType.tie,
+                                    type=(gp.NoteType.tie if held
+                                          else gp.NoteType.normal),
                                 )
                             )
+                            last_on_string[gp_string] = fret
                     elif step is not None and not step.bass_only:
                         # Any other step re-states the shape in full, so it becomes
                         # the one ringing. A `repeated` step strikes the soprano
