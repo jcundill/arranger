@@ -80,7 +80,6 @@ arranger/
 ├── wjazzd.py            # Weimar Jazz Database glue (stdlib sqlite3 only)
 ├── lead_sheet.py        # JSON lead-sheet export over the same database
 ├── grip_chart.py        # generates common_grips.md from the engine's tables
-├── .baseline_capture.py # fingerprints engine output, to prove a refactor changed none
 ├── tests/               # unittest, one file per concern, + support.py
 │   └── data/            # committed MusicXML fixtures (music21, MuseScore, ours)
 ├── docs/                # the documents the routing table above points at
@@ -349,10 +348,14 @@ Each of these cost real time, or nearly shipped a defect.
    script you keep until the suite is green — a half-applied regeneration over a good
    tree is much harder to unpick than a wrong line is to find.
 
-8. **A stale "before" baseline will invent differences that are not there.** Before
-   believing a regression, check the baseline is from the commit you think it is
+8. **A stale "before" measurement will invent differences that are not there.** When
+   proving a refactor changed nothing, capture the fingerprint from the commit you
+   think it is, not from a file that has been sitting in the tree since
    (`git worktree add /tmp/pre HEAD`). The 42 MB database is gitignored, so copy
-   `wjazzd.db` across or the corpus half of the capture comes back empty.
+   `wjazzd.db` across or the corpus half of such a capture comes back empty. The
+   capture itself is a throwaway script under `/tmp`, kept out of the repository:
+   `tests/test_step_loop_equivalence.py` is the standing check, and a measurement
+   that only matters during one refactor has no business outliving it.
 
 9. **A count without a denominator is not a metre.** 2/2 and 2/4 are both two beats
    to the bar, and both readings of `4 / beat_type` agree in 4/4 — so the whole suite

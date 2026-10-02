@@ -1623,8 +1623,7 @@ def arrange_slots(
     # It used to be applied *after* the slot's role had been computed from the
     # written chord. Under `targets` the role does not read the harmony, so nothing
     # moved; under `walking_bass` it does. That ordering change is measured rather
-    # than assumed - see the `fallback=` cases in `.baseline_capture.py`, and
-    # `tests/test_wjazzd.py::TestTheRetryReordersNothingVisible`.
+    # than assumed - `tests/test_wjazzd.py::TestTheRetryReordersNothingVisible`.
     unresolved = unresolved_steps(list(triples), non_chord_tone)
     retry = set(unresolved) if fallback == "diminished" else set()
     rescued: List[int] = []
