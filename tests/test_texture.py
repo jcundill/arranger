@@ -336,6 +336,54 @@ class TestGripsIntersectTheTexture(unittest.TestCase):
         self.assertTrue(steps, "the step must not be lost")
         self.assertIn("none of which is in the requested", buffer.getvalue())
 
+    def test_an_empty_palette_is_not_reported(self):
+        """
+        The companion to the case above, and the one that was broken.
+
+        `walking_bass`'s **fill** palette is `()` on purpose - it means the left hand
+        plays nothing between the anchors - so an explicit `--grips shell` intersects
+        to nothing on every single fill. That is not a caller asking for a grip the
+        texture cannot use, so it is not a caller error, and warning about it printed
+        the same line 76 times over one arrangement: output that unusable on a
+        legitimate flag combination is a defect in its own right.
+
+        The warning still stands for the case above, where the palette is non-empty
+        and simply does not contain what was asked for.
+        """
+        self.assertEqual(
+            TEXTURE_GRIPS["walking_bass"][ROLE_FILL],
+            (),
+            "the premise: this palette is empty by design, not by accident",
+        )
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            steps = VoiceLeadingEngine.arrange_progression(
+                MINOR_CADENCE,
+                grips=("shell",),
+                texture="walking_bass",
+            )
+        self.assertTrue(steps, "the arrangement must not be lost")
+        self.assertNotIn(
+            "none of which is in the requested",
+            buffer.getvalue(),
+            "a deliberately empty palette must not be reported as a caller error",
+        )
+        # Every warning that *is* legitimate still gets through, so this is a
+        # suppression of one case and not of the diagnostics path.
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            VoiceLeadingEngine.arrange_progression(
+                self.PROGRESSION,
+                grips=("shell",),
+                texture="targets",
+                timings=[(0, 1.0, 1.0)],
+            )
+        self.assertIn(
+            "none of which is in the requested",
+            buffer.getvalue(),
+            "the non-empty case must still be reported",
+        )
+
     def test_the_default_grips_are_never_narrowed(self):
         """
         The default is not a restriction, so nothing is deleted from the texture.

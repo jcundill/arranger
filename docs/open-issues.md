@@ -152,9 +152,9 @@ writes the wrong `Note` would produce.
 
 ## 3. `--grips` with a texture whose palette is legitimately empty
 
-**Status:** regression I introduced on 2026-09-29, known, unfixed.
+**Status:** FIXED. See "Stage 1" below.
 
-`--grips shell --texture walking_bass` prints **30+ copies** of:
+`--grips shell --texture walking_bass` printed **76 copies** of:
 
 ```
 Warning: walking_bass uses no grip for a fill, none of which is in the
@@ -170,17 +170,30 @@ warning fires on all of them.
 The logic is right and the case is not a user error, so the fix is to suppress
 the warning when the role's palette is **legitimately empty** (`role_grips` is
 `()`), and keep it for the case where the caller asked for a grip the texture
-genuinely never uses. Both copies of the rule need it:
-
-- `arranger/steps.py`, in `arrange_progression`
-- `wjazzd.py`, in `arrange_slots`
-
-`tests/test_texture.py::test_an_empty_intersection_falls_back_and_says_so`
-asserts the warning is printed, so it will need a companion case asserting it
-is *not* printed for an empty palette.
+genuinely never uses.
 
 Output that unusable on a legitimate flag combination is a defect in its own
 right, independent of the playability work.
+
+### Stage 1 — fixed
+
+The rule turned out to have **one** implementation, not the two this document
+listed: `wjazzd.arrange_slots` routes through
+`decisions.resolve_texture_grips` like `arrange_progression` does, so the
+suppression is one `if` in `arranger/decisions.py` and both CLIs get it.
+
+The distinction is between a texture that *cannot* use the grip and one that
+means to *play nothing*; only the former is worth interrupting output to
+mention. The now-unreachable `role_grips or 'no grip'` fallback in the message
+went with it, since a palette that is empty can no longer reach the warning.
+
+- `tests/test_texture.py::test_an_empty_palette_is_not_reported` — asserts the
+  premise (the palette really is `()`), that the walking-bass run is silent,
+  and that the non-empty `targets` case still warns, so this suppresses one
+  case rather than the diagnostics path.
+- Verified the arrangement is byte-identical before and after (step fingerprint
+  `d2f53ccf47c13f80` over "But Not For Me", walking bass): the fix touches
+  diagnostics and nothing else.
 
 ---
 

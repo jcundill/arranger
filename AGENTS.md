@@ -38,10 +38,10 @@ treat a contradiction between them as a bug in one of them.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **777 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **778 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 10 of those 777, and it is the one that fails if this
+(`tests/test_docs.py` is 10 of those 778, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree.)
 
 **`make check` is what CI runs** (`.github/workflows/ci.yml`, Python 3.11–3.14, with
