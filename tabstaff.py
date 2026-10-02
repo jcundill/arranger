@@ -333,6 +333,11 @@ def _strikes_here(step: ArrangementStep, string_index: int) -> bool:
     - **`bass_only`** - the slot exists for the thumb, so the bass alone strikes and
       every voice above it is held from the previous shape.
 
+    A `bass_only` step is a **fill**, always: a target states the harmony, so the engine
+    never marks one (`decisions.is_bass_only`). A step that arrived carrying both flags
+    rendered here as a blank column over a moving bass, which is how the chords of nine
+    downbeats in "But Not For Me" went missing - see `docs/open-issues.md` item 4.
+
     A `repeated` step under a walking bass is the intersection: the soprano **and**
     the thumb both strike, and only the inner voices are held. The two rules are
     opposites rather than variants - one holds everything above the thumb, the other

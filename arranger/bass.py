@@ -254,6 +254,11 @@ def _held_shape(
     `tabgp._build_song` threads as `ringing`, and it is here for the same reason: both
     need to know what the hand is holding rather than what the current step carries.
 
+    A `repeated` step is excluded for the same reason, and so is a **target**: the flag
+    says what the left hand is doing, and a target re-states its harmony rather than
+    holding a shape, so it never carries `bass_only` at all
+    (`decisions.is_bass_only`).
+
     The thumb's string comes back too, because that note is **not** part of the shape
     the fingers are holding - see `_place_bass`. Identifying it by string rather than by
     pitch is what makes that exclusion exact: the thumb moves between beats, so the
