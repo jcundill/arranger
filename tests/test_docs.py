@@ -187,14 +187,26 @@ class TestTheCiWorkflowMatchesTheProject(unittest.TestCase):
     def test_the_matrix_covers_every_python_the_package_claims(self):
         """The matrix is `requires-python` and the classifiers, exactly.
 
-        The package declares `>=3.10` and classifiers through 3.14. A matrix
+        The package declares `>=3.11` and classifiers through 3.14. A matrix
         narrower than that is a claim of support the gate does not check; a wider
         one tests versions the metadata disclaims.
+
+        The floor is checked in both directions because it moved once already:
+        3.10 was dropped, and a stale `"3.10"` left in the matrix would spend a
+        fifth of every CI run proving a version the metadata now disclaims. That
+        check is worth having precisely because `tests/test_docs.py` itself reads
+        `pyproject.toml` through `tomllib`, which only exists on 3.11+ - the test
+        asserting the floor could not have run on the version below it.
         """
         import tomllib
 
         declared = tomllib.loads(_read("pyproject.toml"))
-        self.assertEqual(declared["project"]["requires-python"], ">=3.10")
+        self.assertEqual(declared["project"]["requires-python"], ">=3.11")
+        self.assertNotIn(
+            "Programming Language :: Python :: 3.10",
+            _read("pyproject.toml"),
+            "3.10 is disclaimed as a floor and must not be classified",
+        )
         self.assertIn(
             "Programming Language :: Python :: 3.14",
             _read("pyproject.toml"),
@@ -202,10 +214,11 @@ class TestTheCiWorkflowMatchesTheProject(unittest.TestCase):
         )
 
         text = self.workflow()
-        for version in ("3.10", "3.11", "3.12", "3.13", "3.14"):
+        for version in ("3.11", "3.12", "3.13", "3.14"):
             self.assertIn(
                 f'"{version}"', text, f"{version} is classified but not in the matrix"
             )
+        self.assertNotIn('"3.10"', text, "the matrix tests a version metadata disclaims")
         self.assertNotIn("3.15", text, "the matrix tests a version metadata disclaims")
 
     def test_the_extras_are_installed_so_the_guards_do_not_silently_skip(self):

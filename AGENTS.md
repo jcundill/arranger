@@ -44,7 +44,7 @@ the absence of an error message. A quiet run is not evidence; a moved count is.
 (`tests/test_docs.py` is 10 of those 777, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree.)
 
-**`make check` is what CI runs** (`.github/workflows/ci.yml`, Python 3.10–3.14, with
+**`make check` is what CI runs** (`.github/workflows/ci.yml`, Python 3.11–3.14, with
 the `xml` and `gp` extras so the optional-extra tests are not silently skipped). One
 thing the workflow's own header says and an agent should not have to rediscover:
 **the corpus tests do not run there.** `wjazzd.db` is 42 MB and gitignored, so 85 of
@@ -86,7 +86,7 @@ arranger/
 ├── docs/                # the documents the routing table above points at
 ├── pyproject.toml       # PEP 621 + PEP 639 metadata (setuptools backend)
 ├── Makefile             # the gate, above
-├── .github/workflows/   # CI: make check on 3.10-3.14, plus a manual corpus job
+├── .github/workflows/   # CI: make check on 3.11-3.14, plus a manual corpus job
 ├── AGENTS.md            # this file
 ├── README.md            # user-facing overview
 └── .venv/               # local virtualenv (not committed)
@@ -125,7 +125,8 @@ Three consequences worth knowing:
   package is already listed. A new *top-level* module needs a `py-modules` entry, or a
 ## Requirements and licence
 
-- Python **3.10+**. The local dev virtualenv runs 3.14.
+- Python **3.11+**. The local dev virtualenv runs 3.14. 3.10 was dropped because
+  `tests/test_docs.py` reads the metadata with `tomllib`, which is 3.11+.
 - **One** runtime dependency: [musthe](https://pypi.org/project/musthe/).
 - **Two** optional extras, each behind a lazy import so the library works without
   either: `xml` → [music21](https://pypi.org/project/music21/) (`tabxml.py`), and

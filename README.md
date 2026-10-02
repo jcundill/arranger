@@ -15,7 +15,7 @@ for smooth left-hand movement.
   shape under a passing tone (see [Non-chord melody notes](#non-chord-melody-notes)).
 - **Voice leading** that minimises sounding-pitch movement between consecutive chords,
   so a chord can stay where the previous one left the hand.
-- **Dependency-light**: Python 3.10+ and [musthe](https://pypi.org/project/musthe/) only. The
+- **Dependency-light**: Python 3.11+ and [musthe](https://pypi.org/project/musthe/) only. The
   optional [Weimar Jazz Database](#rendering-a-head-from-the-weimar-jazz-database)
   integration adds no dependencies at all — it is stdlib `sqlite3`.
 - **Heads from real transcriptions**: render the head of any of the 456 Weimar

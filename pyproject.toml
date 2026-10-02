@@ -8,7 +8,7 @@ name = "jazz-arranger"
 dynamic = ["version"]
 description = "Generate playable jazz guitar chord-melody arrangements from a chord progression."
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 # PEP 639. setuptools>=77 understands the SPDX expression and the license-files
 # list; older versions want the legacy {file = "LICENSE"} table and the
 # "License :: OSI Approved :: MIT License" classifier instead. The classifier is
@@ -19,7 +19,6 @@ license-files = ["LICENSE"]
 keywords = ["jazz", "guitar", "chord-melody", "drop-2", "voicing", "music-theory"]
 classifiers = [
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -96,7 +95,7 @@ version = {attr = "arranger.__version__"}
 #   explanatory branches that are the point of this codebase.
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py311"
 # The venv, the build tree and the export artefacts the CLIs write are not source.
 extend-exclude = [".venv", "build", "dist", "*.egg-info", "__pycache__"]
 
