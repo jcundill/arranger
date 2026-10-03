@@ -197,6 +197,94 @@ class TestRoundTrip(GuitarProTestCase):
         for (fifths, mode), member in expected.items():
             self.assertIs(_key_signature(guitarpro, fifths, mode), member, (fifths, mode))
 
+    def test_every_bar_carries_the_key_not_only_the_first(self):
+        """
+        The key is stated on **every** bar, which is what a `MeasureHeader` per bar needs.
+
+        `keySignature` is a per-bar field in GP5 and a fresh `MeasureHeader` defaults
+        it to `CMajor`, so setting it only on bar 1 wrote a file that read as "Eb major,
+        then C major" for the remaining 31 bars of "But Not For Me". Reported from a
+        GP5 export of that head, and reproduced on the tree before this change.
+
+        Asserted over **all** the headers rather than `[0]`, which is the trap: the
+        three tests above all read `measureHeaders[0]`, and bar 1 was always right.
+        A single-bar file cannot catch this at all, so the fixture here is three bars.
+        """
+        import guitarpro
+
+        # The shared `setUp` fixture is **one** bar with no timings, which is exactly
+        # the shape that cannot catch this defect - so the fixture is built here, over
+        # three bars, rather than borrowed. Asserting on a single bar would have
+        # passed against the broken exporter.
+        steps = VoiceLeadingEngine().arrange_progression(
+            [("A4", "m7", "Dm7"), ("C5", "7", "G7"), ("B4", "maj7", "Cmaj7")],
+            timings=[(1, 1.0, 1.0), (2, 1.0, 1.0), (3, 1.0, 1.0)],
+        )
+        song = self.song(steps=steps, fifths=-3, mode="major")
+        headers = song.measureHeaders
+        self.assertEqual(
+            len(headers), 3, "the fixture is not three bars, so this cannot fail"
+        )
+        for header in headers:
+            self.assertEqual(
+                header.keySignature,
+                guitarpro.KeySignature.EMajorFlat,
+                f"bar {header.number} does not state the head's key",
+            )
+
+    def test_a_key_on_the_first_bar_alone_left_the_rest_in_c(self):
+        """
+        The premise of the test above, asserted as a *count*, so it stays meaningful.
+
+        Guards the shape of the fixture rather than the fix: if a change made the
+        exporter write one header for the whole file, `test_every_bar_carries_the_key`
+        would pass trivially with a single bar and stop testing anything. The writer
+        emits a header per bar, so the count has to follow it.
+        """
+        song = self.song(fifths=-3, mode="major")
+        self.assertEqual(
+            len(song.measureHeaders),
+            len(song.tracks[0].measures),
+            "the exporter no longer writes one header per bar",
+        )
+
+    def test_every_committed_head_states_its_key_on_every_bar(self):
+        """
+        The reported head, and the four others, end to end through the importer.
+
+        A GP5 export is the only place the defect is visible: `MusicXML` and the ASCII
+        and HTML renderers each carry the key once, because those formats state it once.
+        So this goes through `arrange_xml_head` and reads the file back, rather than
+        calling `format_gp5` with a hand-passed `fifths`.
+        """
+        import contextlib
+        import io
+
+        from headxml import arrange_xml_head
+
+        heads = (
+            ("but_not_for_me.mxl", -3),
+            ("heres_that_rainy_day.musicxml", 1),
+            ("The_Jitterbug_Waltz.musicxml", -3),
+        )
+        for name, fifths in heads:
+            with self.subTest(head=name):
+                buffer = io.StringIO()
+                with contextlib.redirect_stdout(buffer):
+                    steps, head, _notes = arrange_xml_head(
+                        f"tests/data/{name}", grips=("shell",)
+                    )
+                self.assertEqual(
+                    head.key_fifths, fifths, f"{name}: the fixture's own key"
+                )
+                song = _parse(io.BytesIO(format_gp5(steps, fifths=head.key_fifths)))
+                keys = {header.keySignature for header in song.measureHeaders}
+                self.assertEqual(
+                    len(keys),
+                    1,
+                    f"{name}: the bars disagree about the key ({keys})",
+                )
+
     def test_a_signature_gp5_cannot_name_is_not_rounded_to_one(self):
         """Nine flats is no conventional key, and the nearest would be a lie.
 

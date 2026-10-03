@@ -87,7 +87,7 @@ forms of the format, so a plain `pip install jazz-arranger` can import a head an
 the exporter is deliberate and is the reason the two are separate modules rather
 than two halves of one.
 
-**Its four test scores are committed in `tests/data/`, and are not guarded.** A
+**Its five test scores are committed in `tests/data/`, and are not guarded.** A
 hand-built fixture proves the parser agrees with itself; only a file written by
 music21, MuseScore or this library's own exporter proves it reads what a notation
 program actually writes. They are excepted from the `*.musicxml` / `*.mxl` rules
@@ -363,6 +363,27 @@ Five decisions in here were each forced by a failure, not chosen:
   the export does not touch `makeRests` without one. Eight corpus heads, plus pickups,
   bar-line crossings and rests, all re-parse with every bar the right length.
   `tests/test_musicxml.py::test_the_time_signature_is_written_once` is the regression.
+- **GP5 states the key on *every* bar, where MusicXML states it once.** The two formats
+  disagree structurally here, and the GP5 side was a defect until 2026-10-03: the
+  exporter wrote one `MeasureHeader` per bar and set `keySignature` only on the first.
+  A fresh `MeasureHeader` defaults that field to `KeySignature.CMajor` and **does not
+  inherit from the previous one**, so a 32-bar Eb head exported as "Eb major, then C
+  major" for 31 bars. Reported from a GP5 export of "But Not For Me" and reproduced on
+  the tree before the fix.
+
+  It survived because every key test read `measureHeaders[0]` — bar 1 was always
+  right — and the shared fixture in `tests/test_guitarpro.py` is **one bar**, which is
+  the one shape that cannot catch it. `test_every_bar_carries_the_key_not_only_the_first`
+  therefore builds its own three-bar arrangement rather than borrowing `setUp`'s, and
+  asserts over every header.
+
+  A second trap sits behind it and cost a crash to find: `PyGuitarPro`'s writer
+  dereferences `keySignature` unconditionally, so the `None` that `_key_signature`
+  returns for a key GP5 cannot name (`fifths` outside ±7) is fine on bar 1 — which
+  assigns it through a guarded branch — and raises `AttributeError` on **bar 2**, so
+  the file is never written. The omission had been hiding that for as long as it was
+  there. Both bars now use one rule, `key_signature or KeySignature.CMajor`, which is
+  also what an absent signature means to every reader.
 - **The key signature is written, in the first measure, on the same terms.** This one
   was a *defect* rather than a style, and the measurement is worth keeping. `fifths`
   counts sharps (positive) or flats (negative) and `mode` says which of the

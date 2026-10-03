@@ -425,8 +425,11 @@ def _build_song(
     header = song.measureHeaders[0]
     header.number = 1
     header.timeSignature = signature
-    if key_signature is not None:
-        header.keySignature = key_signature
+    # Same rule as every later bar, so the two cannot disagree: a real member, or
+    # `CMajor` where GP5 names no key. Bar 1 tolerates `None` and the rest do not -
+    # see the note at the per-bar construction below for why that asymmetry is a
+    # trap rather than a feature.
+    header.keySignature = key_signature or gp.KeySignature.CMajor
     track = song.tracks[0]
     track.name = "Lead"
     track.measures = []
@@ -467,6 +470,24 @@ def _build_song(
             header = gp.MeasureHeader(
                 number=index,
                 timeSignature=gp.TimeSignature(beats_per_bar, gp.Duration(beat_type)),
+                # **Every bar, not just the first.** A fresh `MeasureHeader` defaults
+                # `keySignature` to `KeySignature.CMajor`, so omitting this stated the
+                # head's key correctly on bar 1 and then reverted to C on bar 2 - a
+                # file that read as "Eb major, then C major" for a tune in one key.
+                # Nothing about a `MeasureHeader` inherits from the previous one here:
+                # the key is a per-bar field in the format, and this module writes one
+                # header per bar, so it has to be stated on each.
+                #
+                # Only ever a real member. `PyGuitarPro`'s GP5 writer dereferences
+                # this field unconditionally, so a `None` here - the "no key GP5 can
+                # name" answer from `_key_signature` - raises `AttributeError` on the
+                # *second* bar and the file is never written. Bar 1 already survives
+                # that case because its key is set through the guarded assignment
+                # below, so the omission used to hide it: the first bar was written
+                # without a signature and the rest were not reached. `CMajor` is the
+                # format's own default and is what an absent signature means to every
+                # reader anyway.
+                keySignature=key_signature or gp.KeySignature.CMajor,
             )
             song.measureHeaders.append(header)
         voice = gp.Voice(None)
