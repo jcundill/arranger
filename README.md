@@ -363,9 +363,24 @@ E |---------|
 **The default output is the tab and nothing else** — six string rows, the fret numbers
 sitting in a drawn line of dashes, and a `|` closing every bar. That is what a tab file
 *is*, and what TuxGuitar's, Guitar Pro's and every other ASCII export produce. Each
-string is one continuous line with the frets *in* it, and no fret ever sits hard against
-a barline — there is always a dash between the two. `e*` marks the string carrying the
-melody.
+string is one continuous line with the frets *in* it, no fret ever sits hard against a
+barline, and **`e*` marks the string carrying the melody**.
+
+**Width is duration.** A bar is divided into a sixteenth-note grid, and a note occupies
+as much of it as it sounds for — a half note is drawn twice as wide as a quarter, and the
+dashes after a fret are the note still ringing:
+
+```text
+e*|-------3----|----------|----3----|
+B*|----6--3--6-|-8--------|-6--3--6-|
+G*|----7--3--7-|-8------8-|----7--3--7-|
+```
+
+So the tab says how long everything sounds without a rhythm row. A pickup keeps the rest
+in front of it (`|----6--|` starts a beat and a half late, because the head enters there),
+and the last bar is filled out to its own length, because the rest after the final note is
+still time. `show_timing` adds the explicit `q`/`w` row anyway, for a reader who would
+rather be told than infer.
 
 Four flags add the annotation a score carries and a tab does not, all off by default:
 

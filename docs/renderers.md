@@ -230,10 +230,37 @@ output with TuxGuitar's ASCII export of the same GP5 file:
   different question from `_staff_barlines` (where a bar ends). Both come from one
   `_staff_bars` list, so the two renderers cannot disagree about it.
 
+### Width is duration, and that is what the rhythm row was standing in for
+
+**A column used to be one beat wide whatever the note was worth**, so a quarter and a
+half note came out identical and the ASCII staff said nothing about how long anything
+sounded. That is why the `q`/`w` rhythm row existed at all: it was carrying information
+the tab could have drawn. `_slot_counts` now gives each column a width in sixteenth-note
+slots, taken from `_staff_rhythm`'s own answer, and the separator after a note is
+repeated once per slot — so a half note is drawn twice as wide as a quarter, and the
+drawn width and the `~`/`r` labels cannot disagree about the same note.
+
+Three grid facts changed with it, each measured against `jon6.tab`:
+
+- **A leading rest inside the first bar is kept.** `_staff_columns` started at the first
+  *onset*, which silently dropped a rest inside that bar: a pickup came out with its
+  first fret hard against the opening barline and read as a downbeat. But Not For Me
+  bar 1 is written that way — a quarter rest and then three notes. The start is now
+  rounded down to the **bar** containing the first onset, which keeps the rest without
+  inventing whole empty bars ahead of it. Rounding to the bar rather than to zero is
+  the whole of that change; rounding to zero would pad out a head selected from bar 12.
+- **The last bar is padded out to its own length.** The grid filled the holes *between*
+  onsets but stopped at the last one, so a head whose final note ended early closed its
+  barline mid-bar. The rest after the last note is still time. Only the *last* bar is
+  padded: every earlier one is closed by the next onset or the next bar's first column,
+  and padding those would invent silence the score does not write.
+- **An untimed progression is not subdivided.** No written rhythm means no durations to
+  show, so every column stays one slot wide and the uniform fallback grid is unchanged.
+
 The staff **wraps**, separated by a blank line, and each system is ruled to its own
-width — the last is short by definition. So "every row is the same width" is an
-invariant of a *system*, not of the whole output; the tests read it per system for
-that reason.
+width — a long chord name widens the bar it is in and no other, so one `Cmaj7` cannot
+stretch a whole arrangement. So "every row is the same width" is an invariant of a
+*system*, not of the whole output; the tests read it per system for that reason.
 
 Two decisions in that row were measured rather than chosen:
 

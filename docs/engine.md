@@ -90,13 +90,18 @@ you whether a change is an improvement or a different library.
   `tabstaff.py`**, not here, and are re-exported below. See
   [The staff renderers live in `tabstaff.py`](#the-staff-renderers-live-in-tabstaffpy).
 - `format_tab_staff(steps, beats_per_bar=4, beat_type=4, rhythm=True,
-  show_chords=True, show_melody=False, show_melody_string=True, show_mutes=False,
-  collapse=True, measures_per_line=4, show_timing=True)` — renders the **whole
+  show_chords=False, show_melody=False, show_melody_string=True, show_mutes=False,
+  collapse=True, measures_per_line=4, show_timing=False)` — renders the **whole
   progression along one six-line staff** in reading order (high E on top), which is
   the standard tab layout and unlike `format_progression` is not one block per chord.
-  Chord names go on a line above, each starting in the column where its shape is
-  struck, and `show_timing` (default) adds the **metre** and a **note value per
+  The defaults draw **the tab and nothing else** — six string rows, frets sitting in a
+  line of dashes, every bar ruled. `show_chords`, `show_melody` and `show_timing` add
+  the lead-sheet and score annotation on top, and all three were on by default once.
+  With `show_chords`, the chord names go on a line above, each starting in the column
+  where its shape is struck, and `show_timing` adds the **metre** and a **note value per
   column** above them — see [docs/renderers.md](renderers.md#what-the-staffs-timing-rows-are-and-what-they-are-not).
+  Neither is on by default: **width already says how long a note sounds**, so that row
+  is a second, explicit way of saying it rather than the only one.
   Three decisions are load-bearing and were each forced by looking at the output:
   - **Fret cells are left-aligned in a fixed-width column.** A right-aligned cell
     looks tidy on its own but puts the fret at the far end of the column, so the

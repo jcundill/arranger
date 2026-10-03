@@ -106,14 +106,40 @@ def _staff_columns(
     # The grid starts at the first onset, not at zero: a head selected from bar 1
     # (or from a negative pickup bar) should not be preceded by a screen of empty
     # bars standing in for the music before it.
+    #
+    # **But not part-way through its own bar.** Starting at the onset dropped a
+    # leading rest *within* the first bar, so a head that enters on beat 2 - a pickup,
+    # which is how But Not For Me bar 1 is written - came out with its first fret hard
+    # against the opening barline and read as a downbeat. TuxGuitar's export draws the
+    # rest as dashes and puts the fret where it falls. The start is therefore rounded
+    # *down to the bar containing the first onset*, which preserves the rest inside
+    # that bar while still refusing to invent whole empty bars before it.
     filled: List[Tuple[float, Optional[ArrangementStep]]] = []
-    current = columns[0][0] if columns else 0.0
+    current = (
+        float(int(columns[0][0] // beats_per_bar) * beats_per_bar)
+        if columns else 0.0
+    )
     for onset, step in columns:
         while current < onset - 1e-9:
             filled.append((current, None))
             current += 1.0
         filled.append((onset, step))
         current = onset + 1.0
+
+    # **Pad the last bar out to its own length.** The grid fills the holes *between*
+    # onsets but stopped at the final one, so a head whose last note ends early left
+    # its final bar short - `|-10--6-|` for a 4/4 bar that should be sixteen slots
+    # wide, and the closing barline arriving mid-bar. The rest after the last note is
+    # still time, and TuxGuitar draws it as dashes out to the barline. Only the *last*
+    # bar is padded: every earlier one is closed by the next onset or the next bar's
+    # first column, and padding those would invent silence that is not written.
+    #
+    # Before the `collapse` split below, deliberately: a padded column is a rest, and a
+    # rest breaks the ring, so it has to reach the collapse pass to be marked as one.
+    if filled:
+        bar_end = float((int(filled[-1][0] // beats_per_bar) + 1) * beats_per_bar)
+        while filled[-1][0] < bar_end - 1e-9:
+            filled.append((filled[-1][0] + 1.0, None))
 
     if not collapse:
         return [(onset, step, True) for onset, step in filled]
@@ -187,6 +213,55 @@ _HOLD_LABEL = "~"
 
 # Printed for a column with no step on it: the silence is a rest, and it is time.
 _REST_LABEL = "r"
+
+
+#: The finest rhythmic grid the ASCII staff subdivides a beat into. TuxGuitar's export
+#: uses a sixteenth-note floor, and so does this: a bar is divided into slots at this
+#: resolution so a note's **duration** can be drawn as horizontal space.
+_SLOT_UNITS_PER_BEAT = 4
+
+
+def _slot_counts(
+    columns: List[Tuple[float, Optional[ArrangementStep], bool]],
+    values: Sequence[Tuple[str, str]],
+    beats_per_bar: int,
+) -> List[int]:
+    """
+    How many grid slots each column occupies - the whole of the duration fix.
+
+    **A column used to be one beat wide whatever the note was worth**, so a quarter and
+    a half note were drawn identically and the tab said nothing about how long
+    anything sounded. The ASCII tab does not need a rhythm row to convey that: it
+    conveys it by *width*. A note two beats long is drawn across two slots, and the
+    dashes between are the sound continuing.
+
+    The count comes from `_staff_rhythm`'s own answer, so the drawn width and the
+    `~`/`r` labels cannot disagree about the same note. A column whose label is a hold
+    or a rest occupies exactly one slot: it is the space *after* a note, and the note
+    before it has already claimed its own slots.
+    """
+    counts: List[int] = []
+    for index, (onset, step, _strikes) in enumerate(columns):
+        label = values[index][0] if index < len(values) else ""
+        if label in (_HOLD_LABEL, _REST_LABEL):
+            counts.append(1)
+            continue
+        if step is not None and step.duration:
+            units = max(1, int(round(step.duration * _SLOT_UNITS_PER_BEAT)))
+        elif index + 1 < len(columns):
+            # No written duration: the note runs to the next column, which is the
+            # rule the rhythm row already applies. Capped at its own bar, so a hole
+            # in the middle of a bar cannot widen the bar past its own length.
+            span = columns[index + 1][0] - onset
+            bar_end = (int(onset // beats_per_bar) + 1) * beats_per_bar
+            units = max(1, int(round(min(span, bar_end - onset) * _SLOT_UNITS_PER_BEAT)))
+        else:
+            # The last column has no next one, so it runs to its own barline - the
+            # same rule as above with the bar end standing in for the missing onset.
+            bar_end = (int(onset // beats_per_bar) + 1) * beats_per_bar
+            units = max(1, int(round((bar_end - onset) * _SLOT_UNITS_PER_BEAT)))
+        counts.append(units)
+    return counts
 
 
 def _note_value(quarters: float) -> str:
@@ -543,6 +618,14 @@ def format_tab_staff(
     # never claim a written rhythm the columns were not laid out by.
     timed = _is_timed(steps, rhythm)
     values = _staff_rhythm(columns, beats_per_bar, beat_type, timed)
+    # How wide each column is drawn, so a note's duration shows as horizontal space.
+    # **Only for a timed progression**: an untimed one is laid out one chord per beat
+    # and has no durations to show, so every column stays one slot wide and the output
+    # is the plain uniform grid it has always been.
+    slots = (
+        _slot_counts(columns, values, beats_per_bar)
+        if timed else [1] * len(columns)
+    )
 
     def cell(step: Optional[ArrangementStep], string_index: int, strikes: bool) -> str:
         """One fret cell: a fret number or a mute marker, or empty for a held voice."""
@@ -679,7 +762,11 @@ def format_tab_staff(
                 # every barline is followed by a separator, not only the opening one.
                 out.append("| ")
             elif position:
-                out.append(" ")
+                # One separator per **slot**, not per column: a note two beats long is
+                # drawn twice as wide, and that width is what says so. Without it a
+                # quarter and a half note come out identical and the tab says nothing
+                # about how long anything sounds.
+                out.append(" " * slots[index])
             if cells is not None:
                 text = cells[index] if index < len(cells) else ""
             else:
@@ -713,7 +800,11 @@ def format_tab_staff(
                 # every other bar - all have a dash between the two.
                 out.append("|-")
             elif position:
-                out.append("-")
+                # One dash per **slot**, not one per column - this is what makes a
+                # longer note *look* longer. TuxGuitar's bar 1 has its frets four
+                # columns apart and its bars scale with the density of the music in
+                # them, which is the same thing this produces.
+                out.append("-" * slots[index])
             # **The fill is a dash, not a space** - and this is the whole reason the
             # staff reads as tab rather than as a chord list. A string is one
             # continuous line running the length of the system, with the fret numbers
@@ -721,6 +812,11 @@ def format_tab_staff(
             # and the reader had to infer the strings from the labels alone. It also
             # costs nothing: the character that used to be a space was already there.
             _, step, strikes = columns[index]
+            # The cell itself is one fret wide. The note's **duration** is drawn by the
+            # separator that follows it, which is repeated once per slot the note
+            # occupies - so a half note is followed by twice the dashes of a quarter
+            # and the reader sees it run longer. Padding the cell as well would count
+            # the same slot twice and make a short note look longer than a long one.
             out.append(cell(step, string_index, strikes).ljust(width, "-"))
         out.append("|")
         # The highest string is labelled with a lowercase 'e', the usual tab
