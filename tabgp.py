@@ -359,22 +359,34 @@ def _measures(
 
 def _key_signature(gp: Any, fifths: int, mode: str = "") -> Any:
     """
-    The GP5 key signature for `fifths` sharps-or-flats, or None for C major.
+    The GP5 key signature for `fifths` sharps-or-flats, or None where GP5 names none.
 
-    GP5's `KeySignature` is an **enum keyed on (fifths, is_minor)** rather than a
-    free number, so a fifths value it does not name has no member to return. Rather
-    than write the nearest one - which would put a key in the file the arrangement
-    is not in - None is returned and the file is written without a signature, which
-    is what every GP reader then assumes anyway. The library's own tables never reach
-    past seven of either, so this is a guard rather than a path anything takes.
+    GP5's `KeySignature` is an **enum whose members carry a `(fifths, is_minor)`
+    tuple**, so a fifths it does not name has no member to return. Rather than write
+    the nearest one - which would put a key in the file the arrangement is not in -
+    None is returned and the file is written without a signature, which is what every
+    GP reader assumes anyway. The library's own tables never reach past seven of
+    either, so that is a guard rather than a path anything takes.
+
+    **The member is found by scanning, not by a two-argument call.**
+    `gp.KeySignature(-3, 0)` looks like a value lookup and works on Python 3.12 and
+    later, where `EnumType.__call__` reads a tuple in the `names` position as the
+    member values to match. On 3.11 the same call is the *functional* enum API -
+    "define a new enum class" - and raises
+    `TypeError: <enum 0> cannot extend <enum 'KeySignature'>` before any lookup
+    happens. So it passed on the development machine and on every 3.12+ runner, and
+    failed only on the 3.11 CI job, on the first test that asked for a key. The scan
+    below is the same lookup written out, and it behaves identically on every version
+    the project supports.
 
     `mode` is read only as the major/minor distinction, because that is all GP5
     records: it has no third mode, so `""` states the signature without guessing.
     """
-    try:
-        return gp.KeySignature(fifths, 1 if mode == "minor" else 0)
-    except ValueError:
-        return None
+    wanted = (fifths, 1 if mode == "minor" else 0)
+    for member in gp.KeySignature:
+        if member.value == wanted:
+            return member
+    return None
 
 
 def _build_song(

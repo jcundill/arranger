@@ -166,6 +166,37 @@ class TestRoundTrip(GuitarProTestCase):
             guitarpro.KeySignature.CMajor,
         )
 
+    def test_the_key_member_is_found_without_a_two_argument_enum_call(self):
+        """
+        The lookup must not depend on how a given Python version reads `Enum(...)`.
+
+        `KeySignature(-3, 0)` reads as a value lookup on 3.12+ and as the *functional*
+        enum API - "define a new class" - on 3.11, where it raises
+        `TypeError: <enum 0> cannot extend <enum 'KeySignature'>`. That difference is
+        invisible on a 3.14 dev box and breaks the 3.11 CI job on the first test that
+        asks for a key.
+
+        So this asserts the *result* of every signature the library can ask for, and
+        never the call that produces it. Running it on each version is what the
+        matrix is for; this is the check that fails if the lookup is ever rewritten
+        into a form only one of them accepts.
+        """
+        import guitarpro
+
+        from tabgp import _key_signature
+
+        expected = {
+            (-7, "major"): guitarpro.KeySignature.CMajorFlat,
+            (-3, "major"): guitarpro.KeySignature.EMajorFlat,
+            (-3, "minor"): guitarpro.KeySignature.CMinor,
+            (-3, ""): guitarpro.KeySignature.EMajorFlat,
+            (0, ""): guitarpro.KeySignature.CMajor,
+            (1, "major"): guitarpro.KeySignature.GMajor,
+            (7, "minor"): guitarpro.KeySignature.AMinorSharp,
+        }
+        for (fifths, mode), member in expected.items():
+            self.assertIs(_key_signature(guitarpro, fifths, mode), member, (fifths, mode))
+
     def test_a_signature_gp5_cannot_name_is_not_rounded_to_one(self):
         """Nine flats is no conventional key, and the nearest would be a lie.
 
