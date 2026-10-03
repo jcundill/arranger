@@ -207,8 +207,19 @@ NON_CHORD_TONE_EXTENSIONS = {
     "6": {2: "6/9"},                               # 9th
     "m7": {2: "m9"},                               # 9th
     "m7b5": {2: "m9b5"},                           # 9th (half-diminished 9)
-    # 9th, 11th (the suspended dominant), #11, b13, 13th
-    "7": {2: "9", 5: "7sus4", 6: "7#11", 8: "7b13", 9: "13"},
+    # 9th, 11th (the suspended dominant), #11, b13, 13th, and the b9.
+    #
+    # The b9 is the one altered tension a dominant has that no extension of its own
+    # names: `7alt` would have to be chosen instead, and that claims the #9, #5 and
+    # b13 too, which the melody never stated. `7b9` is the narrowest quality that
+    # contains the b9, and it is already voiceable - so this is the smallest
+    # substitution that makes the note a chord tone.
+    #
+    # It is also the note a tritone substitution exists to absorb: the b9 of G7 is
+    # the 3rd of Db7, so both routes make the melody a chord tone. This one keeps
+    # the written root and the other moves it, which is why it is a table row
+    # rather than a strategy - see docs/reharmonisation-proposals.md.
+    "7": {1: "7b9", 2: "9", 5: "7sus4", 6: "7#11", 8: "7b13", 9: "13"},
     "7b9": {5: "7sus4", 6: "7#11", 8: "7b13"},     # 11th, #11, b13
     "9": {6: "7#11", 9: "13"},                     # #11, 13th
     "13": {6: "7#11"},                             # #11
