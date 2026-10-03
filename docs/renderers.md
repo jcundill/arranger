@@ -235,12 +235,51 @@ output with TuxGuitar's ASCII export of the same GP5 file:
 **A column used to be one beat wide whatever the note was worth**, so a quarter and a
 half note came out identical and the ASCII staff said nothing about how long anything
 sounded. That is why the `q`/`w` rhythm row existed at all: it was carrying information
-the tab could have drawn. `_slot_counts` now gives each column a width in sixteenth-note
-slots, taken from `_staff_rhythm`'s own answer, and the separator after a note is
-repeated once per slot — so a half note is drawn twice as wide as a quarter, and the
-drawn width and the `~`/`r` labels cannot disagree about the same note.
+the tab could have drawn. A note now occupies as many *slots* as it is worth, one slot
+being one fret cell.
 
-Three grid facts changed with it, each measured against `jon6.tab`:
+Three things the grid has to get right, each of which was wrong at once and each measured
+against `jon6.tab`:
+
+- **The units are whole notes.** `ArrangementStep.duration` is in whole notes
+  (`tuning.py`), and the first version of this multiplied it by a slot count as though it
+  were in beats. A quarter note — `duration=0.25` — came out **one** slot wide instead of
+  two, and *every bar in the piece drew at the same width*: no two notes were
+  distinguishable by length at all. `_staff_rhythm` had this right all along
+  (`duration * 4.0` → quarters); the slot grid did not.
+- **`beat_type` is a conversion, not a scale factor.** The grid is per *whole note*, so a
+  4/4 bar and a 2/2 bar are the same sixteen slots, and `beat_type` only converts beats to
+  whole notes on the way in.
+- **Holds and rests get their real span.** They were pinned to one slot, which is what
+  made a pickup's leading rest too short to see and left a half-note hold as narrow as a
+  sixteenth. The rule is the one `_staff_rhythm` already uses: a column runs to the next
+  *sounding* column, capped at its own barline.
+
+**The floor is eight slots to a whole note, and that is measured.** `jon6.tab` bar 1 — a
+quarter rest and three quarter notes in 2/2 — is seventeen characters: one lead-in dash
+plus sixteen of grid, which is eight slots of two characters, one to the quarter.
+`_slots_per_whole` raises that floor only for music finer than an eighth, so the shortest
+note never rounds away to nothing.
+
+With that, our bar 1 and bar 11 come out **byte-identical** to TuxGuitar's — which is the
+check that the lead-in, the cell width and the slot count are all landing where they
+should, independently of each other.
+
+### Sub-beat rests, and the column grid that dropped them
+
+`_staff_columns` advanced the fill cursor a whole beat at a time and always set
+`current = onset + 1.0`, assuming a step was a beat long. It is not: `duration` is in whole
+notes and the default `eighths` skeleton puts steps half a beat apart, so **every gap
+shorter than a beat was stepped over**. Bar 11 of But Not For Me lost its downbeat column
+entirely that way, and with it the tie into the bar's early beat. `_rest_grain` is now the
+shortest thing the progression actually writes, bounded to a beat, so an untimed
+progression keeps the one-column-per-beat grid it always had.
+
+This is the one defect that was **not** in the ASCII renderer alone: `_staff_columns` is
+shared with `format_tab_html` and `_staff_rhythm`, so the page had the same missing rests
+until this was fixed.
+
+Three further grid facts, measured the same way:
 
 - **A leading rest inside the first bar is kept.** `_staff_columns` started at the first
   *onset*, which silently dropped a rest inside that bar: a pickup came out with its
