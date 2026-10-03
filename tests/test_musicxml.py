@@ -184,6 +184,132 @@ class TestMusicXMLDocument(MusicXMLTestCase):
         root = ElementTree.fromstring(format_musicxml(self.steps[:1]))
         self.assertEqual(len(list(self.part(root).iter("time"))), 1)
 
+    def test_the_key_signature_reaches_the_first_measure(self):
+        """The signature is written once, in the first bar, as the format states it.
+
+        The same rule as the time signature above, and the same reason: MusicXML
+        says a signature holds until it changes, so writing it in every bar reads
+        as a new one at each. This is the regression for a head that was exported
+        in C major whatever it was in.
+        """
+        from arranger import format_musicxml
+        long_head = [make_step([-1, -1, 3, 5, 5, -1]) for _ in range(12)]
+        root = ElementTree.fromstring(
+            format_musicxml(long_head, fifths=-3, mode="major")
+        )
+        measures = list(self.part(root).iter("measure"))
+        self.assertGreater(len(measures), 1, "needs a multi-bar document to mean anything")
+        with_key = [m for m in measures if m.find("attributes/key") is not None]
+        self.assertEqual(len(with_key), 1, "the key signature was written more than once")
+        self.assertIs(with_key[0], measures[0], "it was not written in the first measure")
+        self.assertEqual(with_key[0].findtext("attributes/key/fifths"), "-3")
+        self.assertEqual(with_key[0].findtext("attributes/key/mode"), "major")
+
+    def test_a_sharp_key_is_a_positive_count(self):
+        """One sharp is `1`, which is also how MusicXML writes it."""
+        root = self.root(fifths=1)
+        self.assertEqual(self.part(root).findtext("measure/attributes/key/fifths"), "1")
+
+    def key_element(self, **kwargs) -> ElementTree.Element:
+        """
+        The first measure's `<key>`, asserted present and returned.
+
+        `assertIsNotNone` does not narrow the type for pyright, so the check is a
+        raise: this is a helper, and a missing `<key>` has to fail the test that
+        called it rather than return `None` into an `AttributeError` three lines
+        later.
+        """
+        found = self.part(self.root(**kwargs)).find("measure/attributes/key")
+        if found is None:
+            self.fail("the document wrote no <key> at all")
+        return found
+
+    def test_a_signature_of_none_is_still_written(self):
+        """Zero is C major, and MusicXML's own default - so stating it is exact.
+
+        The default the format assumes when `<key>` is absent is no sharps and no
+        flats, so writing the zero says what the file already meant and leaves a
+        reader nothing to assume.
+        """
+        self.assertEqual(self.key_element().findtext("fifths"), "0")
+
+    def test_an_unstated_mode_writes_no_mode(self):
+        """No mode in means no `<mode>` out, rather than a guessed `major`.
+
+        -3 is Eb major *or* C minor, so claiming one of them for a file that said
+        neither would be inventing a claim the reader cannot check.
+        """
+        self.assertIsNone(self.key_element(fifths=-3).find("mode"))
+
+    def test_a_key_signature_means_fewer_accidentals(self):
+        """
+        The point of the whole thing: an in-key note is not written with an accidental.
+
+        This is the defect as a user meets it. A tune exported with no signature needs
+        an accidental on **every** note its key does not already state, and the
+        signature is what stops that. The fixture is a C-major ii-V-I, so it is
+        written with no accidental at all in C and gains one on each of its three
+        naturals - A, E and B - in three flats, where none of them is diatonic. Each
+        render is checked against the other, so neither can pass by being empty.
+        """
+        def marked(fifths: int) -> List[str]:
+            root = ElementTree.fromstring(self.document(fifths=fifths))
+            return sorted(
+                step
+                for step in (
+                    n.findtext("pitch/step")
+                    for n in self.notes(self.part(root))
+                    if n.find("accidental") is not None
+                )
+                if step is not None
+            )
+
+        self.assertEqual(
+            marked(0), [],
+            "the fixture is diatonic in C, so C major must mark nothing",
+        )
+        self.assertEqual(
+            marked(-3), ["A", "B", "E"],
+            "in three flats the fixture's naturals are chromatic and must be marked",
+        )
+
+    def test_chord_symbols_do_not_inflate_the_accidentals(self):
+        """
+        A chord symbol's pitches are never written, and must not mark the notes.
+
+        music21 writes a `ChordSymbol` as `<harmony>` alone - `writeAsChord` is
+        False - but its pitches stay in the stream and are still counted when it
+        decides which notes need an accidental. Left in place they marked notes the
+        signature had already accounted for: 139 accidentals on an Eb-major head
+        with symbols against 27 for the same music without them. The comparison is the
+        point: the symbols are still written, and the notes they mark are the ones
+        the signature alone marks - so turning them off must not change the count.
+
+        It is not asserted as zero, and deliberately: the fixture's own A, E and B
+        *are* chromatic in three flats and are marked whether or not a chord symbol
+        is present. Asserting no accidentals would be asserting a wrong key.
+        """
+        with_symbols = self.document(fifths=-3)
+        without_symbols = self.document(fifths=-3, show_chords=False)
+        self.assertGreater(
+            len(re.findall(r"<harmony>", with_symbols)),
+            0,
+            "the fixture must carry a chord symbol to prove anything",
+        )
+        self.assertEqual(
+            len(re.findall(r"<accidental>", with_symbols)),
+            len(re.findall(r"<accidental>", without_symbols)),
+            "the chord symbols' pitches are still marking notes the key accounts for",
+        )
+
+    def test_rejects_a_signature_outside_the_conventional_range(self):
+        """Past seven of either is a key no conventional signature states."""
+        from arranger import format_musicxml
+        with self.assertRaises(ValueError):
+            format_musicxml(self.steps, fifths=8)
+        with self.assertRaises(ValueError):
+            format_musicxml(self.steps, fifths=-8)
+
     def test_no_steps_renders_nothing(self):
         """An empty arrangement is an empty string, not a partial document."""
         from arranger import format_musicxml

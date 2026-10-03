@@ -137,6 +137,49 @@ class TestRoundTrip(GuitarProTestCase):
         from tabgp import GP_SIGNATURE
         self.assertTrue(self.data().startswith(GP_SIGNATURE))
 
+    def test_the_key_survives_the_round_trip(self):
+        """Three flats written as three flats, and the mode carried beside them.
+
+        GP5's `KeySignature` is an enum keyed on `(fifths, is_minor)`, so the round
+        trip is the only check that the two numbers this library is handed arrive as
+        the key they name: -3 with no mode is Eb, and -3 minor is C, which is a
+        different key arriving from the same count.
+        """
+        import guitarpro
+
+        def written(**kwargs):
+            return self.song(**kwargs).measureHeaders[0].keySignature
+
+        self.assertEqual(written(fifths=-3, mode="major"), guitarpro.KeySignature.EMajorFlat)
+        self.assertEqual(written(fifths=-3, mode="minor"), guitarpro.KeySignature.CMinor)
+        self.assertEqual(written(fifths=1, mode="major"), guitarpro.KeySignature.GMajor)
+        # No mode is not a guess: GP5 records the two modes only, so the signature is
+        # written major - the same default the file already implied by its absence.
+        self.assertEqual(written(fifths=-3), guitarpro.KeySignature.EMajorFlat)
+
+    def test_no_key_leaves_the_file_in_c_major(self):
+        """The format's own default, stated rather than assumed."""
+        import guitarpro
+
+        self.assertEqual(
+            self.song().measureHeaders[0].keySignature,
+            guitarpro.KeySignature.CMajor,
+        )
+
+    def test_a_signature_gp5_cannot_name_is_not_rounded_to_one(self):
+        """Nine flats is no conventional key, and the nearest would be a lie.
+
+        The file then states C major - which is what it would have said with no
+        signature at all - rather than seven flats, which is a different key the
+        arrangement is not in.
+        """
+        import guitarpro
+
+        self.assertEqual(
+            self.song(fifths=-9).measureHeaders[0].keySignature,
+            guitarpro.KeySignature.CMajor,
+        )
+
     def test_every_shape_survives_the_round_trip(self):
         """Each step's frets come back out of the file exactly as written.
 

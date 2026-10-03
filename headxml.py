@@ -12,8 +12,8 @@ It provides:
 * `MUSICXML_KIND_QUALITIES` / `parse_musicxml_chord` - the format's own chord
   notation translated into the library's chord qualities, with untranslatable
   chords reported rather than guessed.
-* `load_musicxml` - a file to a `Head`: the melody, its timing, and the chord in
-  force under each note.
+* `load_musicxml` - a file to a `Head`: the melody, its timing, the key it is in,
+  and the chord in force under each note.
 * `head_skeleton` / `arrange_xml_head` - the reduction and the arrangement.
 * `head_cli` - the `arranger head FILE` command.
 
@@ -382,6 +382,10 @@ class Head:
     `beats_per_bar` is the notated bar length in beats, so a cut-time head is
     rendered two beats to the bar rather than four.
 
+    `key_fifths` / `key_mode` are the key signature, so a renderer can state the key
+    the tune is in instead of falling back to the format's default of C major. See
+    their comments for the encoding, and `_key_signature` for how it is read.
+
     The diagnostics are the reason a chord can go missing without the user
     wondering why: `unmapped` lists the chord symbols this library cannot voice,
     `skipped` the notes that were not melodic, and `report` the prose for the
@@ -399,6 +403,17 @@ class Head:
     # `beats_per_bar` alone cannot say which - a 2/2 and a 2/4 bar are both two
     # beats wide, and printing one as the other misstates the metre.
     beat_type: int = 4
+    # The key signature as MusicXML states it: `key_fifths` counts sharps (positive)
+    # or flats (negative), so -3 is Eb major or C minor, and `key_mode` is which -
+    # "major", "minor", or "" where the score did not say. Kept as the format's own
+    # numbers rather than as a tonic name, because that is what a renderer needs to
+    # write a signature back, and it is the one spelling every convention agrees on.
+    #
+    # Carried at all because a head with no key is C major, not *unknown*: a score
+    # that omits `<key>` states no accidentals, and that is a key this library can
+    # arrange and export.
+    key_fifths: int = 0
+    key_mode: str = ""
     unmapped: Tuple[str, ...] = ()
     skipped: Tuple[str, ...] = ()
     report: Tuple[str, ...] = ()
@@ -564,6 +579,38 @@ def _time_signature(part: ElementTree.Element) -> Tuple[int, int]:
     return beats, beat_type
 
 
+def _key_signature(part: ElementTree.Element) -> Tuple[int, str]:
+    """The `(fifths, mode)` of the last `<key>` that states one.
+
+    **`fifths` is the number of sharps (positive) or flats (negative)** that the
+    signature carries, and it is the one number every notation convention agrees on:
+    -3 is Eb major *or* C minor, which is why `mode` is read beside it. MusicXML
+    allows `<mode>` to be absent, so the default is `""` - "a signature, and no
+    claim about which of its two keys this is" - rather than a guessed `major`.
+
+    The **last** stated signature wins, for the same reason as the metre: a score
+    may modulate, and a head is arranged in the key it ends in rather than the one
+    it starts in.
+
+    An out-of-range or unparseable `fifths` is read as 0 (C major). MusicXML caps it
+    at -7..7 for a conventional signature, so anything wider is a notation program's
+    own spelling convention rather than a key this library could state.
+    """
+    fifths, mode = 0, ""
+    for key in part.iter("key"):
+        stated = (key.findtext("fifths") or "").strip()
+        try:
+            value = int(round(float(stated)))
+        except (TypeError, ValueError):
+            continue
+        if -7 <= value <= 7:
+            fifths = value
+        stated_mode = (key.findtext("mode") or "").strip().lower()
+        if stated_mode in ("major", "minor"):
+            mode = stated_mode
+    return fifths, mode
+
+
 def _midi(pitch: ElementTree.Element) -> Optional[int]:
     """A `<pitch>` as a MIDI number, or None if its spelling is unusable."""
     step = (pitch.findtext("step") or "").strip()
@@ -672,6 +719,10 @@ def load_musicxml(path: Union[str, Path], part: Optional[str] = None) -> Head:
 
     Harmony is held from the `<harmony>` that declares it until the next one, since
     a bar can carry no harmony at all and one bar can carry several.
+
+    The metre and the **key signature** are both read from the last one stated, and
+    both are carried on the `Head`: a head that dropped its key would be exported in
+    C major, which is a wrong score rather than a missing decoration.
     """
     document = _read_document(path)
     root = ElementTree.fromstring(document)
@@ -689,12 +740,15 @@ def load_musicxml(path: Union[str, Path], part: Optional[str] = None) -> Head:
 
     title, composer, part_name = _score_metadata(root, chosen.get("id"))
     beats, beat_type = _time_signature(chosen)
+    fifths, mode = _key_signature(chosen)
     head = Head(
         title=title,
         composer=composer,
         part=part_name,
         beats_per_bar=beats,
         beat_type=beat_type,
+        key_fifths=fifths,
+        key_mode=mode,
     )
     _read_notes(chosen, head)
     return head
@@ -1056,6 +1110,44 @@ def arrange_xml_head(
 # ---------------------------------------------------------------------------
 
 
+def _key_label(head: Head) -> str:
+    """
+    The head's key for the CLI header, as a name: `Eb major`, `C minor`, `C major`.
+
+    Named rather than counted because the header is read by a person deciding
+    whether this is the arrangement they meant, and `-3 (major)` is not that.
+
+    The tonic is the circle of fifths, read as one table rather than two: the flat
+    side and the sharp side are the same circle approached from opposite ends, so
+    -3 is Eb major and -1 is F major - not "one sharp fewer" on the other spelling.
+    The minor tonic is the **relative** minor, three semitones below the major one, so
+    a signature of -3 is Eb major or C minor and never Eb minor: the mode decides
+    which of the two, not the count.
+
+    **A mode the head does not state is not guessed**, so -3 with no mode reads
+    `Eb major/C minor` - the two keys that signature spells, which is what the file
+    said and all it said. C major is the one case not listed twice, because a
+    signature of zero is one key under either mode rather than a signature sitting
+    between two.
+    """
+    # The circle of fifths as two parallel halves, indexed identically: position 0
+    # is seven flats and position 14 is seven sharps, and each is the relative minor
+    # of the other.
+    major = ("Cb", "Gb", "Db", "Ab", "Eb", "Bb", "F",
+             "C", "G", "D", "A", "E", "B", "F#", "C#")
+    minor = ("Ab", "Eb", "Bb", "F", "C", "G", "D",
+             "A", "E", "B", "F#", "C#", "G#", "D#", "A#")
+    fifths, mode = head.key_fifths, head.key_mode
+    index = fifths + 7
+    if mode == "major":
+        return f"{major[index]} major"
+    if mode == "minor":
+        return f"{minor[index]} minor"
+    if fifths == 0:
+        return "C major"
+    return f"{major[index]} major/{minor[index]} minor"
+
+
 def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     """The `head` command: arrange a MusicXML file as chord-melody.
 
@@ -1131,9 +1223,9 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     if head.part:
         print(f"  part: {head.part}")
     print(
-        f"  {head.beats_per_bar}/{head.beat_type}, {len(head)} melody note(s), "
-        f"bars {head.bars[0]}-{head.bars[1] - 1}; neck window: frets "
-        f"{args.fret_min}-{args.fret_max}; grips: {', '.join(args.grips)}"
+        f"  {head.beats_per_bar}/{head.beat_type}, {_key_label(head)}, {len(head)} "
+        f"melody note(s), bars {head.bars[0]}-{head.bars[1] - 1}; neck window: "
+        f"frets {args.fret_min}-{args.fret_max}; grips: {', '.join(args.grips)}"
     )
     for note in notes:
         print(f"  note: {note}")
@@ -1156,6 +1248,12 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     # way, so this is the difference between the right metre and a wrong-looking
     # one. The corpus command passes nothing here, because a Weimar transcription
     # is 4/4 and every writer already assumes that.
+    #
+    # The **key** is passed on exactly the same terms, and for the same kind of
+    # reason: it is not decoration either. A score in three flats exported in C
+    # major writes a flat on every note of its own scale, because a reader with no
+    # signature has nothing else to go on - so the key is a property of the score
+    # the writers must be given, not a preference of the terminal header.
     return render_and_write(
         args,
         steps,
@@ -1163,4 +1261,6 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
         notes=notes,
         beats_per_bar=head.beats_per_bar,
         beat_type=head.beat_type,
+        fifths=head.key_fifths,
+        mode=head.key_mode,
     )
