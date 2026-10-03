@@ -439,8 +439,9 @@ Five decisions are load-bearing:
   notated beat is a float — a 3/4 bar's second beat is 1.666… — and the earlier draft
   of `_metric_weight` compared the *tuple index* against `beats_per_bar`, which let a
   2/2 bar inherit 4/4's second target. `headxml.arrange_xml_head` passes
-  `head.beats_per_bar` through for this reason, and three of the four committed scores
-  are in cut time.
+  `head.beats_per_bar` through for this reason, and three of the five committed scores
+  are in cut time — `The_Jitterbug_Waltz.musicxml` is the 3/4 one, and it is the reason
+  a rule stated only in quarters would pass on 4/4 and fail on a waltz.
 - **A fill that cannot be filled becomes a target.** If a weak beat has no shell,
   interval or melody-alone voicing, the step is re-prepared as a principal note and
   its `role` is corrected to match. The texture is a lighter *texture*, never a missing

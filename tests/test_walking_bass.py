@@ -40,6 +40,7 @@ from arranger import (
     ROLE_TARGET,
     STANDARD_TUNING,
     ArrangementStep,
+    ChordParser,
     VoiceLeadingEngine,
     _place_bass,
     _step_annotation,
@@ -47,6 +48,18 @@ from arranger import (
     format_tab_html,
     format_tab_staff,
     supported_string_sets,
+)
+
+# The precedence rule `docs/open-issues.md` item 5 is about. Imported from where it
+# lives rather than through the package facade, because these are private to
+# `arranger.bass` and re-exporting them would put four internals into the public
+# surface for the benefit of one test file. `test_bass.py` covers them directly for
+# the same reason.
+from arranger.bass import (
+    _beat_offset,
+    _melody_in_force,
+    _melody_timeline,
+    _walking_slots,
 )
 from tabgp import _sounding_frets
 from tabstaff import _strikes_here
@@ -356,6 +369,303 @@ class TestDecisionFTheSecondBarOfAHeldChord(unittest.TestCase):
         self.assertIsNotNone(second.bass)
 
 
+class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
+    """
+    `docs/open-issues.md` item 5: a beat invented for the thumb takes the melody
+    **sounding** at that instant, not the melody the walk last happened to pass.
+
+    The defect was in `_bass_slots`, which tracked `previous_melody` while iterating
+    the walk's own beats. A melody slot was therefore only noticed when the walk landed
+    on it, and in 2/2 the walk visits beats 1.0 and 2.0 only - so a melody moving at beat
+    2.5 was invisible and the invented downbeat inherited from beat 2.0 instead. The
+    file was right at every note onset and wrong in the gaps between them, which is why
+    every check that compared the soprano against the melody at onsets passed.
+
+    The tests are written so that **reverting the fix fails them**, which is asserted
+    rather than assumed: see `test_the_pre_fix_rule_really_does_fail_these`.
+    """
+
+    def _bars_2_and_3(self):
+        """The reported case: bar 2 beat 2.5 sustains into bar 3's invented downbeat.
+
+        Reduced from "But Not For Me" to the six notes that matter, so a failure points at
+        the rule rather than at a fixture. In 2/2 the melody slots of bar 2 are beats
+        1.0, 2.0 and 2.5 and the walk visits 1.0 and 2.0 - which is the whole
+        mechanism. `Eb4` runs 0.75 beats past its onset, so it is still sounding at bar
+        3 beat 1.0, where the walk invents a beat.
+
+        Bar 3 needs melody of its own: `_walking_bass_line` walks the bars the melody
+        reaches, so a three-note progression ending in bar 2 produces no bar 3 at all
+        and the test would pass for the wrong reason.
+        """
+        progression = [
+            ("G4", "maj", "Ebmaj"),   # bar 2 beat 1.0
+            ("F4", "maj", "Ebmaj"),   # bar 2 beat 2.0 - the note the bug inherited
+            ("Eb4", "m7", "Cm7"),     # bar 2 beat 2.5 - the note that is sounding
+            ("F4", "7", "Bb7"),       # bar 3 beat 1.5, after the invented downbeat
+            ("G4", "7", "Bb7"),
+            ("F4", "7", "Bb7"),
+        ]
+        timings = [
+            (2, 1.0, 0.5),
+            (2, 2.0, 0.25),
+            (2, 2.5, 0.375),
+            (3, 1.5, 0.25),
+            (3, 2.0, 0.25),
+            (3, 2.5, 0.25),
+        ]
+        return VoiceLeadingEngine.arrange_progression(
+            progression, timings=timings, texture="walking_bass", beats_per_bar=2
+        )
+
+    def test_the_invented_downbeat_takes_the_sustaining_note_not_the_previous_one(self):
+        """
+        The symptom, in one assertion: the invented bar-3 downbeat carries `Eb4`.
+
+        Before the fix it carried `F4` - the note at bar 2 beat 2.0 - which the score
+        does play, so nothing about it was invalid, and that is precisely why the bug
+        survived: it is a *plausible* note rather than a missing or impossible one.
+        """
+        steps = self._bars_2_and_3()
+        downbeat = [step for step in steps if step.bar == 3 and step.beat == 1.0]
+        self.assertEqual(len(downbeat), 1, "bar 3 beat 1.0 is not a walk-invented beat")
+        self.assertEqual(
+            downbeat[0].melody,
+            "Eb4",
+            "the invented downbeat is not carrying the note that is sounding",
+        )
+
+    def test_the_previous_note_is_not_carried_when_it_has_stopped(self):
+        """
+        The same rule read from the other side: `F4` ends at bar 2 beat 2.25, so bar 3
+        must not inherit it.
+
+        Pinned separately from the test above because "carries the right note" and
+        "stops carrying the wrong one" fail independently - a fix that always used the
+        sustaining note would pass the first and fail this only if the durations were
+        also wrong.
+        """
+        steps = self._bars_2_and_3()
+        downbeat = [step for step in steps if step.bar == 3 and step.beat == 1.0][0]
+        self.assertNotEqual(downbeat.melody, "F4")
+
+    def test_a_walk_invented_beat_before_the_first_melody_note_still_gets_one(self):
+        """
+        The `in_force < 0` branch, and the reason it is tested here rather than
+        through an arrangement.
+
+        A walk beat landing before the tune has started has no melody in force, and
+        `_bass_slots` falls back to index 0 rather than dropping the step - the same
+        "a step survives even when its bass cannot be placed" rule `_attach_bass`
+        follows.
+
+        It cannot be reached from the public API, and that is worth stating rather
+        than working around: `_walking_bass_line` walks **the bars the melody
+        reaches**, so an invented beat can never precede the first melody note. The
+        branch is defensive against a caller that supplies a `bass_line` the walk
+        could not have produced. So it is asserted on the rule itself - and
+        `test_the_fallback_is_reachable_only_that_way` pins the reason, so this test
+        cannot quietly become vacuous if the walk is ever widened.
+        """
+        self.assertEqual(_melody_in_force([], 0.0), -1)
+        # One note starting after the beat asked about: still nothing in force.
+        timeline = _melody_timeline([(0, 2, 1.0, 1.0)], beats_per_bar=4)
+        self.assertEqual(_melody_in_force(timeline, _beat_offset(1, 1.0, 4)), -1)
+
+    def test_the_fallback_is_reachable_only_that_way(self):
+        """
+        The premise of the test above: no arrangement can produce that state.
+
+        Asserted so the defensive branch above stays honest. If a future change made
+        the walk cover bars the melody does not reach - which is defensible - this
+        test would fail and the branch would become reachable through a real
+        arrangement, at which point it should be tested there too.
+        """
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("G4", "maj", "Ebmaj"), ("F4", "maj", "Ebmaj")],
+            timings=[(2, 1.0, 0.5), (2, 2.0, 0.5)],
+            texture="walking_bass",
+            beats_per_bar=4,
+        )
+        first_onset = _beat_offset(2, 1.0, 4)
+        for step in steps:
+            if step.bass_only and step.bar is not None and step.beat is not None:
+                self.assertGreater(
+                    _beat_offset(step.bar, float(step.beat), 4),
+                    first_onset,
+                    "the walk invented a beat before the melody starts",
+                )
+
+    def test_a_rest_under_the_walk_takes_the_note_the_hand_is_holding(self):
+        """
+        Where the score writes silence, the last note started is what the left hand is
+        still holding, so that is what the invented beat names.
+
+        This is the branch that is easy to get wrong in the other direction: reading
+        "the melody in force" strictly would find nothing sounding and leave the beat
+        with no melody at all. Asserted because the fallback is a decision, not an
+        accident - and because on "But Not For Me" it is 5 of the 22 invented beats.
+        """
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("G4", "maj", "Ebmaj"), ("G4", "maj", "Ebmaj")],
+            timings=[(1, 1.0, 0.25), (1, 2.0, None)],
+            texture="walking_bass",
+            beats_per_bar=4,
+        )
+        held = [step for step in steps if step.melody == "G4" and step.bar == 1]
+        self.assertTrue(
+            any(step.beat == 3.0 for step in held),
+            "no step covers the rest at beat 3.0, so the fallback was not exercised",
+        )
+        self.assertEqual([step.melody for step in held if step.beat == 3.0], ["G4"])
+
+    def test_the_pre_fix_rule_really_does_fail_these(self):
+        """
+        The premise of everything above: the rule that was replaced is wrong.
+
+        A test that passes both before and after a fix guards nothing. So the old rule
+        is re-implemented here, in a few lines, and asserted to disagree with the
+        engine on the reported bar. If a future change makes the two agree again, this
+        fails and says the fixture no longer reproduces the defect.
+        """
+        progression = [
+            ("G4", "maj", "Ebmaj"),
+            ("F4", "maj", "Ebmaj"),
+            ("Eb4", "m7", "Cm7"),
+            ("F4", "7", "Bb7"),
+            ("G4", "7", "Bb7"),
+            ("F4", "7", "Bb7"),
+        ]
+        timings = [
+            (2, 1.0, 0.5),
+            (2, 2.0, 0.25),
+            (2, 2.5, 0.375),
+            (3, 1.5, 0.25),
+            (3, 2.0, 0.25),
+            (3, 2.5, 0.25),
+        ]
+        # The old rule, verbatim in shape: track the melody while walking the beats.
+        melody_at = {
+            (bar, float(beat)): index
+            for index, (bar, beat, _duration) in enumerate(timings)
+        }
+        walked = [(2, 1.0), (2, 2.0), (3, 1.0)]
+        previous_melody = -1
+        old_choice = None
+        for bar, beat in walked:
+            key = (bar, beat)
+            if key in melody_at:
+                previous_melody = melody_at[key]
+                continue
+            old_choice = progression[previous_melody][0]
+        self.assertEqual(old_choice, "F4", "the fixture no longer reproduces the bug")
+        steps = VoiceLeadingEngine.arrange_progression(
+            progression, timings=timings, texture="walking_bass", beats_per_bar=2
+        )
+        new_choice = [
+            step for step in steps if step.bar == 3 and step.beat == 1.0
+        ][0].melody
+        self.assertEqual(new_choice, "Eb4")
+        self.assertNotEqual(old_choice, new_choice)
+
+
+class TestEveryHeadCarriesTheMelodyInForce(unittest.TestCase):
+    """
+    The population `docs/open-issues.md` item 5 measured, re-measured after the fix.
+
+    The issue's own table is the "before" column of this test:
+
+    | score | walk-invented beats | carrying the wrong melody (before) | (after) |
+    |---|---|---|---|
+    | `but_not_for_me.mxl` | 22 | **9** | **0** |
+    | `heres_that_rainy_day.musicxml` | 14 | 0 | **0** |
+    | `i_was_doing_all_right.mxl` | 12 | 0 | **0** |
+    | `tenor_madness.musicxml` | 56 | **4** | **0** |
+    | `The_Jitterbug_Waltz.musicxml` | 32 | **2** | **0** |
+
+    The waltz is in the table because it is the **third metre**. A rule proved on two
+    would not have caught a grid that is `beats_per_bar` wide rather than four beats
+    wide, and 3/4 is the metre where a beat-3 melody slot and an invented beat coincide
+    in a way 2/2 and 4/4 do not produce.
+
+    The comparison is against `_melody_in_force` rather than a melody name written out
+    here, because that is the rule under test: a hand-written expectation would be a
+    second implementation of it, and would agree with a broken one just as happily.
+    """
+
+    HEADS = (
+        "but_not_for_me.mxl",
+        "heres_that_rainy_day.musicxml",
+        "i_was_doing_all_right.mxl",
+        "tenor_madness.musicxml",
+        "The_Jitterbug_Waltz.musicxml",
+    )
+
+    def test_no_walk_invented_beat_carries_a_note_that_is_not_sounding(self):
+        """Every invented beat in every committed head carries the melody in force."""
+        from headxml import head_skeleton, load_musicxml
+
+        checked = 0
+        for name in self.HEADS:
+            with self.subTest(head=name):
+                head = load_musicxml(f"tests/data/{name}")
+                skeleton = head_skeleton(head, "eighths", None, "first")
+                triples = [slot[0] for slot in skeleton]
+                timings = [(slot[1], slot[2], slot[3]) for slot in skeleton]
+                slots = _walking_slots(triples, timings, head.beats_per_bar)
+                located = [
+                    (index, bar, beat, duration)
+                    for index, (bar, beat, duration) in enumerate(timings)
+                    if bar is not None and beat is not None
+                ]
+                timeline = _melody_timeline(located, head.beats_per_bar)
+                invented = [slot for slot in slots if slot.bass_only]
+                self.assertTrue(
+                    invented, f"{name}: no walk-invented beats, so nothing is checked"
+                )
+                for slot in invented:
+                    self.assertIsNotNone(
+                        slot.bar, f"{name}: an invented slot has no bar"
+                    )
+                    self.assertIsNotNone(
+                        slot.beat, f"{name}: an invented slot has no beat"
+                    )
+                    if slot.bar is None or slot.beat is None:
+                        continue
+                    at = _beat_offset(slot.bar, float(slot.beat), head.beats_per_bar)
+                    in_force = _melody_in_force(timeline, at)
+                    self.assertGreaterEqual(
+                        in_force,
+                        0,
+                        f"{name} bar {slot.bar} beat {slot.beat}: "
+                        "the melody has not started",
+                    )
+                    self.assertEqual(
+                        triples[slot.index][0],
+                        triples[in_force][0],
+                        f"{name} bar {slot.bar} beat {slot.beat}: carries "
+                        f"{triples[slot.index][0]}, but "
+                        f"{triples[in_force][0]} is sounding there",
+                    )
+                checked += len(invented)
+        self.assertGreater(checked, 100, "suspiciously few invented beats examined")
+
+    def test_the_heads_span_three_metres(self):
+        """
+        The premise of the row above: these are 2/2, 4/4 and 3/4.
+
+        Asserted rather than assumed, because a fixture silently re-notated into 4/4
+        would leave this test passing while covering one metre fewer - which is exactly
+        how the "four-quarter walk" claim in `arrange_progression` came to be believed.
+        """
+        from headxml import load_musicxml
+
+        metres = {
+            load_musicxml(f"tests/data/{name}").beats_per_bar for name in self.HEADS
+        }
+        self.assertEqual(metres, {2, 3, 4}, "the committed heads lost a metre")
+
+
 class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
     """
     The between-step invariant `fret_span()` cannot see, from item 1.
@@ -483,11 +793,8 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
 
         Telling the thumb about the held shape removes candidate strings, so a naive
         version of this change loses thumb notes - and a walking bass with a gap in it
-        is not a walking bass. **One** anchor in this head already had no reachable
-        string before the fix (bar 15: the step's own upper voicing already sounds F3
-        on the low E, and a thumb note must sound strictly below the structure it
-        supports), so the assertion is that exact set rather than an empty one. A
-        second entry here means this change cost a note.
+        is not a walking bass. So the assertion is an exact set rather than an empty
+        one, and a new entry here means this change cost a note.
 
         The anchors are selected by `bass_role` alone, and deliberately **not** by
         `bass_only` as well. They used to be filtered by both, and `docs/open-issues.md`
@@ -496,6 +803,22 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
         and the filter quietly dropped it from this assertion, turning the test into
         one that could not fail. An anchor is an anchor whether or not the left hand
         holds across it, which is what makes `bass_role` the honest population.
+
+        **Item 5 changed this set, and the change is not free.** It went from one gap to
+        three, and it fixed one as well as costing two:
+
+        | anchor | before | after | why |
+        |---|---|---|---|
+        | bar 15 | no thumb | **thumb placed** | the melody there is `Eb5`, not `Ab4`, so the shell no longer sounds the anchor note |
+        | bars 3, 19, 23 | thumb placed | **no thumb** | now `Cm7`, whose root C3 the shell already sounds on the low E |
+
+        The two new gaps are the documented blast radius of the item-5 fix rather than
+        a separate regression: reading the melody in force changed those downbeats
+        from `Ebmaj` over `F4` to `Cm7` over `Eb4`, and under the corrected chord the
+        anchor note *is* the lowest note of the shell, so there is no free string below
+        it for the thumb. The same reason as the original bar-15 gap, reached by a
+        different route - so the test asserts the set and the test below asserts **why**
+        each entry is in it, which is what stops this being paid silently.
         """
         steps = self._arrangement()
         anchors = [
@@ -506,10 +829,57 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
         self.assertGreater(len(anchors), 0)
         missing = [(step.bar, step.beat) for step in anchors if step.bass is None]
         self.assertEqual(
-            [(15, 1.0)],
+            [(3, 1.0), (19, 1.0), (23, 1.0)],
             missing,
             "the set of anchors with no thumb note changed",
         )
+
+    def test_an_anchor_without_a_thumb_note_is_one_the_shell_already_covers(self):
+        """
+        Why each anchor in the set above has no thumb note, so that set is a diagnosis
+        rather than a number that happens to be stable.
+
+        A thumb note must sound strictly below the structure it supports, so an anchor
+        can only fail to place when **the structure already sounds that pitch class**
+        and every string below it is occupied. The first half is what this asserts: for
+        every anchor with no thumb note, the written chord's root is among the pitches
+        the shell is already sounding.
+
+        That is a property of the arrangement rather than of this head, so a future
+        anchor gap has to explain itself here instead of only being absorbed into the
+        set above - and an anchor that *could* have been played will fail this test
+        rather than quietly joining the list.
+        """
+        steps = self._arrangement()
+        checked = 0
+        for step in steps:
+            if step.bass_role != arranger.BASS_ROLE_ANCHOR or step.bass is not None:
+                continue
+            checked += 1
+            sounding = {
+                STANDARD_TUNING[index].midi_note() + fret
+                for index, fret in enumerate(step.voicing.frets)
+                if fret >= 0
+            }
+            self.assertTrue(
+                sounding, f"bar {step.beat}: an anchor sounds nothing at all"
+            )
+            # The chord named on the step is the harmony the anchor roots, so its root
+            # is the pitch the thumb was reaching for. `ChordParser` resolves the name
+            # rather than the test slicing characters out of it, and the octave is
+            # irrelevant because only the pitch class is compared.
+            root_name = ChordParser.parse_chord_name(step.chord)[0]
+            root = (
+                None if root_name is None else Note(root_name + "4").midi_note() % 12
+            )
+            self.assertIsNotNone(root, f"bar {step.bar}: the chord name has no root")
+            self.assertIn(
+                root,
+                {pitch % 12 for pitch in sounding},
+                f"bar {step.bar} beat {step.beat}: the anchor note {root} is not "
+                "already sounding, so the thumb had somewhere to play it",
+            )
+        self.assertGreater(checked, 0, "no anchor gaps were checked")
 
 
 class TestABassOnlyStepIsNeverATarget(unittest.TestCase):
@@ -561,10 +931,26 @@ class TestABassOnlyStepIsNeverATarget(unittest.TestCase):
         The other half, and the reason the fix is a role test rather than a blanket
         one. Under decision C a fill is the melody alone and the melody it carries is
         the one already sounding, so holding it is correct and must survive.
+
+        **Fourteen, not thirteen**, and the extra one is the point of
+        `docs/open-issues.md` item 5. Bar 7 beat 1.0 used to be a *target* stating
+        `F4` - a note the score does not reach until beat 1.5, so the arrangement
+        stated it a quarter early. With the melody in force read off the melody
+        timeline it carries `Eb4`, which really is still ringing from bar 6 beat 2.5,
+        so the melody does not move onto that downbeat and the slot is correctly a
+        fill. The count went **up** because a wrong note was being promoted, and a
+        fix that had left it at 13 would have kept that.
         """
         steps = self._walking_arrangement()
         fills = [step for step in steps if step.bass_only and step.role == ROLE_FILL]
-        self.assertEqual(len(fills), 13, "the held fills changed")
+        self.assertEqual(len(fills), 14, "the held fills changed")
+        # Named rather than left to the count: bar 7 beat 1.0 is the fill the item-5
+        # fix created, and the only one whose melody is held across a *barline*.
+        self.assertIn(
+            (7, 1.0, "Eb4"),
+            [(step.bar, step.beat, step.melody) for step in fills],
+            "bar 7 beat 1.0 no longer fills with the Eb4 that is sounding",
+        )
 
     def test_every_target_states_its_chord_in_every_renderer(self):
         """
@@ -573,13 +959,20 @@ class TestABassOnlyStepIsNeverATarget(unittest.TestCase):
         Checked against all four renderers rather than one, because they disagreed -
         `tabxml` showed the chord and the other three hid it - and agreement between
         them is the property that was actually broken.
+
+        `repeated` is excluded alongside `melody_only`, and the two are excluded for
+        the same reason: both mean *the left hand holds and only the soprano is
+        re-struck*, so a step carrying either legitimately sounds one note in the
+        tab. This is not a loophole opened for the item-5 fix - bar 3 beat 1.0 was
+        already a `repeated` target before it, and asserting on it would have been
+        asserting that the renderers ignore a documented flag.
         """
         import tabxml
         from arranger.render import _step_cells
 
         checked = 0
         for step in self._walking_arrangement():
-            if step.role != ROLE_TARGET or step.melody_only:
+            if step.role != ROLE_TARGET or step.melody_only or step.repeated:
                 continue
             checked += 1
             frets = step.voicing.frets

@@ -93,7 +93,9 @@ class BassNote:
 
     One entry per **walked beat**, not per melody slot - the bass grid is finer than
     the melody grid, which is what lets a held whole note sound one melody note over
-    four thumb notes.
+    a thumb note on every beat of the bar. That is four in 4/4 and two in 2/2, where
+    the whole note is the whole bar; see `_walking_slots` for why the count is a
+    property of the metre rather than a constant.
     """
 
     bar: Optional[int]
@@ -483,22 +485,115 @@ def _walking_slots(
         )
 
     bass_line = _walking_bass_line(chords, onsets, beats_per_bar)
-    return _bass_slots(progression, timings, bass_line)
+    return _bass_slots(progression, timings, bass_line, beats_per_bar)
+
+
+def _beat_offset(bar: int, beat: float, beats_per_bar: int) -> float:
+    """One position on a single absolute beat line, so two bars' beats can be compared.
+
+    A `(bar, beat)` pair orders correctly against another pair, but a *duration*
+    cannot be compared against one: a note running past a barline ends at
+    `(bar, 3.5)` in a 2/2 bar, which is before `(bar + 1, 1.0)` and after `(bar, 2.0)`,
+    and no amount of tuple comparison says so. One number in beats-from-the-start does,
+    and signed bars fall out of the arithmetic rather than needing a case.
+    """
+    return (bar - 1) * beats_per_bar + (beat - 1.0)
+
+
+def _melody_in_force(
+    timeline: Sequence[Tuple[float, float, int]], at: float
+) -> int:
+    """Which melody slot is sounding at beat `at`, or -1 if the melody has not started.
+
+    `timeline` is `(onset, end, index)` in absolute beats, ordered by onset. The rule
+    is **the latest note that has not stopped sounding**, which is not the same as
+    "the latest onset" and not the same as "whatever the walk last passed":
+
+    - A note whose `duration` runs past the next note's onset keeps winning until it
+      stops, so a phrase that holds one note across a barline hands that note - not
+      the one that follows - to the invented downbeat.
+    - A later note that *has* ended loses to an earlier one still sounding, which is
+      what "in force" means and what onset order alone cannot say.
+
+    Where the score writes **silence** at `at`, nothing is in force and the note that
+    most recently started is returned instead: the left hand is still holding that
+    shape, and a beat invented for the thumb has to name the harmony that is
+    actually up. -1 means the melody has not started yet at all, which is the
+    caller's problem to decide and not this function's to guess.
+
+    One forward pass suffices and needs no cursor: `timeline` is in onset order, so
+    the last assignment in each variable is the latest one.
+    """
+    latest = -1
+    sounding = -1
+    for onset, end, index in timeline:
+        if onset > at + _BEAT_EPSILON:
+            break
+        latest = index
+        if at < end - _BEAT_EPSILON:
+            sounding = index
+    return sounding if sounding >= 0 else latest
+
+
+def _melody_timeline(
+    located: Sequence[Tuple[int, int, float, Optional[float]]], beats_per_bar: int
+) -> List[Tuple[float, float, int]]:
+    """`located` as `(onset, end, index)` spans on one absolute beat line.
+
+    A slot's `duration` is in **whole notes** and a bar is `beats_per_bar` beats of
+    them - the importer's own arithmetic, since a bar of `beats_per_bar` notated
+    beats is `beats_per_bar / 4` whole notes long - so a duration becomes
+    `duration * beats_per_bar` beats. Getting that scale wrong would make every
+    span the wrong length, which is why it is written out here rather than left to a
+    reader to infer.
+
+    An unknown duration is `inf`, not zero: "we were not told" is not "it ended
+    here", and a note given no length is the one case where holding it is the safe
+    reading. `located` is already in onset order, and a stable sort keeps two slots
+    sharing an onset in progression order, so the later index wins - the same
+    last-one-wins rule `melody_at` applies below.
+    """
+    return sorted(
+        (
+            (
+                _beat_offset(bar, beat, beats_per_bar),
+                (
+                    float("inf")
+                    if duration is None
+                    else _beat_offset(bar, beat, beats_per_bar)
+                    + duration * beats_per_bar
+                ),
+                index,
+            )
+            for index, bar, beat, duration in located
+        ),
+        key=lambda span: (span[0], span[2]),
+    )
 
 
 def _bass_slots(
     progression: List[Tuple[str, str, str]],
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
     bass_line: List[BassNote],
+    beats_per_bar: int = 4,
 ) -> List[_Slot]:
     """
     The union of the melody grid and the walked beats, as one ordered slot list.
 
     Decision B: the bass grid may be **finer** than the melody grid, because a bar
-    whose melody is a single whole note still has four beats to walk. Every walked
-    beat that has no melody slot becomes an extra slot carrying the previous melody
-    pitch, marked `bass_only` - the renderer holds the upper voices across it and
-    strikes only the thumb.
+    whose melody is a single whole note still has a beat on every one of its
+    `beats_per_bar` beats to walk. Every walked beat that has no melody slot becomes
+    an extra slot carrying the melody in force at that instant, marked `bass_only` -
+    the renderer holds the upper voices across it and strikes only the thumb.
+
+    **"A beat on every beat" is not "four beats".** The grid is `beats_per_bar` beats
+    wide, so a bar yields four thumb notes in 4/4, three in 3/4 and **two in 2/2** -
+    and three of the four committed scores are notated in cut time. The old wording
+    here and in `arrange_progression` said "four beats to walk" and "a four-quarter
+    walk", which was true only in the metre it was written in. That claim was not
+    harmless: it is why the beat 2.5 melody slot was assumed to be one the walk
+    visited, when in 2/2 the walk never goes there. The grid is the grid; the
+    precedence question below is separate and is answered over the melody timeline.
 
     `timings` is `(bar, beat, duration)` per slot and a slot the caller never located
     arrives as `(None, None, None)`: the corpus path supplies no timings at all, and
@@ -512,9 +607,17 @@ def _bass_slots(
     - the union is built **before** the melody loop, so the loop's index still means
       what it meant - `arrange_head`'s timings guard and `arrange_slots`' retry index
       index into the skeleton, not into the result;
-    - an extra slot's `index` is the *previous* melody slot, so the melody it carries
-      is the one actually sounding, and the harmonic timeline the walk reads is
-      unchanged by the union itself.
+    - an extra slot's `index` is the melody slot **in force** at that beat - found
+      from the melody timeline by onset *and* duration, not from the walk's own
+      beats. The melody it carries is therefore the one actually sounding at that
+      instant, and the harmonic timeline the walk reads is unchanged by the union
+      itself.
+
+    The distinction between "in force" and "the previous slot" is not a refinement.
+    It is the difference between the arrangement matching the score between its note
+    onsets and not: see `docs/open-issues.md` item 5, where the two rules disagree
+    on nine downbeats of "But Not For Me" and the renderers faithfully wrote the
+    wrong melody at every one of them.
 
     With no usable timing there is no beat grid to union against, and the gridless
     degradation stands: one thumb note per anchor, one per slot. That is the
@@ -557,18 +660,34 @@ def _bass_slots(
                      and abs(note.beat - float(beat)) <= _BEAT_EPSILON), None)
         entries.append((key, index, bass, False))
 
-    # The walked beats with no melody slot. Ordered by onset, and each takes the
-    # melody slot in force before it - which is why the nearest preceding slot is
-    # found rather than "the previous index".
-    previous_melody = -1
+    # The walked beats with no melody slot. Each takes the melody **in force** at its
+    # own instant, read off the melody timeline rather than off the walk's own beats.
+    #
+    # That distinction is the whole fix. Tracking the previous melody while iterating
+    # `bass_line` means a melody slot is only noticed when the walk happens to land on
+    # it, so in a 2/2 bar - where the walk visits beats 1.0 and 2.0 only - a melody
+    # moving at beat 2.5 is invisible and the invented downbeat inherits from beat 2.0
+    # instead. Nine downbeats of "But Not For Me" stated the wrong note that way, and
+    # because the wrong note then became the melody the slot *looks* correct to every
+    # check that compares against the arrangement's own idea of itself.
+    #
+    # `melody_at` stays for what it is good for - the exact onset test below and the
+    # duration each slot reports - but precedence over time is now `_melody_in_force`'s
+    # job, and it is a different question with a different answer.
+    timeline = _melody_timeline(located, beats_per_bar)
     for note in bass_line:
         if note.bar is None or note.beat is None:
             continue
         key = (note.bar, float(note.beat))
         if key in melody_at:
-            previous_melody = melody_at[key][0]
             continue
-        entries.append((key, previous_melody if previous_melody >= 0 else 0, note, True))
+        in_force = _melody_in_force(
+            timeline, _beat_offset(note.bar, float(note.beat), beats_per_bar)
+        )
+        # Index 0 when the melody has not started yet, which is the pre-existing
+        # fallback: something has to be named, and the opening slot is the least
+        # wrong thing to say on a beat before the tune begins.
+        entries.append((key, in_force if in_force >= 0 else 0, note, True))
 
     # Sort by onset, with a melody slot ahead of a bass-only slot on the same onset
     # so the step that strikes the melody is the step that carries that walk note.

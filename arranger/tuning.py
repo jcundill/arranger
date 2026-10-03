@@ -362,10 +362,12 @@ class ArrangementStep:
     # never sets the other, and an NC step is never marked either.
     #
     # It is what lets the bass grid be finer than the melody grid: a bar whose melody is
-    # a single whole note still gets four thumb notes, one of them on the step that
-    # carries the melody and three bass-only. `arrange_progression` therefore returns
-    # more steps than the progression it was given under this texture, and this field is
-    # how a renderer tells which is which.
+    # a single whole note still gets a thumb note on each of its `beats_per_bar` beats,
+    # one of them on the step that carries the melody and the rest bass-only. That is
+    # four in 4/4 and **two in 2/2**, where a whole note is the whole bar - the grid is
+    # `beats_per_bar` beats wide, not four quarters. `arrange_progression` therefore
+    # returns more steps than the progression it was given under this texture, and this
+    # field is how a renderer tells which is which.
     #
     # It is a statement about the **left hand**, so it never coexists with
     # `role == ROLE_TARGET`: a target states the harmony, and a step that re-states a

@@ -1,19 +1,22 @@
 # Open issues: playability of held shapes, one GP5 discrepancy, and a lost melody
 
 Items 1-4 were written at the end of the 2026-09-29 session, after the
-`GRIP_MAX_SPAN` / `voicing_cost` / `grips`-intersection work. **All four are now
-fixed**; each carries the measurement that produced it and the stage that closed it,
-so the work can be read rather than re-derived. Items 1-3 were fixed in stages 1-3 the
-same day; item 4 needed a corrected diagnosis first, which is recorded in full.
+`GRIP_MAX_SPAN` / `voicing_cost` / `grips`-intersection work, and item 5 was added on
+2026-10-03. **All five are now fixed**; each carries the measurement that produced it
+and the stage that closed it, so the work can be read rather than re-derived. Items
+1-3 were fixed in stages 1-3 the same day; item 4 needed a corrected diagnosis first,
+and item 5 needed a third metre to be fixed honestly - both recorded in full.
 
-**Item 5 was added on 2026-10-03 and is OPEN.** It is the only one here that is not
-fixed, and it is in the same subsystem as item 1 - so read item 1's "Stage 3" before
-touching it, because the two share `_place_bass` and the notion of a held shape.
+Item 5 is in the same subsystem as item 1, so read item 1's "Stage 3" before it: the
+two share the notion of a held shape, though they turn out to be different bugs - item
+1 was the *thumb* measured against the wrong shape, item 5 the *melody* measured over
+the wrong timeline.
 
 The header of each section states its status, and **item 4's original diagnosis was
 wrong** - it blamed the renderers and the fill rule, when the engine was emitting two
 contradictory flags at once. Read its "Stage 4" before acting on the section above
-it.
+it. Item 5's original diagnosis was substantially right, but its own measurements
+were two counts short in the way item 4's were, so read its "Stage 5" too.
 
 Reproduce all of it with the commands in [Reproducing](#reproducing).
 
@@ -426,8 +429,8 @@ fix improved playability as well as correctness.
 
 ## 5. A walk-invented beat takes the wrong melody, and the tune loses a note
 
-**Status:** OPEN. Diagnosed and measured on 2026-10-03; **no fix chosen and none
-built.** Pre-existing, and unrelated to the key-signature work that surfaced it.
+**Status:** FIXED (stage 5). See "Stage 5" below. Diagnosed and measured on
+2026-10-03; pre-existing, and unrelated to the key-signature work that surfaced it.
 
 ### The symptom
 
@@ -441,9 +444,12 @@ file   bar 3:  F4                    F4  G4  F4
 ```
 
 The Eb4 that should still be sounding over the barline is not written at all, and the
-F4 that follows it arrives a quarter early. The nine affected downbeats are bars 3, 7,
-11, 13, 15, 19, 23, 27 and 29 - the first beat of a phrase, where the score holds one
-note across the barline and leaves a quarter of silence before the next.
+F4 that follows it arrives a quarter early. Nine downbeats of this head are affected:
+bars 3, 7, 11, 13, 15, 19, 23, 27 and 29 - each the first beat of a phrase, and each
+one where the arrangement names a note the score has not reached yet. **Not all nine
+are the case above**: bar 3 is a note held across the barline, while bars 11, 13, 15,
+27 and 29 are a beat the score leaves to silence. Stage 5 separates them, and the
+distinction turns out to matter to the fix.
 
 Measured over the four committed scores (`tests/data`), counting the walk-invented
 beats that carry a melody other than the one the score has sounding at that instant:
@@ -455,8 +461,13 @@ beats that carry a melody other than the one the score has sounding at that inst
 | `i_was_doing_all_right.mxl` | 12 | 0 |
 | `tenor_madness.musicxml` | 56 | **4** |
 
-Thirteen slots, all of them the first beat of a bar whose melody note began in the
-previous bar and runs past it.
+Thirteen slots in all, and **the description of them was checked during stage 5 and
+was half right**: seven are a note begun in the previous bar and still sounding, which
+is the bar-3 case. The other six sit over a **written rest** - bars 11, 13, 15, 27 and
+29 of "But Not For Me" among them - where the melody stops at the barline and the
+invented beat inherits a note two bars back. Both need the same fix under the same
+rule, but they are different cases, and the rest case is the one a strict "only notes
+that are sounding" reading would have broken. See "Stage 5".
 
 ### Why the obvious check misses it
 
@@ -561,6 +572,91 @@ then compare the soprano line of `/tmp/jon.gp5` against the melody of
 `tests/data/but_not_for_me.mxl`, **including the notes that run past a barline**.
 Comparing only at note onsets reports no defect at all, which is the point of the
 "why the obvious check misses it" section above.
+
+### Stage 5 — fixed
+
+The first candidate was taken: **precedence is decided over the melody timeline,
+honouring `duration`.** `_melody_in_force` answers "what is sounding at this instant"
+by walking the melody onsets in order and taking the latest one that has not stopped,
+falling back to the latest onset started where the score writes silence.
+
+Two things the section above flagged as "not that simple" turned out to be already
+handled, which is why this was a small change:
+
+- **The bar-3 precedence case needs no special rule.** `Eb4` starts at bar 2 beat 2.5
+  and runs to bar 3 beat 1.25, so the *latest onset at or before* bar 3 beat 1.0 is
+  already `Eb4`. Ordering by onset and stopping at the beat is sufficient; duration is
+  what makes it correct when a later note has *ended*, which no committed head
+  produces today.
+- **Two notes under one key is not reachable.** `head_skeleton` reduces to one note
+  per slot before `_walking_slots` sees it, so `melody_at` never collides; the
+  timeline is built from the same list and inherits that.
+
+The one thing the section above did not anticipate is that **"the note in force" is not
+always "the note sounding"**, and its "all thirteen run past the barline" is only half
+right. Of the 22 invented beats in "But Not For Me", **12 sit over a note still
+sounding and 10 over a written rest**:
+
+| | count | what the slot carried before |
+|---|---|---|
+| a note still sounding | 12 | 4 wrong, 8 already right |
+| the score writes silence | 10 | 5 wrong, 5 already right |
+
+The second row is why a strict reading of the rule would have been a regression. At
+bar 5 beat 1.0 nothing is sounding at all, and the left hand is still holding the bar 4
+shape, so the invented beat must name that note rather than nothing. That is nearly
+half the beats, so it is asserted directly rather than left to the head to reach.
+
+Measured over the committed heads, all five now clean:
+
+| score | metre | walk-invented beats | wrong melody before | after |
+|---|---|---|---|---|
+| `but_not_for_me.mxl` | 2/2 | 22 | **9** | **0** |
+| `heres_that_rainy_day.musicxml` | 2/2 | 14 | 0 | **0** |
+| `i_was_doing_all_right.mxl` | 2/2 | 12 | 0 | **0** |
+| `tenor_madness.musicxml` | 4/4 | 56 | **4** | **0** |
+| `The_Jitterbug_Waltz.musicxml` | 3/4 | 32 | **2** | **0** |
+
+`The_Jitterbug_Waltz.musicxml` was added with this fix and is the **third metre**, and
+that is the point of including it. The "four-quarter walk" wording above was not a
+harmless overstatement: it is the reason a melody slot at beat 2.5 was assumed to be
+one the walk visits, and in 2/2 the walk never goes there. The same false claim is
+corrected in `_walking_slots`, `arrange_progression`, `ArrangementStep.bass_only` and
+the `BassNote` docstring, each now naming `beats_per_bar` rather than four. The
+`BassNote` "four quarters" claim is left in `docs/history/walking-bass.md` alone, per
+AGENTS.md: history records what was decided, not what is currently true.
+
+**The blast radius was wider than the melody line**, as the section above warned, and
+three of this repository's own tests moved. Each is a consequence, and each is
+asserted in its new state rather than merely re-baselined:
+
+- **Bar 3's downbeat became `Eb4` over `Cm7`**, not `F4` over `Ebmaj` - the chord is
+  read from the melody slot, so correcting the melody corrected the harmony with it.
+- **Bar 3's downbeat is now `repeated`** (Eb4 genuinely is still ringing from bar 2), so
+  the renderers hold rather than re-strike. `test_every_target_states_its_chord_in_
+  every_renderer` excludes `repeated` alongside `melody_only`, because both mean "the
+  left hand holds"; bar 3 was already a `repeated` target before this fix, it simply
+  had not been reached.
+- **Bar 7 beat 1.0 became a fill.** It was a *target* stating `F4`, a note the score
+  does not reach until beat 1.5; carrying the sustained `Eb4` means the melody does not
+  move onto that downbeat, so it is correctly thin. The fill count went **13 → 14**,
+  and a fix that had left it at 13 would have kept the bug.
+- **The anchors with no thumb note went from one to three** (bar 3, 19, 23), and bar
+  15 lost its gap. Under the corrected `Cm7` the anchor note *is* the shell's lowest
+  note, so there is no free string below it - the same reason as the original bar-15
+  gap, reached by a different route. The test now also asserts **why** each gap is
+  there, so the next one has to explain itself.
+
+- `tests/test_walking_bass.py::TestAWalkInventedBeatTakesTheMelodyInForce` — six
+  tests on the rule itself, including the two branches no committed head reaches (a
+  beat before the melody starts, and a written rest underneath the walk).
+- `TestEveryHeadCarriesTheMelodyInForce` — two tests: the table above over all five
+  heads, and `test_the_heads_span_three_metres` so the 3/4 row cannot quietly become
+  another 4/4 one.
+- `test_the_pre_fix_rule_really_does_fail_these` re-implements the old three-line rule
+  and asserts it disagrees with the engine on bar 3. **Verified by measurement**: with
+  only the `_bass_slots` rule reverted and the new helpers left in place, all seven of
+  these tests fail on the old rule and pass on the new one.
 
 ---
 

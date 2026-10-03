@@ -566,24 +566,32 @@ class VoiceLeadingEngine:
 
         `texture="walking_bass"` adds a thumb line on the bass strings under a light
         left hand: a **shell** (3rd & 7th) on a target beat, the **melody alone**
-        between, and a four-quarter walk underneath. Three consequences are part of
-        its contract rather than details of it:
+        between, and a walk underneath, one thumb note per beat of the bar. Four
+        consequences are part of its contract rather than details of it:
 
         - **It may return more steps than it was given.** The bass grid is finer than
-          the melody grid, so a bar whose melody is a whole note yields four steps -
-          one carrying the melody and three marked `bass_only`, whose upper voices are
-          held rather than re-struck. Callers that zip their progression against the
-          result, or derive a bar count from `len(steps)`, are wrong under this texture
-          only; `uniform` and `targets` are untouched. A step the walk invented can be
-          promoted to a **target** when the melody moves onto it, and then it states
-          its harmony rather than holding - which is `decisions.is_bass_only`, and the
-          reason a `bass_only` step is always a fill.
+          the melody grid, so a bar whose melody is a whole note still yields a step
+          for each of its `beats_per_bar` beats - one carrying the melody and the rest
+          marked `bass_only`, whose upper voices are held rather than re-struck. That
+          is **four** steps in 4/4, **three** in 3/4 and **two** in 2/2, because the
+          grid is `beats_per_bar` beats wide; the wording here used to say "four", and
+          three of the four committed scores are in cut time. Callers that zip their
+          progression against the result, or derive a bar count from `len(steps)`, are
+          wrong under this texture only; `uniform` and `targets` are untouched. A step
+          the walk invented can be promoted to a **target** when the melody moves onto
+          it, and then it states its harmony rather than holding - which is
+          `decisions.is_bass_only`, and the reason a `bass_only` step is always a fill.
+        - **A `bass_only` step carries the melody sounding at that instant**, not the
+          melody the walk last passed. Those differ whenever the melody moves on a beat
+          the walk does not visit - the beat 2.5 of a 2/2 bar, where the walk is on 1.0
+          and 2.0 - and getting it wrong states a note the score has not reached yet.
+          See `docs/open-issues.md` item 5.
         - **A fill is the melody alone**, and so is a target no shell can sound. The
           chord name above such a step describes the harmony rather than everything
           sounding, which is the texture rather than a defect - the harmony is stated
           in full at the next target.
         - **With `timings=None` the walk degrades to one note per slot.** There is no
-          beat grid to place four quarters on, and that is the path every existing
+          beat grid to place the walk on, and that is the path every existing
           hand-written caller takes, so it is documented rather than silent.
 
         The bass is merged into `Voicing.frets` *after* `_best_voicing` has chosen the
