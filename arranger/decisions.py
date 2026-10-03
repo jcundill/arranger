@@ -257,8 +257,32 @@ def is_repeated_step(
 
     A melody-only (`NC`) step is never marked: it has one active fret and no inner
     voices to hold, so the flag would mean nothing.
+
+    **The same argument applies to any step that sounds a single note**, and that is
+    not the same set. A `texture` fill is the melody alone under `walking_bass` and
+    carries `melody_only=False` - it is a deliberate exception, per the comment at
+    the call site that builds it - so the check above does not catch it. But it plays
+    one note, there are no inner voices ringing to hold, and marking the *next* step
+    `repeated` then instructs every renderer to suppress that step's inner voices.
+
+    That is not a cosmetic flag error. Measured on "But Not For Me" bar 3 under
+    `walking_bass`: the engine voiced `C3 Bb3 Eb4` for a `Cm7` target, and
+    `_step_cells` returned a single `8` on the G string - `C3` and `Bb3`, the two notes
+    that make it a `Cm7` rather than a bare melody note, reached **none** of the four
+    renderers. The chord of the tune was voiced and then thrown away by a rule that
+    meant "hold what is already ringing", applied when nothing was.
+
+    So the test is on what the previous step **sounds**, not on its flag: one active
+    fret means there is nothing to hold. `melody_only` is then a special case of it
+    and is kept as a named check because it reads as the intent rather than the
+    arithmetic.
     """
     if previous_step is None or previous_step.melody_only:
+        return False
+    if len([fret for fret in previous_step.voicing.frets if fret >= 0]) < 2:
+        # A melody-alone step: the melody is held by the hand, not by ringing inner
+        # voices, so the next step has to state whatever it voices rather than
+        # suppress it. See the docstring for the bar this was measured on.
         return False
     if max(previous_step.voicing.midi_notes()) != max(voicing.midi_notes()):
         return False

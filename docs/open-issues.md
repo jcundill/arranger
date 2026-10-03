@@ -1,11 +1,12 @@
 # Open issues: playability of held shapes, one GP5 discrepancy, and a lost melody
 
 Items 1-4 were written at the end of the 2026-09-29 session, after the
-`GRIP_MAX_SPAN` / `voicing_cost` / `grips`-intersection work, and item 5 was added on
-2026-10-03. **All five are now fixed**; each carries the measurement that produced it
-and the stage that closed it, so the work can be read rather than re-derived. Items
-1-3 were fixed in stages 1-3 the same day; item 4 needed a corrected diagnosis first,
-and item 5 needed a third metre to be fixed honestly - both recorded in full.
+`GRIP_MAX_SPAN` / `voicing_cost` / `grips`-intersection work; item 5 was added on
+2026-10-03, and item 6 was found by fixing it. **All six are now fixed**; each carries
+the measurement that produced it and the stage that closed it, so the work can be read
+rather than re-derived. Items 1-3 were fixed in stages 1-3 the same day; item 4 needed
+a corrected diagnosis first, and items 5 and 6 turned out to be two real defects of
+which only one was reachable at a time - both recorded in full.
 
 Item 5 is in the same subsystem as item 1, so read item 1's "Stage 3" before it: the
 two share the notion of a held shape, though they turn out to be different bugs - item
@@ -575,6 +576,13 @@ Comparing only at note onsets reports no defect at all, which is the point of th
 
 ### Stage 5 — fixed
 
+**One defect was found by this fix but is not its own.** Reading the corrected output
+back is what turned it up: bar 3 beat 1.0 became a *repeat* of the note sounding from
+the previous bar, and the renderers then dropped the two inner voices of the `Cm7`
+under it. That is `docs/open-issues.md` **item 6** below, which is pre-existing and was
+reproduced on the commit before this one. The melody fix is what made it visible, by
+making bar 3's melody genuinely the note that was still sounding.
+
 The first candidate was taken: **precedence is decided over the melody timeline,
 honouring `duration`.** `_melody_in_force` answers "what is sounding at this instant"
 by walking the melody onsets in order and taking the latest one that has not stopped,
@@ -632,11 +640,11 @@ asserted in its new state rather than merely re-baselined:
 
 - **Bar 3's downbeat became `Eb4` over `Cm7`**, not `F4` over `Ebmaj` - the chord is
   read from the melody slot, so correcting the melody corrected the harmony with it.
-- **Bar 3's downbeat is now `repeated`** (Eb4 genuinely is still ringing from bar 2), so
-  the renderers hold rather than re-strike. `test_every_target_states_its_chord_in_
-  every_renderer` excludes `repeated` alongside `melody_only`, because both mean "the
-  left hand holds"; bar 3 was already a `repeated` target before this fix, it simply
-  had not been reached.
+- **Bar 3's downbeat is a `repeat` of the `Eb4` still ringing from bar 2 beat 2.5.**
+  That part was correct - the melody really is held - and it is what exposed item 6.
+  `test_every_target_states_its_chord_in_every_renderer` excludes `repeated` alongside
+  `melody_only` because both mean "the left hand holds"; it is the *decision* that was
+  wrong for a melody-alone fill, not the exclusion.
 - **Bar 7 beat 1.0 became a fill.** It was a *target* stating `F4`, a note the score
   does not reach until beat 1.5; carrying the sustained `Eb4` means the melody does not
   move onto that downbeat, so it is correctly thin. The fill count went **13 → 14**,
@@ -657,6 +665,89 @@ asserted in its new state rather than merely re-baselined:
   and asserts it disagrees with the engine on bar 3. **Verified by measurement**: with
   only the `_bass_slots` rule reverted and the new helpers left in place, all seven of
   these tests fail on the old rule and pass on the new one.
+
+---
+
+## 6. A `repeated` step after a melody-alone fill drops the chord
+
+**Status:** FIXED. See "Stage 6" below. Found on 2026-10-03 while fixing item 5, and
+**pre-existing** — reproduced on the commit before that fix.
+
+### The symptom
+
+`--texture walking_bass` on "But Not For Me", bar 3 beat 1.0. The engine voices a
+`Cm7` under a held `Eb4`:
+
+```
+bar 3 beat 1.0   chord Cm7   melody Eb4
+voicing: C3 (low E, fret 8), Bb3 (D, fret 8), Eb4 (G, fret 8)
+```
+
+and the GP5 contains **one note**:
+
+```
+bar 3, beat 0:  G string fret 8   Eb4
+```
+
+`C3` and `Bb3` — the two notes that make this a `Cm7` rather than a bare melody note —
+reach **none** of the four renderers. The player sees the chord name `Cm7` printed above
+a single `Eb` and an octave of empty strings below it.
+
+### Why it happens
+
+`decisions.is_repeated_step` decides that a step is a soprano-only re-strike by
+comparing two things: the melody's **sounding pitch**, and the **harmony**. On bar 3 both
+are unchanged from the previous step, so it returns `True` — and `True` instructs every
+renderer to strike the soprano and hold the rest.
+
+But the previous step, bar 2 beat 2.5, is a **fill**: under `walking_bass` decision C a
+fill is the melody alone, and it sounds exactly one note. There are no inner voices
+ringing to hold. So "hold the previous shape" is an instruction with nothing to act on,
+and its effect is to suppress the *new* shape's inner voices instead.
+
+The rule already knows this principle — its docstring says a melody-only step "has one
+active fret and no inner voices to hold, so the flag would mean nothing" — but the
+guard tests the **flag** `melody_only`, and a texture fill deliberately carries
+`melody_only=False` (see the comment at the call site that builds it). So the case the
+docstring describes is exactly the case the code misses.
+
+### Why item 5 exposed it, and is not responsible
+
+Before item 5's fix, bar 3 beat 1.0 carried `F4` — a note the score does not reach
+until beat 1.5 — so its melody differed from the previous step and the rule correctly
+returned `False`. Once the melody is read from the timeline, that bar carries the
+`Eb4` that really *is* still ringing, the two conditions match, and the rule fires.
+
+So the melody was wrong before and the chord was right; now the melody is right and the
+rule misfires. **Both defects were real and only one was reachable at a time**, which is
+why this was not found by reading the file and why the fix is in
+`decisions.is_repeated_step` rather than in `_bass_slots`.
+
+### Stage 6 — fixed
+
+The guard now tests **what the previous step sounds** rather than which flag it carries:
+
+```python
+if len([fret for fret in previous_step.voicing.frets if fret >= 0]) < 2:
+    return False
+```
+
+`melody_only` is kept as a separate named check because it reads as the intent rather
+than the arithmetic, and because the two are not the same set.
+
+Measured on the reported bar, before and after:
+
+| | before | after |
+|---|---|---|
+| bar 3 beat 1.0 in the tab | `----8--` | **`8-x-8-8-x-x`** |
+| bar 3 beat 1.0 in the GP5 | `G string 8` | `low E 8, D 8, G 8` |
+| voices reaching the output | 1 of 3 | **3 of 3** |
+| the chord's root sounds | no | **yes — C3, an octave below the melody** |
+
+- `tests/test_walking_bass.py::TestASingleNoteStepHasNothingToHold` — three tests: the
+  flag is not set, the chord reaches all four renderers, and the committed head puts the
+  root below the held melody. The first two fail with the guard reverted; verified by
+  measurement rather than assumed.
 
 ---
 
@@ -693,6 +784,16 @@ the previous one — is not covered by anything.
 ---
 
 ## Reproducing
+
+```bash
+# 0. item 5 and item 6 together: the walk-invented downbeat, and the chord it drops
+.venv/bin/python -m arranger head tests/data/but_not_for_me.mxl \
+    --grips shell --texture walking_bass --bars 3 --tab staff
+
+# the bar 3 beat 1.0 line should read `Cm7 Eb4 ... 8-x-8-8-x-x` - three notes, the
+# root an octave below the held melody. Before stage 6 it was one note (the melody
+# alone); before stage 5 it was the wrong melody (F4) with the chord right.
+```
 
 ```bash
 # 1. the unplayable bar

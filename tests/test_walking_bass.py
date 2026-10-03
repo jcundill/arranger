@@ -1248,6 +1248,132 @@ class TestTheInvariant(unittest.TestCase):
             self.assertIsNone(candidate.bass_string)
 
 
+class TestASingleNoteStepHasNothingToHold(unittest.TestCase):
+    """
+    `is_repeated_step` must not suppress a new shape's inner voices when the previous
+    step played a single note.
+
+    Found while fixing `docs/open-issues.md` item 5, and **pre-existing** - verified by
+    reproducing it on the commit before that fix. Bar 3 of "But Not For Me" under
+    `walking_bass` put a melody-alone fill (bar 2 beat 2.5, `Eb4` alone) immediately
+    before a `Cm7` target whose melody is the same still-sounding `Eb4`. The rule
+    compared melody pitch and harmony, saw both unchanged, and marked the target
+    `repeated` - which tells every renderer to strike the soprano and hold the rest.
+
+    The engine had voiced `C3 Bb3 Eb4`, and the file contained `Eb4`. **The two notes
+    that make it a chord rather than a melody note reached none of the four renderers.**
+    A texture fill is the melody alone and carries `melody_only=False` on purpose, so
+    the existing `melody_only` guard did not catch it; the test that mattered was on the
+    flag rather than on what the step sounds.
+    """
+
+    def _steps(self):
+        """
+        The two steps, reduced from the fixture to the four notes that matter.
+
+        Bar 2 beat 2.5 is the melody-alone fill and bar 3 beat 1.0 is the target; the
+        same `Eb4` and the same `Cm7` on both sides, which is what fools the rule.
+        """
+        return VoiceLeadingEngine.arrange_progression(
+            [
+                ("G4", "maj", "Ebmaj"),   # bar 2 beat 1.0
+                ("F4", "maj", "Ebmaj"),   # bar 2 beat 2.0
+                ("Eb4", "m7", "Cm7"),     # bar 2 beat 2.5 - the melody-alone fill
+                ("Eb4", "m7", "Cm7"),     # bar 3 beat 1.0 - the target that repeats it
+                ("F4", "7", "Bb7"),
+            ],
+            timings=[(2, 1.0, 0.5), (2, 2.0, 0.25), (2, 2.5, 0.375), (3, 1.0, 0.375), (3, 1.5, 0.25)],
+            texture="walking_bass",
+            beats_per_bar=2,
+        )
+
+    def test_a_repeat_is_not_claimed_when_the_previous_step_sounded_one_note(self):
+        """
+        The flag itself, and asserted as *not* set rather than as a chord name, because
+        the flag is what the four renderers read.
+        """
+        steps = self._steps()
+        target = [s for s in steps if s.bar == 3 and s.beat == 1.0][0]
+        # The premise, asserted rather than assumed: the step before this one played a
+        # single note, which is the whole reason the rule should not fire.
+        fill = [s for s in steps if s.bar == 2 and s.beat == 2.5][0]
+        self.assertEqual(
+            [f for f in fill.voicing.frets if f >= 0],
+            [4],
+            "the premise changed: bar 2 beat 2.5 is no longer a single note",
+        )
+        self.assertFalse(
+            target.repeated,
+            "a step after a single-note step is not a re-strike of held voices",
+        )
+
+    def test_the_chord_under_that_melody_reaches_every_renderer(self):
+        """
+        The symptom: the two notes that make it a `Cm7` were dropped from the output.
+
+        Checked against all four renderers, since "reached the output" is the property
+        and any one of them passing would not be evidence. Before the fix this failed on
+        all four with the same two notes missing.
+        """
+        import tabxml
+        from arranger.render import _step_cells
+
+        target = [s for s in self._steps() if s.bar == 3 and s.beat == 1.0][0]
+        frets = target.voicing.frets
+        sounding = {i for i, f in enumerate(frets) if f >= 0}
+        self.assertGreaterEqual(len(sounding), 3, "the target is not voicing a chord")
+
+        struck = {i for i, cell in enumerate(_step_cells(target)) if cell.isdigit()}
+        self.assertEqual(
+            sorted(struck),
+            sorted(sounding),
+            "the tab drops the inner voices of a chord under a held melody",
+        )
+        self.assertEqual(
+            sorted(i for i, _fret in _sounding_frets(target)),
+            sorted(sounding),
+            "the GP5 drops the inner voices of a chord under a held melody",
+        )
+        self.assertEqual(
+            len(tabxml._sounding(target)),
+            len(sounding),
+            "the score drops the inner voices of a chord under a held melody",
+        )
+
+    def test_the_committed_head_plays_the_root_below_the_held_melody(self):
+        """
+        The reported bar, in the committed head, and the octave.
+
+        Bar 3 beat 1.0 states `Cm7` under a held `Eb4`. The root has to sound **below**
+        the melody - on the low E at fret 8, `C3` against `Eb4` - or the bar claims a
+        `Cm7` while voicing a bare `Eb`. Asserted on the pitch rather than the fret so
+        the string is free to change if a better voicing appears.
+        """
+        import contextlib
+        import io
+
+        from headxml import arrange_xml_head
+        from tests.test_headxml import BUT_NOT_FOR_ME
+
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            steps, _head, _notes = arrange_xml_head(
+                BUT_NOT_FOR_ME, grips=("shell",), texture="walking_bass"
+            )
+        target = [s for s in steps if s.bar == 3 and s.beat == 1.0][0]
+        self.assertEqual(target.chord, "Cm7")
+        pitches = target.voicing.midi_notes()
+        # C3 root, Bb3 seventh, Eb4 melody - the pitches, not the frets, so the string
+        # each lands on is free to change if a better voicing appears.
+        self.assertIn(63, pitches, "the melody Eb4 does not sound there")
+        self.assertIn(58, pitches, "the seventh Bb3 is missing")
+        self.assertLess(
+            min(pitches),
+            63,
+            "nothing sounds below the melody, so the Cm7 is voiced above it",
+        )
+
+
 class TestNoRegression(unittest.TestCase):
     """The other two textures are untouched by anything above."""
 
