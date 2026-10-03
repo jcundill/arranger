@@ -37,8 +37,25 @@ duplicated or imported across the boundary.
 | `tabstaff.format_tab_html` | a self-contained HTML page for a browser |
 | `tabstaff.write_tab_html` | the only function in the module that touches the filesystem |
 | `_staff_columns` / `_staff_breaks` | the shared layout core, both renderers call these |
+| `_staff_bars` / `_staff_barlines` | the bar number of every column, and the columns that open a bar |
 | `_staff_rhythm` / `_note_value` / `_meter_label` | the timing core: note values, rests and ties, the metre |
 | `_carries_melody` | which strings carry the melody, for the `*` marker |
+
+**A barline and a system break are two different questions, and the split is load-bearing.**
+`_staff_barlines` marks **every** bar — that is the mark saying where the metre falls —
+while `_staff_breaks` marks every `measures_per_line` bars, which is only where a printed
+line *ends*. They used to be the same setting, which meant the staff ruled one bar in four
+and never wrapped at all: `measures_per_line` decided where the barlines went, and a flag
+named for bars-per-line governed nothing else. TuxGuitar's ASCII export closes every
+measure and wraps at a fixed width, and copying it is what forced the split. Both sets come
+from one `_staff_bars` list, so a barline and a wrap can never disagree about where a bar
+ends.
+
+The consequence for the tests is that **"every row is the same width" is an invariant of a
+system, not of the whole staff** — the last system is short by definition, and a staff that
+never wrapped could be compared as a whole. `_systems` in `tests/test_tab_rendering.py`
+splits on the blank line so the assertion can be stated per system, which is what the
+alignment check was for in the first place.
 
 `format_musicxml` and `write_musicxml` are the same rendering decision in a different
 medium, and they live in `tabxml.py` rather than here — see
@@ -178,11 +195,16 @@ length means measuring it, a length is measured in quarters, and quarters come f
 `show_timing` (on by default) adds two rows above the chord names:
 
 ```
-  |4/4                    |                      |     |
-  |w ~   ~   ~   q e    |q     r     r     r   |w    |
-  |Dm7                    |G7                    |Cmaj7|
-  |D5                     |B4                    |C5   |
-e*|10   -     -     -     |7    -     -     -    |8    |
+  |4/4                    |
+  |w     r     r     r    |
+  |Dm7                    |
+  |D5                     |
+e*|10---------------------|
+B |10---------------------|
+G |10---------------------|
+D |10---------------------|
+A |-----------------------|
+E |-----------------------|
 ```
 
 - the **metre** over the first bar, and nowhere else — a signature holds until it
@@ -190,6 +212,94 @@ e*|10   -     -     -     |7    -     -     -    |8    |
   only;
 - a **note value** per column: `w h q e s`, dotted (`q.`), triplet (`3q`), `~` for a
   shape still held from an earlier column, and `r` for a rest.
+
+Three things about the six string rows below them, all of them forced by comparing the
+output with TuxGuitar's ASCII export of the same GP5 file:
+
+- **Each string is a continuous line of dashes**, with the frets sitting *in* it. The
+  cell that used to be a space is now a `-`, which costs nothing and is the whole
+  difference between a staff that reads as tab and one that reads as a chord list.
+- **The rows above are *not* filled.** The chord name, the melody note and the note
+  value are text, and a dash through a chord name is a line through the word. So the
+  `-` lives in `string_line` and not in the shared `line()` builder, and the two
+  separators are both exactly one character — which is what keeps the columns of the
+  two kinds of row aligned.
+- **Every bar is ruled**, and `measures_per_line` now means bars per *line* of music,
+  which is what the flag has always been called. A barline is the one mark saying
+  where the metre falls, and `_staff_breaks` (where a line ends) is deliberately a
+  different question from `_staff_barlines` (where a bar ends). Both come from one
+  `_staff_bars` list, so the two renderers cannot disagree about it.
+
+### Width is duration, and that is what the rhythm row was standing in for
+
+**A column used to be one beat wide whatever the note was worth**, so a quarter and a
+half note came out identical and the ASCII staff said nothing about how long anything
+sounded. That is why the `q`/`w` rhythm row existed at all: it was carrying information
+the tab could have drawn. A note now occupies as many *slots* as it is worth, one slot
+being one fret cell.
+
+Three things the grid has to get right, each of which was wrong at once and each measured
+against `jon6.tab`:
+
+- **The units are whole notes.** `ArrangementStep.duration` is in whole notes
+  (`tuning.py`), and the first version of this multiplied it by a slot count as though it
+  were in beats. A quarter note — `duration=0.25` — came out **one** slot wide instead of
+  two, and *every bar in the piece drew at the same width*: no two notes were
+  distinguishable by length at all. `_staff_rhythm` had this right all along
+  (`duration * 4.0` → quarters); the slot grid did not.
+- **`beat_type` is a conversion, not a scale factor.** The grid is per *whole note*, so a
+  4/4 bar and a 2/2 bar are the same sixteen slots, and `beat_type` only converts beats to
+  whole notes on the way in.
+- **Holds and rests get their real span.** They were pinned to one slot, which is what
+  made a pickup's leading rest too short to see and left a half-note hold as narrow as a
+  sixteenth. The rule is the one `_staff_rhythm` already uses: a column runs to the next
+  *sounding* column, capped at its own barline.
+
+**The floor is eight slots to a whole note, and that is measured.** `jon6.tab` bar 1 — a
+quarter rest and three quarter notes in 2/2 — is seventeen characters: one lead-in dash
+plus sixteen of grid, which is eight slots of two characters, one to the quarter.
+`_slots_per_whole` raises that floor only for music finer than an eighth, so the shortest
+note never rounds away to nothing.
+
+With that, our bar 1 and bar 11 come out **byte-identical** to TuxGuitar's — which is the
+check that the lead-in, the cell width and the slot count are all landing where they
+should, independently of each other.
+
+### Sub-beat rests, and the column grid that dropped them
+
+`_staff_columns` advanced the fill cursor a whole beat at a time and always set
+`current = onset + 1.0`, assuming a step was a beat long. It is not: `duration` is in whole
+notes and the default `eighths` skeleton puts steps half a beat apart, so **every gap
+shorter than a beat was stepped over**. Bar 11 of But Not For Me lost its downbeat column
+entirely that way, and with it the tie into the bar's early beat. `_rest_grain` is now the
+shortest thing the progression actually writes, bounded to a beat, so an untimed
+progression keeps the one-column-per-beat grid it always had.
+
+This is the one defect that was **not** in the ASCII renderer alone: `_staff_columns` is
+shared with `format_tab_html` and `_staff_rhythm`, so the page had the same missing rests
+until this was fixed.
+
+Three further grid facts, measured the same way:
+
+- **A leading rest inside the first bar is kept.** `_staff_columns` started at the first
+  *onset*, which silently dropped a rest inside that bar: a pickup came out with its
+  first fret hard against the opening barline and read as a downbeat. But Not For Me
+  bar 1 is written that way — a quarter rest and then three notes. The start is now
+  rounded down to the **bar** containing the first onset, which keeps the rest without
+  inventing whole empty bars ahead of it. Rounding to the bar rather than to zero is
+  the whole of that change; rounding to zero would pad out a head selected from bar 12.
+- **The last bar is padded out to its own length.** The grid filled the holes *between*
+  onsets but stopped at the last one, so a head whose final note ended early closed its
+  barline mid-bar. The rest after the last note is still time. Only the *last* bar is
+  padded: every earlier one is closed by the next onset or the next bar's first column,
+  and padding those would invent silence the score does not write.
+- **An untimed progression is not subdivided.** No written rhythm means no durations to
+  show, so every column stays one slot wide and the uniform fallback grid is unchanged.
+
+The staff **wraps**, separated by a blank line, and each system is ruled to its own
+width — a long chord name widens the bar it is in and no other, so one `Cmaj7` cannot
+stretch a whole arrangement. So "every row is the same width" is an invariant of a
+*system*, not of the whole output; the tests read it per system for that reason.
 
 Two decisions in that row were measured rather than chosen:
 

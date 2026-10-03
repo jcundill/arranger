@@ -1306,13 +1306,22 @@ class TestHeadCli(unittest.TestCase):
     def test_the_staff_renderer_is_reachable(self):
         """--tab staff lays the head on one six-line staff, in the notated metre."""
         output = self.run_cli(self.score_path(), "--tab", "staff", "--melody")
-        self.assertIn("Dm7", output)
         # The staff draws six strings, high E first. The `*` is `_carries_melody`'s
         # marker, drawn on any string sounding the melody, so it may sit between the
         # letter and the bar - which it now does, because span being ranked above neck
         # position moved this head's B4 from the B string to the high E. The letter and
         # the bar are what this test is about, so the marker is optional.
         self.assertRegex(output, r"e\s*\*?\s*\|")
+        # Six string rows, each a drawn line of dashes with the frets sitting in it.
+        labels = ("e", "B", "G", "D", "A", "E")
+        strings = [
+            row for row in output.split("\n")
+            if row[:1] in labels and "|" in row
+        ]
+        self.assertEqual(len(strings), 6, output)
+        # No chord names: the staff is the tab by default now, and this test is about
+        # the renderer being reachable rather than about what it annotates.
+        self.assertNotIn("Dm7", output)
 
     def test_it_writes_an_html_page_when_asked(self):
         """--html writes a page and says where."""

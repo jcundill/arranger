@@ -38,17 +38,17 @@ treat a contradiction between them as a bug in one of them.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **836 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **852 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 11 of those 836, and it is the one that fails if this
+(`tests/test_docs.py` is 11 of those 852, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree.)
 
 **`make check` is what CI runs** (`.github/workflows/ci.yml`, Python 3.11–3.14, with
 the `xml` and `gp` extras so the optional-extra tests are not silently skipped). One
 thing the workflow's own header says and an agent should not have to rediscover:
 **the corpus tests do not run there.** `wjazzd.db` is 42 MB and gitignored, so 85 of
-the 836 are skipped on a clean clone. The `corpus` job covers them, and only on
+the 852 are skipped on a clean clone. The `corpus` job covers them, and only on
 manual dispatch, gated on the `WJAZZD_DB_URL` repository variable.
 
 **`make check` runs one interpreter, and the matrix runs four.** It is the 3.14 dev

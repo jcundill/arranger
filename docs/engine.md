@@ -90,13 +90,18 @@ you whether a change is an improvement or a different library.
   `tabstaff.py`**, not here, and are re-exported below. See
   [The staff renderers live in `tabstaff.py`](#the-staff-renderers-live-in-tabstaffpy).
 - `format_tab_staff(steps, beats_per_bar=4, beat_type=4, rhythm=True,
-  show_chords=True, show_melody=False, show_melody_string=True, show_mutes=False,
-  collapse=True, measures_per_line=4, show_timing=True)` — renders the **whole
+  show_chords=False, show_melody=False, show_melody_string=True, show_mutes=False,
+  collapse=True, measures_per_line=4, show_timing=False)` — renders the **whole
   progression along one six-line staff** in reading order (high E on top), which is
   the standard tab layout and unlike `format_progression` is not one block per chord.
-  Chord names go on a line above, each starting in the column where its shape is
-  struck, and `show_timing` (default) adds the **metre** and a **note value per
+  The defaults draw **the tab and nothing else** — six string rows, frets sitting in a
+  line of dashes, every bar ruled. `show_chords`, `show_melody` and `show_timing` add
+  the lead-sheet and score annotation on top, and all three were on by default once.
+  With `show_chords`, the chord names go on a line above, each starting in the column
+  where its shape is struck, and `show_timing` adds the **metre** and a **note value per
   column** above them — see [docs/renderers.md](renderers.md#what-the-staffs-timing-rows-are-and-what-they-are-not).
+  Neither is on by default: **width already says how long a note sounds**, so that row
+  is a second, explicit way of saying it rather than the only one.
   Three decisions are load-bearing and were each forced by looking at the output:
   - **Fret cells are left-aligned in a fixed-width column.** A right-aligned cell
     looks tidy on its own but puts the fret at the far end of the column, so the
@@ -107,9 +112,20 @@ you whether a change is an improvement or a different library.
     one step per eighth, so without it a held chord is restruck eight times a bar and
     the staff is a chord list rather than a held shape. A rest clears the held
     pitches, because a rest genuinely stops the ringing.
-  - **Barlines are every `measures_per_line` bars, not every bar**, and the grid
-    starts at the first step's own onset so a head selected from bar 1 (or from a
+  - **Every bar is ruled, and `measures_per_line` is bars per *line*.** These were one
+    setting once: barlines were drawn every `measures_per_line` bars, on the reasoning
+    that a barline every bar cluttered a grid already dense with columns. Splitting them
+    was forced by TuxGuitar's ASCII export, which closes every measure and wraps at a
+    fixed number of bars. A barline is not clutter — it is the one mark saying where the
+    metre falls, and without one on every bar a reader cannot tell a two-bar phrase from
+    a four-bar one. So `_staff_barlines` marks every bar and `_staff_breaks` marks where a
+    line ends, both derived from one `_staff_bars` list so the two cannot disagree. The
+    grid starts at the first step's own onset so a head selected from bar 1 (or from a
     negative pickup bar) is not preceded by empty bars.
+  - **A string is drawn as a continuous line of dashes**, with the fret numbers sitting
+    *in* it, and the chord/melody/metre rows above are **not** filled. That asymmetry is
+    deliberate and is the difference between a staff that reads as tab and one that reads
+    as a chord list; a dash through a chord name would be a line through the word.
   Muted strings are blank by default (a ringing voice is not restruck);
   `show_mutes` spells them out, and a melody-only step always shows its `x`s.
   With no step timing, `rhythm=True` falls back to a uniform one-chord-per-beat
