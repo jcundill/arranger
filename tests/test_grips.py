@@ -14,7 +14,6 @@ from musthe import Note
 
 from arranger import (
     BASS_DEGREES_6432,
-    DUO_DEGREES,
     GRIP_MAX_SPAN,
     GRIP_PREFERENCE,
     GRIP_STRING_SETS,
@@ -55,10 +54,17 @@ def root_midi_of(chord_name):
 
 
 def every_chord_tone(chord_name, quality):
-    """Every tone of the chord, in the register around middle C."""
+    """Every tone of the chord, in the register around middle C.
+
+    Built from the degrees rather than from `get_chord_tones`, which returns *absolute*
+    pitch classes - adding those to the root would place a tone from a chord whose root
+    is not C a tritone or more out, and a ninth would arrive as a non-chord tone.
+    """
+    root_pc = root_midi_of(chord_name) % 12
+    degrees = {(pc - root_pc) % 12 for pc in ChordParser.get_chord_tones(quality, chord_name)}
     return [
-        note_name(root_midi_of(chord_name) + pc)
-        for pc in ChordParser.get_chord_tones(quality, chord_name)
+        note_name(root_midi_of(chord_name) + degree)
+        for degree in sorted(degrees)
     ]
 
 
@@ -191,46 +197,183 @@ class TestShellVoicings(unittest.TestCase):
         )
 
 
-class TestDuoHardRule(unittest.TestCase):
-    """A duo is only ever voiced under a root or a 5th.
+class TestDuoSecondVoice(unittest.TestCase):
+    """A duo sounds the chord's own guide tone beneath the melody, whatever the melody is.
 
-    This is a hard rule, with no cost preference behind it. It is also the test that
-    would fail if a bare 3rd-and-7th duo ever became reachable: the pitch-class subset
-    che
-    ck in TestGripGeneration would *not* catch that, because a 3/7 duo consists of
-    genuine chord tones - it would simply sound wrong.
+    This class replaced one that asserted the opposite. `DUO_DEGREES` used to gate the
+    whole family on a root or a 5th in the *melody*, on the reasoning that a 3rd or a 7th
+    there is "the entire definition of the chord's function" and a bare pair under it
+    sounds like a mistake. That does not hold against a duo built from the guide tone:
+    the guide tone *beneath* a 3rd or a 7th is what states the function, and it is the
+    clearest possible statement that the two notes are this chord and not two passing
+    notes. The old test is therefore **inverted rather than deleted** - it still guards
+    the same risk, which is a duo sounding two arbitrary chord tones.
+
+    The pitch-class subset check in TestGripGeneration cannot see that risk, because such
+    a duo is made of genuine chord tones and would pass it. So these assertions are about
+    *which* chord tones sound, not merely that they are chord tones.
     """
 
     def setUp(self):
         self.engine = VoiceLeadingEngine()
 
-    def test_a_duo_is_generated_under_a_root_or_a_fifth(self):
+    def duos(self, melody, quality, chord_name):
+        return self.engine.get_all_grip_voicings(
+            Note(melody), quality, chord_name=chord_name, grips=("duo",)
+        )
+
+    def test_a_duo_is_generated_under_any_chord_tone(self):
+        """The melody gate is gone: every chord tone admits a duo.
+
+        Including the 3rd and the 7th, which the old rule refused outright.
+
+        The melody is placed at the chord's own octave (`root4`), not from
+        `get_chord_tones`, which returns *absolute* pitch classes: adding those to the
+        root would step the melody up an octave for a chord whose root is not C, and a
+        ninth would then arrive as a non-chord tone - which the engine resolves through
+        the non-chord-tone strategies rather than voicing as written here.
+        """
         for chord_name, quality in (("Cmaj7", "maj7"), ("G7", "7"), ("Dm7", "m7")):
+            root_pc = root_midi_of(chord_name) % 12
             tones = set(ChordParser.get_chord_tones(quality, chord_name))
-            for degree in DUO_DEGREES:
+            degrees = {(pc - root_pc) % 12 for pc in tones}
+            for degree in sorted(degrees):
                 melody = note_name(root_midi_of(chord_name) + degree)
-                duos = self.engine.get_all_grip_voicings(
-                    Note(melody), quality, chord_name=chord_name, grips=("duo",)
-                )
+                duos = self.duos(melody, quality, chord_name)
                 self.assertTrue(duos, f"{chord_name} {melody} should admit a duo")
                 for v in duos:
                     self.assertEqual(len(v.active_frets()), 2, v.tab_string())
                     self.assertTrue(set(v.pitch_classes()) <= tones, v.tab_string())
 
-    def test_no_duo_under_a_third_or_a_seventh(self):
-        """A 3rd or 7th in the melody is never answered with two notes."""
-        for chord_name, quality in (("Cmaj7", "maj7"), ("G7", "7"), ("Am7", "m7")):
-            for degree in SHELL_DEGREES[quality]:
-                if degree in DUO_DEGREES:
-                    continue
-                melody = note_name(root_midi_of(chord_name) + degree)
-                self.assertEqual(
-                    self.engine.get_all_grip_voicings(
-                        Note(melody), quality, chord_name=chord_name, grips=("duo",)
-                    ),
-                    [],
-                    f"{chord_name} {melody} must not admit a duo",
-                )
+    def test_the_second_voice_is_this_quality_s_own_guide_tone(self):
+        """The pair is the melody plus a guide tone, never two arbitrary chord tones."""
+        for chord_name, quality in (("Cmaj7", "maj7"), ("G7", "7"), ("Dm7", "m7")):
+            root_pc = root_midi_of(chord_name) % 12
+            guide = set(SHELL_DEGREES[quality])
+            for melody in every_chord_tone(chord_name, quality):
+                for v in self.duos(melody, quality, chord_name):
+                    degrees = {(p - root_pc) % 12 for p in v.midi_notes()}
+                    self.assertTrue(
+                        degrees & guide,
+                        f"{v.tab_string()} sounds {sorted(degrees)}, no guide tone "
+                        f"of {quality} in {sorted(guide)}",
+                    )
+
+    def test_a_suspended_chord_uses_its_fourth_and_not_a_third(self):
+        """The 4th is a sus chord's guide tone, and it is what a duo must sound.
+
+        `sus4`, `sus2` and `7sus4` admitted **no duo at all** before the second voice was
+        read from SHELL_DEGREES: the hand-written `(4, 3, 0)` scan listed no sus degree,
+        and its root fallback was unreachable besides. These three are that regression.
+        """
+        for chord_name, quality in (
+            ("Csus4", "sus4"),
+            ("Csus2", "sus2"),
+            ("C7sus4", "7sus4"),
+        ):
+            self.assertTrue(
+                self.duos("C4", quality, chord_name),
+                f"{chord_name} should admit a duo under its root",
+            )
+        for v in self.duos("C4", "sus4", "Csus4"):
+            self.assertIn(5, {p % 12 for p in v.midi_notes()}, v.tab_string())
+        for v in self.duos("C4", "sus2", "Csus2"):
+            self.assertIn(2, {p % 12 for p in v.midi_notes()}, v.tab_string())
+
+    def test_every_quality_in_shell_degrees_can_voice_a_duo(self):
+        """No quality listed for a shell is left without one.
+
+        The 25 that already worked and the 3 that did not are covered by one assertion,
+        which is why the two tables cannot drift apart again.
+        """
+        missing = [
+            quality
+            for quality in SHELL_DEGREES
+            if not self.duos("C5", quality, "C" + quality)
+        ]
+        self.assertEqual(missing, [], "qualities with a shell but no duo under a root")
+
+    def test_a_duo_is_never_a_second_under_the_melody(self):
+        """A 2nd in two voices is where they fight; the guide tone drops an octave instead.
+
+        This is the rule that made the skipped-string pairs necessary, so it is asserted
+        as an invariant over every reachable duo rather than on one example.
+        """
+        checked = 0
+        for chord_name, quality in QUALITIES:
+            for melody in every_chord_tone(chord_name, quality):
+                for v in self.duos(melody, quality, chord_name):
+                    upper = sorted(v.midi_notes())
+                    self.assertGreaterEqual(
+                        upper[-1] - upper[0],
+                        3,
+                        f"{chord_name} {melody} {v.tab_string()} is a 2nd",
+                    )
+                    checked += 1
+        self.assertGreater(checked, 0, "no duo was checked")
+
+    def test_a_second_is_displaced_to_a_ninth_where_it_can_be_fretted(self):
+        """The displacement is not merely arithmetic - it produces a playable 9th.
+
+        The guide tone is a whole tone below the melody for several common pairs - a b6
+        over a chord a semitone away, a 4th under a sus4 - so the 2nd is not a corner case.
+        On the adjacent pairs the octave-displaced 9th cannot be fretted inside
+        GRIP_MAX_SPAN["duo"], which is why the duo owns the skipped (3,1) pair; that pair
+        appears below.
+        """
+        # Swept rather than illustrated: any reachable 9th must be on the skipped pair,
+        # because no adjacent pair can hold one inside the span cap.
+        ninths = [
+            v
+            for quality in SHELL_DEGREES
+            for pc in ChordParser.get_chord_tones(quality, "C" + quality)
+            for octave in range(3, 6)
+            for v in self.duos(
+                note_name(12 * octave + pc), quality, "C" + quality
+            )
+            if sorted(v.midi_notes())[-1] - sorted(v.midi_notes())[0] >= 12
+        ]
+        self.assertGreater(len(ninths), 0, "no 9th duos at all")
+        for v in ninths:
+            self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["duo"], v.tab_string())
+            # `active_strings` reads low-to-high where GRIP_STRING_SETS stores it
+            # high-to-low, so compare against the table's own spelling sorted.
+            self.assertEqual(
+                tuple(sorted(v.active_strings)),
+                (1, 3),
+                f"{v.tab_string()} voiced a 9th on an adjacent pair",
+            )
+
+    def test_the_only_cases_that_admit_no_duo_are_named(self):
+        """Two melodies still have no duo, and they are pinned rather than left silent.
+
+        A sus4's 5th at G3, the bottom of the register: the 4th below it is a 2nd, and the
+        9th that would replace it is out of reach even on the skipped (3,1) pair - the A
+        string cannot sound a note that low with the hand anywhere near the G. Returning
+        nothing is the intended outcome; the alternative is the 2nd the rule exists to
+        avoid. Both a `sus4` and a `7sus4` fail there, at the same G3, and the QUALITIES
+        sample carries only the latter - which is why this sweeps SHELL_DEGREES instead.
+        Swept over every quality and every chord-tone melody in G3-Bb5 these two are the
+        **only** melodies with no duo at all.
+        """
+        unreachable = []
+        # Every quality, not the QUALITIES sample: the sample carries C7sus4 but not
+        # Csus4, and the two fail for the same reason at different octaves.
+        for quality in SHELL_DEGREES:
+            chord_name = "C" + quality
+            for pc in ChordParser.get_chord_tones(quality, chord_name):
+                for octave in range(1, 5):
+                    midi = 12 * (octave + 1) + pc
+                    if not Note("G3").midi_note() <= midi <= Note("Bb5").midi_note():
+                        continue
+                    melody = note_name(midi)
+                    if not self.duos(melody, quality, chord_name):
+                        unreachable.append((chord_name, melody))
+        self.assertEqual(
+            unreachable,
+            [("C7sus4", "G3"), ("Csus4", "G3")],
+            "the set of melodies with no duo changed - re-measure before editing this",
+        )
 
     def test_a_duo_still_carries_the_third(self):
         """
@@ -821,23 +964,93 @@ class TestStringSetTable(unittest.TestCase):
         self.assertEqual(GRIP_MAX_SPAN["duo"], 4)
         self.assertEqual(GRIP_MAX_SPAN["interval"], 4)
 
-    def test_an_interval_uses_the_same_sets_as_a_duo(self):
+    def test_an_interval_uses_only_the_adjacent_pairs_a_duo_also_declares(self):
         """
-        The `interval` grip sits on the three adjacent pairs, exactly as a duo does.
+        The `interval` grip sits on the three **adjacent** pairs, which the duo declares
+        too - but not on the duo's two skipped-string pairs.
 
-        Stated rather than assumed, because the two families differ in the *rule* that
-        builds them and not in where they sit - see `_interval_offsets`. A wider set
-        would be a change to the playability contract, not a detail.
+        This assertion was inverted rather than deleted. It previously demanded the two
+        families' sets be *equal*, which was true while both were three adjacent pairs
+        and stopped being true when the duo gained `(5,2)` and `(3,1)`. The invariant
+        worth keeping is the one that explains the difference in both directions:
+
+          - an interval keeps to the adjacent pairs, because a 3rd or a 6th has tuning
+            to spare and the extra reach of a skipped string buys it nothing;
+          - a duo may go wider, because it has to voice a 9th where the guide tone would
+            otherwise be a 2nd, and a 9th is unreachable within the span cap on
+            adjacent strings.
+
+        So the interval's sets are a **subset** of the duo's, and equal to its adjacent
+        ones. A wider interval would be a change to the playability contract, not a
+        detail - which is why the subset is asserted rather than assumed.
         """
+        interval_sets = [tuple(s) for s, _ in GRIP_STRING_SETS["interval"]]
+        duo_sets = [tuple(s) for s, _ in GRIP_STRING_SETS["duo"]]
         self.assertEqual(
-            [list(s) for s, _ in GRIP_STRING_SETS["interval"]],
-            [list(s) for s, _ in GRIP_STRING_SETS["duo"]],
+            set(interval_sets) <= set(duo_sets),
+            True,
+            "an interval sits on a pair the duo does not declare",
+        )
+        adjacent = {s for s in duo_sets if abs(s[0] - s[1]) == 1}
+        self.assertEqual(
+            set(interval_sets),
+            adjacent,
+            "the interval's pairs are not exactly the duo's adjacent ones",
         )
         for strings, soprano in GRIP_STRING_SETS["interval"]:
             self.assertEqual(len(strings), 2)
             # String indices run 0 = low E to 5 = high E, so the soprano is the
             # *first* of a pair and the highest index in it.
             self.assertEqual(soprano, max(strings))
+
+    def test_the_duo_s_skipped_string_pairs_are_all_load_bearing(self):
+        """
+        The duo's three skipped-string pairs exist for the 9ths, and each is needed.
+
+        Without them a duo whose guide tone would be a 2nd has nowhere to go: the 9th
+        that replaces the 2nd needs a fret difference of 9 or 10 on adjacent strings,
+        against a cap of 4. Each pair is asserted to voice a 9th **no other kept pair
+        reaches**, so none is dead weight in the playability contract - and the cap is
+        asserted *not* to have been widened for them, because they work by being wide in
+        tuning and narrow in frets.
+
+        `(4,2)` was measured (193 of the 253 cases) and left out: it is the one pair no
+        kept combination needs, and two sets that voice nothing are two sets added to
+        `supported_string_sets()` for no reason.
+        """
+        skipped = [
+            tuple(sorted(s))
+            for s, _ in GRIP_STRING_SETS["duo"]
+            if abs(s[0] - s[1]) != 1
+        ]
+        self.assertEqual(
+            sorted(skipped),
+            [(1, 3)],
+            "the duo's skipped-string pairs changed - re-measure before editing this",
+        )
+        self.assertEqual(GRIP_MAX_SPAN["duo"], 4, "the span cap was widened to suit a pair")
+
+        engine = VoiceLeadingEngine()
+        ninths = set()
+        for quality in SHELL_DEGREES:
+            chord_name = "C" + quality
+            for pc in ChordParser.get_chord_tones(quality, chord_name):
+                for octave in range(2, 6):
+                    midi = 12 * octave + pc
+                    if not Note("G3").midi_note() <= midi <= Note("Bb5").midi_note():
+                        continue
+                    melody = note_name(midi)
+                    for v in engine.get_all_grip_voicings(
+                        Note(melody), quality, chord_name=chord_name, grips=("duo",)
+                    ):
+                        upper = sorted(v.midi_notes())
+                        if upper[-1] - upper[0] < 12:
+                            continue
+                        ninths.add((chord_name, melody, tuple(v.active_strings)))
+        self.assertTrue(
+            any(tuple(sorted(pair)) == (1, 3) for _, _, pair in ninths),
+            f"the skipped pair voiced no 9th; saw {sorted({p for _, _, p in ninths})}",
+        )
 
     def test_every_entry_names_its_own_soprano(self):
         """

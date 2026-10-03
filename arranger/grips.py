@@ -214,13 +214,49 @@ GRIP_STRING_SETS: Dict[str, Tuple[Tuple[Tuple[int, ...], int], ...]] = {
         ((5, 4, 3), 5), ((4, 3, 2), 4), ((1, 2, 3), 3),
         ((0, 2, 3), 3), ((1, 3, 4), 4), ((5, 3, 2), 5),
     ),
-    # Duos: 1-2, 2-3 and 3-4, each with the higher note carrying the melody.
-    "duo": (((5, 4), 5), ((4, 3), 4), ((3, 2), 3)),
-    # Intervals reuse the three adjacent pairs a duo already declares, for the same
-    # physical reason: a 3rd or a 6th under the melody is two fingers on two
-    # neighbouring strings, and there is nothing to gain from a wider set. What
-    # differs from a duo is the *rule* that builds it, not where it sits - see
-    # _interval_offsets, which is deliberately not gated on DUO_DEGREES.
+    # Duos: 1-2, 2-3 and 3-4, each with the higher note carrying the melody - and **one** pair
+    # that skips a string, 3-5, which exists for a single measured reason.
+    #
+    # A duo's second voice is the chord's guide tone, and the guide tone can land a **2nd**
+    # below the melody. A 2nd in two voices is where they fight rather than agree, and the
+    # cure is to drop the guide tone an octave, making a 9th. **That cure is unreachable on
+    # the adjacent pairs**: a 9th spans 14 semitones and two adjacent strings are tuned 4
+    # or 5 apart, so the lower note needs a fret difference of 9 or 10, against
+    # GRIP_MAX_SPAN["duo"] of 4.
+    #
+    # A skipped string has more tuning between its open notes, so the 9th costs a smaller
+    # fret difference. Four candidates were measured against every quality and every
+    # chord-tone melody in G3-Bb5 - **812** cases where the guide tone is displaced -
+    # counting only those a pair can actually place:
+    #
+    #   (3, 1)  strings 3-5   810 recovered   <- kept
+    #   (5, 2)  strings 1-4   810 recovered   <- equivalent, and wider in tuning
+    #   (4, 2)  strings 2-4    31 recovered   <- rejected
+    #   (5, 3)  strings 1-3   118 recovered   <- rejected
+    #
+    # **One pair is enough, so one pair was added.** The 2 that no combination reaches are
+    # a `sus4` and a `7sus4` with G3 in the melody - the 4th is a 2nd there, and the 9th
+    # that would replace it is out of reach at the bottom of the register. They return no
+    # duo rather than sound a 2nd, and `tests/test_grips.py` names both.
+    #
+    # `(3,1)` is the narrower of the two equivalent pairs and the more idiomatic of the
+    # two shapes - the 3rd string under the G - so it is the one kept. Adding the second
+    # would enlarge `supported_string_sets()` by a set that reaches nothing the first does
+    # not, which is what the "load-bearing" test below exists to prevent.
+    #
+    # The span cap is NOT widened to suit it. This works because (3,1) is wide in
+    # *tuning* (10 semitones between the open strings) and still narrow in *frets* - a
+    # comfortable two-finger reach, not a stretch.
+    "duo": (
+        ((5, 4), 5), ((4, 3), 4), ((3, 2), 3),
+        ((3, 1), 3),
+    ),
+    # Intervals use the three **adjacent** pairs only, and are deliberately *not* the
+    # widened duo set. A 3rd or a 6th has tuning to spare, so the extra reach of a skipped
+    # string buys it nothing - and an interval is a fill texture that never has to voice a
+    # 9th, which is the whole reason the duo needed the wider pair. What differs between
+    # the families is the rule that builds them, not where a short one sits - see
+    # _interval_offsets.
     "interval": (((5, 4), 5), ((4, 3), 4), ((3, 2), 3)),
 }
 
@@ -254,12 +290,26 @@ SHELL_DEGREES: Dict[str, Tuple[int, int]] = {
 # A frozenset, because it is compared against a set of sounding strings.
 _BOTTOM_FOUR = frozenset((0, 1, 2, 3))
 
-# The only soprano degrees a duo is generated for. When the melody is the root or the
-# 5th the ear supplies the missing guide tones, so two voices are enough; under a 3rd
-# or a 7th they are the entire definition of the chord's function, and a bare duo
-# there is the voicing that sounds wrong. This is a hard rule - get_grip_voicings
-# returns nothing for any other melody - and not a cost preference, so there is no
-# last-resort escape hatch.
+# The degrees a duo's **second voice** may take: the root, or the 5th.
+#
+# This used to be the *melody's* degree list too, and it gated the whole family: a duo
+# was generated only under a root or a 5th in the melody, on the reasoning that a 3rd or
+# a 7th there "is the entire definition of the chord's function" and a bare pair under it
+# sounds like a mistake. That reasoning does not survive contact with the guide-tone
+# rule the duo is actually built from. A 3rd or a 7th in the melody is exactly the note
+# a guide tone is there to support - the guide tone *beneath* it states the function -
+# and it is the one case where the pair is unmistakably the chord rather than two passing
+# notes. So the melody gate is gone; see `_duo_offsets`, which takes its second voice
+# from SHELL_DEGREES and skips a unison so the fallback is never the melody itself.
+#
+# A melody that is not a chord tone never reaches the duo at all: the non-chord-tone
+# strategies rewrite the chord before generation, which is why a b6 arrives here as the
+# 9th or 13th of a resolved chord rather than as a passing note with a duo under it.
+#
+# It is still the root and the 5th, and still for the reason stated above: they are the
+# two notes that carry no information about the chord's quality, so a pair built on
+# either leaves the guide tone to do the work. `BASS_DEGREES_6432` below is the same
+# rule applied to the bass rather than to a melody.
 DUO_DEGREES: Tuple[int, int] = (0, 7)
 
 # The degrees the low-E note may take in a 6-4-3-2 shape. The same rule as
@@ -704,33 +754,69 @@ def _interval_set_for_grip(
     return [[0, v1, v3, v2 - 12]]
 
 
-def _duo_offsets(tones: Tuple[int, ...], melody_midi: int, root_pc: int) -> List[int]:
+def _duo_offsets(
+    tones: Tuple[int, ...],
+    melody_midi: int,
+    root_pc: int,
+    canonical: str,
+) -> List[int]:
     """
     A two-note grip under the melody, or an empty list.
 
-    Only ever a root or a 5th in the melody (DUO_DEGREES): there the ear supplies the
-    guide tones, so two voices carry the harmony. A 3rd or a 7th in the melody is
-    precisely the note that defines the chord's function, and pairing it with one
-    other note is the voicing that sounds like a mistake - so this returns nothing and
-    the selector has to find a shell or a complete shape instead.
+    The second voice is **the chord's own guide tone**, read from `SHELL_DEGREES`
+    rather than from a list written out here. That is the same table a shell is built
+    from, and it already encodes the arranging guide's rule: the 3rd, or the **4th** on
+    a suspended chord, with the 7th as the alternative. Re-encoding it here as a
+    `(4, 3, 0)` scan is what this used to do, and it had two faults. It listed no sus
+    degree at all, so `sus4`, `sus2` and `7sus4` - whose guide tone is the 4th, the 9th
+    and the 4th - admitted **no duo anywhere**, and its `0` (root) fallback was
+    unreachable in any case, filtered out by its own `d not in DUO_DEGREES` guard.
+    Reading the shared table agrees with the old behaviour for 25 of the 28 qualities,
+    supplies precisely the three that were dead, and cannot drift from the shell.
 
-    The second voice is the 3rd, which is what keeps the pair from being an empty
-    fifth. A triad has no 3rd-and-7th distinction, so a 5th-top triad falls back to
-    its own third, or to the root when the chord is a suspended fourth.
+    Preference within the table is `[0]`, then `[1]`. The fallback is **load-bearing,
+    not decorative**: when the melody *is* the 3rd, `[0]` would place a unison under it,
+    and a measured 252 of these cases are exactly that. A unison is not a second voice,
+    so the 7th takes over and the pair becomes a 6th.
+
+    **A 2nd under the melody is dropped an octave.** When the guide tone lands within
+    two semitones of the melody the shape is a 2nd, which in two voices is where they
+    fight rather than agree; the same pitch class an octave lower makes it a 9th, which
+    sits. This is why the duo owns two skipped-string pairs: on the adjacent pairs a
+    9th is unreachable inside `GRIP_MAX_SPAN["duo"]`, so **0 of the 48 cases this
+    affects** were voiceable before `GRIP_STRING_SETS` was widened. Two remain
+    unreachable even now and return nothing rather than sound a 2nd;
+    `tests/test_grips.py` names both.
+
+    The melody may be **any** chord tone, not only a root or a 5th. The old
+    `DUO_DEGREES` gate refused a duo under a 3rd or a 7th on the grounds that those
+    notes "are the chord's function" - but a guide tone beneath them is exactly what
+    states that function, and putting the guide tone first is what makes the pair read
+    as the chord rather than as two passing notes. A melody that is not a chord tone at
+    all never reaches here: the non-chord-tone strategies rewrite the chord before the
+    generator runs, so a duo is always placed against a resolved harmony.
     """
-    if (melody_midi - root_pc) % 12 not in DUO_DEGREES:
+    guide = SHELL_DEGREES.get(canonical)
+    if guide is None:
         return []
 
-    # Preference order: the chord's own 3rd, then the minor 3rd for a chord that has
-    # no major one, then the root for a suspended chord with nothing else available.
-    third = next((d for d in (4, 3, 0) if d in tones and d not in DUO_DEGREES), None)
-    if third is None:
-        return []
-
-    pitch = _nearest_tone_below(melody_midi, (root_pc + third) % 12)
-    if pitch is None:
-        return []
-    return [0, pitch - melody_midi]
+    for degree in guide:
+        if degree not in tones:
+            continue
+        pitch_class = (root_pc + degree) % 12
+        # A unison is not a second voice: skip this guide tone and try the other.
+        if pitch_class == melody_midi % 12:
+            continue
+        pitch = _nearest_tone_below(melody_midi, pitch_class)
+        if pitch is None:
+            continue
+        # A 2nd under the melody becomes a 9th - see the docstring.
+        while pitch >= 0 and melody_midi - pitch <= 2:
+            pitch -= 12
+        if pitch < 0:
+            continue
+        return [0, pitch - melody_midi]
+    return []
 
 
 # The intervals an `interval` grip will pair with the melody, in preference order:
@@ -1448,7 +1534,7 @@ def get_grip_voicings(
                 if root_pc is None:
                     continue
                 if grip == "duo":
-                    duo = _duo_offsets(tones, melody_midi, root_pc)
+                    duo = _duo_offsets(tones, melody_midi, root_pc, canonical)
                     templates = [duo] if duo else []
                 elif grip == "drop2_6432":
                     # Found by its own search, like every other non-contiguous

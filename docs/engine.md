@@ -32,7 +32,11 @@ you whether a change is an improvement or a different library.
 - `GRIP_STRING_SETS` — for each grip, its supported `(active string indices, soprano
   index)` pairs: the 4-3-2-1 and 5-4-3-2 four-string blocks, **6-4-3-2**, the six
   shell shapes (1-2-3, 2-3-4, 5-4-3, **6-4-3**, and the two 5-3-2s — `(1,3,4)`
-  skipping the D going down and `(5,3,2)` skipping the B going up), and three duos.
+  skipping the D going down and `(5,3,2)` skipping the B going up). The **duos** are the
+  three adjacent pairs 1-2, 2-3 and 3-4 plus **one** skipped pair, `(3,1)`, which exists
+  to voice the 9ths a displaced 2nd needs — see the decisions below. An `interval` uses
+  the three adjacent pairs only: a 3rd or a 6th has tuning to spare and gains nothing
+  from a wider set.
   `6-4-3`, both `5-3-2`s and `6-4-3-2` are the four non-contiguous sets, each skipping
   one string; `6-4-3-2` and `(5,3,2)` skip one going *up* (the A to reach the B as
   soprano, and the B to reach the high E respectively).
@@ -43,9 +47,13 @@ you whether a change is an improvement or a different library.
   the analogue of `DUO_DEGREES` for the bass rather than the melody. The lowest voice is
   what *defines* the chord, so a 3rd or a 7th there sounds like a different harmony.
 - `SHELL_DEGREES` — the (3rd, 7th) pair per quality, explicit rather than inferred:
-  a quality not listed gets no shell rather than a guessed one. `DUO_DEGREES = (0, 7)`
-  — the only soprano degrees a duo is generated for, as a hard rule. The `interval`
-  grip is deliberately **not** gated on it; see
+  a quality not listed gets no shell rather than a guessed one. A **duo reads its second
+  voice from this same table** — `[0]` first (the 3rd, or the 4th on a suspended chord),
+  `[1]` when `[0]` is the melody itself — so a quality cannot gain a shell and lose its
+  duo. `DUO_DEGREES = (0, 7)` is the degrees a duo's *second voice* may take, not the
+  melody's: a duo is generated under **any** chord tone, because a guide tone beneath a
+  3rd or a 7th is what states the chord's function. The `interval` grip is a separate
+  family for a different reason — it is a texture rather than a harmony; see
   [Texture: chords on the beats, fills between](#texture-chords-on-the-beats-fills-between).
 - `ROLE_TARGET` / `ROLE_FILL`, `TEXTURE_STYLES`, `TARGET_BEATS`, `TEXTURE_GRIPS` —
   the metric layer's whole vocabulary. `TARGET_BEATS = (1, 3)` names *beats*, not
@@ -331,7 +339,7 @@ inclusively would describe a reach the hand does not make, and would make the li
 | `drop3` / `closed` | 4 | derived from a close stack; not offered by default |
 | `drop24` | 4 | **drop-2 & 4** — the second *and* fourth voices lowered an octave; not offered by default |
 | `shell` | 3 | `SHELL_DEGREES` plus one more note |
-| `duo` | 2 | root or 5th in the melody plus the 3rd |
+| `duo` | 2 | the chord's guide tone — the 3rd, or the 4th on a sus chord — under any chord tone |
 
 **Every four-note voicing sounds the chord's 3rd and 7th**, and so does every three-note
 one — except a suspended chord, which has no 3rd and whose guide tone is therefore the
@@ -374,12 +382,40 @@ Five decisions in here were each forced by something measurable:
   decision. Deriving drop-3 and close position from the same chord tones gives a
   *fuller* chord — a legitimate but different voicing — which is exactly why drop-2 is
   left alone.
-- **Duos are a hard rule, not a cost preference.** Under a root or 5th the ear supplies
-  the guide tones, so two notes carry the harmony; under a 3rd or 7th they *are* the
-  chord's function and a bare duo there is the voicing that sounds wrong. So
-  `get_grip_voicings` returns nothing for those, with no escape hatch. The test that
-  pins this is `TestDuoHardRule`, because a 3/7 duo consists of genuine chord tones and
-  the "only chord tones" check would not catch it.
+- **Duos sound the chord's guide tone, under any chord tone.** The second voice is read
+  from `SHELL_DEGREES` — the 3rd, or the **4th** on a suspended chord, with the 7th as the
+  fallback — rather than from a list written out separately. That table already encodes
+  the arranging guide's rule, and sharing it means a quality cannot gain a shell and lose
+  its duo. It replaced a hand-written `(4, 3, 0)` scan that had two faults: it listed no
+  sus degree, so `sus4`, `sus2` and `7sus4` admitted **no duo anywhere**, and its root
+  fallback was unreachable besides, filtered out by its own `d not in DUO_DEGREES` guard.
+  The fallback to the 7th is load-bearing: when the melody *is* the 3rd, `[0]` would place
+  a unison under it, and a measured 252 of these cases are exactly that.
+
+  This used to be a **hard rule on the melody** — `DUO_DEGREES = (0, 7)`, generated only
+  under a root or a 5th, on the reasoning that a 3rd or a 7th there *is* the chord's
+  function and a bare duo under it sounds wrong. That reasoning does not survive the
+  guide-tone rule the family is built from: a guide tone *beneath* a 3rd or a 7th is what
+  states that function, and it is the clearest possible statement that the two notes are
+  this chord. The gate is gone. A melody that is not a chord tone never reaches the duo
+  at all, because the non-chord-tone strategies rewrite the chord before generation — so
+  a b6 arrives as the 9th or 13th of a resolved chord rather than as a passing note with
+  a duo under it. `TestDuoHardRule` asserted the old rule and is **inverted rather than
+  deleted**, because a 3/7 duo consists of genuine chord tones and the "only chord tones"
+  check would not catch it either way.
+
+  - **A 2nd under the melody is dropped an octave.** When the guide tone lands within two
+    semitones of the melody the shape is a 2nd, which in two voices is where they fight
+    rather than agree; the same pitch class an octave lower is a 9th, which sits. This is
+    why the duo owns a **skipped-string** pair. A 9th spans 14 semitones and two adjacent
+    strings are tuned 4 or 5 apart, so the lower note needs a fret difference of 9 or 10
+    against a span cap of 4 — and over the 812 cases where the guide tone is displaced,
+    **none** is voiceable on the adjacent pairs. `(3,1)` (strings 3-5, 10 semitones of
+    tuning between the open strings) recovers 810 of them; `(5,2)` ties it, `(5,3)`
+    recovers 118 and `(4,2)` 31, so **one pair was added, not four**. The cap is not
+    widened for it: the pair works because it is wide in *tuning* and narrow in *frets*.
+    Two cases remain unreachable — a `sus4` and a `7sus4` with G3 in the melody — and they
+    return no duo rather than sound a 2nd, pinned by name in `test_grips.py`.
 - **A shell is searched for, never stacked.** A shell's notes are not in descending pitch
   order down the strings, because the tuning is not monotonic in the useful direction: the
   A string is tuned five semitones *above* the D string. A G7 shell under G3 is
@@ -413,8 +449,17 @@ Five decisions in here were each forced by something measurable:
   which is what finally lets `5-x-5-5-5-x` (A2 G3 C4 E4) beat `x-3-5-2-5-x` (A2 E3 C4 E4).
 - **A partial harmonisation is a fallback, not a style.** `missing` voices outranks neck
   position in the cost, so a complete chord wins even when a shell would have held the
-  position better. A permitted root-or-5th duo scores zero there and competes on equal
-  terms; a shell scores one; a bare 3/7 duo is not generated at all.
+  position better. The term counts the voices: a four-note shape scores 0, a shell 1 and a
+  duo 2, so **a duo loses to a shell** wherever both are playable. That ordering is the
+  arranging guide's — a shell sounds the 3rd *and* the 7th and a duo only one of them, so
+  the shell is the fuller statement and the duo is the fallback beneath it.
+
+  This paragraph used to claim a permitted root-or-5th duo "scores zero there and
+  competes on equal terms". It never did: `missing` is `4 - len(active)` and nothing
+  exempts a duo. Measured, adopting that claim would move 33 of 463 corpus steps (7.1%)
+  and take **7 of them from shells** — inverting the very ranking the guide-tone argument
+  requires. The code was right and the sentence was wrong, so the sentence is corrected
+  and the cost tuple is untouched.
 
 The window is a **penalty, not a filter**: a step with no voicing inside frets 2–13 is
 still played, just outside it. A filter would silently drop every step whose melody
@@ -494,15 +539,14 @@ Five decisions are load-bearing:
   `arrange_progression` and `wjazzd.arrange_slots` — because a head read from a file
   takes the second and a hand-built progression the first. Fixing only one leaves the
   same flag behaving two different ways depending on the entry point.
-- **An `interval` is a texture, not a harmony, so it breaks the duo's hard rule.**
-  `DUO_DEGREES` refuses a two-note shape under a 3rd or 7th because those notes *are*
-  the chord's function. An interval is not claiming the chord, so it is offered under
-  any melody degree — which is exactly the case a fill most often meets, since a
-  passing tone is by definition not a chord tone. Confining it to fill slots via
-  `TEXTURE_GRIPS` is what makes the looser rule safe. Its second voice comes from the
-  chord's own tones, falling back to the **major scale's** pitch classes when the
-  melody is not in the chord: a diatonic note is accompaniment, a chromatic one would
-  be reharmonising.
+- **An `interval` is a texture; a duo is a harmony.** Both are two notes under the melody,
+  and they are now offered under any melody degree, so the degree no longer distinguishes
+  them. What does is the rule that builds them. An interval is not claiming the chord, so
+  its second voice is whichever of a 3rd, 6th or 10th it can reach — falling back to the
+  **major scale's** pitch classes when the melody is not in the chord, because a diatonic
+  note is accompaniment and a chromatic one would be reharmonising. A duo *is* claiming
+  the chord, so its second voice is the chord's guide tone and nothing else. Confining an
+  interval to fill slots via `TEXTURE_GRIPS` is what makes its looser rule safe.
 
 `_step_annotation` names the interval it actually is ("6th"), not the grip, and it
 takes the existing precedence for free: a non-chord tone's substitution is annotated

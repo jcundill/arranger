@@ -113,9 +113,20 @@ def voicing_cost(
        complete chord can be played at all, it is used, and it outranks staying in
        exactly the same spot. This sits below the window and above position because
        both of those are about comfort and this is about whether the chord is
-       actually there - a root-and-3rd duo is a real voicing of a root-and-3rd, not a
-       Cmaj7. A permitted root-or-5th duo scores zero here, so where two notes really
-       are enough it competes on equal terms with a four-note shape.
+       actually there. A root-and-3rd duo is a real voicing of a root-and-3rd, not a
+       Cmaj7 - but it is one chord tone under the melody where a shell is **two**, the
+       3rd and the 7th together, and "it is important to play the guide tones" is what
+       makes a shell the fuller statement of the two. So the term counts: four-note 0,
+       shell 1, duo 2, and a duo loses to a shell that holds the position better.
+
+       An earlier version of this docstring said a permitted root-or-5th duo "scores
+       zero here, so where two notes really are enough it competes on equal terms with
+       a four-note shape". The code has never done that - `missing` is computed as
+       `4 - len(active)` and nothing exempts a duo - so the sentence described a rule
+       that was not implemented. Measured, adopting it would move 33 of 463 corpus
+       steps (7.1%) and take **7 of them from shells**, which is the one outcome the
+       guide-tone argument rules out. The code is right and the sentence was wrong; it
+       is corrected here rather than the tuple.
     3. fret span: a tighter shape is easier to hold and to move, and a five-fret
        stretch is not always a stretch a hand can take. This sits *above* neck
        position, which is the one priority it is promoted across, and that is a

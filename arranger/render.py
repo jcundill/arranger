@@ -27,7 +27,7 @@ imports it.
 
 from __future__ import annotations
 
-from typing import List
+from typing import Dict, List
 
 from .grips import _INTERVAL_NAMES
 from .tuning import (
@@ -40,6 +40,28 @@ from .tuning import (
 )
 
 __all__ = ["_MUTED_CELL", "_STAFF_CELL_WIDTH", "format_progression"]
+
+
+# How a duo's **second voice** is named in a printed annotation, keyed by the interval it
+# forms with the melody, modulo 12 - so a 9th or a 10th reads as the 3rd it is a compound
+# form of, which is what a player calls it.
+#
+# These name the **interval**, not the chord function, and that is deliberate. A duo is
+# built from the chord's guide tone, but the interval it makes with the melody is what the
+# reader sees in the tab, and the two do not always agree: Cmaj7 with its root in the
+# melody puts the 3rd (E) eight semitones below, which is a major 6th as an interval. So
+# the label reads "melody + 6th" for a root-and-3rd pair. Naming it "3rd" there would
+# describe the chord degree while contradicting the fretting, and a reader checking one
+# against the other is exactly who this annotation is for.
+#
+# A suspended chord's guide tone is a 4th or a 9th, which is a 5th or a 6th as an interval
+# below. A diminished chord's guide tone is a diminished 5th, a tritone below. Every
+# semitone count from 2 upward is reachable and listed: a table with a hole in it would
+# print "chord tone" for a real interval, which is the one thing worse than no label.
+_DUO_SECOND_VOICE_NAMES: Dict[int, str] = {
+    2: "2nd", 3: "b3", 4: "3rd", 5: "5th", 6: "b5", 7: "5th",
+    8: "b6", 9: "6th", 10: "7th", 11: "7th",
+}
 
 
 def _step_annotation(step: ArrangementStep) -> str:
@@ -86,7 +108,24 @@ def _step_annotation(step: ArrangementStep) -> str:
                 step, f" (interval fill - {_INTERVAL_NAMES.get(size, '2 notes')}, partial)"
             )
         if step.grip == "duo":
-            return _bass_annotation(step, " (root & 5th duo - partial)")
+            # Name the pair from the notes that actually sound, as the interval branch
+            # above does. This used to be the fixed string "root & 5th duo", which
+            # described **none** of the four pitch-class pairs a duo can produce:
+            # `(3,7)`, `(4,7)`, `(0,4)` and `(0,3)` - a b3 with a 5th, a 3rd with a 5th, a
+            # root with a 3rd, a root with a b3. It named the degrees the *melody* was
+            # once allowed to take, which stopped being true when the melody gate was
+            # lifted, and a reader checking the tab against the label found neither.
+            #
+            # The **upper** voices, for the reason given above: the thumb is a walking
+            # line underneath and is not part of the pair.
+            upper = sorted(step.voicing.upper_midi_notes())
+            if len(upper) == 2:
+                size = (upper[-1] - upper[0]) % 12
+                return _bass_annotation(
+                    step,
+                    f" (duo - melody + {_DUO_SECOND_VOICE_NAMES.get(size, 'chord tone')}, partial)",
+                )
+            return _bass_annotation(step, " (duo - partial)")
         return _bass_annotation(step, f" ({step.grip} - 3rd & 7th, partial)")
     if not step.non_chord_tone:
         return _bass_annotation(step)

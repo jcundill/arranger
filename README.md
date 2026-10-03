@@ -9,7 +9,8 @@ picks among them with one position-aware cost function.
 - **Six grip families**, drop-2 first: `drop2`, `drop3`, `drop24`, `drop2_6432`,
   `shell` and `duo` — four-note voicings down to two-note guide-tone pairs. Every
   one sounds the chord's **3rd and 7th**, the two notes that decide whether the ear
-  hears a major or a minor chord ([grips](#grips)).
+  hears a major or a minor chord; a `duo` sounds one of them, under any chord tone,
+  since two notes is the floor this library will play ([grips](#grips)).
 - **Melody pinned to the soprano**, on the high E, B or G string, so a low melody can
   still be harmonised in position.
 - **Playable or absent.** Every voicing sits in frets 0–18 within a 5-fret span on a
@@ -574,7 +575,7 @@ can stay where the previous one left the hand.
 | `drop24` | 4 | **drop-2 & 4** — the second *and* fourth voices an octave down |
 | `drop2_6432` | 4 | **6-4-3-2** — low E, D, G and B, so the bass can be a root |
 | `shell` | 3 | the 3rd and 7th plus one more: 1-2-3, 2-3-4, 5-4-3, **6-4-3** or **5-3-2** |
-| `duo` | 2 | the root or 5th in the melody plus the 3rd |
+| `duo` | 2 | the chord's guide tone — the 3rd, or the 4th on a sus chord — under any chord tone |
 | `interval` | 2 | a 3rd, 6th or 10th below the melody — a *fill*, not a harmony |
 
 The first six are `GRIP_PREFERENCE`, the order they are tried in. `interval` is not in
@@ -666,15 +667,17 @@ Gmaj9/F# D4   (shell - 3rd & 7th, partial) x-x-4-4-3-x
 *Expect an open, unlabelled sound: the 3rd and 7th are what make the chord major or
 minor, and leaving out the root lets the player imply it.*
 
-**5. Duos** — `--grips duo` leaves two notes, the melody and the 3rd or 5th:
+**5. Duos** — `--grips duo` leaves two notes: the melody and the chord's **guide tone**,
+the 3rd or the 4th on a suspended chord (or the 7th, when the melody is already the 3rd):
 
 ```bash
 python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-2 --grips duo
 ```
 
 ```text
-Gmaj9    D4   (root & 5th duo - partial) x-x-x-4-3-x
-Gmaj9/F# D4   (root & 5th duo - partial) x-x-x-4-3-x
+Gmaj9    D4   (duo - melody + b3, partial) x-x-x-4-3-x
+Gmaj9    D4   (melody repeated - single note) ----3-
+Gmaj9/F# D4   (duo - melody + b3, partial) x-x-x-4-3-x
 ```
 
 *Expect the sparsest thing this library will play — the harmony implied rather than
@@ -700,7 +703,8 @@ says how many — on a head, that is usually a colour you want and not always on
 
 ### The neck window, and why it is not a filter
 
-Every voicing is confined to frets 0–18 and a span of at most 5 (4 for a duo), on a real
+Every voicing is confined to frets 0–18 and a span of at most 5 (4 for a duo and an
+interval), on a real
 string set. `NECK_FRET_MIN`/`NECK_FRET_MAX` — frets 2 to 13 — are the range the selector
 *aims* for, not a hard filter: a step with no voicing inside the window is still played,
 just outside it, because losing a chord of the tune is worse than being a fret out of

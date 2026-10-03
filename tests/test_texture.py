@@ -26,6 +26,7 @@ from arranger import (
     GRIP_STRING_SETS,
     ROLE_FILL,
     ROLE_TARGET,
+    SHELL_DEGREES,
     TEXTURE_GRIPS,
     TEXTURE_STYLES,
     ChordParser,
@@ -926,18 +927,25 @@ class TestIntervalGrip(unittest.TestCase):
 
     def test_an_interval_is_offered_under_any_melody_degree(self):
         """
-        Unlike a duo, an interval is not gated on DUO_DEGREES.
+        An interval is offered under any melody degree, and so - since the duo's melody
+        gate was lifted - is a duo.
 
-        The guide asks for "2-note intervals (3rds or 6ths)" as a *fill*, so a 3rd
-        or a 7th in the melody has to be playable - that is precisely the case a
-        duo refuses, and the reason this is a separate family.
+        The guide asks for "2-note intervals (3rds or 6ths)" as a *fill*, so a 3rd or a
+        7th in the melody has to be playable.
 
-        Asked across every allowed soprano string rather than one, because a duo is
-        refused for the same reason under *no* string and the point of the test is
-        the degree, not the register.
+        The second half of this test was **inverted rather than deleted**. It used to
+        assert that a duo refuses those same three melodies, and cited that refusal as
+        the reason `interval` is a distinct family. A duo no longer refuses them: its
+        second voice is the chord's guide tone, and a guide tone *beneath* a 3rd or a 7th
+        is what states the chord's function rather than losing it. So the distinction
+        between the two families is no longer the melody degree, and asserting the old
+        difference would assert a rule the engine does not have.
+
+        What still distinguishes them is asserted below: a duo is a **harmony** and must
+        sound a guide tone, while an interval is a **texture** and pairs the melody with
+        whichever of a 3rd, 6th or 10th it can reach - including, for a non-chord tone, a
+        note of the prevailing key rather than of the chord.
         """
-        # C over Dm7 is the b7, F# over D7 is the 3rd, C# over Dmaj7 is the major 7th:
-        # all degrees a duo refuses.
         for quality, name, melody in (
             ("m7", "Dm7", "C5"),
             ("7", "D7", "F#4"),
@@ -947,15 +955,38 @@ class TestIntervalGrip(unittest.TestCase):
                 Note(melody), quality, chord_name=name, grips=("interval",)
             )
             self.assertTrue(voicings, f"no interval under {melody} for {name}")
-            # And a duo genuinely refuses the same three, which is what makes this
-            # a distinct family rather than a renamed one.
-            self.assertEqual(
-                VoiceLeadingEngine.get_grip_voicings(
-                    Note(melody), quality, chord_name=name, grips=("duo",)
-                ),
-                [],
-                f"a duo unexpectedly sounded under {melody} for {name}",
+
+    def test_a_duo_under_a_third_or_a_seventh_sounds_a_guide_tone(self):
+        """
+        The rule that replaced the melody gate: under a 3rd or a 7th, a duo is offered,
+        and its second voice is the chord's guide tone.
+
+        This is what makes the pair above a *harmony* rather than a renamed interval -
+        the assertion the old "a duo refuses these" check used to stand for.
+        """
+        for quality, name, melody in (
+            ("m7", "Dm7", "C5"),      # the b7 in the melody
+            ("7", "D7", "F#4"),      # the 3rd in the melody
+            ("maj7", "Dmaj7", "C#5"),  # the major 7th in the melody
+        ):
+            duos = VoiceLeadingEngine.get_all_grip_voicings(
+                Note(melody), quality, chord_name=name, grips=("duo",)
             )
+            self.assertTrue(duos, f"no duo under {melody} for {name}")
+            guide = set(SHELL_DEGREES[quality])
+            # The degrees are measured from the **chord's** root, not from the melody:
+            # the melody is often the 7th, and measuring from it would report every
+            # pair as containing a guide tone by accident.
+            root_name, _ = ChordParser.parse_chord_name(name)
+            root_pc = Note(f"{root_name}4").midi_note() % 12
+            for v in duos:
+                degrees = {(p - root_pc) % 12 for p in v.midi_notes()}
+                self.assertEqual(len(degrees), 2, v.tab_string())
+                self.assertTrue(
+                    degrees & guide,
+                    f"{v.tab_string()} under {melody} sounds {sorted(degrees)}, "
+                    f"which contains no guide tone of {quality}",
+                )
 
     def test_no_interval_without_a_chord_root(self):
         """
