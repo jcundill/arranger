@@ -355,18 +355,21 @@ print(format_tab_staff(steps, show_melody=True))
   |4/4              |
   |Dm7   G7    Cmaj7|
   |D5    B4    C5   |
-e*|10   -     -8    |
-B*|10   -12   -8    |
-G |10   -12   -9    |
-D |10   -12   -9    |
-A |     -     -     |
-E |     -13   -     |
+e*|10----7-----8----|
+B*|10----6-----8----|
+G |10----7-----9----|
+D |10----5-----9----|
+A |-----------------|
+E |-----------------|
 ```
 
-The chord names sit on a line above, each starting in the column where its shape is
-struck, and `e*` marks the string carrying the melody. Above them the **metre** (`4/4`),
-written over the first bar only — a time signature holds until it changes — and the
-**note value** of every column (`w` whole, `r` rest). Without that row a whole note and a
+Each string is drawn as one continuous line of dashes with the fret numbers sitting *in*
+it — that is what makes a staff read as tab rather than as a list of chords — and **every
+bar is closed with a `|`**, the way TuxGuitar, Guitar Pro and printed tab all do. The
+chord names sit on a line above, each starting in the column where its shape is struck,
+and `e*` marks the string carrying the melody. Above them the **metre** (`4/4`), written
+over the first bar only — a time signature holds until it changes — and the **note value**
+of every column (`w` whole, `r` rest). Without that row a whole note and a
 quarter were drawn identically, since on this grid both were one column of frets; it is
 what makes the staff a score rather than a chord list. Pass `show_timing=False` to drop
 them, and `beat_type` to state the metre properly — 2/2 is 2/2, not 2/4.
@@ -377,10 +380,11 @@ Three options do most of the work:
   moves over the same pitches, instead of restriking it on every step. The skeleton voices
   one step per eighth; a player holds the shape rather than hitting it eight times a bar.
   A rest breaks the ring, so the next shape is struck again.
-- **`rhythm=True` (the default)** spaces the chords on their real beats, drawing a barline
-  every `measures_per_line` bars. This needs each step to carry `bar` and `beat`, which
-  the corpus loader supplies; a hand-written progression has no timing and falls back to
-  one chord per beat.
+- **`rhythm=True` (the default)** spaces the chords on their real beats. Every bar is
+  closed with a `|`, and `measures_per_line` sets how many bars go on one line of music
+  before the staff wraps (the last line may be shorter). This needs each step to carry
+  `bar` and `beat`, which the corpus loader supplies; a hand-written progression has no
+  timing and falls back to one chord per beat.
 - **`show_mutes=False` (the default)** leaves muted strings blank, because in chord-melody
   a voice that is still ringing is not restruck. Pass `True` to spell them out as `x`.
 

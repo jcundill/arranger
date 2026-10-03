@@ -37,8 +37,25 @@ duplicated or imported across the boundary.
 | `tabstaff.format_tab_html` | a self-contained HTML page for a browser |
 | `tabstaff.write_tab_html` | the only function in the module that touches the filesystem |
 | `_staff_columns` / `_staff_breaks` | the shared layout core, both renderers call these |
+| `_staff_bars` / `_staff_barlines` | the bar number of every column, and the columns that open a bar |
 | `_staff_rhythm` / `_note_value` / `_meter_label` | the timing core: note values, rests and ties, the metre |
 | `_carries_melody` | which strings carry the melody, for the `*` marker |
+
+**A barline and a system break are two different questions, and the split is load-bearing.**
+`_staff_barlines` marks **every** bar — that is the mark saying where the metre falls —
+while `_staff_breaks` marks every `measures_per_line` bars, which is only where a printed
+line *ends*. They used to be the same setting, which meant the staff ruled one bar in four
+and never wrapped at all: `measures_per_line` decided where the barlines went, and a flag
+named for bars-per-line governed nothing else. TuxGuitar's ASCII export closes every
+measure and wraps at a fixed width, and copying it is what forced the split. Both sets come
+from one `_staff_bars` list, so a barline and a wrap can never disagree about where a bar
+ends.
+
+The consequence for the tests is that **"every row is the same width" is an invariant of a
+system, not of the whole staff** — the last system is short by definition, and a staff that
+never wrapped could be compared as a whole. `_systems` in `tests/test_tab_rendering.py`
+splits on the blank line so the assertion can be stated per system, which is what the
+alignment check was for in the first place.
 
 `format_musicxml` and `write_musicxml` are the same rendering decision in a different
 medium, and they live in `tabxml.py` rather than here — see
@@ -178,11 +195,16 @@ length means measuring it, a length is measured in quarters, and quarters come f
 `show_timing` (on by default) adds two rows above the chord names:
 
 ```
-  |4/4                    |                      |     |
-  |w ~   ~   ~   q e    |q     r     r     r   |w    |
-  |Dm7                    |G7                    |Cmaj7|
-  |D5                     |B4                    |C5   |
-e*|10   -     -     -     |7    -     -     -    |8    |
+  |4/4                    |
+  |w     r     r     r    |
+  |Dm7                    |
+  |D5                     |
+e*|10---------------------|
+B |10---------------------|
+G |10---------------------|
+D |10---------------------|
+A |-----------------------|
+E |-----------------------|
 ```
 
 - the **metre** over the first bar, and nowhere else — a signature holds until it
@@ -190,6 +212,28 @@ e*|10   -     -     -     |7    -     -     -    |8    |
   only;
 - a **note value** per column: `w h q e s`, dotted (`q.`), triplet (`3q`), `~` for a
   shape still held from an earlier column, and `r` for a rest.
+
+Three things about the six string rows below them, all of them forced by comparing the
+output with TuxGuitar's ASCII export of the same GP5 file:
+
+- **Each string is a continuous line of dashes**, with the frets sitting *in* it. The
+  cell that used to be a space is now a `-`, which costs nothing and is the whole
+  difference between a staff that reads as tab and one that reads as a chord list.
+- **The rows above are *not* filled.** The chord name, the melody note and the note
+  value are text, and a dash through a chord name is a line through the word. So the
+  `-` lives in `string_line` and not in the shared `line()` builder, and the two
+  separators are both exactly one character — which is what keeps the columns of the
+  two kinds of row aligned.
+- **Every bar is ruled**, and `measures_per_line` now means bars per *line* of music,
+  which is what the flag has always been called. A barline is the one mark saying
+  where the metre falls, and `_staff_breaks` (where a line ends) is deliberately a
+  different question from `_staff_barlines` (where a bar ends). Both come from one
+  `_staff_bars` list, so the two renderers cannot disagree about it.
+
+The staff **wraps**, separated by a blank line, and each system is ruled to its own
+width — the last is short by definition. So "every row is the same width" is an
+invariant of a *system*, not of the whole output; the tests read it per system for
+that reason.
 
 Two decisions in that row were measured rather than chosen:
 

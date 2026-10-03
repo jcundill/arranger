@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from contextlib import redirect_stdout
 from html.parser import HTMLParser
+from typing import List
 
 import arranger
 from arranger import (
@@ -382,16 +383,27 @@ class TestStaffTab(unittest.TestCase):
         """
         With timing, a barline is drawn where the bar changes: a step in bar 1 is
         followed by one in bar 2, and the barline sits between them.
+
+        **Every bar is ruled**, not every `measures_per_line`th one. This asserted
+        the opposite once - that a barline was rare - and that was the decision
+        TuxGuitar's export contradicted. The assertion is inverted rather than
+        dropped: the barline is now the mark that says where the metre falls, and a
+        staff that drew one only every fourth bar could not show a two-bar phrase
+        apart from a four-bar one. What is still load-bearing here is *where* it
+        falls relative to the shape, so that is what the test states.
         """
         timed = self.engine.arrange_progression(
             [("D5", "m7", "Dm7"), ("C5", "maj7", "Cmaj7")]
         )
         timed[0].bar, timed[0].beat = 0, 1.0
         timed[1].bar, timed[1].beat = 1, 1.0
-        # measures_per_line=1 draws a barline at every bar change. The three blank
-        # columns between the two shapes are the rest of bar 0, and the barline
-        # falls after them, so the second bar's shape sits beyond it.
-        line = self.staff_lines(timed, measures_per_line=1)[0]
+        # measures_per_line=4 keeps both bars on one system, which is what puts the
+        # barline *between* the two shapes where this test can see it. At one bar
+        # per line they are separate systems and there is nothing between them.
+        # The three dashed columns between the shapes are the rest of bar 0.
+        staff = format_tab_staff(timed, measures_per_line=4)
+        self.assertEqual(len(_systems(staff)), 1, staff)
+        line = next(row for row in staff.split("\n") if row.startswith("e"))
         # The staff opens with its own '|', so the barline opened by partition is
         # that one; the next '|' is the real barline between bar 0 and bar 1.
         head, _, tail = line.partition("|")
@@ -402,9 +414,62 @@ class TestStaffTab(unittest.TestCase):
         # written just before it - so the barline sits after them, not before.
         self.assertTrue(tail.rstrip("-| ").endswith("8"))
         # The three remaining beats of bar 0 are blank columns between the two
-        # shapes, so there is a run of space before bar 1's barline.
-        self.assertIn("   ", tail)
+        # shapes, so there is a run of dashes before bar 1's barline.
+        self.assertIn("---", tail)
         self.assertNotIn("10", tail)              # and bar 1 is a fresh shape
+
+    def test_every_bar_is_ruled_not_every_fourth(self):
+        """
+        Four bars in a row produce four barlines, which is the whole point of the
+        change: the metre is legible bar by bar rather than once per line of music.
+        """
+        steps = _timed(["Dm7", "G7", "Cmaj7", "Fm7"])
+        line = self.staff_lines(steps, measures_per_line=4)[0]
+        # One for the staff's own opening, one closing each of the four bars.
+        self.assertEqual(line.count("|"), 5, line)
+
+    def test_every_measure_is_closed(self):
+        """
+        Each measure ends with a barline rather than running into the next one, which
+        is what TuxGuitar, Guitar Pro and printed tab all do.
+        """
+        steps = _timed(["Dm7", "G7", "Cmaj7"])
+        line = self.staff_lines(steps, measures_per_line=4)[0]
+        self.assertEqual(line.count("|"), 4, line)  # opening + three bars
+
+    def test_the_staff_wraps_at_measures_per_line(self):
+        """
+        `measures_per_line` is bars per *line of music*, and the flag's name has
+        always claimed that. It did not: the staff was drawn as one long line and
+        the flag only spaced the barlines. Three bars at two per line is two systems,
+        the second holding the remaining bar.
+        """
+        steps = _timed(["Dm7", "G7", "Cmaj7"])
+        staff = format_tab_staff(steps, measures_per_line=2)
+        self.assertEqual(len(_systems(staff)), 2, staff)
+        # A blank line separates them, or two systems read as one long one.
+        self.assertIn("\n\n", staff)
+
+    def test_every_string_row_is_a_continuous_line_of_dashes(self):
+        """
+        The change that makes the staff read as tab rather than as a chord list: each
+        string is drawn as one unbroken run of dashes with the frets sitting in it.
+
+        Asserted on the string rows only. The chord, melody, metre and note-value
+        rows are *text* and must stay unruled - a dash through a chord name would be
+        a line through the word - which is why the fill is applied in `string_line`
+        rather than in the shared `line` builder.
+        """
+        steps = _timed(["Dm7", "G7"], frets=_TWO_SHAPES)
+        for system in _systems(format_tab_staff(steps)):
+            strings = [line for line in system if line[:1] in ("e", "B", "G", "D", "A", "E")]
+            self.assertEqual(len(strings), 6, system)
+            for line in strings:
+                # Only the leading string label, the barlines and the frets are not
+                # dashes; nothing else may be a space, or the string has a gap in it.
+                body = line[3:]
+                self.assertNotIn(" ", body, line)
+                self.assertTrue(set(body) <= set("-|0123456789x"), line)
 
     def test_rhythm_leaves_a_gap_for_a_held_chord(self):
         """
@@ -848,24 +913,29 @@ class TestStaffTimingRowsStayAligned(unittest.TestCase):
         steps = _timed(["Dm7", "G7", "Cmaj7"], beats=[(0, 1.0), (1, 1.0), (2, 1.0)])
         return format_tab_staff(steps, show_melody=True, measures_per_line=1, **kwargs)
 
-    def test_every_row_is_the_same_width_with_the_timing_rows(self):
-        """The metre and note-value rows are ruled like everything else."""
-        lines = self.build().split("\n")
-        self.assertEqual(len({len(line) for line in lines}), 1, lines)
+    def test_every_row_of_a_system_is_the_same_width_with_the_timing_rows(self):
+        """The metre and note-value rows are ruled like everything else.
+
+        Per system, not per staff: the staff wraps, and a short last system is
+        correct rather than a broken one. See `_systems`.
+        """
+        for system in _systems(self.build()):
+            self.assertEqual(len({len(line) for line in system}), 1, system)
 
     def test_the_new_rows_share_the_string_rows_barlines(self):
         """A barline lands in the same column on every row, new ones included."""
-        lines = self.build().split("\n")
-        positions = [[i for i, c in enumerate(line) if c == "|"] for line in lines]
-        strings = next(i for i, line in enumerate(lines) if line.startswith("e"))
-        for index, row in enumerate(positions):
-            self.assertEqual(row, positions[strings], f"row {index}: {lines[index]!r}")
+        for system in _systems(self.build()):
+            positions = [[i for i, c in enumerate(line) if c == "|"] for line in system]
+            strings = next(i for i, line in enumerate(system) if line.startswith("e"))
+            for index, row in enumerate(positions):
+                self.assertEqual(row, positions[strings], f"row {index}: {system[index]!r}")
 
     def test_the_new_rows_are_end_bounded(self):
-        """Both begin and end with a barline, or they read as captions."""
-        for line in self.build().split("\n")[:2]:
-            self.assertTrue(line.startswith("  |"), repr(line))
-            self.assertTrue(line.endswith("|"), repr(line))
+        """Every system's rows begin and end with a barline, or they read as captions."""
+        for system in _systems(self.build()):
+            for line in system[:2]:
+                self.assertTrue(line.startswith("  |"), repr(line))
+                self.assertTrue(line.endswith("|"), repr(line))
         voicing = make_voicing([-1, -1, 10, 10, 10, 10])
         steps = [
             ArrangementStep(chord="Dm7", melody="D5", voicing=voicing, bar=0, beat=1.0),
@@ -1484,6 +1554,25 @@ class TestTabstaffModuleBoundary(unittest.TestCase):
             )
 
 
+def _systems(staff: str) -> List[List[str]]:
+    """A rendered staff split into systems, each a list of its own lines.
+
+    The staff now wraps, so the invariant that used to hold of the whole output -
+    every row the same width, every barline in the same column - holds of one
+    *system* at a time. Two systems are separated by a blank line and are free to be
+    different widths, because the last one is short by definition. Asserting across
+    the whole output would therefore assert something false, and would stop being
+    the alignment check it was written to be.
+    """
+    systems: List[List[str]] = [[]]
+    for line in staff.split("\n"):
+        if line == "":
+            systems.append([])
+        else:
+            systems[-1].append(line)
+    return [system for system in systems if system]
+
+
 class TestStaffBarlineAlignment(unittest.TestCase):
     """Tests that every row of the ASCII staff is ruled identically.
 
@@ -1492,6 +1581,11 @@ class TestStaffBarlineAlignment(unittest.TestCase):
     separate defects made it not: the chord and melody rows began with three
     spaces rather than a barline, and rstrip() trimmed their trailing blank
     columns so they ended short of the string rows.
+
+    Every assertion here is per **system**, which is the unit the invariant now has:
+    the staff wraps at `measures_per_line`, and two systems of different widths is
+    correct rather than broken. Asserting over the whole output would fail on every
+    arrangement whose last system is short - that is, on nearly all of them.
     """
 
     def build(self, measures_per_line=1, bars=4):
@@ -1506,32 +1600,46 @@ class TestStaffBarlineAlignment(unittest.TestCase):
             steps, show_melody=True, measures_per_line=measures_per_line
         )
 
-    def test_every_row_is_the_same_width(self):
-        """A short chord row is what made the staff look unaligned."""
-        lines = self.build().split("\n")
-        self.assertEqual(len({len(line) for line in lines}), 1, lines)
+    def test_every_row_of_a_system_is_the_same_width(self):
+        """A short chord row is what made the staff look unaligned.
+
+        Per system, not per staff: a wrapped staff's systems differ in width, and
+        the last is short by definition.
+        """
+        for system in _systems(self.build()):
+            self.assertEqual(len({len(line) for line in system}), 1, system)
 
     def test_barlines_land_in_the_same_column_on_every_row(self):
         """The barline positions are compared against the string rows."""
-        lines = self.build().split("\n")
-        columns = [[i for i, c in enumerate(line) if c == "|"] for line in lines]
-        for line, positions in zip(lines[1:], columns[1:]):
-            self.assertEqual(positions, columns[2], f"misaligned: {line!r}")
+        for system in _systems(self.build()):
+            positions = [[i for i, c in enumerate(line) if c == "|"] for line in system]
+            for line, row in zip(system[1:], positions[1:]):
+                self.assertEqual(row, positions[2], f"misaligned: {line!r}")
 
     def test_chord_and_melody_rows_are_both_end_bounded(self):
         """
         A chord row with no leading barline reads as a caption above the staff
         rather than as part of it, so both ends must be ruled.
-        """
-        lines = self.build().split("\n")
-        for line in lines[:2]:
-            self.assertTrue(line.startswith("  |"), repr(line))
-            self.assertTrue(line.endswith("|"), repr(line))
 
-    def test_sparse_barlines_still_line_up(self):
-        """The default four bars per line draws fewer barlines, not misaligned ones."""
-        lines = self.build(measures_per_line=4).split("\n")
-        self.assertEqual(len({len(line) for line in lines}), 1, lines)
-        positions = [[i for i, c in enumerate(line) if c == "|"] for line in lines]
-        for row in positions[1:]:
-            self.assertEqual(row, positions[2])
+        Every system's rows, not the first system's: a wrapped staff would otherwise
+        be checked only where the wrapping happens not to matter.
+        """
+        for system in _systems(self.build()):
+            for line in system[:2]:
+                self.assertTrue(line.startswith("  |"), repr(line))
+                self.assertTrue(line.endswith("|"), repr(line))
+
+    def test_systems_of_four_bars_still_line_up(self):
+        """Fewer, wider systems are ruled just as exactly as one-bar systems.
+
+        The default is four bars per line, so this is the shape actually rendered -
+        and a wider system is the stricter case, since a barline that drifts is easier
+        to miss in a short one.
+        """
+        systems = _systems(self.build(measures_per_line=4))
+        self.assertEqual(len(systems), 1)
+        for system in systems:
+            self.assertEqual(len({len(line) for line in system}), 1, system)
+            positions = [[i for i, c in enumerate(line) if c == "|"] for line in system]
+            for row in positions[1:]:
+                self.assertEqual(row, positions[2])
