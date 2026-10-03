@@ -205,16 +205,16 @@ class Voicing:
             return self.midi_notes()
         bass_string = self.bass_string
         # Filtered by string index, never by position in a filtered list: the two are
-        # different things, and comparing a string number against a list offset drops
-        # whichever voice happens to come first.
+        # different things. This used to `enumerate(...)` the *pitches* and compare the
+        # resulting counter against `bass_string`, which is a position, not a string -
+        # so it kept the thumb and dropped the melody whenever the thumb was not the
+        # lowest-indexed active string. It read correctly only when the thumb was on the
+        # low E, where the two happen to coincide, which is the one case the existing
+        # walking-bass fixtures all cover.
         return [
-            midi
-            for index, midi in enumerate(
-                GuitarFretboard.fret_to_midi(index, fret)
-                for index, fret in enumerate(self.frets)
-                if fret >= 0
-            )
-            if index != bass_string
+            GuitarFretboard.fret_to_midi(index, fret)
+            for index, fret in enumerate(self.frets)
+            if fret >= 0 and index != bass_string
         ]
 
     def active_frets(self) -> List[int]:

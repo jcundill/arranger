@@ -13,6 +13,11 @@ two share the notion of a held shape, though they turn out to be different bugs 
 1 was the *thumb* measured against the wrong shape, item 5 the *melody* measured over
 the wrong timeline.
 
+**Item 7 is open.** **Item 8 is fixed and is the one to read first if you are here to
+learn from a defect**: it is a method whose comment described the correct behaviour
+while the code did the opposite, and it survived a green gate because every fixture
+happened to use the one input that did not trigger it.
+
 The header of each section states its status, and **item 4's original diagnosis was
 wrong** - it blamed the renderers and the fill rule, when the engine was emitting two
 contradictory flags at once. Read its "Stage 4" before acting on the section above
@@ -827,3 +832,104 @@ for s in st:
 
 (2) is the one that matters for item 1: the per-step span is fine and the
 arrangement is still unplayable.
+
+---
+
+## 8. `upper_midi_notes` dropped the melody and kept the thumb (walking bass)
+
+**Status:** FIXED. See "The fix" below. Found while adding the `melody` and
+`melody_bass` textures, which are the first outputs built entirely from single-note
+voicings and so the first to ask that method what it returns.
+
+### The symptom
+
+A walking-bass staff re-struck notes that were already ringing. The shape was
+articulated, then broken into again a beat later, where it should have been held:
+
+```
+ B*|-3-----3-------------      the B string is struck twice in one bar
+ B*|-3-------------------      and should sound once and ring
+ e*|-8-8-8-8-------------      the same, twice more
+ e*|-8-8-----------------
+```
+
+This is the exact behaviour `Voicing.upper_midi_notes` exists to prevent: its
+docstring says excluding the thumb "is what lets a `bass_only` step read as a *held*
+upper shape with a moving thumb", and `tabstaff._collapse` reads it for exactly that
+hold-versus-strike decision.
+
+### Why the obvious check misses it
+
+Nothing in the arrangement is malformed. Each step's frets, span, chord tones and
+playability are all correct; the fault is in which notes the renderer compares. And
+the suite was green over it, because every existing walking-bass fixture puts the
+thumb on the **low E**, which is the one case the defect does not affect.
+
+### The root cause
+
+The method filtered by **list position** while comparing against a **string index**:
+
+```python
+return [
+    midi
+    for index, midi in enumerate(          # index is 0, 1, 2 ... a POSITION
+        GuitarFretboard.fret_to_midi(index, fret)
+        for index, fret in enumerate(self.frets)
+        if fret >= 0
+    )
+    if index != bass_string                 # bass_string is a STRING index
+]
+```
+
+The comment immediately above it read *"Filtered by string index, never by position in
+a filtered list: the two are different things"* - describing the correct behaviour
+directly above the incorrect code. The inner generator yields bare pitches, so the
+outer `enumerate` numbers them by their order in the filtered list. The two coincide
+only when the thumb is the lowest-indexed sounding string.
+
+So for any step where the thumb sat on the 5th or 4th string, the filter kept the
+**thumb** and dropped the **melody**. Measured on "But Not For Me" bars 1-2 under
+`walking_bass`:
+
+```
+steps                            : 151
+  with a thumb off the low E     :  77
+  of those, the old code returned a different set: 77   (every one)
+```
+
+and the wrong set was not merely reordered. Three of the four examples returned *only*
+the thumb, so a renderer reading them saw a single bass pitch where a melody or a shell
+was sounding:
+
+```
+D5  tab=x-5-x-x-x-10   old=[50]        fixed=[74]
+B4  tab=x-5-x-x-x-7    old=[50]        fixed=[71]
+Bb4 tab=x-x-6-x-x-6    old=[56, 70]    fixed=[70]
+```
+
+`_place_bass` picks the thumb's string per note by fret proximity, so an A- or
+D-string thumb is ordinary rather than exotic - it is simply the case no fixture had.
+
+### The fix
+
+Enumerate the frets once, filtering on the string index in the same pass, so the value
+compared is the string rather than a position:
+
+```python
+return [
+    GuitarFretboard.fret_to_midi(index, fret)
+    for index, fret in enumerate(self.frets)
+    if fret >= 0 and index != bass_string
+]
+```
+
+Measured effect on the same head: the rendered staff changes by **37 diff lines**, all
+of them spurious re-strikes becoming held notes and held runs extending across the beat
+they should have rung through. `tests/test_walking_bass.py::TestUpperVoicesExcludeThe
+ThumbByStringNotPosition` pins it over each of the three thumb strings, and asserts the
+result does not depend on which one the thumb landed on.
+
+Worth noting for the traps: this is a defect that sat in the tree through a gate run
+that reported **OK**, because the tests happened to cover only the one input that did
+not trigger it. A passing suite is evidence about the cases it covers, and nothing
+more.

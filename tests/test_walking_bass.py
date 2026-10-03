@@ -42,6 +42,7 @@ from arranger import (
     ArrangementStep,
     ChordParser,
     VoiceLeadingEngine,
+    Voicing,
     _place_bass,
     _step_annotation,
     format_progression,
@@ -1678,3 +1679,85 @@ class TestWalkingBassRendering(unittest.TestCase):
         self.assertEqual(steps[0].voicing.grip, "shell")
         self.assertEqual(len(upper_pitches(steps[0])), 3)
 
+
+class TestUpperVoicesExcludeTheThumbByStringNotPosition(unittest.TestCase):
+    """`upper_midi_notes` must drop the thumb by **string**, never by list position.
+
+    Both renderers read this to decide hold-versus-strike, and `_step_annotation` reads
+    it to name an interval or a duo, so getting it wrong is not cosmetic: it returns the
+    wrong *notes*.
+
+    This is a regression test for a real defect. The method used to `enumerate(...)` the
+    sounding **pitches** and compare that counter - a position in the filtered list -
+    against `bass_string`, which is a string index. The two coincide only when the thumb
+    is the lowest-indexed active string, which for a low-E thumb under a shell they do:
+    every existing walking-bass fixture put the thumb on the 6th string, so the suite was
+    green over a method that returned the *thumb* and dropped the melody the moment the
+    thumb moved to the 5th or 4th. The comment above the code said "filtered by string
+    index, never by position in a filtered list" while doing the opposite.
+    """
+
+    def voicing(self, frets, bass_midi, bass_string):
+        active = [f for f in frets if f >= 0]
+        return Voicing(
+            frets=frets,
+            top_fret=max(active),
+            avg_fret=sum(active) / len(active),
+            grip="melody",
+            bass_midi=bass_midi,
+            bass_string=bass_string,
+        )
+
+    def test_a_thumb_on_the_a_string_keeps_the_melody(self):
+        """The case the old code got backwards: melody on the high E, thumb on the A."""
+        # A string fret 8 = F3, high E fret 8 = C5. The thumb is NOT the lowest-indexed
+        # active string, so a positional filter keeps position 0 - the thumb - and drops
+        # the melody at position 1.
+        v = self.voicing([-1, 8, -1, -1, -1, 8], bass_midi=53, bass_string=1)
+        self.assertEqual(sorted(v.midi_notes()), [53, 72])
+        self.assertEqual(
+            sorted(v.upper_midi_notes()),
+            [72],
+            "upper_midi_notes returned the thumb instead of the melody",
+        )
+
+    def test_every_thumb_string_gives_the_same_upper_voices(self):
+        """The result must not depend on *which* string the thumb landed on.
+
+        The same melody against a low-E, A-string and D-string thumb has to read the
+        same, because `_place_bass` picks the string per note by fret proximity.
+        """
+        cases = [
+            (0, 40),   # low E, open
+            (1, 45),   # A, open
+            (2, 50),   # D, open
+        ]
+        for thumb_string, thumb_midi in cases:
+            frets = [-1] * 6
+            frets[thumb_string] = 0
+            frets[5] = 8                       # C5 on the high E
+            v = self.voicing(frets, bass_midi=thumb_midi, bass_string=thumb_string)
+            self.assertEqual(
+                sorted(v.upper_midi_notes()),
+                [72],
+                f"thumb on string {thumb_string} changed the upper voices",
+            )
+
+    def test_a_step_with_no_thumb_is_untouched(self):
+        """No bass recorded means every note is an upper voice, which is the default."""
+        v = self.voicing([-1, -1, -1, -1, -1, 8], bass_midi=None, bass_string=None)
+        self.assertEqual(sorted(v.upper_midi_notes()), [72])
+
+    def test_a_four_voice_shell_keeps_three_notes_over_any_thumb(self):
+        """The walking-bass case the renderers actually depend on: shell plus thumb."""
+        for thumb_string, thumb_midi in ((0, 40), (1, 45), (2, 50)):
+            frets = [-1] * 6
+            frets[thumb_string] = 0
+            # G string fret 5 = C4, B string fret 5 = E4, high E fret 8 = C5.
+            frets[3], frets[4], frets[5] = 5, 5, 8
+            v = self.voicing(frets, bass_midi=thumb_midi, bass_string=thumb_string)
+            self.assertEqual(
+                sorted(v.upper_midi_notes()),
+                [60, 64, 72],
+                f"thumb on string {thumb_string} changed the shell",
+            )
