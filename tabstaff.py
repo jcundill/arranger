@@ -447,21 +447,30 @@ def format_tab_staff(
     beats_per_bar: int = 4,
     beat_type: int = 4,
     rhythm: bool = True,
-    show_chords: bool = True,
+    show_chords: bool = False,
     show_melody: bool = False,
     show_melody_string: bool = True,
     show_mutes: bool = False,
     collapse: bool = True,
     measures_per_line: int = 4,
-    show_timing: bool = True,
+    show_timing: bool = False,
 ) -> str:
     """
     Renders a whole progression as a standard six-line guitar staff.
 
     format_progression() gives one line, or one six-line block, *per chord*. This
     instead lays every step along a single staff in reading order - high E on top
-    down to low E - which is how printed tab is read, with the chord names on a
-    line above and a barline wherever the bar changes.
+    down to low E - which is how printed tab is read, with a barline closing every
+    measure.
+
+    **The default output is the tab and nothing else**: six string rows, the fret
+    numbers sitting in a drawn line of dashes, and the barlines. No chord names, no
+    melody note names, no metre and no note values. That is what a tab file *is*, and
+    it is what TuxGuitar's, Guitar Pro's and every other ASCII export produce - a
+    thing you drop into a file and read, not a score with annotation. The chord row
+    was on by default until this was changed, and it was the wrong default: a reader
+    who wants the harmony can read it off the arrangement, and one who wants it on
+    the page asked for it. Pass `show_chords` for it.
 
     Fret cells are a fixed width and the number sits at the left of its column,
     which is how tab is written and what keeps a chord name aligned with the fret
@@ -472,14 +481,14 @@ def format_tab_staff(
     melody-only (no chord) step always shows its `x`s, because there the other
     strings really are silent.
 
-    Above the chord names sit two more rows, both from `show_timing`: the **metre**
-    (`4/4`) over the first bar, and a **rhythm** row naming the note value in every
-    column - `w` for a whole note, `~` for a shape still held from an earlier
-    column, `r` for a rest. Without them the grid shows *where* a chord falls but
-    never *how long it sounds*, so a whole note and a quarter are drawn identically
-    - which is the one thing the MusicXML and GP5 renderers both get right and this
-    one did not. `beat_type` is what the metre needs: a 2/2 beat is a half note, so
-    2/2 reads `h` where 4/4 reads `q` on the same grid.
+    `show_timing` adds two rows above the chord names: the **metre** (`4/4`) over the
+    first bar, and a **rhythm** row naming the note value in every column - `w` for
+    a whole note, `~` for a shape still held from an earlier column, `r` for a rest.
+    With them the grid shows not only *where* a chord falls but *how long it sounds*,
+    since a whole note and a quarter are drawn identically without them. They are
+    **off by default** now, for the same reason the chord row is: they are a score's
+    annotation, not the tab. `beat_type` is what the metre needs when they are on: a
+    2/2 beat is a half note, so 2/2 reads `h` where 4/4 reads `q` on the same grid.
 
     Args:
         steps: arranged steps, typically from arrange_progression().
@@ -491,8 +500,9 @@ def format_tab_staff(
         rhythm: space the steps on their real beats. This needs every step to
             carry `bar` and `beat`; if any does not, the uniform grid is used, so
             a hand-written progression still renders sensibly.
-        show_chords: draw the chord-name line.
-        show_melody: draw the melody-note line.
+        show_chords: draw the chord-name line above the staff. Off by default: the tab
+            is the six string rows, and a chord name is a lead sheet's annotation.
+        show_melody: draw the melody-note line. Off by default, as above.
         show_melody_string: mark the string carrying the melody with a `*`.
         show_mutes: print `x` on every unsounded string.
         collapse: strike a shape once and let it ring while the melody moves over the
@@ -501,10 +511,10 @@ def format_tab_staff(
         measures_per_line: bars per printed line of music; the staff wraps there and
             the last line may be shorter. Every bar is ruled regardless - this
             governs only where a line *ends*, not where the barlines fall.
-        show_timing: draw the metre and the note-value rows. On by default, because
-            a staff that shows the position of a chord but not its length is
-            half a score; `False` restores the two-row output this renderer had
-            before them.
+        show_timing: draw the metre and the note-value rows above the chord names.
+            Off by default along with them: they say how long each chord sounds,
+            which a score needs and a tab file does not carry. Pass `True` for a
+            staff that reads as a score rather than as tab.
 
     Returns:
         The rendered staff as a newline-joined string, or "" for no steps. Pure:
@@ -545,22 +555,47 @@ def format_tab_staff(
             return _MUTED_CELL if (show_mutes or step.melody_only) else ""
         return str(fret)
 
-    # Every line shares one column width. A chord name is wider than two
-    # characters, so the grid widens to the longest label rather than letting the
-    # chord line push itself out of step with the frets underneath it. The metre and
-    # the note values go through the same calculation: a `4/4` or an `0.67q`
-    # fallback is wider than a fret, and truncating either would print a note value
-    # that is not the one being played.
-    width = _STAFF_CELL_WIDTH
-    for _, step, _ in columns:
-        if step is None:
-            continue
-        for text in (step.chord, step.melody):
-            width = max(width, len(text))
-    if show_timing:
-        width = max(width, len(_meter_label(beats_per_bar, beat_type)))
-    for label, _kind in values:
-        width = max(width, len(label))
+    def system_width(system: List[int]) -> int:
+        """
+        The cell width for one system: the widest label among **its own** columns.
+
+        Every row of a system shares one column width, and the grid widens to the
+        longest label rather than letting the chord line push itself out of step with
+        the frets underneath it. The metre and the note values go through the same
+        calculation: a `4/4` or a `0.67q` fallback is wider than a fret, and
+        truncating either would print a note value that is not the one being played.
+
+        **Only labels that are actually drawn count.** The chord name is measured
+        under `show_chords` and the melody note under `show_melody`, because a label
+        that is not printed cannot knock the grid out of alignment - and counting it
+        anyway meant that turning the rows off left the tab *wider* than leaving them
+        on, which is the opposite of what the flag says.
+
+        **Per system, not per progression.** It used to be computed once over every
+        column, which meant a single two-digit fret anywhere in the piece set the
+        width for the whole arrangement: a bar of nothing but single-digit frets was
+        drawn two characters per cell because some other bar held a `13`. TuxGuitar's
+        export does not do that - its bars are sized independently (measured across
+        `jon6.tab`: 7, 14, 17 and 19 characters). Per system is the finest granularity
+        that keeps the invariant the alignment tests exist to protect, since two bars
+        drawn on one system have to share a grid or a fret stops lining up across the
+        six strings. Per *bar* would match the export more closely and would break it.
+        """
+        width = _STAFF_CELL_WIDTH
+        for index in system:
+            step = columns[index][1]
+            if step is None:
+                continue
+            if show_chords:
+                width = max(width, len(step.chord))
+            if show_melody:
+                width = max(width, len(step.melody))
+        if show_timing:
+            width = max(width, len(_meter_label(beats_per_bar, beat_type)))
+            for label, _kind in values:
+                if label:
+                    width = max(width, len(label))
+        return width
 
     def _meter_cells(count: int) -> List[str]:
         """The metre in the first column and nothing elsewhere.
@@ -574,11 +609,15 @@ def format_tab_staff(
         """
         return [_meter_label(beats_per_bar, beat_type)] + [""] * (count - 1)
 
-    def line(system: List[int], text_for: Any, when_struck: bool, dedupe: bool = False,
-             cells: Optional[Sequence[str]] = None,
+    def line(width: int, system: List[int], text_for: Any, when_struck: bool,
+             dedupe: bool = False, cells: Optional[Sequence[str]] = None,
              in_force: Optional[str] = None) -> Tuple[str, Optional[str]]:
         """
         Renders a chord, melody, metre or rhythm row for one system of music.
+
+        `width` is `system_width(system)` and is passed rather than recomputed, because
+        it is a property of the system and every row of that system must use the same
+        one - see `system_width` for why it is per system.
 
         `system` is the list of column indexes this printed line covers, so every row
         is drawn over the same columns as the six string rows beneath it. It has to
@@ -616,13 +655,29 @@ def format_tab_staff(
         # rows stop short of the string rows and the staff reads as unaligned.
         out = ["  |"]
         previous = in_force
+        # **One separator after every barline, including this row's own opening one.**
+        # TuxGuitar writes a dash between the barline and the first fret of the bar and
+        # never a fret hard against the `|` - measured over `jon6.tab`, the shortest
+        # lead-in in the file is one dash, and all 26 of its bars have one. It is a
+        # small thing that stops a beat-1 fret reading as glued to the barline it
+        # follows. Here it is a space, because these rows are text and unruled; the
+        # string rows put a `-` in the same column, and both being exactly one
+        # character wide is what keeps the two kinds of row aligned.
+        #
+        # It is written unconditionally because the row's own opening barline needs it
+        # as much as any other, and the loop below already suppresses the *barline*
+        # itself for position 0 - so without this, the first column of every system
+        # would sit hard against the `|` while every later column had a separator.
+        out.append(" ")
         for position, index in enumerate(system):
             # `position`, not `index`: the row has just written its own opening
             # barline, so the first column of a system must not write a second.
             # Every system begins on a barline, so this is not a rare case - without
             # it every line after the first opened with a doubled `||`.
             if index in bar_marks and position:
-                out.append("|")
+                # The barline's own lead-in, for the reason given in `string_line`:
+                # every barline is followed by a separator, not only the opening one.
+                out.append("| ")
             elif position:
                 out.append(" ")
             if cells is not None:
@@ -642,13 +697,21 @@ def format_tab_staff(
         # an empty bar rather than as ragged text.
         return "".join(out) + "|", previous
 
-    def string_line(system: List[int], string_index: int) -> str:
+    def string_line(width: int, system: List[int], string_index: int) -> str:
         out = ["*", "|"] if show_melody_string and _carries_melody(steps, string_index) else [" ", "|"]
+        # The lead-in dash, for the reason given in `line`. On a string row it is a
+        # real dash rather than the space used there, because here the character is
+        # part of the string's own drawn line.
+        out.append("-")
         for position, index in enumerate(system):
             # The `position` guard for the reason given in `line`: this row has
             # already written its own opening barline.
             if index in bar_marks and position:
-                out.append("|")
+                # A barline inside the line is followed by its own lead-in, exactly as
+                # the opening one is. Without it the first fret of the second bar sat
+                # hard against the `|`, where TuxGuitar - and the opening bar, and
+                # every other bar - all have a dash between the two.
+                out.append("|-")
             elif position:
                 out.append("-")
             # **The fill is a dash, not a space** - and this is the whole reason the
@@ -676,12 +739,16 @@ def format_tab_staff(
             # the reader cannot tell where one printed line ends and the next begins,
             # which is the only cue the wrapping itself provides.
             lines.append("")
+        # One width for every row of this system. See `system_width` - per system,
+        # because two bars drawn on one line have to share a grid or a fret stops
+        # lining up across the six strings.
+        width = system_width(system)
         if show_timing:
             # The metre goes in the first column of the *first* system, over the bar it
             # governs, which is where a printed score puts a time signature - and not
             # again on the next system, because a signature holds until it changes.
             lines.append(line(
-                system, lambda step: "", when_struck=True,
+                width, system, lambda step: "", when_struck=True,
                 # The cells are addressed by global column index, so the metre row is
                 # blank on every column but the very first of the first system.
                 cells=(
@@ -694,19 +761,20 @@ def format_tab_staff(
             # and the row would be a blank line that looks like a missing one.
             if values:
                 lines.append(line(
-                    system, lambda step: "", when_struck=True, cells=labels,
+                    width, system, lambda step: "", when_struck=True, cells=labels,
                 )[0])
         if show_chords:
             row, in_force = line(
-                system, lambda step: step.chord if step else "",
+                width, system, lambda step: step.chord if step else "",
                 when_struck=True, dedupe=True, in_force=in_force,
             )
             lines.append(row)
         if show_melody:
             lines.append(line(
-                system, lambda step: step.melody if step else "", when_struck=False,
+                width, system, lambda step: step.melody if step else "",
+                when_struck=False,
             )[0])
-        lines.extend(string_line(system, index) for index in range(5, -1, -1))
+        lines.extend(string_line(width, system, index) for index in range(5, -1, -1))
     return "\n".join(lines).rstrip()
 
 

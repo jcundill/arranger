@@ -348,45 +348,70 @@ reading order:
 ```python
 from arranger import format_tab_staff
 
-print(format_tab_staff(steps, show_melody=True))
+print(format_tab_staff(steps))
 ```
 
 ```text
-  |4/4              |
-  |Dm7   G7    Cmaj7|
-  |D5    B4    C5   |
-e*|10----7-----8----|
-B*|10----6-----8----|
-G |10----7-----9----|
-D |10----5-----9----|
-A |-----------------|
-E |-----------------|
+e*|-10-7--8-|
+B |-10-6--8-|
+G |-10-7--9-|
+D |-10-5--9-|
+A |---------|
+E |---------|
 ```
 
-Each string is drawn as one continuous line of dashes with the fret numbers sitting *in*
-it — that is what makes a staff read as tab rather than as a list of chords — and **every
-bar is closed with a `|`**, the way TuxGuitar, Guitar Pro and printed tab all do. The
-chord names sit on a line above, each starting in the column where its shape is struck,
-and `e*` marks the string carrying the melody. Above them the **metre** (`4/4`), written
-over the first bar only — a time signature holds until it changes — and the **note value**
-of every column (`w` whole, `r` rest). Without that row a whole note and a
-quarter were drawn identically, since on this grid both were one column of frets; it is
-what makes the staff a score rather than a chord list. Pass `show_timing=False` to drop
-them, and `beat_type` to state the metre properly — 2/2 is 2/2, not 2/4.
+**The default output is the tab and nothing else** — six string rows, the fret numbers
+sitting in a drawn line of dashes, and a `|` closing every bar. That is what a tab file
+*is*, and what TuxGuitar's, Guitar Pro's and every other ASCII export produce. Each
+string is one continuous line with the frets *in* it, and no fret ever sits hard against
+a barline — there is always a dash between the two. `e*` marks the string carrying the
+melody.
 
-Three options do most of the work:
+Four flags add the annotation a score carries and a tab does not, all off by default:
+
+- **`show_chords`** draws the chord names on a line above, each starting in the column
+  where its shape is struck.
+- **`show_melody`** draws a line of melody note names.
+- **`show_timing`** adds the **metre** (`4/4`) over the first bar and the **note value**
+  of every column (`w` whole, `r` rest, `~` held). Without that row a whole note and a
+  quarter are drawn identically, since on this grid both were one column of frets. Pass
+  `beat_type` to state the metre properly — 2/2 is 2/2, not 2/4.
+
+```python
+print(format_tab_staff(steps, show_chords=True, show_melody=True, show_timing=True))
+```
+
+```
+  | 4/4        |
+  | q   r   q  |
+  | Dm7   G7   |
+  | D5    B4   |
+e*|-10-7--8-|
+B |-10-6--8-|
+G |-10-7--9-|
+D |-10-5--9-|
+A |---------|
+E |---------|
+```
+
+The rows share one column grid with the strings beneath them, and each **system** of
+music is ruled to its own width — a long chord name widens the bar it is in and no
+other, so one `Cmaj7` cannot stretch a whole arrangement. `measures_per_line` sets how
+many bars go on one line before the staff wraps; the last line may be shorter.
+
+Three more options do most of the work:
 
 - **`collapse=True` (the default)** strikes a shape once and lets it ring while the melody
   moves over the same pitches, instead of restriking it on every step. The skeleton voices
   one step per eighth; a player holds the shape rather than hitting it eight times a bar.
   A rest breaks the ring, so the next shape is struck again.
-- **`rhythm=True` (the default)** spaces the chords on their real beats. Every bar is
-  closed with a `|`, and `measures_per_line` sets how many bars go on one line of music
-  before the staff wraps (the last line may be shorter). This needs each step to carry
-  `bar` and `beat`, which the corpus loader supplies; a hand-written progression has no
-  timing and falls back to one chord per beat.
-- **`show_mutes=False` (the default)** leaves muted strings blank, because in chord-melody
-  a voice that is still ringing is not restruck. Pass `True` to spell them out as `x`.
+- **`rhythm=True` (the default)** spaces the chords on their real beats, so a held chord
+  is drawn with room around it rather than jammed against the next one. This needs each
+  step to carry `bar` and `beat`, which the corpus loader supplies; a hand-written
+  progression has no timing and falls back to one chord per beat.
+- **`show_mutes=False` (the default)** leaves unsounded strings as plain dashes, because
+  in chord-melody a voice that is still ringing is not restruck. Pass `True` to spell them
+  out as `x`.
 
 `docs/renderers.md` covers the full set and the ASCII/HTML forms.
 
