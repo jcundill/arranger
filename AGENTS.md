@@ -38,17 +38,17 @@ treat a contradiction between them as a bug in one of them.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **787 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **791 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 10 of those 787, and it is the one that fails if this
+(`tests/test_docs.py` is 10 of those 791, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree.)
 
 **`make check` is what CI runs** (`.github/workflows/ci.yml`, Python 3.11–3.14, with
 the `xml` and `gp` extras so the optional-extra tests are not silently skipped). One
 thing the workflow's own header says and an agent should not have to rediscover:
 **the corpus tests do not run there.** `wjazzd.db` is 42 MB and gitignored, so 85 of
-the 787 are skipped on a clean clone. The `corpus` job covers them, and only on
+the 791 are skipped on a clean clone. The `corpus` job covers them, and only on
 manual dispatch, gated on the `WJAZZD_DB_URL` repository variable.
 
 Individually:
@@ -372,6 +372,7 @@ Each of these cost real time, or nearly shipped a defect.
 | [docs/renderers.md](docs/renderers.md) | tab staff, MusicXML import/export, GP5, and their traps |
 | [docs/corpus.md](docs/corpus.md) | the Weimar database, head selection, skeletons |
 | [docs/open-issues.md](docs/open-issues.md) | diagnosed bugs with their measurements; fixed items stay, with what the fix was |
+| [docs/reharmonisation-proposals.md](docs/reharmonisation-proposals.md) | tritone substitution (shipped) and chromatic approach chords (measured, not built), with the corpus numbers behind each |
 | [docs/history/](docs/history/) | completed plans: corpus, walking bass, texture, arranging guide |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | what CI runs, and which tests it does *not* run |
 

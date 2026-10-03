@@ -913,7 +913,7 @@ dependencies (`make install-dev`).
 
 **CI runs `make check` on Python 3.11 through 3.14**, with both optional extras installed
 so the guarded tests are not silently skipped. One thing to know: `wjazzd.db` is 42 MB and
-gitignored, so **85 of the 787 tests are skipped on a clean clone** — a green check does
+gitignored, so **85 of the 791 tests are skipped on a clean clone** — a green check does
 not mean the Weimar path was exercised. A separate `corpus` job covers those, on manual
 dispatch only.
 

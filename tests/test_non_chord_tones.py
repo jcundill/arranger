@@ -225,6 +225,65 @@ class TestExtendedExtensionMappings(unittest.TestCase):
         ):
             self.assertFalse(self.engine.is_chord_tone(melody, quality, name))
 
+    def test_a_dominant_b9_reaches_the_altered_dominant(self):
+        """The b9 over a plain dominant is the one route with nowhere else to go.
+
+        It is also the note a tritone substitution exists to absorb: the b9 of G7
+        is the 3rd of Db7, so both routes make the melody a chord tone. The
+        table route keeps the written root, which is the narrower claim - see
+        docs/reharmonisation-proposals.md.
+        """
+        self.assertEqual(
+            self.engine.resolve_non_chord_tone(Note("Ab5"), "7", "G7", "extension"),
+            ("7b9", "G7b9"),
+        )
+
+    def test_the_b9_route_is_the_narrowest_quality_that_contains_it(self):
+        """`7b9` rather than `7alt`: the substitute adds the one tone the melody
+        states, and does not also claim the #9, #5 and b13 that `7alt` would."""
+        substituted = self.engine.resolve_non_chord_tone(
+            Note("Ab5"), "7", "G7", "extension"
+        )
+        # A bare `assert` rather than `assertIsNotNone`: pyright does not narrow
+        # through the unittest helper, and this is the trap `test_docs.py`'s
+        # `_layout_block` already had to work around. Resolving the Optional where
+        # the type is still known is the house answer.
+        assert substituted is not None
+        quality, name = substituted
+        self.assertEqual(quality, "7b9")
+        # The b9 is a chord tone of the substitute, and is the only addition: every
+        # tone the source chord had is still there.
+        source = {t % 12 for t in ChordParser.get_chord_tones("7", "G7")}
+        target = {t % 12 for t in ChordParser.get_chord_tones(quality, name)}
+        self.assertTrue(target - source == {8}, "G7 -> G7b9 adds exactly the b9")
+
+    def test_the_b9_of_a_dominant_is_not_a_chord_tone_before_substitution(self):
+        """The route must only fire for a genuine non-chord tone.
+
+        Ab is a chord tone of Db7 but not of G7, so the degree key is read against
+        the *written* root. A b3 over G7 is degree 3 and must stay unresolved -
+        mapping it would assert a chord the melody never implied.
+        """
+        self.assertFalse(self.engine.is_chord_tone(Note("Ab5"), "7", "G7"))
+        self.assertIsNone(
+            self.engine.resolve_non_chord_tone(Note("Bb4"), "7", "G7", "extension")
+        )
+
+    def test_end_to_end_a_b9_over_a_dominant_is_harmonised_as_the_altered_dominant(self):
+        """End to end: the step names its substitute and sounds only its tones."""
+        result = self.engine.arrange_progression([("Ab4", "7", "G7")])
+        self.assertEqual(len(result), 1)
+        step = result[0]
+        self.assertEqual(step.chord, "G7", "the written chord is still reported")
+        self.assertEqual(step.harmonized_as, "G7b9")
+        self.assertEqual(step.strategy, "extension")
+        self.assertTrue(step.non_chord_tone)
+        tones = set(ChordParser.get_chord_tones("7b9", "G7b9"))
+        self.assertTrue(
+            set(step.voicing.pitch_classes()) <= tones, step.voicing.tab_string()
+        )
+        self.assertLessEqual(step.voicing.fret_span(), 5)
+
     def test_end_to_end_extension_steps_use_the_new_colours(self):
         """A bar that hits the new colours: each non-chord melody becomes the
         named substitute, and every sounding pitch belongs to that substitute."""
