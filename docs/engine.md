@@ -738,3 +738,45 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
     non-diatonic note may be the *point*. The `key` argument the plan anticipated was
     not added: nothing in the pipeline supplies a key, and inferring one from the
     chord progression would be a guess.
+
+### Melody alone: `melody` and `melody_bass`
+
+Two textures that answer "lead sheet in, the tune out". `texture="melody"` plays the
+melody and nothing else, and `texture="melody_bass"` plays the same line with a walking
+thumb under it and still nothing harmonising it. Neither is a *grip*, for the reason
+above: what they change is what may be played at all, and a grip would have to win a
+cost comparison it should not be in.
+
+Both are declared by an empty tuple on **both** roles in `TEXTURE_GRIPS`, which is the
+same word `walking_bass` already used for its fills to mean "the left hand plays
+nothing here". The route is `get_melody_only_voicing`, and the step it builds keeps
+`melody_only=False` — the harmony still exists and the chord name is still printed as
+context, so the flag that would annotate "(no chord - melody alone)" would be claiming
+something false.
+
+Three decisions are load-bearing:
+
+- **One table names the textures, read by four call sites.** `MELODY_ONLY_TEXTURES` and
+  `THUMB_TEXTURES` in `textures.py` are the single source for "harmonises nothing" and
+  "builds a thumb line". `melody_alone_case`, `should_promote_fill`, the walked-slot
+  union in `arrange_progression` and its `prepared is None` rescue all read them.
+  Each site naming `walking_bass` as a literal is how a texture joins the melody-alone
+  route in one place and misses it in another, and `tests/test_texture.py` asserts the
+  two tables cover every empty palette so the gap cannot open silently.
+- **The empty tuple is the declaration; it is never absent.** `()` and a missing key
+  mean opposite things — "the left hand plays nothing" against "this role is
+  unhandled" — so the assertion is over the *set* of empty palettes, not over the
+  presence of one. That set widened from one entry to five when these were added, and
+  the test was widened with it rather than relaxed.
+- **A solo note is one string, and that is outside the playability invariant.**
+  `supported_string_sets()` is sets of two to four strings; a melody-alone step has one
+  active fret. That has always been true of an `NC` bar and a walking-bass fill; two
+  textures built entirely on it make it a headline output, so it is stated and pinned
+  in `TestMelodyOnlyTextures` rather than left implied by a test that happens not to
+  look at it.
+
+`melody` and `melody_bass` differ in exactly one thing — the thumb line — which is
+what makes them the obvious candidates for collapsing into a single texture with a
+`bass=` policy. They are separate names for now because the policy does not exist yet,
+and building two vocabularies at once would be the duplication `bass.py`'s module
+docstring warns about.

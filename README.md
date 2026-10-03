@@ -683,6 +683,34 @@ Gmaj9/F# D4   (duo - melody + b3, partial) x-x-x-4-3-x
 *Expect the sparsest thing this library will play — the harmony implied rather than
 stated, for a solo voice or for leaving room over a band.*
 
+**5b. The tune on its own** — `--texture melody` plays the melody and nothing else, so a
+lead sheet in gives you the line out. The chord names are still printed above it as
+context; nothing under them is being voiced.
+
+```bash
+python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-2 --texture melody
+```
+
+```text
+Gmaj9    D4   x-x-x-x-3-x
+Gmaj9    D4   x-x-x-x-3-x
+Gmaj9/F# D4   x-x-x-x-3-x
+```
+
+`--texture melody_bass` is the same line with a walking thumb under it, and still
+nothing harmonising it — a bass voice and the tune, with no chords anywhere:
+
+```text
+Gmaj9    D4   (bass: G2, anchor) 3-x-x-x-3-x
+Gmaj9    D4   x-x-x-x-3-x
+Gmaj9    D4   (bass: F#2, connect) 2-----
+Gmaj9/F# D4   x-x-x-x-3-x
+```
+
+*Expect a single melodic line, played where the hand can play it. `--texture
+walking_bass` is the other end of this: a shell stating the harmony on the strong
+beats, this line between them.*
+
 **6. Rewriting unresolved tensions** — `--fallback diminished` substitutes a Barry Harris
 dim7 wherever nothing else can voice a melody note:
 

@@ -66,8 +66,10 @@ from .grips import (
 )
 from .options import ArrangeOptions
 from .textures import (
+    MELODY_ONLY_TEXTURES,
     TEXTURE_GRIPS,
     TEXTURE_STYLES,
+    THUMB_TEXTURES,
     _metric_weight,
     _roles_for_slot,
 )
@@ -673,7 +675,7 @@ class VoiceLeadingEngine:
         # voicing exists, and only this function is downstream of one. `_place_bass`
         # resolves both together, after selection.
         slots: Optional[List[_Slot]] = None
-        if texture == "walking_bass":
+        if texture in THUMB_TEXTURES:
             # Decision B: the union is built here, before the melody loop, so the
             # loop's index still indexes the skeleton it was given. `_walking_slots`
             # is shared with `wjazzd.arrange_slots`, so the corpus and head paths
@@ -856,7 +858,14 @@ class VoiceLeadingEngine:
                 # *dropped*, with a warning as the only sign. The melody-alone route a
                 # fill takes is the right one here too: the note of the tune survives,
                 # the thumb still walks, and the harmony is stated at the next target.
-                if texture == "walking_bass":
+                #
+                # `melody` and `melody_bass` reach this branch only when the melody
+                # cannot be played at all, which `get_melody_only_voicing` answers with
+                # None; there is nothing to fall back to and the step is skipped below
+                # with the warning. The branch is kept for them anyway so that a future
+                # texture added to `MELODY_ONLY_TEXTURES` inherits the rescue rather
+                # than needing this condition widened again.
+                if texture in THUMB_TEXTURES or texture in MELODY_ONLY_TEXTURES:
                     solo_voicing = cls.get_melody_only_voicing(
                         melody_note, prefer=top_strings
                     )

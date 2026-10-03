@@ -49,6 +49,7 @@ from .chords import sounding_harmony
 from .cost import _best_voicing
 from .diagnostics import Diagnostics
 from .grips import GRIP_MAX_SPAN, GRIP_PREFERENCE
+from .textures import MELODY_ONLY_TEXTURES, THUMB_TEXTURES
 from .tuning import NO_CHORD, ROLE_FILL, ROLE_TARGET, ArrangementStep, Voicing
 
 # The three answers to "how is this slot played". Named rather than a bool because
@@ -132,18 +133,29 @@ def melody_alone_case(
 
     - **an `NC` bar** carries melody but no harmony, so there is nothing to voice.
       Taken before any chord logic, so it is never reharmonised and never warns.
-    - **a walking-bass fill**, and **a walking-bass target no shell can sound.** A
-      fill is *meant* to be thin, and a target that cannot be voiced must not be
-      dropped: the note of the tune survives and the harmony is stated at the next
-      target. Both are branches because the fill's grip tuple is *empty* - the
-      generic path would read "no candidates" as a failure and promote the fill to a
-      target, the exact opposite of the texture - and because `grips=("shell",)` is
-      the whole target tuple, so a melody with no shell (D over Bbm7) would be
-      dropped with only a warning.
+    - **a fill under a thumb texture**, **a target no shell can sound**, and **every
+      slot of a melody-only texture.** A fill is *meant* to be thin; a target that
+      cannot be voiced must not be dropped, because the note of the tune survives and
+      the harmony is stated at the next target; and a `melody` or `melody_bass` slot
+      is *defined* to be a single note. All three reach it the same way, and the
+      condition is deliberately **two** clauses rather than one:
+
+      - `slot_grips == ()` is the declaration. `TEXTURE_GRIPS` says "the left hand
+        plays nothing" with an empty tuple and never by omitting a key, so this is
+        where a melody-only texture, a walking-bass fill, and a narrowed-to-nothing
+        palette all arrive.
+      - `texture in THUMB_TEXTURES and role == ROLE_FILL` covers the one case the
+        declaration misses: `--grips shell --texture walking_bass`, where the caller
+        narrows a fill to `("shell",)` and the palette is no longer empty. Without
+        this clause that fill would try to voice a shell, which is the opposite of
+        what the texture means.
+
+      Both are needed because the first alone would change `--grips shell
+      --texture walking_bass`, and the second alone would miss every narrowed palette.
     """
     if quality == NO_CHORD or name == NO_CHORD:
         return MELODY_ALONE_NO_CHORD
-    if texture == "walking_bass" and (role == ROLE_FILL or slot_grips == ()):
+    if (texture in THUMB_TEXTURES and role == ROLE_FILL) or slot_grips == ():
         return MELODY_ALONE_TEXTURE
     return MELODY_ALONE_NONE
 
@@ -197,15 +209,17 @@ def should_promote_fill(
     before it is reported as missing - the same argument that makes `NECK_FRET_MIN`
     a penalty rather than a filter.
 
-    Disabled under `walking_bass`, where a fill is *meant* to be empty: the
-    melody-alone branch has already handled it, so promoting here would undo the
-    texture one step at a time.
+    Disabled wherever a fill is *meant* to be empty - `walking_bass`, and the two
+    melody-only textures - because the melody-alone branch has already handled it, so
+    promoting here would undo the texture one step at a time. Named by table rather
+    than by literal, so a texture added to `TEXTURE_STYLES` cannot join the melody-alone
+    route while missing this.
 
     `slot_grips != requested` is the "the role narrowed the caller's grips" case. If
     the two are equal the retry would ask for exactly what just failed, so it is
     skipped rather than repeated.
     """
-    if texture == "walking_bass":
+    if texture in MELODY_ONLY_TEXTURES or texture in THUMB_TEXTURES:
         return False
     return prepared_is_none and role == ROLE_FILL and slot_grips != requested
 

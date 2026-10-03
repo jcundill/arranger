@@ -74,11 +74,13 @@ from .grips import (
 from .render import _print_step, _step_annotation, format_progression
 from .steps import StepPreparation, VoiceLeadingEngine
 from .textures import (
+    MELODY_ONLY_TEXTURES,
     ROLE_FILL,
     ROLE_TARGET,
     TARGET_BEATS,
     TEXTURE_GRIPS,
     TEXTURE_STYLES,
+    THUMB_TEXTURES,
     _metric_weight,
     _roles_for_slot,
 )
@@ -338,6 +340,7 @@ __all__ = [
     "BassNote",
     "DUO_DEGREES",
     "GRIP_MAX_SPAN",
+    "MELODY_ONLY_TEXTURES",
     "GRIP_PREFERENCE",
     "GRIP_STRING_SETS",
     "HIGH_FRET_LIMIT",
@@ -355,6 +358,7 @@ __all__ = [
     "TARGET_BEATS",
     "TEXTURE_GRIPS",
     "TEXTURE_STYLES",
+    "THUMB_TEXTURES",
     "ArrangementStep",
     "ChordParser",
     "Diagnostics",

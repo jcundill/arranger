@@ -33,11 +33,13 @@ from .grips import GRIP_PREFERENCE
 from .tuning import ROLE_FILL, ROLE_TARGET
 
 __all__ = [
+    "MELODY_ONLY_TEXTURES",
     "ROLE_FILL",
     "ROLE_TARGET",
     "TARGET_BEATS",
     "TEXTURE_GRIPS",
     "TEXTURE_STYLES",
+    "THUMB_TEXTURES",
 ]
 
 
@@ -45,7 +47,28 @@ __all__ = [
 # Texture styles, in the order that breaks a tie. `uniform` is the historical
 # behaviour - every slot is a target and the cost tuple's completeness criterion
 # decides, which is why it is the default and why existing output is unchanged.
-TEXTURE_STYLES: Tuple[str, ...] = ("uniform", "targets", "walking_bass")
+TEXTURE_STYLES: Tuple[str, ...] = (
+    "uniform", "targets", "walking_bass", "melody", "melody_bass",
+)
+
+
+# Textures that **harmonise nothing**: every slot is the melody alone, whatever the
+# chord symbol says. Declared by name so that the four places that decide "does this
+# slot become a single note" all read one table instead of each naming `walking_bass`
+# in its own words - which is how a texture added to `TEXTURE_STYLES` silently misses
+# a branch and harmonises nothing, or drops its melody.
+#
+# The pair differs in exactly one thing, which is the other table below: `melody` has
+# no thumb line and `melody_bass` has one. Both are declared here rather than derived
+# from `TEXTURE_GRIPS`, because a texture whose palettes happen to be empty is not the
+# same claim as one that means to harmonise nothing.
+MELODY_ONLY_TEXTURES: Tuple[str, ...] = ("melody", "melody_bass")
+
+# Textures that build a **thumb line**: the walked-beat grid is unioned with the melody
+# grid before the step loop, so a bar whose melody is one whole note still carries four
+# bass notes. Separate from `MELODY_ONLY_TEXTURES` because `walking_bass` has a thumb
+# and *does* harmonise, on its strong beats.
+THUMB_TEXTURES: Tuple[str, ...] = ("walking_bass", "melody_bass")
 
 # The beats of a bar that carry a full chord under the "targets" texture, counted
 # from 1. Beats 1 and 3 are the guide's rule verbatim: in 4/4 they are the two
@@ -87,6 +110,23 @@ TEXTURE_GRIPS: Dict[str, Dict[str, Tuple[str, ...]]] = {
         "target": ("shell",),
         "fill": (),
     },
+    # `melody` is the lead sheet in, the tune out: every slot is the melody alone, so
+    # nothing under it is ever harmonised and the chord name above it is context rather
+    # than a claim about what is sounding. It is a texture rather than a grip because
+    # "what may be played at all" is the question it answers, and a grip would have to
+    # win a cost comparison it should not be in - see `GRIP_PREFERENCE`.
+    #
+    # The empty tuple on **both** roles is the declaration, in the same words
+    # `walking_bass`'s fill uses for its fills: `arrange_progression` reads `()` as "the
+    # left hand plays nothing" and routes the slot through `get_melody_only_voicing`.
+    # It is never absent and never approximated by an empty list elsewhere.
+    "melody": {"target": (), "fill": ()},
+    # The same line with a thumb under it, and no shell above it anywhere: a bass voice
+    # walking under the tune with nothing harmonising it. `walking_bass` states the
+    # harmony on its strong beats and leaves the thumb to fill the gaps; this one is
+    # thumb-and-melody throughout, which is why its **target** palette is empty too and
+    # not only its fill's.
+    "melody_bass": {"target": (), "fill": ()},
 }
 
 # How close a notated beat has to be to a whole beat to count as it. A 2/2 bar's
@@ -177,7 +217,7 @@ def _roles_for_slot(
     if texture == "uniform" or weight < 0:
         # Historical behaviour, and "we were never told where this note falls".
         return [ROLE_TARGET]
-    if texture == "walking_bass":
+    if texture in THUMB_TEXTURES:
         # `weight > 0` is kept *inside* the conjunction, and that is the off-beat
         # change rule rather than a detail of it. A chord arriving on the 4-and is
         # voiced under the new chord by the harmony timeline - which axis says what is
@@ -195,6 +235,12 @@ def _roles_for_slot(
         #
         # Checked before `uniform`'s catch-all below so no later branch can return
         # TARGET first; `uniform` itself never reaches here.
+        #
+        # `melody_bass` is here for the role's sake rather than the shell's: it voices
+        # no shell, but `is_bass_only` reads the role to decide whether a beat invented
+        # for the thumb holds the melody or re-strikes it, and a beat invented for the
+        # thumb must hold it. `melody` has no thumb, no invented beats, and no use for
+        # either role, so it falls through to the metric rule below.
         if weight > 0 and (harmony_changed or melody_moves):
             return [ROLE_TARGET]
         return [ROLE_FILL]
