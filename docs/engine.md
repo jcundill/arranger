@@ -780,3 +780,71 @@ what makes them the obvious candidates for collapsing into a single texture with
 `bass=` policy. They are separate names for now because the policy does not exist yet,
 and building two vocabularies at once would be the duplication `bass.py`'s module
 docstring warns about.
+
+### The bass policy: `bass=` as its own axis
+
+The thumb line used to be part of a texture's *name*: `walking_bass` meant both "a
+shell on the strong beats" and "a note on every beat below". Two separable decisions
+wearing one identifier. It is now `texture=` (the left hand) crossed with `bass=` (the
+thumb), with `BASS_AUTO` resolving from the texture so nothing has to be rewritten:
+
+| texture | default bass | equivalent to |
+|---|---|---|
+| `walking_bass` | `walk` | `texture="walking_bass", bass="walk"` |
+| `melody_bass` | `walk` | `texture="melody", bass="walk"` |
+| everything else | `none` | `texture=..., bass="none"` |
+
+All four equivalences are asserted byte-for-byte against the rendered tab, which is
+what makes the axis safe to add: every published walking-bass output is pinned against
+the `auto` default, so nothing moved.
+
+**The policies are a registry, not a flag**, because the set of patterns is open and is
+meant to stay that way. `BASS_POLICY_ROLES` maps a policy name to the `BASS_ROLE_*`
+values it keeps, and `bass_line_for` applies it as a *filter over the roles
+`_walking_bass_line` already assigns*. So:
+
+- `walk` keeps every role — a note on every beat.
+- `anchors` keeps only `BASS_ROLE_ANCHOR` — a root where the harmony changes.
+
+`anchors` is deliberately **not a second generator**. The harmonic reasoning about what
+a bass note is *for* is written once, and both policies inherit it; they cannot drift
+apart because one of them is a subset of the other by construction. A pattern that
+needs new reasoning gets its own generator beside `_walking_bass_line` and a row in the
+table; a pattern that is a rhythm of an existing one is a row.
+
+`BASS_AUTO` is deliberately **not** in `BASS_STYLES`. It is a default for an argument,
+not a pattern, so keeping it out means `arrange_progression` validates `bass` against
+the policies and never has to special-case a sentinel. An unknown spelling raises
+rather than defaulting to a walk.
+
+**One refusal rule, derived rather than listed: a thumb line needs one free bass
+string.** `thumb_capacity` computes it from `TEXTURE_GRIPS` and `GRIP_STRING_SETS` — the
+left hand's palette is the whole question — so a texture added later cannot reach the
+thumb-line route without its capacity being measured too. Measured here:
+
+```
+melody, melody_bass, a walking_bass fill   all three free
+targets, a walking_bass target             one
+uniform                                     zero
+```
+
+`uniform` is the only one that fails, and it fails for a reason worth naming: its
+palette is four-note grips and `drop24`'s `(4,2,1,0)` set spans all three thumb strings
+at once. So `bass="walk"` under `uniform` is **refused with a warning that names a
+texture that would work**, and the arrangement still sounds — losing a bass costs less
+than losing a note of the tune.
+
+Two honest caveats, both measured rather than assumed:
+
+- This is the **worst case across the sets a grip may use**, and in practice the
+  selector rarely picks the worst one. On "But Not For Me" every `uniform` step still
+  left a string. The rule is deliberately conservative: it refuses a combination that
+  would usually work rather than shipping a line that is occasionally holed.
+- **A thumb line is lossy under any four-note or shell texture, and always was.**
+  Measured on "But Not For Me" bars 1-2: `walking_bass` loses 9 of 151 thumb notes (6.0%)
+  — that is pre-existing behaviour, not something this change introduced — and `targets`
+  loses 11 of 151 (7.3%) under `walk`, 7 of 88 (8.0%) under `anchors`. The two melody
+  textures lose **none**, because a single left-hand note leaves every thumb string
+  free. So the rule refuses the one combination that can *never* work and lets the
+  others through with their existing warning, rather than refusing a texture whose
+  loss rate is the same order as the flagship's.

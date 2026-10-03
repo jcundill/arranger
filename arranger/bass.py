@@ -32,7 +32,14 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from musthe import Note
 
 from .chords import NON_CHORD_TONE_EXTENSIONS, ChordParser, normalised_harmony
-from .textures import _BEAT_EPSILON, _metric_weight
+from .textures import (
+    _BEAT_EPSILON,
+    ROLE_FILL,
+    ROLE_TARGET,
+    TEXTURE_GRIPS,
+    TEXTURE_STYLES,
+    _metric_weight,
+)
 from .tuning import STANDARD_TUNING, ArrangementStep, Voicing
 
 # --- Walking bass ---
@@ -72,6 +79,49 @@ BASS_ROLE_CONNECT = "connect"
 BASS_ROLE_APPROACH = "approach"
 BASS_ROLE_ENCLOSURE = "enclosure"
 BASS_ROLE_HOLD = "hold"
+
+
+# --- The bass policy: which pattern, if any, the thumb line is written on ---------
+#
+# A **policy**, not a flag, because the set of bass patterns is open and the user asked
+# for it to stay that way: adding a pattern should be one entry in `BASS_POLICY_ROLES`
+# plus, at most, one generator beside `_walking_bass_line` - never another branch at
+# each of the four call sites that decide whether a thumb line exists.
+#
+# `BASS_NONE` is the default and changes nothing that worked before it. The other two
+# differ only in *how many beats carry a note*:
+#
+#   walk     a note on every beat of every bar the melody touches. That is what makes
+#            the line a walk, and it is also what costs the most room underneath the
+#            left hand.
+#   anchors  a note only where the harmony changes, the root of that chord. It is a
+#            bass *voice* rather than a walking line: it marks the changes and leaves
+#            the rest of the bar to whatever is sounding above.
+#
+# Both are expressed as a filter over the roles `_walking_bass_line` already assigns,
+# so the harmonic reasoning - what a walking note is *for* - is written once and both
+# policies inherit it. `anchors` is not a second generator that could disagree with
+# `walk` about what an anchor is; it is `walk` with the connective roles dropped.
+BASS_NONE = "none"
+BASS_ANCHORS = "anchors"
+BASS_WALK = "walk"
+
+# Which `BASS_ROLE_*` values each policy keeps, or None for "every role". Keyed by
+# policy so a new pattern is a row here, and asserted against `BASS_STYLES` below so a
+# policy cannot be named without a rule or given a rule without a name.
+BASS_POLICY_ROLES: Dict[str, Optional[Tuple[str, ...]]] = {
+    BASS_WALK: None,
+    BASS_ANCHORS: (BASS_ROLE_ANCHOR,),
+}
+
+BASS_STYLES: Tuple[str, ...] = (BASS_NONE, BASS_ANCHORS, BASS_WALK)
+
+# "whatever this texture means", resolved before the arrangement runs. It is **not** in
+# `BASS_STYLES` - a caller cannot ask for it explicitly as a policy, only as the default
+# for an argument - and that is the reason the two lists differ in length. Keeping it out
+# means `arrange_progression` validates `bass` against the policies and never has to
+# special-case a sentinel after the fact.
+BASS_AUTO = "auto"
 
 
 @dataclass
@@ -448,9 +498,16 @@ def _walking_slots(
     # `BUT_NOT_FOR_ME_TIMINGS` in test_texture.py and `arrange_slots` itself.
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
     beats_per_bar: int = 4,
+    bass: str = BASS_WALK,
 ) -> List[_Slot]:
     """
     The walking-bass slot union: the melody grid plus the walked beats.
+
+    `bass` names the policy from `BASS_STYLES`. `BASS_WALK` writes a note on every
+    beat, which is what makes the line a *walk*; `BASS_ANCHORS` keeps only the beats
+    that already carry a root, which needs far less room under the left hand and so
+    works under textures `walk` is refused for. The union is built the same way either
+    way - the grid is the grid - so a sparser line is sparser and nothing else.
 
     **The one place the union is built.** Both step loops reach it -
     `VoiceLeadingEngine.arrange_progression` and `wjazzd.arrange_slots` - because a
@@ -484,7 +541,7 @@ def _walking_slots(
             (bar, float(beat)) if bar is not None and beat is not None else None
         )
 
-    bass_line = _walking_bass_line(chords, onsets, beats_per_bar)
+    bass_line = bass_line_for(bass, chords, onsets, beats_per_bar)
     return _bass_slots(progression, timings, bass_line, beats_per_bar)
 
 
@@ -708,8 +765,11 @@ def _bass_slots(
 
 
 def _walking_bass_line(
-    chords: List[Tuple[Optional[str], str, str]],
-    onsets: Optional[List[Optional[Tuple[int, float]]]],
+    # `Sequence` rather than `List`, for the reason `bass_line_for` gives: invariance
+    # would reject a caller whose chords are a narrower tuple type than this signature
+    # declares, which means the same thing and is what `_walking_slots` builds.
+    chords: Sequence[Tuple[Optional[str], str, str]],
+    onsets: Optional[Sequence[Optional[Tuple[int, float]]]],
     beats_per_bar: int = 4,
 ) -> List[BassNote]:
     """
@@ -892,3 +952,143 @@ def _walking_bass_line(
         previous_pc = best_pc
 
     return notes
+
+
+def bass_line_for(
+    bass: str,
+    # `Sequence`, not `List`, for the reason `_walking_slots` gives in full: `List` is
+    # invariant, so a caller holding a `List[Tuple[str, str, str]]` is not assignable
+    # to a `List[Tuple[Optional[str], str, str]]` and pyright rejects it over a *narrower*
+    # type that means the same thing. `Sequence` is covariant and both fit.
+    chords: Sequence[Tuple[Optional[str], str, str]],
+    onsets: Optional[Sequence[Optional[Tuple[int, float]]]],
+    beats_per_bar: int = 4,
+) -> List[BassNote]:
+    """The bass line for one policy: `_walking_bass_line`, filtered by its roles.
+
+    This is the seam a new pattern goes through. `BASS_NONE` returns nothing and is
+    never called with a grid to build - `arrange_progression` skips the union entirely
+    - so it is answered here too rather than by a caller-side `if`, which keeps the
+    "which policies produce a line" question in one place.
+
+    A policy with no entry in `BASS_POLICY_ROLES` raises rather than defaulting, on the
+    same rule the rest of the library follows: a spelling nobody recognises is a
+    question, and answering it by guessing is how a wrong note gets in. The check lives
+    in `tests/test_bass.py`, which asserts the two tables agree.
+    """
+    if bass == BASS_NONE:
+        return []
+    roles = BASS_POLICY_ROLES[bass]
+    line = _walking_bass_line(chords, onsets, beats_per_bar)
+    if roles is None:
+        return line
+    return [note for note in line if note.role in roles]
+
+
+def thumb_capacity(texture: str, role: str) -> Optional[int]:
+    """How many of the three thumb strings the left hand leaves free, worst case.
+
+    **The number a bass policy is checked against.** `_place_bass` skips whichever
+    thumb strings the upper shape already speaks on, per note, so a thumb line is a
+    question of *capacity* rather than of conflict - and the capacity is whatever
+    `TEXTURE_GRIPS` says that role may play.
+
+    Returns `None` for a palette that is empty, which means "the left hand plays
+    nothing here" and so leaves every thumb string free; the caller reads that as
+    unbounded rather than as zero.
+
+    Derived from the tables rather than listed, so a texture added to `TEXTURE_STYLES`
+    cannot join the thumb-line route without its capacity being measured too. Measured
+    across this tree:
+
+        melody, melody_bass, a walking_bass fill   all three free
+        targets, a walking_bass target             one
+        uniform                                     **zero** - `drop24`'s (4,2,1,0)
+                                                    set spans the whole thumb range
+
+    which is why `walk` is refused under `uniform` and `anchors` is not: an anchors
+    line needs one string and survives on the single one `uniform` leaves.
+    """
+    # Imported here rather than at module scope: `grips` sits above `bass` in the
+    # package order, so a top-level import would be legal but would make `bass` read as
+    # depending on the grip tables for its own sake - it does not, and only this one
+    # capacity question does.
+    from .grips import GRIP_STRING_SETS
+
+    table = TEXTURE_GRIPS.get(texture)
+    if table is None:
+        return None
+    grips = table.get(role, ())
+    if not grips:
+        return None
+    worst: Optional[int] = None
+    for grip in grips:
+        if grip == "melody":
+            continue
+        for strings, _soprano in GRIP_STRING_SETS.get(grip, ()):
+            free = len(set(BASS_STRING_INDICES) - set(strings))
+            worst = free if worst is None else min(worst, free)
+    return worst
+
+
+def bass_allowed(texture: str, bass: str) -> Tuple[bool, str]:
+    """Whether `texture` can carry `bass`, and why not when it cannot.
+
+    **The refusal rule, and it is one line:** a thumb line needs the left hand to leave
+    at least one of the three thumb strings free, and `thumb_capacity` derives that from
+    `TEXTURE_GRIPS` rather than from a list here. Both `walk` and `anchors` need exactly
+    one - they differ in how many *notes* they write, not in where the thumb can go - so
+    the same threshold covers both, and a future policy is refused or allowed on the
+    same terms without this function being taught about it.
+
+    Measured across this tree, `uniform` is the only texture that fails: its palette is
+    four-note grips, and `drop24`'s `(4,2,1,0)` set spans all three thumb strings at
+    once. Note this is the **worst case across the sets a grip may use**, and in practice
+    the selector rarely picks that one - measured on "But Not For Me" every step still
+    left a string. So the rule is deliberately conservative: it refuses a combination
+    that would *usually* work rather than shipping a line that is occasionally holed,
+    because a bass line with gaps in it is worse than no bass line, and the caller is
+    told what to use instead.
+
+    The alternative is named in the reason string, so the refusal is a sentence a player
+    can act on rather than a policy they have to reverse-engineer.
+    """
+    if bass == BASS_NONE:
+        return True, ""
+    for role in (ROLE_TARGET, ROLE_FILL):
+        free = thumb_capacity(texture, role)
+        if free is None:
+            continue                      # the left hand plays nothing: all three free
+        if free < 1:
+            return False, _no_room_reason(texture, role)
+    return True, ""
+
+
+def _no_room_reason(texture: str, role: str) -> str:
+    """The sentence a refused combination reports.
+
+    It names an alternative texture **only if that texture would have fitted**, and it
+    reads `thumb_capacity` directly rather than calling `bass_allowed`. Every non-`none`
+    policy shares the same one-string threshold, so there is never a different *policy*
+    to suggest - and re-entering the refusal to look would recurse. A refusal that
+    misdirects is worse than one that only explains itself.
+    """
+    head = (
+        f"{texture} leaves no bass string free for a {role} - its grips can occupy "
+        f"all of {tuple(BASS_STRING_INDICES)}. "
+    )
+    fits = [
+        other
+        for other in TEXTURE_STYLES
+        if other != texture
+        and all(
+            (free := thumb_capacity(other, r)) is None or free >= 1
+            for r in (ROLE_TARGET, ROLE_FILL)
+        )
+    ]
+    if fits:
+        return (
+            head + "Every bass policy needs the same string, so no policy fits here. "
+            f"Try texture={fits[0]!r}, or drop the bass."
+        )
+    return head + "No texture in this set leaves the thumb a string."

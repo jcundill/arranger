@@ -17,18 +17,25 @@ What the pass is responsible for:
 """
 
 import unittest
+from typing import List, Optional, Tuple
 
 from arranger import (
+    BASS_POLICY_ROLES,
     BASS_ROLE_ANCHOR,
     BASS_ROLE_APPROACH,
     BASS_ROLE_CONNECT,
     BASS_ROLE_ENCLOSURE,
     BASS_ROLE_HOLD,
+    BASS_STYLES,
     NO_CHORD,
     PITCH_CLASS_NAMES,
+    TEXTURE_STYLES,
     _bass_harmony,
     _walking_bass_line,
+    bass_allowed,
     bass_cost,
+    bass_line_for,
+    thumb_capacity,
 )
 
 
@@ -412,3 +419,111 @@ class TestBassCost(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheBassPolicyRegistry(unittest.TestCase):
+    """`bass=` is a policy with a name, and the set of policies is open.
+
+    The point of the registry is that a **new bass pattern is a row in a table**, not
+    another branch at each of the call sites that decide whether a thumb line exists.
+    These tests are mostly about that staying true - the two tables agreeing, and no
+    policy being nameable without a rule - because a registry that can be named past
+    its own rules is worse than the branches it replaced.
+    """
+
+    def test_every_policy_has_a_rule_and_every_rule_has_a_policy(self):
+        """`BASS_STYLES` and `BASS_POLICY_ROLES` describe the same set.
+
+        The two differ in exactly one entry by design - `BASS_AUTO` is a default and not
+        a policy - so `BASS_STYLES` minus `none` is the key set of the rule table.
+        """
+        self.assertEqual(
+            sorted(p for p in BASS_STYLES if p != "none"),
+            sorted(BASS_POLICY_ROLES),
+            "a policy is nameable without a rule, or has a rule without a name",
+        )
+
+    def test_auto_is_not_a_policy(self):
+        """`auto` is resolved before it reaches any of this.
+
+        It is a default for an argument, not a pattern a caller can ask for, and keeping
+        it out of `BASS_STYLES` is what lets `arrange_progression` validate `bass`
+        against the policies without special-casing a sentinel.
+        """
+        self.assertNotIn("auto", BASS_STYLES)
+        self.assertNotIn("auto", BASS_POLICY_ROLES)
+
+    def test_walk_keeps_every_role_and_anchors_keeps_only_the_root(self):
+        """`anchors` is `walk` with the connective roles dropped, not a second opinion.
+
+        Asserted against the same generator's output so the two cannot drift: if a role
+        is added to the walk, `anchors` either keeps it or it does not - but it is
+        computed from the same line either way.
+        """
+        # Annotated rather than inferred: `List` is invariant, so a list of
+        # `Tuple[str, str, str]` is not a `List[Tuple[Optional[str], str, str]]` and
+        # pyright rejects it - the same trap, and the same spelling, as every other
+        # timing list in this suite.
+        chords: List[Tuple[Optional[str], str, str]] = [("C", "maj7", "Cmaj7")] * 8
+        onsets: List[Tuple[int, float]] = [(1, 1.0 + 0.5 * i) for i in range(8)]
+        walked = bass_line_for("walk", chords, onsets, 4)
+        anchored = bass_line_for("anchors", chords, onsets, 4)
+        self.assertGreater(len(walked), len(anchored))
+        self.assertEqual({n.role for n in anchored}, {BASS_ROLE_ANCHOR})
+        self.assertTrue(
+            all(n.role == BASS_ROLE_ANCHOR for n in anchored),
+            "anchors kept a connective role",
+        )
+        # Every anchored note is one the walk actually wrote, in order.
+        walked_anchors = [n for n in walked if n.role == BASS_ROLE_ANCHOR]
+        self.assertEqual(
+            [(n.bar, n.beat, n.pitch_class) for n in anchored],
+            [(n.bar, n.beat, n.pitch_class) for n in walked_anchors],
+            "anchors is not a subset of walk",
+        )
+
+    def test_none_writes_no_line(self):
+        self.assertEqual(bass_line_for("none", [("C", "maj7", "Cmaj7")], None, 4), [])
+
+    def test_an_unknown_policy_raises_rather_than_defaulting(self):
+        """A spelling nobody recognises is a question, not a walk.
+
+        Defaulting here would put a bass line under an arrangement that did not ask for
+        one, which is the failure mode the house rule exists to prevent everywhere else.
+        """
+        with self.assertRaises(KeyError):
+            bass_line_for("stride", [("C", "maj7", "Cmaj7")], None, 4)
+
+
+class TestThumbCapacityAndRefusal(unittest.TestCase):
+    """A thumb line needs a string, and the capacity is derived not listed."""
+
+    def test_capacity_is_read_from_the_grip_tables(self):
+        """`uniform` is the one texture that can occupy every thumb string at once."""
+        self.assertEqual(thumb_capacity("uniform", "target"), 0)
+        targets_capacity = thumb_capacity("targets", "target")
+        assert targets_capacity is not None, "a grip palette cannot be unbounded"
+        self.assertGreaterEqual(targets_capacity, 1)
+        # An empty palette means the left hand plays nothing: every string is free.
+        self.assertIsNone(thumb_capacity("melody", "target"))
+        self.assertIsNone(thumb_capacity("walking_bass", "fill"))
+
+    def test_uniform_is_refused_for_every_policy_and_the_reason_names_a_texture(self):
+        for policy in (p for p in BASS_STYLES if p != "none"):
+            allowed, reason = bass_allowed("uniform", policy)
+            self.assertFalse(allowed, policy)
+            self.assertIn("no bass string free", reason)
+            self.assertIn("texture=", reason, "the refusal must say what to use instead")
+
+    def test_the_textures_that_leave_a_string_are_allowed(self):
+        for texture in TEXTURE_STYLES:
+            if texture == "uniform":
+                continue
+            for policy in BASS_STYLES:
+                allowed, _why = bass_allowed(texture, policy)
+                self.assertTrue(allowed, f"{texture} + {policy}")
+
+    def test_none_is_always_allowed(self):
+        for texture in TEXTURE_STYLES:
+            allowed, _why = bass_allowed(texture, "none")
+            self.assertTrue(allowed, texture)

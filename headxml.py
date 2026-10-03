@@ -1073,6 +1073,7 @@ def arrange_xml_head(
     section: Optional[Tuple[int, int]] = None,
     grips: Tuple[str, ...] = GRIP_PREFERENCE,
     texture: str = "uniform",
+    bass: str = "auto",
 ) -> Tuple[List[ArrangementStep], Head, List[str]]:
     """Loads a MusicXML head, reduces it and arranges it, end to end.
 
@@ -1100,7 +1101,7 @@ def arrange_xml_head(
     timings = [(slot[1], slot[2], slot[3]) for slot in slots]
     steps, _rescued, notes = arrange_slots(
         triples, timings, non_chord_tone=non_chord_tone, fallback=fallback,
-        grips=grips, texture=texture, beats_per_bar=head.beats_per_bar,
+        grips=grips, texture=texture, bass=bass, beats_per_bar=head.beats_per_bar,
     )
     return steps, head, list(head.report) + notes
 
@@ -1214,6 +1215,7 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
             section=section,
             grips=tuple(args.grips),
             texture=args.texture,
+            bass=args.bass,
         )
     except (ValueError, zipfile.BadZipFile) as error:
         parser.error(str(error))

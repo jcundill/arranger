@@ -176,6 +176,7 @@ def _roles_for_slot(
     texture: str,
     harmony_changed: bool = True,
     melody_moves: bool = False,
+    has_thumb: bool = False,
 ) -> List[str]:
     """
     The metric roles a slot of the given weight may take under `texture`.
@@ -217,7 +218,7 @@ def _roles_for_slot(
     if texture == "uniform" or weight < 0:
         # Historical behaviour, and "we were never told where this note falls".
         return [ROLE_TARGET]
-    if texture in THUMB_TEXTURES:
+    if has_thumb:
         # `weight > 0` is kept *inside* the conjunction, and that is the off-beat
         # change rule rather than a detail of it. A chord arriving on the 4-and is
         # voiced under the new chord by the harmony timeline - which axis says what is
@@ -236,11 +237,13 @@ def _roles_for_slot(
         # Checked before `uniform`'s catch-all below so no later branch can return
         # TARGET first; `uniform` itself never reaches here.
         #
-        # `melody_bass` is here for the role's sake rather than the shell's: it voices
-        # no shell, but `is_bass_only` reads the role to decide whether a beat invented
-        # for the thumb holds the melody or re-strikes it, and a beat invented for the
-        # thumb must hold it. `melody` has no thumb, no invented beats, and no use for
-        # either role, so it falls through to the metric rule below.
+        # `has_thumb` rather than the texture name, because the thumb line is now an
+        # argument of its own (`bass=`): any texture may carry one. The reason this
+        # branch exists is the role's, not the shell's - `is_bass_only` reads it to
+        # decide whether a beat invented for the thumb holds the melody or re-strikes
+        # it, and a beat invented for the thumb must hold it. A texture with no thumb
+        # has no invented beats and no use for either role, so it falls through to the
+        # metric rule below.
         if weight > 0 and (harmony_changed or melody_moves):
             return [ROLE_TARGET]
         return [ROLE_FILL]

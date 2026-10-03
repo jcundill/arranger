@@ -67,6 +67,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, List, Optional, Sequence
 
+from .bass import BASS_AUTO, BASS_STYLES
 from .chords import NON_CHORD_TONE_STRATEGIES
 from .grips import GRIP_PREFERENCE
 from .render import format_progression
@@ -91,9 +92,16 @@ class CommonHelp:
     One field per flag that `corpus` and `head` spell differently. A flag absent
     from this dataclass has its help written once in `add_common_arguments`,
     because the two commands agree on it - `fallback`, `grips`, `non_chord_tone`,
-    `pick` and `skeleton` are those five, and there is deliberately no way to add a
-    sixth without stating the new text twice. (`vertical` was the sixth until it
+    `pick` and `skeleton` were those five, and there is deliberately no way to add
+    another without stating the new text twice. (`vertical` was the sixth until it
     was removed along with the branch of `format_progression` it selected.)
+
+    `bass` is the sixth, added 2026-10 with the bass-policy axis. It is a genuine
+    member of the identical set rather than a loophole: the policy is an arrangement
+    choice and means the same thing against a transcription and against a score -
+    neither command reads a different metre or a different beat for it. It is named
+    in `tests/test_cli.py::test_the_help_text_is_not_one_shared_string` so that
+    being here is a recorded decision and not an omission.
 
     `Optional` rather than `str` because `head` gives `--fret-min` and
     `--fret-max` no help at all, and `argparse`'s own default for `help` is
@@ -228,6 +236,18 @@ def add_common_arguments(
         choices=list(TEXTURE_STYLES),
         default="uniform",
         help=help_text.texture,
+    )
+    parser.add_argument(
+        "--bass",
+        choices=list(BASS_STYLES),
+        default=BASS_AUTO,
+        help=(
+            "which pattern the thumb line is written on: 'walk' puts a note on every "
+            "beat, 'anchors' only where the harmony changes, 'none' (the default with "
+            "--texture uniform or targets) no line at all. 'auto' follows the texture, "
+            "so --texture walking_bass walks unless you say otherwise. Refused, with a "
+            "warning, where the left hand leaves the thumb no string"
+        ),
     )
     parser.add_argument(
         "--fret-min",

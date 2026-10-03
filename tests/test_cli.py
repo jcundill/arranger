@@ -121,7 +121,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         other simply has no such option.
         """
         corpus, head, shared = self.parsers()
-        self.assertEqual(len(shared), 16, "the shared flag count moved")
+        self.assertEqual(len(shared), 17, "the shared flag count moved")
 
         disagreeing = [
             f"{dest}: corpus={_semantics(corpus[dest])!r} head={_semantics(head[dest])!r}"
@@ -153,10 +153,17 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         silently changed what both commands print, with nothing to catch it.
 
         So the difference is asserted in both directions: each of the eleven is
-        different, and the five that are identical are named, so a sixth drifting
+        different, and the ones that are identical are named, so a flag drifting
         into `CommonHelp` fails here instead of being noticed by a user.
 
-        The counts are sixteen and eleven now, not seventeen and eleven:
+        **The identical set is now six, not five**, and the sixth is `bass`. It is
+        named rather than absorbed into `CommonHelp` because the policy means the
+        same thing against a transcription and against a score - it is an arrangement
+        choice, and neither command reads a different metre for it. The count a
+        sixth was supposed to be impossible to reach without stating its text twice;
+        it is reachable by being written once *on purpose*, which is what this is.
+
+        The counts are seventeen and eleven now, not seventeen and eleven:
         `--vertical` was removed along with the `format_progression` branch it
         selected, and it was one of the six whose help the commands spelled
         identically. Only that side of the split moved, which is why the eleven are
@@ -175,7 +182,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         )
         self.assertEqual(
             sorted(set(shared) - set(differing)),
-            ["fallback", "grips", "non_chord_tone", "pick", "skeleton"],
+            ["bass", "fallback", "grips", "non_chord_tone", "pick", "skeleton"],
             "a flag gained or lost its differing help - remeasure before editing",
         )
 

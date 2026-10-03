@@ -1498,6 +1498,7 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
         section=section,
         grips=tuple(args.grips),
         texture=args.texture,
+        bass=args.bass,
     )
 
     print(f"{solo.title} - {solo.performer} (melid {solo.melid}, {solo.key})")
@@ -1550,6 +1551,7 @@ def arrange_slots(
     fallback: Optional[str] = None,
     grips: Tuple[str, ...] = GRIP_PREFERENCE,
     texture: str = "uniform",
+    bass: str = "auto",
     beats_per_bar: int = 4,
     diagnostics: Optional[Diagnostics] = None,
 ) -> Tuple[List[ArrangementStep], List[int], List[str]]:
@@ -1648,6 +1650,7 @@ def arrange_slots(
         non_chord_tone=non_chord_tone,
         grips=grips,
         texture=texture,
+        bass=bass,
         beats_per_bar=beats_per_bar,
     )
 
@@ -1664,6 +1667,7 @@ def _corpus_options(
     grips: Tuple[str, ...],
     texture: str,
     beats_per_bar: int,
+    bass: str = "auto",
 ) -> ArrangeOptions:
     """The request `arrange_slots` makes of the engine, as one value.
 
@@ -1706,14 +1710,18 @@ def _corpus_options(
     # --- the slash bass, as data -------------------------------------------------
     bass_pcs: Dict[int, Optional[int]] = {}
     for index, (_melody, _quality, name) in enumerate(triples):
-        bass = parse_weimar_chord(name)[2]
-        if bass is not None:
-            bass_pcs[index] = bass_pitch_class(bass)
+        # Named `slash`, not `bass`: this function now takes a `bass` **policy**
+        # parameter, and a loop local of that name would silently shadow it and pass a
+        # pitch class where the policy belongs.
+        slash = parse_weimar_chord(name)[2]
+        if slash is not None:
+            bass_pcs[index] = bass_pitch_class(slash)
 
     return ArrangeOptions(
         non_chord_tone=non_chord_tone,
         grips=grips,
         texture=texture,
+        bass=bass,
         beats_per_bar=beats_per_bar,
         timings=typed_timings,
         bass_pcs=bass_pcs or None,
@@ -1732,6 +1740,7 @@ def arrange_head(
     section: Optional[Tuple[int, int]] = None,
     grips: Tuple[str, ...] = GRIP_PREFERENCE,
     texture: str = "uniform",
+    bass: str = "auto",
 ) -> HeadArrangement:
     """Builds a chord-melody arrangement of a head, end to end.
 
@@ -1766,7 +1775,7 @@ def arrange_head(
     built = build_skeleton(solo, strategy, section, pick, lift, non_chord_tone)
     steps, rescued, arrange_notes = arrange_slots(
         built.triples, built.timings, non_chord_tone=non_chord_tone,
-        fallback=fallback, grips=grips, texture=texture,
+        fallback=fallback, grips=grips, texture=texture, bass=bass,
     )
     # How many steps a diminished retry *would* rescue, whether or not it ran. Set
     # here rather than in arrange_slots, which has no Skeleton to report it on and

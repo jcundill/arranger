@@ -40,6 +40,12 @@ class ArrangeOptions:
     fret_max: int = NECK_FRET_MAX
     grips: Tuple[str, ...] = GRIP_PREFERENCE
     texture: str = "uniform"
+    # Which bass **policy** the thumb line is written on: "none", "anchors" or "walk".
+    # An axis of its own rather than a property of the texture, because the pattern is
+    # the composer's choice and the set of patterns is open - see `BASS_STYLES` in
+    # `bass.py`, where a new one is a row in a table. The default changes nothing that
+    # worked before it.
+    bass: str = "none"
     beats_per_bar: int = 4
     # `Sequence`, not `List`, and that is load-bearing rather than stylistic: the
     # library and the corpus hold *different* timing types - `Tuple[int, float, ...]`

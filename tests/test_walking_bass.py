@@ -1761,3 +1761,113 @@ class TestUpperVoicesExcludeTheThumbByStringNotPosition(unittest.TestCase):
                 [60, 64, 72],
                 f"thumb on string {thumb_string} changed the shell",
             )
+
+
+class TestTheBassPolicyIsAnAxis(unittest.TestCase):
+    """`bass=` selects the pattern; the texture no longer carries it.
+
+    `walking_bass` used to mean "a thumb line" as part of its name. Now it means "a
+    thumb line, by default", and the same line is reachable from a texture that has
+    never heard of walking bass. What must not change is that the default produces
+    exactly what it always did - which is the whole of the equivalence below.
+    """
+
+    PROGRESSION = [
+        ("F5", "maj7", "Fmaj7"),
+        ("E5", "maj7", "Emaj7"),
+        ("D5", "maj7", "Dmaj7"),
+        ("C5", "7", "C7"),
+        ("C5", "maj7", "Fmaj7"),
+        ("B4", "m7", "Bm7"),
+        ("A4", "maj7", "Amaj7"),
+        ("G4", "7", "G7"),
+    ]
+    ONSETS: List[Tuple[int, float]] = [(0, 1.0 + 0.5 * i) for i in range(8)]
+
+    def arrange(self, **kwargs):
+        timings = [
+            (bar, beat, None) for bar, beat in self.ONSETS
+        ]
+        return VoiceLeadingEngine.arrange_progression(
+            self.PROGRESSION, timings=timings, **kwargs
+        )
+
+    def tabs(self, steps):
+        return [s.voicing.tab_string() for s in steps]
+
+    def test_auto_reproduces_walking_bass_exactly(self):
+        """The default resolves to a walk, byte for byte.
+
+        This is the equivalence that makes the axis safe: `texture="walking_bass"` was
+        the only way to ask for a line before, and every published walking-bass tab is
+        pinned against it.
+        """
+        self.assertEqual(
+            self.tabs(self.arrange(texture="walking_bass")),
+            self.tabs(self.arrange(texture="walking_bass", bass="auto")),
+        )
+        self.assertEqual(
+            self.tabs(self.arrange(texture="walking_bass")),
+            self.tabs(self.arrange(texture="walking_bass", bass="walk")),
+        )
+
+    def test_bass_none_drops_the_thumb_and_keeps_the_shells(self):
+        """A walking bass with no bass is still a coherent texture: shells on the beats.
+
+        Dropping the policy drops the thumb and nothing else - the texture's own claim,
+        which is a shell on a strong beat and the melody alone between them, is about
+        the *left* hand and is unaffected by how many notes the thumb writes.
+        """
+        with_thumb = self.arrange(texture="walking_bass")
+        without = self.arrange(texture="walking_bass", bass="none")
+        self.assertTrue(any(s.bass is not None for s in with_thumb))
+        self.assertEqual([s.bass for s in without], [None] * len(without))
+        shells = [s for s in without if s.grip == "shell"]
+        self.assertTrue(shells, "the strong beats lost their shell")
+        self.assertTrue(
+            all(s.role == ROLE_TARGET for s in shells),
+            "a shell appeared on a fill",
+        )
+        self.assertEqual(
+            len(without), len(self.PROGRESSION),
+            "without a grid the slot count should be one per melody note",
+        )
+
+    def test_anchors_writes_fewer_notes_than_a_walk(self):
+        """Same texture, two policies, and the line is measurably sparser."""
+        walked = self.arrange(texture="walking_bass")
+        anchored = self.arrange(texture="walking_bass", bass="anchors")
+        walked_notes = sum(1 for s in walked if s.bass is not None)
+        anchored_notes = sum(1 for s in anchored if s.bass is not None)
+        self.assertGreater(walked_notes, anchored_notes)
+        self.assertGreater(anchored_notes, 0, "anchors wrote nothing at all")
+        self.assertEqual(
+            {s.bass_role for s in anchored if s.bass is not None},
+            {"anchor"},
+            "anchors wrote a connective role",
+        )
+
+    def test_a_texture_that_never_had_a_thumb_can_carry_one(self):
+        """`targets` harmonises in full, and a thumb line under it is now expressible."""
+        plain = self.arrange(texture="targets")
+        walked = self.arrange(texture="targets", bass="walk")
+        self.assertEqual([s.bass for s in plain], [None] * len(plain))
+        self.assertTrue(any(s.bass is not None for s in walked))
+
+    def test_uniform_refuses_the_line_and_says_so_rather_than_dropping_quietly(self):
+        """The one combination the left hand cannot accommodate is reported, not guessed."""
+        messages = []
+        diagnostics = arranger.Diagnostics(emit=messages.append)
+        steps = self.arrange(texture="uniform", bass="walk", diagnostics=diagnostics)
+        self.assertTrue(messages, "the refusal was silent")
+        self.assertTrue(
+            any("no bass string free" in m for m in messages), messages
+        )
+        self.assertEqual([s.bass for s in steps], [None] * len(steps))
+        # And the arrangement still sounds: losing a bass beats losing the tune.
+        self.assertEqual(len(steps), len(self.PROGRESSION))
+        self.assertTrue(all(s.voicing.active_frets() for s in steps))
+
+    def test_an_unknown_policy_raises(self):
+        with self.assertRaises(ValueError):
+            self.arrange(texture="targets", bass="stride")

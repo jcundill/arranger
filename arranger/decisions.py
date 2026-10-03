@@ -49,7 +49,6 @@ from .chords import sounding_harmony
 from .cost import _best_voicing
 from .diagnostics import Diagnostics
 from .grips import GRIP_MAX_SPAN, GRIP_PREFERENCE
-from .textures import MELODY_ONLY_TEXTURES, THUMB_TEXTURES
 from .tuning import NO_CHORD, ROLE_FILL, ROLE_TARGET, ArrangementStep, Voicing
 
 # The three answers to "how is this slot played". Named rather than a bool because
@@ -118,6 +117,7 @@ def melody_alone_case(
     slot_grips: Tuple[str, ...],
     quality: str,
     name: str,
+    has_thumb: bool = False,
 ) -> str:
     """Which of the three "play this as a single note" routes this slot takes.
 
@@ -155,7 +155,7 @@ def melody_alone_case(
     """
     if quality == NO_CHORD or name == NO_CHORD:
         return MELODY_ALONE_NO_CHORD
-    if (texture in THUMB_TEXTURES and role == ROLE_FILL) or slot_grips == ():
+    if (has_thumb and role == ROLE_FILL) or slot_grips == ():
         return MELODY_ALONE_TEXTURE
     return MELODY_ALONE_NONE
 
@@ -201,6 +201,8 @@ def should_promote_fill(
     prepared_is_none: bool,
     slot_grips: Tuple[str, ...],
     requested: Tuple[str, ...],
+    has_thumb: bool = False,
+    melody_only_texture: bool = False,
 ) -> bool:
     """Whether a fill that produced nothing should be re-prepared as a principal note.
 
@@ -219,7 +221,7 @@ def should_promote_fill(
     the two are equal the retry would ask for exactly what just failed, so it is
     skipped rather than repeated.
     """
-    if texture in MELODY_ONLY_TEXTURES or texture in THUMB_TEXTURES:
+    if has_thumb or melody_only_texture:
         return False
     return prepared_is_none and role == ROLE_FILL and slot_grips != requested
 

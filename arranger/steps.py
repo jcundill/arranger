@@ -32,12 +32,17 @@ from . import chords as _chords
 from . import cost as _cost
 from . import grips as _grips
 from .bass import (
+    BASS_AUTO,
+    BASS_NONE,
+    BASS_STYLES,
+    BASS_WALK,
     BassNote,
     _held_shape,
     _place_bass,
     _previous_bass,
     _Slot,
     _walking_slots,
+    bass_allowed,
 )
 from .chords import (
     NON_CHORD_TONE_EXTENSIONS,
@@ -112,6 +117,37 @@ class StepPreparation:
     strategy: Optional[str]
     harmonized_as: Optional[str]
 
+
+
+
+
+def _resolve_bass(texture: str, bass: str, diagnostics: Diagnostics) -> str:
+    """The policy to actually run: `BASS_AUTO` resolved, validated, or refused.
+
+    Three outcomes, in the order they are decided:
+
+    - `auto` resolves from the texture, which is what keeps `texture="walking_bass"`
+      walking without the caller repeating itself.
+    - an unknown spelling raises. The same rule as everywhere else in the library: a
+      policy nobody recognises is a question, and answering it by defaulting to a walk
+      would put a bass line under an arrangement that did not ask for one.
+    - a combination the left hand cannot accommodate is **refused with a warning**, and
+      the arrangement proceeds without a thumb line. Not dropped and not degraded: a
+      walking line with gaps in it is worse than no line, and losing the bass costs less
+      than losing the tune. The warning names a texture that would work.
+    """
+    if bass == BASS_AUTO:
+        bass = BASS_WALK if texture in THUMB_TEXTURES else BASS_NONE
+    if bass not in BASS_STYLES:
+        raise ValueError(
+            f"Unknown bass policy {bass!r}; expected one of {BASS_STYLES}, "
+            f"or 'auto'"
+        )
+    allowed, reason = bass_allowed(texture, bass)
+    if not allowed:
+        diagnostics.warn(f"Warning: {reason}")
+        return BASS_NONE
+    return bass
 
 
 
@@ -503,6 +539,7 @@ class VoiceLeadingEngine:
         # allowed to delegate here.
         timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]] = None,
         texture: str = "uniform",
+        bass: str = BASS_AUTO,
         beats_per_bar: int = 4,
         diagnostics: Optional[Diagnostics] = None,
         options: Optional[ArrangeOptions] = None,
@@ -551,6 +588,25 @@ class VoiceLeadingEngine:
         default, means the caller has told us nothing about where its notes fall, and
         then every slot is a principal note and this function behaves exactly as it
         always has.
+
+        `bass` selects the **policy** the thumb line is written on, from BASS_STYLES:
+        `"none"` (the default, no thumb line), `"anchors"` (a note only where the
+        harmony changes, carrying that chord's root), or `"walk"` (a note on every beat,
+        which is what makes the line a walk). It is an argument of its own rather than a
+        property of the texture, because the pattern is the composer's choice and the set
+        of patterns is open - a new one is a row in `BASS_POLICY_ROLES`.
+
+        `BASS_AUTO`, the default here, resolves from the texture: one of
+        `THUMB_TEXTURES` walks, everything else does not. So `texture="walking_bass"` and
+        `texture="walking_bass", bass="walk"` are the same arrangement, and
+        `bass="none"` on a walking bass gives the same strong-beat shells with the thumb
+        dropped - a coherent texture in its own right.
+
+        A combination the left hand cannot accommodate is **refused rather than
+        degraded**. `uniform` leaves no bass string free, because its four-note grips can
+        span all three, so a thumb line under it would come and go; the refusal names a
+        texture that would work and the arrangement still sounds, because losing a bass
+        costs less than shipping a line with holes in it.
 
         `texture="targets"` uses the timing to arrange the way the guide describes:
         a full four-note chord on beats 1 and 3 of the bar, and a shell, a 3rd/6th
@@ -674,14 +730,21 @@ class VoiceLeadingEngine:
         # string: neither the octave nor the string can be decided before an upper
         # voicing exists, and only this function is downstream of one. `_place_bass`
         # resolves both together, after selection.
+        # Resolve the bass policy once. `auto` means "whatever this texture means", so
+        # `walking_bass` keeps walking and everything else keeps having no thumb; an
+        # explicit policy overrides that, which is what lets a texture that was never
+        # written for a thumb line carry one.
+        bass = _resolve_bass(texture, bass, diagnostics)
+        has_thumb = bass != BASS_NONE
+
         slots: Optional[List[_Slot]] = None
-        if texture in THUMB_TEXTURES:
+        if has_thumb:
             # Decision B: the union is built here, before the melody loop, so the
             # loop's index still indexes the skeleton it was given. `_walking_slots`
             # is shared with `wjazzd.arrange_slots`, so the corpus and head paths
             # cannot walk a different line from this one - see its docstring for why
             # that duplication has already cost this project one bug.
-            slots = _walking_slots(progression, timings, beats_per_bar)
+            slots = _walking_slots(progression, timings, beats_per_bar, bass)
 
         # Harmony and melody state for the walking-bass role rule. Both are read from
         # what actually sounds, not from the written chord, so a substituted chord
@@ -746,6 +809,7 @@ class VoiceLeadingEngine:
                                  or harmony_key != last_target_harmony),
                 melody_moves=(previous_melody_midi is None
                               or melody_note.midi_note() != previous_melody_midi),
+                has_thumb=has_thumb,
             )[0]
             if role == ROLE_TARGET:
                 last_target_harmony = harmony_key
@@ -765,7 +829,7 @@ class VoiceLeadingEngine:
             # non-default routes build different steps: an NC bar sets
             # `melody_only=True`, a texture case must not.
             melody_alone = melody_alone_case(
-                texture, role, slot_grips, chord_type, name
+                texture, role, slot_grips, chord_type, name, has_thumb
             )
             if melody_alone == MELODY_ALONE_TEXTURE:
                 solo_voicing = cls.get_melody_only_voicing(
@@ -865,7 +929,7 @@ class VoiceLeadingEngine:
                 # with the warning. The branch is kept for them anyway so that a future
                 # texture added to `MELODY_ONLY_TEXTURES` inherits the rescue rather
                 # than needing this condition widened again.
-                if texture in THUMB_TEXTURES or texture in MELODY_ONLY_TEXTURES:
+                if has_thumb or texture in MELODY_ONLY_TEXTURES:
                     solo_voicing = cls.get_melody_only_voicing(
                         melody_note, prefer=top_strings
                     )
@@ -892,7 +956,9 @@ class VoiceLeadingEngine:
                 # re-prepared as a principal note before it is reported as missing.
                 # Same argument as NECK_FRET_MIN being a penalty and not a filter.
                 if should_promote_fill(
-                    texture, role, True, slot_grips, grips
+                    texture, role, True, slot_grips, grips,
+                    has_thumb=has_thumb,
+                    melody_only_texture=texture in MELODY_ONLY_TEXTURES,
                 ):
                     prepared = cls.prepare_step(
                         progression, index,
