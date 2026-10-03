@@ -264,6 +264,34 @@ class TestTheCiWorkflowMatchesTheProject(unittest.TestCase):
         self.assertIn("85", header)
         self.assertIn("does NOT mean", header)
 
+    def test_the_workflow_declares_the_permissions_it_uses(self):
+        """The root carries `permissions`, and no job asks for more than it needs.
+
+        GitHub CodeQL's `actions/missing-permissions` alerts on a workflow with
+        no `permissions` key at all, because the run then inherits the repository
+        or organization default — which for anything created before February 2023
+        is read-write on *every* scope. A workflow that only checks the tree out
+        would then hold a token able to push to it.
+
+        The key is asserted at the root rather than per job on purpose: both jobs
+        run the same steps and need the same single scope, and a root key is the
+        one that cannot be forgotten by a job added later.
+        """
+        text = self.workflow()
+        header = text.split("jobs:")[0]
+        self.assertIn("permissions:", header)
+        self.assertIn("contents: read", header)
+
+        # Nothing in this workflow writes to the repository, so no scope beyond
+        # reading the tree is justified; a `write` appearing anywhere is a
+        # credential this gate does not use.
+        for scope in ("contents: write", "pull-requests: write", "issues: write"):
+            self.assertNotIn(
+                scope,
+                text,
+                f"{scope} is held by a workflow that only reads the repository",
+            )
+
     def test_the_corpus_job_fails_loudly_when_its_variable_is_unset(self):
         """A gated job that skips silently is indistinguishable from one that ran.
 

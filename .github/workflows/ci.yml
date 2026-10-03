@@ -6,7 +6,7 @@ name: CI
 # silently.
 #
 # THE DATABASE DOES NOT RUN HERE. `wjazzd.db` is 42 MB and gitignored, so on a
-# clean clone the corpus tests are SKIPPED: **85 skipped, 692 run** - of which 83
+# clean clone the corpus tests are SKIPPED: **85 skipped, 751 run** - of which 83
 # are database-guarded, 77 of them `@requires_db` classes in `test_wjazzd.py` and
 # `test_lead_sheet.py` and the rest individual guards in `test_guitarpro.py`. A
 # green check here does NOT mean the corpus path was exercised. The `corpus` job at
@@ -16,6 +16,20 @@ on:
     branches: ["**"]
   pull_request:
   workflow_dispatch:
+
+# Least privilege, stated at the root so it applies to every job that does not
+# override it. Without this the run inherits the repository (or organization)
+# default, which for anything created before February 2023 is read-write on
+# every scope - so a workflow that only reads the tree would hold a token that
+# can push to it, open pull requests against it and publish packages from it.
+#
+# `contents: read` is what `actions/checkout` needs and all this workflow does:
+# both jobs check out, install, and run `make check`. Nothing here writes to
+# the repository, comments on a pull request, or touches a release, so there is
+# no scope to escalate - and writing it down is the point, because the default
+# can change and this file can be copied to a repository with stricter ones.
+permissions:
+  contents: read
 
 # Cancel superseded runs on the same ref: the suite takes ~45s locally and
 # several minutes across five versions, so a five-commit push would otherwise
