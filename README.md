@@ -95,7 +95,7 @@ python -m arranger head tests/data/but_not_for_me.mxl --bars 1-5
 ```text
 But Not For Me - George Gershwin
   part: Voice
-  2/2, 80 melody note(s), bars 1-32; neck window: frets 2-13; grips: drop2, shell, duo
+  2/2, Eb major, 80 melody note(s), bars 1-32; neck window: frets 2-13; grips: drop2, shell, duo
   note: 15 rests and unpitched notes
 
 Bb7      F4   x-5-6-3-6-x
@@ -153,7 +153,7 @@ you want a thinner arrangement.
 is still played, outside it, and the run header echoes your window whether or not it was
 met — losing a chord of the tune is worse than being a fret out of position.
 
-### Four things a score does that a database does not
+### Five things a score does that a database does not
 
 **The harmony is a timeline.** A `<harmony>` precedes the note it governs, several can
 share a bar, and a bar can carry none at all — so a chord is *held* from the note it is
@@ -163,6 +163,12 @@ follows it would drop the harmony from every bar that does not change.
 **The metre is the notated one.** `beat` is the beat *within* the bar in notated beats,
 so a 2/2 head is two beats to the bar rather than four — which is how most standards are
 written, and how three of the four scores in this repository are.
+
+**The key signature is read, and written back.** `Head` carries the score's `<fifths>`
+and `<mode>`, and the MusicXML and GP5 writers state them — so a tune in three flats
+exports as a tune in three flats instead of an unlabelled C-major score carrying a
+flat on every note of its own scale. A score that omits `<key>` is C major, which is
+what a file with no signature already means, so nothing changes for one.
 
 **The melody is the top line.** A `<chord>` group reduces to its *highest* note, because
 MusicXML does not order a group by pitch and in a chord-melody part the first member is
@@ -761,8 +767,10 @@ the hand is genuinely low.
 A step with no free bass string below the melody keeps its upper voicing and says so
 (`no bass string free below the melody for bass ...`) rather than dropping the note.
 
-`docs/open-issues.md` records the two defects this texture has already had, both fixed,
-and what they were measured at.
+`docs/open-issues.md` records the three defects this texture has had — two fixed, and
+**one open**: a walk-invented beat takes the wrong melody where a note is held across a
+barline, which costs the tune that note in cut time. It carries the measurements and
+the candidate fixes.
 
 ## High melodies: the octave-down move
 
@@ -913,7 +921,7 @@ dependencies (`make install-dev`).
 
 **CI runs `make check` on Python 3.11 through 3.14**, with both optional extras installed
 so the guarded tests are not silently skipped. One thing to know: `wjazzd.db` is 42 MB and
-gitignored, so **85 of the 791 tests are skipped on a clean clone** — a green check does
+gitignored, so **85 of the 820 tests are skipped on a clean clone** — a green check does
 not mean the Weimar path was exercised. A separate `corpus` job covers those, on manual
 dispatch only.
 

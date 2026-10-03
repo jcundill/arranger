@@ -357,6 +357,38 @@ def _measures(
     return [beats for beats in measures if beats]
 
 
+def _key_signature(gp: Any, fifths: int, mode: str = "") -> Any:
+    """
+    The GP5 key signature for `fifths` sharps-or-flats, or None where GP5 names none.
+
+    GP5's `KeySignature` is an **enum whose members carry a `(fifths, is_minor)`
+    tuple**, so a fifths it does not name has no member to return. Rather than write
+    the nearest one - which would put a key in the file the arrangement is not in -
+    None is returned and the file is written without a signature, which is what every
+    GP reader assumes anyway. The library's own tables never reach past seven of
+    either, so that is a guard rather than a path anything takes.
+
+    **The member is found by scanning, not by a two-argument call.**
+    `gp.KeySignature(-3, 0)` looks like a value lookup and works on Python 3.12 and
+    later, where `EnumType.__call__` reads a tuple in the `names` position as the
+    member values to match. On 3.11 the same call is the *functional* enum API -
+    "define a new enum class" - and raises
+    `TypeError: <enum 0> cannot extend <enum 'KeySignature'>` before any lookup
+    happens. So it passed on the development machine and on every 3.12+ runner, and
+    failed only on the 3.11 CI job, on the first test that asked for a key. The scan
+    below is the same lookup written out, and it behaves identically on every version
+    the project supports.
+
+    `mode` is read only as the major/minor distinction, because that is all GP5
+    records: it has no third mode, so `""` states the signature without guessing.
+    """
+    wanted = (fifths, 1 if mode == "minor" else 0)
+    for member in gp.KeySignature:
+        if member.value == wanted:
+            return member
+    return None
+
+
 def _build_song(
     gp: Any,
     measures: List[List[Tuple[Optional[ArrangementStep], float, bool]]],
@@ -366,6 +398,8 @@ def _build_song(
     tempo: int,
     beats_per_bar: int,
     beat_type: int = 4,
+    fifths: int = 0,
+    mode: str = "",
 ) -> Any:
     """
     The measures as a guitarpro `Song`, ready to write.
@@ -380,6 +414,7 @@ def _build_song(
     displays.
     """
     signature = gp.TimeSignature(beats_per_bar, gp.Duration(beat_type))
+    key_signature = _key_signature(gp, fifths, mode)
     song = gp.Song(
         versionTuple=GP_VERSION,
         title=title,
@@ -390,6 +425,8 @@ def _build_song(
     header = song.measureHeaders[0]
     header.number = 1
     header.timeSignature = signature
+    if key_signature is not None:
+        header.keySignature = key_signature
     track = song.tracks[0]
     track.name = "Lead"
     track.measures = []
@@ -540,6 +577,8 @@ def format_gp5(
     tempo: int = 120,
     beats_per_bar: int = 4,
     beat_type: int = 4,
+    fifths: int = 0,
+    mode: str = "",
     rhythm: bool = True,
     collapse: bool = True,
     show_chords: bool = True,
@@ -570,6 +609,13 @@ def format_gp5(
         beat_type: the denominator of that signature. Pass the notated value, so a
             head in cut time is written 2/2 rather than restated as 2/4; the bar
             length is identical either way and only the displayed metre differs.
+        fifths: the key signature's count of sharps (positive) or flats (negative),
+            so -3 is Eb major or C minor. Defaults to 0, which is C major - the
+            assumption the format makes in the absence of a signature anyway. A value
+            GP5 has no member for leaves the file without one rather than writing the
+            nearest; see `_key_signature`.
+        mode: "major", "minor", or "" where the key is neither, which states the
+            signature without claiming a mode - GP5 records no third one.
         rhythm: place the steps on their real beats. Falls back to a uniform
             one-chord-per-beat grid when the steps carry no timing, exactly as
             `format_musicxml` and `format_tab_staff` do, so a hand-written
@@ -617,7 +663,8 @@ def format_gp5(
         ]
 
     song = _build_song(
-        gp, measures, title, subtitle, composer, tempo, beats_per_bar, beat_type
+        gp, measures, title, subtitle, composer, tempo, beats_per_bar, beat_type,
+        fifths, mode,
     )
     buffer = io.BytesIO()
     gp.write(song, buffer, version=GP_VERSION)

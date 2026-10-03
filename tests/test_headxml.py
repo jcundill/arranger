@@ -22,6 +22,7 @@ import arranger
 from arranger import NO_CHORD, ChordParser
 from headxml import (
     Head,
+    _key_label,
     _part_is_tab,
     arrange_xml_head,
     head_cli,
@@ -56,8 +57,16 @@ def score(
     beats: int = 4,
     beat_type: int = 4,
     part_id: str = "P1",
+    fifths: Optional[int] = None,
+    mode: str = "",
 ) -> str:
-    """A minimal score-partwise document around the measures given."""
+    """A minimal score-partwise document around the measures given.
+
+    `fifths` states a `<key>` when given, and omitting it writes no `<key>` at all -
+    which is a real case rather than a gap in the fixture, because a score with no
+    signature states C major.
+    """
+    key = "" if fifths is None else f"<key><fifths>{fifths}</fifths>{mode}</key>"
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
   <work><work-title>Test</work-title></work>
@@ -66,6 +75,7 @@ def score(
     <measure number="1">
       <attributes>
         <divisions>{divisions}</divisions>
+        {key}
         <time><beats>{beats}</beats><beat-type>{beat_type}</beat-type></time>
       </attributes>
       {measures}
@@ -574,6 +584,143 @@ class TestRealScores(unittest.TestCase):
         self.assertAlmostEqual(written, float(bars), delta=bars * 0.2)
 
 
+class TestKeySignature(unittest.TestCase):
+    """Reading a `<key>`, which is what the export needs to state the right key.
+
+    Without this the head is C major whatever the score says, so an Eb-major tune
+    exports with a flat written on every note of its own scale.
+    """
+
+    def load(self, measures: str, **kwargs) -> Head:
+        path = write_score(score(measures, **kwargs))
+        self.addCleanup(os.unlink, path)
+        return load_musicxml(path)
+
+    def test_the_signature_reaches_the_head(self):
+        """Three flats and a mode, read as the two numbers MusicXML states."""
+        head = self.load(
+            harmony("Eb", "major") + note("G"),
+            fifths=-3, mode="<mode>major</mode>",
+        )
+        self.assertEqual((head.key_fifths, head.key_mode), (-3, "major"))
+
+    def test_a_sharp_key_is_positive(self):
+        """The count is signed: one sharp is 1 and is not one flat."""
+        head = self.load(
+            harmony("G", "major") + note("B"), fifths=1, mode="<mode>major</mode>"
+        )
+        self.assertEqual((head.key_fifths, head.key_mode), (1, "major"))
+
+    def test_a_minor_key_is_carried_not_assumed(self):
+        """The same three flats is Eb major or C minor, and the mode says which."""
+        head = self.load(
+            harmony("Cm", "minor") + note("G"), fifths=-3, mode="<mode>minor</mode>"
+        )
+        self.assertEqual(head.key_mode, "minor")
+
+    def test_a_score_with_no_signature_is_c_major(self):
+        """An absent `<key>` states no accidentals, which *is* C major.
+
+        Read as "unknown" this would be a different default; reading it as C major
+        is what lets such a score export exactly as it always did.
+        """
+        head = self.load(harmony("C", "major") + note("E"))
+        self.assertEqual((head.key_fifths, head.key_mode), (0, ""))
+
+    def test_an_absent_mode_is_not_guessed(self):
+        """`<mode>` is optional, so a signature alone says which two keys it is."""
+        head = self.load(harmony("Eb", "major") + note("G"), fifths=-3)
+        self.assertEqual((head.key_fifths, head.key_mode), (-3, ""))
+
+
+    def test_the_last_signature_wins(self):
+        """A score may modulate; the head is arranged in the key it ends in.
+
+        The same rule as the metre, and for the same reason: the first `<key>` is
+        not the one in force for most of the piece.
+        """
+        document = f"""<?xml version="1.0"?>
+<score-partwise version="3.1"><part-list><score-part id="P1"/></part-list><part id="P1">
+<measure number="1"><attributes><divisions>4</divisions>
+  <key><fifths>0</fifths><mode>major</mode></key></attributes>
+  {harmony("C", "major")}{note("E", duration=4)}
+</measure>
+<measure number="2"><attributes><divisions>4</divisions>
+  <key><fifths>-3</fifths><mode>major</mode></key></attributes>
+  {rest(4)}
+</measure>
+</part></score-partwise>"""
+        path = write_score(document)
+        self.addCleanup(os.unlink, path)
+        self.assertEqual(load_musicxml(path).key_fifths, -3)
+
+    def test_an_unusable_signature_reads_as_no_signature(self):
+        """A `<fifths>` that is not a number is not worth losing the head over.
+
+        MusicXML allows a `<key>` with no `<fifths>` at all, and some exporters write
+        a malformed one; both are treated as "states no signature" rather than
+        raised on, because the key is metadata and the melody is the content.
+        """
+        document = f"""<?xml version="1.0"?>
+<score-partwise version="3.1"><part-list><score-part id="P1"/></part-list><part id="P1">
+<measure number="1"><attributes><divisions>4</divisions>
+  <key><mode>major</mode></key></attributes>
+  {harmony("C", "major")}{note("E")}
+</measure></part></score-partwise>"""
+        path = write_score(document)
+        self.addCleanup(os.unlink, path)
+        self.assertEqual(load_musicxml(path).key_fifths, 0)
+
+    def test_a_signature_wider_than_seven_is_not_claimed(self):
+        """Beyond seven of either is not a conventional signature this can state."""
+        head = self.load(harmony("C", "major") + note("E"), fifths=-9)
+        self.assertEqual(head.key_fifths, 0)
+
+    def test_the_key_of_a_real_score_is_read(self):
+        """"But Not For Me" is a music21 export in three flats - Eb, not C."""
+        head = load_musicxml(BUT_NOT_FOR_ME)
+        self.assertEqual((head.key_fifths, head.key_mode), (-3, "major"))
+
+
+class TestKeyLabel(unittest.TestCase):
+    """The CLI header names the key, because `-3 (major)` is not one a person reads."""
+
+    def label(self, fifths: int, mode: str) -> str:
+        return _key_label(Head(key_fifths=fifths, key_mode=mode))
+
+    def test_the_tonic_follows_the_signature(self):
+        """Both halves of the circle, from seven flats to seven sharps.
+
+        -1 is F major and not E# major: one flat's worth is a signature read from
+        the flat side, not one sharp short of the *other* spelling.
+        """
+        self.assertEqual(self.label(0, "major"), "C major")
+        self.assertEqual(self.label(1, "major"), "G major")
+        self.assertEqual(self.label(-1, "major"), "F major")
+        self.assertEqual(self.label(-3, "major"), "Eb major")
+        self.assertEqual(self.label(-5, "major"), "Db major")
+        self.assertEqual(self.label(7, "major"), "C# major")
+
+    def test_a_minor_key_is_the_relative_minor(self):
+        """Three flats is C minor, not Eb minor: the mode picks of the two.
+
+        Getting this wrong is not a cosmetic slip - it names a different key, and
+        Eb minor has six flats rather than three.
+        """
+        self.assertEqual(self.label(-3, "minor"), "C minor")
+        self.assertEqual(self.label(0, "minor"), "A minor")
+        self.assertEqual(self.label(2, "minor"), "B minor")
+
+    def test_an_unstated_mode_names_both_keys(self):
+        """No mode is not a guess: it is the two keys the signature spells."""
+        self.assertEqual(self.label(-3, ""), "Eb major/C minor")
+        self.assertEqual(self.label(2, ""), "D major/B minor")
+
+    def test_no_signature_is_one_key_not_two(self):
+        """Zero is C major under either mode, so it is not listed twice."""
+        self.assertEqual(self.label(0, ""), "C major")
+
+
 class TestLoadingTail(unittest.TestCase):
     """Two loader cases kept apart so the class above stays readable."""
 
@@ -1077,6 +1224,77 @@ class TestHeadCli(unittest.TestCase):
         # 32 bars is 32 measures and not 64 half-length ones. Reading the beat count
         # as a quarter count is what doubled it.
         self.assertEqual(len(song.tracks[0].measures), 32)
+
+    def test_a_real_head_exports_in_the_key_it_is_in(self):
+        """
+        The end-to-end measure, on the two committed scores that state a key.
+
+        Both numbers here were measured, and one of them went *up*. "I Was Doing All
+        Right" is in G and carries the F natural of a `G#dim7` resolving to `G7b9`;
+        with no `<key>` written, 12 of those Fs carried no accidental at all, so a
+        reader saw F# - the note the file did not mean. Stating the key marks them,
+        which is why the assertion is "the signature is right" rather than "there are
+        fewer accidentals": that second form would have passed while that error stood.
+        """
+        from tabxml import format_musicxml
+
+        def exported(path):
+            steps, head, _ = arrange_xml_head(path)
+            return ElementTree.fromstring(
+                format_musicxml(
+                    steps,
+                    title=head.title,
+                    beats_per_bar=head.beats_per_bar,
+                    beat_type=head.beat_type,
+                    fifths=head.key_fifths,
+                    mode=head.key_mode,
+                )
+            )
+
+        for path, expected in ((BUT_NOT_FOR_ME, "-3"), (I_WAS_DOING_ALL_RIGHT, "1")):
+            root = exported(path)
+            written = [
+                (key.findtext("fifths"), key.findtext("mode"))
+                for key in root.iter("key")
+            ]
+            self.assertEqual(written, [(expected, "major")], path)
+
+    def test_the_written_files_carry_the_key_of_the_score(self):
+        """
+        End to end: a score in three flats exports as a score in three flats.
+
+        This is the whole defect in one test. The file states `<fifths>-3</fifths>`
+        and `<mode>major</mode>`; without that, every note of the Eb scale carries
+        an accidental the signature had already accounted for. It reads the file
+        back rather than inspecting the argument, because the argument is what the
+        test supplies and the file is what a musician opens.
+        """
+        try:
+            import music21  # noqa: F401
+        except ImportError:
+            self.skipTest("music21 is not installed")
+
+        directory = tempfile.mkdtemp()
+        target = os.path.join(directory, "eb.musicxml")
+        self.addCleanup(lambda: os.path.exists(target) and os.unlink(target))
+        output = self.run_cli(BUT_NOT_FOR_ME, "--musicxml", target)
+        self.assertEqual(self.code, 0)
+        self.assertIn("wrote", output)
+
+        root = ElementTree.parse(target).getroot()
+        keys = list(root.iter("key"))
+        self.assertEqual(len(keys), 1, "the signature must be written once, in the first bar")
+        self.assertEqual(keys[0].findtext("fifths"), "-3")
+        self.assertEqual(keys[0].findtext("mode"), "major")
+
+    def test_the_header_names_the_key(self):
+        """`Eb major` in the header, so the key is visible before the file is opened.
+
+        The count is not enough to read: -3 is Eb major *or* C minor, and the header
+        is where a user checks they arranged the tune they meant.
+        """
+        output = self.run_cli(BUT_NOT_FOR_ME)
+        self.assertIn("Eb major", output)
 
     def test_a_file_that_is_not_a_score_is_a_usage_error(self):
         """A readable non-score is caught here, not deep in the loader."""

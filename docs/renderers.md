@@ -101,7 +101,7 @@ which is what makes the TAB-staff part-selection test possible.
 | `MUSICXML_KIND_QUALITIES` | `kind-value` → library quality; the inverse of `tabxml._READABLE_KINDS` |
 | `_DEGREE_REFINEMENTS` | `(quality, degree, alter) → quality`, for the alterations a kind cannot name |
 | `parse_musicxml_chord(harmony)` | → `(root, quality, bass)`; `None` for a chord that cannot be voiced |
-| `Head` / `HeadNote` | the loaded melody, its timing, and each note's chord |
+| `Head` / `HeadNote` | the loaded melody, its timing, its key, and each note's chord |
 | `load_musicxml(path, part=None)` | `.mxl` or `.musicxml` → `Head` |
 | `head_skeleton(head, strategy, section, pick)` | slots of `(triple, bar, beat, duration)` |
 | `arrange_xml_head(path, …)` | the whole pipeline → steps, the `Head`, and diagnostics |
@@ -336,7 +336,7 @@ Sibelius, MuseScore and Final. Everything that is genuinely *shared* - `_events`
 `_is_hold`, `_substitute_steps` - is still shared, so a head lands on the same beats in
 both files.
 
-Four decisions in here were each forced by a failure, not chosen:
+Five decisions in here were each forced by a failure, not chosen:
 
 - **The document is post-processed with `ElementTree` after music21 writes it** - for
   `_drop_empty_inversions` and `_downgrade_kinds`, and `_unique_instrument_ids`. The
@@ -363,6 +363,35 @@ Four decisions in here were each forced by a failure, not chosen:
   the export does not touch `makeRests` without one. Eight corpus heads, plus pickups,
   bar-line crossings and rests, all re-parse with every bar the right length.
   `tests/test_musicxml.py::test_the_time_signature_is_written_once` is the regression.
+- **The key signature is written, in the first measure, on the same terms.** This one
+  was a *defect* rather than a style, and the measurement is worth keeping. `fifths`
+  counts sharps (positive) or flats (negative) and `mode` says which of the
+  signature's two keys it is; both reach `_build_part` from `Head.key_fifths` /
+  `Head.key_mode`, and a `fifths` outside -7..7 is rejected rather than clamped.
+
+  It matters because music21 writes an explicit `<accidental>` for any note the
+  signature does not already account for. A 32-bar Eb-major head exported with no
+  `<key>` therefore wrote **201 accidentals** - 137 of them flats the key had already
+  said. With the signature written it is **27**, every one of them a note genuinely
+  outside Eb or a cautionary repeat within a bar.
+  A second, separate cause turned up while measuring that, and would have left most of
+  the noise behind: **a chord symbol's pitches mark notes the signature accounts for.**
+  music21 writes a `ChordSymbol` as `<harmony>` alone - `writeAsChord` is False - so
+  its pitches never reach the document, but they stay in the stream and are still
+  counted when music21 decides which notes need an accidental. Left in place they put
+  the count at 139 with symbols against 27 without, for the same music. `_chord_symbol`
+  clears them on both the parsed and the fallback path, because a pitch the document
+  does not contain has no business deciding what the document contains.
+
+**The signature also fixed a real error, and the count went *up* to show it.** "I Was
+  Doing All Right" is in G, and its export carries F naturals - the F of a `G#dim7`
+  resolving to `G7b9`. In a file with no `<key>`, a reader assumes F♯, and **12 of
+  those Fs were written with no accidental at all** - silently F♯ to a reader. Stating
+  the key raised that file's accidental count from 48 to 66, and the 18 more are
+  almost exactly those notes finally marked. So a falling count is the *expected*
+  signature of this fix and a rising one is not automatically a regression: both have
+  to be read against the key, which is why the check here is not "fewer accidentals"
+  but "every accidental is either required or a cautionary repeat within its bar".
 
 Two more are worth stating because they look like bugs otherwise:
 

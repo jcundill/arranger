@@ -416,6 +416,34 @@ class TestTheSharedDispatch(unittest.TestCase):
             self.assertEqual(calls[name]["beats_per_bar"], 4, name)
             self.assertEqual(calls[name]["beat_type"], 4, name)
 
+    def test_the_key_reaches_the_two_score_writers(self):
+        """The key a head is in has to reach the files that can state it.
+
+        A dispatch that dropped it left every score in C major, and the score
+        writers are the only two that write pitches: the staff and the HTML page
+        show fret numbers, so a signature has nothing there to apply to. The
+        absence is asserted rather than left implicit, because that asymmetry is
+        the easy thing to get wrong in either direction.
+        """
+        calls = self.captured_calls(fifths=-3, mode="major")
+        for name in ("musicxml", "gp5"):
+            self.assertEqual(calls[name]["fifths"], -3, name)
+            self.assertEqual(calls[name]["mode"], "major", name)
+        for name in ("staff", "html"):
+            self.assertNotIn("fifths", calls[name], name)
+
+    def test_the_key_defaults_to_the_writers_own_zero(self):
+        """`corpus` passes no key, and a Weimar transcription is usually C.
+
+        So `None` has to become 0 rather than being forwarded as a null, which is
+        what lets the two commands share one dispatch - the same bargain the metre
+        makes two paragraphs above.
+        """
+        calls = self.captured_calls()
+        for name in ("musicxml", "gp5"):
+            self.assertEqual(calls[name]["fifths"], 0, name)
+            self.assertEqual(calls[name]["mode"], "", name)
+
     def test_the_subtitle_reaches_the_renderers_that_have_one(self):
         """`corpus` names performer and key; `head` has neither.
 

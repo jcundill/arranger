@@ -278,6 +278,8 @@ def render_and_write(
     notes: Sequence[str] = (),
     beats_per_bar: Optional[int] = None,
     beat_type: Optional[int] = None,
+    fifths: Optional[int] = None,
+    mode: str = "",
 ) -> int:
     """Print the arrangement and write whatever files `args` asked for.
 
@@ -295,6 +297,13 @@ def render_and_write(
     every writer, which was checked against `format_tab_html`, `format_musicxml`
     and `format_gp5` rather than assumed.
 
+    `fifths` / `mode` are the key signature, and follow the same convention: `None`
+    means 0, which is C major and what a Weimar transcription is in most of the
+    time, so `corpus` passes nothing. They reach the two **file** writers only -
+    `format_musicxml` writes `<key>` and `format_gp5` a `KeySignature` - and
+    deliberately not `format_tab_staff` or `write_tab_html`, which show fret
+    numbers rather than pitches and so have nothing for a signature to say.
+
     `notes` goes only to the HTML page, the one renderer that shows them; the two
     file writers have no notes list. `subtitle` defaults to `""`, which is also
     `format_musicxml`'s and `format_gp5`'s own default, so the `head` command
@@ -311,6 +320,9 @@ def render_and_write(
     # corpus run passes nothing and lands in the same place.
     bars = 4 if beats_per_bar is None else beats_per_bar
     beat = 4 if beat_type is None else beat_type
+    # The key, on the same terms as the metre above: 0 is C major, which is what a
+    # document with no signature already means, so passing nothing is not a change.
+    key_fifths = 0 if fifths is None else fifths
 
     if args.tab == "staff":
         # The staff is the only renderer that uses the step timing, so it is the
@@ -363,6 +375,8 @@ def render_and_write(
                 subtitle=subtitle,
                 beats_per_bar=bars,
                 beat_type=beat,
+                fifths=key_fifths,
+                mode=mode,
             )
         except ImportError as error:
             print(f"\n{error}")

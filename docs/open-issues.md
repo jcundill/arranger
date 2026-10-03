@@ -1,10 +1,14 @@
-# Open issues: playability of held shapes, and one GP5 discrepancy
+# Open issues: playability of held shapes, one GP5 discrepancy, and a lost melody
 
-Written at the end of the 2026-09-29 session, after the `GRIP_MAX_SPAN` /
-`voicing_cost` / `grips`-intersection work. **All four items below are now fixed**;
-each carries the measurement that produced it and the stage that closed it, so the
-work can be read rather than re-derived. Items 1-3 were fixed in stages 1-3 the same
-day; item 4 needed a corrected diagnosis first, which is recorded in full.
+Items 1-4 were written at the end of the 2026-09-29 session, after the
+`GRIP_MAX_SPAN` / `voicing_cost` / `grips`-intersection work. **All four are now
+fixed**; each carries the measurement that produced it and the stage that closed it,
+so the work can be read rather than re-derived. Items 1-3 were fixed in stages 1-3 the
+same day; item 4 needed a corrected diagnosis first, which is recorded in full.
+
+**Item 5 was added on 2026-10-03 and is OPEN.** It is the only one here that is not
+fixed, and it is in the same subsystem as item 1 - so read item 1's "Stage 3" before
+touching it, because the two share `_place_bass` and the notion of a held shape.
 
 The header of each section states its status, and **item 4's original diagnosis was
 wrong** - it blamed the renderers and the fill rule, when the engine was emitting two
@@ -417,6 +421,146 @@ fix improved playability as well as correctness.
   test could no longer fail. It now selects by `bass_role` alone — an anchor is an
   anchor whether or not the left hand holds across it. The bar-15 gap itself is
   **unchanged**: it still has no thumb note.
+
+---
+
+## 5. A walk-invented beat takes the wrong melody, and the tune loses a note
+
+**Status:** OPEN. Diagnosed and measured on 2026-10-03; **no fix chosen and none
+built.** Pre-existing, and unrelated to the key-signature work that surfaced it.
+
+### The symptom
+
+`--texture walking_bass` on "But Not For Me" writes a soprano line that is right at
+every note the tune attacks and **wrong at nine phrase downbeats**. Bar 3 is the
+smallest case:
+
+```
+score bar 3:  (Eb4 held from bar 2)  F4  G4  F4
+file   bar 3:  F4                    F4  G4  F4
+```
+
+The Eb4 that should still be sounding over the barline is not written at all, and the
+F4 that follows it arrives a quarter early. The nine affected downbeats are bars 3, 7,
+11, 13, 15, 19, 23, 27 and 29 - the first beat of a phrase, where the score holds one
+note across the barline and leaves a quarter of silence before the next.
+
+Measured over the four committed scores (`tests/data`), counting the walk-invented
+beats that carry a melody other than the one the score has sounding at that instant:
+
+| score | walk-invented beats | carrying the wrong melody |
+|---|---|---|
+| `but_not_for_me.mxl` | 22 | **9** |
+| `heres_that_rainy_day.musicxml` | 14 | 0 |
+| `i_was_doing_all_right.mxl` | 12 | 0 |
+| `tenor_madness.musicxml` | 56 | **4** |
+
+Thirteen slots, all of them the first beat of a bar whose melody note began in the
+previous bar and runs past it.
+
+### Why the obvious check misses it
+
+**The file is right everywhere the tune has a note.** The arrangement matches the
+score at all 80 melody onsets of "But Not For Me" - every attack of the tune is the
+highest sounding pitch of its beat. A check that compares the soprano against the
+melody at note onsets passes completely, because the wrong notes are all in the gaps
+*between* onsets, at beats where the score writes no new note at all.
+
+This is the same shape as item 1's "why the obvious check misses it": the invariant
+that is easy to state is per-step, and this defect lives in what a step *inherits*.
+
+It also survives a round-trip test, because the GP5 file is a faithful rendering of
+the arrangement - the arrangement is what is wrong. Both `tabgp` and `tabxml` place
+`step.melody` where the step says, so no renderer can be the place to fix it.
+
+### The actual root cause
+
+`arranger/bass.py::_bass_slots` decides which melody a walk-invented beat carries by
+tracking `previous_melody` **while iterating the walk's own beats**:
+
+```python
+previous_melody = -1
+for note in bass_line:                 # the WALK's beats, not the melody's
+    key = (note.bar, float(note.beat))
+    if key in melody_at:
+        previous_melody = melody_at[key][0]
+        continue
+    entries.append((key, previous_melody if previous_melody >= 0 else 0, note, True))
+```
+
+So a melody slot is only noticed if **the walk happens to land on it**. In 2/2 the
+walk visits only beats 1.0 and 2.0 of each bar - measured, `_walking_bass_line`
+returns 1-2 notes per bar in cut time against 4 in 4/4 - so the melody slot at beat
+2.5 is invisible, and the next walk beat inherits the melody from beat 2.0 instead of
+the note that is actually sustaining. Instrumented on bars 2-3:
+
+```
+bar  beat   kind    idx  melody carried
+  2  2.5    MELODY   5   Eb4
+  3  1.0    WALK     4   F4     <-- idx 5 is what is sounding
+```
+
+The one-line fix is to track `previous_melody` over `located` - the melody timeline -
+rather than over `bass_line`, since `located` is already in onset order and is the
+thing actually being asked about. It is *not* that simple, which is why it is
+recorded rather than done:
+
+- The melody timeline is a list of **onsets**, and "the melody in force" is only well
+  defined if a note's `duration` is respected. A slot whose duration runs past the
+  next slot's onset - exactly the bar-3 case, where Eb4 ends at bar 3 beat 1.25 and
+  the next note starts at 1.5 - has to win over any later onset until it stops
+  sounding. `_bass_slots` currently reads `duration` only to pass it through, never
+  to decide precedence.
+- `melody_at` is keyed by `(bar, beat)` and assumes one note per key. Two notes can
+  share a slot under `pick`, and a note whose onset is *not* on the walk grid is the
+  normal case rather than an edge.
+- The invented beat is then voiced as a real step and can be **promoted to a target**
+  (documented in `arrange_progression`: "a step the walk invented can be promoted to
+  a target when the melody moves onto it"). On these nine bars it is promoted, so the
+  wrong note is not merely held - it is stated as the harmony. Any fix that changes
+  which melody the invented beat carries changes which bars promote, which changes
+  the chord written there, so the blast radius is wider than the melody line.
+
+### Candidate fixes (none chosen)
+
+- **Order `previous_melody` by the melody timeline, honouring `duration`.** Smallest
+  and most obviously right: it makes "the note in force" mean what it says. Needs the
+  precedence rule above, and the two-notes-per-key case.
+- **Give the walk a grid that contains every melody onset**, so the existing
+  coincidence test sees everything. This also fixes the metre problem below, but it
+  changes how many thumb notes are written, which is a visible change to every
+  walking-bass arrangement.
+- **Do not invent a beat where the melody is sustaining** - leave the gap as a rest.
+  Loses the thumb note on the downbeat, which is the one beat a walking bass most
+  needs it.
+
+### Related: the "four-quarter walk" claim is only true in 4/4
+
+`arrange_progression`'s docstring and `docs/history/walking-bass.md` both describe
+walking bass as "a four-quarter walk underneath", and `_bass_slots` says the bass
+grid "may be finer than the melody grid, so a bar whose melody is a whole note still
+has four beats to walk". Measured: **4 notes per bar in 4/4, 1-2 in 2/2** - every
+bar of "But Not For Me" (2/2) and of "Tenor Madness" (4/4) respectively.
+
+This is the same trap as AGENTS.md item 9, "a count without a denominator is not a
+metre": the claim is true in the metre it was written in and false in the metre three
+of the four committed scores are notated in. It is also load-bearing here, because the
+beat 2.5 the walk misses is exactly the beat the false claim says it visits.
+Correcting the wording is cheap and should happen whichever fix is chosen.
+
+### Reproducing
+
+The render, from [Reproducing](#reproducing):
+
+```bash
+.venv/bin/python -m arranger head tests/data/but_not_for_me.mxl \
+    --grips shell --texture walking_bass --gp5 /tmp/jon.gp5
+```
+
+then compare the soprano line of `/tmp/jon.gp5` against the melody of
+`tests/data/but_not_for_me.mxl`, **including the notes that run past a barline**.
+Comparing only at note onsets reports no defect at all, which is the point of the
+"why the obvious check misses it" section above.
 
 ---
 

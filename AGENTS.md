@@ -38,18 +38,23 @@ treat a contradiction between them as a bug in one of them.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **791 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **820 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 10 of those 791, and it is the one that fails if this
+(`tests/test_docs.py` is 10 of those 820, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree.)
 
 **`make check` is what CI runs** (`.github/workflows/ci.yml`, Python 3.11–3.14, with
 the `xml` and `gp` extras so the optional-extra tests are not silently skipped). One
 thing the workflow's own header says and an agent should not have to rediscover:
 **the corpus tests do not run there.** `wjazzd.db` is 42 MB and gitignored, so 85 of
-the 791 are skipped on a clean clone. The `corpus` job covers them, and only on
+the 820 are skipped on a clean clone. The `corpus` job covers them, and only on
 manual dispatch, gated on the `WJAZZD_DB_URL` repository variable.
+
+**`make check` runs one interpreter, and the matrix runs four.** It is the 3.14 dev
+one. A construct that is version-dependent passes here and fails on the 3.11 job —
+see trap 11, where a two-argument `Enum(...)` call was a value lookup on 3.12+ and
+class definition on 3.11.
 
 Individually:
 
@@ -362,6 +367,35 @@ Each of these cost real time, or nearly shipped a defect.
    passed while the file was unusable for every other metre. That is why `Head`
    carries `beat_type` and it is plumbed to the file headers, and why the check that
    catches it sums each measure's durations rather than counting measures.
+
+10. **An omitted attribute is not an identity — and a default that is wrong is
+    silent.** The exporter wrote no `<key>`, so every score left the library was in C
+   major whatever it was in; the importer read `<time>` and not `<key>`, so the head
+   arrived with nothing to write. Nothing errored, because a missing key signature is
+   *legal* and means C major. It cost 201 accidentals on a 32-bar Eb head against 27.
+   Two things made it cost that much rather than 155, and both were found by
+   measuring rather than reading:
+   - **`<harmony>` symbols mark notes through a channel the document does not use.**
+     `writeAsChord = False` means the symbol's pitches are never written, yet they
+     stay in the stream and music21 still counts them when deciding which notes need
+     an `<accidental>`: 139 against 27 for the same music. Cleared in `_chord_symbol`.
+   - **Never grep a document with a single-line pattern for a multi-line element.**
+     `<key>.*?</key>` without `re.S` reports *no key* on a document that has one,
+     which is exactly the shape of the bug being chased. That cost an hour of
+     "music21 does not emit `<key>`" — a conclusion drawn from a regex that could not
+     match. `re.findall(pattern, text, re.S)`, always.
+
+11. **The dev interpreter is not the matrix.** `gp.KeySignature(-3, 0)` looks like a
+    value lookup and is one on Python 3.12+, where `EnumType.__call__` reads a tuple in
+    the `names` position as member values to match. On **3.11** the same call is the
+    *functional* enum API — "define a new class" — and raises `TypeError: <enum 0>
+    cannot extend <enum 'KeySignature'>` before any lookup happens. It passed on the
+    3.14 dev box and on every 3.12+ runner, and failed only on the 3.11 CI job, on the
+    first test that asked for a key. `_key_signature` now scans the members and compares
+    `.value`, which is the same lookup written out and behaves identically everywhere.
+    The general form: **a two-argument `Enum(...)` is not a value lookup, it is class
+    definition**, and `make check` cannot catch this because it runs one version.
+    Anything version-sensitive has to be exercised on each version CI runs.
 
 ## Where things are documented
 

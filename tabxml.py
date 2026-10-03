@@ -12,7 +12,9 @@ What it writes is a real score rather than a note list:
 - the **chord symbols** on each chord change, on
 - the **written rhythm**: each step is a note or chord of the length it occupies, an
   unchanged shape is written as one longer note rather than a re-strike, and an event
-  that runs across a bar line is tied rather than stretched.
+  that runs across a bar line is tied rather than stretched, and
+- the **key signature**, once, in the first measure: without it a three-flat tune is
+  written as a C-major score, which means an accidental on every note of its own scale.
 
 **There is no TAB staff here, deliberately.** This module used to write a six-line TAB
 staff beside the notation one, and it is worth recording why it no longer does.
@@ -391,6 +393,8 @@ def _build_part(
     pickup: float = 0.0,
     show_chords: bool = True,
     beat_type: int = 4,
+    fifths: int = 0,
+    mode: str = "",
 ) -> Any:
     """
     The staff of the score: a `Part` of measures, in reading order.
@@ -410,6 +414,14 @@ def _build_part(
     counting differs. Treating the count as a quarter count is what wrote a 32-bar
     cut-time head as 64 bars; inverting the fraction is what then made each of
     them a quarter note long.
+
+    `fifths` / `mode` state the **key signature**, once, in the first measure, on
+    the same reasoning as the metre: MusicXML says a signature holds until it
+    changes, so writing it in every bar is legal but reads as a new one at each.
+    It is not decoration. music21 writes an explicit `<accidental>` for any note the
+    signature does not already account for, so a head whose key was dropped is not
+    merely unlabelled - every diatonic note of the real key is written with an
+    accidental the signature had already said. See `_key_signature`.
     """
     from music21 import clef, meter, stream
 
@@ -436,7 +448,8 @@ def _build_part(
     # signature holds until it changes, so repeating it in every bar is legal but
     # reads as a new one at each: MuseScore 3 draws a 4/4 over every bar of the head.
     # `state["signature"]` is the flag, rather than a local, because `new_measure`
-    # has to see it and the alternative is a second piece of mutable state.
+    # has to see it and the alternative is a second piece of mutable state. The key
+    # signature goes in the same place and on the same terms.
     state["signature"] = False
 
     def new_measure() -> Any:
@@ -448,6 +461,10 @@ def _build_part(
             # already in force - the one this writes - so the later bars need none,
             # and `makeRests` still has a `barDuration` to pad and tie against.
             built.timeSignature = meter.TimeSignature(f"{beats_per_bar}/{beat_type}")
+            # A signature of zero is still written: MusicXML's default when `<key>`
+            # is absent is exactly no sharps and no flats, so stating it says what
+            # C major says and leaves nothing for a reader to assume.
+            built.keySignature = _key_signature(fifths, mode)
         part.append(built)
         return built
 
@@ -547,6 +564,34 @@ def _build_part(
     return part
 
 
+def _key_signature(fifths: int, mode: str = "") -> Any:
+    """
+    The music21 key signature for `fifths` sharps-or-flats, with `mode` when known.
+
+    music21 suppresses an explicit `<accidental>` on any note the signature already
+    accounts for, which is the point: an Eb-major tune exported in C major needs a
+    flat written on **every** note of its own scale. "But Not For Me" is 32 bars in
+    Eb, and the accidentals that assumption produced numbered 201 - 137 of them
+    flats that the key already said.
+
+    `mode` is carried by `asKey`, which returns the same signature with a mode
+    attached. That is preferable to assigning `mode` on the signature, which music21
+    does not type as a settable attribute and which a future release may not accept;
+    and it is preferable to building a `key.Key` from a tonic name, because the tonic
+    is not what this library was given. It is handed the signature's own two numbers
+    and never has to know that -3 is Eb major rather than C minor.
+
+    An unrecognised mode is left unset rather than guessed, so a file that stated no
+    mode gets `<fifths>` alone - exactly what it said.
+    """
+    from music21 import key
+
+    signature = key.KeySignature(fifths)
+    if mode:
+        signature = signature.asKey(mode)
+    return signature
+
+
 def _rest(length: float) -> Any:
     """A rest of `length` quarter lengths, for a gap in the arrangement."""
     from music21 import note
@@ -610,6 +655,15 @@ def _chord_symbol(name: str) -> Any:
     The exception is deliberately broad: this is a formatting fallback for names
     from an external database, and a new music21 release should degrade the symbol
     rather than fail the export.
+
+    The symbol's **pitches are dropped**, which is not cosmetic. music21 writes the
+    symbol as `<harmony>` only - `writeAsChord = False` - so its pitches never reach
+    the document, but they remain in the stream and are still counted when music21
+    decides which notes need an `<accidental>`. Their effect is to mark notes the key
+    signature already accounts for: with a symbol present, an Eb-major head wrote 139
+    accidentals, and without one the same music wrote 27. Clearing them is what makes
+    the accidentals that remain mean "this note is out of the key" rather than "this
+    note is in the key, and the key was not read".
     """
     from music21 import harmony
 
@@ -625,6 +679,11 @@ def _chord_symbol(name: str) -> Any:
         symbol.chordKind = "other"
         symbol.chordKindStr = name
     symbol.writeAsChord = False
+    # The pitches are never written - see the docstring - so they are dropped here,
+    # on both the parsed and the fallback path, rather than left to distort the
+    # accidental pass. `[]` rather than `None`: music21 treats a missing/None
+    # `pitches` as "figure it out again from the figure string".
+    symbol.pitches = []
     return symbol
 
 
@@ -748,6 +807,8 @@ def format_musicxml(
     composer: str = "",
     beats_per_bar: int = 4,
     beat_type: int = 4,
+    fifths: int = 0,
+    mode: str = "",
     rhythm: bool = True,
     collapse: bool = True,
     show_chords: bool = True,
@@ -773,6 +834,12 @@ def format_musicxml(
         beat_type: the denominator of that signature. Pass the notated value, so a
             head in cut time is written 2/2 rather than restated as 2/4; the bar
             length is identical either way and only the displayed metre differs.
+        fifths: the key signature's count of sharps (positive) or flats (negative),
+            so -3 is Eb major or C minor. Defaults to 0, which is C major - the
+            assumption every format makes in the absence of a signature, so a
+            progression that was never in a key exports as it always did.
+        mode: "major", "minor", or "" where the key is not one of those two modes.
+            Written as MusicXML's `<mode>` when given, and omitted otherwise.
         rhythm: space the steps on their real beats. Falls back to a uniform
             one-chord-per-beat grid when the steps carry no timing, exactly as
             `format_tab_staff` does, so a hand-written progression still exports.
@@ -783,10 +850,20 @@ def format_musicxml(
         A complete MusicXML document as a string, or "" for no steps. Pure: nothing
         is printed and no file is written, so the caller stays in control. Needs the
         optional `music21` extra; see `_music21` for the error raised without it.
+
+    Raises:
+        ValueError: if `beats_per_bar` is below 1, or `fifths` is outside -7..7.
     """
     _music21()
     if beats_per_bar < 1:
         raise ValueError(f"beats_per_bar must be at least 1, got {beats_per_bar!r}")
+    if not -7 <= fifths <= 7:
+        # MusicXML's `<fifths>` is unbounded in the schema, but no conventional
+        # signature goes past seven of either, and a reader outside -7..7 is
+        # displaying something this library did not mean to ask for. Rejected
+        # rather than clamped: a wrong key is a wrong score, and a caller holding
+        # an out-of-range number has a bug worth hearing about.
+        raise ValueError(f"fifths must be between -7 and 7, got {fifths!r}")
     if not steps:
         return ""
 
@@ -811,7 +888,7 @@ def format_musicxml(
         0,
         _build_part(
             events, title, beats_per_bar, pickup=pickup, show_chords=show_chords,
-            beat_type=beat_type,
+            beat_type=beat_type, fifths=fifths, mode=mode,
         ),
     )
 
