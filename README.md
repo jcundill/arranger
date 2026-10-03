@@ -767,8 +767,10 @@ the hand is genuinely low.
 A step with no free bass string below the melody keeps its upper voicing and says so
 (`no bass string free below the melody for bass ...`) rather than dropping the note.
 
-`docs/open-issues.md` records the two defects this texture has already had, both fixed,
-and what they were measured at.
+`docs/open-issues.md` records the three defects this texture has had — two fixed, and
+**one open**: a walk-invented beat takes the wrong melody where a note is held across a
+barline, which costs the tune that note in cut time. It carries the measurements and
+the candidate fixes.
 
 ## High melodies: the octave-down move
 
@@ -919,7 +921,7 @@ dependencies (`make install-dev`).
 
 **CI runs `make check` on Python 3.11 through 3.14**, with both optional extras installed
 so the guarded tests are not silently skipped. One thing to know: `wjazzd.db` is 42 MB and
-gitignored, so **85 of the 819 tests are skipped on a clean clone** — a green check does
+gitignored, so **85 of the 820 tests are skipped on a clean clone** — a green check does
 not mean the Weimar path was exercised. A separate `corpus` job covers those, on manual
 dispatch only.
 
