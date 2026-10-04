@@ -26,6 +26,7 @@ from headxml import (
     _key_label,
     _part_is_tab,
     arrange_xml_head,
+    chord_at,
     head_cli,
     head_skeleton,
     load_musicxml,
@@ -47,6 +48,26 @@ from wjazzd import arrange_slots
 #                                 notation one, and chords music21 could not classify
 DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 RAINY_DAY = os.path.join(DATA, "heres_that_rainy_day.musicxml")
+
+
+def chord_or_fail(changes, bar: int, beat: float) -> HeadChange:
+    """`chord_at`, raising rather than returning `None`.
+
+    **`Optional` is the right return type for the library and the wrong one for a test.**
+    A position with no chord in force is a legitimate answer the function must be able to
+    give, so it cannot raise; but a test that asks for a chord and gets nothing has found
+    a defect, and should stop rather than compare against `None`. Pyright does not narrow
+    through `assertIsNotNone` either, so every assertion would otherwise need a cast or a
+    second `assert` — twelve of them, for one rule.
+
+    The same reasoning as `guide_pcs` in `test_comping.py`.
+    """
+    change = chord_at(changes, bar, beat)
+    if change is None:
+        raise AssertionError(
+            f"bar {bar} beat {beat}: no chord is in force, so the query cannot be checked"
+        )
+    return change
 BUT_NOT_FOR_ME = os.path.join(DATA, "but_not_for_me.mxl")
 TENOR_MADNESS = os.path.join(DATA, "tenor_madness.musicxml")
 I_WAS_DOING_ALL_RIGHT = os.path.join(DATA, "i_was_doing_all_right.mxl")
@@ -655,7 +676,7 @@ class TestChordTimeline(unittest.TestCase):
                 if note.quality is None:
                     continue
                 checked += 1
-                in_force = self._chord_in_force(head, note.bar, note.beat)
+                in_force = chord_or_fail(head.chords, note.bar, note.beat).chord
                 self.assertEqual(
                     in_force, note.chord,
                     f"{path}: bar {note.bar} beat {note.beat} - the timeline says "
@@ -663,26 +684,6 @@ class TestChordTimeline(unittest.TestCase):
                 )
         # A count as well as an agreement, so an empty fixture cannot make this vacuous.
         self.assertEqual(checked, 271)
-
-    def _chord_in_force(self, head: Head, bar: int, beat: float) -> str:
-        """The chord the timeline says is in force at `(bar, beat)`, by forward fill.
-
-        **Raises rather than returning `None`.** Pyright does not narrow through
-        `assertIsNotNone`, so a caller would have to `assert` as well as assert on the
-        absence — and the absence is a defect worth stopping on, not a value to compare
-        against. This is the same reason `guide_pcs` in `test_comping.py` raises.
-        """
-        in_force = None
-        for change in head.chords:
-            if change.key <= (bar, round(beat, 6)):
-                in_force = change.chord
-            else:
-                break
-        if in_force is None:
-            raise AssertionError(
-                f"bar {bar} beat {beat}: no chord is in force at all"
-            )
-        return in_force
 
     def test_a_hand_built_case_isolates_it(self):
         """One note, then a chord that only rests follow.
@@ -779,6 +780,137 @@ class TestChordTimeline(unittest.TestCase):
         skeleton = head_skeleton(head)
         self.assertEqual(len(skeleton), len(head.notes))
         self.assertTrue(head.chords, "the fixture must actually carry harmony")
+
+
+class TestChordAt(unittest.TestCase):
+    """`chord_at`: which chord is in force at a position, by forward fill.
+
+    **Phase 2 of open-issues item 10** — the query, with no consumer. The next phase uses
+    it for a beat no melody note describes; until then nothing calls it but tests, so
+    this is a specification written before its first use, which is the only honest time
+    to write one.
+
+    The three rules it has to get right, each measured rather than assumed:
+
+    - a chord holds until the next change replaces it, **including at its own beat**;
+    - where a bar declares two chords on the same beat, **the last one wins** — bars 33
+      and 35 of `i_was_doing_all_right` are written `Gmaj` then `Eb7`, and the note in
+      each bar carries `Eb7`, so first-wins would disagree with the shipped output;
+    - a position before the first change has **no** chord, and says so rather than
+      guessing.
+    """
+
+    def test_a_chord_holds_until_the_next_one_replaces_it(self):
+        """Bar 2 of `i_was_doing_all_right`: `Am7` at beat 1, `D7` at beat 2.5.
+
+        Two positions strictly between them, and one exactly on the change.
+        """
+        head = load_musicxml(I_WAS_DOING_ALL_RIGHT)
+        self.assertEqual(chord_or_fail(head.chords, 2, 1.0).chord, "Am7")
+        self.assertEqual(chord_or_fail(head.chords, 2, 1.5).chord, "Am7")
+        self.assertEqual(chord_or_fail(head.chords, 2, 2.0).chord, "Am7")
+        # **On** the change, not before it: the note path captures the chord before a
+        # note, so a change sharing a beat with the note it governs still applies.
+        self.assertEqual(chord_or_fail(head.chords, 2, 2.5).chord, "D7")
+
+    def test_it_answers_for_a_position_no_note_describes(self):
+        """Bar 32 of `heres_that_rainy_day` has no notes and two changes.
+
+        This is the query's reason to exist, and it is the position the note path cannot
+        be asked about at all.
+        """
+        head = load_musicxml(RAINY_DAY)
+        self.assertEqual(chord_or_fail(head.chords, 32, 1.0).chord, "Am7")
+        self.assertEqual(chord_or_fail(head.chords, 32, 1.5).chord, "Am7")
+        self.assertEqual(chord_or_fail(head.chords, 32, 2.0).chord, "D9")
+        # Past the end of the bar it still carries the last thing declared, which is
+        # what "holds until the next one replaces it" means across a barline.
+        self.assertEqual(chord_or_fail(head.chords, 32, 9.0).chord, "D9")
+
+    def test_the_last_change_at_a_position_wins(self):
+        """Bars 33 and 35 declare two chords on beat 1.0, and the note carries the second.
+
+        Not a synthetic tie: measured on the committed score. First-wins would put
+        `Gmaj` and `G6` under notes that ship with `Eb7`, so this is the rule that keeps
+        the query from disagreeing with the output it will one day feed.
+        """
+        head = load_musicxml(I_WAS_DOING_ALL_RIGHT)
+        for bar, first in ((33, "Gmaj"), (35, "G6")):
+            at_bar = [(c.beat, c.chord) for c in head.chords if c.bar == bar]
+            self.assertEqual(at_bar, [(1.0, first), (1.0, "Eb7")], f"bar {bar} changed")
+            self.assertEqual(chord_or_fail(head.chords, bar, 1.0).chord, "Eb7", f"bar {bar}")
+            # And the note in that bar agrees, which is what makes the rule measurable
+            # rather than merely asserted.
+            self.assertEqual(
+                [n.chord for n in head.notes if n.bar == bar], ["Eb7"], f"bar {bar}"
+            )
+
+    def test_a_position_before_the_first_change_has_no_chord(self):
+        """`None`, not the first chord — a position no chord has reached has no harmony.
+
+        The failure this avoids is the one the rest of the module refuses everywhere: a
+        chord invented where the file states none.
+        """
+        head = load_musicxml(I_WAS_DOING_ALL_RIGHT)
+        self.assertIsNone(chord_at(head.chords, 0, 1.0))
+        self.assertIsNone(chord_at([], 1, 1.0))
+        # A bar before the head's first bar is a plausible phase-3 caller, so the
+        # out-of-range case is asserted rather than assumed.
+        self.assertIsNone(chord_at(head.chords, -1, 1.0))
+
+    def test_a_pickup_bar_is_ordered_before_bar_one(self):
+        """Bars are signed — a pickup is negative — so a plain integer compare is right.
+
+        Stated because "a signed bar sorts correctly" is an assumption a reader has to
+        make, and the day it is wrong is the day a pickup vanishes from a part.
+        """
+        head = load_musicxml(I_WAS_DOING_ALL_RIGHT)
+        first = head.chords[0]
+        if first.bar > 0:
+            self.assertIsNone(chord_at(head.chords, first.bar - 1, 1.0))
+        self.assertEqual(chord_at(head.chords, first.bar, first.beat), first)
+
+    def test_it_agrees_with_the_note_path_on_every_note(self):
+        """The cross-check, now over the shipped function: 271 of 271.
+
+        `TestChordTimeline` proved the *data* reproduces the notes; this proves the
+        *query* over that data does, which is a different thing and could have been wrong
+        at the boundary the duplicate-position rule covers.
+        """
+        checked = 0
+        for path in (BUT_NOT_FOR_ME, RAINY_DAY, I_WAS_DOING_ALL_RIGHT):
+            head = load_musicxml(path)
+            for note in head.notes:
+                if note.quality is None:
+                    continue
+                checked += 1
+                change = chord_at(head.chords, note.bar, note.beat)
+                assert change is not None, (
+                    f"{path}: bar {note.bar} beat {note.beat} has no chord in force"
+                )
+                self.assertEqual(
+                    change.chord, note.chord,
+                    f"{path}: bar {note.bar} beat {note.beat} - {change.chord!r} vs "
+                    f"{note.chord!r}",
+                )
+        self.assertEqual(checked, 271)
+
+    def test_an_unsorted_timeline_still_answers_correctly(self):
+        """A hand-built `Head.chords` need not be in position order.
+
+        The scan is not broken out of early, precisely so this works: a forward fill that
+        stopped at the first entry past the target would answer `D7` here instead of
+        `Am7`, and the caller would have no way to know the list was the problem.
+        """
+        unsorted = [
+            HeadChange(bar=2, beat=1.0, chord="Am7", quality="m7"),
+            HeadChange(bar=3, beat=1.0, chord="D7", quality="7"),
+            HeadChange(bar=1, beat=1.0, chord="Gmaj", quality="maj"),
+        ]
+        self.assertEqual(chord_or_fail(unsorted, 2, 1.5).chord, "Am7")
+        self.assertEqual(chord_or_fail(unsorted, 3, 1.0).chord, "D7")
+        self.assertEqual(chord_or_fail(unsorted, 1, 1.0).chord, "Gmaj")
+        self.assertIsNone(chord_at(unsorted, 0, 1.0))
 
 
 class TestKeySignature(unittest.TestCase):

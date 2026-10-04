@@ -925,11 +925,12 @@ adding the next policy: **name the generator, not the axis value.**
 
 ## 10. A chord in force is stored per melody note, so a bar the melody skips is silent
 
-**Status: open; stage 1 landed (the timeline is recorded), the defect is not fixed.**
-Found while asking what a comping grid should do on a bar whose melody is all rests. It is
-not a grid bug and not a walking-bass bug: it is one missing data structure, and three
-shipped behaviours depend on its absence. **Read "Stage 1" before the sections below** —
-it changes what the first of the four changes in "Why it is not a patch" has to be.
+**Status: open; stages 1 and 2 landed (the timeline is recorded and queryable), the defect
+is not fixed.** Found while asking what a comping grid should do on a bar whose melody is
+all rests. It is not a grid bug and not a walking-bass bug: it is one missing data
+structure, and three shipped behaviours depend on its absence. **Read "Stage 1" and
+"Stage 2" before the sections below** — together they remove the first of the four changes
+in "Why it is not a patch", which was the one the item assumed was needed.
 
 ### The symptom
 
@@ -1049,13 +1050,52 @@ The beat conversion is `_flush_group`'s expression, `1 + onset/divisions *
 beats_per_bar/4`, spelled out rather than shared — trap 9's denominator problem, and all
 three fixtures are 2/2, which is the metre that catches it.
 
+### Stage 2 — landed: the query
+
+`chord_at(changes, bar, beat)` answers "what is in force here" for a position no melody
+note describes, which is the twin of `bass._melody_in_force` ("which melody slot is
+sounding here" for a beat the thumb invented). It has **no consumer yet**, so all 39
+arrangements and `make demo` are unchanged again — this is a specification written before
+its first use, which is the only honest time to write one.
+
+Three rules, each forced by a measurement rather than chosen:
+
+- **A chord holds until the next one replaces it, including at its own beat.** Bar 2 of
+  `i_was_doing_all_right` is `Am7` at beat 1 and `D7` at beat 2.5, and the note path
+  captures the chord *before* a note — so a change sharing a beat with the note it
+  governs applies to it.
+- **The last change at a position wins.** Measured, not hypothetical: bars 33 and 35 of
+  `i_was_doing_all_right` each carry **two** `<harmony>` elements on beat 1.0 (`Gmaj` then
+  `Eb7`; `G6` then `Eb7`), and the note in each bar carries `Eb7`. First-wins would put a
+  chord under a note that ships with a different one.
+- **`None` before the first change.** A position no chord has reached has no harmony, and
+  inventing one is what this module refuses everywhere else.
+
+**A bug the tests caught, which is the reason the implementation is written the way it
+is.** The obvious body — scan and overwrite, or scan and `break` at the first entry past
+the target — is order-dependent, and `test_an_unsorted_timeline_still_answers_correctly`
+failed it: with `[bar 2, bar 3, bar 1]` in that order, **every bar answered `Gmaj`**. A
+hand-built `Head.chords` need not be in position order, and a forward fill that stops
+early on one returns a stale chord with nothing to indicate it.
+
+So the answer is *the change with the greatest key at or before the target*, which is
+order-independent and still last-wins at a tie, because two changes at one position have
+**equal** keys and `>=` takes the later of them. Verified: unsorted and sorted lists now
+give identical answers, and mutating `>=` to `>` fails 2 of the 7, while restoring the
+`break` fails 1.
+
+`test_it_agrees_with_the_note_path_on_every_note` closes the loop at 271 of 271 — the
+data agrees with the notes, and now the *query over* that data agrees too, which is a
+different claim and could have failed at the duplicate-position boundary above.
+
 ### Why it is not a patch
 
-The step loop iterates melody slots, so a grid can only *keep* or *drop* one. Fixing
-this means a chord timeline that exists independently of the melody, which changes:
+The step loop iterates melody slots, so a grid can only *keep* or *drop* one. Fixing this
+means slots a grid position can create, which changes:
 
-- `Head` — it would have to carry bars the melody does not enter;
-- `head_skeleton` — rests become time rather than skipped elements;
+- `head_skeleton` — rests become time rather than skipped elements, and it must emit chord
+  slots as well as note slots. (`Head` no longer appears here: stages 1 and 2 built the
+  timeline it would have had to carry.)
 - `ArrangementStep.melody` — `None` on a slot no melody note created, and all four
   renderers assume otherwise for alignment;
 - `decisions.melody_alone_case` — an invented slot has no melody note to be alone *with*,

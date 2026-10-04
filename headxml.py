@@ -57,8 +57,10 @@ from wjazzd import (
 __all__ = [
     "MUSICXML_KIND_QUALITIES",
     "Head",
+    "HeadChange",
     "HeadNote",
     "arrange_xml_head",
+    "chord_at",
     "head_cli",
     "head_skeleton",
     "load_musicxml",
@@ -1115,6 +1117,56 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
 # How far inside its bar a note's beat is kept, so it cannot collide with the next
 # bar's downbeat. A 2/2 bar is two beats wide, so its last quarter is beat 2.5.
 _BEAT_EPSILON = 1e-6
+
+
+def chord_at(
+    changes: Sequence[HeadChange], bar: int, beat: float
+) -> Optional[HeadChange]:
+    """The change in force at `(bar, beat)`, by forward fill, or `None` if none is.
+
+    **The query open-issues item 10 needs, and the twin of `bass._melody_in_force`.**
+    That one answers "which melody slot is sounding here" for a beat the thumb invented;
+    this answers "which chord is sounding here" for a beat no note describes. Both are
+    forward fills over an ordered timeline, and both are *needed* because the step loop
+    iterates melody slots — so a position with no melody slot must be able to ask the
+    harmony question anyway.
+
+    Three rules, each a decision rather than an implementation detail:
+
+    - **A chord holds until the next one replaces it** (`<=`, not `<`). A change *on*
+      beat 2 is in force *at* beat 2, which is what the note path already does: a note
+      carries the chord captured before it, so a change on the same position applies.
+    - **The last change at a position wins.** Measured on `i_was_doing_all_right`, bars
+      33 and 35 each carry **two** `<harmony>` elements at beat 1.0 (`Gmaj` then `Eb7`),
+      and the note in each bar carries `Eb7` — so "the last one declared" is the rule the
+      shipped output already follows, and taking the first would disagree with it.
+    - **`None` before the first change**, never a guess. A position no chord has reached
+      has no harmony, and inventing one is the failure this module refuses everywhere
+      else. The caller decides what to do — drop the bar, or warn — because only it knows
+      whether the position is real.
+
+    **The answer is the change with the greatest position at or before the target**, which
+    makes the scan order-independent: an unsorted list gives the same answer as a sorted
+    one, because "greatest key not after the position" does not depend on the order the
+    entries arrive in. Last-wins at a duplicated position falls out of the same rule —
+    two changes at one position have *equal* keys, so `>=` takes the later of them, which
+    is the one the note path captures.
+
+    That last point is why this is not "the last matching entry in the list". Scanning
+    and overwriting returns whichever entry happens to come last *in the input*, which on
+    an unsorted list can be a stale one: with `[bar 2, bar 3, bar 1]` in that order, every
+    bar answers `Gmaj`. The comparison below is what makes that impossible rather than
+    merely unlikely.
+    """
+    position = (bar, round(beat, 6))
+    found: Optional[HeadChange] = None
+    for change in changes:
+        key = change.key
+        if key > position:
+            continue
+        if found is None or key >= found.key:
+            found = change
+    return found
 
 
 def head_skeleton(
