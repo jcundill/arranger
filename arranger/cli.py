@@ -71,7 +71,7 @@ from .bass import BASS_AUTO, BASS_STYLES
 from .chords import NON_CHORD_TONE_STRATEGIES
 from .grips import GRIP_PREFERENCE
 from .render import format_progression
-from .textures import MELODY_AUTO, TEXTURE_STYLES
+from .textures import HARMONY_AUTO, HARMONY_STYLES, MELODY_AUTO, TEXTURE_STYLES
 from .tuning import NECK_FRET_MAX, NECK_FRET_MIN, ArrangementStep
 
 if TYPE_CHECKING:  # pragma: no cover - the annotations are strings at runtime
@@ -260,6 +260,19 @@ def add_common_arguments(
             "Dropping soprano hands the melody to another instrument and leaves a "
             "guide-tone comping part; refused, with a warning, on a texture that "
             "plays the melody and nothing else"
+        ),
+    )
+    parser.add_argument(
+        "--harmony",
+        choices=list(HARMONY_STYLES) + [HARMONY_AUTO],
+        default=HARMONY_AUTO,
+        help=(
+            "which degrees the guitar states when it is NOT singing: 'guide' (the "
+            "default) is the 3rd and the 7th, 'shell_root' adds a root or 5th under "
+            "them, 'root' is a bass note alone, 'full' is the whole chord. Read only "
+            "when the guitar has no melody of its own, so it composes with --voices "
+            "rather than replacing it. Refused, with a warning, where the voice "
+            "selection leaves no room for it"
         ),
     )
     parser.add_argument(

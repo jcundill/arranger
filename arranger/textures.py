@@ -46,11 +46,22 @@ __all__ = [
     "TEXTURE_GRIPS",
     "TEXTURE_STYLES",
     "THUMB_TEXTURES",
+    "HARMONY_AUTO",
+    "HARMONY_BUILT",
+    "HARMONY_FULL",
+    "HARMONY_GUIDE",
+    "HARMONY_POLICIES",
+    "HARMONY_ROOT",
+    "HARMONY_SHELL_ROOT",
+    "HARMONY_STYLES",
     "VOICES_ALL",
     "VOICES_NONE",
     "VOICE_NAMES",
+    "harmony_allowed",
     "melody_allowed",
+    "parse_harmony",
     "parse_voices",
+    "resolve_harmony",
     "resolve_voices",
     "voices_have_soprano",
 ]
@@ -254,6 +265,135 @@ MELODY_POLICIES: Dict[str, Tuple[str, ...]] = {
     MELODY_AUTO: VOICES_ALL,
     "none": VOICES_NONE,
 }
+
+# --- The harmony axis: which degrees the guitar states when it is NOT singing ---
+#
+# A **degree family**, and nothing else. It answers "what does this part say about the
+# chord", not "which notes are on the guitar" and not "how many": arity still comes from
+# the voice selection, and whether the tune is ours at all is a separate axis again. So
+# the three are genuinely orthogonal, which is the whole point of having this table.
+#
+# The families are read from tables that already state what a bass may be and what a
+# shell must sound, rather than re-derived here - the same rule the rest of the module
+# follows, and the reason `guide` and `root` are the *shipped* behaviour rather than a
+# description of it.
+#
+#   HARMONY_FULL       the chord in full: every tone the quality defines
+#   HARMONY_GUIDE      both guide tones - the 3rd and the 7th
+#   HARMONY_SHELL_ROOT both guide tones AND a root or 5th underneath them
+#   HARMONY_ROOT       the lowest note only: a root, else a 5th
+#
+# **`shell_root` is the one that is new**, and it is the case the guide-tone table cannot
+# express: `SHELL_DEGREES` says what must sound, `BASS_DEGREES_6432` says what may be the
+# bottom, and a shape needing both is a claim neither table makes alone. Measured at 11 of
+# 11 chords on the head in `tests/data/`, on the **existing** `(5,4,3)` shell sets, so it
+# needs no new string sets and no new grip family.
+HARMONY_FULL = "full"
+HARMONY_GUIDE = "guide"
+HARMONY_SHELL_ROOT = "shell_root"
+HARMONY_ROOT = "root"
+
+HARMONY_STYLES: Tuple[str, ...] = (
+    HARMONY_FULL,
+    HARMONY_GUIDE,
+    HARMONY_SHELL_ROOT,
+    HARMONY_ROOT,
+)
+
+#: The one harmony family this engine can already voice. The other three are named here
+#: so the vocabulary exists and `harmony=` has something to validate against, but nothing
+#: is built on them yet - see `docs/comping-styles.md` §4.1 and §8 Stage C. `full` is the
+#: historical chord-melody, which the ordinary grip route voices rather than the comping
+#: generator, so it is **not** the comping route's default either.
+HARMONY_BUILT: Tuple[str, ...] = (HARMONY_GUIDE,)
+
+HARMONY_AUTO = "auto"
+
+#: `auto` means "whatever this part already says", which is the shipped behaviour and the
+#: reason the axis is inert by default. It resolves to `guide` rather than to `full`
+#: because the comping generator is only reached when the guitar is *not* singing, and a
+#: part that states no harmony is stated with its guide tones.
+HARMONY_POLICIES: Dict[str, str] = {
+    HARMONY_AUTO: HARMONY_GUIDE,
+}
+
+
+def parse_harmony(argument: str) -> str:
+    """A `harmony` argument as one of `HARMONY_STYLES`, or the `HARMONY_AUTO` sentinel.
+
+    A single identifier out of a closed set rather than a comma-separated list, because
+    unlike the voice selection this axis names **one** degree family and not a subset of
+    roles in a stack. Parsed here rather than inline at the call site so the vocabulary
+    and the refusal live in one place, on the same rule as `parse_voices`.
+
+    Raises `ValueError` on an unknown name: a spelling nobody recognises is a question,
+    and answering it by falling back to `guide` would hand back a part that states
+    something other than what was asked for.
+    """
+    text = argument.strip().lower()
+    if text == HARMONY_AUTO:
+        return HARMONY_AUTO
+    if text not in HARMONY_STYLES:
+        raise ValueError(
+            f"Unknown harmony {argument!r}; expected any of "
+            f"{', '.join(HARMONY_STYLES)}, or 'auto'"
+        )
+    return text
+
+
+def resolve_harmony(
+    harmony: str, voices: Tuple[str, ...], diagnostics: Any
+) -> str:
+    """The degree family to actually voice: `auto` resolved, validated, or refused.
+
+    `auto` resolves through `HARMONY_POLICIES`, which is what keeps the axis inert: the
+    resolved value is the shipped behaviour, so an arrangement that names no harmony is
+    byte-identical to one that never had the axis.
+
+    A combination the generator cannot voice is **refused rather than degraded**, on the
+    rule `melody_allowed` and `bass_allowed` both follow: an arrangement that says
+    something other than what was asked for is worse than one that says nothing, and the
+    caller is told which selection would work. Returning `guide` here is deliberate and
+    is the *inert* answer rather than a silent substitution - it is what the part said
+    before this axis existed.
+    """
+    resolved = HARMONY_POLICIES.get(harmony, harmony)
+    allowed, reason = harmony_allowed(resolved, voices)
+    if not allowed:
+        diagnostics.warn(f"Warning: {reason}")
+        return HARMONY_GUIDE
+    return resolved
+
+
+def harmony_allowed(harmony: str, voices: Tuple[str, ...]) -> Tuple[bool, str]:
+    """Whether this degree family can be voiced under this voice selection, and why not.
+
+    **Derived rather than listed**, from two facts rather than a table someone has to
+    remember to extend. A family that asks for the bass voice *alone* is a one-note
+    claim, so it can only be voiced by a selection that names one voice; and the
+    converse, a family sounding three notes, needs a selection with room for three.
+
+    Checked before any voicing work, on the library's standing rule that an impossible
+    request is answered by saying what would work rather than by dropping something the
+    caller asked for.
+    """
+    if harmony == HARMONY_ROOT:
+        if voices != (MELODY_BASS,):
+            return False, (
+                f"harmony={HARMONY_ROOT} is a bass voice on its own, so it needs a "
+                f"selection of exactly one voice naming the bass "
+                f"(voices={MELODY_BASS}); {', '.join(voices)} asks for "
+                f"{len(voices)} note(s)"
+            )
+        return True, ""
+    if harmony == HARMONY_SHELL_ROOT and len(voices) < 3:
+        return False, (
+            f"harmony={HARMONY_SHELL_ROOT} sounds three notes - both guide tones and a "
+            f"root or 5th under them - so it needs a selection with room for three; "
+            f"{', '.join(voices)} asks for {len(voices)}"
+        )
+    return True, ""
+
 
 # The beats of a bar that carry a full chord under the "targets" texture, counted
 # from 1. Beats 1 and 3 are the guide's rule verbatim: in 4/4 they are the two

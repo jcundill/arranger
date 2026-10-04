@@ -40,24 +40,48 @@ treat a contradiction between them as a bug in one of them.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **939 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **952 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 12 of those 939, and it is the one that fails if this
+(`tests/test_docs.py` is 12 of those 952, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree. It also fails if a document
 exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
 new file cannot be added without being registered.)
 
-**Three axes, not one.** `texture=` (where notes fall), `bass=` (who plays the bottom,
-`BASS_STYLES`) and `voices=` (which voices the guitar plays, `VOICE_NAMES`) are
+**Four axes, not one.** `texture=` (where notes fall), `bass=` (who plays the bottom,
+`BASS_STYLES`), `voices=` (which voices the guitar plays, `VOICE_NAMES`) and `harmony=`
+(which *degrees* the part states when it is not singing, `HARMONY_STYLES`) are
 **orthogonal**, and
 a band setting is a combination rather than a mode: `bass="none", voices="none"` is a
 bassist on the root, a horn on the melody and the guitar comping guide tones between them.
-Adding a fourth axis means a new `*_STYLES` / `*_POLICIES` pair and a `*_AUTO` sentinel that
+Adding an axis means a new `*_STYLES` / `*_POLICIES` pair and a `*_AUTO` sentinel that
 is deliberately **not** in the styles list, plus a `*_allowed` refusal function derived from
 a table rather than listed — never another branch at the call sites. The trap: a loop
 variable shadowing a policy parameter (`melody` in `wjazzd.arrange_slots` did exactly this,
 and it only raised when a diminished retry had something to rescue).
+
+**`harmony=` was added by following that rule, and the three traps below are what it cost.**
+`HARMONY_STYLES` + `HARMONY_POLICIES` + `HARMONY_AUTO` + `harmony_allowed` in
+`textures.py`, resolved once per arrangement next to `_resolve_melody`, and inert twice
+over: `auto` resolves to the shipped `guide`, and the axis is read only by the comping
+route, so it cannot touch a melody-bearing arrangement. Three things to know before adding
+a fifth:
+
+- **A degree family is not an arity.** `guide` and `shell_root` are two different claims
+  that both need three notes available, so `harmony_allowed` refuses on **how many notes
+  were asked for** and not on a table of combinations. Deriving the rule is what kept it
+  to two entries instead of a list to extend.
+- **A family that "contains" a degree is not that family.** The first `shell_root`
+  implementation asked whether *some* root or 5th was sounding, and on an `Ebmaj` whose
+  guide tones are D and G the plain shape `D G Bb` already contains the 5th — so the new
+  family was silently a synonym for `guide` and every other test still passed. The check
+  is on the **lowest** note. `test_shell_root_is_not_merely_a_shape_that_contains_a_bass_degree`
+  exists only because of that, and its docstring says so.
+- **The shell chord-melody is not on this axis.** `--grips shell` is a *grip* choice
+  layered on the same degrees, with the melody pinned to the soprano string;
+  `harmony=guide` is the melody-free part. They are deliberately separate — see
+  [docs/comping-styles.md §4.1](docs/comping-styles.md) — and `harmony=` is inert on any
+  arrangement the guitar sings, so `--grips shell` is untouched by it.
 
 **`make check` is what CI runs** (`.github/workflows/ci.yml`, Python 3.11–3.14, with
 the `xml` and `gp` extras so the optional-extra tests are not silently skipped). One

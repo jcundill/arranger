@@ -71,6 +71,8 @@ from .grips import (
 )
 from .options import ArrangeOptions
 from .textures import (
+    HARMONY_AUTO,
+    HARMONY_SHELL_ROOT,
     MELODY_AUTO,
     MELODY_BASS,
     MELODY_ONLY_TEXTURES,
@@ -79,7 +81,9 @@ from .textures import (
     THUMB_TEXTURES,
     _metric_weight,
     _roles_for_slot,
+    parse_harmony,
     parse_voices,
+    resolve_harmony,
     resolve_voices,
     voices_have_soprano,
 )
@@ -175,6 +179,26 @@ def _resolve_melody(
 
 
 
+def _resolve_harmony(
+    harmony: str, voices: Tuple[str, ...], diagnostics: Diagnostics
+) -> str:
+    """The degree family to actually voice: `auto` resolved, parsed, or refused.
+
+    The same two-step shape as `_resolve_melody` above - parse, then resolve - because
+    it is the same rule about the same thing: `textures` owns the vocabulary and the
+    refusal, this function owns nothing but the wiring.
+
+    Takes **no texture**, and that is deliberate rather than an oversight: whether a
+    degree family can be voiced depends on how many notes were asked for, and on
+    nothing about where the notes fall. `guide` under `walking_bass` and `guide` under
+    `uniform` are the same two degrees.
+
+    Resolved **once per arrangement**, next to `_resolve_melody` and for the reason
+    stated there: the band does not change halfway through a tune.
+    """
+    return resolve_harmony(parse_harmony(harmony), voices, diagnostics)
+
+
 class VoiceLeadingEngine:
     """Generates and voice-leads jazz guitar voicings dynamically.
 
@@ -227,10 +251,17 @@ class VoiceLeadingEngine:
         fret_max: int = NECK_FRET_MAX,
         notes: int = 3,
         bass_voice: bool = False,
+        shell_root: bool = False,
     ) -> List[Voicing]:
         """See `grips.get_comping_voicings`."""
         return _grips.get_comping_voicings(
-            chord_type, chord_name, fret_min, fret_max, notes, bass_voice
+            chord_type,
+            chord_name,
+            fret_min,
+            fret_max,
+            notes,
+            bass_voice,
+            shell_root,
         )
 
     @staticmethod
@@ -579,6 +610,7 @@ class VoiceLeadingEngine:
         texture: str = "uniform",
         bass: str = BASS_AUTO,
         melody: str = MELODY_AUTO,
+        harmony: str = HARMONY_AUTO,
         beats_per_bar: int = 4,
         diagnostics: Optional[Diagnostics] = None,
         options: Optional[ArrangeOptions] = None,
@@ -732,6 +764,7 @@ class VoiceLeadingEngine:
                     # who builds the options and then overrides the keyword must not
                     # silently lose the override.
                     ("melody", melody),
+                    ("harmony", harmony),
                     ("beats_per_bar", beats_per_bar),
                 )
                 if value != ArrangeOptions.__dataclass_fields__[name].default
@@ -748,6 +781,7 @@ class VoiceLeadingEngine:
             grips = options.grips
             texture = options.texture
             melody = options.melody
+            harmony = options.harmony
             beats_per_bar = options.beats_per_bar
             if options.timings is not None:
                 timings = list(options.timings)
@@ -792,6 +826,12 @@ class VoiceLeadingEngine:
         # through a tune.
         voices = _resolve_melody(melody, texture, diagnostics)
         melody_voiced = voices_have_soprano(voices)
+        # The harmony axis, resolved here for the same reason and read only by the
+        # comping route below. Resolving it unconditionally rather than inside
+        # `if not melody_voiced` is deliberate: a spelling nobody recognises must be
+        # reported **once, up front**, rather than never at all on an arrangement where
+        # the guitar happens to be singing - the same argument as `_resolve_melody`'s.
+        harmony_family = _resolve_harmony(harmony, voices, diagnostics)
 
         slots: Optional[List[_Slot]] = None
         if has_thumb:
@@ -1008,6 +1048,12 @@ class VoiceLeadingEngine:
                     # an extra CLI flag, so the two spellings of one request cannot
                     # disagree.
                     bass_voice=voices == (MELODY_BASS,),
+                    # Whether this part states both guide tones **and** a root or 5th
+                    # under them. The one degree family neither `notes` nor
+                    # `bass_voice` can express, and derived from the resolved family
+                    # rather than passed as another flag, so the two spellings of one
+                    # request cannot disagree.
+                    shell_root=harmony_family == HARMONY_SHELL_ROOT,
                 )
                 if not candidates:
                     # No guide-tone shape in a playable position. The chord of the tune

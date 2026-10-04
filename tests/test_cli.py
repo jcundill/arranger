@@ -121,7 +121,11 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         other simply has no such option.
         """
         corpus, head, shared = self.parsers()
-        self.assertEqual(len(shared), 18, "the shared flag count moved")
+        # 19 since `harmony=` was added. Counted, not derived, deliberately: this
+        # assertion is a tripwire for "a flag was added to one command and not the
+        # other", and a number that recomputed itself from the parsers would notice
+        # nothing.
+        self.assertEqual(len(shared), 19, "the shared flag count moved")
 
         disagreeing = [
             f"{dest}: corpus={_semantics(corpus[dest])!r} head={_semantics(head[dest])!r}"
@@ -183,7 +187,12 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         )
         self.assertEqual(
             sorted(set(shared) - set(differing)),
-            ["bass", "fallback", "grips", "non_chord_tone", "pick", "skeleton", "voices"],
+            # `harmony` is here for the reason `bass` is, and `bass`'s own entry
+            # above states the test: it is an arranging choice that means the same
+            # thing against a transcription and against a score, so both commands
+            # print one help string rather than two.
+            ["bass", "fallback", "grips", "harmony", "non_chord_tone", "pick",
+             "skeleton", "voices"],
             "a flag gained or lost its differing help - remeasure before editing",
         )
 

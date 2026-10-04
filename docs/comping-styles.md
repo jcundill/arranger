@@ -1,7 +1,11 @@
 # Comping styles: a design proposal
 
-**Status: proposal. Nothing here is built.** This records a design and the measurements
-that forced it, so the decision can be reviewed rather than re-derived. It follows
+**Status: partly built.** Stage C of [§8](#8-staged-approach) has landed the *harmony*
+axis (`harmony=full|guide|shell_root|root`), so `shell_root` exists and the degree-family
+table in §4.1 is no longer a proposal in its entirety. The rhythm grid (§4.2) is still
+**not** built, §6 still holds open questions, and `--voices` is still `--voices`. This
+records a design and the measurements that forced it, so the decision can be reviewed
+rather than re-derived. It follows
 [reharmonisation-proposals.md](reharmonisation-proposals.md), which is the precedent: a
 proposal that says what was measured, what is proposed and what is deliberately
 not built.
@@ -127,7 +131,7 @@ a **degree family**, read from a table that already exists rather than re-derive
 |---|---|---|---|
 | `full` | root, 3rd, 5th, 7th | `CHORD_TONES_FROM_ROOT` | shipped default |
 | `guide` | 3rd + 7th | `SHELL_DEGREES` | shipped (2-note comping) |
-| `shell_root` | 3rd + 7th, lowest = root or 5th | `SHELL_DEGREES` + `BASS_DEGREES_6432` | **not built** |
+| `shell_root` | 3rd + 7th, lowest = root or 5th | `SHELL_DEGREES` + `BASS_DEGREES_6432` | **built** (Stage C) |
 | `root` | root, else 5th | `BASS_DEGREES_6432` | shipped (`--voices bass`) |
 
 **A shell chord-melody is already reachable, and it is not in this table.** `--grips shell`
@@ -157,10 +161,22 @@ wrong:
   A shell chord-melody is a **grip** choice layered on a degree family, so no value in this
   table names it. That is a gap in the table, not a contradiction of it.
 
-**`shell_root` is the missing case, and it is measured reachable: 11 of 11 chords.** Both
-guide tones present *and* the lowest note a root or 5th, at span ≤ `GRIP_MAX_SPAN["shell"]`,
-finds a shape for every chord in the head — all on the **existing** `(5,4,3)` shell set.
-**No new string sets are required**, which is the single most useful fact in this document.
+**`shell_root` is the case that was missing, and it is measured reachable: 11 of 11
+chords.** Both guide tones present *and* the lowest note a root or 5th, at span ≤
+`GRIP_MAX_SPAN["shell"]`, finds a shape for every chord in the head — all on the
+**existing** `(5,4,3)` shell set. **No new string sets are required**, which is the single
+most useful fact in this document, and Stage C confirmed it by building it.
+
+**The implementation found something this section did not say, and it is the whole
+difference between the family and a synonym for `guide`.** The rule has to be *the lowest
+note is a root or 5th*, not *some root or 5th is sounding*: on an `Ebmaj` whose guide
+tones are D and G, the plain three-note guide shape is `D G Bb`, which already **contains**
+the 5th. An implementation asking the second question is satisfied by the guide-tone shape
+itself, returns identical output to `guide`, and passes every other assertion in §4.1 —
+which is precisely what the first one did. `shell_root` filters those candidates out
+rather than the `guide` ones in, and
+`tests/test_comping.py::test_shell_root_is_not_merely_a_shape_that_contains_a_bass_degree`
+now exists to keep that from regressing.
 
 Two honest costs, both already true of the shipped one-voice case:
 
@@ -385,7 +401,27 @@ than it looks: a document linked once, in one place, is fully protected by that 
 `tests/test_docs.py` is 12 of those. The old line also said "11 of those 926" while the
 line above it said 938, so it was already internally inconsistent.
 
-### Stage C — Rename and consolidate the axis
+### Stage C — Rename and consolidate the axis — **partly done**
+
+**Landed: the `harmony=` axis and the `shell_root` family.** `HARMONY_STYLES`,
+`HARMONY_POLICIES`, `HARMONY_AUTO` and `harmony_allowed` are in `textures.py`;
+`get_comping_voicings` and `_shell_voicing` take `shell_root`; the keyword threads
+through `arrange_progression`, `ArrangeOptions`, `arrange_slots`, `_corpus_options` and
+both CLIs. Inert twice over — `auto` resolves to the shipped `guide`, and the axis is read
+only by the comping route — and all six published arrangements are byte-identical.
+
+**Not done: the rename.** `--voices` is still `--voices`, and `melody=` still carries a
+voice list. Both were left deliberately: the rename is only worth making once the flag it
+renames *means* something, and §6 Q2 (whether `harmony=guide` + `sings=yes` reaches the
+melody through the shell grip or the comping generator) is still open. The vocabulary
+exists and the awkward name is now the only thing wrong, which is a better state to leave
+it in than either half of a rename.
+
+**`MELODY_STYLES` — the table that does not exist.** `options.py` cited it in a comment;
+the real one is `MELODY_POLICIES`, keyed `auto` / `none`. **Fixed**: the comment now names
+the table that exists.
+
+### Stage D — The rhythm grid (not started)
 
 With flag compatibility off the table this is one coherent change rather than a
 migration, and it is the natural moment for it because the vocabulary is still small.
@@ -405,8 +441,6 @@ Acceptance: `walking_bass` output byte-identical; `MELODY_STYLES` cited nowhere;
 `melody=` keyword that carries a voice list is gone or renamed to say what it carries; and
 `--grips shell` either still works as written or is *deliberately* re-expressed as
 `harmony=guide` + `sings=yes`, with the difference recorded rather than discovered.
-
-### Stage D — The rhythm grid
 
 The largest genuinely new work, and the only stage that adds a concept rather than
 renaming one. `joe_pass` and `charleston` are the payoff.

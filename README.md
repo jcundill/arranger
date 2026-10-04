@@ -132,6 +132,7 @@ python -m arranger head tests/data/i_was_doing_all_right.mxl --bars 1-3 --html h
 | `--texture` | `uniform` | `uniform`, `targets`, `walking_bass` — see [texture](#texture) |
 | `--bass` | follows `--texture` | `none`, `anchors`, `walk` — see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
 | `--voices` | `auto` (all four) | any subset of `soprano,alto,tenor,bass` — see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
+| `--harmony` | `auto` (= `guide`) | `full`, `guide`, `shell_root`, `root` — which degrees the part states when it is *not* singing; see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
 | `--fret-min` / `--fret-max` | `2` / `13` | the neck window to aim for |
 | `--grips` | all six | which grip families to consider, **most preferred first** |
 | `--tab` | `line` | `staff` lays the head on one six-line staff, spaced on its real rhythm |
@@ -252,6 +253,7 @@ python -m arranger corpus --melid 218 --section chorus:1  # a solo chorus instea
 | `--texture` | `uniform` | `uniform`, `targets`, `walking_bass` — see [texture](#texture) |
 | `--bass` | follows `--texture` | `none`, `anchors`, `walk` — see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
 | `--voices` | `auto` (all four) | any subset of `soprano,alto,tenor,bass` — see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
+| `--harmony` | `auto` (= `guide`) | `full`, `guide`, `shell_root`, `root` — which degrees the part states when it is *not* singing; see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
 | `--fret-min` / `--fret-max` | `2` / `13` | the neck window to aim for |
 | `--grips` | all six | which grip families to consider, **most preferred first** |
 | `--tab` | `line` | `staff` lays the head on one six-line staff, on its real rhythm |
@@ -863,6 +865,25 @@ so a band setting is a combination rather than a mode:
 | `texture=` | where notes fall, how thick the left hand is | `uniform`, `targets`, `walking_bass`, `melody`, `melody_bass` |
 | `bass=` | the bass voice | `none`, `anchors`, `walk` |
 | `voices=` | which voices the guitar plays | any subset of `soprano`, `alto`, `tenor`, `bass` |
+| `harmony=` | **which degrees** the part states, when it is not singing | `full`, `guide`, `shell_root`, `root` |
+
+**`harmony=` is read only when the guitar has no tune of its own**, so it composes with
+`--voices` rather than competing with it: `voices` says *how many* notes and whether the
+soprano is ours, `harmony` says *which degrees those notes are*.
+
+| `harmony=` | the part sounds | needs |
+|---|---|---|
+| `guide` (the default) | the 3rd and the 7th — the notes that say major or minor | two notes |
+| `shell_root` | both guide tones **and** a root or 5th underneath them | three notes |
+| `root` | a root, or a 5th where the root is out of reach — a bass note on its own | `--voices bass` alone |
+| `full` | the whole chord | the ordinary chord-melody route |
+
+`--harmony shell_root --voices alto,tenor,bass` is a horn on the tune with the guitar
+stating quality *and* root underneath; it needs the three notes, and asking for it with
+two is refused with a warning rather than quietly thinned. On an arrangement where the
+guitar *is* singing, `--harmony` does nothing at all — for that, a chord-melody on shells
+is `--grips shell`, which is a grip choice rather than a degree family and keeps the
+melody pinned to the top string.
 
 `--bass none` and `--voices alto,tenor` together are the ensemble this library was asked
 for: a bassist on the root, a sax on the melody, and the guitar comping the two middle

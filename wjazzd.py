@@ -1500,6 +1500,7 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
         texture=args.texture,
         bass=args.bass,
         melody=args.voices,
+        harmony=args.harmony,
     )
 
     print(f"{solo.title} - {solo.performer} (melid {solo.melid}, {solo.key})")
@@ -1554,6 +1555,7 @@ def arrange_slots(
     texture: str = "uniform",
     bass: str = "auto",
     melody: str = "auto",
+    harmony: str = "auto",
     beats_per_bar: int = 4,
     diagnostics: Optional[Diagnostics] = None,
 ) -> Tuple[List[ArrangementStep], List[int], List[str]]:
@@ -1661,6 +1663,7 @@ def arrange_slots(
         texture=texture,
         bass=bass,
         melody=melody,
+        harmony=harmony,
         beats_per_bar=beats_per_bar,
     )
 
@@ -1679,6 +1682,7 @@ def _corpus_options(
     beats_per_bar: int,
     bass: str = "auto",
     melody: str = "auto",
+    harmony: str = "auto",
 ) -> ArrangeOptions:
     """The request `arrange_slots` makes of the engine, as one value.
 
@@ -1734,6 +1738,7 @@ def _corpus_options(
         texture=texture,
         bass=bass,
         melody=melody,
+        harmony=harmony,
         beats_per_bar=beats_per_bar,
         timings=typed_timings,
         bass_pcs=bass_pcs or None,
@@ -1754,6 +1759,7 @@ def arrange_head(
     texture: str = "uniform",
     bass: str = "auto",
     melody: str = "auto",
+    harmony: str = "auto",
 ) -> HeadArrangement:
     """Builds a chord-melody arrangement of a head, end to end.
 
@@ -1789,6 +1795,7 @@ def arrange_head(
     steps, rescued, arrange_notes = arrange_slots(
         built.triples, built.timings, non_chord_tone=non_chord_tone,
         fallback=fallback, grips=grips, texture=texture, bass=bass, melody=melody,
+        harmony=harmony,
     )
     # How many steps a diminished retry *would* rescue, whether or not it ran. Set
     # here rather than in arrange_slots, which has no Skeleton to report it on and

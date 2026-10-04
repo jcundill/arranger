@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from typing import Callable, Mapping, Optional, Sequence, Tuple
 
 from .grips import GRIP_PREFERENCE
-from .textures import MELODY_AUTO
+from .textures import HARMONY_AUTO, MELODY_AUTO
 from .tuning import MELODY_STRING_CHOICES_FULL, NECK_FRET_MAX, NECK_FRET_MIN
 
 # `(bar, beat, duration)` for one slot. `bar` is signed - a pickup is negative -
@@ -47,10 +47,16 @@ class ArrangeOptions:
     # `bass.py`, where a new one is a row in a table. The default changes nothing that
     # worked before it.
     bass: str = "none"
-    # Which instrument plays the **soprano voice**, from `MELODY_STYLES` in
-    # `textures.py`: "guitar" keeps the melody pinned to the soprano string (the
-    # default, and the historical arrangement), "none" gives the tune to another
-    # instrument and leaves the guitar a guide-tone comping part.
+    # Which voices the guitar plays, from `MELODY_POLICIES` in `textures.py` (which
+    # resolves the `auto` sentinel). `soprano` keeps the melody pinned to the soprano
+    # string - the default, and the historical arrangement - and dropping it gives the
+    # tune to another instrument, leaving the guitar a guide-tone comping part.
+    #
+    # **Named `melody` and carrying a voice list, which reads as a mistake** and is
+    # left in place deliberately: the `harmony=` axis landed beside it and this one is
+    # still a rename away (`docs/comping-styles.md` §6 Q2 and §8 Stage C), and a flag
+    # called `melody` taking `"soprano,alto"` will mislead the next reader. Renaming it
+    # before the question it raises is settled would trade one wrong name for another.
     #
     # An axis of its own, and orthogonal to `texture` and to `bass`, because those
     # answer different questions: where notes fall, and who plays the bottom. A band
@@ -67,6 +73,25 @@ class ArrangeOptions:
     # `bass` does not have this problem because it is deliberately *not* read back out
     # of the options - see the note beside that unpack.
     melody: str = MELODY_AUTO
+    # Which **degrees** this part states when it is not singing, from `HARMONY_STYLES`
+    # in `textures.py`: "guide" is the shipped comping shape (the 3rd and the 7th).
+    #
+    # A fourth axis, and orthogonal to the other three rather than another way of
+    # spelling one of them - and that orthogonality is why it is separate from
+    # `melody`. The three existing axes answer *how many* notes (from the voice
+    # selection), *where* they fall (texture, and the rhythm grid to come) and *who
+    # plays the bottom* (bass). None of them answers **what the part says about the
+    # chord**, which is a different question: `guide` and `shell_root` both sound a
+    # 3rd and a 7th, and differ in whether a root or 5th is stated underneath them.
+    #
+    # The default is the sentinel `HARMONY_AUTO` ("auto") rather than the resolved
+    # "guide", for the same reason `melody` is: it matches `arrange_progression`'s
+    # keyword default, so the two spellings can be compared field-by-field and a
+    # default that disagreed would make every corpus call look like a caller who had
+    # passed both. It resolves to `guide` because that is what the comping route has
+    # always said, so the axis is **inert by default** and every existing arrangement
+    # is unaffected.
+    harmony: str = HARMONY_AUTO
     beats_per_bar: int = 4
     # `Sequence`, not `List`, and that is load-bearing rather than stylistic: the
     # library and the corpus hold *different* timing types - `Tuple[int, float, ...]`
