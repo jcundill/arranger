@@ -5,11 +5,14 @@ axis (`harmony=full|guide|shell_root|root`), so `shell_root` exists and the degr
 table in §4.1 is no longer a proposal in its entirety. Stage D has landed the **first half
 of the rhythm grid** — `grid=every_note|freddie|charleston|joe_pass|final_and` — so §4.2's
 table is built as a closed set of named rows, with the free-form spelling (§6 Q6) still to
-come. **`hold=` is withdrawn** — see Stage D — and a measured defect now stands between
-the grid and the styles it was built for: [open-issues.md](open-issues.md) item 10, where a
-quarter of the beat positions a grid names produce no chord at all, because a grid can only
-*filter* melody slots and harmony is stored per melody note. §6 still holds open questions,
-and `--voices`
+come. **`hold=` is withdrawn** — see Stage D — and a measured defect stood between the grid
+and the styles it was built for: [open-issues.md](open-issues.md) item 10, where a quarter
+of the beat positions a grid names produced no chord at all, because a grid could only
+*filter* melody slots and harmony was stored per melody note. **Its stage 3 landed**: on the
+comping route the grid now *generates* positions rather than filtering them, so the union is
+live and `charleston` and `joe_pass` are no longer silent on a 2/2 head — the silence was
+never the metre, as §4.2 below originally supposed. §6 still holds open questions, and
+`--voices`
 is still `--voices`. This
 records a design and the measurements that forced it, so the decision can be reviewed
 rather than re-derived. It follows
@@ -212,13 +215,27 @@ exist, which it does: measured on this 2/2 head the final upbeat is 2.5 and it i
 selectable under `--skeleton eighths`. A grid that cannot be written in one metre and
 played in another is not a rhythmic idea, it is a spelling.
 
-**But `charleston` is a 4/4 figure and is *not* bar-relative** — this was corrected after
-a measurement here read as a defect. The Charleston is the on-beat-and-the-and of 2 in a
-four-beat bar, so on a 2/2 bar the honest reading is 1 + and-of-**1** (the half-note
-pulse), not 1 + and-of-2. Run against this 2/2 head as written, `charleston` comes out
-silent — **and that is not a bug in the grid or in the head**: it is a 4/4 idiom asked
-of a 2/2 bar, and the mismatch is the arranger's, not the library's. Both committed
-fixtures are 2/2, so nothing here can exercise it.
+**But `charleston` is a 4/4 figure and is *not* bar-relative** — and the reason it came out
+silent on this 2/2 head was **not the metre at all**. This paragraph originally said it was
+"a 4/4 idiom asked of a 2/2 bar… the mismatch is the arranger's, not the library's". That
+was a misdiagnosis, reached from a measurement that was right and an inference that was not,
+and the same two failure modes as [open-issues.md](open-issues.md) item 4 and item 10.
+
+The measurement was correct — `charleston` **was** silent — and the cause was that a grid
+could only *filter* melody slots, so a position with no written note was unreachable
+whatever the pattern said. Only 41 of the 80 notes on this head fall on a beat, and the
+Charleston names the and of beat 2, which almost none of them does. `joe_pass`, which
+names the *ands*, was silent on all three committed fixtures for the same reason.
+
+Stage 3 of item 10 landed the fix: on the comping route the grid now **generates** its
+positions from the timeline rather than filtering the melody's. Measured on this 2/2 head,
+every named grid now places something — `every_note` 63, `charleston` 63, `joe_pass` 64,
+`final_and` 32 — and a Charleston is playable in 2/2.
+
+**So the distinction below survives, but its consequence does not.** The spelling still
+differs — a metre-relative figure is written against beat numbers and a bar-relative one
+against `LAST` — and that is worth recording. What no longer holds is the conclusion that a
+metre-relative figure *cannot* be played in another metre.
 
 Which means a pattern table has to say which is which, because the two spell differently:
 

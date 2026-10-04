@@ -925,12 +925,13 @@ adding the next policy: **name the generator, not the axis value.**
 
 ## 10. A chord in force is stored per melody note, so a bar the melody skips is silent
 
-**Status: open; stages 1 and 2 landed (the timeline is recorded and queryable), the defect
-is not fixed.** Found while asking what a comping grid should do on a bar whose melody is
-all rests. It is not a grid bug and not a walking-bass bug: it is one missing data
-structure, and three shipped behaviours depend on its absence. **Read "Stage 1" and
-"Stage 2" before the sections below** — together they remove the first of the four changes
-in "Why it is not a patch", which was the one the item assumed was needed.
+**Status: open; stages 1–3 landed (the timeline is recorded, queryable, and unioned on the
+comping route), the defect is only partly fixed.** Found while asking what a comping grid
+should do on a bar whose melody is all rests. It is not a grid bug and not a walking-bass
+bug: it is one missing data structure, and three shipped behaviours depend on its absence.
+**Read "Stage 1" through "Stage 3" before the sections below** — together they remove the
+first of the four changes in "Why it is not a patch", and stage 3 fixes the comping route
+while leaving two debts recorded at the end of it.
 
 ### The symptom
 
@@ -1087,6 +1088,68 @@ give identical answers, and mutating `>=` to `>` fails 2 of the 7, while restori
 `test_it_agrees_with_the_note_path_on_every_note` closes the loop at 271 of 271 — the
 data agrees with the notes, and now the *query over* that data agrees too, which is a
 different claim and could have failed at the duplicate-position boundary above.
+
+### Stage 3 — landed: the comping union
+
+`chord_slots` yields one slot per position the grid names, and `arrange_xml_head` unions
+them with `head_skeleton`'s on the **comping route only**. **This is the first phase that
+changes output**, and the scope is deliberately narrow:
+
+| | steps before | steps after |
+|---|---|---|
+| `comps+freddie` | 80 / 81 / 110 | **102 / 103 / 124** |
+| `comps+joe_pass` | 80 / 81 / 110 | **105 / 114 / 159** |
+
+Measured over three fixtures and fourteen flag combinations: **six arrangements change,
+thirty-six do not** — including all four `grid=` arrangements on the singing route, and
+`make demo`. The gate is 1003 tests with every pre-existing assertion passing unchanged.
+
+**`every_note` is excluded from the union, and that is load-bearing.** It names every beat
+of the bar, so merging it with the notes would keep every position the note path has *and
+drop the ones it does not* — the melody runs at sixteenths and the grid at beats, so the
+union would thin the part. That is the one case where the two lists must not be merged.
+
+**A stab's duration is now the grid's, not the note's** — the distance to the next grid
+position, capped at the barline. Measured: `every_note` and `freddie` give 0.5 on a 2/2
+fixture, `joe_pass` gives 0.25 and 0.5 because it names the *ands*, and **no grid produces
+a whole note anywhere**. That is the correction the conflation above asked for, delivered
+as arithmetic rather than a new flag.
+
+**`charleston` was not a 4/4 figure asked of a 2/2 bar.** §4.2 of `comping-styles.md`
+attributed its silence to the metre, and that was a misdiagnosis: the grid could only
+*filter* melody slots, so a position with no note was unreachable whatever the pattern
+said. Measured on the 2/2 fixtures, every named grid now places something — `every_note`
+63, `charleston` 63, `joe_pass` 64, `final_and` 32 — and `joe_pass` was previously
+**silent on all three**.
+
+**Two bugs this phase's own tests caught.**
+
+- **A skipped resolution step, and it hit the default arrangement.** The route predicate
+  was `voices_have_soprano(parse_voices(melody))`, and `parse_voices("auto")` returns the
+  **sentinel** `("auto",)`, which contains no soprano — so the *melody-bearing* route was
+  classified as the comping one and unioned grid positions into itself. Measured: **14
+  steps of a singing `grid=freddie` arrangement carried a placeholder melody.** Fixed with
+  `resolve_voices`. This is AGENTS.md trap 12 arriving from a new direction: a *resolution*
+  step skipped, so a policy reads as something it is not.
+- **`NO_CHORD` is not usable as a placeholder melody.** The corpus pre-pass parses a slot's
+  melody with `musthe.Note` (`wjazzd.unresolved_steps`) and it raised
+  `ValueError: Could not parse the note 'NC'` — a crash, not a wrong note.
+  `_PLACEHOLDER_MELODY = "C4"` parses, and is documented as the **cost of a deferral**
+  rather than as a design: the honest field is `ArrangementStep.melody: Optional[str]`,
+  which would let a slot with no tune carry no note at all. Deferred, measured, and
+  asserted in a test so it cannot be quietly forgotten.
+
+### Still open
+
+The corpus path (`wjazzd.skeleton_slots`) builds its slots from **notes** and has no
+timeline, so a Weimar head with a bar of rests has the same defect and none of this applies
+to it. Those tests run only in the manual `corpus` job, so CI would not catch a regression
+there either.
+
+`melody_alone_case`'s fifth kind is likewise still owed: an invented slot carries a
+placeholder melody rather than none, so it reaches that function as a melody slot and takes
+the comping route by virtue of `melody_voiced=False` rather than by its own nature. That
+works, and it is a debt rather than a design.
 
 ### Why it is not a patch
 

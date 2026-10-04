@@ -21,12 +21,14 @@ from xml.etree import ElementTree
 import arranger
 from arranger import NO_CHORD, ChordParser
 from headxml import (
+    _PLACEHOLDER_MELODY,
     Head,
     HeadChange,
     _key_label,
     _part_is_tab,
     arrange_xml_head,
     chord_at,
+    chord_slots,
     head_cli,
     head_skeleton,
     load_musicxml,
@@ -911,6 +913,148 @@ class TestChordAt(unittest.TestCase):
         self.assertEqual(chord_or_fail(unsorted, 3, 1.0).chord, "D7")
         self.assertEqual(chord_or_fail(unsorted, 1, 1.0).chord, "Gmaj")
         self.assertIsNone(chord_at(unsorted, 0, 1.0))
+
+
+class TestChordSlots(unittest.TestCase):
+    """`chord_slots` and the union: the comping route stops losing positions.
+
+    **Phase 3 of open-issues item 10, and the first phase that changes output.** Phases 1
+    and 2 were additive and left every arrangement byte-identical; this one adds steps.
+    The scope is pinned below: **only the comping route with a named grid**, because the
+    melody-bearing route's "a chord under each melody note" is the chord-melody idiom and
+    a grid must not add positions to it.
+
+    Measured over three fixtures and fourteen flag combinations, six arrangements change
+    and thirty-six do not:
+
+        comps+freddie   80 -> 102,  81 -> 103,  110 -> 124 steps
+        comps+joe_pass  80 -> 105,  81 -> 114,  110 -> 159 steps
+
+    Every other combination — including all four `grid=` ones on the singing route, and
+    `make demo` — is byte-identical.
+    """
+
+    def setUp(self):
+        self.rainy = load_musicxml(RAINY_DAY)
+        self.iwas = load_musicxml(I_WAS_DOING_ALL_RIGHT)
+
+    def _melody_positions(self, head):
+        return {(s[1], round(s[2], 6)) for s in head_skeleton(head)}
+
+    def _chord_positions(self, head, grid):
+        return {(s[3], round(s[4], 6)) for s in chord_slots(head, grid=grid)}
+
+    def test_a_bar_with_no_notes_now_gets_its_chords(self):
+        """Bar 32 of `heres_that_rainy_day`: the defect, and the reason for the phase.
+
+        No notes at all, two changes (`Am7` then `D9`), and before this the bar produced
+        nothing whatever — it was not quiet, it was absent.
+        """
+        self.assertEqual([n.bar for n in self.rainy.notes if n.bar == 32], [])
+        positions = sorted(
+            (beat, chord) for _m, _q, chord, bar, beat, _d in
+            chord_slots(self.rainy, grid="freddie") if bar == 32
+        )
+        self.assertEqual(positions, [(1.0, "Am7"), (2.0, "D9")])
+
+    def test_the_union_adds_exactly_the_positions_without_a_note(self):
+        """The two lists are disjoint where it matters, and the union is their sum.
+
+        Stated as a count rather than eyeballed, because the claim is arithmetic: every
+        grid position either already had a melody note or was added. `chord_slots` returns
+        the grid's positions alone and `_merge_chord_slots` does the union, so this
+        measures the two separately and checks the arithmetic rather than trusting either.
+        """
+        melody = self._melody_positions(self.iwas)
+        chords = self._chord_positions(self.iwas, "freddie")
+        added = chords - melody
+        self.assertGreater(
+            len(added), 0,
+            "the fixture must actually have positions with no melody note",
+        )
+        # A position with both is one slot, not two, and the melody slot wins it — so the union
+        # is exactly the two sets, and its size is the arithmetic the step loop then sees.
+        self.assertEqual(len(chords), len(chords & melody) + len(added))
+        self.assertEqual(len(melody | chords), len(melody) + len(added))
+
+    def test_every_named_grid_places_something(self):
+        """`joe_pass` and `charleston` were silent on all three fixtures before this.
+
+        Stage D of `docs/comping-styles.md` records `charleston` coming out silent on a
+        2/2 head and attributes it to the figure being 4/4. That was a misdiagnosis: the
+        grid could only filter melody slots, so a position with no note was unreachable
+        whatever the pattern said. Measured now, on a 2/2 head:
+
+            every_note  63   charleston  63   joe_pass  64   final_and  32
+        """
+        for grid in ("every_note", "freddie", "charleston", "joe_pass", "final_and"):
+            with self.subTest(grid=grid):
+                self.assertTrue(
+                    self._chord_positions(self.rainy, grid),
+                    f"grid={grid} places nothing at all",
+                )
+
+    def test_a_stab_is_never_a_whole_note(self):
+        """The duration is the grid's, not the melody note's — which is the point.
+
+        Under `every_note` and `freddie` every duration on a 2/2 fixture is 0.5 — one
+        notated beat. A stab that inherited the melody's length would be a whole note on a
+        bar the melody holds, which is the confusion item 10 records.
+
+        `joe_pass` is 0.25 or 0.5 because it names the *ands*, so the distance to the next
+        position is half a beat — asserted here because it is the same rule producing a
+        different number, which is what makes "the grid decides" a claim rather than a
+        coincidence.
+        """
+        for grid, expected in (("every_note", {0.5}), ("freddie", {0.5}),
+                               ("joe_pass", {0.25, 0.5})):
+            with self.subTest(grid=grid):
+                durations = {round(s[5], 6) for s in chord_slots(self.rainy, grid=grid)}
+                self.assertEqual(durations, expected, f"grid={grid}")
+                # And never a whole note, whichever grid asked.
+                self.assertNotIn(1.0, durations, f"grid={grid} produced a whole note")
+
+    def test_a_position_with_no_chord_in_force_is_skipped(self):
+        """Never guessed: bar 1 beat 1 of `but_not_for_me` is a rest under no harmony.
+
+        The file writes a quarter rest, and the first `<harmony>` arrives on beat 1.5, so
+        beat 1.0 has neither a note nor a chord. `chord_at` returns `None` and the position
+        is dropped rather than filled with the chord arriving half a beat later.
+        """
+        head = load_musicxml(BUT_NOT_FOR_ME)
+        self.assertIsNone(chord_at(head.chords, 1, 1.0))
+        first = min(beat for bar, beat in self._chord_positions(head, "freddie")
+                    if bar == 1)
+        self.assertGreater(first, 1.0, "a position with no harmony was filled in")
+
+    def test_the_singing_route_is_not_touched(self):
+        """`melody=auto` unions nothing, and no placeholder reaches a singing part.
+
+        The regression that makes this necessary, and it was measured rather than
+        predicted: `parse_voices("auto")` returns the **sentinel** `("auto",)`, which has
+        no soprano, so testing the route on the parsed value alone classified the *default*
+        arrangement as the comping route. Fourteen steps of a singing `grid=freddie`
+        arrangement carried the placeholder melody before `resolve_voices` was added.
+        """
+        body = harmony("C", "major") + note("C", 5)
+        path = write_score(score(body, divisions=4, beats=4))
+        self.addCleanup(os.unlink, path)
+        singing, _head, _notes = arrange_xml_head(path)
+        self.assertEqual([s.melody for s in singing], ["C5"])
+        self.assertNotIn(_PLACEHOLDER_MELODY, [s.melody for s in singing])
+
+    def test_a_slot_whose_melody_has_stopped_carries_the_placeholder(self):
+        """Where no note is sounding, `melody_at` is `None` and the slot says so plainly.
+
+        Bar 32 of `heres_that_rainy_day` follows the last melody note, so there is no tune
+        under the chord. `_PLACEHOLDER_MELODY` is what stands in, and it is a placeholder
+        rather than a claim — the honest `Optional[str]` is deferred and recorded in the
+        issue. Asserted so the deferral is visible in a test rather than only in prose.
+        """
+        slots = [s for s in chord_slots(self.rainy, grid="freddie") if s[3] == 32]
+        self.assertTrue(slots, "bar 32 must place its chords")
+        for melody, _quality, _name, _bar, _beat, _duration in slots:
+            self.assertEqual(melody, _PLACEHOLDER_MELODY)
 
 
 class TestKeySignature(unittest.TestCase):
