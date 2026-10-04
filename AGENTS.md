@@ -25,7 +25,7 @@ gate and the conventions — not the explanation.
 | the Weimar corpus, head selection, skeletons | [docs/corpus.md](docs/corpus.md) | `wjazzd.py` |
 | a known bug, with its measurement | [docs/open-issues.md](docs/open-issues.md) | — |
 | `voices=`, which voices the guitar plays | [docs/voices-axis.md](docs/voices-axis.md) | `arranger/textures.py` |
-| the comping axes (`harmony=`, the rhythm grid) | [docs/comping-styles.md](docs/comping-styles.md) | — |
+| the comping axes (`harmony=`, `grid=`, the rhythm grid) | [docs/comping-styles.md](docs/comping-styles.md) | `arranger/textures.py` |
 | how something was decided, historically | [docs/history/](docs/history/) | — |
 | user-facing behaviour and examples | [README.md](README.md) | — |
 
@@ -40,18 +40,18 @@ treat a contradiction between them as a bug in one of them.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **953 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **970 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 12 of those 953, and it is the one that fails if this
+(`tests/test_docs.py` is 12 of those 970, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree. It also fails if a document
 exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
 new file cannot be added without being registered.)
 
-**Four axes, not one.** `texture=` (where notes fall), `bass=` (who plays the bottom,
-`BASS_STYLES`), `voices=` (which voices the guitar plays, `VOICE_NAMES`) and `harmony=`
-(which *degrees* the part states when it is not singing, `HARMONY_STYLES`) are
-**orthogonal**, and
+**Five axes, not one.** `texture=` (where notes fall), `bass=` (who plays the bottom,
+`BASS_STYLES`), `voices=` (which voices the guitar plays, `VOICE_NAMES`), `harmony=`
+(which *degrees* the part states when it is not singing, `HARMONY_STYLES`) and `grid=`
+(*where a chord falls* in the bar, `GRID_STYLES`) are **orthogonal**, and
 a band setting is a combination rather than a mode: `bass="none", voices="none"` is a
 bassist on the root, a horn on the melody and the guitar comping guide tones between them.
 Adding an axis means a new `*_STYLES` / `*_POLICIES` pair and a `*_AUTO` sentinel that
@@ -441,6 +441,33 @@ Each of these cost real time, or nearly shipped a defect.
     The general form: **a two-argument `Enum(...)` is not a value lookup, it is class
     definition**, and `make check` cannot catch this because it runs one version.
     Anything version-sensitive has to be exercised on each version CI runs.
+12. **A new guard clause is not a new route — and moving one can break the case it
+    did not name.** Adding `grid=` meant asking `decisions.melody_alone_case` what an
+    **off-grid** slot should do, and the answer differs by route: with the guitar
+    singing the note sounds alone, with it comping the guitar is *silent*. That is a
+    fourth *kind*, `MELODY_ALONE_REST`, not a flag — a bool could not express both,
+    which is trap 6's shape arriving again from a new direction.
+
+    The ordering of that function's three guards is what cost the time — 12 tests over
+    two attempts, because each ordering fixes one route and breaks the other:
+
+    - placing the grid test **after** the `melody_voiced` guard makes `grid=`
+      **silently inert on the comping route**: measured, all four patterns returned
+      80/80 comps, byte-identical to the default, with no warning anywhere;
+    - hoisting the `NO_CHORD` test **above** that guard lets an `NC` bar reach the
+      comping route, where it must be *dropped with a warning*; it instead survived as
+      a step — `['Dm7', 'NC', 'A7']` where it had been `['Dm7', 'A7']`;
+    - fixing that by returning `NONE` for `NC` everywhere breaks the **singing**
+      route, which needs `MELODY_ALONE_NO_CHORD`; the note then found no voicing and
+      vanished, taking **11 tests across four files**, every one of them `NC`.
+
+    The general form: **before reordering a decision function's guards, ask what each
+    guard is load-bearing *for*, and then check the two routes separately.** Both
+    routes build different steps from one function — which is the whole reason it
+    returns a kind — so an ordering right for one is not thereby right for the other.
+    An `NC` bar is also what proves "off the grid" is not universal: it has *no chord
+    to place*, so "silent here" and "no chord here" are different claims, and only the
+    first is a rest.
 
 ## Where things are documented
 

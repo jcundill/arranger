@@ -1013,3 +1013,79 @@ warn twice or hand the horn's line back to the guitarist.
 
 
 
+
+## `grid=` — where a chord falls
+
+`harmony=` answers *which degrees* a stab states; this answers *where one lands*. A
+comping style needs both, and `bass=` supplies a third orthogonal question (what plays the
+bottom). The vocabulary is `GRID_STYLES` + `GRID_PATTERNS` + `GRID_AUTO` in `textures.py`,
+with `parse_grid` / `resolve_grid` / `grid_allowed` beside the other axes' functions.
+
+**Positions are `(beat, eighths)` pairs, and `beat` may be a sentinel.** `LAST` resolves
+to the metre's final beat and `ALL` to every beat of the bar, so a pattern names *a
+position* rather than a beat number — `final_and` is 2.5 in 2/2, 3.5 in 3/4 and 4.5 in
+4/4 from one row. `eighths` is an **integer count of eighths**, not a float, because a
+notated position is a float in practice (a 3/4 bar's second beat is 1.666...) and
+comparing floats for equality is a comparison that will eventually be false for the wrong
+reason — the same argument as `_BEAT_EPSILON`.
+
+| pattern | positions | kind |
+|---|---|---|
+| `every_note` | **none** — the absence of a restriction | bar-relative |
+| `freddie` | `(ALL, 0)` | bar-relative |
+| `final_and` | `(LAST, SUB)` | bar-relative |
+| `charleston` | `(1, 0), (2, SUB)` | metre-relative |
+| `joe_pass` | `(ALL, SUB)` | metre-relative |
+
+**`bar_relative` is a property of the pattern, not a comment.** It says whether a *silence*
+is the arranger's mistake: a bar-relative pattern resolves in any metre, while a
+metre-relative one is a named figure of a particular metre and is either right or is a 4/4
+figure asked of a 2/2 bar. That is the arranger's calling, not an engine defect, and
+recording it as data is what stops "the pattern silently did nothing" reading as a bug.
+
+**`every_note` is not a pattern with positions; it is the absence of one.** `grid_positions`
+returns nothing for it, so `grid_allowed` must test it explicitly — deriving the check from
+`grid_positions` made the *default* warn in every metre, which is the false reading the
+check exists to avoid. "Places nothing" and "has no positions to place" are different
+claims and only the first is a mismatch.
+
+**The refusal is unreachable through the shipped rows**, measured: every metre-relative
+pattern fits every metre, because `charleston` keeps its beat 1 and `joe_pass` is built on
+`ALL`. `grid_allowed` is therefore defensive, and the two warning messages are tested
+against a temporary row. `tests/test_grid.py::test_no_shipped_row_is_a_mismatch_in_any_metre`
+exists to keep that fact from being forgotten — a check no input can fail proves nothing.
+
+**`beat=None` is on the grid.** A slot nobody located has no position to be off, the same
+rule `_metric_weight` follows with its `-1`. Without it a hand-written progression — which
+carries no timings — would lose every chord the moment a grid was passed, which is the
+opposite of an opt-in.
+
+### What an off-grid slot does, and why it is a fourth kind
+
+`decisions.melody_alone_case` returns a *kind*, and the grid added `MELODY_ALONE_REST`
+alongside `MELODY_ALONE_NONE`, `MELODY_ALONE_TEXTURE` and `MELODY_ALONE_NO_CHORD`:
+
+- **guitar singing** → `MELODY_ALONE_TEXTURE`: the note of the tune sounds alone. No note
+  is dropped, ever.
+- **guitar comping** → `MELODY_ALONE_REST`: the guitar is silent. There is no melody on
+  this guitar to play alone, and the tune is the horn's. The step is still emitted, so the
+  part keeps its bar and beat and lines up against the tune; all six strings are muted, so
+  every renderer draws silence rather than a held shape.
+- **`NC`** → unchanged per route. It has *no chord to place*, so "off the grid" is not a
+  claim about it: the comping route drops the bar with a warning, the singing route plays
+  the note alone.
+
+The **ordering of those guards is load-bearing and was got wrong twice** — see
+[../AGENTS.md](../AGENTS.md) trap 12 for the three orderings and what each one breaks.
+
+**The grid does not touch the bass line**, and that is orthogonality tested rather than
+asserted: measured on `but_not_for_me` with `texture=targets, melody=alto,tenor,
+bass=walk`, the walked notes are `[51, None, 52, None]` at both `grid=auto` and
+`grid=freddie`. A grid removes chords, never the thumb.
+
+### What is not built
+
+The **free-form** spelling (naming positions directly rather than choosing a row) and a
+**held baseline** (`hold=`). The latter is not a flag: `ArrangementStep` has no sustain
+concept at all, so a held root under a stab pattern would touch all four renderers' attack
+logic. See [comping-styles.md](comping-styles.md) §8 Stage D.

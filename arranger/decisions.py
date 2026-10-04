@@ -56,6 +56,7 @@ from .tuning import NO_CHORD, ROLE_FILL, ROLE_TARGET, ArrangementStep, Voicing
 MELODY_ALONE_NONE = "none"        # look it up through the grips, as usual
 MELODY_ALONE_TEXTURE = "texture"  # a texture case: has a harmony, not spelled out
 MELODY_ALONE_NO_CHORD = "nc"      # an NC bar: no harmony to voice at all
+MELODY_ALONE_REST = "rest"        # off the grid: the guitar plays nothing here
 
 
 def resolve_texture_grips(
@@ -119,6 +120,7 @@ def melody_alone_case(
     name: str,
     has_thumb: bool = False,
     melody_voiced: bool = True,
+    on_grid: bool = True,
 ) -> str:
     """Which of the three "play this as a single note" routes this slot takes.
 
@@ -167,11 +169,73 @@ def melody_alone_case(
     guide tone to state and nothing for the guitar to play. It is answered as
     `MELODY_ALONE_NONE` and the caller warns instead, which keeps the tune's silence
     visible rather than quietly handing the horn's line to the guitarist.
+
+    **`on_grid=False` is the grid axis, and it is the one case where the guitar plays
+    nothing rather than one note.** Every other answer ends at
+    `get_melody_only_voicing`, which is the tune on its own; there is no such thing
+    when the tune is somebody else's, so an off-grid slot on the comping route is a
+    **rest** - `MELODY_ALONE_REST`, a fourth kind. This is `docs/comping-styles.md`
+    §4.2's "a melody note with no chord position on it sounds alone", and it needs two
+    different answers rather than one: with the guitar singing, the note still sounds
+    (the texture case); with it not singing, the note is the horn's and the guitar has
+    nothing to add. A single bool would have had to pick one.
     """
+    # **The ordering of the three guards below is load-bearing, and each one has been
+    # got wrong in a way its test caught.**
+    #
+    # The grid is asked *inside* the voice guard rather than after it. Answering the
+    # voice guard first made `grid=` silently inert on the comping route: measured, all
+    # four patterns returned 80 of 80 comps on `but_not_for_me` under
+    # `melody=alto,tenor`, byte-identical to the default. That is safe because a grid
+    # only ever *removes* chords, so it cannot reintroduce a soprano the voice
+    # selection removed.
     if not melody_voiced:
-        return MELODY_ALONE_NONE
+        # An `NC` bar is **not** a rest. It has no chord, so there is no guide tone to
+        # place and nothing to comp: the caller drops the bar and warns, which is the
+        # honest report. Answering `REST` here would emit a step where there should be
+        # none and swallow that warning - measured: the `NC` bar reappeared in the
+        # arrangement as a silent step, and
+        # `test_an_nc_bar_is_reported_rather_than_silently_dropped` caught it
+        # returning `['Dm7', 'NC', 'A7']` where it had returned `['Dm7', 'A7']`.
+        #
+        # So the grid only decides whether the guitar is silent *about a chord it
+        # could otherwise state*. "Nothing here to play" and "nothing to say here" are
+        # different claims, and only the first is a rest.
+        if quality == NO_CHORD or name == NO_CHORD:
+            return MELODY_ALONE_NONE
+        return MELODY_ALONE_REST if not on_grid else MELODY_ALONE_NONE
+    # The singing route answers `NC` the way it always has, and it must keep doing so
+    # even though the comping route above returns `NONE` for the same slot: the two
+    # routes build different steps there (the caller drops the bar and warns, versus
+    # `get_melody_only_voicing` with `melody_only=True`), which is the reason this
+    # function returns a *kind* and not a bool. Dropping the `NC` answer along with the
+    # comping one sent the note through the harmonised path instead, where it found no
+    # voicing and vanished - 11 tests across four files, all `NC`.
     if quality == NO_CHORD or name == NO_CHORD:
         return MELODY_ALONE_NO_CHORD
+    if not on_grid:
+        # **Off the grid.** The answer depends on whether the guitar is singing, which
+        # is the whole reason this cannot be a bool on the texture case:
+        #
+        # - singing: the note of the tune still sounds, alone. This is
+        #   `docs/comping-styles.md` §4.2's "a melody note with no chord position on
+        #   it sounds alone", and it is the *texture* case - the step has a harmony,
+        #   it is simply not being spelled out here, so `melody_only` must stay False.
+        # - not singing: there is no melody on this guitar to play alone, and the
+        #   tune belongs to the horn. The guitar is **silent**, which is what a comping
+        #   grid means - a stab on the ands and nothing on the beats - and it is a
+        #   fourth kind because no existing answer is that.
+        #
+        # Without the second case an off-grid slot fell through to the comping route
+        # and comped anyway, the exact opposite of what `grid=joe_pass` asks for.
+        # Without the first case it rested, and the guitar lost notes of the tune it
+        # was supposed to be singing - measured at 39 of 80 steps on
+        # `but_not_for_me` under `grid=freddie`, where every note off the beat went
+        # silent instead of sounding alone.
+        # Reached only when the guitar **is** singing, since the guard above answers
+        # the comping route - so this is unconditionally the texture case: the note of
+        # the tune still sounds, alone.
+        return MELODY_ALONE_TEXTURE
     if (has_thumb and role == ROLE_FILL) or slot_grips == ():
         return MELODY_ALONE_TEXTURE
     return MELODY_ALONE_NONE

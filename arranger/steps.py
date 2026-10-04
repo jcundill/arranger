@@ -52,6 +52,7 @@ from .chords import (
 )
 from .decisions import (
     MELODY_ALONE_NO_CHORD,
+    MELODY_ALONE_REST,
     MELODY_ALONE_TEXTURE,
     is_bass_only,
     is_repeated_step,
@@ -71,6 +72,7 @@ from .grips import (
 )
 from .options import ArrangeOptions
 from .textures import (
+    GRID_AUTO,
     HARMONY_AUTO,
     HARMONY_SHELL_ROOT,
     MELODY_AUTO,
@@ -81,8 +83,11 @@ from .textures import (
     THUMB_TEXTURES,
     _metric_weight,
     _roles_for_slot,
+    on_grid,
+    parse_grid,
     parse_harmony,
     parse_voices,
+    resolve_grid,
     resolve_harmony,
     resolve_voices,
     voices_have_soprano,
@@ -93,6 +98,7 @@ from .tuning import (
     NO_CHORD,
     PITCH_CLASS_NAMES,
     ROLE_TARGET,
+    STANDARD_TUNING,
     ArrangementStep,
     Voicing,
     _note_name,
@@ -197,6 +203,21 @@ def _resolve_harmony(
     stated there: the band does not change halfway through a tune.
     """
     return resolve_harmony(parse_harmony(harmony), voices, diagnostics)
+
+
+def _resolve_grid(grid: str, beats_per_bar: int, diagnostics: Diagnostics) -> str:
+    """The grid to place chords on: parsed, `auto` resolved, validated or refused.
+
+    The same two-step shape as `_resolve_melody` and `_resolve_harmony` above,
+    because it is the same rule about the same kind of thing: `textures` owns the
+    vocabulary and the refusal, this function owns only the wiring.
+
+    **Takes the metre rather than a texture**, and that is what distinguishes it from
+    `harmony`. Whether a rhythm fits is a property of the metre - `final_and` is the
+    upbeat of the last beat whatever the arrangement is doing - so it is resolved
+    against `beats_per_bar` and nothing else.
+    """
+    return resolve_grid(parse_grid(grid), beats_per_bar, diagnostics)
 
 
 class VoiceLeadingEngine:
@@ -611,6 +632,7 @@ class VoiceLeadingEngine:
         bass: str = BASS_AUTO,
         melody: str = MELODY_AUTO,
         harmony: str = HARMONY_AUTO,
+        grid: str = GRID_AUTO,
         beats_per_bar: int = 4,
         diagnostics: Optional[Diagnostics] = None,
         options: Optional[ArrangeOptions] = None,
@@ -765,6 +787,7 @@ class VoiceLeadingEngine:
                     # silently lose the override.
                     ("melody", melody),
                     ("harmony", harmony),
+                    ("grid", grid),
                     ("beats_per_bar", beats_per_bar),
                 )
                 if value != ArrangeOptions.__dataclass_fields__[name].default
@@ -782,6 +805,7 @@ class VoiceLeadingEngine:
             texture = options.texture
             melody = options.melody
             harmony = options.harmony
+            grid = options.grid
             beats_per_bar = options.beats_per_bar
             if options.timings is not None:
                 timings = list(options.timings)
@@ -832,6 +856,13 @@ class VoiceLeadingEngine:
         # reported **once, up front**, rather than never at all on an arrangement where
         # the guitar happens to be singing - the same argument as `_resolve_melody`'s.
         harmony_family = _resolve_harmony(harmony, voices, diagnostics)
+        # The grid axis, resolved here for the same reason and read by **both** routes
+        # below rather than only the comping one - unlike `harmony=`, which the guitar
+        # singing makes unreachable. A grid says where a chord lands, and that is a
+        # question about the part whether the guitar is singing it or comping under a
+        # horn, so scoping it to one route would make `grid=` silently inert on a
+        # melody-bearing arrangement rather than doing nothing there.
+        grid_pattern = _resolve_grid(grid, beats_per_bar, diagnostics)
 
         slots: Optional[List[_Slot]] = None
         if has_thumb:
@@ -921,13 +952,57 @@ class VoiceLeadingEngine:
 
             # A slot that is played as a single note rather than looked up. Which
             # slots those are, and why each is a branch rather than a missing case,
-            # is decisions.melody_alone_case. It returns a *kind*, because the two
+            # is decisions.melody_alone_case. It returns a *kind*, because the three
             # non-default routes build different steps: an NC bar sets
-            # `melody_only=True`, a texture case must not.
+            # `melody_only=True`, a texture case must not, and an off-grid slot on the
+            # comping route is a rest with no notes in it at all.
+            #
+            # `on_grid` is read from the **slot's own beat**, not from the bar it sits
+            # in: the grid is bar-relative, so the same beat number means different
+            # positions in different bars of different metres, and `textures.on_grid`
+            # is the one place that knows the metre.
             melody_alone = melody_alone_case(
                 texture, role, slot_grips, chord_type, name, has_thumb,
                 melody_voiced=melody_voiced,
+                on_grid=on_grid(beat, grid_pattern, beats_per_bar),
             )
+            if melody_alone == MELODY_ALONE_REST:
+                # The guitar is silent and the horn has the note. **The step is still
+                # emitted**, carrying the bar, the beat and the chord name: it is what
+                # keeps the melody's position in the tab staff, and a comping part
+                # whose bars collapsed to their stabs would no longer line up against
+                # the tune it is comping under.
+                #
+                # All six strings muted, so every renderer draws it as silence rather
+                # than as a held shape - `bass_only` would be the opposite claim (the
+                # thumb alone) and `repeated` would claim a melody this part does not
+                # play. `melody_only` stays **False**: the step does have a harmony,
+                # it simply is not being stated here.
+                arrangements.append(ArrangementStep(
+                    chord=name,
+                    melody=note_str,
+                    voicing=Voicing(
+                        frets=[-1] * len(STANDARD_TUNING),
+                        top_fret=0,
+                        avg_fret=0.0,
+                        grip="rest",
+                    ),
+                    grip="rest",
+                    bar=bar,
+                    beat=beat,
+                    duration=duration,
+                    role=role,
+                    metric_weight=weight,
+                    melody_voiced=melody_voiced,
+                ))
+                # The thumb still walks on a rest. A comping grid thins the **chords**,
+                # not the bass line - that is the whole difference between `grid=` and
+                # `bass=none`, and dropping the attach here would silently delete the
+                # walk from every bar the grid thinned.
+                cls._attach_bass(
+                    arrangements[-1], slot.bass, arrangements, diagnostics
+                )
+                continue
             if melody_alone == MELODY_ALONE_TEXTURE:
                 solo_voicing = cls.get_melody_only_voicing(
                     melody_note, prefer=top_strings

@@ -71,7 +71,14 @@ from .bass import BASS_AUTO, BASS_STYLES
 from .chords import NON_CHORD_TONE_STRATEGIES
 from .grips import GRIP_PREFERENCE
 from .render import format_progression
-from .textures import HARMONY_AUTO, HARMONY_STYLES, MELODY_AUTO, TEXTURE_STYLES
+from .textures import (
+    GRID_AUTO,
+    GRID_STYLES,
+    HARMONY_AUTO,
+    HARMONY_STYLES,
+    MELODY_AUTO,
+    TEXTURE_STYLES,
+)
 from .tuning import NECK_FRET_MAX, NECK_FRET_MIN, ArrangementStep
 
 if TYPE_CHECKING:  # pragma: no cover - the annotations are strings at runtime
@@ -202,17 +209,17 @@ def add_common_arguments(
     slot_picks: Optional[Sequence[str]] = None,
     skeleton_strategies: Optional[Sequence[str]] = None,
 ) -> None:
-    """Add the 16 flags both front ends take, to `parser`.
+    """Add the 17 flags both front ends take, to `parser`.
 
     `help_text` supplies the prose for the eleven flags whose wording differs
-    between the commands; the other five are written once here because the two
+    between the commands; the other six are written once here because the two
     agree on them. `skeleton_strategies` and `slot_picks` are the reduction
     vocabularies, passed in because they belong to `wjazzd` - see the module
     docstring for why they are not imported.
 
     The order the flags are added in is the order they appear in `--help`. Each
     command now adds its own flags first and this block after, so the shared
-    sixteen appear in the same relative order in both. `head`'s listing is
+    seventeen appear in the same relative order in both. `head`'s listing is
     unchanged by this; `corpus`'s moves `--lift` up to sit with its other
     corpus-specific flags rather than between `--pick` and `--non-chord-tone`,
     which is the only visible difference either command's `--help` has.
@@ -292,6 +299,20 @@ def add_common_arguments(
             "when the guitar has no melody of its own, so it composes with --voices "
             "rather than replacing it. Refused, with a warning, where the voice "
             "selection leaves no room for it"
+        ),
+    )
+    parser.add_argument(
+        "--grid",
+        choices=list(GRID_STYLES) + [GRID_AUTO],
+        default=GRID_AUTO,
+        help=(
+            "where a chord falls in the bar: 'every_note' (the default) states one "
+            "under every written melody note, 'freddie' on every beat of the notated "
+            "bar, 'charleston' on beat 1 and the upbeat of beat 2, 'joe_pass' on the "
+            "upbeat of every beat, 'final_and' on the upbeat of the bar's LAST beat. "
+            "Positions are bar-relative, so 'final_and' is the same musical idea in "
+            "2/2, 3/4 and 4/4. Where the guitar is singing, a note with no chord on "
+            "it sounds alone; where it is comping, the guitar rests"
         ),
     )
     parser.add_argument(

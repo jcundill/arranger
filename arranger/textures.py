@@ -27,12 +27,25 @@ byte-identical to what it always was.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
 from .grips import GRIP_PREFERENCE
 from .tuning import ROLE_FILL, ROLE_TARGET
 
 __all__ = [
+    "ALL",
+    "GRID_AUTO",
+    "GRID_CHARLESTON",
+    "GRID_EVERY_NOTE",
+    "GRID_FINAL_AND",
+    "GRID_FREDDIE",
+    "GRID_JOE_PASS",
+    "GRID_PATTERNS",
+    "GRID_POLICIES",
+    "GRID_STYLES",
+    "GridPattern",
+    "LAST",
     "MELODY_ALTO",
     "MELODY_AUTO",
     "MELODY_BASS",
@@ -54,6 +67,12 @@ __all__ = [
     "HARMONY_ROOT",
     "HARMONY_SHELL_ROOT",
     "HARMONY_STYLES",
+    "SUB",
+    "grid_allowed",
+    "grid_positions",
+    "on_grid",
+    "parse_grid",
+    "resolve_grid",
     "VOICES_ALL",
     "VOICES_NONE",
     "VOICE_NAMES",
@@ -454,11 +473,243 @@ TEXTURE_GRIPS: Dict[str, Dict[str, Tuple[str, ...]]] = {
     "melody_bass": {"target": (), "fill": ()},
 }
 
+# --- The grid axis: where a chord FALLS inside the bar -------------------------
+#
+# The second half of a comping style, and the half `harmony=` cannot express. The
+# degree family says *what* a stab states; this says *where* one lands. They are
+# orthogonal on purpose: a full chord on every beat and a shell on the ands are
+# two different questions, and a user who wants one does not thereby get the other.
+#
+# **Positions are bar-relative, and `LAST` is what makes that true.** The upbeat of
+# the bar's final beat is one musical idea that lands on a different beat number in
+# every metre - 4.5 in 4/4, 2.5 in 2/2, 3.5 in 3/4 - so a pattern that spells it
+# `[(4, SUB)]` would look to a 2/2 head like it named a beat that does not exist.
+# Spelling it `[(LAST, SUB)]` and resolving `LAST` against the metre is the same
+# figure in all three. This is the `TARGET_BEATS` lesson applied to a rhythm: name
+# *the position*, never a literal beat number.
+#
+# Subdivision is an **integer count of eighths**, not a float, for the same reason
+# `_BEAT_EPSILON` exists: a notated position is a float in practice (a 3/4 bar's
+# second beat is 1.666...) and comparing floats for equality to decide whether a
+# chord lands is a comparison that will eventually be false for the wrong reason.
+GRID_EVERY_NOTE = "every_note"
+GRID_FREDDIE = "freddie"
+GRID_CHARLESTON = "charleston"
+GRID_JOE_PASS = "joe_pass"
+GRID_FINAL_AND = "final_and"
+
+# The subdivision of a beat, in whole eighths. Integer on purpose - see above.
+SUB = 1
+
+# Beat sentinels, so a pattern can name a position rather than a beat number.
+LAST = 0   # the metre's FINAL beat, resolved against `beats_per_bar`
+ALL = -1   # every beat the metre has; composes with a subdivision (`(ALL, SUB)`)
+
+
+@dataclass(frozen=True)
+class GridPattern:
+    """One rhythm grid: the within-bar positions a chord may fall on.
+
+    `positions` is a tuple of `(beat, eighths)` pairs, where `beat` is a beat
+    number, `LAST` or `ALL`, and `eighths` is an integer count of eighths from that
+    beat (`0` is the beat, `SUB` is its upbeat).
+
+    **`bar_relative` is a property of the pattern, not a comment**, and it earns its
+    place by saying whether a *silence* is the arranger's mistake. A bar-relative
+    pattern (`freddie`, `final_and`) is playable in any metre - `LAST` resolves, so
+    it never asks for a beat that is not there. A metre-relative one (`charleston`,
+    `joe_pass`) is a named figure of a particular metre: asked of a 2/2 bar it may
+    be wrong, and that is the arranger's calling, not a defect in the engine. Left
+    implicit, a pattern that places nothing reads as a bug; recorded as data, it is
+    a fact about the pattern and the refusal below can name it.
+    """
+
+    positions: Tuple[Tuple[int, int], ...]
+    bar_relative: bool
+
+
+GRID_STYLES: Tuple[str, ...] = (
+    GRID_EVERY_NOTE,
+    GRID_FREDDIE,
+    GRID_CHARLESTON,
+    GRID_JOE_PASS,
+    GRID_FINAL_AND,
+)
+
+#: The named grids. `every_note` is the **shipped** behaviour - one chord per written
+#: melody note - and is what keeps the axis inert: an arrangement naming no grid is
+#: byte-identical to one from before this axis existed.
+#:
+#: `joe_pass` is not invented here. It is
+#: [history/Arranging_Guide.md](history/Arranging_Guide.md) §"Joe Pass", which
+#: specifies the chord pops living "primarily on the and of beats" - so the grid is
+#: every beat's upbeat, and the walking thumb underneath it is the **bass axis**,
+#: not this one. Keeping those separate is what lets `bass=walk` compose with any
+#: grid instead of being baked into one row.
+GRID_PATTERNS: Dict[str, GridPattern] = {
+    GRID_EVERY_NOTE: GridPattern(positions=(), bar_relative=True),
+    GRID_FREDDIE: GridPattern(positions=((ALL, 0),), bar_relative=True),
+    GRID_FINAL_AND: GridPattern(positions=((LAST, SUB),), bar_relative=True),
+    GRID_CHARLESTON: GridPattern(
+        positions=((1, 0), (2, SUB)), bar_relative=False
+    ),
+    GRID_JOE_PASS: GridPattern(positions=((ALL, SUB),), bar_relative=False),
+}
+
+#: `auto` means "wherever a chord already fell", which is the shipped behaviour and
+#: the reason the axis is inert by default. It resolves to `every_note` because a
+#: head read from a score gives every written note its own slot, and that is what
+#: this axis must reproduce exactly when nobody has asked for anything.
+GRID_AUTO = "auto"
+GRID_POLICIES: Dict[str, str] = {GRID_AUTO: GRID_EVERY_NOTE}
+
+
+def parse_grid(argument: str) -> str:
+    """A `grid` argument as one of `GRID_STYLES`, or the `GRID_AUTO` sentinel.
+
+    The same rule as `parse_harmony`: a single name out of a closed set, and
+    `ValueError` on anything else. A pattern name is a musical claim about where a
+    chord lands, so guessing one would return a part that comps somewhere the caller
+    did not ask for - worse than refusing, and worse than silence.
+    """
+    text = argument.strip().lower()
+    if text == GRID_AUTO:
+        return GRID_AUTO
+    if text not in GRID_STYLES:
+        raise ValueError(
+            f"Unknown grid {argument!r}; expected any of "
+            f"{', '.join(GRID_STYLES)}, or 'auto'"
+        )
+    return text
+
+
+def grid_positions(
+    grid: str, beats_per_bar: int
+) -> Tuple[Tuple[int, Tuple[float, ...]], ...]:
+    """Resolve a named grid against a metre: beat numbers paired with their beats.
+
+    Returns one entry per distinct beat the pattern touches, each holding every
+    within-bar position on that beat. `ALL` expands to every beat of the bar and
+    `LAST` to the metre's final beat, which is the whole reason those two sentinels
+    exist - `final_and` is 2.5 in 2/2 and 4.5 in 4/4 without being written twice.
+
+    An **empty** result means the pattern places nothing in this metre, and that is
+    a real answer rather than a bug: `charleston` is a 4/4 figure, so asked of a
+    2/2 bar it has nowhere to go. `grid_allowed` is what turns that into a warning
+    naming the pattern; this function only reports the geometry.
+    """
+    pattern = GRID_PATTERNS[grid]
+    beats: Dict[int, List[float]] = {}
+    for beat, eighths in pattern.positions:
+        if beat == ALL:
+            numbers: Tuple[int, ...] = tuple(range(1, beats_per_bar + 1))
+        elif beat == LAST:
+            numbers = (beats_per_bar,)
+        else:
+            # A literal beat the metre does not have is dropped rather than clamped:
+            # clamping would silently turn `charleston` asked of a 2/2 bar into a
+            # *different* figure that happens to fit, which is the guessing this
+            # library refuses everywhere else.
+            numbers = (beat,) if 1 <= beat <= beats_per_bar else ()
+        for number in numbers:
+            # 1-based, because that is what a beat *is* everywhere else in this
+            # library: `headxml` writes `1.0 + ...` for a downbeat and
+            # `_metric_weight` compares against `TARGET_BEATS = (1, 3)`. Subtracting
+            # one here would make `final_and` resolve to 1.5 in a 2/2 bar, which is
+            # the upbeat of the *first* beat - measured, not reasoned: the whole
+            # point of the `LAST` sentinel is that the same pattern lands on the
+            # bar's final beat in every metre.
+            beats.setdefault(number, []).append(number + eighths * 0.5)
+    return tuple(
+        (number, tuple(sorted(set(positions))))
+        for number, positions in sorted(beats.items())
+    )
+
+
 # How close a notated beat has to be to a whole beat to count as it. A 2/2 bar's
 # eighths land on 1.0, 1.5, 2.0, 2.5, and a 3/4 bar's on 1.0, 1.666..., so an exact
 # comparison would call almost none of them downbeats. Measured in beats, not in
 # quarters, so this is the same tolerance in any metre.
 _BEAT_EPSILON = 1e-6
+
+
+def on_grid(beat: Optional[float], grid: str, beats_per_bar: int) -> bool:
+    """Whether a chord falls on this beat of the bar under this grid.
+
+    **`beat=None` is on the grid.** A slot nobody located has no position to be off,
+    and this is the rule `_metric_weight` already follows with its `-1`: not being
+    told where a note falls is not being told it is weak. Returning `True` is what
+    keeps a hand-written progression - which carries no timings at all -
+    byte-identical, and it is the same reason the default is inert.
+
+    `every_note` is `True` for every beat, which is what makes the axis inert by
+    default rather than merely defaulting to something harmless.
+    """
+    if beat is None or grid == GRID_EVERY_NOTE:
+        return True
+    target = float(beat)
+    return any(
+        abs(target - position) <= _BEAT_EPSILON
+        for _number, positions in grid_positions(grid, beats_per_bar)
+        for position in positions
+    )
+
+
+def grid_allowed(grid: str, beats_per_bar: int) -> Tuple[bool, str]:
+    """Whether this grid places at least one chord in this metre, and why not.
+
+    **Derived rather than listed**, and the *direction* of the test is the point. The
+    question asked is one-directional - can the pattern be expressed at all here? -
+    and deliberately not "does every bar carry a note on one of its positions". The
+    second question has a correct answer of "no, and that is fine": a bar whose
+    melody is all on the beat has nothing at 2.5 for `final_and` to land on, the
+    melody-alone route handles it, and a warning would be noise. Only a pattern that
+    places **nothing anywhere** is a real mismatch, and it is nearly always a
+    metre-relative figure asked of a metre it was not written for.
+    `every_note` is not a pattern with positions at all - it is the absence of a
+    restriction - so it is **allowed unconditionally**. Reading it off
+    `grid_positions` instead would report it as placing nothing in every metre,
+    which is the false reading that this check exists to avoid: "places nothing" and
+    "has no positions to place" are different claims about a pattern, and only the
+    first is a mismatch.
+    """
+    if grid == GRID_EVERY_NOTE:
+        return True, ""
+    if grid_positions(grid, beats_per_bar):
+        return True, ""
+    if GRID_PATTERNS[grid].bar_relative:
+        return False, (
+            f"grid={grid} places no chord in a {beats_per_bar}-beat bar, and it is "
+            f"a bar-relative pattern, which should resolve in any metre - so this "
+            f"is a defect in the pattern rather than a mismatch with the metre"
+        )
+    return False, (
+        f"grid={grid} is a metre-relative figure and places no chord in "
+        f"{beats_per_bar}/4: it is right, or it is a figure of another metre asked "
+        f"of this one. Try a bar-relative pattern such as 'freddie' or "
+        f"'final_and', or grid=every_note"
+    )
+
+
+def resolve_grid(grid: str, beats_per_bar: int, diagnostics: Any) -> str:
+    """The grid to actually place chords on: `auto` resolved, validated, or refused.
+
+    The same two-step shape as `resolve_harmony` and for the same reason: the
+    resolved value is the shipped behaviour, so an arrangement naming no grid is
+    byte-identical to one from before this axis existed.
+
+    A grid this metre cannot express is **refused rather than degraded**, on the rule
+    every axis in this module follows. The fallback is `every_note` - one chord per
+    written note - which is the *inert* answer and what the part said before this
+    axis existed, rather than a silent substitution of some other figure that does
+    fit.
+    """
+    resolved = GRID_POLICIES.get(grid, grid)
+    allowed, reason = grid_allowed(resolved, beats_per_bar)
+    if not allowed:
+        diagnostics.warn(f"Warning: {reason}")
+        return GRID_EVERY_NOTE
+    return resolved
 
 
 def _metric_weight(

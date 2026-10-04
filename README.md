@@ -131,6 +131,7 @@ python -m arranger head tests/data/i_was_doing_all_right.mxl --bars 1-3 --html h
 | `--bass` | follows `--texture` | `none`, `anchors`, `walk` — see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
 | `--voices` | `auto` (all four) | any subset of `soprano,alto,tenor,bass` — see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
 | `--harmony` | `auto` (= `guide`) | `full`, `guide`, `shell_root`, `root` — which degrees the part states when it is *not* singing; see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
+| `--grid` | `auto` (= `every_note`) | `every_note`, `freddie`, `charleston`, `joe_pass`, `final_and` — where a chord *falls* in the bar; see [where a chord falls](#where-a-chord-falls-the-grid-axis) |
 | `--fret-min` / `--fret-max` | `2` / `13` | the neck window to aim for |
 | `--grips` | all six | which grip families to consider, **most preferred first** |
 | `--tab` | `line` | `staff` lays the head on one six-line staff, spaced on its real rhythm |
@@ -257,6 +258,7 @@ python -m arranger corpus --melid 218 --section chorus:1  # a solo chorus instea
 | `--bass` | follows `--texture` | `none`, `anchors`, `walk` — see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
 | `--voices` | `auto` (all four) | any subset of `soprano,alto,tenor,bass` — see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
 | `--harmony` | `auto` (= `guide`) | `full`, `guide`, `shell_root`, `root` — which degrees the part states when it is *not* singing; see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
+| `--grid` | `auto` (= `every_note`) | `every_note`, `freddie`, `charleston`, `joe_pass`, `final_and` — where a chord *falls* in the bar; see [where a chord falls](#where-a-chord-falls-the-grid-axis) |
 | `--fret-min` / `--fret-max` | `2` / `13` | the neck window to aim for |
 | `--grips` | all six | which grip families to consider, **most preferred first** |
 | `--tab` | `line` | `staff` lays the head on one six-line staff, on its real rhythm |
@@ -1001,6 +1003,48 @@ tones, and the guitar is genuinely silent while the horn is not.
 **Nothing changes until you ask.** `voices` defaults to `auto`, which resolves to `guitar`:
 the melody pinned to the soprano string, exactly as before. All 883 existing tests pass
 unchanged, and no published arrangement moves.
+
+## Where a chord falls: the `grid` axis
+
+`--harmony` says *which degrees* a stab states and `--voices` says *whether the guitar is
+singing*. `--grid` is the third question: **where in the bar a chord lands.**
+
+| `--grid` | a chord falls on |
+|---|---|
+| `every_note` (the default) | every written melody note |
+| `freddie` | every beat of the notated bar |
+| `charleston` | beat 1, and the upbeat of beat 2 |
+| `joe_pass` | the upbeat of every beat |
+| `final_and` | the upbeat of the bar's **final** beat |
+
+**The positions are bar-relative, which is what lets one name work in any metre.**
+"the upbeat of the final beat" is 4.5 in 4/4, 2.5 in 2/2 and 3.5 in 3/4 — the same musical
+idea at three different beat numbers. Spelling the pattern as a literal beat (`beat 4`)
+would make it look, on a 2/2 head, like a pattern naming a beat that does not exist.
+
+**What happens to a note with no chord on it depends on who is singing**, which is the
+one place this axis needs two answers rather than one:
+
+- **guitar singing** — the note of the tune still sounds, on its own. No note is ever
+  dropped: a chord-melody under `--grid joe_pass` plays the melody throughout and places
+  chords only on the ands.
+- **guitar comping** (`--voices alto,tenor`) — the guitar is **silent** on that beat,
+  because the melody belongs to the horn and there is nothing for the guitar to add. The
+  step is still emitted, so the part keeps its position in the bar and lines up against
+  the tune; it draws as an empty column.
+
+**The bass line is not affected.** A grid removes *chords*, never the thumb: measured on
+`but_not_for_me` with `--texture targets --bass walk`, the walked notes are identical
+under `--grid auto` and `--grid freddie`. The two axes are orthogonal, which is the point
+of having both.
+
+**Nothing changes until you ask.** `--grid` defaults to `auto`, which resolves to
+`every_note` — one chord per written melody note, which is what the library already did.
+Every published arrangement is byte-identical.
+
+A **free-form grid** — naming positions directly, rather than choosing a row — is not
+built yet. See [docs/comping-styles.md §4.2](docs/comping-styles.md) for the design and
+what remains.
 
 ## High melodies: the octave-down move
 

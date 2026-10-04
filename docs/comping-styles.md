@@ -2,8 +2,11 @@
 
 **Status: partly built.** Stage C of [§8](#8-staged-approach) has landed the *harmony*
 axis (`harmony=full|guide|shell_root|root`), so `shell_root` exists and the degree-family
-table in §4.1 is no longer a proposal in its entirety. The rhythm grid (§4.2) is still
-**not** built, §6 still holds open questions, and `--voices` is still `--voices`. This
+table in §4.1 is no longer a proposal in its entirety. Stage D has landed the **first half
+of the rhythm grid** — `grid=every_note|freddie|charleston|joe_pass|final_and` — so §4.2's
+table is built as a closed set of named rows, with the free-form spelling (§6 Q6) and the
+sustained baseline (`hold=`) still to come. §6 still holds open questions, and `--voices`
+is still `--voices`. This
 records a design and the measurements that forced it, so the decision can be reviewed
 rather than re-derived. It follows
 [reharmonisation-proposals.md](reharmonisation-proposals.md), which is the precedent: a
@@ -474,7 +477,11 @@ Two live facts in the tree that this section did not know about, both settled in
 6. **Can a user pass a grid on the command line?** "Harmony on the and of 4" is a
    legitimate request, but a free-form rhythm argument is a parsing surface with no
    natural syntax. A row **name** is safer; a closed set of names is limiting. This is the
-   main tension in the whole proposal.
+   main tension in the whole proposal. **Partly settled:** Stage D shipped the **named
+   rows** first, as `--grid`, and deferred the free-form spelling to a second commit in the
+   same stage. So the closed set is what exists today, and the question is now "what does
+   the free-form surface look like" rather than "names or grammar" — a strictly smaller
+   question, and one the shipped table can inform.
 7. **What happens to `walking_bass`?** It is currently a `texture` and is really *comp +
    sings + thumb*. Under the proposal it becomes `harmony=guide`, sings=yes, `bass=walk` —
    and **its shipped output must stay byte-identical**, which is the acceptance test for
@@ -595,10 +602,64 @@ the part that was worth landing first.
 the real one is `MELODY_POLICIES`, keyed `auto` / `none`. **Fixed**: the comment now names
 the table that exists.
 
-### Stage D — The rhythm grid (not started; one precondition now measured)
+### Stage D — The rhythm grid (**partly built**: `grid=`; free-form spelling and `hold=` to come)
 
 The largest genuinely new work, and the only stage that adds a concept rather than
 renaming one. `joe_pass` and `charleston` are the payoff.
+
+**Landed: the `grid=` axis.** `GRID_STYLES`, `GRID_PATTERNS`, `GRID_AUTO`,
+`grid_allowed`, `parse_grid` and `resolve_grid` are in `textures.py`; the keyword
+threads through `arrange_progression`, `ArrangeOptions`, `arrange_slots`,
+`arrange_xml_head`, `arrange_head` and both CLIs as `--grid`. Inert by default —
+`auto` resolves to `every_note`, and every published arrangement is byte-identical.
+
+Three things the implementation settled that this section did not say:
+
+- **`every_note` is not a pattern with positions; it is the absence of one.** Reading
+  its "does it place anything?" off `grid_positions` reports it as placing nothing in
+  every metre, which made the *default* warn everywhere. Caught by
+  `test_a_bar_relative_pattern_is_allowed_in_every_metre`. "Places nothing" and "has no
+  positions to place" are different claims, and only the first is a mismatch.
+- **The refusal is unreachable through the shipped vocabulary.** Measured over every
+  metre-relative row against every metre from 1 up: none is ever refused, because
+  `charleston` keeps its beat 1 (which exists everywhere) and `joe_pass` is built on
+  `ALL`. The two warning messages are therefore exercised against a *temporary* row
+  (`_temporary_pattern`), and `test_no_shipped_row_is_a_mismatch_in_any_metre` exists
+  to keep that fact from being quietly forgotten — a check no input can fail proves
+  nothing about the axis.
+- **An off-grid slot is a melody-alone note on one route and a rest on the other**, so
+  it needed a **fourth kind**, `MELODY_ALONE_REST`, not a bool. The guard ordering in
+  `decisions.melody_alone_case` then cost 12 tests across two attempts, because each
+  ordering fixes one route and breaks the other — see `AGENTS.md` trap 12. Measured on
+  `but_not_for_me`, all 80 steps: with the guitar singing, `freddie` sends 39 to
+  melody-alone and `joe_pass` 41, with **no note lost**; with it comping, the same 39
+  and 41 become rests.
+
+**What the grid did *not* turn out to touch: the bass line.** Measured on
+`texture=targets, melody=alto,tenor, bass=walk`, `bass` is `[51, None, 52, None]` both
+at `grid=auto` and under `grid=freddie`. The walk visits whole beats only and a grid
+only removes *chords*, so the two axes are orthogonal — which is the orthogonality
+claim of §4 tested rather than asserted. An earlier reading of that measurement as a
+`bass=walk` bug was wrong: `bass=walk` with `texture=uniform` is **refused by design**
+(`bass_allowed`, with a warning naming `texture='targets'`), and the diagnostic was
+missed only because no `Diagnostics` collector was passed.
+
+**Not done, and deliberately:**
+
+- **The free-form grid spelling** (§6 Q6). Deferred to a second commit in this stage,
+  on the agreed basis that the named table lands first and is measured. This is the
+  one question §6 called "the main tension in the whole proposal", and it stays open.
+- **`hold=` — the sustained baseline.** A style is a *bundle*: `grid` says where the
+  stabs fall and `hold` what sustains underneath, with `harmony=` still orthogonal for
+  what each stab states. **Measured and not built:** `ArrangementStep` has `repeated`,
+  `bass_only` and `melody_only`, all of which re-strike or hold *upper* voices, and
+  both `bass=walk` and `bass=anchors` re-strike the thumb on every note they place.
+  There is **no sustain concept anywhere in the step model**, so a held root under a
+  stab pattern is genuinely new machinery touching four renderers' attack logic — the
+  same surface `bass_only` had, which is where open-issues item 4 came from. It is a
+  separate change, and naming it here is the point of §6 Q5's question about where the
+  style table lives: a `COMPATING_STYLES` row of `{grid, hold}` composes the axes
+  instead of fusing them.
 
 Two things must be settled **inside** this stage, not discovered by it. The first is now
 settled and the second remains a design decision:

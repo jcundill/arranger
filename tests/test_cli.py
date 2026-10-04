@@ -125,9 +125,10 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         # assertion is a tripwire for "a flag was added to one command and not the
         # other", and a number that recomputed itself from the parsers would notice
         # nothing.
-        # 17, down from 19: `--skeleton` and `--pick` are corpus-only now that the
-        # MusicXML path does not reduce. See `test_each_command_keeps_exactly_its_own_flags`.
-        self.assertEqual(len(shared), 17, "the shared flag count moved")
+        # 18, up from 17 for `--grid`. The `17, down from 19` in the line above was
+        # `--skeleton` and `--pick` becoming corpus-only now that the MusicXML path
+        # does not reduce; see `test_each_command_keeps_exactly_its_own_flags`.
+        self.assertEqual(len(shared), 18, "the shared flag count moved")
 
         disagreeing = [
             f"{dest}: corpus={_semantics(corpus[dest])!r} head={_semantics(head[dest])!r}"
@@ -201,7 +202,14 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
             # above states the test: it is an arranging choice that means the same
             # thing against a transcription and against a score, so both commands
             # print one help string rather than two.
-            ["bass", "fallback", "grips", "harmony", "non_chord_tone", "voices"],
+            # `grid` joins them for the reason `harmony` is named above: where a
+            # chord *lands* is an arranging choice that means the same thing against
+            # a transcription and against a score - and both commands resolve it
+            # against their own metre, which is the argument, not a difference.
+            [
+                "bass", "fallback", "grid", "grips", "harmony", "non_chord_tone",
+                "voices",
+            ],
             "a flag gained or lost its differing help - remeasure before editing",
         )
 
