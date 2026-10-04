@@ -16,7 +16,7 @@ import contextlib
 import io
 import unittest
 
-import wjazzd
+import arranger.slots
 from arranger import Diagnostics, VoiceLeadingEngine, default_diagnostics
 
 # Progressions chosen because each provokes a *different* warning, so a warning
@@ -173,8 +173,8 @@ class TestTheDefaultPathIsUnchanged(unittest.TestCase):
             self.assertIn("Warning:", warning)
 
     def test_prepare_step_reports_to_the_collector_too(self):
-        """The corpus path reaches the engine through prepare_step, so a warning
-        raised there has to reach the same collector or the head path goes quiet."""
+        """The engine reaches its warnings through prepare_step, so a warning
+        raised there has to reach the collector rather than stdout."""
         diagnostics = Diagnostics()
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
@@ -188,19 +188,27 @@ class TestTheDefaultPathIsUnchanged(unittest.TestCase):
         )
 
 
-class TestTheCorpusPathReportsToTheSameCollector(unittest.TestCase):
-    """`arrange_slots` runs its own loop, so it needs its own check.
+class TestTheSlotPathReportsToTheSameCollector(unittest.TestCase):
+    """`arrange_slots` wraps the engine, so it needs its own check.
 
-    A warning raised only on the head path is the failure this guards: the engine
-    has been collected for months and the corpus silently kept printing, or worse,
-    stopped printing without anyone noticing.
+    A warning raised only on the engine's own path is the failure this guards: the
+    collector has existed for months and the slot layer silently kept printing, or
+    worse, stopped printing without anyone noticing.
+
+    **This used to compare two step loops, and now there is one.** The class was
+    written when `wjazzd.arrange_slots` held a near-verbatim second copy of the
+    loop, and `test_the_two_entry_points_report_the_same_warning_for_one_step`
+    existed to catch the two copies formatting the same warning differently. The
+    copy is gone - it delegates to `arrange_progression` - so the test below still
+    asserts that the wrapper reports what the engine reports, which is the
+    remaining half of what it checked and the half that can still break.
     """
 
     def test_arrange_slots_accepts_a_collector(self):
         diagnostics = Diagnostics()
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
-            wjazzd.arrange_slots(
+            arranger.slots.arrange_slots(
                 UNRESOLVABLE_NON_CHORD_TONE, diagnostics=diagnostics
             )
         self.assertEqual(buffer.getvalue(), "", "the collector did not take effect")
@@ -212,23 +220,26 @@ class TestTheCorpusPathReportsToTheSameCollector(unittest.TestCase):
     def test_arrange_slots_prints_by_default(self):
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
-            wjazzd.arrange_slots(UNRESOLVABLE_NON_CHORD_TONE)
+            arranger.slots.arrange_slots(UNRESOLVABLE_NON_CHORD_TONE)
         self.assertTrue(buffer.getvalue().strip())
 
     def test_the_two_entry_points_report_the_same_warning_for_one_step(self):
-        """The point of the phase, stated as a test.
+        """The wrapper must not reformat what the engine reported.
 
-        One progression, arranged through the library and through the corpus loader.
-        The warning text must be identical, because until now each loop formatted
-        its own copy of it - and nothing checked that they still matched.
+        This used to say "the two step loops", because there were two. There is
+        one now, so what remains is that `arrange_slots` hands the warning
+        through rather than formatting its own copy of the text - which is the
+        half of the original assertion that can still break.
         """
         _steps, from_library = arrange(UNRESOLVABLE_NON_CHORD_TONE)
 
-        corpus_diagnostics = Diagnostics()
-        wjazzd.arrange_slots(UNRESOLVABLE_NON_CHORD_TONE, diagnostics=corpus_diagnostics)
+        slot_diagnostics = Diagnostics()
+        arranger.slots.arrange_slots(
+            UNRESOLVABLE_NON_CHORD_TONE, diagnostics=slot_diagnostics
+        )
 
         self.assertEqual(
             from_library,
-            corpus_diagnostics.warnings,
-            "the two step loops format the same warning differently",
+            slot_diagnostics.warnings,
+            "the slot wrapper formats the same warning differently",
         )

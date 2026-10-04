@@ -6,7 +6,7 @@ Guidance for AI coding agents (and humans) working in this repository.
 Given `(melody note, chord quality, chord name)` triples it generates voicings in
 several grip families, pins the melody to the soprano string, and chooses among the
 candidates with one position-aware cost function. It can also read a written head out
-of a MusicXML file or the Weimar Jazz Database and arrange that.
+of a MusicXML file and arrange that.
 
 Runtime dependency: `musthe`, and nothing else. Everything else is optional.
 
@@ -22,7 +22,7 @@ gate and the conventions — not the explanation.
 | non-chord melody notes, a new chord quality | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` |
 | the step loop, `arrange_progression`, `Diagnostics` | [docs/engine.md](docs/engine.md) | `arranger/steps.py` |
 | tab staff, HTML, MusicXML, GP5, or the MusicXML importer | [docs/renderers.md](docs/renderers.md) | `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py` |
-| the Weimar corpus, head selection, skeletons | [docs/corpus.md](docs/corpus.md) | `wjazzd.py` |
+| the slot layer: triples to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
 | a known bug, with its measurement | [docs/open-issues.md](docs/open-issues.md) | — |
 | `voices=`, which voices the guitar plays | [docs/voices-axis.md](docs/voices-axis.md) | `arranger/textures.py` |
 | the comping axes (`harmony=`, `grid=`, the rhythm grid) | [docs/comping-styles.md](docs/comping-styles.md) | `arranger/textures.py` |
@@ -40,10 +40,10 @@ treat a contradiction between them as a bug in one of them.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1008 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **844 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 12 of those 1008, and it is the one that fails if this
+(`tests/test_docs.py` is 12 of those 844, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree. It also fails if a document
 exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
 new file cannot be added without being registered.)
@@ -89,12 +89,13 @@ a fifth:
   `soprano` and so cannot replace `--voices`. A fifth axis inherits this constraint: scope
   it to the comping route, and do not let it reach the melody-bearing one by accident.
 
-**`make check` is what CI runs** (`.github/workflows/ci.yml`, Python 3.11–3.14, with
-the `xml` and `gp` extras so the optional-extra tests are not silently skipped). One
-thing the workflow's own header says and an agent should not have to rediscover:
-**the corpus tests do not run there.** `wjazzd.db` is 42 MB and gitignored, so 85 of
-the 85 are skipped on a clean clone. The `corpus` job covers them, and only on
-manual dispatch, gated on the `WJAZZD_DB_URL` repository variable.
+**`make check` is what CI runs**, in one job (`.github/workflows/ci.yml`, Python
+3.11–3.14, with the `xml` and `gp` extras so the optional-extra tests are not silently
+skipped). **There is no second job and nothing a clean clone cannot run** — that used
+to need stating here and in the workflow header, because the 42 MB Weimar Jazz
+Database was gitignored and 85 of the suite's tests skipped on every fresh checkout.
+The database is gone, so a green check means the whole suite ran, and the only guards
+left are the optional-extra ones this job installs against.
 
 **`make check` runs one interpreter, and the matrix runs four.** It is the 3.14 dev
 one. A construct that is version-dependent passes here and fails on the 3.11 job —
@@ -123,20 +124,18 @@ arranger/
 │   ├── steps.py         #   VoiceLeadingEngine and the one step loop
 │   ├── slots.py         #   the slot layer: triples to steps, the one pre-pass
 │   ├── render.py        #   format_progression and per-step rendering
-│   └── cli.py           #   the two CLIs' shared flags and output dispatch
+│   └── cli.py           #   the head CLI's flags and output dispatch
 ├── tabstaff.py          # whole-progression staff renderers (ASCII + HTML)
 ├── tabxml.py            # MusicXML export (optional extra: music21)
 ├── tabgp.py             # Guitar Pro 5 export (optional extra: PyGuitarPro)
 ├── headxml.py           # MusicXML import: a melody + chord symbols
-├── wjazzd.py            # Weimar Jazz Database glue (stdlib sqlite3 only)
-├── lead_sheet.py        # JSON lead-sheet export over the same database
 ├── grip_chart.py        # generates common_grips.md from the engine's tables
 ├── tests/               # unittest, one file per concern, + support.py
 │   └── data/            # committed MusicXML fixtures (music21, MuseScore, ours)
 ├── docs/                # the documents the routing table above points at
 ├── pyproject.toml       # PEP 621 + PEP 639 metadata (setuptools backend)
 ├── Makefile             # the gate, above
-├── .github/workflows/   # CI: make check on 3.11-3.14, plus a manual corpus job
+├── .github/workflows/   # CI: one job, make check on 3.11-3.14
 ├── AGENTS.md            # this file
 ├── README.md            # user-facing overview
 └── .venv/               # local virtualenv (not committed)
@@ -329,27 +328,20 @@ gate, and a snapshot mechanism would let a regression pass by regenerating itsel
    optionally to the `DROP2_INTERVAL_SETS[...] = ...` block).
 5. To make the quality reachable by the `extension` strategy, add it to
    `NON_CHORD_TONE_EXTENSIONS`.
-6. **If the Weimar Jazz Database should be able to spell it**, add the matching
-   suffix to `WEIMAR_QUALITY_ALIASES` in `wjazzd.py`. The database has 108
-   distinct suffixes in its own notation, and one that is absent resolves to
-   `None` and is *counted and reported* rather than guessed - so a new quality
-   the corpus cannot reach is silent until this step is done.
-7. **If a MusicXML file should be able to spell it**, add the matching
+6. **If a MusicXML file should be able to spell it**, add the matching
    `kind-value` to `MUSICXML_KIND_QUALITIES` in `headxml.py`, and any `<degree>`
    alteration that reaches it to `_DEGREE_REFINEMENTS`. The same rule applies: an
    absent kind resolves to `None` and is counted in `Head.unmapped`, so a new
    quality MusicXML cannot spell stays silent until this step is done. Note the
    table is keyed on the *library* quality, so a `kind` that only a `<degree>`
    reaches (a 7b5, say) needs a degree entry rather than a kind entry.
-8. Add tests to `tests/test_voicings.py` for the drop-2 fingerings and to
+7. Add tests to `tests/test_voicings.py` for the drop-2 fingerings and to
    `tests/test_grips.py` for the other grips: exact fingerings, pitch classes a subset
    of `ChordParser.get_chord_tones(...)`, `fret_span() <= 5`, and the sounding strings
    a member of `supported_string_sets()`.
    `TestQualityTableInvariants` checks the template and degree lists stay the same
    length, and `tests/test_non_chord_tones.py` covers any new
-   `NON_CHORD_TONE_EXTENSIONS` route. `tests/test_wjazzd.py` asserts every
-   `WEIMAR_QUALITY_ALIASES` entry resolves to a quality the library can voice, so
-   a table entry naming an unvoiceable quality fails the suite.
+   `NON_CHORD_TONE_EXTENSIONS` route.
    `tests/test_headxml.py::TestChordParsing::test_every_kind_the_table_names_is_voiceable`
    is the same assertion for `MUSICXML_KIND_QUALITIES`.
 
@@ -477,10 +469,9 @@ Each of these cost real time, or nearly shipped a defect.
 | [README.md](README.md) | user-facing overview, worked examples, limitations |
 | [docs/engine.md](docs/engine.md) | grips, the selector, texture, the cost tuple, non-chord tones |
 | [docs/renderers.md](docs/renderers.md) | tab staff, MusicXML import/export, GP5, and their traps |
-| [docs/corpus.md](docs/corpus.md) | the Weimar database, head selection, skeletons |
 | [docs/open-issues.md](docs/open-issues.md) | diagnosed bugs with their measurements; fixed items stay, with what the fix was |
 | [docs/reharmonisation-proposals.md](docs/reharmonisation-proposals.md) | tritone substitution (shipped) and chromatic approach chords (measured, not built), with the corpus numbers behind each |
-| [docs/history/](docs/history/) | completed plans: corpus, walking bass, texture, arranging guide |
+| [docs/history/](docs/history/) | completed plans: corpus, walking bass, texture, arranging guide - a record of the past, not of what exists |
 | [docs/voices-axis.md](docs/voices-axis.md) | **in progress** - the `voices=` axis, awaiting QA |
 | [docs/comping-styles.md](docs/comping-styles.md) | **proposal** - the comping axes (`harmony=`, the rhythm grid), with the measurements behind them; nothing in it is built |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | what CI runs, and which tests it does *not* run |
@@ -497,11 +488,11 @@ make demo                            # the built-in demonstration arrangements
 .venv/bin/jazz-arranger              # the console script, once installed
 ```
 
-`main()` also dispatches two subcommands, both imported lazily inside the branch so
-`import arranger` depends on neither:
+`main()` also dispatches one subcommand, imported lazily inside the branch so
+`import arranger` does not pull in the importer - nor, through it, the renderers it
+uses - for a caller who only wants the library:
 
 ```bash
-.venv/bin/python -m arranger corpus --melid 218    # needs the 42 MB wjazzd.db
 .venv/bin/python -m arranger head FILE.musicxml    # the MusicXML importer
 ```
 

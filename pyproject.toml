@@ -56,8 +56,8 @@ jazz-arranger = "arranger:main"
 # `tabstaff` holds the whole-progression staff renderers and imports `arranger`,
 # so it is listed after it. `tabxml` and `tabgp` each import both, and are
 # independent of one another. `headxml` is the MusicXML *importer* and imports
-# `arranger` and `wjazzd`; it is stdlib-only, so unlike `tabxml` it needs no
-# optional extra to work.
+# `arranger`; it is stdlib-only, so unlike `tabxml` it needs no optional extra
+# to work.
 #
 # `arranger.diagnostics` holds the warning collector the engine reports to,
 # `arranger.options` the knobs the engine reads, and `arranger.decisions` the
@@ -68,7 +68,6 @@ py-modules = [
     "tabstaff",
     "tabxml",
     "tabgp",
-    "wjazzd",
     "headxml",
 ]
 
@@ -104,12 +103,9 @@ select = ["E", "W", "F", "I", "B", "SIM"]
 ignore = ["E501", "B905", "SIM102", "SIM117"]
 
 [tool.ruff.lint.per-file-ignores]
-# `tests/test_wjazzd.py` computes its DEFAULT_DB before importing, and
 # `tests/test_guitarpro.py` imports PyGuitarPro lazily inside the guarded
-# classes. Both are deliberate: they are what lets the suite run on a fresh
-# clone with neither a 42 MB database nor an optional extra installed.
-"tests/test_wjazzd.py" = ["E402"]
-"tests/test_lead_sheet.py" = ["E402"]
+# classes, which is what lets the suite run on a fresh clone with no
+# optional extra installed.
 # `arranger/__init__.py` is a facade, so most of what it imports is a
 # re-export rather than a use. F401 is the rule that says "you imported
 # something and never mentioned it again", which is precisely what a re-export
@@ -121,4 +117,4 @@ ignore = ["E501", "B905", "SIM102", "SIM117"]
 "arranger/__init__.py" = ["F401"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["arranger", "tabstaff", "tabxml", "tabgp", "wjazzd", "headxml", "grip_chart", "tests"]
+known-first-party = ["arranger", "tabstaff", "tabxml", "tabgp", "headxml", "grip_chart", "tests"]

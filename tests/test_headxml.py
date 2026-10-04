@@ -20,6 +20,7 @@ from xml.etree import ElementTree
 
 import arranger
 from arranger import NO_CHORD, ChordParser
+from arranger.slots import arrange_slots
 from headxml import (
     _PLACEHOLDER_MELODY,
     Head,
@@ -35,7 +36,6 @@ from headxml import (
     parse_musicxml_chord,
 )
 from tabxml import _events, _substitute_steps
-from wjazzd import arrange_slots
 
 # The real scores the importer's tests read, in `tests/data/`. They are committed
 # and are NOT guarded: a missing fixture is a broken checkout, not a reason to
@@ -208,7 +208,7 @@ class TestChordParsing(unittest.TestCase):
         """The bass is returned separately, so the quality stays a bare '7'.
 
         Glued onto the quality it would be '7/F', which matches no table - the
-        same trap `wjazzd.parse_weimar_chord` documents for the database.
+        same trap `arranger.slots._slash_bass` documents for a slash chord.
         """
         self.assertEqual(self.parse(harmony("G", "major-ninth", bass="F#")), ("G", "maj9", "F#"))
         self.assertEqual(self.parse(harmony("D", "dominant", bass="C")), ("D", "7", "C"))

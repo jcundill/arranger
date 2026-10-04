@@ -1,9 +1,9 @@
 """The two step loops must produce the same arrangement.
 
-`VoiceLeadingEngine.arrange_progression` and `wjazzd.arrange_slots` are two loops
+`VoiceLeadingEngine.arrange_progression` and `arrange_slots` are two loops
 over the same slots. They used to hold two copies of six decisions, kept in step
 by a comment reading *"Both copies must agree"* - which is not a mechanism, and the
-project had already paid for that once: the corpus path was built separately,
+project had already paid for that once: a second caller was built separately,
 drifted, and voiced an `Am7` under a written `Bbm7` for twenty-five transcriptions
 before anyone noticed.
 
@@ -21,9 +21,14 @@ while every unit test inside the engine still passes. That is what the matrix be
 catches, and it is a real failure mode rather than a formality.
 
 The second class guards the *structure* instead: that each decision still has one
-definition, that the engine still calls it, and that `wjazzd` has not grown a loop
+definition, that the engine still calls it, and that `slots` has not grown a loop
 of its own. That is the check that would catch a well-meaning future "small
 optimisation" that reintroduces a second copy.
+
+**`slots` is where `wjazzd.arrange_slots` moved when the database was removed.**
+The assertions below were re-pointed at it rather than deleted, which is trap 5's
+rule again: the claim "this module does not contain a step loop" is still a claim
+about a file that exists, and the file is now named `arranger.slots`.
 
 No `skipUnless` here. These are hand-built fixtures with no database and no optional
 dependency, so this file always runs - which is the property that makes it worth
@@ -34,8 +39,7 @@ import importlib
 import unittest
 from typing import List, Optional, Tuple
 
-import wjazzd
-from arranger import Diagnostics, VoiceLeadingEngine
+from arranger import Diagnostics, VoiceLeadingEngine, slots
 
 # (melody, quality, name) triples chosen to cover the decision points rather than to
 # be a tune: a chord tone, a 9th the extension strategy absorbs, a note with no route
@@ -86,9 +90,9 @@ def through_library(triples, timings, texture, **kwargs):
     return steps, diagnostics.warnings
 
 
-def through_corpus(triples, timings, texture, **kwargs):
+def through_slots(triples, timings, texture, **kwargs):
     diagnostics = Diagnostics()
-    steps, _rescued, _notes = wjazzd.arrange_slots(
+    steps, _rescued, _notes = slots.arrange_slots(
         triples, timings=timings, texture=texture, diagnostics=diagnostics, **kwargs
     )
     return steps, diagnostics.warnings
@@ -114,7 +118,7 @@ class TestTheTwoLoopsAgree(unittest.TestCase):
     def assert_same_arrangement(self, triples, texture, **kwargs):
         timings = timings_for(len(triples))
         mine, my_warnings = through_library(triples, timings, texture, **kwargs)
-        theirs, their_warnings = through_corpus(triples, timings, texture, **kwargs)
+        theirs, their_warnings = through_slots(triples, timings, texture, **kwargs)
 
         self.assertEqual(
             [step.tab_line() for step in mine],
@@ -199,7 +203,7 @@ class TestTheDecisionsAreActuallyShared(unittest.TestCase):
             'fret_span() >= GRIP_MAX_SPAN["drop2"]',
             "sounding_harmony(previous_step)",
         )
-        for module_name in ("arranger", "arranger.steps", "wjazzd"):
+        for module_name in ("arranger", "arranger.steps", "arranger.slots"):
             source = source_of(module_name)
             for snippet in snippets:
                 with self.subTest(module=module_name, snippet=snippet):
@@ -213,9 +217,9 @@ class TestTheDecisionsAreActuallyShared(unittest.TestCase):
         """Since Phase 4 there is one loop, and it is the engine's.
 
         This class used to assert that *both* loops called each decision. That
-        premise is now false by design - `wjazzd` delegates rather than looping -
+        premise is now false by design - `slots` delegates rather than looping -
         so the assertion is inverted: the decisions are called from the engine, and
-        `wjazzd` must not have grown a loop of its own. A test that keeps asserting
+        `slots` must not have grown a loop of its own. A test that keeps asserting
         the old shape would be a test resisting the refactor it exists to protect.
 
         The engine is `arranger.steps` rather than `arranger`: Phase 5 made
@@ -227,9 +231,18 @@ class TestTheDecisionsAreActuallyShared(unittest.TestCase):
             with self.subTest(decision=name):
                 self.assertIn(f"{name}(", engine, f"the engine does not call {name}")
 
-    def test_the_corpus_does_not_contain_a_step_loop(self):
-        """`wjazzd` asks the engine for an arrangement; it does not build one."""
-        corpus = source_of("wjazzd")
+    def test_the_slot_layer_does_not_contain_a_step_loop(self):
+        """`slots` asks the engine for an arrangement; it does not build one.
+
+        This was `test_the_corpus_does_not_contain_a_step_loop`, reading
+        `wjazzd`, and it is re-pointed rather than dropped: `arrange_slots` now
+        lives in `arranger.slots`, and a second loop creeping back into it would
+        be exactly the defect the original test was written to catch. Inverted
+        twice over, in the sense trap 5 describes - the premise changed twice
+        (a second loop, then a second module) and the assertion against a copy
+        has not.
+        """
+        slot_source = source_of("arranger.slots")
         for snippet in (
             "prepare_step(",
             "_best_voicing(",
@@ -238,6 +251,6 @@ class TestTheDecisionsAreActuallyShared(unittest.TestCase):
             with self.subTest(snippet=snippet):
                 self.assertNotIn(
                     snippet,
-                    corpus,
-                    "wjazzd has grown a step loop again; it should delegate",
+                    slot_source,
+                    "arranger.slots has grown a step loop again; it should delegate",
                 )

@@ -210,10 +210,10 @@ you whether a change is an improvement or a different library.
   **single-fret** `Voicing` for an NC step, or `None` if unreachable. It is
   explicitly *not* a harmonised voicing and is exempt from the string-set invariant.
 - `ArrangementStep.melody_only` — defaulted flag set on NC steps.
-- `main()` — with no arguments, prints the built-in demonstrations; with `corpus`
-  as the first argument, delegates to `wjazzd.corpus_cli` and with `head` to
-  `headxml.head_cli`, both through a **lazy** import inside the branch, so
-  `import arranger` never depends on the database module or the importer.
+- `main()` — with no arguments, prints the built-in demonstrations; with `head`
+  as the first argument, delegates to `headxml.head_cli` through a **lazy** import
+  inside the branch, so `import arranger` never depends on the importer or, through
+  it, on the renderers.
 - `main()` — prints the built-in demonstration arrangements; exposed as the
   `jazz-arranger` console script via `[project.scripts]`.
 
@@ -239,12 +239,7 @@ you whether a change is an improvement or a different library.
    optionally to the `DROP2_INTERVAL_SETS[...] = ...` block).
 5. To make the quality reachable by the `extension` strategy, add it to
    `NON_CHORD_TONE_EXTENSIONS`.
-6. **If the Weimar Jazz Database should be able to spell it**, add the matching
-   suffix to `WEIMAR_QUALITY_ALIASES` in `wjazzd.py`. The database has 108
-   distinct suffixes in its own notation, and one that is absent resolves to
-   `None` and is *counted and reported* rather than guessed - so a new quality
-   the corpus cannot reach is silent until this step is done.
-7. **If a MusicXML file should be able to spell it**, add the matching
+6. **If a MusicXML file should be able to spell it**, add the matching
    `kind-value` to `MUSICXML_KIND_QUALITIES` in `headxml.py`, and any `<degree>`
    alteration that reaches it to `_DEGREE_REFINEMENTS`. The same rule applies: an
    absent kind resolves to `None` and is counted in `Head.unmapped`, so a new
@@ -535,10 +530,11 @@ Five decisions are load-bearing:
   palette, so the default is untouched. An **empty** intersection is a caller asking for
   a grip the texture never uses: the step still sounds, and says so on stdout.
 
-  Both entry points need this, and they are separate copies of one loop —
-  `arrange_progression` and `wjazzd.arrange_slots` — because a head read from a file
-  takes the second and a hand-built progression the first. Fixing only one leaves the
-  same flag behaving two different ways depending on the entry point.
+  Both entry points need this — `arrange_progression` and
+  `arranger.slots.arrange_slots` — because a head read from a file takes the second
+  and a hand-built progression the first. They are no longer two loops, so this is
+  a request built in two places rather than a policy applied twice: fixing only one
+  would leave the same flag behaving two different ways depending on the entry point.
 - **An `interval` is a texture; a duo is a harmony.** Both are two notes under the melody,
   and they are now offered under any melody degree, so the degree no longer distinguishes
   them. What does is the rule that builds them. An interval is not claiming the chord, so
@@ -653,7 +649,7 @@ Three decisions are load-bearing:
 
 **Known limitation.** The decision is per step and applies to the melody only, so a
 melody leaping across the limit can arrive an octave apart from its neighbour. This
-is deliberately unlike `wjazzd.py`'s `--lift auto`, which transposes a whole head at
+is deliberately unlike the removed corpus loader's `--lift auto`, which transposed a whole head at
 once; `--lift auto` cannot tear the line apart, and this can. The trade is
 deliberate: no step is ever left unplayable, at the cost of one melodic interval.
 
@@ -690,7 +686,7 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
 - A melody that can only be voiced above `HIGH_FRET_LIMIT` is moved down an octave,
   so `step.melody` can be an octave below the written note. The decision is per step
   and applies to the melody alone, so a leap across the limit can leave one melodic
-  interval an octave wide — unlike `wjazzd.py --lift auto`, which transposes a whole
+  interval an octave wide — unlike the corpus loader's `--lift auto`, which transposed a whole
   head at once. See
   [High melodies move down an octave](#high-melodies-move-down-an-octave).
 - A fixed max fret span of 5 and fret range 0–18 is assumed.

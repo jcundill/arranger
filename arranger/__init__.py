@@ -206,28 +206,42 @@ def __dir__() -> List[str]:
 
 def main() -> None:
     """
-    Entry point: the built-in demonstration, or a subcommand.
+    Entry point: the built-in demonstration, or the `head` subcommand.
 
     With no arguments this prints the built-in demonstration arrangements.
 
-    With `corpus` as the first argument it hands over to `wjazzd.corpus_cli`, the
-    Weimar Jazz Database front end, which is where the transcribed-head feature
-    lives. The import is deliberately lazy and inside the branch: the database
-    module is optional glue over a 42 MB file that most users do not have, and
-    `import arranger` must never depend on it.
+    With `head` as the first argument it hands over to `headxml.head_cli`, the
+    MusicXML front end. The import is deliberately lazy and inside the branch, so
+    `import arranger` does not pull in the importer - nor, through it, the renderers
+    it uses - for somebody who only wants the library.
+
+    **Anything else that looks like a subcommand is a usage error, not the demo.**
+    Until the `corpus` subcommand was removed this fell through silently, so
+    `arranger corpus --melid 218` printed three arrangements and exited 0 - to a
+    user who asked for a head and was given nothing resembling one. A removed
+    command that quietly becomes the demo is worse than one that is gone: the exit
+    code says it worked.
+
+    The test is `argv[1]` being a bare word, so an option (`--grips shell`) still
+    reaches the demo rather than being rejected, and `--help` is handled by the
+    caller's own flag handling below.
     """
-    if len(sys.argv) > 1 and sys.argv[1] == "corpus":
-        from wjazzd import corpus_cli
-
-        raise SystemExit(corpus_cli(sys.argv[2:]))
-
     if len(sys.argv) > 1 and sys.argv[1] == "head":
-        # The MusicXML importer, imported here for the same reason as the corpus
-        # front end above: both are optional entry points, and neither may be a
-        # cost - or a dependency - to somebody who only wants the library.
         from headxml import head_cli
 
         raise SystemExit(head_cli(sys.argv[2:]))
+
+    if len(sys.argv) > 1 and sys.argv[1].isalpha() and not sys.argv[1].startswith("-"):
+        # A bare leading word that is not `head` was a subcommand, or a typo for
+        # one. Say so rather than arranging a demonstration nobody asked for.
+        print(
+            f"Unknown command {sys.argv[1]!r}. The only subcommand is "
+            f"'head':\n"
+            f"  python -m arranger head FILE.musicxml [options]\n"
+            f"With no arguments, this prints the built-in demonstrations.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
 
     engine = VoiceLeadingEngine()
 

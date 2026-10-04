@@ -70,8 +70,8 @@ those stays put because `Voicing.tab_block()` and `format_progression` use it to
 
 ### The re-export is lazy, and has to be
 
-`from arranger import format_tab_html` still works — the README, the tests and
-`wjazzd` all spell it that way — but `arranger` does **not** import `tabstaff` at
+`from arranger import format_tab_html` still works — the README and the tests
+spell it that way — but `arranger` does **not** import `tabstaff` at
 the top. A top-level (or even bottom-of-file) import would be a genuine cycle:
 importing `tabstaff` first would re-enter a half-initialised `arranger` and fail to
 find the names. So `arranger` exposes them through a **module-level `__getattr__`**
@@ -130,9 +130,9 @@ Six decisions are load-bearing, and each was forced by a real file:
   the note it governs, several can share a bar, and a bar can carry none at all —
   But Not For Me bars 3 and 5 carry no harmony, and Rainy Day bar 1 changes twice
   inside the bar. So a chord is **held** from the note it is declared before until
-  the next replaces it, the same forward fill `wjazzd` applies to the `beats`
-  table. Reading the chord off the following note would drop the harmony from
-  every bar that does not change.
+  the next replaces it — the ordinary forward fill, which is also what the removed
+  corpus loader applied to its `beats` table. Reading the chord off the following
+  note would drop the harmony from every bar that does not change.
 - **A `.mxl` is read through `META-INF/container.xml`,** which names the root
   file. "The first `.xml` in the archive" looks equivalent and is not: a container
   may carry a `score.xml` beside a stylesheet or a thumbnail, and picking the
@@ -402,17 +402,21 @@ and why it is now plumbed all the way to the file headers.
 `WEIMAR_QUALITY_ALIASES`. A quality naming a chord the voicing tables do not hold
 is reported as untranslatable rather than failing silently later.
 
-**The voicings are not re-implemented here.** `arrange_xml_head` hands its slots
-to `wjazzd.arrange_slots`, the step loop promoted out of `wjazzd.arrange_head` for
-exactly this. An imported head therefore gets the same non-chord-tone strategies,
-the same opt-in dim7 retry, the same `repeated` hold and the same slash-bass rule
-as one read from the database. A second implementation of the step loop is how
-the corpus path came to disagree with the library once already; the whole point of
-the extraction is that it cannot happen again.
+**The voicings are not re-implemented here.** `arrange_xml_head` hands its slots to
+`arranger.slots.arrange_slots`, the engine's own slot layer, which lives in the
+package. An imported head therefore gets the same non-chord-tone strategies, the
+same opt-in dim7 retry, the same `repeated` hold and the same slash-bass rule as any
+other caller. A second implementation of the step loop is how this importer came to
+disagree with the library once already; the whole point of the extraction is that it
+cannot happen again.
+
+That function *was* `wjazzd.arrange_slots`, and its own docstring described it as
+"the corpus path's own step loop" while MusicXML was most of its callers. The
+database is gone and it is now named for what it does.
 
 **Imports are lazy where they keep the module cheap** — `argparse` inside
 `head_cli`, and the renderers inside it too, so `load_musicxml` costs nothing.
-`main()` imports `headxml` inside the `head` branch, as it does `wjazzd`.
+`main()` imports `headxml` inside the `head` branch.
 
 
 
@@ -460,7 +464,7 @@ Five decisions in here were each forced by a failure, not chosen:
   unchanged sounding pitches.
 - **Steps sharing an onset divide their span equally**, and the transcribed
   `duration` is not used as a weight. It is the length of the *melody note* the step
-  came from, which runs past the onset, and the corpus's values are arbitrary
+  came from, which runs past the onset, and its values are arbitrary
   fractions of a whole note; scaling by them yields note values music21 refuses to
   write, and it refuses the **whole export** rather than rounding one. Two eighths on
   the last beat of a bar are two eighths.
@@ -537,11 +541,11 @@ Two more are worth stating because they look like bugs otherwise:
 musthe-only rule, and it is opt-in: `pip install 'jazz-arranger[xml]'`. `_music21()`
 imports it inside the functions and rewrites the `ImportError` into a message naming
 that install command, so `import arranger`, the ASCII staff and the HTML page all work
-without it, and `corpus_cli` reports the missing extra as a usage message rather than a
+without it, and `head_cli` reports the missing extra as a usage message rather than a
 traceback.
 
 **A chord name music21 cannot classify is written, not dropped.** `mMaj7`, `maj9` and
-`7alt` are among the ones it rejects, and the Weimar notation produces more
+`7alt` are among the ones it rejects, and published notation produces more
 (`Bb7sus4`). `_chord_symbol` falls back to `<kind text="...">other</kind>` with the
 root still parsed out by `ChordParser`, which is how MusicXML spells a symbol whose
 type the writer does not recognise.
@@ -587,7 +591,7 @@ the bug.
 **dev-only** tool (like pyright, never a runtime dependency and not in the `xml` extra)
 would catch this whole class - MusicXML-level errors invisible to a round trip. It
 means vendoring the 3.1 XSD into `tests/` and skipping when absent, in the same
-`skipUnless` spirit as the `wjazzd.db` tests.
+`skipUnless` spirit as the optional-extra tests.
 
 **Known limitations.** Durations are floored at a sixteenth, because MusicXML cannot
 write less and music21 aborts rather than rounding; nothing this library generates is

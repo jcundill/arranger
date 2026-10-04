@@ -1102,7 +1102,7 @@ changes output**, and the scope is deliberately narrow:
 
 Measured over three fixtures and fourteen flag combinations: **six arrangements change,
 thirty-six do not** — including all four `grid=` arrangements on the singing route, and
-`make demo`. The gate is 1008 tests with every pre-existing assertion passing unchanged.
+`make demo`. The gate was 1008 tests with every pre-existing assertion passing unchanged (841 after the corpus removal).
 
 **`every_note` is excluded from the union, and that is load-bearing.** It names every beat
 of the bar, so merging it with the notes would keep every position the note path has *and
@@ -1172,10 +1172,14 @@ either way.
 
 ### Still open
 
-The corpus path (`wjazzd.skeleton_slots`) builds its slots from **notes** and has no
-timeline, so a Weimar head with a bar of rests has the same defect and none of this applies
-to it. Those tests run only in the manual `corpus` job, so CI would not catch a regression
-there either.
+**The corpus half of this is retired rather than fixed, and that is worth stating
+rather than leaving as a stale debt.** `wjazzd.skeleton_slots` built its slots from
+*notes* and had no timeline, so a Weimar head with a bar of rests had the same defect
+and none of the three stages above applied to it — and CI could not have caught a
+regression there either, because those tests only ran in the manual `corpus` job. The
+database and its loader are gone (`arranger.slots` is what remains of the part that
+was not corpus-specific), so the debt no longer has a subject. The 164 tests that
+would have fixed it were removed with it rather than ported.
 
 `melody_alone_case`'s fifth kind is likewise still owed: an invented slot carries a
 placeholder melody rather than none, so it reaches that function as a melody slot and takes

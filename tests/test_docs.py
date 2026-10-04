@@ -54,7 +54,6 @@ DOCUMENTS = [
     "README.md",
     "docs/engine.md",
     "docs/renderers.md",
-    "docs/corpus.md",
     "docs/open-issues.md",
     "docs/comping-styles.md",
     "docs/voices-axis.md",
@@ -312,17 +311,58 @@ class TestTheCiWorkflowMatchesTheProject(unittest.TestCase):
             "a bare interpreter name makes pyright blind to every installed package",
         )
 
-    def test_the_workflow_says_the_database_tests_do_not_run(self):
-        """The header states that the corpus path is skipped, and how badly.
+    def test_the_workflow_says_the_whole_suite_runs_on_a_clean_clone(self):
+        """The header states that a green check now means *everything* ran.
 
-        Measured: 85 skipped on a clean clone against 2 with the database
-        present. An agent reading a green check must not conclude the Weimar path
-        was exercised, so the file has to say so in its own words rather than
-        leaving it to be inferred from a `skipUnless`.
+        **This asserted the opposite for most of the project's life.** The corpus
+        job was manual-dispatch only and the database was gitignored, so 85 of the
+        suite's tests were skipped on any clean clone and the header said so in the
+        strongest terms available ("a green check does NOT mean the Weimar path was
+        exercised"). That was the right claim to make while the caveat existed.
+
+        With the database gone the caveat is gone, and the claim that was worth
+        making has to be restated in the other direction: a green check here means
+        the entire suite ran, because there is nothing a clean clone cannot run. A
+        header that kept the old wording would be warning about a problem that no
+        longer exists, which is its own kind of wrong - it teaches a reader to
+        distrust a green run that is now trustworthy.
         """
         header = self.workflow().split("jobs:")[0]
-        self.assertIn("85", header)
-        self.assertIn("does NOT mean", header)
+        self.assertIn("whole suite ran", header)
+        # And the shape of the old caveat must be gone, not merely unmentioned:
+        # "85 skipped" is a number that would now be false.
+        self.assertNotIn("85", header)
+
+    def test_no_gate_is_gated_behind_a_variable(self):
+        """Nothing in the workflow can skip silently, because nothing is gated.
+
+        **This replaces `test_the_corpus_job_fails_loudly_when_its_variable_is_unset`,
+        and it keeps the property rather than the job.** That test asserted the
+        `corpus` job read `vars.WJAZZD_DB_URL` and `exit 1` when it was unset - a
+        gated job that skips quietly is indistinguishable in the checks UI from one
+        that ran, which was the exact failure mode the header warned about.
+
+        The job is gone, so there is nothing to read and nothing to exit on. The
+        reason the assertion existed still applies to whatever comes next, and it
+        now has a stronger form: **the workflow has exactly one job and it is not
+        conditional on anything.** A future gate added behind a variable or a
+        dispatch event would reintroduce the silent-skip failure, and this catches
+        it where the old test caught the one instance that then existed.
+        """
+        text = self.workflow()
+        jobs = re.findall(r"^  ([a-z_]+):$", text.split("jobs:")[1], re.M)
+        self.assertEqual(jobs, ["check"], "a second job means a gate that may not run")
+        # No `if:` on a job, and no repository variable gating a step.
+        self.assertNotIn("vars.", text, "a gated step can skip without saying so")
+        # `workflow_dispatch` belongs to the `on:` block and is a *more* trigger,
+        # not a gate - it lets a human re-run the gate. What must not appear is a
+        # conditional on the job, and `if:` inside it is how the corpus job was
+        # restricted to manual dispatch.
+        job_body = text.split("jobs:")[1]
+        self.assertNotIn(
+            "\n    if:", job_body,
+            "the gate job is conditional, so a push may not run it at all",
+        )
 
     def test_the_workflow_declares_the_permissions_it_uses(self):
         """The root carries `permissions`, and no job asks for more than it needs.
@@ -351,21 +391,6 @@ class TestTheCiWorkflowMatchesTheProject(unittest.TestCase):
                 text,
                 f"{scope} is held by a workflow that only reads the repository",
             )
-
-    def test_the_corpus_job_fails_loudly_when_its_variable_is_unset(self):
-        """A gated job that skips silently is indistinguishable from one that ran.
-
-        The database has no stable download URL this repository can name, so the
-        job reads `vars.WJAZZD_DB_URL`. Until that is set the job must **exit
-        non-zero** rather than skip: a silently-skipped corpus job looks exactly
-        like a passing one in the checks UI, which is the failure mode the header
-        is warning about in the first place.
-        """
-        text = self.workflow()
-        corpus = text.split("  corpus:")[1]
-        self.assertIn("vars.WJAZZD_DB_URL", corpus)
-        self.assertIn("exit 1", corpus)
-        self.assertIn("workflow_dispatch", text)
 
 
 if __name__ == "__main__":
