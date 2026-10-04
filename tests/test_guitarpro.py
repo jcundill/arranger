@@ -485,7 +485,7 @@ class TestRhythm(GuitarProTestCase):
 
         head = select_head(218)
         steps = arrange_head(
-            load_solo(218), head=head, strategy="eighths"
+            load_solo(218), head=head
         ).steps
         events, pickup = _events(_substitute_steps(steps), 4, True)
         for number, beats in enumerate(_measures(events, pickup, 4), start=1):
@@ -722,7 +722,7 @@ class TestRhythm(GuitarProTestCase):
         path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "data", "but_not_for_me.mxl"
         )
-        steps, head, _notes = arrange_xml_head(path, strategy="eighths")
+        steps, head, _notes = arrange_xml_head(path)
         song = self.song(
             steps=steps,
             beats_per_bar=head.beats_per_bar,
@@ -830,7 +830,7 @@ class TestRhythm(GuitarProTestCase):
         path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "data", "but_not_for_me.mxl"
         )
-        steps, head, _notes = arrange_xml_head(path, strategy="eighths")
+        steps, head, _notes = arrange_xml_head(path)
         song = self.song(
             steps=steps,
             beats_per_bar=head.beats_per_bar,
@@ -925,7 +925,6 @@ class TestRhythm(GuitarProTestCase):
         steps, head, _notes = arrange_xml_head(
             os.path.join(os.path.dirname(os.path.abspath(__file__)),
                          "data", "but_not_for_me.mxl"),
-            strategy="eighths",
         )
         song = self.song(
             steps=steps,

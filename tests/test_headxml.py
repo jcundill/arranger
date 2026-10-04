@@ -770,14 +770,24 @@ class TestReductionAndArranging(unittest.TestCase):
             divisions=8,
         )
         # Four quarter notes fill the bar: beats 1, 2, 3, 4, which both grids keep.
-        self.assertEqual([s[2] for s in head_skeleton(head, "eighths")], [1.0, 2.0, 3.0, 4.0])
-        self.assertEqual([s[2] for s in head_skeleton(head, "beats")], [1.0, 2.0, 3.0, 4.0])
+        self.assertEqual([s[2] for s in head_skeleton(head)], [1.0, 2.0, 3.0, 4.0])
+        self.assertEqual([s[2] for s in head_skeleton(head)], [1.0, 2.0, 3.0, 4.0])
 
-    def test_eighths_are_kept_where_a_beat_grid_would_drop_them(self):
-        """Four eighths a bar: the eighth grid keeps four, the beat grid fewer.
+    def test_the_strategy_no_longer_changes_which_notes_are_played(self):
+        """Four eighths a bar sound once under **every** setting, not just `eighths`.
 
-        This is the density decision the corpus path measures (`eighths` is its
-        default for the same reason), asserted on a score rather than a database.
+        **This inverts the density test that stood here**, which asserted that a coarser
+        grid kept strictly fewer slots - `beats` dropping the notes between the beats.
+        That was the grid doing a melody reduction, which is what cost 24 notes on the
+        committed triplet head, and it is gone: `--skeleton` is a melody-*selection* flag
+        and no setting of it removes a note of the tune.
+
+        The density decision that this test used to make is not lost, it **moved**: where
+        chords fall is now the rhythm axis's question rather than this flag's, and it is
+        not built yet. Until it is, every setting plays the tune and differs only in
+        nothing at all - which is the honest state of the flag and the reason it wants a
+        floor (`beats` / `eighths` / `sixteenths` are placeholders for that axis) rather
+        than five live densities.
         """
         # Four of eight divisions is an eighth, so four of them are a half bar.
         head = self.load(
@@ -786,47 +796,80 @@ class TestReductionAndArranging(unittest.TestCase):
             + note("G", duration=4) + note("A", duration=4),
             divisions=8,
         )
-        eighths = [s[2] for s in head_skeleton(head, "eighths")]
-        beats = [s[2] for s in head_skeleton(head, "beats")]
-        self.assertEqual(eighths, [1.0, 1.5, 2.0, 2.5])
-        # A note between two beats rounds onto one of them, so the beat grid keeps
-        # strictly fewer slots - which is the whole point of the finer default.
-        self.assertLess(len(beats), len(eighths))
-        self.assertEqual(beats[0], 1.0)
+        self.assertEqual([s[2] for s in head_skeleton(head)], [1.0, 1.5, 2.0, 2.5])
 
-    def test_a_note_off_the_grid_lands_on_it(self):
-        """A triplet note rounds to the nearest eighth, so it is voiced on one.
+    def test_every_written_note_keeps_the_beat_it_was_written_on(self):
+        """No note of the tune is moved, merged, or dropped by the reduction.
 
-        The written onsets fall between the eighths; the slots do not, because the
-        grid is what the voicings are spaced on and a chord a sixteenth off the beat
-        would sit between two columns of the staff.
+        **This is the model, stated in one assertion.** `--skeleton` is a
+        *melody-selection* flag: it says which notes the soprano is asked to sound, and
+        the answer is every one of them, down to the floor. It is **not** a spacing
+        rule, and where chords fall is a separate axis with its own question.
+
+        The previous behaviour quantised every note to a grid, which cost 24 of 110 notes
+        on the committed triplet head - 11 in the tuplet bars and **13 in the straight
+        ones** - because two notes closer together than the grid shared a slot and the
+        `pick` rule silently dropped one. A note of the tune going missing is worse than
+        a chord sitting slightly off a column of the staff, and the loss was invisible.
         """
-        # divisions=12, so a quarter is 12. Two triplet eighths written as 8 are
-        # divided to 5 each, so the onsets fall on 1 + 5/12 and 1 + 10/12.
         head = self.load(
             harmony("C", "major")
             + note("E", duration=8, tuplet=True) + note("F", duration=8, tuplet=True)
             + note("G", duration=12),
             divisions=12,
         )
-        # Read raw, the onsets really are off the eighth grid...
-        self.assertAlmostEqual(head.notes[1].beat, 1 + 5 / 12, places=6)
-        self.assertAlmostEqual(head.notes[2].beat, 1 + 10 / 12, places=6)
-        # ...and every slot lands on one.
-        for _triple, _bar, beat, _duration in head_skeleton(head, "eighths"):
-            self.assertAlmostEqual((beat - 1.0) % 0.5, 0.0, places=6)
+        # The tuplets are marked as written, and they are a third of a beat apart.
+        self.assertEqual([n.tuplet for n in head.notes], [True, True, False])
+        beats = [beat for _t, _bar, beat, _d in head_skeleton(head)]
+        # Compared at the precision the slot stores: `_slot_key` rounds to six places
+        # so that a float read from several divisions cannot make two equal-looking
+        # positions differ in the last bit, and an exact equality here would be a
+        # statement about that rounding rather than about the model.
+        self.assertEqual(
+            beats, [round(n.beat, 6) for n in head.notes]
+        )
 
-    def test_the_chords_strategy_keeps_one_slot_per_change(self):
-        """The written harmony rather than the melody, at the change's own beat."""
+    def test_a_tuplet_head_keeps_every_note_on_every_grid(self):
+        """The end-to-end claim, on the committed score rather than a hand-built one.
+
+        A hand-built fixture is fine for a rule but not for a count: the point here is
+        that the reduction no longer *loses notes of the tune*, and the only honest way
+        to say that is against a real score's note count. `i_was_doing_all_right.mxl`
+        carries 39 tuplets among its 110 notes, and before this rule `eighths` kept 86
+        of them - losing 11 in the tuplet bars and **13 in the straight ones**, because
+        any two notes closer together than the grid collided.
+        """
+        head = load_musicxml(I_WAS_DOING_ALL_RIGHT)
+        # Every written note, including all 39 tuplets. Under `eighths` this head used
+        # to keep 86 of 110 - losing 11 in the tuplet bars and **13 in the straight
+        # ones**, because two notes closer together than the grid shared a slot and one
+        # was dropped from the arrangement without a word.
+        self.assertEqual(len(head_skeleton(head)), len(head.notes))
+        self.assertEqual(sum(1 for n in head.notes if n.tuplet), 39)
+
+    def test_a_chord_change_sounds_under_every_note_it_governs(self):
+        """Two chords in the bar, six notes, and the harmony changes part-way through.
+
+        **This inverts the test that stood here**, which asserted the `chords` strategy
+        gave one slot per chord change - two slots for these six notes. That was a
+        reduction of the melody, which is the thing this module no longer does: the
+        soprano plays the tune. What survives is the part of it that was not about
+        reduction at all - **the harmony in force is right on every note**, and the
+        change lands where the file put it rather than on a downbeat.
+        """
         head = self.load(
             harmony("C", "major") + note("E") + note("F") + note("G")
             + harmony("F", "dominant") + note("A") + note("B"),
         )
-        slots = head_skeleton(head, "chords")
-        self.assertEqual([s[0][2] for s in slots], ["Cmaj", "F7"])
-        # The change lands on the fourth quarter, which is beat 4 - not the
-        # downbeat the grid would have put it on.
-        self.assertEqual([s[2] for s in slots], [1.0, 4.0])
+        slots = head_skeleton(head)
+        # Five written notes, five slots - none of them merged away.
+        self.assertEqual(len(slots), len(head.notes))
+        # The first three are under Cmaj and the last two under F7.
+        self.assertEqual([s[0][2] for s in slots],
+                         ["Cmaj", "Cmaj", "Cmaj", "F7", "F7"])
+        # And each note keeps the beat it was written on, so the change is heard at the
+        # fourth quarter (beat 4) rather than being snapped to a grid position.
+        self.assertEqual([s[2] for s in slots], [1.0, 2.0, 3.0, 4.0, 5.0])
 
     def test_a_leading_rest_still_takes_up_its_time(self):
         """A rest is not a note, but it is time, and the cursor must cross it.
@@ -880,7 +923,7 @@ class TestReductionAndArranging(unittest.TestCase):
         # makes the renderers write that bar short rather than inventing a downbeat.
         events, pickup = _events(
             _substitute_steps(
-                arrange_xml_head(BUT_NOT_FOR_ME, strategy="eighths")[0]
+                arrange_xml_head(BUT_NOT_FOR_ME)[0]
             ),
             head.beats_per_bar,
             True,
@@ -911,28 +954,36 @@ class TestReductionAndArranging(unittest.TestCase):
         self.assertEqual([n.beat for n in head.notes], [1.0, 1.5, 2.0, 2.5])
         # ...and the eighth grid keeps all four rather than folding the last onto 2.0.
         self.assertEqual(
-            [s[2] for s in head_skeleton(head, "eighths")], [1.0, 1.5, 2.0, 2.5]
+            [s[2] for s in head_skeleton(head)], [1.0, 1.5, 2.0, 2.5]
         )
 
-    def test_a_bar_line_overflow_is_still_pulled_back_inside(self):
-        """The clamp the last-eighth fix refines still does its original job.
+    def test_a_note_past_the_bar_line_is_still_pulled_back_inside(self):
+        """The clamp still does its job, which is now a narrower one.
 
-        A note that *rounds onto* the bar line - the last thing `_slot_key` is
-        documented to catch - is still pulled back to the last grid position inside
-        the bar, so a bar cannot gain a phantom step on its own downbeat and collide
-        with the first step of the next.
+        **The job changed with the model, and the assertion had to change with it.**
+        This used to be about a note that *rounded onto* the bar line: `eighths` put the
+        grid at 0.5, a note at 2.75 rounded to 3.0, and 3.0 is the bar line of a 2/2 bar,
+        so it was pulled back to the last eighth inside - 2.5.
+
+        There is no grid now, so nothing rounds: every note keeps the beat it was
+        written on, and a note written past the bar line is simply **over the line**
+        rather than rounding onto it. The clamp is still what stops that, and it is still
+        load-bearing - but what it pulls back to is the bar line approached from inside,
+        not the last grid step.
         """
         head = self.load(
             harmony("C", "major")
             + note("E", duration=8) + note("F", duration=8)
-            # A note at 2.75 rounds up to 3.0, which is the bar line in a 2/2 bar.
             + note("G", duration=6) + note("A", duration=2),
             divisions=8, beats=2, beat_type=2,
         )
-        beats = [s[2] for s in head_skeleton(head, "eighths")]
-        # Nothing lands on 3.0 or beyond: the overflow came back to 2.5.
-        self.assertTrue(all(b <= 2.5 for b in beats), beats)
-        self.assertIn(2.5, beats)
+        beats = [s[2] for s in head_skeleton(head)]
+        # The bar is two beats wide, so its last eighth is 2.375 and the bar line 3.0.
+        # Every note is where the file put it, none of them on the line, and the last
+        # one is still there rather than folded onto an earlier slot.
+        self.assertEqual(beats, [n.beat for n in head.notes])
+        self.assertTrue(all(b < head.beats_per_bar + 1.0 for b in beats), beats)
+        self.assertEqual(max(beats), 2.375)
 
     def test_a_cut_time_head_keeps_every_note_of_the_tune(self):
         """No note of a real 2/2 head is lost to the reduction.
@@ -947,7 +998,7 @@ class TestReductionAndArranging(unittest.TestCase):
         # The last quarter of a 2/2 bar is beat 2.5, so these exist in the file...
         self.assertTrue(any(n.beat > head.beats_per_bar for n in head.notes))
         # ...and the eighth grid must not have folded them onto the second beat.
-        slots = head_skeleton(head, "eighths")
+        slots = head_skeleton(head)
         self.assertTrue(any(beat > head.beats_per_bar for _t, _b, beat, _d in slots))
         # Nothing may land on or past the bar line either.
         for _triple, _bar, beat, _duration in slots:
@@ -957,7 +1008,7 @@ class TestReductionAndArranging(unittest.TestCase):
         """The bass rides in the name, as the corpus path keeps it, and rule B
         promotes a triad whose bass is its own seventh."""
         head = self.load(harmony("A", "minor", bass="G") + note("E"))
-        _melody, quality, name = head_skeleton(head, "beats")[0][0]
+        _melody, quality, name = head_skeleton(head)[0][0]
         self.assertEqual(quality, "m7")  # A minor triad over G is a minor 7th
         self.assertEqual(name, "Am/G")
 
@@ -970,7 +1021,6 @@ class TestReductionAndArranging(unittest.TestCase):
         """
         steps, _head, _notes = arrange_xml_head(
             self.path(harmony("D", "dominant", bass="C") + note("F", octave=4)),
-            strategy="beats",
         )
         self.assertEqual(len(steps), 1)
         self.assertEqual(steps[0].chord, "D7/C")
@@ -982,7 +1032,7 @@ class TestReductionAndArranging(unittest.TestCase):
         """A note with no harmony is voiced alone, not under an invented chord."""
         path = write_score(score(note("C", octave=5) + harmony("C", "major") + note("E")))
         self.addCleanup(os.unlink, path)
-        steps, _head, _notes = arrange_xml_head(path, strategy="beats")
+        steps, _head, _notes = arrange_xml_head(path)
         self.assertTrue(steps[0].melody_only)
         self.assertEqual(steps[0].chord, NO_CHORD)
         self.assertFalse(steps[1].melody_only)
@@ -995,7 +1045,7 @@ class TestReductionAndArranging(unittest.TestCase):
             + harmony("G", "dominant") + note("B", octave=4)
             + harmony("C", "major-seventh") + note("B", octave=4)
         )
-        slots = head_skeleton(head, "beats")
+        slots = head_skeleton(head)
         steps, _rescued, _notes = arrange_slots(
             [s[0] for s in slots], [(s[1], s[2], s[3]) for s in slots]
         )
@@ -1026,7 +1076,7 @@ class TestReductionAndArranging(unittest.TestCase):
                   + harmony("C", "major-seventh") + note("B", octave=4))
         )
         self.addCleanup(os.unlink, source)
-        steps, _head, _notes = arrange_xml_head(source, strategy="beats")
+        steps, _head, _notes = arrange_xml_head(source)
 
         exported = write_score(format_musicxml(steps, title="Round trip"), suffix=".musicxml")
         self.addCleanup(os.unlink, exported)

@@ -125,8 +125,6 @@ python -m arranger head tests/data/i_was_doing_all_right.mxl --bars 1-3 --html h
 |---|---|---|
 | `--part` | the melody part | a `<score-part>` id, when a score has several |
 | `--bars` | the whole head | half-open `LO-HI`; **bounds may be negative** for pickups |
-| `--skeleton` | `eighths` | how finely to read the melody — see below |
-| `--pick` | `first` | which note to take when one slot holds several |
 | `--non-chord-tone` | `extension` | how to harmonise a melody note outside the chord |
 | `--fallback` | off | `diminished` — see [the trade-off](#the-fallback-trade-off) |
 | `--texture` | `uniform` | `uniform`, `targets`, `walking_bass` — see [texture](#texture) |
@@ -140,14 +138,19 @@ python -m arranger head tests/data/i_was_doing_all_right.mxl --bars 1-3 --html h
 | `--bars-per-line` | `4` | with `--tab staff`: bars per staff line |
 | `--html` / `--musicxml` / `--gp5` | off | also write the head to a file — see [rendering](#rendering) |
 
-**`--skeleton` picks the rhythmic grid.** One step per *chord change*, per *beat*, per
-*eighth*, per *sixteenth*, or per *notated note* — so `eighths` is the default because a
-chord-melody line is usually eighths, and `notes` is the most literal reading of a
-written melody. A denser grid means more steps and more decisions, not a different tune.
+**Every written note sounds.** There is no reduction: `arranger head` plays the tune as
+written, one step per note, each on the beat it was written on. That was not always true.
+`--skeleton` used to name a grid — one step per chord change, beat, eighth, sixteenth or
+note — and every note was quantised onto it, so two notes closer together than the grid
+shared a step and one was **silently dropped**. On a 32-bar head with triplets it lost
+24 of 110 notes, and only 11 were in the triplet bars: 13 were in the straight ones. A
+note of the tune going missing without a word is worse than a busy tab, so the flag and
+its companion `--pick` are gone from `head`.
 
-**`--pick` matters only where the score is dense.** Where several notes share one slot
-(chord changes are often notated as a single melody note), `first` takes the first in
-the score and `longest` takes the longest value.
+**`--skeleton` and `--pick` are still on `arranger corpus`.** The Weimar path reduces —
+149 transcriptions are too long to play straight — so it keeps both. Where the *chords*
+fall within a bar is a separate question with its own axis, and that is where those
+choices belong now.
 
 **`--grips` is ordered.** It is a preference list, not a set: putting `shell` first
 will displace a four-note drop-2 whenever the two cost the same. Leave it alone unless
@@ -194,7 +197,7 @@ from headxml import load_musicxml, head_skeleton
 
 head = load_musicxml("tests/data/but_not_for_me.mxl")   # melody, timing, chords
 print(head.title, head.beats_per_bar, len(head))
-for triple, bar, beat, duration in head_skeleton(head, "eighths"):
+for triple, bar, beat, duration in head_skeleton(head):
     print(bar, beat, triple)
 ```
 
@@ -246,8 +249,8 @@ python -m arranger corpus --melid 218 --section chorus:1  # a solo chorus instea
 | `--section` | the head | pick a span: `form:A1`, `chorus:1`, `phrase:2`, `idea:lick` |
 | `--lift` | `auto` | `auto`, `none`, `always`, `per-note` — see below |
 | `--bars` | the whole span | half-open `LO-HI`; **bounds may be negative** for pickups |
-| `--skeleton` | `eighths` | one step per chord / beat / eighth / sixteenth / note |
-| `--pick` | `first` | which note to take when one slot holds several |
+| `--skeleton` | `eighths` | how finely to reduce — one step per chord / beat / eighth / sixteenth / note |
+| `--pick` | `first` | which note to take when one step holds several |
 | `--non-chord-tone` | `extension` | how to harmonise a melody note outside the chord |
 | `--fallback` | off | `diminished` — see [the trade-off](#the-fallback-trade-off) |
 | `--texture` | `uniform` | `uniform`, `targets`, `walking_bass` — see [texture](#texture) |

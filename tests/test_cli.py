@@ -125,7 +125,9 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         # assertion is a tripwire for "a flag was added to one command and not the
         # other", and a number that recomputed itself from the parsers would notice
         # nothing.
-        self.assertEqual(len(shared), 19, "the shared flag count moved")
+        # 17, down from 19: `--skeleton` and `--pick` are corpus-only now that the
+        # MusicXML path does not reduce. See `test_each_command_keeps_exactly_its_own_flags`.
+        self.assertEqual(len(shared), 17, "the shared flag count moved")
 
         disagreeing = [
             f"{dest}: corpus={_semantics(corpus[dest])!r} head={_semantics(head[dest])!r}"
@@ -142,8 +144,16 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         database, and `file` only against a file on disk.
         """
         corpus, head, _shared = self.parsers()
+        # `skeleton` and `pick` moved to this side deliberately. Both were a *reduction*
+        # - they decided which melody notes were dropped - and the MusicXML path no
+        # longer reduces: every written note of a score sounds, because a note of the
+        # tune going missing silently is worse than a busy tab. The Weimar corpus still
+        # reduces, so it keeps both; `head` has neither. Converging the two paths is
+        # separate work, and until then the flag means two different things - which is
+        # why it is named here rather than quietly dropped from the vocabulary.
         self.assertEqual(
-            sorted(set(corpus) - set(head)), ["lift", "list", "melid", "section"]
+            sorted(set(corpus) - set(head)),
+            ["lift", "list", "melid", "pick", "section", "skeleton"],
         )
         self.assertEqual(sorted(set(head) - set(corpus)), ["file", "part"])
 
@@ -191,8 +201,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
             # above states the test: it is an arranging choice that means the same
             # thing against a transcription and against a score, so both commands
             # print one help string rather than two.
-            ["bass", "fallback", "grips", "harmony", "non_chord_tone", "pick",
-             "skeleton", "voices"],
+            ["bass", "fallback", "grips", "harmony", "non_chord_tone", "voices"],
             "a flag gained or lost its differing help - remeasure before editing",
         )
 

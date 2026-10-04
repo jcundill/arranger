@@ -199,8 +199,8 @@ def add_common_arguments(
     parser: argparse.ArgumentParser,
     help_text: CommonHelp,
     *,
-    skeleton_strategies: Sequence[str],
-    slot_picks: Sequence[str],
+    slot_picks: Optional[Sequence[str]] = None,
+    skeleton_strategies: Optional[Sequence[str]] = None,
 ) -> None:
     """Add the 16 flags both front ends take, to `parser`.
 
@@ -218,8 +218,27 @@ def add_common_arguments(
     which is the only visible difference either command's `--help` has.
     """
     parser.add_argument("--bars", default=None, help=help_text.bars)
-    parser.add_argument("--skeleton", choices=skeleton_strategies, default="eighths")
-    parser.add_argument("--pick", choices=slot_picks, default="first")
+    if skeleton_strategies is not None:
+        # **Only the corpus command offers this**, and the asymmetry is the point
+        # rather than an omission: `--skeleton` was a *reduction* - it decided which
+        # melody notes the reduction dropped - and the MusicXML path no longer reduces.
+        # Every written note of a score now sounds, down to the floor, because a note of
+        # the tune going missing is worse than a busy tab. Where the chords fall is a
+        # separate question with its own axis.
+        #
+        # The Weimar corpus keeps its strategies because it is a library over 149
+        # transcriptions and still reduces; `wjazzd._slot_key` quantises, so `first` and
+        # `longest` still differ there. Converging the two paths is separate work, and
+        # until it happens this flag means two different things - which is recorded
+        # rather than papered over.
+        parser.add_argument("--skeleton", choices=skeleton_strategies, default="eighths")
+    if slot_picks is not None:
+        # Corpus-only, for the same reason as `--skeleton`: `pick` chose which of
+        # several notes sharing a **slot** represented it, and the MusicXML path gives
+        # every note its own slot now - so there is nothing for it to choose between and
+        # `first` and `longest` are the same arrangement. It still matters to the corpus,
+        # which reduces and does merge notes.
+        parser.add_argument("--pick", choices=slot_picks, default="first")
     parser.add_argument(
         "--non-chord-tone",
         choices=NON_CHORD_TONE_STRATEGIES,

@@ -49,8 +49,6 @@ from arranger import (
     ChordParser,
 )
 from wjazzd import (
-    SKELETON_STRATEGIES,
-    SLOT_PICKS,
     arrange_slots,
     midi_to_note_name,
     promote_slash_chord,
@@ -359,6 +357,13 @@ class HeadNote:
     beat: float
     pitch: int
     duration: float
+    # True when the note came from a `<time-modification>`, i.e. it is part of a
+    # tuplet. Carried **explicitly** rather than inferred from `duration`, because
+    # the inference is wrong: a plain eighth is half a grid step under `eighths`, so
+    # "is the duration a whole number of steps" is true for tuplets *and* for every
+    # ordinary eighth, and the check silently re-spaced the whole head. Only the
+    # file knows which notes were written as a tuplet.
+    tuplet: bool = False
     chord: str = ""
     quality: Optional[str] = None
     bass: Optional[str] = None
@@ -620,15 +625,41 @@ def _midi(pitch: ElementTree.Element) -> Optional[int]:
     return (octave + 1) * 12 + _STEP_SEMITONES[step] + _number(pitch.findtext("alter"))
 
 
-def _duration_in_divisions(note: ElementTree.Element) -> int:
-    """A note's length in divisions, divided down for a tuplet.
+def _duration_in_divisions(note: ElementTree.Element, divisions: int = 0) -> int:
+    """A note's length in divisions, **already divided down** if the writer reduced it.
 
-    MusicXML writes a tuplet's note with an *unreduced* `<duration>` plus a
-    `<time-modification>` saying how many of them fill the space of how many normal
-    ones - a triplet quarter is written as two thirds of a quarter, which is 6720
-    in the divisions of 10080 that "I Was Doing All Right" uses. Without this
-    division a triplet lasts a third too long and every bar after the first drifts
-    out of time.
+    MusicXML's specification says a tuplet's `<duration>` is *unreduced*: three
+    eighth-note triplets are written as six divisions each, so a reader must divide
+    them by three or the bar runs a third long. **Real writers do not agree**, and this
+    one did not - which is a bug this function used to have, in the direction that
+    mattered.
+
+    The two conventions are not distinguishable by arithmetic on the value alone: the
+    fixture's triplet quarter is written `6720` in the divisions of 10080, and 6720
+    divides cleanly both as "already reduced" (6720/10080 = 2/3) and as "unreduced"
+    (6720 x 2/3 = 4480). Deciding per measure is no better - 24 of the 36 measures in
+    `i_was_doing_all_right.mxl` come out a whole number of bars under **both** readings.
+
+    What does decide it is the **relationship to `<type>`**, which states the note's
+    nominal value:
+
+    | `<type>` | written | of a nominal quarter | reading |
+    |---|---|---|---|
+    | `quarter` | 10080 | exactly 1.0 | plain |
+    | `quarter` | **6720** | **exactly 2/3** | **already reduced** - a triplet quarter is 2/3 of a quarter |
+    | `quarter` | 4480 | 4/9 | neither; treated as unreduced, per the spec |
+
+    So: if the written value is *already* `normal/actual` of its nominal, take it as
+    it stands; otherwise divide, as the specification says. The first row of that table
+    is what makes the rule safe - a tuplet quarter is **2/3 of a quarter**, and dividing
+    6720 produced **4/9**, a whole third of the true length. Three such notes spanned
+    4/3 of a quarter where the figure must fill two.
+
+    **The consequence was invisible until the exporter noticed.** Onsets stayed correct
+    - the cursor is re-based per bar from `bar_index`, so no bar drifted - and tablature
+    ignores `duration` entirely. Only the MusicXML writer reads it, and music21 refused
+    the result with "Cannot convert inexpressible durations to MusicXML", which is what
+    finally surfaced a number that had been wrong the whole time.
     """
     duration = _number(note.findtext("duration"))
     modification = note.find("time-modification")
@@ -636,9 +667,74 @@ def _duration_in_divisions(note: ElementTree.Element) -> int:
         return duration
     actual = _number(modification.findtext("actual-notes"), 1)
     normal = _number(modification.findtext("normal-notes"), 1)
-    if actual > 0 and normal > 0 and actual != normal:
-        duration = duration * normal // actual
-    return duration
+    if actual <= 0 or normal <= 0 or actual == normal:
+        return duration
+    if divisions > 0 and _duration_is_already_reduced(
+        note, duration, divisions, actual, normal
+    ):
+        return duration
+    return duration * normal // actual
+
+
+#: `<type>` to its length in quarters. The nominal value a written duration is measured
+#: against to decide whether a writer reduced a tuplet already - see
+#: `_duration_in_divisions`, which is the only user.
+_TYPE_IN_QUARTERS: Dict[str, float] = {
+    "maxima": 32.0, "long": 16.0, "breve": 8.0, "whole": 4.0, "half": 2.0,
+    "quarter": 1.0, "eighth": 0.5, "16th": 0.25, "32nd": 0.125, "64th": 0.0625,
+    "128th": 0.03125, "256th": 0.015625,
+}
+
+
+def _duration_is_already_reduced(
+    note: ElementTree.Element, duration: int, divisions: int, actual: int, normal: int
+) -> bool:
+    """Whether this note's written duration is already `normal/actual` of its `<type>`.
+
+    True for a writer that reduced the value, false for one following the
+    specification's unreduced convention. `<type>` is what makes the question
+    answerable: without a nominal value to measure against, 6720 is divisible both ways
+    and the two conventions are the same number.
+    """
+    modification = note.find("time-modification")
+    # `<normal-type>` is the tuplet's own nominal value and is the better of the two
+    # sources; `<type>` is the fallback for a file that omits it.
+    nominal_text = ""
+    if modification is not None:
+        nominal_text = (modification.findtext("normal-type") or "").strip()
+    if not nominal_text:
+        nominal_text = (note.findtext("type") or "").strip()
+    nominal = _TYPE_IN_QUARTERS.get(nominal_text)
+    if nominal is None or divisions <= 0 or nominal <= 0:
+        # No nominal to measure against, so the specification's reading is the only
+        # defensible one: a note that says nothing about itself is taken unreduced.
+        return False
+    # **`<divisions>` is per QUARTER note, not per whole note.** MusicXML defines it as
+    # "the number of duration units in a quarter note", so 10080 divisions is a quarter
+    # and 6720/10080 is already 2/3 - multiplying by four here read the file as 1/6 and
+    # rejected a value it should have accepted.
+    written_quarters = duration / divisions
+    # Already reduced when the written value *is* normal/actual of the nominal - to
+    # within a division, since a reduced value is not always an exact multiple.
+    reduced = written_quarters * actual / normal
+    return abs(reduced - nominal) <= 1.0 / divisions + 1e-9
+
+
+def _is_tuplet(note: ElementTree.Element) -> bool:
+    """Whether this note is written as part of a tuplet.
+
+    A **marker read from the file**, not a property deduced from the duration.
+    MusicXML says so explicitly with `<time-modification>`, and the deduction is not
+    merely worse but wrong: under `eighths` a plain eighth lasts half a grid step,
+    so "the duration is not a whole number of steps" holds for ordinary eighths as
+    well as for triplets, and using it re-spaced every eighth in the head.
+    """
+    modification = note.find("time-modification")
+    if modification is None:
+        return False
+    actual = _number(modification.findtext("actual-notes"), 1)
+    normal = _number(modification.findtext("normal-notes"), 1)
+    return actual > 0 and normal > 0 and actual != normal
 
 
 def _stops_a_tie(note: ElementTree.Element) -> bool:
@@ -658,6 +754,7 @@ def _flush_group(
     bass: Optional[str],
     tie_stop: bool = False,
     lyrics: Tuple[str, ...] = (),
+    tuplet: bool = False,
 ) -> None:
     """Emit one melody note from a finished `<chord>` group.
 
@@ -689,6 +786,7 @@ def _flush_group(
             beat=1.0 + (onset / divisions) * (beats_per_bar / 4.0),
             pitch=pitch,
             duration=length / divisions / 4.0,
+            tuplet=tuplet,
             chord=chord,
             quality=quality,
             bass=bass,
@@ -783,6 +881,7 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
     group: List[Tuple[int, int]] = []
     group_onset = 0
     group_tie = False
+    group_tuplet = False
     group_chord = NO_CHORD
     group_quality: Optional[str] = NO_CHORD
     group_bass: Optional[str] = None
@@ -836,7 +935,7 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
             if child.find("cue") is not None:
                 skip("cue notes")
                 if child.find("chord") is None:
-                    cursor += _duration_in_divisions(child)
+                    cursor += _duration_in_divisions(child, divisions)
                 continue
             # A rest is not a melody note, but it is still *time*: the cursor has to
             # move past it or every note after it is read too early. Bar 1 of "But
@@ -852,14 +951,14 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
                 skip("rests and unpitched notes")
                 # Not a `<chord>` member, so it advances the cursor in its own right.
                 if child.find("chord") is None:
-                    cursor += _duration_in_divisions(child)
+                    cursor += _duration_in_divisions(child, divisions)
                 continue
             pitch = _midi(pitch_element)
             if pitch is None:
                 skip("notes with an unreadable pitch")
                 continue
 
-            length = _duration_in_divisions(child)
+            length = _duration_in_divisions(child, divisions)
             onset = cursor
             if child.find("chord") is not None:
                 # A member of a `<chord>` group: the same onset, the same length.
@@ -885,11 +984,13 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
             if group:
                 _flush_group(group, notes, bar, group_onset, divisions, beats_per_bar,
                              group_chord, group_quality, group_bass,
-                             tie_stop=group_tie, lyrics=group_lyrics)
+                             tie_stop=group_tie, lyrics=group_lyrics,
+                             tuplet=group_tuplet)
                 group.clear()
             group.append((pitch, length))
             group_onset = onset
             group_tie = _stops_a_tie(child)
+            group_tuplet = _is_tuplet(child)
             group_chord, group_quality, group_bass = chord, quality, bass
             group_lyrics = tuple(
                 (lyric.findtext("text") or "").strip()
@@ -901,7 +1002,7 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
         # losing the last chord of the bar.
         _flush_group(group, notes, bar, group_onset, divisions, beats_per_bar,
                      group_chord, group_quality, group_bass,
-                     tie_stop=group_tie, lyrics=group_lyrics)
+                     tie_stop=group_tie, lyrics=group_lyrics, tuplet=group_tuplet)
         group.clear()
         bar_index = bar + 1
 
@@ -922,73 +1023,49 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
 # Reduction and arrangement
 # ---------------------------------------------------------------------------
 
-# The slot width each reduction strategy names, in beats. None means "keep every
-# note on its own onset", which is what "notes" means. The strategy *names* are
-# imported from `wjazzd` rather than restated, so the two input paths cannot drift
-# apart: a strategy that means one thing in the corpus means the same thing here.
-_STRATEGY_GRID: Dict[str, Optional[float]] = {
-    "beats": 1.0,
-    "eighths": 0.5,
-    "sixteenths": 0.25,
-    "notes": None,
-}
-
-# The distance a slot's beat is kept inside its bar when there is no grid to step
-# back by. See `_slot_key`, which is the only user.
+# How far inside its bar a note's beat is kept, so it cannot collide with the next
+# bar's downbeat. A 2/2 bar is two beats wide, so its last quarter is beat 2.5.
 _BEAT_EPSILON = 1e-6
 
 
 def head_skeleton(
     head: Head,
-    strategy: str = "eighths",
     section: Optional[Tuple[int, int]] = None,
-    pick: str = "first",
 ) -> List[Tuple[Tuple[str, str, str], int, float, float]]:
-    """Reduces a loaded head to slots: (triple, bar, beat, duration).
+    """A loaded head as slots: (triple, bar, beat, duration), **one per written note**.
 
-    One voicing is generated per slot, and `strategy` decides what a slot is - a
-    chord change, a beat, an eighth, a sixteenth, or a single note - which is the
-    whole reduction mechanism, and the same set the corpus path offers
-    (`wjazzd.SKELETON_STRATEGIES`). `section` is a half-open (start, end) bar
-    range, defaulting to the whole head; `pick` chooses which note represents a
-    slot several notes share.
+    **There is no reduction here any more**, and that is the point. `strategy` used to
+    name a grid - a chord change, a beat, an eighth, a sixteenth, or a note - and every
+    note was quantised onto it, so two notes closer together than the grid shared a slot
+    and one of them was silently dropped from the arrangement. Measured on the committed
+    triplet head, `eighths` kept 86 of 110 notes: 11 lost in the tuplet bars and **13 in
+    the straight ones**, because any pair closer than the grid collided. **A note of the
+    tune went missing and nothing said so.**
+
+    So the soprano plays the tune: every note the file wrote gets a slot, on the beat it
+    was written, down to the floor (a 16th in practice; 32nds do not occur in real
+    material). Where the *chords* fall is a separate question with its own axis, and
+    answering it here is what cost the notes.
+
+    `section` is a half-open (start, end) bar range, defaulting to the whole head.
+    `pick` is gone with the reduction: it chose which of several notes sharing a slot
+    represented it, and no two notes share a slot now.
 
     A note under no harmony becomes a melody-only `NO_CHORD` step, which
     `arrange_progression` short-circuits rather than inventing a chord for. A note
     whose chord symbol the loader could not translate is **skipped** rather than
     guessed: a wrong chord under a good melody is worse than a gap.
     """
-    if strategy not in SKELETON_STRATEGIES:
-        raise ValueError(
-            f"Unknown skeleton strategy {strategy!r}; expected one of {SKELETON_STRATEGIES}"
-        )
-    if pick not in SLOT_PICKS:
-        raise ValueError(f"Unknown slot pick {pick!r}; expected one of {SLOT_PICKS}")
-
     lo, hi = section if section is not None else head.bars
     notes = [n for n in head.notes if lo <= n.bar < hi]
     if not notes:
         return []
 
-    if strategy == "chords":
-        groups = _chord_change_groups(notes)
-    else:
-        grid = _STRATEGY_GRID[strategy]
-        groups = {}
-        for note in notes:
-            groups.setdefault(_slot_key(note, head, grid), []).append(note)
+    groups = {(note.bar, round(note.beat, 6)): note for note in notes}
 
     slots: List[Tuple[Tuple[str, str, str], int, float, float]] = []
     for key in sorted(groups):
-        candidates = groups[key]
-        chosen = (
-            max(candidates, key=lambda n: n.duration) if pick == "longest" else candidates[0]
-        )
-        # The slot's beat is the *key's* - the quantised grid position - not the
-        # note's own onset. They differ for a triplet, and it is the grid that the
-        # voicings are spaced on: a chord written a sixteenth off the beat would
-        # otherwise sit between two columns of the staff and off the beat of the
-        # barline it belongs to.
+        chosen = groups[key]
         bar, beat = key
         if chosen.quality is None:
             if chosen.chord == NO_CHORD:
@@ -1010,64 +1087,9 @@ def head_skeleton(
     return slots
 
 
-def _slot_key(note: HeadNote, head: Head, grid: Optional[float]) -> Tuple[int, float]:
-    """The (bar, beat) a note occupies under a strategy.
-
-    `grid` is the strategy's beat width; None keeps every note on its own onset,
-    which is what "notes" means. A slot's beat is *quantised* to the grid rather
-    than being the note's own beat, because the grid is what the voicings are
-    spaced on: a note a hair off the beat must land on the beat, which is the same
-    quantisation the corpus path does by deriving its key from `tatum`.
-
-    A beat that lands **on or past the bar line** is pulled back inside the bar, so
-    a bar cannot gain a phantom step on its own downbeat and collide with the first
-    step of the next. The limit is therefore the *last grid position still inside
-    the bar*, which is one grid step short of `beats_per_bar + 1` - **not**
-    `beats_per_bar` itself.
-
-    That distinction is the whole point, and it is what cut time exposes. A 2/2 bar
-    is two beats wide, so its eighths run 1.0, 1.5, 2.0, **2.5**: the last eighth of
-    the bar is beat 2.5, half a beat past `beats_per_bar`. Clamping to
-    `beats_per_bar` folded every one of those notes onto beat 2.0, where they
-    collided with the note already there and were dropped by the slot's `pick` rule
-    - 13 of the 80 notes in "But Not For Me", a music21-written 2/2 head whose
-    fourth quarter of every bar sits at beat 2.5. Losing a note of the tune to a
-    clamp is far worse than voicing one a hair off the beat.
-    """
-    if grid is None:
-        # No quantisation, so there is no grid to step back by and the limit is the
-        # bar line itself, approached from inside.
-        limit = float(head.beats_per_bar) + 1.0 - _BEAT_EPSILON
-        return (note.bar, round(min(note.beat, limit), 6))
-    beat = 1.0 + round((note.beat - 1.0) / grid) * grid
-    limit = float(head.beats_per_bar) + 1.0 - grid
-    return (note.bar, round(min(beat, limit), 6))
-
-
-def _chord_change_groups(notes: Sequence[HeadNote]) -> Dict[Tuple[int, float], List[HeadNote]]:
-    """The slots the `chords` strategy reduces to: one per written chord change.
-
-    The written harmony rather than the melody, which is how a slow tune reads: a
-    head that moves roughly once a bar should be voiced once a bar, not on every
-    eighth of it. A slot's beat is the first note the change lands on, so the
-    change is voiced where the file puts it rather than always on the downbeat.
-    """
-    groups: Dict[Tuple[int, float], List[HeadNote]] = {}
-    previous: Optional[str] = None
-    for note in notes:
-        if note.chord == NO_CHORD:
-            continue
-        if note.chord != previous:
-            groups.setdefault((note.bar, round(note.beat, 6)), []).append(note)
-            previous = note.chord
-    return groups
-
-
 def arrange_xml_head(
     path: Union[str, Path],
     part: Optional[str] = None,
-    strategy: str = "eighths",
-    pick: str = "first",
     non_chord_tone: str = "extension",
     fallback: Optional[str] = None,
     section: Optional[Tuple[int, int]] = None,
@@ -1098,7 +1120,7 @@ def arrange_xml_head(
     not a metre.
     """
     head = load_musicxml(path, part)
-    slots = head_skeleton(head, strategy, section, pick)
+    slots = head_skeleton(head, section)
     triples = [slot[0] for slot in slots]
     timings = [(slot[1], slot[2], slot[3]) for slot in slots]
     steps, _rescued, notes = arrange_slots(
@@ -1167,7 +1189,7 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     import argparse
 
     from arranger.cli import HEAD_HELP, add_common_arguments, render_and_write
-    from wjazzd import SKELETON_STRATEGIES, SLOT_PICKS, parse_bar_range
+    from wjazzd import parse_bar_range
 
     parser = argparse.ArgumentParser(
         prog="arranger head",
@@ -1181,8 +1203,6 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     add_common_arguments(
         parser,
         HEAD_HELP,
-        skeleton_strategies=SKELETON_STRATEGIES,
-        slot_picks=SLOT_PICKS,
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
@@ -1212,8 +1232,7 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
         steps, head, notes = arrange_xml_head(
             args.file,
             part=args.part,
-            strategy=args.skeleton,
-            pick=args.pick,
+
             non_chord_tone=args.non_chord_tone,
             fallback=args.fallback,
             section=section,

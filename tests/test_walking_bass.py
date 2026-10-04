@@ -610,7 +610,7 @@ class TestEveryHeadCarriesTheMelodyInForce(unittest.TestCase):
         for name in self.HEADS:
             with self.subTest(head=name):
                 head = load_musicxml(f"tests/data/{name}")
-                skeleton = head_skeleton(head, "eighths", None, "first")
+                skeleton = head_skeleton(head)
                 triples = [slot[0] for slot in skeleton]
                 timings = [(slot[1], slot[2], slot[3]) for slot in skeleton]
                 slots = _walking_slots(triples, timings, head.beats_per_bar)

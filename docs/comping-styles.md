@@ -191,11 +191,126 @@ Two honest costs, both already true of the shipped one-voice case:
 it is what lets a user state a pattern the library has never heard of **without new code**:
 
 ```text
-freddie     [(1,0), (2,0), (3,0), (4,0)]              # every quarter note
-charleston  [(1,0), (2,SUB)] or [(1,SUB), (3,0)]      # 1 + and-of-2, or and-of-1 + 3
-joe_pass    comp stabs on the ANDs; thumb on 1,2,3,4
-and_of_4    [(4,SUB)]                                  # harmony on the and-of-4
+freddie     [(1,0), (2,0), (3,0), ...]     # every beat the metre has
+charleston  [(1,0), (2,SUB)]              # 1 + and-of-2   -- a 4/4 figure
+joe_pass    stabs on the ANDs; thumb on the beats
+final_and   [(LAST, SUB)]                 # the upbeat of the bar's final beat
 ```
+
+**Positions are bar-relative, and `LAST` is what makes that work.** `LAST` is the metre's
+final beat, so `final_and` is 4.5 in 4/4, 2.5 in 2/2 and 3.5 in 3/4 — the same musical
+idea at three different beat numbers. Spelling a position as a literal beat
+(`and_of_4 = [(4, SUB)]`) makes a 2/2 or 3/4 head look as though the position does not
+exist, which it does: measured on this 2/2 head the final upbeat is 2.5 and it is
+selectable under `--skeleton eighths`. A grid that cannot be written in one metre and
+played in another is not a rhythmic idea, it is a spelling.
+
+**But `charleston` is a 4/4 figure and is *not* bar-relative** — this was corrected after
+a measurement here read as a defect. The Charleston is the on-beat-and-the-and of 2 in a
+four-beat bar, so on a 2/2 bar the honest reading is 1 + and-of-**1** (the half-note
+pulse), not 1 + and-of-2. Run against this 2/2 head as written, `charleston` comes out
+silent — **and that is not a bug in the grid or in the head**: it is a 4/4 idiom asked
+of a 2/2 bar, and the mismatch is the arranger's, not the library's. Both committed
+fixtures are 2/2, so nothing here can exercise it.
+
+Which means a pattern table has to say which is which, because the two spell differently:
+
+| | what it means |
+|---|---|
+| **`freddie`, `final_and`** | **bar-relative.** Playable in any metre; `LAST` resolves against it. |
+| **`charleston`, `joe_pass`** | **metre-relative.** A named figure of a particular metre, and it is either right or it is a 4/4 figure in a 2/2 bar. |
+
+Recording that as a property of the pattern rather than leaving it implicit is what stops
+"the pattern silently did nothing" being read as a defect in the engine — the same failure
+`TARGET_BEATS` avoids by naming *beats* rather than counting.
+
+#### The grid is a *chord* selection, and the melody is separate
+
+**These are two different questions and the flag was answering both.** What melody notes
+sound, and where a chord falls under them, are independent — and the user has settled the
+split:
+
+- **Every written melody note sounds, down to a 16th.** The floor is on note *value*; two
+  notes at or above it are never merged, whatever the grid does. Measured: both committed
+  fixtures are ≥16th throughout (0 notes at 32nd or smaller in either), so the floor
+  excludes nothing from either today. **This is now what the code does** — `--skeleton` no
+  longer quantises at all, and every written note keeps the beat it was written on:
+
+  | head | notes | `beats` | `eighths` | `sixteenths` | `notes` |
+  |---|---|---|---|---|---|
+  | `but_not_for_me` | 80 | 80 | 80 | 80 | 80 |
+  | `i_was_doing_all_right` | 110 | **110** | **110** | **110** | **110** |
+
+  `i_was_doing_all_right` used to keep 61 / 86 / 105 — **`eighths` dropped 24 of 110**,
+  and only 11 of those were in the 5 tuplet bars: 13 were in the *straight* bars, because
+  any two notes closer together than the grid shared a slot and the `pick` rule dropped
+  one. **A note of the tune went missing, silently.** Quantisation was answering the chord
+  question in the melody's name.
+
+  All six `but_not_for_me` arrangements are byte-identical to their pre-change output, so
+  the cost of this is paid entirely by the head that had the problem.
+
+  **`--skeleton` and `--pick` are gone from `arranger head`**, and the flag table with
+  them: the reduction they configured no longer exists, so keeping four names for one
+  behaviour would be a lie. The Weimar corpus keeps both, because it still reduces —
+  `wjazzd._slot_key` quantises and its `first`/`longest` still differ there, where
+  `head`'s no longer can. **The two paths therefore mean different things by these names
+  today**, which is recorded rather than papered over; converging `wjazzd` on the same
+  rule is the obvious follow-up and is not this change.
+
+  The four table rows above (`beats`, `eighths`, `sixteenths`, `notes`) are therefore a
+  record of a decision that has been *acted on*, not a live menu. The chord axis that
+  they were holding a place for is Stage D, and when it lands it is a new flag rather than
+  a revival of this one.
+
+  **Two bugs were found on the way, both latent.** Triplet *durations* were being divided
+  twice — the file writes them already reduced (`3 x 6720 = 2 x 10080`, a whole 2/2 bar) and
+  the importer divided again, so a triplet quarter was **4/9** of a quarter where it is
+  **2/3**; three of them spanned 4/3 of a quarter where the figure must fill two. Nothing
+  noticed, because onsets are re-based per bar and tablature ignores `duration` — only the
+  MusicXML writer reads it, and music21 refused the result, which is what finally surfaced
+  a number that had been wrong the whole time. The two conventions are not separable
+  arithmetically (6720 divides both ways) or per measure (24 of 36 measures come out whole
+  under both); only `<normal-type>` distinguishes them.
+- **A melody note with no chord position on it sounds alone.** The machinery is already
+  built and already correct for this: `melody_alone_case` returns `MELODY_ALONE_TEXTURE`,
+  which routes through `get_melody_only_voicing` and leaves `melody_only=False`. It is
+  deliberately **not** the `NC` case, because the step *does* have a harmony — it is
+  simply not spelled out under that note, and the flag would make the annotation read
+  "(no chord - melody alone)" and claim a lie. That is AGENTS.md trap 6's shape, already
+  handled by returning a *kind* rather than a bool.
+- **The grid selection is a chord placement, not a melody reduction.** It has four rows:
+
+| grid selection | a chord lands on |
+|---|---|
+| `beats` | every beat |
+| `eighths` | every eighth |
+| `sixteenths` | every sixteenth |
+| `notes` | **every written melody note** — 110 of 110 measured |
+
+**So `--skeleton` stops being one flag doing two jobs.** Today it decides both, by
+*geometry*: a note is quantised to the nearest grid position and **ties are silently
+dropped**. Measured on `i_was_doing_all_right`, `eighths` keeps 86 of 110 notes — and the
+24 lost are not all triplets: 11 in the 5 triplet bars, **13 in the 29 straight bars**.
+Any two notes closer together than the grid collide, in either kind of bar. That is why
+splitting the two questions is not tidiness: the melody loss is an artefact of the grid,
+and the grid should have no opinion about it.
+
+#### A silent pattern has two causes, and only one is an error
+
+A pattern can place no chords at all, for two entirely different reasons, and they need
+different answers:
+
+| cause | measured example | the right response |
+|---|---|---|
+| **the grid is too coarse** | `final_and` (2.5) under `--skeleton beats`, which offers only 1.0 and 2.0 | warn — the user asked for something the grid cannot express |
+| **no melody note there** | a bar whose notes are all on the beat, under any grid | **nothing** — a chord cannot go where there is no note, and the melody-alone route handles it |
+
+Warning on the second would be noise: "you asked for comping on the ands, there are no
+notes on the ands" is not an error, it is the answer. Only the first deserves a message,
+and it must name the grid that is too coarse. The test is therefore one-directional —
+**the grid must be at least as fine as the pattern** — rather than the two-way
+"resolution versus placement" an earlier draft of this section described.
 
 `joe_pass` is not invented here: it is
 [history/Arranging_Guide.md](history/Arranging_Guide.md) §"Joe Pass" Walking Bass & Comp
@@ -219,15 +334,38 @@ A comping style is therefore **a degree family + a grid**, which is precisely th
 A count without a denominator is not a metre (AGENTS.md trap 9). A beat grid **must** be
 metric-aware or it will invent beats that do not exist:
 
-| metre | `freddie` (every quarter) | does and-of-4 exist? |
+| metre | `freddie` (every quarter) | the upbeat of the **final** beat |
 |---|---|---|
-| 4/4 | beats 1, 2, 3, 4 | yes |
-| 2/2 | beats 1, 2 | **no** |
-| 3/4 | beats 1, 2, 3 | **no** |
+| 4/4 | beats 1, 2, 3, 4 | 4-and — beat 4.5 |
+| 2/2 | beats 1, 2 | 2-and — beat 2.5 |
+| 3/4 | beats 1, 2, 3 | 3-and — beat 3.5 |
 
 `But Not For Me` is **2/2**, so `freddie` on this head is **two** notes per bar, not four.
 This is the same trap `TARGET_BEATS` already documents ("in 2/2 (two notated beats) beat 3
 does not exist and only the downbeat is a target").
+
+**The position is bar-relative, and an earlier draft of this table got that wrong.** It
+read `and_of_4` as the literal *beat 4* and concluded there is "no and-of-4" in 2/2 or 3/4.
+That is a statement about a beat *number* in a metre that does not have that beat, not
+about a *musical position*: **the upbeat of the bar's last beat exists in every metre**,
+and what changes is which beat number it falls on. Measured on this 2/2 head, bar 2's
+final-beat upbeat is **2.5**, and it is present in the lattice under `--skeleton eighths`
+and finer.
+
+**So the grid must be written bar-relative** — "the and after the last beat", never "beat
+4" — and it is still gated on the lattice, which is a *separate* and real constraint:
+
+| `--skeleton` | bar 2 of this 2/2 head offers | final upbeat (2.5) present? |
+|---|---|---|
+| `beats` | 1.0, 2.0 | **no** — no subdivision to put it on |
+| `eighths` | 1.0, 2.0, 2.5 | **yes** |
+| `sixteenths` | 1.0, 2.0, 2.5 | **yes** |
+
+Two different reasons a position can be unavailable, and only the first is about the
+metre: **the metre decides which beat the position sits on**, and **the lattice decides
+whether that position has a slot to sit in**. A grid naming the final upbeat therefore
+needs `--skeleton eighths` or finer, and a warning when it is asked for under `beats` is
+the honest answer — not silence, and not an invented beat.
 
 ### 4.3 Does the guitar sing
 
@@ -292,9 +430,10 @@ Two live facts in the tree that this section did not know about, both settled in
    it exists because a raw head runs to 10.7 notes per bar. The §4.2 grid is a
    **placement**: a selected subset of positions, which no strategy above can express. So
    a grid selects points *from* the lattice `--skeleton` produced, and two consequences
-   follow: a style naming and-of-4 needs a lattice fine enough to contain one (`eighths` at
-   minimum), and in 2/2 there is no and-of-4 at all. Both are design inputs to Stage D
-   rather than open questions about ownership.
+   follow: a style naming the final upbeat needs a lattice fine enough to contain one
+   (`eighths` at minimum, since `beats` has no subdivision to put it on). The metre and
+   the lattice are **separate** constraints and both are real. These are design inputs to
+   Stage D rather than open questions about ownership.
 2. **Does `harmony=guide` with `sings=yes` reach the melody through the shell grip or
    through `get_comping_voicings`?** — **settled as (C), deliberately, and the rename waits
    on revisiting it.** The degrees are the same either way, so this is decided entirely by
@@ -466,10 +605,12 @@ settled and the second remains a design decision:
 
 - **The lattice relationship** (§6 Q1). The grid selects positions from `--skeleton`'s
   output, so it needs a lattice fine enough to hold the positions it names: a style
-  naming and-of-4 needs `eighths` or finer, and in 2/2 there is no and-of-4 at all. This
-  is an input to the design rather than an open question, and it is what keeps
-  `--skeleton` and the grid complementary — a resolution and a placement, not two
-  owners of one thing.
+  naming the final upbeat needs `--skeleton eighths` or finer, because `beats` has no
+  subdivision to put it on — measured on this 2/2 head, whose final upbeat is **2.5** and
+  which offers it under `eighths` but not under `beats`. That is what keeps `--skeleton`
+  and the grid complementary: **a resolution and a placement, not two owners of one
+  thing.** The metre decides which beat the position lands on; the lattice decides whether
+  it has a slot to land in, and an earlier draft of this document confused the two.
 
 - **`--non-chord-tone`'s inertness on the comping route** (§2 oddity 4) — **measured, and
   the concern dissolves.** A guide-tone comp is the same pair of notes whether the melody
