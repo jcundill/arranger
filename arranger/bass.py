@@ -1031,7 +1031,83 @@ def thumb_capacity(texture: str, role: str) -> Optional[int]:
     return worst
 
 
-def bass_allowed(texture: str, bass: str) -> Tuple[bool, str]:
+def _worst_free_capacity(string_sets: Sequence[Tuple[int, ...]]) -> int:
+    """The fewest of `BASS_STRING_INDICES` any of `string_sets` leaves free.
+
+    The shared arithmetic of `thumb_capacity` and `comping_capacity`, factored so the
+    two cannot drift: both answer "how bad could the left hand get", and they differ
+    only in **where the string sets come from** - the role's grip palette on the
+    melody-bearing route, `_comping_string_sets` on the comping one.
+
+    Worst case across the sets, deliberately, and for the reason `bass_allowed` gives:
+    a thumb line with gaps in it is worse than no thumb line, so the question is
+    whether the string is *ever* unavailable rather than whether it usually is.
+    """
+    return min(len(set(BASS_STRING_INDICES) - set(strings)) for strings in string_sets)
+
+
+def comping_capacity(notes: int, bass_voice: bool = False) -> int:
+    """How many thumb strings a **melody-free comping shape** leaves free, worst case.
+
+    **`thumb_capacity` cannot answer this, and asking it to was a bug.** That function
+    derives its answer from `TEXTURE_GRIPS`, which describes the shapes the
+    melody-bearing route generates. On the comping route the shapes come from
+    `get_comping_voicings` instead, and the texture is *inert*: measured on
+    `tests/data/but_not_for_me.mxl`, all 80 comping shapes are byte-identical under
+    `texture=uniform` and `texture=targets`. So `bass_allowed("uniform", "walk")` was
+    refusing a combination that is perfectly playable, on the strength of a palette
+    the comping route never uses - and `melody="alto,tenor", bass="walk"` under the
+    default texture produced **no thumb line at all** with the warning "uniform leaves
+    no bass string free for a target".
+
+    The warning was false on the facts, too. Every comping shape on that head sounds on
+    strings `(2, 3, 4, 5)` and never once on the low E or the A:
+
+        string 0 (low E)   0 steps
+        string 1 (A)       0 steps
+        string 2 (D)       1 step
+        string 3 (G)      19 steps
+        string 4 (B)      79 steps
+        string 5 (high E) 61 steps
+
+    **Derived from the generator rather than listed**, on the rule `harmony_allowed`
+    follows and for the same reason: a family that can be voiced is not a list of
+    combinations somebody has to remember to extend. Measured here, worst case over the
+    sets `_comping_string_sets` may pick at each arity:
+
+        1 note (an inner voice)   3 free
+        1 note (`bass_voice`)     2 free
+        2 notes (`alto,tenor`)    2 free
+        3 notes                   1 free
+        4 notes                   1 free
+
+    **Never zero, at any arity** - which is the finding rather than a coincidence, and
+    the reason `bass_allowed` cannot refuse this route at all: the comping shapes are
+    built from the `duo` and `shell` families, which live on the top half of the neck
+    precisely because the bottom of it belongs to the thumb.
+
+    A one-note `bass_voice` shape is the one case that reaches the bottom of the neck
+    (`BASS_VOICE_STRING_SETS` is `(0, 1, 2)`), and it still leaves two strings free -
+    the same note cannot occupy all three, because a one-note shape is one string.
+
+    No `None` return, unlike `thumb_capacity`: an empty palette there means "the left
+    hand plays nothing", which is unbounded. A comping shape always sounds at least one
+    note, so the capacity is always a real count and never a sentinel.
+    """
+    # Imported here for the reason `thumb_capacity` gives: `grips` sits above `bass` in
+    # the package order, and this - like that one - is the only question in this module
+    # that needs the grip tables.
+    from .grips import _comping_string_sets
+
+    return _worst_free_capacity(_comping_string_sets(notes, bass_voice))
+
+
+def bass_allowed(
+    texture: str,
+    bass: str,
+    notes: Optional[int] = None,
+    bass_voice: bool = False,
+) -> Tuple[bool, str]:
     """Whether `texture` can carry `bass`, and why not when it cannot.
 
     **The refusal rule, and it is one line:** a thumb line needs the left hand to leave
@@ -1052,8 +1128,24 @@ def bass_allowed(texture: str, bass: str) -> Tuple[bool, str]:
 
     The alternative is named in the reason string, so the refusal is a sentence a player
     can act on rather than a policy they have to reverse-engineer.
+
+    **`notes` and `bass_voice` are the comping route's half of the question, and they
+    are why this function takes them.** On the comping route the left hand's shapes are
+    not described by `TEXTURE_GRIPS` at all - it is inert there, measured 80/80 shapes
+    byte-identical across `uniform` and `targets` - so passing a texture here and
+    refusing on it was the `comping_capacity` bug. The route is stated by the *caller*
+    passing them rather than inferred from the texture, because the texture cannot
+    distinguish it: `uniform` is a real palette on one route and a meaningless name on
+    the other, and only the engine's own route decision knows which.
     """
     if bass == BASS_NONE:
+        return True, ""
+    if notes is not None:
+        # The comping route: measured 1..3 free thumb strings at every arity, so this
+        # cannot refuse. Checked rather than assumed, so a future arity that really did
+        # fill the neck is caught here rather than arriving as an unplaceable line.
+        if comping_capacity(notes, bass_voice) < 1:
+            return False, _comping_no_room_reason(notes, bass_voice)
         return True, ""
     for role in (ROLE_TARGET, ROLE_FILL):
         free = thumb_capacity(texture, role)
@@ -1062,6 +1154,24 @@ def bass_allowed(texture: str, bass: str) -> Tuple[bool, str]:
         if free < 1:
             return False, _no_room_reason(texture, role)
     return True, ""
+
+
+def _comping_no_room_reason(notes: int, bass_voice: bool) -> str:
+    """The sentence a refused **comping** combination reports.
+
+    Separate from `_no_room_reason` rather than a branch inside it, because the two
+    sentences are about different things: that one names a texture to try instead, and
+    there is no texture to try here - the route is chosen by the voice selection, not
+    by a palette. Naming a texture on this route is how the original bug produced a
+    warning that told the player to change a setting that had no effect.
+    """
+    return (
+        f"a {notes}-note comping shape can occupy all of "
+        f"{tuple(BASS_STRING_INDICES)}"
+        + (" with bass_voice" if bass_voice else "")
+        + ", leaving the thumb nowhere to go. Every bass policy needs the same string. "
+        "Try naming fewer voices for the guitar, or drop the bass."
+    )
 
 
 def _no_room_reason(texture: str, role: str) -> str:

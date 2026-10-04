@@ -1,10 +1,11 @@
-# Open issues: playability of held shapes, one GP5 discrepancy, and a lost melody
+# Open issues: playability of held shapes, a GP5 discrepancy, and a lost melody
 
 Items 1-4 were written at the end of the 2026-09-29 session, after the
 `GRIP_MAX_SPAN` / `voicing_cost` / `grips`-intersection work; item 5 was added on
-2026-10-03, and item 6 was found by fixing it. **All six are now fixed**; each carries
-the measurement that produced it and the stage that closed it, so the work can be read
-rather than re-derived. Items 1-3 were fixed in stages 1-3 the same day; item 4 needed
+2026-10-03, item 6 was found by fixing it, and item 9 came out of a measurement of the
+comping axes. **All except item 7 are now fixed**; each carries the measurement that
+produced it and the stage that closed it, so the work can be read rather than
+re-derived. Items 1-3 were fixed in stages 1-3 the same day; item 4 needed
 a corrected diagnosis first, and items 5 and 6 turned out to be two real defects of
 which only one was reachable at a time - both recorded in full.
 
@@ -16,7 +17,10 @@ the wrong timeline.
 **Item 7 is open.** **Item 8 is fixed and is the one to read first if you are here to
 learn from a defect**: it is a method whose comment described the correct behaviour
 while the code did the opposite, and it survived a green gate because every fixture
-happened to use the one input that did not trigger it.
+happened to use the one input that did not trigger it. **Item 9 is the newest and is
+the one to read before adding a policy function**: it is a check reading a table that
+describes a different generator, and it survived a green gate because its one test
+happened to name the input that worked.
 
 The header of each section states its status, and **item 4's original diagnosis was
 wrong** - it blamed the renderers and the fill rule, when the engine was emitting two
@@ -785,6 +789,133 @@ Note the parallel with item 1: that rule demotes a *target* that cannot be
 played, but it only tests `role == ROLE_TARGET` and a per-step span. The
 walking-bass analogue — a step that is individually fine but unplayable next to
 the previous one — is not covered by anything.
+
+---
+
+## 9. `bass_allowed` refused a thumb line using a palette the comping route never plays
+
+**Status: fixed.** Found while measuring whether `walking_bass` could be expressed as a
+combination of the shipped axes; recorded here because the *shape* of it is the trap,
+not the typo.
+
+### The symptom
+
+`melody="alto,tenor", bass="walk"` — a horn on the tune, the guitar comping, and a
+walking bass underneath — produced **no thumb line at all** under the default texture,
+with this warning:
+
+```
+Warning: uniform leaves no bass string free for a target - its grips can occupy all of
+(0, 1, 2). Every bass policy needs the same string, so no policy fits here.
+Try texture='targets', or drop the bass.
+```
+
+Every clause of that sentence is a misdirection. Measured on
+`tests/data/but_not_for_me.mxl`:
+
+| | steps | thumb notes | warning |
+|---|---|---|---|
+| `texture=uniform` | 80 | **0** | the refusal above |
+| `texture=targets` | 166 | 127 | none |
+
+So the same request produced two different parts, and the one that worked required
+naming a texture that **has no effect on this route at all**.
+
+### Why the obvious check misses it
+
+Because the texture genuinely cannot distinguish the routes, and nothing in the
+signature said so. `bass_allowed(texture, bass)` measures thumb capacity from
+`TEXTURE_GRIPS[texture][role]` — the palette the *melody-bearing* route generates via
+`get_all_grip_voicings`. On the comping route the shapes come from
+`get_comping_voicings` instead, and the texture is inert: **all 80 comping shapes are
+byte-identical under `texture=uniform` and `texture=targets`.** The function was being
+asked about a table that does not describe the shapes being generated.
+
+And the warning was false on the facts as well. Those 80 comping shapes sound like this:
+
+```
+string 0 (low E)    0 steps
+string 1 (A)        0 steps
+string 2 (D)        1 step
+string 3 (G)       19 steps
+string 4 (B)       79 steps
+string 5 (high E)  61 steps
+```
+
+The thumb had the entire bottom of the neck. `uniform`'s grip palette really can occupy
+`(0, 1, 2)` — `drop24`'s `(4,2,1,0)` set spans all three thumb strings at once — but
+that is a fact about shapes the comping route never builds.
+
+**The existing test passed throughout** because it spelled `texture="targets"`: the one
+texture that happened to fit. A test that pins a workaround is not a test of the
+behaviour.
+
+### The general form
+
+**A policy function that asks about a table describing the wrong generator.** This is
+AGENTS.md trap 1 — a check reading an input that does not describe the thing checked —
+arriving at an *axis boundary* rather than at a forgotten file. `_place_bass` is handed
+the voicing and works per note; `bass_allowed` is handed a texture and reasons about a
+palette, and on one of the two routes that palette is a meaningless name.
+
+The rule it suggests: **the thing a policy asks about must be the thing that produced
+the output.** A route flag (`melody_voiced`) is not the same as an axis value, and where
+one is inert the other must not be asked.
+
+### The fix
+
+`bass.comping_capacity(notes, bass_voice)`, derived from `_comping_string_sets` the way
+`harmony_allowed` derives its rule — measured from the generator, not listed, so a
+future arity is covered without editing a table. Worst case free thumb strings:
+
+| arity | free |
+|---|---|
+| 1 note (an inner voice) | 3 |
+| 1 note (`bass_voice`) | 2 |
+| 2 notes (`alto,tenor`) | 2 |
+| 3 notes | 1 |
+| 4 notes | 1 |
+
+**Never zero, at any arity** — which is the finding rather than a coincidence: the
+comping families are `duo` and `shell`, which live on the top half of the neck
+precisely because the bottom of it belongs to the thumb. So this route cannot be
+refused, and `bass_allowed` now takes the route's own arity (`notes`, `bass_voice`) and
+asks the right question when it is given them.
+
+That **forced a reordering** in `arrange_progression`: `_resolve_melody` now runs before
+`_resolve_bass`, because only the first knows the route. The two resolutions are
+independent, so the order carries no other meaning — but it is now load-bearing, and
+reversing it silently reinstates the bug. This is trap 12's shape (a guard ordering that
+looks incidental and is not) in a place with no failing test to point at it.
+
+Measured effect: the comping route goes from **80 steps / 0 thumb notes** to **166 steps
+/ 127 thumb notes** under the default texture, and both textures now agree exactly. This
+is a behaviour change and is deliberate — it is the correct output, and nothing about it
+is special-cased.
+
+### Where the code is
+
+| file | what changed |
+|---|---|
+| `arranger/bass.py` | `comping_capacity`, `_worst_free_capacity` (the arithmetic both capacity functions share), `bass_allowed(..., notes, bass_voice)`, `_comping_no_room_reason` |
+| `arranger/steps.py` | `_resolve_bass` takes `melody_voiced`/`notes`/`bass_voice`; `_resolve_melody` now resolves **before** it |
+| `arranger/__init__.py` | `comping_capacity` re-exported |
+| `tests/test_bass.py` | `TestCompingCapacity` — 5 tests |
+| `tests/test_comping.py` | `TestTheCompingRouteCarriesAThumb` — 4 tests |
+
+Verified by mutation rather than by assertion: reverting the call site to
+`melody_voiced=True` fails 3 of the 9, including
+`test_the_texture_does_not_change_the_comping_arrangement` — which is the invariant that
+actually broke, and which could not be written before the fix.
+
+### Not fixed, and it is the same defect
+
+`harmony_allowed` is asked about `voices`, which is load-bearing on both routes, so it
+is correct — but the *pair* of functions now asks two different things in two different
+ways, and `grid_allowed` is still asked about a metre rather than about the lattice.
+The general fix is a single "what did the generator produce" seam, which is the boundary
+the restructure proposes to draw. Until then, this item's rule is the one to apply when
+adding the next policy: **name the generator, not the axis value.**
 
 ---
 

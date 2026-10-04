@@ -408,6 +408,114 @@ class TestTheCompingArrangement(unittest.TestCase):
         )
 
 
+class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
+    """The thumb line must not be refused for a palette the comping route never plays.
+
+    **`bass_allowed` was asked about `TEXTURE_GRIPS` on a route where it is inert.**
+    That table describes the shapes `get_all_grip_voicings` generates; on the comping
+    route the shapes come from `get_comping_voicings` and the texture is a meaningless
+    name - measured on `tests/data/but_not_for_me.mxl`, all 80 comping shapes are
+    byte-identical under `texture=uniform` and `texture=targets`.
+
+    So `melody="alto,tenor", bass="walk"` under the **default** texture was refused with
+    "uniform leaves no bass string free for a target" and emitted no thumb at all, while
+    the same request under `texture=targets` emitted 127. The warning named a setting
+    that could not change the outcome.
+
+    The existing `test_the_bass_axis_still_decides_the_bottom` passed throughout,
+    because it spelled `texture="targets"` - the one texture that happened to fit. These
+    tests pin the invariant rather than the workaround: **the texture is inert on this
+    route, so it must not appear in the decision.**
+    """
+
+    def setUp(self):
+        self.engine = VoiceLeadingEngine()
+        # The same hand-written progression and timings the arrangement class above
+        # uses. `test_the_walked_beats_reach_the_part` depends on the timings being
+        # denser than the four notes, since it asserts that a walk can invent beats -
+        # so they are spread over four beats rather than sitting on all four slots.
+        self.timings = [(0, 1.0, 1.0), (0, 2.0, 1.0), (0, 2.5, 0.5), (0, 3.5, 0.5)]
+
+    def comped(self, **kwargs):
+        steps = self.engine.arrange_progression(
+            PROGRESSION, melody=VOICES_ARG,
+            diagnostics=Diagnostics(), timings=self.timings, **kwargs,
+        )
+        self.assertTrue(steps, "an arrangement with no steps at all is a defect")
+        return steps
+
+    def test_the_default_texture_no_longer_refuses_a_thumb_line(self):
+        """The regression itself: `bass=walk` under the default texture.
+
+        Asserted on the *thumb notes* rather than on the warning, because a fix that
+        merely quieted the warning while still dropping the line would pass otherwise.
+        """
+        steps = self.comped(bass="walk")
+        self.assertTrue(
+            any(step.bass is not None for step in steps),
+            "the comping route emitted no thumb notes at all",
+        )
+
+    def test_the_texture_does_not_change_the_comping_arrangement(self):
+        """The invariant that was broken, stated as one assertion over every texture.
+
+        This is the test the defect made impossible to write. It is stronger than
+        "they are all allowed" and stronger than comparing one texture against another:
+        it says the texture cannot reach this decision **at all**, so a texture added to
+        `TEXTURE_STYLES` later is covered without editing this test.
+        """
+        baseline = None
+        for texture in TEXTURE_STYLES:
+            if texture in MELODY_ONLY_TEXTURES:
+                # These harmonise nothing and refuse a voice selection without the
+                # soprano outright (`melody_allowed`), so they never reach this route.
+                continue
+            steps = self.comped(bass="walk", texture=texture)
+            frets = [step.voicing.frets for step in steps]
+            if baseline is None:
+                baseline = (texture, frets)
+                continue
+            self.assertEqual(
+                frets, baseline[1],
+                f"texture={texture} changed the comping route; "
+                f"texture={baseline[0]} is the reference",
+            )
+
+    def test_bass_none_is_still_honoured_on_this_route(self):
+        """The fix removed a refusal, not the axis.
+
+        Without this, "the thumb line now appears" and "the thumb line always appears"
+        would be indistinguishable, and the second is the bug's mirror image.
+        """
+        steps = self.comped(bass="none", texture="uniform")
+        self.assertTrue(all(step.bass is None for step in steps))
+
+    def test_the_walked_beats_reach_the_part(self):
+        """The union is built on this route now, so a walk invents its own beats.
+
+        `_walking_slots` unions the melody grid with the walked beats. It was never
+        called here, because the refusal made `has_thumb` False first - so this is the
+        observable consequence of the fix rather than of the axis: a bar the melody
+        barely visits still carries four quarters, and the part has more steps than the
+        head had notes.
+
+        **Compared against `bass=none` and not against a texture.** The first draft of
+        this test compared `uniform` against `targets` and failed, which was the fix
+        working: both now build the same union, because the texture no longer reaches
+        the decision. A test asserting the texture *changes* the step count here would
+        have pinned the bug.
+        """
+        walked = self.comped(bass="walk")
+        silent = self.comped(bass="none")
+        # Four written notes, and the walk adds the two beats the melody skips.
+        self.assertEqual(len(silent), 4, "the head is four notes in one bar")
+        self.assertEqual(len(walked), 6, "the walk should add the two empty beats")
+        self.assertGreater(
+            len(walked), len(silent),
+            "a walking line adds no beats, so the walk is not being heard",
+        )
+
+
 class TestTheRefusal(unittest.TestCase):
     """A texture that harmonises nothing cannot also give the melody away."""
 

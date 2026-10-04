@@ -137,7 +137,14 @@ class StepPreparation:
 
 
 
-def _resolve_bass(texture: str, bass: str, diagnostics: Diagnostics) -> str:
+def _resolve_bass(
+    texture: str,
+    bass: str,
+    diagnostics: Diagnostics,
+    melody_voiced: bool = True,
+    notes: int = 4,
+    bass_voice: bool = False,
+) -> str:
     """The policy to actually run: `BASS_AUTO` resolved, validated, or refused.
 
     Three outcomes, in the order they are decided:
@@ -151,6 +158,22 @@ def _resolve_bass(texture: str, bass: str, diagnostics: Diagnostics) -> str:
       the arrangement proceeds without a thumb line. Not dropped and not degraded: a
       walking line with gaps in it is worse than no line, and losing the bass costs less
       than losing the tune. The warning names a texture that would work.
+
+    **`melody_voiced` is the route, and it is an argument rather than something derived
+    from `texture`.** Which left-hand shapes an arrangement will generate is decided by
+    `voices_have_soprano`, and no texture can express it: `uniform` is a real grip
+    palette on the melody-bearing route and a **meaningless name** on the comping one,
+    where the shapes come from `get_comping_voicings` and the texture is inert (measured
+    80/80 shapes byte-identical across `uniform` and `targets`). So this function asks
+    `bass_allowed` about the comping route's capacity when that is the route, and about
+    the texture's otherwise.
+
+    This is why the call site resolves the melody axis **first**. That ordering is
+    deliberate rather than incidental - see `arrange_progression`, and note that the two
+    resolutions are independent of each other, so swapping them back would only
+    reintroduce the bug. What must not change is that both happen *before*
+    `has_thumb` is read, because that flag gates whether the walked-beat union is built
+    at all.
     """
     if bass == BASS_AUTO:
         bass = BASS_WALK if texture in THUMB_TEXTURES else BASS_NONE
@@ -159,7 +182,15 @@ def _resolve_bass(texture: str, bass: str, diagnostics: Diagnostics) -> str:
             f"Unknown bass policy {bass!r}; expected one of {BASS_STYLES}, "
             f"or 'auto'"
         )
-    allowed, reason = bass_allowed(texture, bass)
+    allowed, reason = bass_allowed(
+        texture,
+        bass,
+        # `None` for the melody-bearing route, so `bass_allowed` asks the texture's
+        # palette. `len(voices)` on the comping one, which is the arity the comping
+        # generator will actually build.
+        None if melody_voiced else notes,
+        bass_voice,
+    )
     if not allowed:
         diagnostics.warn(f"Warning: {reason}")
         return BASS_NONE
@@ -837,19 +868,46 @@ class VoiceLeadingEngine:
         # string: neither the octave nor the string can be decided before an upper
         # voicing exists, and only this function is downstream of one. `_place_bass`
         # resolves both together, after selection.
-        # Resolve the bass policy once. `auto` means "whatever this texture means", so
-        # `walking_bass` keeps walking and everything else keeps having no thumb; an
-        # explicit policy overrides that, which is what lets a texture that was never
-        # written for a thumb line carry one.
-        bass = _resolve_bass(texture, bass, diagnostics)
-        has_thumb = bass != BASS_NONE
 
-        # The melody axis, resolved the same way and for the same reasons. `auto` keeps
+        # The melody axis, resolved first and for the reason below. `auto` keeps
         # every voice, which is why nothing below this line changes unless a caller
         # opts in. Decided once rather than per step: the band does not change halfway
         # through a tune.
+        #
+        # **This resolution comes before `_resolve_bass` because the bass policy needs
+        # to know which route the engine is on**, and only this line knows. `bass_allowed`
+        # measures thumb capacity against `TEXTURE_GRIPS`, which describes the shapes the
+        # melody-bearing route generates and is *inert* on the comping one - so asking it
+        # about a texture on that route refused a combination that is playable and, worse,
+        # told the player to change a setting that could not affect the result. See
+        # `comping_capacity`, and `docs/open-issues.md` for the measurement.
+        #
+        # The two resolutions are independent of each other, so the order between them
+        # carries no other meaning; what matters is that both finish before
+        # `has_thumb` is read, because that flag gates whether the walked-beat union is
+        # built at all.
         voices = _resolve_melody(melody, texture, diagnostics)
         melody_voiced = voices_have_soprano(voices)
+
+        # The bass policy. `auto` means "whatever this texture means", so
+        # `walking_bass` keeps walking and everything else keeps having no thumb; an
+        # explicit policy overrides that, which is what lets a texture that was never
+        # written for a thumb line carry one.
+        #
+        # `notes=len(voices)` and `bass_voice` are the comping route's own arity
+        # arguments, passed for both routes and used only when `melody_voiced` is
+        # False. They are derived from the resolved voices rather than passed as another
+        # flag, so the two spellings of one request cannot disagree.
+        bass = _resolve_bass(
+            texture,
+            bass,
+            diagnostics,
+            melody_voiced=melody_voiced,
+            notes=len(voices),
+            bass_voice=voices == (MELODY_BASS,),
+        )
+        has_thumb = bass != BASS_NONE
+
         # The harmony axis, resolved here for the same reason and read only by the
         # comping route below. Resolving it unconditionally rather than inside
         # `if not melody_voiced` is deliberate: a spelling nobody recognises must be

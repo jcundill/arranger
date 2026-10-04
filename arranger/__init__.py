@@ -26,12 +26,15 @@ Adding a public name means adding it to `__all__` here, and
 `tests/test_tab_rendering.py::TestTabstaffModuleBoundary` checks the list against
 the module's real surface so the two cannot drift.
 
-**Seven private names are re-exported too** - `_bass_harmony`, `_place_bass`,
-`_walking_bass_line`, `_interval_offsets`, `_metric_weight`, `_roles_for_slot` and
-`_step_annotation`. They are not API and are deliberately absent from `__all__`,
+**Eight private names are re-exported too** - `_bass_harmony`, `_place_bass`,
+`_walking_bass_line`, `_interval_offsets`, `_metric_weight`, `_roles_for_slot`,
+`_step_annotation` and `_comping_no_room_reason`. They are not API and are
+deliberately absent from `__all__`,
 but the tests reach into them to state a rule directly rather than infer it from
 the engine's output ("the walk's pitch-class set is exactly the chord's tones plus
-its extensions", "a fill is chosen by the role rule"). Moving the code would
+its extensions", "a fill is chosen by the role rule", "this refusal must not tell
+the player to change a texture, because on this route a texture changes nothing").
+Moving the code would
 otherwise have forced those tests to reimplement the rule they are checking, which
 is the copy-paste failure Phase 1 removed. They are listed here so the cost of
 moving a function - "also re-export it" - is visible rather than discovered.
@@ -61,11 +64,13 @@ from .bass import (
     BASS_WALK,
     BassNote,
     _bass_harmony,
+    _comping_no_room_reason,
     _place_bass,
     _walking_bass_line,
     bass_allowed,
     bass_cost,
     bass_line_for,
+    comping_capacity,
     thumb_capacity,
 )
 from .chords import ChordParser, normalised_harmony, sounding_harmony
@@ -470,6 +475,7 @@ __all__ = [
     "bass_cost",
     "bass_line_for",
     "chords",
+    "comping_capacity",
     "cli",
     "cost",
     "decisions",
