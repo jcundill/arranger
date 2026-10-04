@@ -22,6 +22,7 @@ import arranger
 from arranger import NO_CHORD, ChordParser
 from headxml import (
     Head,
+    HeadChange,
     _key_label,
     _part_is_tab,
     arrange_xml_head,
@@ -582,6 +583,202 @@ class TestRealScores(unittest.TestCase):
         bars = head.bars[1] - head.bars[0]
         written = sum(n.duration for n in head.notes)
         self.assertAlmostEqual(written, float(bars), delta=bars * 0.2)
+
+
+class TestChordTimeline(unittest.TestCase):
+    """`Head.chords`: the harmony as a timeline, independent of the melody.
+
+    **Phase 1 of open-issues item 10**, and this class tests only the *recording* — the
+    timeline is built and nothing consumes it yet, so every arrangement is
+    byte-identical. The arrangement-level tests belong to the phase that fixes the
+    defect, and writing them now would be testing a fix that does not exist.
+
+    The loss it records is real and is in the committed scores: 6 of their 154
+    `<harmony>` elements precede no note at all, so the chord they declare is in force
+    over material no note describes.
+
+    The load-bearing test is `test_the_timeline_reproduces_every_notes_own_chord`. It
+    states that the timeline, built independently, **agrees with the shipped note path
+    on all 271 notes** — so a change that disagrees with the notes is a change that is
+    wrong, not a second opinion. That is the only check that makes the others mean
+    anything.
+    """
+
+    def _chords_in_bar(self, head: Head, bar: int):
+        return [(round(c.beat, 6), c.chord) for c in head.chords if c.bar == bar]
+
+    def _notes_in_bar(self, head: Head, bar: int):
+        return [(round(n.beat, 6), n.chord) for n in head.notes if n.bar == bar]
+
+    def load(self, measures: str, **kwargs) -> Head:
+        """A score written to a temp file and read back, as `TestKeySignature` does."""
+        path = write_score(score(measures, **kwargs))
+        self.addCleanup(os.unlink, path)
+        return load_musicxml(path)
+
+    def test_a_chord_no_note_follows_is_still_recorded(self):
+        """The defect itself, on a committed score: bar 2 of `i_was_doing_all_right`.
+
+        Written as `HARMONY(m7), NOTE(D5), HARMONY(7), rest` — an `Am7` under the D5 and
+        a `D7` that governs the rest of the bar. Only the first has a note.
+        """
+        head = load_musicxml(I_WAS_DOING_ALL_RIGHT)
+        self.assertEqual(self._notes_in_bar(head, 2), [(1.0, "Am7")])
+        self.assertEqual(self._chords_in_bar(head, 2), [(1.0, "Am7"), (2.5, "D7")])
+
+    def test_a_bar_of_nothing_but_rests_still_has_its_chords(self):
+        """Bar 32 of `heres_that_rainy_day` has **no notes at all** and two changes.
+
+        This is the case that cannot even be asked of the note path — there is no note to
+        ask with — so it is the strongest of the three.
+        """
+        head = load_musicxml(RAINY_DAY)
+        self.assertEqual(self._notes_in_bar(head, 32), [])
+        self.assertEqual(self._chords_in_bar(head, 32), [(1.0, "Am7"), (2.0, "D9")])
+
+    def test_the_timeline_reproduces_every_notes_own_chord(self):
+        """The cross-check: 271 of 271, on all three fixtures.
+
+        `notes[i].chord` is the shipped fact and `head.chords` is the new one; the
+        timeline is forward-filled to a note's own `(bar, beat)` and must agree. A
+        disagreement would mean one of the two is wrong, and `notes` is the one with
+        every published arrangement behind it.
+
+        Notes whose chord the loader could not translate are skipped, because they are
+        counted in `Head.unmapped` and never recorded — the same rule as on the note
+        path, and asserting otherwise would be asserting a guess.
+        """
+        checked = 0
+        for path in (BUT_NOT_FOR_ME, RAINY_DAY, I_WAS_DOING_ALL_RIGHT):
+            head = load_musicxml(path)
+            for note in head.notes:
+                if note.quality is None:
+                    continue
+                checked += 1
+                in_force = self._chord_in_force(head, note.bar, note.beat)
+                self.assertEqual(
+                    in_force, note.chord,
+                    f"{path}: bar {note.bar} beat {note.beat} - the timeline says "
+                    f"{in_force!r} and the note says {note.chord!r}",
+                )
+        # A count as well as an agreement, so an empty fixture cannot make this vacuous.
+        self.assertEqual(checked, 271)
+
+    def _chord_in_force(self, head: Head, bar: int, beat: float) -> str:
+        """The chord the timeline says is in force at `(bar, beat)`, by forward fill.
+
+        **Raises rather than returning `None`.** Pyright does not narrow through
+        `assertIsNotNone`, so a caller would have to `assert` as well as assert on the
+        absence — and the absence is a defect worth stopping on, not a value to compare
+        against. This is the same reason `guide_pcs` in `test_comping.py` raises.
+        """
+        in_force = None
+        for change in head.chords:
+            if change.key <= (bar, round(beat, 6)):
+                in_force = change.chord
+            else:
+                break
+        if in_force is None:
+            raise AssertionError(
+                f"bar {bar} beat {beat}: no chord is in force at all"
+            )
+        return in_force
+
+    def test_a_hand_built_case_isolates_it(self):
+        """One note, then a chord that only rests follow.
+
+        The synthetic counterpart to the two fixtures above: it says the rule without
+        depending on a particular score's contents, and it is the shape a test of the
+        *fix* should be written against.
+        """
+        body = (
+            harmony("D", "minor") + note("D", 5)
+            + harmony("A", "dominant") + rest() + rest()
+        )
+        head = self.load(body, divisions=4, beats=4)
+        self.assertEqual([n.chord for n in head.notes], ["Dm"])
+        self.assertEqual(
+            [(c.beat, c.chord) for c in head.chords], [(1.0, "Dm"), (2.0, "A7")]
+        )
+
+    def test_the_timeline_is_empty_for_a_head_with_no_harmony(self):
+        """Defaulted, so a `Head` built by hand or by a test is unaffected.
+
+        A new field that had to be populated to be safe would be a breaking change to
+        every construction site; an empty default is what keeps phase 1 additive.
+        """
+        self.assertEqual(Head().chords, [])
+        self.assertEqual(len(Head().notes), 0)
+
+    def test_a_change_is_a_head_change_carrying_its_position(self):
+        """The record's own shape, which is what a consumer will read.
+
+        `quality` and `bass` are carried rather than re-derived: `bass` is a slash bass
+        the file spells separately from the quality, and re-parsing the chord name to
+        recover it would lose a spelling the loader already resolved. `key` rounds the
+        beat to six places, because the timeline is compared against `HeadNote.beat` and
+        two floats that differ only in the seventh decimal are the same position.
+        """
+        head = load_musicxml(I_WAS_DOING_ALL_RIGHT)
+        # **The second** change in the bar, not the first: bar 2 is
+        # `Am7` under a written note and `D7` under a rest, and the `D7` is the one
+        # no note would ever record.
+        change = next(c for c in head.chords if c.bar == 2 and c.chord == "D7")
+        self.assertIsInstance(change, HeadChange)
+        self.assertEqual((change.bar, change.chord), (2, "D7"))
+        self.assertEqual(change.quality, "7")
+        self.assertIsNone(change.bass)
+        self.assertEqual(change.key, (2, round(change.beat, 6)))
+        # And `key` names the beat the change takes effect on, which is the beat the
+        # rest begins - the note path has no step here to compare against.
+        self.assertEqual(change.key, (2, 2.5))
+
+    def test_an_untranslatable_chord_is_still_counted_and_not_recorded(self):
+        """Never guessed, on the timeline exactly as on the note path.
+
+        A `<harmony>` this library cannot voice is appended to `unmapped` and skipped. If
+        it were also recorded, a later fix to the alias table would silently start
+        emitting a chord nobody asked for.
+        """
+        unvoiceable = (
+            "<harmony><root><root-step>G</root-step></root>"
+            "<kind>not-a-real-kind</kind></harmony>"
+        )
+        body = harmony("C", "major") + note("C", 5) + unvoiceable
+        head = self.load(body, divisions=4, beats=4)
+        self.assertEqual(len(head.unmapped), 1)
+        # `harmony("C", "major")` spells a major triad `Cmaj`, and the unvoiceable
+        # element must not appear - so this is one entry, not two.
+        self.assertEqual([c.chord for c in head.chords], ["Cmaj"])
+
+    def test_the_beat_of_a_change_is_where_its_note_would_have_been(self):
+        """The `<harmony>` position and the note it precedes agree, in a 2/2 bar.
+
+        Trap 9's denominator: a 2/2 bar and a 4/4 bar are both four quarters long, so
+        reading a raw division count as a beat number is right in one and wrong in the
+        other. Every fixture here is 2/2, which is exactly the metre that catches it —
+        a quarter note is on beat 1.5, not beat 3.
+        """
+        head = load_musicxml(BUT_NOT_FOR_ME)
+        self.assertEqual((head.beats_per_bar, head.beat_type), (2, 2))
+        changes = self._chords_in_bar(head, 2)
+        notes = self._notes_in_bar(head, 2)
+        self.assertTrue(changes and notes)
+        # A change and the note it governs must name the same beat and the same chord,
+        # or the timeline is describing a different music from the notes.
+        self.assertEqual(changes[0], notes[0])
+
+    def test_nothing_consumes_the_timeline_yet(self):
+        """Phase 1 is additive: `head_skeleton` still reads `notes` alone.
+
+        Asserted rather than assumed, because it is the property that makes this phase
+        safe to land on its own — and it will start failing when the fix arrives, at
+        which point this test should be **replaced**, not deleted (AGENTS.md trap 5).
+        """
+        head = load_musicxml(RAINY_DAY)
+        skeleton = head_skeleton(head)
+        self.assertEqual(len(skeleton), len(head.notes))
+        self.assertTrue(head.chords, "the fixture must actually carry harmony")
 
 
 class TestKeySignature(unittest.TestCase):

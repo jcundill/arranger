@@ -380,6 +380,47 @@ class HeadNote:
 
 
 @dataclass
+class HeadChange:
+    """One `<harmony>` element: a chord **becoming** in force at a position.
+
+    **`HeadNote.chord` and this are the same fact read two ways**, and the difference
+    is the whole of open-issues item 10. A note carries the chord that was in force
+    *where the note is*; this carries the chord that *begins* at a position, whether or
+    not any note is ever written there.
+
+    Measured on the committed fixtures, a `<harmony>` followed by no note is not a
+    synthetic edge case — it is 6 of the 154 `<harmony>` elements across the three:
+
+        i_was_doing_all_right   bars 2, 10, 26, 34, 36
+        heres_that_rainy_day    bar 32
+
+    and bar 2 of `i_was_doing_all_right` is exactly the case the issue describes — an
+    `m7` under a written D5, then a `7` governing a rest:
+
+        bar 2: HARMONY(m7), NOTE(D5), HARMONY(7), rest
+
+    The `7` is in force for the rest of the bar and **no note ever records it**, so
+    before this field existed the bar simply ended. `heres_that_rainy_day` loses bars
+    8, 16, 24 and 32 the same way.
+
+    `beat` is the beat **within the bar**, as everywhere else in this module, and
+    `quality is None` is never recorded — an untranslatable chord is counted in
+    `Head.unmapped` and not guessed, exactly as on the note path.
+    """
+
+    bar: int
+    beat: float
+    chord: str
+    quality: Optional[str] = None
+    bass: Optional[str] = None
+
+    @property
+    def key(self) -> Tuple[int, float]:
+        """The `(bar, beat)` this change takes effect at, for timeline lookups."""
+        return (self.bar, round(self.beat, 6))
+
+
+@dataclass
 class Head:
     """A loaded head: the melody, its timing, and everything the loader learned.
 
@@ -422,6 +463,16 @@ class Head:
     unmapped: Tuple[str, ...] = ()
     skipped: Tuple[str, ...] = ()
     report: Tuple[str, ...] = ()
+    # Every `<harmony>` in the part, in document order, as a **chord timeline**
+    # independent of the melody. Empty by default, so a `Head` built by hand or by a
+    # test keeps working, and `head_skeleton` reads `notes` only — this is recorded
+    # and nothing else yet consumes it.
+    #
+    # It exists because `notes` cannot say what is in force where no note is written,
+    # and open-issues item 10 measures what that costs: on `heres_that_rainy_day` bars
+    # 8, 16, 24 and 32 vanish from the arrangement entirely, and on
+    # `i_was_doing_all_right` bar 34. See `HeadChange`.
+    chords: List[HeadChange] = field(default_factory=list)
 
     def __len__(self) -> int:
         return len(self.notes)
@@ -874,6 +925,10 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
     unmapped: List[str] = []
     skipped: Dict[str, int] = {}
     notes: List[HeadNote] = []
+    # The chord timeline, built as the document is walked so `cursor` is the position
+    # each `<harmony>` occupies. Separate from `notes` because a `<harmony>` can
+    # precede nothing at all - see `HeadChange` and open-issues item 10.
+    changes: List[HeadChange] = []
     # The `<chord>` group being assembled at the current cursor: (pitch, length),
     # together with the onset it started at, whether it ends a tie, and the lyrics
     # on its first member. Flushed when the next unmarked note - or the bar line -
@@ -923,6 +978,39 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
                     unmapped.append(_chord_symbol(child))
                     continue
                 chord, quality, bass = f"{root_name}{parsed_quality}", parsed_quality, parsed_bass
+                # **Recorded as well as held.** The locals above are the forward fill
+                # the melody path reads, and they are correct; what they cannot do is
+                # describe a `<harmony>` no note ever reaches, because the only place
+                # they are written out is `group_chord` on the next note. This append
+                # is the whole of phase 1: the timeline exists, and nothing consumes it
+                # yet.
+                #
+                # **The beat conversion is `_flush_group`'s, not `cursor / divisions`.**
+                # A 2/2 bar is `beats_per_bar` quarters long, so a note is on
+                # `1 + onset/divisions * beats_per_bar/4` — the same expression, spelled
+                # out rather than shared, so a `<harmony>` and the note it precedes can
+                # never disagree about which beat they are on. That is trap 9's
+                # denominator problem: a bar of two beats and a bar of four are both
+                # four quarters, and reading the raw division count gets the beat number
+                # wrong in exactly one of them.
+                #
+                # `cursor` rather than `group_onset`, because the element sits *before*
+                # whatever follows it: a `<harmony>` after the bar's last note is recorded
+                # on the beat it occupies and in force into the next bar.
+                #
+                # Measured on the committed fixtures, 6 of 154 `<harmony>` elements are
+                # followed by no note at all - `i_was_doing_all_right` bars 2, 10, 26, 34
+                # and 36, `heres_that_rainy_day` bar 32 - so this is a real loss and not
+                # an edge case. See `HeadChange` and open-issues item 10.
+                changes.append(
+                    HeadChange(
+                        bar=bar,
+                        beat=1.0 + (cursor / divisions) * (beats_per_bar / 4.0),
+                        chord=chord,
+                        quality=quality,
+                        bass=bass,
+                    )
+                )
                 continue
             if child.tag != "note":
                 continue
@@ -1007,6 +1095,7 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
         bar_index = bar + 1
 
     head.notes = notes
+    head.chords = changes
     head.unmapped = tuple(dict.fromkeys(unmapped))
     head.skipped = tuple(f"{count} {reason}" for reason, count in sorted(skipped.items()))
     report: List[str] = []

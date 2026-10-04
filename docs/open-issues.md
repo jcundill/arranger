@@ -925,9 +925,11 @@ adding the next policy: **name the generator, not the axis value.**
 
 ## 10. A chord in force is stored per melody note, so a bar the melody skips is silent
 
-**Status: open, measured, not fixed.** Found while asking what a comping grid should do
-on a bar whose melody is all rests. It is not a grid bug and not a walking-bass bug: it
-is one missing data structure, and three shipped behaviours depend on its absence.
+**Status: open; stage 1 landed (the timeline is recorded), the defect is not fixed.**
+Found while asking what a comping grid should do on a bar whose melody is all rests. It is
+not a grid bug and not a walking-bass bug: it is one missing data structure, and three
+shipped behaviours depend on its absence. **Read "Stage 1" before the sections below** —
+it changes what the first of the four changes in "Why it is not a patch" has to be.
 
 ### The symptom
 
@@ -1002,6 +1004,50 @@ So the union generalises less than the document assumes, and a first reading of 
 item — "the bass already does this, so the comp can copy it" — was wrong. The bass
 copies a pattern the *harmony timeline* has to supply, and for a melody-less bar the
 timeline has nothing to supply. That is the same missing structure, one level down.
+
+### Stage 1 — landed: the timeline exists
+
+The first of the four changes above is **not** needed. `Head` already carries a chord
+timeline in effect — `headxml`'s module docstring says so, and `_read_notes` implements
+the forward fill. The loss was at exactly one point: a `<harmony>` updates three locals
+and the only place they are written out is `group_chord`, on the next note. A change no
+note reaches was read, held, and discarded.
+
+So stage 1 records it instead of discarding it:
+
+| file | what changed |
+|---|---|
+| `headxml.py` | `HeadChange` (a chord becoming in force at a `(bar, beat)`), `Head.chords`, and one `append` in the `<harmony>` branch |
+| `tests/test_headxml.py` | `TestChordTimeline` — 9 tests |
+
+**Everything is byte-identical**, which is the point of landing it alone: `head_skeleton`
+still reads `notes`, so all 39 arrangements across the three fixtures and the whole flag
+matrix are unchanged, and `make demo` is unchanged.
+
+**The test that makes the others mean anything** is
+`test_the_timeline_reproduces_every_notes_own_chord`: the timeline, forward-filled to
+each note's own position, **reproduces all 271 notes' chords across the three fixtures**.
+So it is not a second opinion — where it and the note path could differ, the note path is
+the one with every published arrangement behind it. Verified by mutation: making the
+`append` conditional fails 8 of the 9 (the ninth asserts the *empty* default, which is
+correctly true either way).
+
+**Measured on the committed scores**, so this was not a synthetic case after all — 6 of
+their 154 `<harmony>` elements precede no note:
+
+| fixture | bars |
+|---|---|
+| `i_was_doing_all_right` | 2, 10, 26, 34, 36 |
+| `heres_that_rainy_day` | 32 |
+
+Bar 2 of `i_was_doing_all_right` is the issue in miniature — `HARMONY(m7), NOTE(D5),
+HARMONY(7), rest`, so an `Am7` has a note and a `D7` governs the rest of the bar with
+none. Bar 32 of `heres_that_rainy_day` is the strongest form: **no notes at all**, two
+changes, and before this it produced nothing whatever.
+
+The beat conversion is `_flush_group`'s expression, `1 + onset/divisions *
+beats_per_bar/4`, spelled out rather than shared — trap 9's denominator problem, and all
+three fixtures are 2/2, which is the metre that catches it.
 
 ### Why it is not a patch
 
