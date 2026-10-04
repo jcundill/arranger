@@ -1086,6 +1086,11 @@ bass=walk`, the walked notes are `[51, None, 52, None]` at both `grid=auto` and
 ### What is not built
 
 The **free-form** spelling (naming positions directly rather than choosing a row) and a
-**held baseline** (`hold=`). The latter is not a flag: `ArrangementStep` has no sustain
-concept at all, so a held root under a stab pattern would touch all four renderers' attack
-logic. See [comping-styles.md](comping-styles.md) §8 Stage D.
+**held baseline** (`hold=`). **Both were withdrawn on 2026-10-04, on measurement** — a stab
+already lasts as long as the melody note under it, because `step.duration` *is* that
+note's duration and every renderer already honours it, so "a held baseline" as a flag
+would add a second answer to a question the step model already answers. The real gap is
+the inverse one: a stab *outlasting* its note. See
+[comping-styles.md](comping-styles.md) §8 Stage D, and
+[open-issues.md](open-issues.md) item 10 for the larger thing underneath it — that a grid
+can only filter melody slots, so a quarter of the positions it names produce no chord.

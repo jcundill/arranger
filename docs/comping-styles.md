@@ -4,8 +4,12 @@
 axis (`harmony=full|guide|shell_root|root`), so `shell_root` exists and the degree-family
 table in §4.1 is no longer a proposal in its entirety. Stage D has landed the **first half
 of the rhythm grid** — `grid=every_note|freddie|charleston|joe_pass|final_and` — so §4.2's
-table is built as a closed set of named rows, with the free-form spelling (§6 Q6) and the
-sustained baseline (`hold=`) still to come. §6 still holds open questions, and `--voices`
+table is built as a closed set of named rows, with the free-form spelling (§6 Q6) still to
+come. **`hold=` is withdrawn** — see Stage D — and a measured defect now stands between
+the grid and the styles it was built for: [open-issues.md](open-issues.md) item 10, where a
+quarter of the beat positions a grid names produce no chord at all, because a grid can only
+*filter* melody slots and harmony is stored per melody note. §6 still holds open questions,
+and `--voices`
 is still `--voices`. This
 records a design and the measurements that forced it, so the decision can be reviewed
 rather than re-derived. It follows
@@ -332,6 +336,25 @@ A comping style is therefore **a degree family + a grid**, which is precisely th
 `_walking_slots` already demonstrates. [voices-axis.md §7](voices-axis.md) reserved this:
 "a row in `MELODY_POLICIES` … the table and the seam exist, the rows do not."
 
+**Corrected 2026-10-04 — that inference overreaches, and by a measured margin.** The
+union is a seam for **beat-level** gaps inside a bar the melody *enters*; the quoted
+claim is about such a bar, and it is accurate. It is not a seam for bars the melody
+**abandons**, because `_walking_slots` walks "every bar **the melody touches**"
+(`bass.py:835`). Measured on a three-bar head whose melody occupies bars 1 and 3:
+
+| | bars walked |
+|---|---|
+| melody in bars 1 and 3 | **1, 3** — bar 2 has no beats to walk |
+| melody in bars 1, 2 and 3 | 1, 2, 3 |
+
+And a bar the melody abandons entirely is **not representable at all**: `headxml` counts
+rests in `skipped`, so it contributes no slot and no bar number. A named grid therefore
+loses **49 of 190 beat positions (25%)** across the three committed fixtures — a quarter
+of the positions it names — and `hold=` cannot be the answer, because the missing thing is
+not a sustain policy but the *chord timeline the grid would be written against*. That is
+[open-issues.md](open-issues.md) item 10, and it is what makes the harmonisation engine
+in this document's place rather than a rename of the flags.
+
 #### The metre trap
 
 A count without a denominator is not a metre (AGENTS.md trap 9). A beat grid **must** be
@@ -602,7 +625,7 @@ the part that was worth landing first.
 the real one is `MELODY_POLICIES`, keyed `auto` / `none`. **Fixed**: the comment now names
 the table that exists.
 
-### Stage D — The rhythm grid (**partly built**: `grid=`; free-form spelling and `hold=` to come)
+### Stage D — The rhythm grid (**partly built**: `grid=`; `hold=` withdrawn; blocked on open-issues item 10)
 
 The largest genuinely new work, and the only stage that adds a concept rather than
 renaming one. `joe_pass` and `charleston` are the payoff.
@@ -649,17 +672,35 @@ missed only because no `Diagnostics` collector was passed.
 - **The free-form grid spelling** (§6 Q6). Deferred to a second commit in this stage,
   on the agreed basis that the named table lands first and is measured. This is the
   one question §6 called "the main tension in the whole proposal", and it stays open.
-- **`hold=` — the sustained baseline.** A style is a *bundle*: `grid` says where the
-  stabs fall and `hold` what sustains underneath, with `harmony=` still orthogonal for
-  what each stab states. **Measured and not built:** `ArrangementStep` has `repeated`,
-  `bass_only` and `melody_only`, all of which re-strike or hold *upper* voices, and
-  both `bass=walk` and `bass=anchors` re-strike the thumb on every note they place.
-  There is **no sustain concept anywhere in the step model**, so a held root under a
-  stab pattern is genuinely new machinery touching four renderers' attack logic — the
-  same surface `bass_only` had, which is where open-issues item 4 came from. It is a
-  separate change, and naming it here is the point of §6 Q5's question about where the
-  style table lives: a `COMPATING_STYLES` row of `{grid, hold}` composes the axes
-  instead of fusing them.
+- **`hold=` — the sustained baseline. Withdrawn, 2026-10-04, on measurement.** This entry
+  originally read: a style is a *bundle*, `grid` says where the stabs fall and `hold`
+  what sustains underneath, and "there is **no sustain concept anywhere in the step
+  model**". Two measurements dissolve it:
+
+  1. **A stab already lasts as long as the note under it.** `step.duration` *is* the
+     melody note's duration, and it carries the full set the score writes — 0.25, 0.375,
+     0.5 and 1.0 across the three fixtures, identical on the steps and on the source
+     slots. `tabstaff` already draws it as width and `tabxml` already caps a span by it.
+     So a chord tied to the note — across a barline or otherwise — needs no new machinery,
+     and "no sustain concept" is literally true and materially misleading.
+  2. **The two cases were conflated.** Under chord-melody (`every_note`) the chord *should*
+     be tied to the note. Under a comp grid (`freddie`, `charleston`) it should be struck
+     short. Bar 4 of `but_not_for_me` is a whole note, and `every_note`, `freddie` and
+     `charleston` all emit `dur=1.0` there — so a stab is a whole note. **Duration is
+     inherited rather than chosen**, and that is a real gap — but it is the *inverse* of
+     what this entry proposed: the chord needs to stop *outlasting* the note, not to
+     outlast it.
+
+  The gap is real and it is still in Stage D's scope, but it is not a `hold=` flag: it is
+  the grid owning the rhythm, so a stab's duration is the distance to the next grid
+  position. That change cannot be made until the grid can *place* a stab at all — see
+  [open-issues.md](open-issues.md) item 10, where a quarter of the positions a grid names
+  produce nothing. **Withdrawn rather than deferred**, because as worded it is a no-op and
+  leaving it in the document invites someone to build it.
+
+  §6 Q5's question about where the style table lives survives the withdrawal, and the
+  answer is now a row of `{grid, harmony}` — composition rather than fusion — with stab
+  duration falling out of the grid once item 10 is fixed.
 
 Two things must be settled **inside** this stage, not discovered by it. The first is now
 settled and the second remains a design decision:

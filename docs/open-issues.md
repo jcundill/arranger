@@ -2,10 +2,11 @@
 
 Items 1-4 were written at the end of the 2026-09-29 session, after the
 `GRIP_MAX_SPAN` / `voicing_cost` / `grips`-intersection work; item 5 was added on
-2026-10-03, item 6 was found by fixing it, and item 9 came out of a measurement of the
-comping axes. **All except item 7 are now fixed**; each carries the measurement that
-produced it and the stage that closed it, so the work can be read rather than
-re-derived. Items 1-3 were fixed in stages 1-3 the same day; item 4 needed
+2026-10-03, item 6 was found by fixing it, item 9 came out of a measurement of the
+comping axes, and item 10 came out of asking what a comping grid should do on a bar the
+melody does not enter. **All except items 7 and 10 are now fixed**; each carries the
+measurement that produced it and the stage that closed it, so the work can be read rather
+than re-derived. Items 1-3 were fixed in stages 1-3 the same day; item 4 needed
 a corrected diagnosis first, and items 5 and 6 turned out to be two real defects of
 which only one was reachable at a time - both recorded in full.
 
@@ -14,13 +15,16 @@ two share the notion of a held shape, though they turn out to be different bugs 
 1 was the *thumb* measured against the wrong shape, item 5 the *melody* measured over
 the wrong timeline.
 
-**Item 7 is open.** **Item 8 is fixed and is the one to read first if you are here to
-learn from a defect**: it is a method whose comment described the correct behaviour
-while the code did the opposite, and it survived a green gate because every fixture
-happened to use the one input that did not trigger it. **Item 9 is the newest and is
-the one to read before adding a policy function**: it is a check reading a table that
-describes a different generator, and it survived a green gate because its one test
-happened to name the input that worked.
+**Items 7 and 10 are open.** **Item 8 is fixed and is the one to read first if you are
+here to learn from a defect**: it is a method whose comment described the correct
+behaviour while the code did the opposite, and it survived a green gate because every
+fixture happened to use the one input that did not trigger it. **Item 9 is the newest
+fixed one and is the one to read before adding a policy function**: it is a check
+reading a table that describes a different generator, and it survived a green gate
+because its one test happened to name the input that worked. **Item 10 is the largest
+open one** - a quarter of the beat positions a named grid names produce no chord at all,
+and the case cannot even be represented by the importer - and it is the reason the
+harmonisation engine is worth building.
 
 The header of each section states its status, and **item 4's original diagnosis was
 wrong** - it blamed the renderers and the fill rule, when the engine was emitting two
@@ -919,6 +923,114 @@ adding the next policy: **name the generator, not the axis value.**
 
 ---
 
+## 10. A chord in force is stored per melody note, so a bar the melody skips is silent
+
+**Status: open, measured, not fixed.** Found while asking what a comping grid should do
+on a bar whose melody is all rests. It is not a grid bug and not a walking-bass bug: it
+is one missing data structure, and three shipped behaviours depend on its absence.
+
+### The symptom
+
+On the comping route, a bar whose melody is entirely rests produces **no part at all** —
+not a quiet bar, not a single stab. Not even the bar exists.
+
+Built by hand, three bars of melody where bars 1 and 3 carry notes and bar 2 carries
+only a chord symbol in force (`Cmaj7`, begun at bar 1 beat 2):
+
+```
+grid=freddie, melody=alto,tenor  →  3 steps
+   bar 1: [(1.0, shell, Dm7),  (2.0, shell, Cmaj7)]
+   bar 3: [(1.0, shell, A7)]
+   bar 2: absent
+```
+
+`Cmaj7` is in force for the whole of bar 2. It is voiced once, at bar 1 beat 2, with
+**that melody note's** duration — so it cannot be heard sounding under bar 2 at all.
+
+### Why the obvious check misses it
+
+Because the case is **structurally inexpressible**, not merely quiet. `headxml` counts
+rests in `skipped` (`skip("rests and unpitched notes")` — 15, 6 and 10 in the three
+committed fixtures) and a skipped rest contributes no slot and no bar number. So "a bar
+with a chord but no melody" is not a rare input; it is an input the pipeline cannot
+represent. Nothing raises, no warning is emitted, and every assertion that counts steps
+passes.
+
+### The measurement
+
+Beat positions where a chord is in force but the melody has no note — positions a comp
+should stab and cannot. **All three fixtures are 2/2.**
+
+| fixture | beats | no melody note | share | `freddie` stabs emitted |
+|---|---|---|---|---|
+| `but_not_for_me` | 64 | 23 | **35%** | 41 |
+| `heres_that_rainy_day` | 58 | 14 | **24%** | 44 |
+| `i_was_doing_all_right` | 68 | 12 | **17%** | 56 |
+| **total** | **190** | **49** | **25%** | |
+
+**A quarter of the positions a named grid names produce no chord.**
+
+### The root cause, and a correction to how it reads
+
+Harmony is stored **per melody note**, not per time position. Three consequences, each
+measurable:
+
+| question | needs | has |
+|---|---|---|
+| what sounds in a bar the melody skips | the chord in force across it | nothing — the bar is absent |
+| what sounds on a beat the melody skips | the chord in force at that instant | the chord of the *previous* note |
+| how long a stab lasts | the grid's next position | the melody note's duration |
+
+**The walking bass is affected too, and this corrects an earlier reading of it.** Its
+comment says "One walked beat per quarter of every bar **the melody touches**"
+(`bass.py:835`), which is accurate — and the docs state the same limit correctly, as
+"a bar whose melody is a single whole note still yields four bass notes"
+(`docs/history/walking-bass.md`, quoted in `comping-styles.md` §4.2). Both describe a
+bar the melody *enters*, verified: with a whole note in bar 1 the walk covers bar 1, and
+with every bar entered it covers all three.
+
+What does **not** hold is the inference drawn in `comping-styles.md` §4.2 — that
+`_walking_slots` is the seam a comping grid wants. It is a seam for *beat-level* gaps
+inside a bar the melody enters, not for bars the melody abandons:
+
+| | bars walked |
+|---|---|
+| melody in bars 1 and 3 only | **1, 3** |
+| melody in bars 1, 2 and 3 | 1, 2, 3 |
+
+So the union generalises less than the document assumes, and a first reading of this
+item — "the bass already does this, so the comp can copy it" — was wrong. The bass
+copies a pattern the *harmony timeline* has to supply, and for a melody-less bar the
+timeline has nothing to supply. That is the same missing structure, one level down.
+
+### Why it is not a patch
+
+The step loop iterates melody slots, so a grid can only *keep* or *drop* one. Fixing
+this means a chord timeline that exists independently of the melody, which changes:
+
+- `Head` — it would have to carry bars the melody does not enter;
+- `head_skeleton` — rests become time rather than skipped elements;
+- `ArrangementStep.melody` — `None` on a slot no melody note created, and all four
+  renderers assume otherwise for alignment;
+- `decisions.melody_alone_case` — an invented slot has no melody note to be alone *with*,
+  so its `kind` vocabulary would need a fifth value or the slot would never reach it.
+
+That is a different order of change from anything in this file so far, and it is the
+same boundary the restructure draws: **a harmonisation engine whose input is a chord
+timeline, not a list of melody notes.** Three independent findings now point at it —
+this item, item 9's "name the generator, not the axis value", and the inertness of
+`harmony=` and `non_chord_tone` on the melody-bearing route.
+
+### The rule it suggests
+
+**A rhythm needs a source of its own.** Where the grid's positions are filtered out of
+the melody rather than generated from the metre, a quarter of them vanish silently, and
+no warning can be issued because the question was never asked. The same shape as item 8:
+a method whose comment describes the correct behaviour while the code does the opposite,
+except here the comment is *correct* and only the reader's inference was not.
+
+---
+
 ## Reproducing
 
 ```bash
@@ -929,6 +1041,37 @@ adding the next policy: **name the generator, not the axis value.**
 # the bar 3 beat 1.0 line should read `Cm7 Eb4 ... 8-x-8-8-x-x` - three notes, the
 # root an octave below the held melody. Before stage 6 it was one note (the melody
 # alone); before stage 5 it was the wrong melody (F4) with the chord right.
+```
+
+```bash
+# 10. the chord timeline: a bar the melody does not enter
+# Three bars of melody where bar 2 carries only a chord symbol in force.
+# Cmaj7 begins at bar 1 beat 2 and governs all of bar 2.
+.venv/bin/python -c "
+from arranger import Diagnostics, VoiceLeadingEngine
+prog = [('D5','m7','Dm7'), ('C5','maj7','Cmaj7'), ('E4','7','A7')]
+timings = [(1,1.0,1.0), (1,2.0,1.0), (3,1.0,1.0), (3,2.0,1.0)]   # no slot in bar 2
+steps = VoiceLeadingEngine.arrange_progression(
+    prog, timings=timings, melody='alto,tenor', grid='freddie',
+    diagnostics=Diagnostics())
+for s in steps:
+    print('bar', s.bar, 'beat', s.beat, s.chord, s.voicing.frets)
+print('bar 2 present:', any(s.bar == 2 for s in steps))
+print('Cmaj7 duration:', [s.duration for s in steps if s.chord == 'Cmaj7'])
+"
+# bar 2 is absent, and Cmaj7 is voiced once, at bar 1 beat 2, for that melody note's
+# own duration - so it cannot be heard sounding under the bar it governs.
+
+# the walking bass has the same limit, at bass.py:835 ('every bar the melody touches')
+.venv/bin/python -c "
+from arranger.bass import bass_line_for
+from arranger.chords import ChordParser
+chords = [(ChordParser.parse_chord_name(n)[0], ChordParser.parse_chord_name(n)[1] or '', n)
+          for _m, _q, n in [('D5','m7','Dm7'), ('C5','maj7','Cmaj7'), ('E4','7','A7')]]
+line = bass_line_for('walk', chords, [(1,1.0), (1,2.0), (3,1.0), (3,2.0)], 4)
+print('bars walked:', sorted({n.bar for n in line}))
+"
+# bars walked: [1, 3]   <- bar 2 has no beats to walk
 ```
 
 ```bash
