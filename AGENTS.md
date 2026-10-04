@@ -24,6 +24,8 @@ gate and the conventions — not the explanation.
 | tab staff, HTML, MusicXML, GP5, or the MusicXML importer | [docs/renderers.md](docs/renderers.md) | `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py` |
 | the Weimar corpus, head selection, skeletons | [docs/corpus.md](docs/corpus.md) | `wjazzd.py` |
 | a known bug, with its measurement | [docs/open-issues.md](docs/open-issues.md) | — |
+| `voices=`, which voices the guitar plays | [docs/voices-axis.md](docs/voices-axis.md) | `arranger/textures.py` |
+| the comping axes (`harmony=`, the rhythm grid) | [docs/comping-styles.md](docs/comping-styles.md) | — |
 | how something was decided, historically | [docs/history/](docs/history/) | — |
 | user-facing behaviour and examples | [README.md](README.md) | — |
 
@@ -38,11 +40,13 @@ treat a contradiction between them as a bug in one of them.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **938 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **939 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 11 of those 926, and it is the one that fails if this
-document — or the CI workflow — stops describing the tree.)
+(`tests/test_docs.py` is 12 of those 939, and it is the one that fails if this
+document — or the CI workflow — stops describing the tree. It also fails if a document
+exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
+new file cannot be added without being registered.)
 
 **Three axes, not one.** `texture=` (where notes fall), `bass=` (who plays the bottom,
 `BASS_STYLES`) and `voices=` (which voices the guitar plays, `VOICE_NAMES`) are
@@ -420,6 +424,7 @@ Each of these cost real time, or nearly shipped a defect.
 | [docs/reharmonisation-proposals.md](docs/reharmonisation-proposals.md) | tritone substitution (shipped) and chromatic approach chords (measured, not built), with the corpus numbers behind each |
 | [docs/history/](docs/history/) | completed plans: corpus, walking bass, texture, arranging guide |
 | [docs/voices-axis.md](docs/voices-axis.md) | **in progress** - the `voices=` axis, awaiting QA |
+| [docs/comping-styles.md](docs/comping-styles.md) | **proposal** - the comping axes (`harmony=`, the rhythm grid), with the measurements behind them; nothing in it is built |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | what CI runs, and which tests it does *not* run |
 
 `common_grips.md` is generated from the engine's own tables by `grip_chart.py` and

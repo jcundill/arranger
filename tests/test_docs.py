@@ -37,6 +37,18 @@ ROOT = Path(__file__).resolve().parent.parent
 #: The documents an agent is most likely to read first. A fact asserted here is
 #: asserted because it was wrong in one of these, not because it is worth asserting
 #: in the abstract.
+#:
+#: `comping-styles.md` and `voices-axis.md` are here because of a measured omission,
+#: not a principle: both were added while this list was not updated, and the
+#: link-resolution and reachability checks below then passed *vacuously* over both.
+#: `docs/comping-styles.md` was found on disk with its body duplicated, its last
+#: section spliced mid-word and 37 U+FFFD replacement characters in it, while
+#: `make check` reported 938 tests OK, pyright 0 errors and ruff clean. The gate was
+#: green because it was not looking - a check that enumerates its inputs by hand
+#: silently skips whatever was added last, which is AGENTS.md trap 1 applied to
+#: documentation. **A new document must be added here in the same commit that
+#: creates it**, and the routing table in `AGENTS.md` must link it, or the next
+#: agent inherits an unverified file.
 DOCUMENTS = [
     "AGENTS.md",
     "README.md",
@@ -44,6 +56,9 @@ DOCUMENTS = [
     "docs/renderers.md",
     "docs/corpus.md",
     "docs/open-issues.md",
+    "docs/comping-styles.md",
+    "docs/voices-axis.md",
+    "docs/reharmonisation-proposals.md",
 ]
 
 #: Matches a version as stated in prose: `0.9.0`, `` `0.9.0` ``, "currently 0.9.0".
@@ -76,6 +91,22 @@ def _layout_block() -> str:
     if found is None:
         raise AssertionError("AGENTS.md has no '## Repository layout' block")
     return found.group(1)
+
+
+def _topic_documents_on_disk() -> List[str]:
+    """Every topic document under `docs/`, as repository-relative POSIX paths.
+
+    `docs/history/` is excluded because it is deliberately not extended and is
+    already reachable through the `docs/history/` directory link; everything else
+    is a document an agent may be sent to and therefore one whose links and stated
+    version the checks below must actually read.
+    """
+    return sorted(
+        path.relative_to(ROOT).as_posix()
+        for path in (ROOT / "docs").rglob("*.md")
+        if "history" not in path.relative_to(ROOT).parts
+    )
+
 
 class TestDocsMatchTheCode(unittest.TestCase):
     """Documentation drift fails the suite instead of misleading the next agent."""
@@ -150,6 +181,35 @@ class TestDocsMatchTheCode(unittest.TestCase):
                 if not path.exists():
                     broken.append(f"{name} -> {target}")
         self.assertEqual(broken, [], "a document links to a file that does not exist")
+
+    def test_every_document_on_disk_is_in_the_list(self):
+        """A document created without being registered fails the suite.
+
+        Every other check in this class reads `DOCUMENTS`, so a file missing from
+        it is a file **no check in this file looks at** - the links in it are never
+        resolved and any version it states is never compared. That is not a
+        hypothetical: `docs/comping-styles.md` was added without being listed, and
+        while it was unlisted it carried a duplicated body, a section spliced
+        mid-word and 37 U+FFFD replacement characters with `make check` reporting
+        938 tests OK, pyright 0 errors and ruff clean. The gate was green because
+        it was not looking.
+
+        This is AGENTS.md trap 1 - "a gate that enumerates its inputs by hand
+        silently skips whatever was added last" - applied to documentation, and it
+        is caught here by deriving the list from the filesystem rather than by
+        trusting the list to have been updated. A new document must be added to
+        `DOCUMENTS` in the same commit that creates it.
+        """
+        registered = set(DOCUMENTS)
+        unregistered = [
+            name for name in _topic_documents_on_disk() if name not in registered
+        ]
+        self.assertEqual(
+            unregistered,
+            [],
+            "a document on disk is not in DOCUMENTS, so no check in this file "
+            "reads it - add it to DOCUMENTS and link it from AGENTS.md",
+        )
 
     def test_the_routing_table_reaches_every_document(self):
         """Each topic document is reachable from `AGENTS.md`.

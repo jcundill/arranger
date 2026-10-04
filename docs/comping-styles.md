@@ -343,8 +343,47 @@ because it was not looking. That is the AGENTS.md "a quiet run is not evidence" 
 its purest form: a check that enumerates its inputs by hand silently skips whatever was
 added last (trap 1), applied to documentation.
 
-Acceptance: both documents in `DOCUMENTS`, both linked from `AGENTS.md`, and a
-deliberately corrupted copy of either failing the suite.
+**Done.** All three documents are in `DOCUMENTS` and linked from `AGENTS.md`, and a
+twelfth test now derives the expected list from the filesystem:
+
+```
+test_every_document_on_disk_is_in_the_list
+```
+
+so a document that exists and is not registered fails the suite rather than quietly
+escaping every check that reads `DOCUMENTS`. **That test paid for itself immediately**:
+adding it surfaced a third unregistered file, `docs/reharmonisation-proposals.md`, which
+was linked from `AGENTS.md` but whose links no check had ever resolved. Three documents
+were unverified, not two.
+
+Verified by mutation rather than by assertion — each of these was introduced, observed to
+fail, and reverted:
+
+| mutation | caught by |
+|---|---|
+| a broken relative link added to `comping-styles.md` | `test_the_relative_links_between_documents_resolve` |
+| a wrong version stated in `voices-axis.md` | `test_the_stated_version_is_the_packages_version` |
+| **both** `AGENTS.md` links to `comping-styles.md` removed | `test_the_routing_table_reaches_every_document` |
+| a new unregistered `docs/brand-new.md` created | `test_every_document_on_disk_is_in_the_list` |
+
+The first row of this table was, briefly, a live failure. Writing it up here put the
+literal three-part version number into this document as the example of a wrong version,
+and `test_the_stated_version_is_the_packages_version` reads **every** `\d+\.\d+\.\d+`
+as a version claim wherever it appears — so registering this document made the suite fail
+on prose describing its own mutation. That is the check working as designed on a document
+that had just come under it, and the fix was to stop writing a version-shaped literal in
+a document that is now version-checked. It bit twice, because the first fix described the
+string it had just removed. Worth knowing before quoting any version number here.
+
+The third row carries a caveat worth keeping. Removing *one* of the two `AGENTS.md` links
+to this document — the routing table and the index table each name it — leaves the suite
+**green**, because the test asks "is it reachable?" and it still is. That is the test
+behaving correctly rather than a hole in it, but it means reachability is a weaker signal
+than it looks: a document linked once, in one place, is fully protected by that one link.
+
+`AGENTS.md`'s stated counts moved with it: **939 tests OK (skipped=2)**, and
+`tests/test_docs.py` is 12 of those. The old line also said "11 of those 926" while the
+line above it said 938, so it was already internally inconsistent.
 
 ### Stage C — Rename and consolidate the axis
 
