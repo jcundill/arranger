@@ -249,12 +249,21 @@ simultaneously. One flag; the property that the contradiction goes away and
 3. **Implement real voice allocation** — a shape that places a named voice on a specific
    degree. Much larger, and it fights `_shell_voicing`'s set semantics.
 
-**Recommendation: (2), as Stage C of [§8](#8-staged-approach).** This reverses an earlier
-recommendation, and it reverses because a constraint has been withdrawn: option (1) was
-picked because it "breaks nothing", and the project is pre-1.0 (`0.9.0`, no CHANGELOG, no
-deprecation policy, no stability classifier) with **compatibility of shipped flags
-explicitly not a constraint**. Re-documenting a flag that is about to be replaced is work
-done twice.
+**Recommendation: (2) — but deferred, and Stage C landed the *vocabulary* instead.** This
+reverses an earlier recommendation, and it reverses because a constraint has been
+withdrawn: option (1) was picked because it "breaks nothing", and the project is pre-1.0
+(`0.9.0`, no CHANGELOG, no deprecation policy, no stability classifier) with **compatibility
+of shipped flags explicitly not a constraint**. Re-documenting a flag that is about to be
+replaced is work done twice.
+
+**The rename did not happen in Stage C, and that was the plan rather than an omission.**
+§6 Q2 settled as (C) — `harmony=` covers the melody-free comping route only — which means
+`harmony=` **cannot express `soprano`**. Renaming `--voices` to `harmony=` in that state
+would drop the axis's own headline case, so the two would have to land together: route
+`harmony=guide` + `sings=yes` through the shell grip (option (A) in §6 Q2), deprecate
+`--grips shell` as the redundant spelling, and rename in one commit. What exists now is the
+harder half of that work — the degree families, `shell_root` at 11/11, and a name that
+means what it says — with the spelling to follow.
 
 What does *not* go away is the sequencing. A rename still wants the grid to land with it,
 so that `harmony=guide` arrives with something for a grid to place, rather than a
@@ -287,13 +296,33 @@ Two live facts in the tree that this section did not know about, both settled in
    minimum), and in 2/2 there is no and-of-4 at all. Both are design inputs to Stage D
    rather than open questions about ownership.
 2. **Does `harmony=guide` with `sings=yes` reach the melody through the shell grip or
-   through `get_comping_voicings`?** (§4.1) The degrees are the same either way, so this
-   is decided entirely by machinery, and the two answers are not equivalent: the shell grip
-   pins the melody to the soprano string, the comping generator never sees it. Measured
-   today, `--grips shell` gives 3 notes with the melody on top in 4/4 steps and
-   `melody=none` gives the same 2 guide tones without it. **Stage C cannot pick a name for
-   the axis until this is settled**, because the two routes would answer to one setting
-   with different voicings.
+   through `get_comping_voicings`?** — **settled as (C), deliberately, and the rename waits
+   on revisiting it.** The degrees are the same either way, so this is decided entirely by
+   machinery, and the two answers are not equivalent: the shell grip pins the melody to the
+   soprano string, the comping generator never sees it.
+
+   **(C) — `harmony=` is scoped to the melody-free comping route, and `--grips shell` stays
+   a separate grip choice.** That is what Stage C built. `harmony=` therefore does nothing
+   on any arrangement the guitar sings, which `test_the_axis_is_inert_when_the_guitar_is_singing`
+   locks in rather than leaving to chance.
+
+   The cost is accepted rather than argued away: **`harmony=` cannot express `soprano`, so
+   on its own it is a strictly weaker `--voices`.** That is precisely why the rename is
+   *deferred* instead of done — under (C) there is nothing for the new name to replace, and
+   renaming `--voices` to `harmony=` would lose the axis's own headline case. Two flags
+   reach adjacent territory (`--grips shell` and `--harmony guide`), and §4.1 says so
+   rather than leaving a reader to discover it.
+
+   **(A) is the follow-up, and it is what the rename waits for**: route `harmony=guide` +
+   `sings=yes` through the shell grip, deprecate `--grips shell` as the redundant spelling,
+   and only then rename. (A)'s output is byte-identical to today's `--grips shell` by
+   construction, so it is a spelling change rather than a musical one — which is why it is
+   worth doing as one commit.
+
+   **(B) — extending the comping generator to state the melody as a separate voice — is not
+   recommended at all.** It is new behaviour rather than a rename, and it is where
+   AGENTS.md trap 6 lives: unifying two branches on a shared predicate is how a step ends
+   up annotated as having a harmony it does not have.
 3. **Does `--voices` get renamed, re-documented, or made real?** (§5 — settled: renamed,
    Stage C)
 4. **Does `--texture` survive?** If the harmony axis takes over its degree behaviour,
@@ -397,9 +426,10 @@ to this document — the routing table and the index table each name it — leav
 behaving correctly rather than a hole in it, but it means reachability is a weaker signal
 than it looks: a document linked once, in one place, is fully protected by that one link.
 
-`AGENTS.md`'s stated counts moved with it: **939 tests OK (skipped=2)**, and
-`tests/test_docs.py` is 12 of those. The old line also said "11 of those 926" while the
-line above it said 938, so it was already internally inconsistent.
+`AGENTS.md`'s stated counts moved with it, and have moved again since — the tree is at
+**952 tests OK (skipped=2)** after Stage C, with `tests/test_docs.py` still 12 of those.
+The old line said "11 of those 926" while the line above it said 938, so it was already
+internally inconsistent before Stage B touched it.
 
 ### Stage C — Rename and consolidate the axis — **partly done**
 
@@ -410,49 +440,56 @@ through `arrange_progression`, `ArrangeOptions`, `arrange_slots`, `_corpus_optio
 both CLIs. Inert twice over — `auto` resolves to the shipped `guide`, and the axis is read
 only by the comping route — and all six published arrangements are byte-identical.
 
-**Not done: the rename.** `--voices` is still `--voices`, and `melody=` still carries a
-voice list. Both were left deliberately: the rename is only worth making once the flag it
-renames *means* something, and §6 Q2 (whether `harmony=guide` + `sings=yes` reaches the
-melody through the shell grip or the comping generator) is still open. The vocabulary
-exists and the awkward name is now the only thing wrong, which is a better state to leave
-it in than either half of a rename.
+**Not done: the rename, and §6 Q2 is now settled as (C)** — `harmony=` covers the
+melody-free comping route and `--grips shell` stays a separate grip choice. That settles
+*why* the rename did not happen: `harmony=` cannot express `soprano`, so under (C) it is a
+strictly weaker `--voices` and renaming would drop the axis's headline case. `--voices` is
+still `--voices`, and `melody=` still carries a voice list.
+
+The follow-up is §6 Q2 option (A) as **one commit**: route `harmony=guide` + `sings=yes`
+through the shell grip, deprecate `--grips shell`, rename. Its output is byte-identical to
+today's `--grips shell` by construction, so it is a spelling change rather than a musical
+one — which is what makes it safe to do all at once. The vocabulary and the honest name are
+the part that was worth landing first.
 
 **`MELODY_STYLES` — the table that does not exist.** `options.py` cited it in a comment;
 the real one is `MELODY_POLICIES`, keyed `auto` / `none`. **Fixed**: the comment now names
 the table that exists.
 
-### Stage D — The rhythm grid (not started)
-
-With flag compatibility off the table this is one coherent change rather than a
-migration, and it is the natural moment for it because the vocabulary is still small.
-
-Order *within* the stage: `full` and `guide` first — both already reachable, being what
-`walking_bass` and `--voices bass` do today — then `shell_root`, the one case §4.1
-measured at 11/11 on the **existing** `(5,4,3)` sets, so still no new grip families.
-
-**One question has to be answered before the name is chosen, not after: §6 Q2.** Whether
-`harmony=guide` with `sings=yes` reaches the melody through the shell grip or through
-`get_comping_voicings` decides what the setting *means*, and the two are not equivalent —
-the shell grip pins the melody to the soprano string, the comping generator never sees
-it. Naming the axis before answering it is how `--grips shell` ends up silently redundant
-or silently different (§4.1).
-
-Acceptance: `walking_bass` output byte-identical; `MELODY_STYLES` cited nowhere; the
-`melody=` keyword that carries a voice list is gone or renamed to say what it carries; and
-`--grips shell` either still works as written or is *deliberately* re-expressed as
-`harmony=guide` + `sings=yes`, with the difference recorded rather than discovered.
+### Stage D — The rhythm grid (not started; one precondition now measured)
 
 The largest genuinely new work, and the only stage that adds a concept rather than
 renaming one. `joe_pass` and `charleston` are the payoff.
 
-Two things must be settled **inside** this stage, not discovered by it:
+Two things must be settled **inside** this stage, not discovered by it. The first is now
+settled and the second remains a design decision:
 
 - **The lattice relationship** (§6 Q1). The grid selects positions from `--skeleton`'s
-  output, so it needs a lattice fine enough to hold the positions it names.
-- **`--non-chord-tone`'s existing inertness** on the comping route (§2 oddity 4). The
-  grid puts stabs on weak beats, which is exactly where the strategies are already a
-  no-op — so "does a stab get the tension treatment?" needs an answer before the first
-  stab is placed, not after.
+  output, so it needs a lattice fine enough to hold the positions it names: a style
+  naming and-of-4 needs `eighths` or finer, and in 2/2 there is no and-of-4 at all. This
+  is an input to the design rather than an open question, and it is what keeps
+  `--skeleton` and the grid complementary — a resolution and a placement, not two
+  owners of one thing.
+
+- **`--non-chord-tone`'s inertness on the comping route** (§2 oddity 4) — **measured, and
+  the concern dissolves.** A guide-tone comp is the same pair of notes whether the melody
+  above it is a chord tone or a 9th, and the same on beat 1 as on beat 2: `Ebmaj` with the
+  9th `D5` over it returns `[2, 7]` in every case, with `non_chord_tone=False`, no strategy
+  consulted and no warning. The strategies are not "a no-op on weak beats" — they are
+  **structurally unreachable** from this route, because `get_comping_voicings` is never
+  handed a beat and never sees the melody pitch that a tension strategy would resolve.
+  The guitar states the chord; the tune is somebody else's, so there is no tension of ours
+  to treat.
+
+  That control is **not vacuous**, which is worth saying because a measurement that cannot
+  fail proves nothing. On the melody-bearing route the same progression *does* change with
+  the beat, and under `texture=targets` it changes sharply: a four-note chord on beat 1, a
+  three-note shell on beat 2. The beat is consulted exactly where it should be, and the
+  comping route is beat-independent by construction rather than by accident.
+
+  **So the grid can place a stab anywhere the lattice offers**, on a strong beat or a
+  weak one, without opening a question about tension treatment — there is none to apply.
+  One fewer decision to make, and one fewer place for a future bug to hide.
 
 ### What is *not* a compatibility constraint
 

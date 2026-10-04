@@ -81,7 +81,13 @@ a fifth:
   layered on the same degrees, with the melody pinned to the soprano string;
   `harmony=guide` is the melody-free part. They are deliberately separate — see
   [docs/comping-styles.md §4.1](docs/comping-styles.md) — and `harmony=` is inert on any
-  arrangement the guitar sings, so `--grips shell` is untouched by it.
+  arrangement the guitar sings, so `--grips shell` is untouched by it. **This was a
+  decision, not an oversight**: `harmony=guide` with `sings=yes` could instead have been
+  routed through the shell grip, which would have made `--grips shell` redundant and given
+  the axis one spelling for both routes. That is §6 Q2 option (A), and it is **deferred
+  along with the `--voices` rename**, because until it lands `harmony=` cannot express
+  `soprano` and so cannot replace `--voices`. A fifth axis inherits this constraint: scope
+  it to the comping route, and do not let it reach the melody-bearing one by accident.
 
 **`make check` is what CI runs** (`.github/workflows/ci.yml`, Python 3.11–3.14, with
 the `xml` and `gp` extras so the optional-extra tests are not silently skipped). One
