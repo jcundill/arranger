@@ -1499,6 +1499,7 @@ def corpus_cli(argv: Optional[Sequence[str]] = None) -> int:
         grips=tuple(args.grips),
         texture=args.texture,
         bass=args.bass,
+        melody=args.voices,
     )
 
     print(f"{solo.title} - {solo.performer} (melid {solo.melid}, {solo.key})")
@@ -1552,6 +1553,7 @@ def arrange_slots(
     grips: Tuple[str, ...] = GRIP_PREFERENCE,
     texture: str = "uniform",
     bass: str = "auto",
+    melody: str = "auto",
     beats_per_bar: int = 4,
     diagnostics: Optional[Diagnostics] = None,
 ) -> Tuple[List[ArrangementStep], List[int], List[str]]:
@@ -1635,13 +1637,20 @@ def arrange_slots(
             f"diminished fallback replaced the written chord on {len(retry)} step(s)"
         )
         for index in sorted(retry):
-            melody, quality, name = triples[index]
+            # Named `note`, not `melody`: this loop variable would otherwise shadow the
+            # `melody` **policy** parameter for the rest of the function, and
+            # `_corpus_options(melody=...)` below would be handed whatever note this
+            # loop last visited - `ValueError: Unknown melody policy 'D4'`, raised only
+            # when a diminished retry had something to rescue, so it looked like a
+            # corpus bug rather than a shadowing one. The same trap `_corpus_options`
+            # dodges for `bass`, documented beside its own loop.
+            note, quality, name = triples[index]
             resolved = engine.resolve_non_chord_tone(
-                Note(melody), quality, name, "diminished",
+                Note(note), quality, name, "diminished",
                 next_melody=_next_chord_tone_melody(triples, index),
             )
             if resolved is not None:
-                working[index] = (melody, resolved[0], resolved[1])
+                working[index] = (note, resolved[0], resolved[1])
                 rescued.append(index)
 
     options = _corpus_options(
@@ -1651,6 +1660,7 @@ def arrange_slots(
         grips=grips,
         texture=texture,
         bass=bass,
+        melody=melody,
         beats_per_bar=beats_per_bar,
     )
 
@@ -1668,6 +1678,7 @@ def _corpus_options(
     texture: str,
     beats_per_bar: int,
     bass: str = "auto",
+    melody: str = "auto",
 ) -> ArrangeOptions:
     """The request `arrange_slots` makes of the engine, as one value.
 
@@ -1722,6 +1733,7 @@ def _corpus_options(
         grips=grips,
         texture=texture,
         bass=bass,
+        melody=melody,
         beats_per_bar=beats_per_bar,
         timings=typed_timings,
         bass_pcs=bass_pcs or None,
@@ -1741,6 +1753,7 @@ def arrange_head(
     grips: Tuple[str, ...] = GRIP_PREFERENCE,
     texture: str = "uniform",
     bass: str = "auto",
+    melody: str = "auto",
 ) -> HeadArrangement:
     """Builds a chord-melody arrangement of a head, end to end.
 
@@ -1775,7 +1788,7 @@ def arrange_head(
     built = build_skeleton(solo, strategy, section, pick, lift, non_chord_tone)
     steps, rescued, arrange_notes = arrange_slots(
         built.triples, built.timings, non_chord_tone=non_chord_tone,
-        fallback=fallback, grips=grips, texture=texture, bass=bass,
+        fallback=fallback, grips=grips, texture=texture, bass=bass, melody=melody,
     )
     # How many steps a diminished retry *would* rescue, whether or not it ran. Set
     # here rather than in arrange_slots, which has no Skeleton to report it on and

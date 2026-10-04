@@ -27,19 +27,32 @@ byte-identical to what it always was.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from .grips import GRIP_PREFERENCE
 from .tuning import ROLE_FILL, ROLE_TARGET
 
 __all__ = [
+    "MELODY_ALTO",
+    "MELODY_AUTO",
+    "MELODY_BASS",
     "MELODY_ONLY_TEXTURES",
+    "MELODY_POLICIES",
+    "MELODY_SOPRANO",
+    "MELODY_TENOR",
     "ROLE_FILL",
     "ROLE_TARGET",
     "TARGET_BEATS",
     "TEXTURE_GRIPS",
     "TEXTURE_STYLES",
     "THUMB_TEXTURES",
+    "VOICES_ALL",
+    "VOICES_NONE",
+    "VOICE_NAMES",
+    "melody_allowed",
+    "parse_voices",
+    "resolve_voices",
+    "voices_have_soprano",
 ]
 
 
@@ -69,6 +82,178 @@ MELODY_ONLY_TEXTURES: Tuple[str, ...] = ("melody", "melody_bass")
 # bass notes. Separate from `MELODY_ONLY_TEXTURES` because `walking_bass` has a thumb
 # and *does* harmonise, on its strong beats.
 THUMB_TEXTURES: Tuple[str, ...] = ("walking_bass", "melody_bass")
+
+# --- The melody axis: which voices the guitar plays ---
+#
+# The third axis, and the one this module exists alongside `bass`. Where the axes are
+# orthogonal, and the orthogonality is the point rather than an accident of naming:
+#
+#   texture=   where notes fall and how thick the left hand is
+#   bass=      the bass voice - none / anchors / walk
+#   voices=    WHICH voices the guitar sounds - soprano, alto, tenor, bass
+#
+# A band setting is then a *combination* of axes, not a mode: `--bass none --voices
+# alto,tenor` is a bassist on the root and a sax on the tune with the guitar comping the
+# two middle voices. "I am sitting next to a bass player, so I want none of the 1s and 5s
+# and none of the walking motion" is `bass="none"`; "and the melody is not mine either"
+# is dropping `soprano` from `voices`. Leave either alone and it is the guitarist's job.
+#
+# The four voice names are **the SATB quartet**, highest to lowest, and they are named
+# rather than numbered because the question is never "how many notes" but "which voices
+# am I playing". The default is all four, so `voices=` names the same four parts a chord
+# symbol implies.
+MELODY_SOPRANO = "soprano"
+MELODY_ALTO = "alto"
+MELODY_TENOR = "tenor"
+MELODY_BASS = "bass"
+
+# The voices, in the order they are named in a four-part stack: highest first.
+VOICE_NAMES: Tuple[str, ...] = (
+    MELODY_SOPRANO, MELODY_ALTO, MELODY_TENOR, MELODY_BASS,
+)
+
+# What `--voices none` means. **Not** "the guitar plays nothing" - that would be silence,
+# and silence is not an arrangement. It is the ordinary ensemble answer: the tune belongs
+# to the horn, the root to the bass player, and the guitar takes the two voices in
+# between. Named as a constant rather than spelled out at the call sites, because "the two
+# middle voices" is one musical decision and not four strings.
+VOICES_NONE: Tuple[str, ...] = (MELODY_ALTO, MELODY_TENOR)
+
+# Every voice: the historical behaviour, the guitar playing the whole chord with the
+# melody on top.
+VOICES_ALL: Tuple[str, ...] = VOICE_NAMES
+
+MELODY_AUTO = "auto"
+
+# --- Reading and validating a `--voices` argument ---
+#
+# `voices` is a **comma-separated list of voice names**, not one identifier out of a fixed
+# set, because the useful combinations are named by the *arranger*, not by us. The
+# argument is parsed once, here, into a canonical tuple and everything downstream reads
+# the tuple - which is also what keeps `MELODY_POLICIES` a registry rather than a flag.
+
+
+def parse_voices(argument: str) -> Tuple[str, ...]:
+    """A `--voices` argument as a canonical, ordered tuple of voice names.
+
+    Voices come back **highest first**, always deduplicated, so `alto,tenor` and
+    `tenor,alto` are one request rather than two that happen to agree - a caller listing
+    voices in score order and one listing them bottom-up must not get two arrangements.
+
+    Two spellings are accepted beyond the bare names, because both are things a player
+    says: `auto`, which means *whatever this instrument does* and is resolved by
+    `resolve_voices`, and `none`, which is `VOICES_NONE`.
+
+    Raises `ValueError` on an unknown name. The rule is the library's: a spelling nobody
+    recognises is a question, and answering it by dropping the voice would hand back a
+    part missing something nobody asked it to drop.
+    """
+    text = argument.strip().lower()
+    if text == MELODY_AUTO:
+        return (MELODY_AUTO,)
+    if text == "none":
+        return VOICES_NONE
+    if not text:
+        raise ValueError(
+            f"voices is empty; expected any of {VOICE_NAMES}, 'none', or 'auto'"
+        )
+    chosen: List[str] = []
+    for part in text.split(","):
+        name = part.strip().lower()
+        if name == "none":
+            chosen.extend(VOICES_NONE)
+            continue
+        if name == MELODY_AUTO:
+            raise ValueError(
+                f"'auto' cannot be combined with named voices in {argument!r}; it "
+                f"means all of them on its own"
+            )
+        if name not in VOICE_NAMES:
+            raise ValueError(
+                f"Unknown voice {name!r}; expected any of {VOICE_NAMES}, "
+                f"'none', or 'auto'"
+            )
+        if name not in chosen:
+            chosen.append(name)
+    if not chosen:
+        raise ValueError(
+            f"voices resolved to nothing in {argument!r}; the guitar has to play "
+            f"something"
+        )
+    return tuple(name for name in VOICE_NAMES if name in chosen)
+
+
+def voices_have_soprano(voices: Tuple[str, ...]) -> bool:
+    """Whether the guitar sounds the melody under this voice selection.
+
+    One predicate rather than a comparison against `VOICES_ALL` at each call site, named
+    for the musical question rather than the data: the engine's job changes completely
+    depending on whether the top voice is ours, because **the melody is what pins a
+    voicing** - with no soprano there is no note to pin, which is why
+    `get_comping_voicings` exists and takes none.
+    """
+    return MELODY_SOPRANO in voices
+
+
+def melody_allowed(texture: str, voices: Tuple[str, ...]) -> Tuple[bool, str]:
+    """Whether `texture` can carry this voice selection, and why not when it cannot.
+
+    **The refusal rule, and it is derived rather than listed.** `MELODY_ONLY_TEXTURES`
+    are the textures that harmonise nothing: every slot is the melody alone, whatever
+    the chord symbol says (see `TEXTURE_GRIPS`, where both of their palettes are the
+    empty tuple). So a selection without the soprano is self-contradictory there - the
+    texture *is* the melodic voice, and removing it leaves the guitar with nothing to
+    play.
+
+    Measured across this tree, `melody` and `melody_bass` are the only two that fail;
+    every other texture keeps at least one voice to play. A selection that *does* keep the
+    soprano is allowed everywhere, because then the guitar plays the tune as it always has.
+    """
+    if voices_have_soprano(voices):
+        return True, ""
+    if texture not in MELODY_ONLY_TEXTURES:
+        return True, ""
+    return False, (
+        f"{texture} plays the melody and nothing else, so it cannot also give the "
+        f"melody away - every slot would be empty. Try texture='targets' with "
+        f"voices='alto,tenor' for a guide-tone comping part."
+    )
+
+
+def resolve_voices(
+    voices: Tuple[str, ...], texture: str, diagnostics: Any
+) -> Tuple[str, ...]:
+    """The voices to actually play: validated, ordered, or refused with the guitar intact.
+
+    `auto` resolves to `VOICES_ALL`, which is what keeps the axis inert. Note the one
+    asymmetry with `bass`: `BASS_AUTO` reads the texture because `walking_bass` *means* a
+    thumb line, whereas **no texture means "somebody else sings"** - a fact about the band
+    rather than about the texture.
+
+    A selection with **no soprano** is refused on a melody-only texture, and refused
+    rather than degraded, on the rule `bass_allowed` follows: an arrangement that says
+    nothing is worse than one that says something, and the caller is told which texture
+    would work.
+    """
+    if voices == (MELODY_AUTO,):
+        return VOICES_ALL
+    allowed, reason = melody_allowed(texture, voices)
+    if not allowed:
+        diagnostics.warn(f"Warning: {reason}")
+        return VOICES_ALL
+    return voices
+
+
+# The policies a named selection resolves to. A **registry** rather than a flag, for the
+# reason `BASS_POLICY_ROLES` is one: the set of patterns is open and meant to stay open,
+# and a named comping pattern - Freddie Green, Charleston - is a row here rather than
+# another branch at each of the call sites that decide which voices sound. The voices a
+# row keeps are stated with the same four names a caller passes, so the table and the
+# argument vocabulary cannot drift apart.
+MELODY_POLICIES: Dict[str, Tuple[str, ...]] = {
+    MELODY_AUTO: VOICES_ALL,
+    "none": VOICES_NONE,
+}
 
 # The beats of a bar that carry a full chord under the "targets" texture, counted
 # from 1. Beats 1 and 3 are the guide's rule verbatim: in 4/4 they are the two

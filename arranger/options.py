@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import Callable, Mapping, Optional, Sequence, Tuple
 
 from .grips import GRIP_PREFERENCE
+from .textures import MELODY_AUTO
 from .tuning import MELODY_STRING_CHOICES_FULL, NECK_FRET_MAX, NECK_FRET_MIN
 
 # `(bar, beat, duration)` for one slot. `bar` is signed - a pickup is negative -
@@ -46,6 +47,26 @@ class ArrangeOptions:
     # `bass.py`, where a new one is a row in a table. The default changes nothing that
     # worked before it.
     bass: str = "none"
+    # Which instrument plays the **soprano voice**, from `MELODY_STYLES` in
+    # `textures.py`: "guitar" keeps the melody pinned to the soprano string (the
+    # default, and the historical arrangement), "none" gives the tune to another
+    # instrument and leaves the guitar a guide-tone comping part.
+    #
+    # An axis of its own, and orthogonal to `texture` and to `bass`, because those
+    # answer different questions: where notes fall, and who plays the bottom. A band
+    # setting is a *combination* -- `bass="none", melody="none"` is a bassist on the
+    # root and a horn on the tune with the guitar between them -- so each is chosen
+    # separately rather than as one mode. The default changes nothing that worked
+    # before it.
+    #
+    # The default is the **sentinel** `MELODY_AUTO` ("auto"), not the resolved "guitar",
+    # so that it matches `arrange_progression`'s keyword default and the two spellings
+    # can be compared field-by-field. That comparison is load-bearing: `arrange_slots`
+    # builds an `ArrangeOptions` and passes it, so a default that disagreed with the
+    # keyword's would make every corpus call look like a caller who had passed both.
+    # `bass` does not have this problem because it is deliberately *not* read back out
+    # of the options - see the note beside that unpack.
+    melody: str = MELODY_AUTO
     beats_per_bar: int = 4
     # `Sequence`, not `List`, and that is load-bearing rather than stylistic: the
     # library and the corpus hold *different* timing types - `Tuple[int, float, ...]`

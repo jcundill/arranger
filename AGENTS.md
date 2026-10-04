@@ -38,17 +38,28 @@ treat a contradiction between them as a bug in one of them.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **883 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **938 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 11 of those 883, and it is the one that fails if this
+(`tests/test_docs.py` is 11 of those 926, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree.)
+
+**Three axes, not one.** `texture=` (where notes fall), `bass=` (who plays the bottom,
+`BASS_STYLES`) and `voices=` (which voices the guitar plays, `VOICE_NAMES`) are
+**orthogonal**, and
+a band setting is a combination rather than a mode: `bass="none", voices="none"` is a
+bassist on the root, a horn on the melody and the guitar comping guide tones between them.
+Adding a fourth axis means a new `*_STYLES` / `*_POLICIES` pair and a `*_AUTO` sentinel that
+is deliberately **not** in the styles list, plus a `*_allowed` refusal function derived from
+a table rather than listed — never another branch at the call sites. The trap: a loop
+variable shadowing a policy parameter (`melody` in `wjazzd.arrange_slots` did exactly this,
+and it only raised when a diminished retry had something to rescue).
 
 **`make check` is what CI runs** (`.github/workflows/ci.yml`, Python 3.11–3.14, with
 the `xml` and `gp` extras so the optional-extra tests are not silently skipped). One
 thing the workflow's own header says and an agent should not have to rediscover:
 **the corpus tests do not run there.** `wjazzd.db` is 42 MB and gitignored, so 85 of
-the 883 are skipped on a clean clone. The `corpus` job covers them, and only on
+the 85 are skipped on a clean clone. The `corpus` job covers them, and only on
 manual dispatch, gated on the `WJAZZD_DB_URL` repository variable.
 
 **`make check` runs one interpreter, and the matrix runs four.** It is the 3.14 dev
@@ -408,6 +419,7 @@ Each of these cost real time, or nearly shipped a defect.
 | [docs/open-issues.md](docs/open-issues.md) | diagnosed bugs with their measurements; fixed items stay, with what the fix was |
 | [docs/reharmonisation-proposals.md](docs/reharmonisation-proposals.md) | tritone substitution (shipped) and chromatic approach chords (measured, not built), with the corpus numbers behind each |
 | [docs/history/](docs/history/) | completed plans: corpus, walking bass, texture, arranging guide |
+| [docs/voices-axis.md](docs/voices-axis.md) | **in progress** - the `voices=` axis, awaiting QA |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | what CI runs, and which tests it does *not* run |
 
 `common_grips.md` is generated from the engine's own tables by `grip_chart.py` and

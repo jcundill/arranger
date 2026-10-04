@@ -376,6 +376,21 @@ class ArrangementStep:
     # walk-invented downbeat the melody moved onto arrived carrying both and every
     # renderer obeyed the flag and dropped the chord.
     bass_only: bool = False
+    # The guitar does **not** sound the melody on this step: the melodic voice belongs
+    # to another instrument, and this one is a guide-tone comping shape underneath it.
+    # Set from `melody=` (MELODY_NONE) rather than inferred, so a renderer can ask the
+    # question without re-deriving it from the grip - and so the answer survives on a
+    # step a caller built by hand.
+    #
+    # `step.melody` still carries the tune. That is deliberate: it is the *written* note
+    # the horn is playing, the chord name above the step belongs to it, and dropping it
+    # would leave a band part with nothing to line up against. What is missing is the
+    # guitar playing it, which is what this says.
+    #
+    # It changes what a renderer draws in one specific way: there is no soprano string
+    # carrying the tune, so a `repeated` melody can no longer be a soprano-only
+    # re-strike. See `render._step_cells`, which holds the whole shape instead.
+    melody_voiced: bool = True
 
     @property
     def has_timing(self) -> bool:

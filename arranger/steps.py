@@ -71,16 +71,22 @@ from .grips import (
 )
 from .options import ArrangeOptions
 from .textures import (
+    MELODY_AUTO,
+    MELODY_BASS,
     MELODY_ONLY_TEXTURES,
     TEXTURE_GRIPS,
     TEXTURE_STYLES,
     THUMB_TEXTURES,
     _metric_weight,
     _roles_for_slot,
+    parse_voices,
+    resolve_voices,
+    voices_have_soprano,
 )
 from .tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
+    NO_CHORD,
     PITCH_CLASS_NAMES,
     ROLE_TARGET,
     ArrangementStep,
@@ -150,6 +156,24 @@ def _resolve_bass(texture: str, bass: str, diagnostics: Diagnostics) -> str:
     return bass
 
 
+def _resolve_melody(
+    voices: str, texture: str, diagnostics: Diagnostics
+) -> Tuple[str, ...]:
+    """The voices to actually play: `auto` resolved, parsed, validated, or refused.
+
+    Two steps and they are not the same step. **Parsing** turns the caller's string into a
+    canonical tuple of voice names, so `tenor,alto` and `alto,tenor` are one request -
+    `textures.parse_voices` owns the vocabulary and the ordering. **Resolution** is what
+    `textures.resolve_voices` owns: `auto` becomes every voice, and a selection a texture
+    cannot carry is refused with a warning naming one that would work.
+
+    An unknown voice name raises from `parse_voices`, before any voicing work, on the
+    library's standing rule: a spelling nobody recognises is a question, and answering it
+    by dropping the voice would hand back a part missing something nobody asked it to drop.
+    """
+    return resolve_voices(parse_voices(voices), texture, diagnostics)
+
+
 
 class VoiceLeadingEngine:
     """Generates and voice-leads jazz guitar voicings dynamically.
@@ -194,6 +218,20 @@ class VoiceLeadingEngine:
     ) -> Tuple[str, Optional[int], Tuple[int, ...]]:
         """See `grips._chord_context`."""
         return _grips._chord_context(chord_type, chord_name)
+
+    @staticmethod
+    def get_comping_voicings(
+        chord_type: str,
+        chord_name: Optional[str] = None,
+        fret_min: int = NECK_FRET_MIN,
+        fret_max: int = NECK_FRET_MAX,
+        notes: int = 3,
+        bass_voice: bool = False,
+    ) -> List[Voicing]:
+        """See `grips.get_comping_voicings`."""
+        return _grips.get_comping_voicings(
+            chord_type, chord_name, fret_min, fret_max, notes, bass_voice
+        )
 
     @staticmethod
     def _lower_soprano_strings(top_strings: Tuple[int, ...]) -> Tuple[int, ...]:
@@ -540,6 +578,7 @@ class VoiceLeadingEngine:
         timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]] = None,
         texture: str = "uniform",
         bass: str = BASS_AUTO,
+        melody: str = MELODY_AUTO,
         beats_per_bar: int = 4,
         diagnostics: Optional[Diagnostics] = None,
         options: Optional[ArrangeOptions] = None,
@@ -684,6 +723,15 @@ class VoiceLeadingEngine:
                     ("fret_max", fret_max),
                     ("grips", grips),
                     ("texture", texture),
+                    # `bass` is absent here and has been since it was added: it is an
+                    # axis whose *default* (`auto`) resolves from the texture rather
+                    # than being the historical value, so it cannot be compared against
+                    # `ArrangeOptions.bass`'s default and has never been read back out
+                    # of `options` either. `melody` is copied here rather than repeating
+                    # that omission, because its default is a plain value and a caller
+                    # who builds the options and then overrides the keyword must not
+                    # silently lose the override.
+                    ("melody", melody),
                     ("beats_per_bar", beats_per_bar),
                 )
                 if value != ArrangeOptions.__dataclass_fields__[name].default
@@ -699,6 +747,7 @@ class VoiceLeadingEngine:
             fret_max = options.fret_max
             grips = options.grips
             texture = options.texture
+            melody = options.melody
             beats_per_bar = options.beats_per_bar
             if options.timings is not None:
                 timings = list(options.timings)
@@ -736,6 +785,13 @@ class VoiceLeadingEngine:
         # written for a thumb line carry one.
         bass = _resolve_bass(texture, bass, diagnostics)
         has_thumb = bass != BASS_NONE
+
+        # The melody axis, resolved the same way and for the same reasons. `auto` keeps
+        # every voice, which is why nothing below this line changes unless a caller
+        # opts in. Decided once rather than per step: the band does not change halfway
+        # through a tune.
+        voices = _resolve_melody(melody, texture, diagnostics)
+        melody_voiced = voices_have_soprano(voices)
 
         slots: Optional[List[_Slot]] = None
         if has_thumb:
@@ -829,7 +885,8 @@ class VoiceLeadingEngine:
             # non-default routes build different steps: an NC bar sets
             # `melody_only=True`, a texture case must not.
             melody_alone = melody_alone_case(
-                texture, role, slot_grips, chord_type, name, has_thumb
+                texture, role, slot_grips, chord_type, name, has_thumb,
+                melody_voiced=melody_voiced,
             )
             if melody_alone == MELODY_ALONE_TEXTURE:
                 solo_voicing = cls.get_melody_only_voicing(
@@ -900,6 +957,122 @@ class VoiceLeadingEngine:
                 arrangements[-1].bass_only = is_bass_only(slot.bass_only, role)
                 cls._attach_bass(arrangements[-1], slot.bass, arrangements, diagnostics)
                 continue
+
+            # --- The comping route: the guitar harmonises, somebody else sings ---
+            #
+            # Taken before `prepare_step`, because `prepare_step` is built around a
+            # melody to pin: it asks `get_all_grip_voicings` for shapes carrying this
+            # note on their topmost string, and every one of them would put the tune
+            # back on the guitar. There is nothing to subtract afterwards - the guitar's
+            # part was never generated - so the candidates have to come from the
+            # melody-free generator in the first place.
+            #
+            # Deliberately *after* the NC branch above and the melody-alone branch
+            # before it, because both are cases where there is no harmony to state:
+            # an NC bar has no chord at all, and a `melody`-texture fill has already
+            # committed to playing one note. `melody_allowed` refuses the two textures
+            # where *every* slot would land here, so this cannot be reached with
+            # nothing to play.
+            if not melody_voiced:
+                # An `NC` bar has no chord, so there is no guide tone to state and
+                # nothing at all for the guitar to play under the horn's line. That is
+                # a real hole in the part and it is reported as one, in one sentence -
+                # rather than reaching `get_comping_voicings`, which correctly refuses a
+                # chord with no root, and then falling through to a melody-bearing route
+                # that would either warn twice or hand the horn's line back to the
+                # guitarist. Skipping is the honest answer: the guitar is silent on this
+                # bar, and the horn is not.
+                if chord_type == NO_CHORD or name == NO_CHORD:
+                    diagnostics.warn(
+                        f"Warning: {name} has no chord and this voice selection "
+                        f"({', '.join(voices)}) leaves the guitar nothing to comp; "
+                        f"skipping the bar"
+                    )
+                    continue
+                candidates = cls.get_comping_voicings(
+                    chord_type,
+                    chord_name=name,
+                    fret_min=fret_min,
+                    fret_max=fret_max,
+                    # How many notes were asked for. A voice is a *role* in the stack,
+                    # so this is the length of the selection and not a count of parts
+                    # played twice - `--voices alto,tenor` is two notes, and padding it
+                    # to three would put a voice in the part that belongs to the bassist.
+                    notes=len(voices),
+                    # **Whether this selection is the bass voice and nothing else**,
+                    # which arity cannot say: `alto`, `tenor` and `bass` all ask for one
+                    # note. Measured before this was passed, all three produced
+                    # byte-identical arrangements on strings 1-3 - the middle of the
+                    # neck - and the bass voice is the one selection whose register is
+                    # part of what it *is*. Derived from the resolved voices rather than
+                    # an extra CLI flag, so the two spellings of one request cannot
+                    # disagree.
+                    bass_voice=voices == (MELODY_BASS,),
+                )
+                if not candidates:
+                    # No guide-tone shape in a playable position. The chord of the tune
+                    # is still owed to the band, so fall through to the ordinary
+                    # melody-bearing route rather than dropping the bar - the same
+                    # trade `prepare_step` makes when a strategy finds nothing. The
+                    # guitar plays the tune here, which is a worse answer than a thin
+                    # one and a better one than silence.
+                    diagnostics.warn(
+                        f"Warning: no guide-tone comping shape found for {name}; "
+                        f"falling back to voicing the melody on the guitar"
+                    )
+                else:
+                    # The root, read once for the selector's bass-function tie-break.
+                    # `get_comping_voicings` has already refused to generate anything
+                    # without a root, so by this point it is never None - the check is
+                    # read from the same place the generator read it rather than
+                    # re-derived, so the two cannot disagree.
+                    _canonical, root_pc, _tones = cls._chord_context(chord_type, name)
+                    arrangements.append(ArrangementStep(
+                        chord=name,
+                        # The written note, which is the horn's line. The guitar does not
+                        # sound it - `melody_voiced=False` is what says so.
+                        melody=note_str,
+                        voicing=select_step_voicing(
+                            candidates,
+                            arrangements[-1].voicing if arrangements else None,
+                            fret_min,
+                            fret_max,
+                            # The tones the written chord allows. Passed even though the
+                            # generator already filters on them: `voicing_cost` counts
+                            # wrong notes itself, and a generator that could be wrong
+                            # should not be the only thing standing between a chord symbol
+                            # and a note that is not in it.
+                            ChordParser.get_chord_tones(chord_type, name),
+                            # The root, which enables the bass-function tie-break. None
+                            # for a chord whose name will not parse, which leaves that
+                            # criterion unasked rather than guessing a bass - the same
+                            # rule the ordinary route follows.
+                            root_pc,
+                            # No `melody_pc`: there is no melody on the guitar for the
+                            # wrong-note count to excuse, which is what lets a comping
+                            # shape be held to the chord's full tone set.
+                            None,
+                            # The corpus's slash bass, honoured before selection rather
+                            # than after, exactly as on the ordinary route.
+                            bass_pcs.get(index) if bass_pcs else None,
+                            bass_cost_for,
+                        ) or candidates[0],
+                        grip="shell",
+                        # A comping shape is three voices by construction, so `partial`
+                        # is always true and is not worth re-deriving per step.
+                        partial=True,
+                        bar=bar,
+                        beat=beat,
+                        duration=duration,
+                        role=role,
+                        metric_weight=weight,
+                        bass_only=is_bass_only(slot.bass_only, role),
+                        melody_voiced=False,
+                    ))
+                    cls._attach_bass(
+                        arrangements[-1], slot.bass, arrangements, diagnostics
+                    )
+                    continue
 
             # Everything up to choosing a shape is shared with the corpus loader,
             # which needs the same candidates but honours a slash bass first. See

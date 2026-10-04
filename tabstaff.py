@@ -509,6 +509,13 @@ def _strikes_here(step: ArrangementStep, string_index: int) -> bool:
     if step.bass_only:
         return string_index == step.voicing.bass_string
     if step.repeated:
+        if not step.melody_voiced:
+            # No soprano to re-strike: the whole comping shape is held, because the
+            # horn repeating the note is not something the guitar articulates. The same
+            # rule `render._step_cells` applies, and the reason it is stated in both is
+            # that this pair is what keeps the ASCII staff, the HTML and the one-line
+            # renderer from disagreeing about what attacks.
+            return True
         struck = {step.voicing.soprano_string()}
         if step.voicing.bass_midi is not None:
             struck.add(step.voicing.bass_string)  # type: ignore[arg-type]

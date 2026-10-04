@@ -810,20 +810,31 @@ class TestMelodyOnlyTextures(unittest.TestCase):
                 for step in steps:
                     self.assertEqual(step.grip, "melody", f"{texture} {grips}")
 
-    def test_a_solo_note_is_outside_the_multi_string_invariant_on_purpose(self):
-        """One active fret is not a `supported_string_sets()` entry, and that is stated.
+    def test_a_solo_note_is_a_supported_single_string_set(self):
+        """A solo note is a singleton, and the invariant now says so.
 
-        The playability invariant is "two to four strings", and a single note is one
-        string. That has always been true for an `NC` bar and a walking-bass fill; two
-        textures built entirely on it make the exception a headline output, so it is
-        pinned here rather than left implied by a test that happens not to look.
+        **This assertion was inverted, not deleted.** It previously read
+        `assertNotIn(..., supported_string_sets())`, pinning the fact that a one-string
+        shape was *outside* the playability invariant. That was true and it was a real
+        gap: the invariant claims "the sounding strings are exactly one
+        `supported_string_sets()` entry", and a melody-only texture violates it on every
+        slot, so the library shipped shapes it had not agreed to be playable.
+
+        `grips.SINGLE_NOTE_STRING_SETS` fixes that rather than excusing it: one note on
+        one string has no span to exceed and no second voice to clash with, so it is
+        playable anywhere, and `supported_string_sets()` now lists all six singletons.
+        The claim this test protects is unchanged - that the solo note is one string, and
+        that the library says so in one place - only the direction of it has moved.
+
+        Measured alongside: the same gap existed for the one-note *comping* shape, which
+        `SINGLE_NOTE_STRING_SETS` also closes; see `tests/test_comping.py`.
         """
         for step in self.arrange("melody"):
             self.assertEqual(len(step.voicing.active_frets()), 1)
-            self.assertNotIn(
+            self.assertIn(
                 frozenset(step.voicing.active_strings),
                 supported_string_sets(),
-                "a solo note is deliberately outside the multi-string invariant",
+                "a solo note must be one of the singleton sets",
             )
 
 

@@ -130,6 +130,8 @@ python -m arranger head tests/data/i_was_doing_all_right.mxl --bars 1-3 --html h
 | `--non-chord-tone` | `extension` | how to harmonise a melody note outside the chord |
 | `--fallback` | off | `diminished` — see [the trade-off](#the-fallback-trade-off) |
 | `--texture` | `uniform` | `uniform`, `targets`, `walking_bass` — see [texture](#texture) |
+| `--bass` | follows `--texture` | `none`, `anchors`, `walk` — see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
+| `--voices` | `auto` (all four) | any subset of `soprano,alto,tenor,bass` — see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
 | `--fret-min` / `--fret-max` | `2` / `13` | the neck window to aim for |
 | `--grips` | all six | which grip families to consider, **most preferred first** |
 | `--tab` | `line` | `staff` lays the head on one six-line staff, spaced on its real rhythm |
@@ -248,6 +250,8 @@ python -m arranger corpus --melid 218 --section chorus:1  # a solo chorus instea
 | `--non-chord-tone` | `extension` | how to harmonise a melody note outside the chord |
 | `--fallback` | off | `diminished` — see [the trade-off](#the-fallback-trade-off) |
 | `--texture` | `uniform` | `uniform`, `targets`, `walking_bass` — see [texture](#texture) |
+| `--bass` | follows `--texture` | `none`, `anchors`, `walk` — see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
+| `--voices` | `auto` (all four) | any subset of `soprano,alto,tenor,bass` — see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
 | `--fret-min` / `--fret-max` | `2` / `13` | the neck window to aim for |
 | `--grips` | all six | which grip families to consider, **most preferred first** |
 | `--tab` | `line` | `staff` lays the head on one six-line staff, on its real rhythm |
@@ -847,6 +851,132 @@ A step with no free bass string below the melody keeps its upper voicing and say
 **one open**: a walk-invented beat takes the wrong melody where a note is held across a
 barline, which costs the tune that note in cut time. It carries the measurements and
 the candidate fixes.
+
+## Who plays which voice: `bass` and `voices`
+
+`texture` and `bass` answer two separate questions — *where do notes fall* and *who plays
+the bottom* — and `voices` adds a third: **who plays the tune**. All three are orthogonal,
+so a band setting is a combination rather than a mode:
+
+| axis | question it answers | values |
+|---|---|---|
+| `texture=` | where notes fall, how thick the left hand is | `uniform`, `targets`, `walking_bass`, `melody`, `melody_bass` |
+| `bass=` | the bass voice | `none`, `anchors`, `walk` |
+| `voices=` | which voices the guitar plays | any subset of `soprano`, `alto`, `tenor`, `bass` |
+
+`--bass none` and `--voices alto,tenor` together are the ensemble this library was asked
+for: a bassist on the root, a sax on the melody, and the guitar comping the two middle
+voices. Each is chosen separately because each is a different decision — "I'm next to a
+bass player so I want none of the 1s and 5s and none of the walking motion" is `bass=none`,
+"and the melody isn't mine either" is dropping `soprano` from `voices`, and leaving either
+alone keeps that voice the guitarist's job.
+
+`--voices` takes a **comma-separated list of the SATB voices**, because the question a
+player asks is never "how many notes" but *which voices am I playing*:
+
+| `--voices` | notes | the part |
+|---|---|---|
+| `auto` *(default)* | 4 | all four voices — the historical chord-melody |
+| `none` | 2 | shorthand for `alto,tenor` |
+| `alto,tenor` | 2 | the two middle voices |
+| `alto` | 1 | one guide tone, high on the neck |
+| `bass` | 1 | one note in a **bass register**, root or 5th |
+
+Order does not matter (`tenor,alto` and `alto,tenor` are the same request) and neither do
+capital letters or stray spaces. An unknown voice name is an error rather than a silently
+dropped voice.
+
+**Naming one voice says *which* one, and `bass` is not the same request as `alto`.**
+`alto` and `tenor` alone are a guide tone under somebody else's melody — the 3rd, on a
+high string, which is where a player puts one. `bass` alone is the bottom of the band:
+it sounds the **root, or the 5th where the root is unreachable**, on the low E, A or D.
+Both are one note, so the arity cannot tell them apart, and for a while it did not:
+`--voices bass`, `alto` and `tenor` produced identical arrangements, with the bass voice
+sounding a 3rd in the middle of the neck. `--voices bass` is a bass *line* and states
+nothing about the chord's quality; name an inner voice as well if you want the quality
+said.
+
+```bash
+python -m arranger head tests/data/but_not_for_me.mxl --voices bass
+```
+
+```text
+Bb7      F4   (shell - 3rd & 7th, partial) x-x-3-x-x-x
+Bb7      G4   (shell - 3rd & 7th, partial) x-x-3-x-x-x
+Ebmaj    G4   (shell - 3rd & 7th, partial) 6-x-x-x-x-x
+```
+
+One note per step, on the low E, A or D, sounding the chord's root — `Bb7` gives `Bb`, not
+the `D` a guide-tone shape would. The third column is the *written* melody, which this
+guitar is not playing (`melody_voiced` is `False`); it is still on the step so the band can
+line up against it. The `(shell - 3rd & 7th, partial)` annotation is stale wording for this
+selection — the shape is a single bass note, not a shell — and is left as-is rather than
+special-cased, because the grip label is shared with the shapes that genuinely are shells.
+
+`bass` is only treated this way when named **alone**. `--voices tenor,bass` and
+`--voices alto,tenor,bass` are a duo and a shell, and their lowest note belongs to the
+shape's own string set.
+
+### `voices=none` — guide-tone comping
+
+With `voices=none` the guitar stops singing and states the chord instead. The shape is a
+**shell**: the 3rd and the 7th, plus one more. Those are the two notes that decide whether
+the ear hears a major or a minor chord, and with no melody to support them there is nothing
+to add — a fourth voice would be the root or the 5th, which carry no information about the
+chord's quality.
+
+```bash
+python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-2 \
+    --texture targets --voices alto,tenor --bass none
+```
+
+```text
+Gmaj9    D4   (shell - 3rd & 7th, partial) x-x-x-x-7-7
+Gmaj9    D4   (shell - 3rd & 7th, partial) x-x-x-x-7-7
+Gmaj9/F# D4   (shell - 3rd & 7th, partial) x-x-x-x-7-7
+```
+
+*Expect **two** notes per step — one per voice you named. `--voices alto` gives one and
+`--voices alto,tenor,bass` gives three; the arity follows the selection rather than a
+constant, because a part sounding more notes than the caller named is a voice somebody
+else was supposed to have. `step.melody` still carries the note the horn is playing, and
+`step.melody_voiced` is `False` because the guitar is not the one playing it — that is what
+makes the two flags different things: the first is the written tune, the second is who sounds
+it.*
+
+**The shape is chosen from the chord alone.** `get_comping_voicings` takes no melody
+argument, and asking it for `D5` and `G3` under the same chord returns the *identical*
+candidate set — a generator that read the melody could not do that. What it does mean is
+that a chord tone in the shell may land on the same pitch class as the melody: measured over
+three corpus heads, **409 of 2,069 steps contain the melody's exact pitch**. That is
+unremarkable — it is the guide tone the ear needs anyway — and it is not the guitar singing.
+
+Every quality the engine can voice has a comping shape in some playable position — checked
+over `CHORD_TONES_FROM_ROOT` rather than a hand-picked list, so a quality added later cannot
+join the engine without being measured. A quality with no readable root still gets nothing,
+on the same rule as every other guide-tone generator: a shell is a claim about *this* chord's
+3rd and 7th, and guessing them without a root is how a wrong note gets in.
+
+**`texture` still decides where the chords go.** The axes are independent, not one mode
+between them: `--texture targets --voices none` gives a shell on beats 1 and 3 and a thinner
+shell between, with the horn's line untouched throughout.
+
+**A repeated melody holds the whole shape.** Normally a repeat is a soprano-only
+re-strike with the inner voices held — but there is no soprano to re-strike when the guitar
+isn't singing, so the shape is held instead. Measured over 2,243 corpus steps, 152 carry
+`repeated`; without this the guitar part would have played a moving melody line on exactly
+the beats where the arrangement handed the tune away.
+
+**Refused, not degraded, where it cannot work.** The `melody` and `melody_bass` textures
+*are* the melodic voice — every slot is the melody alone — so `voices=none` under either
+would leave the guitar with nothing to play on any slot. That is refused with a warning
+naming `texture='targets'`, and the arrangement still sounds. An `NC` bar under `voices=none`
+is likewise reported rather than quietly dropped: there is no chord, so there are no guide
+tones, and the guitar is genuinely silent while the horn is not.
+
+**Nothing changes until you ask.** `voices` defaults to `auto`, which resolves to `guitar`:
+the melody pinned to the soprano string, exactly as before. All 883 existing tests pass
+unchanged, and no published arrangement moves.
 
 ## High melodies: the octave-down move
 

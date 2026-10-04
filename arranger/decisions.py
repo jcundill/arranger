@@ -118,6 +118,7 @@ def melody_alone_case(
     quality: str,
     name: str,
     has_thumb: bool = False,
+    melody_voiced: bool = True,
 ) -> str:
     """Which of the three "play this as a single note" routes this slot takes.
 
@@ -152,7 +153,23 @@ def melody_alone_case(
 
       Both are needed because the first alone would change `--grips shell
       --texture walking_bass`, and the second alone would miss every narrowed palette.
+
+    **`melody_voiced` is the fourth clause, and it is a guard rather than a route.**
+    Every answer here ends at `get_melody_only_voicing`, which is the melody on its
+    own - so under `melody="none"` this function cannot be allowed to answer
+    `MELODY_ALONE_TEXTURE`, or a fill would put the tune straight back on the guitar
+    and the axis would be honoured only on targets. Measured: under
+    `--texture targets --bass walk` every fill came back `x-7-x-x-x-8`, a bare melody
+    note, which is exactly the part that was supposed to be somebody else's.
+
+    So when the guitar is not singing, only an `NC` bar may take this route - and that
+    one is *also* wrong, for a different reason: an NC bar has no chord, so there is no
+    guide tone to state and nothing for the guitar to play. It is answered as
+    `MELODY_ALONE_NONE` and the caller warns instead, which keeps the tune's silence
+    visible rather than quietly handing the horn's line to the guitarist.
     """
+    if not melody_voiced:
+        return MELODY_ALONE_NONE
     if quality == NO_CHORD or name == NO_CHORD:
         return MELODY_ALONE_NO_CHORD
     if (has_thumb and role == ROLE_FILL) or slot_grips == ():

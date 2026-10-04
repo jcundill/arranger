@@ -71,7 +71,7 @@ from .bass import BASS_AUTO, BASS_STYLES
 from .chords import NON_CHORD_TONE_STRATEGIES
 from .grips import GRIP_PREFERENCE
 from .render import format_progression
-from .textures import TEXTURE_STYLES
+from .textures import MELODY_AUTO, TEXTURE_STYLES
 from .tuning import NECK_FRET_MAX, NECK_FRET_MIN, ArrangementStep
 
 if TYPE_CHECKING:  # pragma: no cover - the annotations are strings at runtime
@@ -247,6 +247,19 @@ def add_common_arguments(
             "--texture uniform or targets) no line at all. 'auto' follows the texture, "
             "so --texture walking_bass walks unless you say otherwise. Refused, with a "
             "warning, where the left hand leaves the thumb no string"
+        ),
+    )
+    parser.add_argument(
+        "--voices",
+        default=MELODY_AUTO,
+        help=(
+            "which voices the guitar plays, from the SATB quartet: comma-separated "
+            "any of soprano, alto, tenor, bass (default: auto = all four, the "
+            "historical chord-melody). 'none' is shorthand for 'alto,tenor' - the "
+            "ensemble answer, with a horn on the tune and a bassist on the root. "
+            "Dropping soprano hands the melody to another instrument and leaves a "
+            "guide-tone comping part; refused, with a warning, on a texture that "
+            "plays the melody and nothing else"
         ),
     )
     parser.add_argument(

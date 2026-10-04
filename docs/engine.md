@@ -848,3 +848,168 @@ Two honest caveats, both measured rather than assumed:
   free. So the rule refuses the one combination that can *never* work and lets the
   others through with their existing warning, rather than refusing a texture whose
   loss rate is the same order as the flagship's.
+
+### `voices=` as a third axis: which voices the guitar plays
+
+`bass=` answers *who plays the bottom*. `voices=` answers *which voices this instrument
+sounds*, and it is an axis of the same kind rather than a mode — a band setting is a
+**combination**, not one name.
+
+| axis | question | values |
+|---|---|---|
+| `texture=` | where notes fall, how thick the left hand is | `uniform`, `targets`, `walking_bass`, `melody`, `melody_bass` |
+| `bass=` | the bass voice | `none`, `anchors`, `walk` |
+| `voices=` | which voices the guitar plays | any subset of `soprano`, `alto`, `tenor`, `bass` |
+
+**The four names are the SATB quartet, and they are the argument's whole grammar.**
+`--voices` takes a **comma-separated list**, not one identifier out of a fixed set, because
+the useful combinations are named by the *arranger* and not by us — and because the
+question a player asks is never "how many notes" but "which voices am I playing".
+
+| `--voices` | the part |
+|---|---|
+| `auto` *(default)* | all four voices: the historical chord-melody |
+| `soprano,alto,tenor,bass` | the same, said explicitly |
+| `none` | shorthand for **`alto,tenor`** |
+| `alto,tenor` | the two middle voices: the ensemble comping part |
+| `alto` | one voice |
+
+`none` is **not** "the guitar plays nothing" — that would be silence, and silence is not an
+arrangement. It is the ordinary ensemble answer: the tune belongs to the horn, the root to
+the bassist, and the guitar takes the voices in between.
+
+**`parse_voices` returns a canonical tuple, highest voice first, deduplicated.** So
+`tenor,alto` and `alto,tenor` are one request and not two that happen to agree, and a
+policy row and an argument can be compared with `==`. Whitespace and case are the caller's
+business, not the parser's. An unknown name raises: a spelling nobody recognises is a
+question, and answering it by dropping the voice would hand back a part missing something
+nobody asked it to drop.
+
+**`MELODY_AUTO` resolves to `VOICES_ALL`, so the axis is inert until asked for.** Every
+pre-existing test passes unchanged and no published arrangement moves.
+
+**One asymmetry with `BASS_AUTO`, stated rather than implied.** `BASS_AUTO` reads the
+texture, because `walking_bass` *means* a thumb line. **No texture means "somebody else
+sings"** — that is a fact about the band, not about the texture — so `MELODY_AUTO` resolves
+to the historical behaviour unconditionally, and no texture implies it.
+
+**`MELODY_POLICIES` is a registry, not a flag**, for the reason `BASS_POLICY_ROLES` is: the
+set of patterns is open and meant to stay open. A named comping pattern — Freddie Green,
+Charleston — is a **row**, not another branch at each of the call sites that decide which
+voices sound. Each row states the voices it keeps using the same four names a caller
+passes, so the table and the argument vocabulary cannot drift apart.
+
+### `get_comping_voicings`: a chord with no melody on top
+
+The generator behind `voices="none"`. **It is `_place_shell`'s own search with nothing held
+at the top.** A shell is already a claim about the chord's 3rd and 7th rather than about
+the tune, so `_place_shell` needed no change: it already tries every fret combination on
+the remaining strings and keeps the ones where both guide tones sound and nothing outside
+the chord does. The only difference is that the top fret is searched too rather than fixed
+by a melody. Because the window is exactly `GRIP_MAX_SPAN["shell"]`, the search stays
+*exhaustive within the playability invariant*.
+
+The shared half is factored into `_shell_voicing` so the melody-bearing shell and the
+melody-free one cannot drift apart on what counts as a shell.
+
+**It takes no melody argument, and that is the invariant rather than an accident.** Asking
+it for `D5` and for `G3` under the same chord returns the **identical candidate set** — a
+generator that read the melody could not do that. `tests/test_comping.py` asserts exactly
+this, over eight melody notes and three chords.
+
+**The arity is the length of the selection, and it is honoured.** `notes` says how many
+voices the guitar was asked for, and a two-voice request is **two notes**. The first
+version of this generator always built a three-note shell, so `--voices alto` and
+`--voices alto,tenor` both came back with three — a part sounding a voice nobody named,
+which in a band setting is a voice another player was supposed to have.
+
+**The arity picks the grip family rather than truncating one.** Truncating a `shell` set to
+two strings looks free and is not: it yields pairs the library has never measured —
+`(0, 2)` skips the A string, `(5, 3)` skips the B — and they would enter the tab as though
+they had been designed for the job. A two-note shape is a `duo`, the family this library
+has always offered for exactly that, so two voices take the `duo` sets and three take the
+`shell` sets unchanged.
+
+**One voice is a weaker claim, and the rule says so rather than refusing.** Two notes can
+sound both guide tones, which is what states the chord; one note cannot, so a single note
+keeps the **first** guide tone (the 3rd, or the 4th on a sus chord) — the same preference
+order `_duo_offsets` already applies. Refusing instead would have made `--voices alto` fall
+through to the melody-bearing route: measured, it warned on every step and handed the
+horn's line back to the guitarist, the opposite of what naming one voice asked for.
+
+**With no melody to support, a fourth voice would be the root or the 5th** — the two notes
+that carry no information about the chord's quality. That is why only the `shell` family is
+offered at all.
+
+**A quality with no readable root gets nothing**, on the same rule as every other
+guide-tone generator here: a shell is a claim about *this* chord's 3rd and 7th, and guessing
+them without a root is how a wrong note gets into the tab.
+
+**The playability invariant, minus the melody clause.** Every candidate sounds only chord
+tones, sounds exactly the number of notes asked for, occupies one string set from the
+matching family, and holds a span within that family's `GRIP_MAX_SPAN`. The dropped clause
+is "the melody is on the topmost string", and it is dropped for the only reason there is:
+there is no melody.
+
+Measured over three corpus heads under `--voices alto,tenor` — 2,069 steps:
+
+```
+notes per step          2        (2069 of 2069)
+melody_voiced           False    (2069 of 2069)
+supported string set    yes      (2069 of 2069)
+over GRIP_MAX_SPAN      0
+wrong notes             0
+guide tone missing      0
+unreadable chord        610      (no tone set at all; the library's own rule is not to
+                                  judge a chord it could not read - see cost.voicing_cost)
+```
+
+**What is *not* claimed, measured rather than assumed.** A comping step may well contain the
+melody's own pitch: **409 of 2,069 corpus steps do.** That is coincidence, not the guitar
+singing — the melody's pitch class is often a chord tone the shell needs anyway. What the
+axis guarantees is that the shape was *chosen from the chord alone*, and that
+`step.melody_voiced` is `False`. An earlier version of this document and of the test suite
+claimed the stronger, falsifiable version ("no step sounds the melody"), and the
+measurement is what corrected it.
+
+### The renderer rule: a repeated melody holds the whole shape
+
+Normally `repeated` is a **soprano-only re-strike** — the melody re-articulates under an
+unchanged harmony, so the inner voices are held. That presumes there *is* a soprano
+carrying the tune. Under `voices="none"` there is none, so "re-strike the soprano" would
+re-strike a guide tone and the shape would change on a beat where nothing has. The rule
+becomes **hold the whole shape**, which is what a guitarist comping behind a horn does while
+the horn repeats the note.
+
+This is not a corner case. Measured over 2,243 corpus steps, **152 carry `repeated`**, and
+keeping the old rule rendered every one as a single moving note — a melody line on the
+guitar part, on exactly the beats where the arrangement had handed the tune away.
+
+The rule is stated in **two** places, `render._step_cells` and `tabstaff._strikes_here`,
+because those two are what keep the one-line renderer, the ASCII staff and the HTML from
+disagreeing about what attacks. `tests/test_comping.py::TestRepeatedStepsHoldTheShape`
+asserts they agree, string by string.
+
+### Two consequences, both derived rather than listed
+
+**A texture that harmonises nothing cannot also give the melody away.** `melody_allowed`
+derives the refusal from `MELODY_ONLY_TEXTURES` — those two textures *are* the melodic
+voice, every slot being the melody alone, so `voices="none"` under either would leave the
+guitar with nothing to play on any slot. Refused **with a warning naming
+`texture='targets'`**, and the arrangement still sounds with the guitar keeping the tune.
+Measured across the tree: those two are the only textures that fail.
+
+**`melody_alone_case` gains a guard, because its routes all end at the melody alone.** Every
+answer it gives reaches `get_melody_only_voicing`, so under `voices="none"` it must not
+answer `MELODY_ALONE_TEXTURE` — or a texture *fill* would put the tune straight back on the
+guitar, and the axis would be honoured only on targets. Measured: before the guard, every
+fill under `--texture targets --bass walk` came back `x-7-x-x-x-8`, a bare melody note.
+
+**An `NC` bar is reported, not quietly dropped.** There is no chord, so there are no guide
+tones, and the guitar is genuinely silent while the horn is not. It is skipped with one
+sentence naming the reason, rather than reaching the generator (which correctly refuses a
+chord with no root) and then falling through to a melody-bearing route that would either
+warn twice or hand the horn's line back to the guitarist.
+
+
+
