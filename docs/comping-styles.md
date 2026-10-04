@@ -433,8 +433,9 @@ simultaneously. One flag; the property that the contradiction goes away and
 **Recommendation: (2) — but deferred, and Stage C landed the *vocabulary* instead.** This
 reverses an earlier recommendation, and it reverses because a constraint has been
 withdrawn: option (1) was picked because it "breaks nothing", and the project is pre-1.0
-(`0.9.0`, no CHANGELOG, no deprecation policy, no stability classifier) with **compatibility
-of shipped flags explicitly not a constraint**. Re-documenting a flag that is about to be
+(no CHANGELOG, no deprecation policy, no stability classifier) with **compatibility of
+shipped flags explicitly not a constraint** — a claim `0.10.0` then acted on, by removing
+the `corpus` subcommand and two flags outright. Re-documenting a flag that is about to be
 replaced is work done twice.
 
 **The rename did not happen in Stage C, and that was the plan rather than an omission.**

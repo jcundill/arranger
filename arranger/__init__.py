@@ -167,7 +167,14 @@ from .tuning import (
 # lowest voice can be a root by decision rather than by string-set accident.
 # 0.9.0 adds the walking-bass texture: a thumb line on the bass strings under a
 # light left hand.
-__version__ = "0.9.0"
+# 0.10.0 REMOVES the Weimar Jazz Database path: the `wjazzd` and `lead_sheet`
+# modules, the `arranger corpus` subcommand, and the `--skeleton`/`--pick` flags.
+# That is a breaking change to the public surface - hence the minor bump on a
+# 0.x version, where the minor digit is the breaking one. `arrange_slots` moved
+# into the package as `arranger.slots`, so the slot layer it always was is now
+# importable from the engine. The MusicXML path is unchanged: byte-identical
+# output on every committed fixture across sixteen flag combinations.
+__version__ = "0.10.0"
 
 
 # The whole-progression staff renderers live in `tabstaff`, which imports this
