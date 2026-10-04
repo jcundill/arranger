@@ -845,6 +845,34 @@ def _flush_group(
     becoming a second one. That is the whole reason this is a flush and not an
     append per `<note>`: a tie crosses a bar line, so the two halves are read in
     different measures and cannot be joined at read time.
+
+    **The merge must NOT be restricted to this bar, and that is measured.** Adding
+    `and notes[-1].bar == bar` looks like a fix - `notes[-1]` is the last note *read*,
+    not the last note in this measure - and it was tried, on the belief that merging
+    across a barline "ate the new bar's downbeat". It does the opposite, because a
+    `tie type="stop"` in a new bar is precisely the continuation the merge exists to
+    absorb: restricting the merge turns every cross-barline tie into a *second* note at
+    the same pitch. Measured over the fixtures, the guard **added** notes rather than
+    removing any, and on two of them invented a bar:
+
+        fixture                     without the guard   with it
+        but_not_for_me.mxl                    80           84
+        heres_that_rainy_day.musicxml         81           88
+        i_was_doing_all_right.mxl             110          112
+        tenor_madness.musicxml                200          212
+        The_Jitterbug_Waltz.musicxml         119          125
+        Trouble_in_Mind_Blues.musicxml        53           63
+
+    `heres_that_rainy_day` also grew from 34 bars to 37, because a spurious note
+    re-entered bars the tie had legitimately emptied. The claim that started this - that
+    bar 3 of a blues head loses its first note, and that music21 then writes two notes
+    with no `<pitch>` - was checked against the exported file and **does not reproduce**:
+    zero such notes, with or without the guard, on the head that prompted it.
+
+    The premise confused *merged* with *lost*. Bar 2's A4 eighth and bar 3's A4 half are
+    one note of 3.5 beats, not two notes and not one shorter note: bar 3 has no downbeat
+    note because its downbeat is still sounding the one written in bar 2. Ten tests
+    failed against the guard, including the two that state this rule directly.
     """
     if not group:
         return

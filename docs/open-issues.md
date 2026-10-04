@@ -1102,7 +1102,7 @@ changes output**, and the scope is deliberately narrow:
 
 Measured over three fixtures and fourteen flag combinations: **six arrangements change,
 thirty-six do not** — including all four `grid=` arrangements on the singing route, and
-`make demo`. The gate is 1003 tests with every pre-existing assertion passing unchanged.
+`make demo`. The gate is 1008 tests with every pre-existing assertion passing unchanged.
 
 **`every_note` is excluded from the union, and that is load-bearing.** It names every beat
 of the bar, so merging it with the notes would keep every position the note path has *and
@@ -1138,6 +1138,37 @@ said. Measured on the 2/2 fixtures, every named grid now places something — `e
   rather than as a design: the honest field is `ArrangementStep.melody: Optional[str]`,
   which would let a slot with no tune carry no note at all. Deferred, measured, and
   asserted in a test so it cannot be quietly forgotten.
+
+**A third change in the same working tree was a misdiagnosis, and it is recorded here
+because it is the shape of item 8 rather than a fact about item 10.** Stage 3 also
+carried an uncommitted edit to `headxml._flush_group` adding
+`and notes[-1].bar == bar` to the tie merge, on the stated belief that merging into
+`notes[-1]` "ate the new bar's downbeat" on a blues head.
+
+It does the opposite, and the measurement is the finding: a `tie type="stop"` in a new
+bar **is** the continuation the merge exists to absorb, so restricting the merge turns
+every cross-barline tie into a second note at the same pitch. The guard **added** notes
+on all six fixtures — `but_not_for_me` 80 → 84, `heres_that_rainy_day` 81 → 88,
+`i_was_doing_all_right` 110 → 112, `tenor_madness` 200 → 212,
+`The_Jitterbug_Waltz` 119 → 125 — and grew `heres_that_rainy_day` from 34 bars to 37 by
+re-entering bars a tie had legitimately emptied. **Ten tests failed against it**,
+including `test_a_tie_across_a_bar_line_is_one_note` and the two that assert note
+counts per fixture.
+
+The reported symptom was checked before the change was trusted and **does not
+reproduce**: exporting the blues head gives zero notes with no `<pitch>`, with or
+without the guard. The premise read *merged* as *lost* — bar 3 has no downbeat note
+because its downbeat is still sounding the A4 written in bar 2, which is what a tie
+means. Reverted; the comment on the function now records the measurement so the same
+fix is not attempted a third time.
+
+The fixture earned its place in the tree rather than being deleted along with the
+change. `tests/test_headxml.py::TestAHeldNoteIsOneNoteAcrossABarline` — five tests —
+pins the rule on the real file, and names the observation that started all of this:
+**bars 8, 16 and 17 carry no note at all**, each because a note held from an earlier bar
+covers it. Verified by mutation: adding the guard back fails **4 of the 5**, the fifth
+being the premise assertion that the file really does tie across barlines, which holds
+either way.
 
 ### Still open
 

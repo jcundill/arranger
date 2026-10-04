@@ -48,8 +48,11 @@ from wjazzd import arrange_slots
 #   heres_that_rainy_day.musicxml MuseScore 3 (3.1), slash chords, <degree> alterations
 #   tenor_madness.musicxml        this library's own export: a TAB staff beside a
 #                                 notation one, and chords music21 could not classify
+#   Trouble_in_Mind_Blues.musicxml  a 4/4 blues with ties written across barlines, which
+#                                 is the case `TestAHeldNoteIsOneNoteAcrossABarline` pins
 DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 RAINY_DAY = os.path.join(DATA, "heres_that_rainy_day.musicxml")
+TROUBLE_IN_MIND = os.path.join(DATA, "Trouble_in_Mind_Blues.musicxml")
 
 
 def chord_or_fail(changes, bar: int, beat: float) -> HeadChange:
@@ -606,6 +609,120 @@ class TestRealScores(unittest.TestCase):
         bars = head.bars[1] - head.bars[0]
         written = sum(n.duration for n in head.notes)
         self.assertAlmostEqual(written, float(bars), delta=bars * 0.2)
+
+
+class TestAHeldNoteIsOneNoteAcrossABarline(unittest.TestCase):
+    """`Trouble in Mind`: ties written across barlines, on a real 4/4 blues.
+
+    **This fixture is here because of a misdiagnosis, and the reason is the point.**
+    A guard was once added to `headxml._flush_group` - `and notes[-1].bar == bar` -
+    on the belief that merging a tie-stop into the previous note "ate the new bar's
+    downbeat" on this head. It does the opposite. A `tie type="stop"` in a new bar
+    *is* the continuation the merge exists to absorb, so the guard turned every
+    cross-barline tie into a second note at the same pitch: **53 notes became 63
+    here**, and `but_not_for_me` went 80 to 84. Ten tests failed against it.
+
+    The premise read **merged** as **lost**. Bars 8, 16 and 17 carry no note of their
+    own, and the second and third tests below say why that is correct rather than
+    alarming. Verified by mutation: adding the guard back fails **4 of the 5** - the
+    fifth asserts the fixture's premises, which hold either way.
+
+    The synthetic counterpart is `TestLoading.test_a_tie_across_a_bar_line_is_one_note`;
+    this one is on a file a notation program wrote, which is the only thing that can
+    show the rule survives real bar lengths, real divisions and real ties.
+    """
+
+    def setUp(self):
+        self.head = load_musicxml(TROUBLE_IN_MIND)
+
+    def _notes_in(self, bar):
+        return [n for n in self.head.notes if n.bar == bar]
+
+    def test_the_fixture_really_does_tie_across_barlines(self):
+        """The premise, asserted on the file's own `<tie>` elements.
+
+        Without this the rest of the class could pass on a fixture that stopped
+        containing the thing it exists to check.
+        """
+        root = ElementTree.parse(TROUBLE_IN_MIND).getroot()
+        starts = sum(
+            1 for tie in root.iter("tie") if tie.get("type") == "start"
+        )
+        stops = sum(1 for tie in root.iter("tie") if tie.get("type") == "stop")
+        self.assertGreater(starts, 0, "the fixture must contain tie starts")
+        self.assertGreater(stops, 0, "the fixture must contain tie stops")
+        # At least one stop is the first note of its measure, which is the only
+        # arrangement that makes a tie cross a barline rather than sit inside one.
+        boundaries = 0
+        for measure in root.iter("measure"):
+            notes = measure.findall("note")
+            if notes and any(t.get("type") == "stop" for t in notes[0].findall("tie")):
+                boundaries += 1
+        self.assertGreater(
+            boundaries, 0, "the fixture must contain a tie crossing a barline"
+        )
+
+    def test_the_two_halves_of_a_tie_are_one_note(self):
+        """Bar 2's A4 eighth and bar 3's A4 half are one note of 3.5 beats.
+
+        The merge is what makes that true, and its length is the proof it happened:
+        a note that was never extended is a quarter of a whole note, not 0.875.
+        """
+        last = self._notes_in(2)[-1]
+        self.assertEqual((last.beat, last.note_name), (4.5, "A4"))
+        self.assertAlmostEqual(last.duration, 0.875, places=6)
+        # And it is *one* note: bar 3 opens with no note at all, because its downbeat
+        # is still sounding this one. A duplicate would sit at bar 3 beat 1.0.
+        self.assertEqual([n.beat for n in self._notes_in(3) if n.beat < 2.0], [])
+
+    def test_a_bar_covered_by_a_held_note_carries_no_note_of_its_own(self):
+        """Bar 8 is empty, and the note that empties it is asserted, not assumed.
+
+        **This is what the misdiagnosis read as data loss.** Bar 7's A4 is held for
+        5.5 beats from beat 4.5: half a beat to the barline, all four beats of bar 8,
+        and one more beat into bar 9. It therefore ends on bar 9 beat 2.0, which is
+        exactly where bar 9's written rests begin. Bar 8 having no note is the tie
+        working, and the arithmetic below is what makes that checkable rather than
+        merely asserted.
+        """
+        self.assertEqual(self._notes_in(8), [], "bar 8 must be covered, not dropped")
+        held = self._notes_in(7)[-1]
+        self.assertEqual((held.beat, held.note_name), (4.5, "A4"))
+        self.assertAlmostEqual(held.duration * 4.0, 5.5, places=6)
+        # Quarters from the start of bar 7: the note starts 3.5 in, and bar 9 beat 1.0
+        # is 8.0 in, so ending 1.0 quarter past that is bar 9 beat 2.0 - where the
+        # rests in bar 9 begin.
+        end = (held.beat - 1.0) + held.duration * 4.0
+        self.assertAlmostEqual(end, 9.0, places=6)
+        self.assertAlmostEqual(end - 8.0, 1.0, places=6)
+
+    def test_a_bar_the_held_note_reaches_past_its_last_note_is_still_not_lost(self):
+        """`Head.bars` stops at the last *note*, so the music's true end is later.
+
+        The last note begins in bar 15 and is held to bar 17 beat 2.0, so the range is
+        `(1, 16)`. Asserted because it looks like truncation and is not: the sound
+        past bar 15 is inside a note's duration, and a duration is what carries it.
+        """
+        self.assertEqual(self.head.bars, (1, 16))
+        last = self._notes_in(15)[-1]
+        self.assertEqual((last.beat, last.note_name), (4.5, "G4"))
+        # Two whole bars is 8.0 quarters, so 9.0 lands inside bar 17 - past the range.
+        self.assertAlmostEqual((last.beat - 1.0) + last.duration * 4.0, 9.0, places=6)
+
+    def test_no_note_is_duplicated_where_two_are_tied(self):
+        """53 notes, and no two consecutive ones share a barline and a pitch.
+
+        The count is the blunt check; the scan is the one that names the defect if a
+        future change reintroduces it, because it fails on the *pair* rather than on a
+        total that has to be re-baselined every time the fixture is re-read.
+        """
+        self.assertEqual(len(self.head.notes), 53)
+        for before, after in zip(self.head.notes, self.head.notes[1:]):
+            if before.pitch == after.pitch and before.bar != after.bar:
+                self.fail(
+                    f"bar {before.bar} and bar {after.bar} both sound "
+                    f"{after.note_name}: a tie became two notes"
+                )
 
 
 class TestChordTimeline(unittest.TestCase):
