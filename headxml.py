@@ -1202,12 +1202,30 @@ def head_skeleton(
     if not notes:
         return []
 
+    # **The rounding is a grouping key, never a position.** It exists so that two
+    # notes read from different `divisions` compare equal as one slot, and for that
+    # it is right. It must not be the value either, and a triplet is what shows why:
+    # `1/3` has no exact binary form, so the beats of an eighth-note triplet are
+    # 1.3333333333333333 and 1.6666666666666665 - and rounding to six places sends
+    # the first DOWN and the second UP, so the gap between them grows from a third
+    # to a third plus 6.7e-07.
+    #
+    # That surplus is not noise downstream. `tabxml._events` caps each note at the
+    # length the file wrote, so the extra becomes a **rest of 6.7e-07 quarters** -
+    # a length MusicXML cannot express, which music21 rounds up to a whole triplet
+    # note. Bar 1 of "Trouble in Mind" came out with four notes under one `3`
+    # bracket, a rest inside the triplet, and a bar two beats long instead of one;
+    # the committed triplet head carried 13 such rests. So the slot carries
+    # `chosen.beat`, the note's own float, and only the grouping is rounded.
     groups = {(note.bar, round(note.beat, 6)): note for note in notes}
 
     slots: List[Tuple[Tuple[str, str, str], int, float, float]] = []
     for key in sorted(groups):
         chosen = groups[key]
-        bar, beat = key
+        # `key[0]` rather than unpacking: the bar is an int and needs no rounding, and
+        # unpacking both is what made the rounded beat the obvious thing to use.
+        bar = key[0]
+        beat = chosen.beat
         if chosen.quality is None:
             if chosen.chord == NO_CHORD:
                 slots.append(

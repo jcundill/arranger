@@ -1150,13 +1150,53 @@ class TestReductionAndArranging(unittest.TestCase):
         # The tuplets are marked as written, and they are a third of a beat apart.
         self.assertEqual([n.tuplet for n in head.notes], [True, True, False])
         beats = [beat for _t, _bar, beat, _d in head_skeleton(head)]
-        # Compared at the precision the slot stores: `_slot_key` rounds to six places
-        # so that a float read from several divisions cannot make two equal-looking
-        # positions differ in the last bit, and an exact equality here would be a
-        # statement about that rounding rather than about the model.
-        self.assertEqual(
-            beats, [round(n.beat, 6) for n in head.notes]
+        # **The slot carries the note's own float, and this assertion was inverted to
+        # say so.** It used to compare against `round(n.beat, 6)`, because the slot
+        # stored the rounded beat: `head_skeleton` grouped notes by a six-place key
+        # and then emitted that key as the position. A triplet is where that costs
+        # something - `1/3` has no exact binary form, so rounding the first note of
+        # a triplet DOWN and the next UP made the gap between them longer than the
+        # note itself, and the surplus was written as a rest. Measured on the
+        # committed triplet head: 13 such rests, and none since. See
+        # `test_a_triplet_head_writes_no_rest_it_cannot_express`, which asserts that
+        # on the real score rather than on this fixture's hand-written durations.
+        self.assertEqual(beats, [n.beat for n in head.notes])
+
+    def test_a_triplet_head_writes_no_rest_it_cannot_express(self):
+        """The end-to-end consequence, on the committed triplet score.
+
+        The defect was invisible in the tab and glaring in the score. `head_skeleton`
+        emitted six-place-rounded beats, which made the gap between two triplet notes
+        longer than the notes in it; `tabxml._events` caps a note at the length the
+        file wrote, so the surplus became a **rest of about 1e-06 quarters** - a
+        length MusicXML cannot express, and which music21 inflates to a whole
+        triplet note. Measured on `i_was_doing_all_right.mxl`: **13 such rests and
+        133 events before, 0 and 120 after.** Each one put an extra note inside a
+        `3` bracket and stretched the bar, so "Trouble in Mind" bar 1 came out two
+        beats long instead of one.
+
+        Asserted on the events rather than on the XML, because that is where the rest
+        is born and it needs no optional dependency to see it.
+        """
+        head = load_musicxml(I_WAS_DOING_ALL_RIGHT)
+        # The fixture must actually be a triplet head, or this proves nothing.
+        tuplets = sum(1 for n in head.notes if n.tuplet)
+        self.assertGreater(tuplets, 0, "this fixture must contain triplets")
+
+        slots = head_skeleton(head)
+        steps, _rescued, _notes = arrange_slots(
+            [s[0] for s in slots], [(s[1], s[2], s[3]) for s in slots]
         )
+        events, _pickup = _events(_substitute_steps(steps), head.beats_per_bar, True,
+                                  head.beat_type)
+        # Every rest is a real one: at least a sixteenth. The sixteenth is the
+        # shortest event `_events` will write (`_MIN_EVENT_LENGTH`), so anything
+        # shorter is a rounding artefact rather than silence the score contains.
+        unexpressible = [
+            length for step, _strikes, length in events
+            if step is None and length < 0.25 - 1e-9
+        ]
+        self.assertEqual(unexpressible, [])
 
     def test_a_tuplet_head_keeps_every_note_on_every_grid(self):
         """The end-to-end claim, on the committed score rather than a hand-built one.
