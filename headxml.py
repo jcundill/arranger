@@ -24,12 +24,12 @@ the next one replaces it. Reading the chord off the note that follows it would
 guess.
 
 **The voicings are not re-implemented here.** `arrange_xml_head` hands its slots
-to `wjazzd.arrange_slots`, the same function the corpus path uses, so a head read
-from a score and the same head read from the database are voiced by identical
-code. A second implementation of the step loop is how the corpus path came to
-disagree with the library once already.
+to `arranger.slots.arrange_slots`, the engine's own slot layer, so a head read
+from a score is voiced by exactly the code every other caller uses. A second
+implementation of the step loop is how this importer came to disagree with the
+library once already.
 
-Deliberately stdlib-only, like `wjazzd`: `musthe` remains the sole dependency.
+Deliberately stdlib-only: `musthe` remains the sole dependency.
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ from arranger import (
     resolve_voices,
     voices_have_soprano,
 )
-from wjazzd import (
+from arranger.slots import (
     arrange_slots,
     midi_to_note_name,
     promote_slash_chord,
@@ -89,7 +89,7 @@ __all__ = [
 # 3.1-era reader will accept, this one says what each one *means* here.
 #
 # A kind the library cannot voice is absent rather than folded into a near
-# neighbour, on the same principle as `wjazzd.WEIMAR_QUALITY_ALIASES`: an
+# neighbour, on the same principle as `slots.promote_slash_chord` beside it: an
 # untranslatable chord is counted and reported, because a plausible wrong chord is
 # worse than a gap the user can see. `Neapolitan`, `Italian`, `French`, `German`,
 # `pedal`, `power`, `Tristan` and `none` are all absent for that reason - they are
@@ -302,7 +302,7 @@ def parse_musicxml_chord(
 
     The `<bass>` is split out and returned rather than glued onto the quality,
     because `ChordParser` would then fail every table lookup - the same trap
-    `wjazzd.parse_weimar_chord` documents for the database's slash chords.
+    `slots._slash_bass` documents for a slash chord in a symbol.
 
     `quality` is None for a chord this library cannot voice, and the caller counts
     it: a wrong-but-plausible quality is worse than a reported gap.
@@ -364,7 +364,7 @@ class HeadNote:
 
     `chord` is the symbol in force, `quality` the library spelling of it (None when
     the symbol was untranslatable, which is counted in `Head.unmapped`) and `bass`
-    a slash bass kept for the voicing preference, exactly as in the corpus path.
+    a slash bass kept for the voicing preference.
     """
 
     bar: int
@@ -1262,8 +1262,8 @@ def melody_at(notes: Sequence[HeadNote], bar: int, beat: float) -> Optional[str]
 #: The note a chord slot carries when **no melody note is sounding at that position**.
 #:
 #: **A real pitch, and that is a deliberate lie with a reason.** The slot tuple's first
-#: element is consumed by the corpus pre-pass, which parses it with `musthe.Note` and
-#: resolves it against the chord (`wjazzd.unresolved_steps`); `NO_CHORD` there raises
+#: element is consumed by the slot pre-pass, which parses it with `musthe.Note` and
+#: resolves it against the chord (`slots.unresolved_steps`); `NO_CHORD` there raises
 #: `ValueError`, measured rather than assumed. So the placeholder must parse.
 #:
 #: It is a *placeholder*, never a claim. On the comping route the melody is the horn's, the
@@ -1434,7 +1434,7 @@ def head_skeleton(
             # loader counted it in `Head.unmapped`, so the gap is reported rather
             # than silent.
             continue
-        # Rule B, the same promotion the corpus path applies: a triad whose bass
+        # A triad whose bass
         # is its own seventh implies the seventh chord. It takes the *root*, not
         # the full chord name, which is why the root is split off here rather
         # than rebuilt from `chosen.chord` at the call site.
@@ -1463,10 +1463,10 @@ def arrange_xml_head(
     Returns the steps, the `Head` they came from - so the caller can report the
     title, the metre and the loader's diagnostics - and any notes worth printing.
 
-    The voicings come from `wjazzd.arrange_slots`, which is the corpus path's own
-    step loop, so the non-chord-tone strategies, the opt-in diminished retry, the
-    repeated-melody hold and the slash-bass preference are identical whichever
-    source a head was read from. Only the *selection* is this module's business.
+    The voicings come from `arranger.slots.arrange_slots`, the engine's own slot
+    layer, so the non-chord-tone strategies, the opt-in diminished retry, the
+    repeated-melody hold and the slash-bass preference are the engine's rather than
+    this importer's. Only the *selection* is this module's business.
 
     `fallback` may be "diminished"; it replaces the written chord, so it is off
     unless asked for.
@@ -1608,17 +1608,16 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     """The `head` command: arrange a MusicXML file as chord-melody.
 
     Returns a process exit code. It is a thin front end over `arrange_xml_head`
-    and the same renderers `corpus_cli` uses, so a head from a score and a head
-    from the database render identically.
+    and the whole-progression renderers, so it prints the same tabs any other
+    caller gets.
 
-    `argparse` is imported inside the function for the reason `wjazzd.corpus_cli`
-    imports it there: the module stays importable - and cheap - for a caller who
-    only wants `load_musicxml`.
+    `argparse` is imported inside the function so the module stays importable -
+    and cheap - for a caller who only wants `load_musicxml`.
     """
     import argparse
 
     from arranger.cli import HEAD_HELP, add_common_arguments, render_and_write
-    from wjazzd import parse_bar_range
+    from arranger.slots import parse_bar_range
 
     parser = argparse.ArgumentParser(
         prog="arranger head",
@@ -1648,8 +1647,8 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
             # A bad range is a usage error, so report it as one rather than
             # letting a ValueError traceback reach the user.
             parser.error(str(error))
-        # `parse_bar_range` allows an open-ended "12", which the corpus path
-        # resolves against the section's own end. A file has no section, so an
+        # `parse_bar_range` allows an open-ended "12", which the section
+        # resolves against its own end. A file has no section, so an
         # open range runs to the end of the head - which is what "the rest of it"
         # means, and is why this is not silently ignored.
         if hi is None:
@@ -1703,8 +1702,7 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     # the wrong grid, and a tune notated 2/2 displayed as common time. `beat_type`
     # is what makes it 2/2 rather than 2/4 - the bar length is the same either
     # way, so this is the difference between the right metre and a wrong-looking
-    # one. The corpus command passes nothing here, because a Weimar transcription
-    # is 4/4 and every writer already assumes that.
+    # one.
     #
     # The **key** is passed on exactly the same terms, and for the same kind of
     # reason: it is not decoration either. A score in three flats exported in C

@@ -121,6 +121,7 @@ arranger/
 │   ├── options.py       #   ArrangeOptions - the knobs as one value
 │   ├── decisions.py     #   decisions both step loops share
 │   ├── steps.py         #   VoiceLeadingEngine and the one step loop
+│   ├── slots.py         #   the slot layer: triples to steps, the one pre-pass
 │   ├── render.py        #   format_progression and per-step rendering
 │   └── cli.py           #   the two CLIs' shared flags and output dispatch
 ├── tabstaff.py          # whole-progression staff renderers (ASCII + HTML)
@@ -150,16 +151,16 @@ dynamically from `arranger.__version__` — that is the single source of truth, 
 ### The engine is a package, and the order is enforced
 
 The engine was one 4290-line module until Phase 5 of the package refactor. It is
-now twelve modules in a strict dependency order:
+now thirteen modules in a strict dependency order:
 
 ```
 tuning -> diagnostics -> chords -> grips -> cost -> textures
                                                    |
                             bass <- options -----+----> decisions
                                                    |
-                                                 steps -> render -> cli
-                                                            |
-                                                          (facade)
+                                                 steps -> slots -> render -> cli
+                                                            |              |
+                                                          (facade) <-------+
 ```
 
 A module may import only what is *below* it, and

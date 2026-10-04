@@ -48,7 +48,7 @@ from typing import TYPE_CHECKING, Any, List
 
 from musthe import Note  # re-exported: `from arranger import Note` is used by tests
 
-from . import cli, cost, decisions, options
+from . import cli, cost, decisions, options, slots
 from .bass import (
     BASS_ANCHORS,
     BASS_AUTO,
@@ -87,6 +87,7 @@ from .grips import (
     supported_string_sets,
 )
 from .render import _print_step, _step_annotation, format_progression
+from .slots import arrange_slots, parse_bar_range, unresolved_steps
 from .steps import StepPreparation, VoiceLeadingEngine
 from .textures import (
     ALL,
@@ -419,6 +420,7 @@ __all__ = [
     "grid_allowed",
     "grid_positions",
     "on_grid",
+    "parse_bar_range",
     "parse_grid",
     "resolve_grid",
     "HARMONY_AUTO",
@@ -464,6 +466,7 @@ __all__ = [
     "TEXTURE_STYLES",
     "THUMB_TEXTURES",
     "ArrangementStep",
+    "arrange_slots",
     "ChordParser",
     "Diagnostics",
     "GuitarFretboard",
@@ -493,12 +496,14 @@ __all__ = [
     "melody_allowed",
     "options",
     "render",
+    "slots",
     "sounding_harmony",
     "steps",
     "supported_string_sets",
     "thumb_capacity",
     "textures",
     "tuning",
+    "unresolved_steps",
     "write_musicxml",
     "write_tab_html",
     "write_gp5",
