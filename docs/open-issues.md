@@ -1134,10 +1134,13 @@ said. Measured on the 2/2 fixtures, every named grid now places something — `e
 - **`NO_CHORD` is not usable as a placeholder melody.** The corpus pre-pass parses a slot's
   melody with `musthe.Note` (`wjazzd.unresolved_steps`) and it raised
   `ValueError: Could not parse the note 'NC'` — a crash, not a wrong note.
-  `_PLACEHOLDER_MELODY = "C4"` parses, and is documented as the **cost of a deferral**
+  `_PLACEHOLDER_MELODY = "C4"` parses, and was documented as the **cost of a deferral**
   rather than as a design: the honest field is `ArrangementStep.melody: Optional[str]`,
-  which would let a slot with no tune carry no note at all. Deferred, measured, and
-  asserted in a test so it cannot be quietly forgotten.
+  which lets a slot with no tune carry no note at all. **Fixed (§9.3 step B):** the
+  sentinel is deleted rather than hidden, `headxml.chord_slots` emits `None` where no
+  note sounds, every renderer prints the absence blank, and the test that asserted
+  equality against the placeholder — which all 30 real `C4` slots across the fixtures
+  could have satisfied for the wrong reason — now asserts `IsNone`.
 
 **A third change in the same working tree was a misdiagnosis, and it is recorded here
 because it is the shape of item 8 rather than a fact about item 10.** Stage 3 also
@@ -1181,10 +1184,11 @@ database and its loader are gone (`arranger.slots` is what remains of the part t
 was not corpus-specific), so the debt no longer has a subject. The 164 tests that
 would have fixed it were removed with it rather than ported.
 
-`melody_alone_case`'s fifth kind is likewise still owed: an invented slot carries a
-placeholder melody rather than none, so it reaches that function as a melody slot and takes
-the comping route by virtue of `melody_voiced=False` rather than by its own nature. That
-works, and it is a debt rather than a design.
+`melody_alone_case`'s fifth kind is likewise still owed: an invented slot now carries
+`None` (step B deleted the placeholder), but it still reaches that function as a melody
+*slot* and takes the comping route by virtue of `melody_voiced=False` rather than by its
+own nature. That works, and it is a debt rather than a design — step B removed the
+invention, not the missing kind.
 
 ### Why it is not a patch
 
@@ -1195,7 +1199,9 @@ means slots a grid position can create, which changes:
   slots as well as note slots. (`Head` no longer appears here: stages 1 and 2 built the
   timeline it would have had to carry.)
 - `ArrangementStep.melody` — `None` on a slot no melody note created, and all four
-  renderers assume otherwise for alignment;
+  renderers assume otherwise for alignment; **the field half of this is done** (step B
+  made it `Optional` and taught the renderers to print the absence blank), so only the
+  `melody_alone_case` kind remains;
 - `decisions.melody_alone_case` — an invented slot has no melody note to be alone *with*,
   so its `kind` vocabulary would need a fifth value or the slot would never reach it.
 

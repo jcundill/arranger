@@ -19,10 +19,9 @@ from typing import Optional
 from xml.etree import ElementTree
 
 import arranger
-from arranger import NO_CHORD, ChordParser
+from arranger import NO_CHORD, ChordParser, Diagnostics, format_progression
 from arranger.slots import arrange_slots
 from headxml import (
-    _PLACEHOLDER_MELODY,
     Head,
     HeadChange,
     _key_label,
@@ -33,8 +32,11 @@ from headxml import (
     head_cli,
     head_skeleton,
     load_musicxml,
+    melody_at,
+    melody_state,
     parse_musicxml_chord,
 )
+from tabstaff import format_tab_staff, write_tab_html
 from tabxml import _events, _substitute_steps
 
 # The real scores the importer's tests read, in `tests/data/`. They are committed
@@ -1145,7 +1147,7 @@ class TestChordSlots(unittest.TestCase):
         self.assertGreater(first, 1.0, "a position with no harmony was filled in")
 
     def test_the_singing_route_is_not_touched(self):
-        """`melody=auto` unions nothing, and no placeholder reaches a singing part.
+        """`melody=auto` unions nothing, and no invented note reaches a singing part.
 
         The regression that makes this necessary, and it was measured rather than
         predicted: `parse_voices("auto")` returns the **sentinel** `("auto",)`, which has
@@ -1158,20 +1160,167 @@ class TestChordSlots(unittest.TestCase):
         self.addCleanup(os.unlink, path)
         singing, _head, _notes = arrange_xml_head(path)
         self.assertEqual([s.melody for s in singing], ["C5"])
-        self.assertNotIn(_PLACEHOLDER_MELODY, [s.melody for s in singing])
+        self.assertNotIn(None, [s.melody for s in singing])
 
-    def test_a_slot_whose_melody_has_stopped_carries_the_placeholder(self):
-        """Where no note is sounding, `melody_at` is `None` and the slot says so plainly.
+    def test_a_slot_whose_melody_has_stopped_carries_no_melody(self):
+        """Where no note is sounding, the slot carries `None` rather than an invention.
 
         Bar 32 of `heres_that_rainy_day` follows the last melody note, so there is no tune
-        under the chord. `_PLACEHOLDER_MELODY` is what stands in, and it is a placeholder
-        rather than a claim — the honest `Optional[str]` is deferred and recorded in the
-        issue. Asserted so the deferral is visible in a test rather than only in prose.
+        under the chord. The deleted `_PLACEHOLDER_MELODY` stood in with a pitch that
+        parsed but was not playing; `None` is the honest value, and the assertion is
+        `assertIsNone` rather than an equality a placeholder could have satisfied — all
+        30 real `C4` slots across the fixtures sat on genuinely written C4s, which is why
+        equality against a sentinel could pass for the wrong reason (§9.3 step B).
         """
         slots = [s for s in chord_slots(self.rainy, grid="freddie") if s[3] == 32]
         self.assertTrue(slots, "bar 32 must place its chords")
         for melody, _quality, _name, _bar, _beat, _duration in slots:
-            self.assertEqual(melody, _PLACEHOLDER_MELODY)
+            self.assertIsNone(melody)
+
+
+class TestMelodyState(unittest.TestCase):
+    """`melody_state`: onset / held / silent, the split `melody_at` cannot give (§9.3 step B).
+
+    Only an onset is a position to reharmonise under (§9.2): a held note was decided
+    where it began, and a silent position has nothing to decide beneath. `melody_at`'s
+    two-way answer collapses the first two, so these tests keep them apart on a real
+    score rather than on a constructed tuple.
+    """
+
+    def setUp(self):
+        self.head = load_musicxml(RAINY_DAY)
+        self.notes = self.head.notes
+
+    def _integer_onset(self):
+        """A note beginning on an exact beat, so the rounding test cannot wobble."""
+        return next(n for n in self.notes if n.beat == int(n.beat))
+
+    def test_a_written_onset_reports_onset(self):
+        """A position a note begins at is its onset - the note's own `key`."""
+        note = self._integer_onset()
+        self.assertEqual(melody_state(self.notes, note.bar, note.beat), "onset")
+
+    def test_a_position_inside_a_sounding_note_reports_held(self):
+        """A probe between a note's onset and its end inherits that note.
+
+        The probe is the note's own midpoint (`duration * 2` in beats, half of the
+        `duration * 4` that `melody_at` adds), so where no other note begins and this
+        one is in force the answer must be "held" - asserted as *some* position on the
+        fixture qualifying, because one colliding with a later onset merely drops out.
+        """
+        probes = [
+            (note.bar, round(note.beat + note.duration * 2.0, 6))
+            for note in self.notes
+            if note.duration > 0
+        ]
+        held = [
+            (bar, beat) for bar, beat in probes
+            if melody_state(self.notes, bar, beat) == "held"
+        ]
+        self.assertTrue(held, "no position inside a sounding note reports held")
+
+    def test_a_bar_after_the_melody_ends_reports_silent(self):
+        """Bar 32 of `heres_that_rainy_day` has chords and no tune over them."""
+        for beat in (1.0, 1.5, 2.0):
+            with self.subTest(beat=beat):
+                self.assertEqual(melody_state(self.notes, 32, beat), "silent")
+
+    def test_the_onset_test_rounds_the_beat_like_head_note_key(self):
+        """A beat differing in the seventh decimal is the same position, not a new one.
+
+        The rule is `HeadNote.key`'s rounding - one rule, one answer - and §9.5's
+        measurement snippet (`abs(n.beat - beat) < 1e-9`) is a *different* rule that
+        would call an offset of 1e-7 a separate position and report "held" here. Two
+        roundings of the same beat is the disagreement `HeadNote.key`'s docstring
+        exists to forbid.
+        """
+        note = self._integer_onset()
+        self.assertEqual(melody_state(self.notes, note.bar, note.beat + 1e-7), "onset")
+
+
+class TestSilentSlotsCarryNoMelody(unittest.TestCase):
+    """§9.3 step B at the step level: `ArrangementStep.melody` is `Optional`, honestly.
+
+    The deletion's visible half (open-issues item 10): `Cmaj7  C4  (shell - 3rd & 7th,
+    partial)` was printed by the default line tab 14 times on `but_not_for_me` under
+    `--voices alto,tenor --grid freddie`, reading as a claim that the guitar played C4.
+    It did not. What is asserted here is the replacement: a slot the tune does not
+    occupy carries `None` and prints blank, while a slot it does occupy is unchanged -
+    held notes still carry the note in force (Option A), so this step moves nothing
+    under a sounding melody.
+    """
+
+    def _arrange(self):
+        """The comping union over `heres_that_rainy_day`, whose melody ends before bar 32."""
+        return arrange_xml_head(RAINY_DAY, melody="alto,tenor", grid="freddie")
+
+    def test_a_slot_where_the_melody_stopped_carries_none(self):
+        """Bar 32 sits under a chord and over no note; the step says so plainly."""
+        steps, _head, _notes = self._arrange()
+        silent = [s for s in steps if s.bar == 32]
+        self.assertTrue(silent, "bar 32 must place its chords")
+        for step in silent:
+            self.assertIsNone(step.melody, step.tab_line())
+            self.assertNotIn("C4", step.tab_line())
+            self.assertNotIn("None", step.tab_line())
+
+    def test_every_step_carries_the_note_actually_in_force(self):
+        """The invariant the placeholder could not state: `step.melody` *is* `melody_at`.
+
+        Every slot - written-note position or grid position - holds exactly the note
+        the tune sounds there, and `None` exactly where it sounds nothing. The
+        placeholder failed this by construction: all 30 real `C4` slots across the
+        fixtures sat on genuinely written C4s, so an equality against a sentinel could
+        pass for the wrong reason on either side.
+        """
+        steps, head, _notes = self._arrange()
+        self.assertTrue(steps)
+        for step in steps:
+            if step.bar is None or step.beat is None:
+                continue
+            self.assertEqual(
+                step.melody,
+                melody_at(head.notes, step.bar, step.beat),
+                f"bar {step.bar} beat {step.beat}: {step.tab_line()}",
+            )
+
+    def test_the_renderers_print_the_absence_blank(self):
+        """No renderer says `None`, and none invents the deleted `C4`.
+
+        The three surfaces that read `step.melody`: the line tab and the diagnostic
+        line (`arranger.render`), the ASCII staff's width and melody row (`tabstaff`),
+        and the HTML melody row. Each had its own formatting path, and each raised or
+        lied on a `None` before step B.
+        """
+        steps, _head, _notes = self._arrange()
+        self.assertNotIn("None", format_progression(steps))
+        staff = format_tab_staff(steps, show_melody=True)
+        self.assertNotIn("None", staff)
+        with tempfile.TemporaryDirectory() as tmp:
+            html = write_tab_html(steps, os.path.join(tmp, "silent.html"))
+            self.assertNotIn("None", html)
+
+    def test_a_no_note_slot_on_a_singing_route_is_refused_with_a_warning(self):
+        """The combination no shipped flow produces is refused, not guessed.
+
+        Silent slots arrive only through the comping union, which runs only when the
+        voice selection has no soprano. A caller who hand-builds a `None` under a
+        singing selection gets a warning and a skipped slot: the guitar cannot sing
+        what is not there, and inventing a pitch is the rule the deleted placeholder
+        broke.
+        """
+        diagnostics = Diagnostics()
+        steps, _rescued, _notes = arrange_slots(
+            [(None, "m7", "Dm7"), ("C5", "maj7", "Cmaj7")],
+            [(1, 1.0, 0.5), (1, 2.0, 0.5)],
+            melody="auto",
+            diagnostics=diagnostics,
+        )
+        self.assertEqual([s.chord for s in steps], ["Cmaj7"])
+        self.assertTrue(
+            any("has no melody note" in w for w in diagnostics.warnings),
+            diagnostics.warnings,
+        )
 
 
 class TestKeySignature(unittest.TestCase):

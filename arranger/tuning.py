@@ -285,7 +285,12 @@ class Voicing:
 class ArrangementStep:
     """Represents one chord-melody step in an arranged progression."""
     chord: str
-    melody: str
+    # The melody this step carries, or None when no note sounds at its position: a
+    # comping slot placed by the grid where the tune is silent says so plainly rather
+    # than borrowing a pitch (the deleted `_PLACEHOLDER_MELODY`, §9.3 step B). A held
+    # position keeps the note in force, so None means *silent*, not *held* - the
+    # onset/held/silent split is `headxml.melody_state` when the difference is asked.
+    melody: Optional[str]
     voicing: Voicing
     # Non-chord-tone bookkeeping, filled in by arrange_progression. Defaults keep
     # the dataclass and its dict-style shim backward compatible.

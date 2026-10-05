@@ -996,6 +996,13 @@ across the fixtures sit on genuinely written C4s — so any test asserting
 `melody == _PLACEHOLDER_MELODY` can pass for the wrong reason, including the one that
 currently documents the deferral.
 
+**Landed.** `headxml.melody_state` is the sibling, `chord_slots` emits `None` for a slot
+no note occupies, `ArrangementStep.melody` is `Optional[str]`, `_PLACEHOLDER_MELODY` is
+deleted, and the renderers print the absence blank — the sentinel-equality test became
+`assertIsNone`. Held slots still carry the note in force (Option A above), so the
+three-state split is exposed by `melody_state` rather than by the field; the fifth
+`melody_alone_case` kind is still not in this step.
+
 **Step A — `every_note` as a declared property.** It is not a rhythm pattern but the *absence*
 of one: `GridPattern(positions=())`, `on_grid` true for every beat, `grid_allowed` true
 unconditionally because reading it off `grid_positions` would report "places nothing in every

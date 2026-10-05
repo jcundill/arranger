@@ -510,7 +510,7 @@ class VoiceLeadingEngine:
     @classmethod
     def prepare_step(
         cls,
-        progression: List[Tuple[str, str, str]],
+        progression: Sequence[Tuple[Optional[str], str, str]],
         index: int,
         previous: Optional[Voicing] = None,
         previous_chord: Optional[str] = None,
@@ -541,6 +541,12 @@ class VoiceLeadingEngine:
         if diagnostics is None:
             diagnostics = default_diagnostics()
         note_str, chord_type, name = progression[index]
+        if note_str is None:
+            # No melody to pin. `arrange_progression` skips such a slot before it can
+            # reach here - every singing route needs a note, and the comping route
+            # never calls this - so this is the widened triple type's honest answer
+            # rather than a `Note(None)` waiting for a caller that lies.
+            return None
         melody_note = Note(note_str)
 
         # Chord-tone match first, quality-only fallback second, across every
@@ -645,7 +651,7 @@ class VoiceLeadingEngine:
     @classmethod
     def arrange_progression(
         cls,
-        progression: List[Tuple[str, str, str]],
+        progression: Sequence[Tuple[Optional[str], str, str]],
         top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
         non_chord_tone: str = "extension",
         fret_min: int = NECK_FRET_MIN,
@@ -968,7 +974,21 @@ class VoiceLeadingEngine:
         for slot in loop:
             index = slot.index
             note_str, chord_type, name = progression[index]
-            melody_note = Note(note_str)
+            if note_str is None:
+                if melody_voiced:
+                    # Defensive, and never taken by a shipped flow: a slot with no
+                    # melody note arrives only through the comping union
+                    # (`headxml._merge_chord_slots`), which runs only when the voice
+                    # selection has no soprano. Refusing loudly rather than inventing
+                    # a note is the rule the deleted placeholder used to break.
+                    diagnostics.warn(
+                        f"Warning: slot {index} has no melody note but this voice "
+                        f"selection asks the guitar to sing; skipping the slot"
+                    )
+                    continue
+                melody_note = None
+            else:
+                melody_note = Note(note_str)
 
             # Where this slot falls in the bar, and therefore what it is for. Read
             # defensively, exactly as wjazzd.arrange_slots guards its own timings: a
@@ -987,18 +1007,29 @@ class VoiceLeadingEngine:
             # what lets the second bar of a two-bar chord restate its shell when the
             # player re-articulates the line there and stay thin when they do not).
             harmony_key = normalised_harmony(name)
+            # A silent slot moves nothing onto the beat: `melody_moves` is False, and
+            # the tracked pitch clears to None so the next onset reads as the melody
+            # arriving there - a fresh attack after silence counts as movement, which
+            # is what the placeholder's C4 accidentally produced for the slot *after*
+            # a rest, minus its false claim about the silent slot itself.
+            melody_moves = (
+                melody_note is not None
+                and (previous_melody_midi is None
+                     or melody_note.midi_note() != previous_melody_midi)
+            )
             role = _roles_for_slot(
                 weight,
                 texture,
                 harmony_changed=(last_target_harmony is None
                                  or harmony_key != last_target_harmony),
-                melody_moves=(previous_melody_midi is None
-                              or melody_note.midi_note() != previous_melody_midi),
+                melody_moves=melody_moves,
                 has_thumb=has_thumb,
             )[0]
             if role == ROLE_TARGET:
                 last_target_harmony = harmony_key
-            previous_melody_midi = melody_note.midi_note()
+            previous_melody_midi = (
+                melody_note.midi_note() if melody_note is not None else None
+            )
             # The texture decides which grips are *available* on this step. It is not a
             # term in the cost, so a fill cannot be outbid for being in position - the
             # point is that fewer notes are played here, not that this shape is better.
@@ -1062,6 +1093,10 @@ class VoiceLeadingEngine:
                 )
                 continue
             if melody_alone == MELODY_ALONE_TEXTURE:
+                # This kind is answered only when the guitar sings, and a singing slot
+                # with no note was refused at the top of this loop - so a note is
+                # pinned here, which is what lets the type say so below.
+                assert melody_note is not None
                 solo_voicing = cls.get_melody_only_voicing(
                     melody_note, prefer=top_strings
                 )
@@ -1091,6 +1126,9 @@ class VoiceLeadingEngine:
             # `melody_only` flag is set here and *only* here; a texture case above
             # reaches the same route deliberately without it.
             if melody_alone == MELODY_ALONE_NO_CHORD:
+                # As the texture branch above: this kind means the guitar sings, and
+                # that guard already refused a singing slot with no note.
+                assert melody_note is not None
                 solo_voicing = cls.get_melody_only_voicing(melody_note, prefer=top_strings)
                 if solo_voicing is None:
                     diagnostics.warn(
@@ -1189,6 +1227,18 @@ class VoiceLeadingEngine:
                     shell_root=harmony_family == HARMONY_SHELL_ROOT,
                 )
                 if not candidates:
+                    if melody_note is None:
+                        # The ordinary fallback below voices *the melody*, and this
+                        # slot has none to voice - there is no thin shape to fall back
+                        # to either, so the chord of the tune cannot be stated here at
+                        # all. Reported as the hole it is and skipped; the next grid
+                        # position still gets its chance.
+                        diagnostics.warn(
+                            f"Warning: no guide-tone comping shape found for {name} "
+                            f"and no melody note at this position to fall back to; "
+                            f"skipping the slot"
+                        )
+                        continue
                     # No guide-tone shape in a playable position. The chord of the tune
                     # is still owed to the band, so fall through to the ordinary
                     # melody-bearing route rather than dropping the bar - the same
@@ -1253,6 +1303,10 @@ class VoiceLeadingEngine:
                     )
                     continue
 
+            # Every melody-bearing route below pins a note, and a slot with none has
+            # left the loop by now: the guard at the top refuses one the guitar is
+            # asked to sing, and the comping block above always steps or continues.
+            assert melody_note is not None
             # Everything up to choosing a shape is shared with the corpus loader,
             # which needs the same candidates but honours a slash bass first. See
             # prepare_step.
@@ -1540,14 +1594,18 @@ class VoiceLeadingEngine:
 
     @classmethod
     def _next_resolution_melody(
-        cls, progression: List[Tuple[str, str, str]], index: int
+        cls, progression: Sequence[Tuple[Optional[str], str, str]], index: int
     ) -> Optional[str]:
         """
         The pitch the melody line resolves into: the first following step whose
         melody is a chord tone of its own chord (None when the phrase never
         resolves). Used to spell the dim7 substitution's root.
+
+        A slot with no melody note is stepped over: silence resolves into nothing.
         """
         for note_str, chord_type, name in progression[index + 1:]:
+            if note_str is None:
+                continue
             if cls.is_chord_tone(Note(note_str), chord_type, name):
                 return note_str
         return None

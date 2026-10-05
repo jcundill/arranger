@@ -250,7 +250,7 @@ def format_progression(steps: List[ArrangementStep]) -> str:
         The rendered tab, with steps separated by newlines.
     """
     return "\n".join(
-        f"{step.chord:<8} {step.melody:<3} "
+        f"{step.chord:<8} {(step.melody or ''):<3} "
         f"{_step_annotation(step)} {'-'.join(_step_cells(step))}".rstrip()
         for step in steps
     )
@@ -260,6 +260,6 @@ def _print_step(step: ArrangementStep) -> None:
     """Prints one arranged step, including which string carries the melody."""
     melody_string = 6 - step.voicing.soprano_string()  # guitar string number, 1 = high E
     print(
-        f"Chord: {step.chord:<8} | Melody: {step.melody:<3}{_step_annotation(step)} | "
+        f"Chord: {step.chord:<8} | Melody: {(step.melody or ''):<3}{_step_annotation(step)} | "
         f"Tab [E-A-D-G-B-E]: {'-'.join(_step_cells(step))} | Melody string: {melody_string}"
     )

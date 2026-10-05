@@ -76,6 +76,7 @@ __all__ = [
     "head_skeleton",
     "load_musicxml",
     "melody_at",
+    "melody_state",
     "parse_musicxml_chord",
 ]
 
@@ -1259,32 +1260,43 @@ def melody_at(notes: Sequence[HeadNote], bar: int, beat: float) -> Optional[str]
     return found.note_name
 
 
-#: The note a chord slot carries when **no melody note is sounding at that position**.
-#:
-#: **A real pitch, and that is a deliberate lie with a reason.** The slot tuple's first
-#: element is consumed by the slot pre-pass, which parses it with `musthe.Note` and
-#: resolves it against the chord (`slots.unresolved_steps`); `NO_CHORD` there raises
-#: `ValueError`, measured rather than assumed. So the placeholder must parse.
-#:
-#: It is a *placeholder*, never a claim. On the comping route the melody is the horn's, the
-#: guitar is not singing it, and the step's `melody` field carries this only so four
-#: renderers keep their alignment. The honest fix is `ArrangementStep.melody: Optional[str]`
-#: and is **deferred**, recorded as such in open-issues item 10 — this is the cost of that
-#: deferral, stated rather than hidden. `melody_at` returning `None` is therefore normal
-#: and not an error.
-#:
-#: **Why not carry the melody in force instead?** Because there is none here: this is the
-#: position where the tune has stopped or has not begun. The nearest written note would be
-#: inventing a melody that is not playing, which is the failure `chord_at` refuses when it
-#: returns `None`. `C4` is arbitrary and unreachable-in-practice; a borrow is not.
-_PLACEHOLDER_MELODY = "C4"
+def melody_state(notes: Sequence[HeadNote], bar: int, beat: float) -> str:
+    """Whether a melody note **articulates**, still **sounds**, or is absent at `(bar, beat)`.
+
+    The three-way sibling of `melody_at`, for the question its two-way answer cannot
+    ask. `melody_at` says only whether something is in force; §9.2 needs the split
+    because only an **onset** is a position to reharmonise under — a held note was
+    already harmonised where it began, and substituting the chord beneath it now would
+    re-decide a decision already made under the very note that motivated it.
+
+    Returns `"onset"`, `"held"` or `"silent"`:
+
+    - **onset** — a note begins exactly here (its `HeadNote.key` is this position);
+    - **held** — a note begun earlier still sounds here, so the position inherits it;
+    - **silent** — nothing sounds, the melody has stopped or has not begun, which is
+      exactly when `melody_at` returns `None`.
+
+    **The onset test is `HeadNote.key`'s rounding, not a tolerance of its own.**
+    The timelines this library compares against each other — `chord_at` against a
+    note's position, `melody_at` against a grid position — round the beat the same
+    way, so a value differing only in the seventh decimal is one position to both. An
+    `abs(diff) < 1e-9` check here would be a second rule with its own answer, and the
+    two would disagree exactly on the file strange enough to need them.
+
+    A plain `str` rather than an enum: nothing branches on the answer yet — step C's
+    reharmonise table is what will read it.
+    """
+    if melody_at(notes, bar, beat) is None:
+        return "silent"
+    position = (bar, round(beat, 6))
+    return "onset" if any(note.key == position for note in notes) else "held"
 
 
 def chord_slots(
     head: Head,
     section: Optional[Tuple[int, int]] = None,
     grid: str = "every_note",
-) -> List[Tuple[str, str, str, int, float, float]]:
+) -> List[Tuple[Optional[str], str, str, int, float, float]]:
     """Every position `grid` names, as slots, **including positions no melody note has**.
 
     **The complement of `head_skeleton`, and the union of the two is what a comping part
@@ -1298,10 +1310,11 @@ def chord_slots(
 
     Returns `(melody, quality, chord, bar, beat, duration)`, and **`melody` is the note in
     force at that position, not a written one** — the rule `bass._bass_slots` already uses
-    for an invented beat. Carrying a melody rather than `None` is what lets this land
-    before `ArrangementStep.melody` becomes `Optional`, so the four renderers' alignment
-    assumptions stay untouched. That is a deferral rather than a solution and is recorded
-    as one in the issue.
+    for an invented beat — or **`None` when no note sounds**: the melody has stopped or has
+    not begun, and inventing one there is the failure `chord_at` refuses when it returns
+    `None`. `ArrangementStep.melody` is `Optional` to carry that honesty into the step, the
+    renderers print the absence blank, and `melody_state` says whether a present note is an
+    onset or a hold when that distinction is the question (§9.2's reharmonise rule).
 
     **A position with no melody note and no chord is skipped**, never guessed. Bar 1 beat
     1 of `but_not_for_me` is exactly that — a quarter rest under a `<harmony>` that only
@@ -1346,7 +1359,7 @@ def chord_slots(
         return []
     positions.sort()
 
-    slots: List[Tuple[str, str, str, int, float, float]] = []
+    slots: List[Tuple[Optional[str], str, str, int, float, float]] = []
     for index, (bar, beat) in enumerate(positions):
         change = chord_at(head.chords, bar, beat)
         if change is None or change.quality is None:
@@ -1364,17 +1377,21 @@ def chord_slots(
         promoted = promote_slash_chord(root_name or "", change.quality, change.bass)
         name = f"{change.chord}/{change.bass}" if change.bass else change.chord
         note = melody_at(head.notes, bar, beat)
-        slots.append((note or _PLACEHOLDER_MELODY, promoted, name, bar, beat, length))
+        slots.append((note, promoted, name, bar, beat, length))
     return slots
 
 
 def head_skeleton(
     head: Head,
     section: Optional[Tuple[int, int]] = None,
-) -> List[Tuple[Tuple[str, str, str], int, float, float]]:
+) -> List[Tuple[Tuple[Optional[str], str, str], int, float, float]]:
     """A loaded head as slots: (triple, bar, beat, duration), **one per written note**.
 
-    **There is no reduction here any more**, and that is the point. `strategy` used to
+    The melody half is typed `Optional[str]` although every note *this* function
+    emits is written: its slots are unioned with `chord_slots`', whose positions
+    include ones no note occupies, and one list has one type (§9.3 step B).
+
+    There is no reduction here any more, and that is the point. `strategy` used to
     name a grid - a chord change, a beat, an eighth, a sixteenth, or a note - and every
     note was quantised onto it, so two notes closer together than the grid shared a slot
     and one of them was silently dropped from the arrangement. Measured on the committed
@@ -1418,7 +1435,7 @@ def head_skeleton(
     # `chosen.beat`, the note's own float, and only the grouping is rounded.
     groups = {(note.bar, round(note.beat, 6)): note for note in notes}
 
-    slots: List[Tuple[Tuple[str, str, str], int, float, float]] = []
+    slots: List[Tuple[Tuple[Optional[str], str, str], int, float, float]] = []
     for key in sorted(groups):
         chosen = groups[key]
         # `key[0]` rather than unpacking: the bar is an int and needs no rounding, and
@@ -1516,11 +1533,11 @@ def arrange_xml_head(
 
 
 def _merge_chord_slots(
-    slots: List[Tuple[Tuple[str, str, str], int, float, float]],
+    slots: List[Tuple[Tuple[Optional[str], str, str], int, float, float]],
     head: Head,
     section: Optional[Tuple[int, int]],
     grid: str,
-) -> List[Tuple[Tuple[str, str, str], int, float, float]]:
+) -> List[Tuple[Tuple[Optional[str], str, str], int, float, float]]:
     """`head_skeleton`'s slots plus `chord_slots`', in one ordered list.
 
     **A union on `(bar, beat)`, and the melody slot wins a collision.** A position that
@@ -1552,7 +1569,7 @@ def _merge_chord_slots(
         return slots
 
     existing = {(bar, round(beat, 6)) for _triple, bar, beat, _dur in slots}
-    merged: List[Tuple[Tuple[str, str, str], int, float, float]] = list(slots)
+    merged: List[Tuple[Tuple[Optional[str], str, str], int, float, float]] = list(slots)
     for melody, quality, name, bar, beat, length in extra:
         if (bar, round(beat, 6)) in existing:
             continue

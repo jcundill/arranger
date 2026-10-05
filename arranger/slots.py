@@ -84,7 +84,7 @@ def parse_bar_range(text: str) -> Tuple[int, Optional[int]]:
         raise ValueError(f"Bar range {text!r} is empty; HI must be greater than LO")
     return (lo, hi)
 def unresolved_steps(
-    triples: Sequence[Tuple[str, str, str]],
+    triples: Sequence[Tuple[Optional[str], str, str]],
     non_chord_tone: str = "extension",
 ) -> List[int]:
     """Indexes of steps no non-chord-tone strategy could resolve.
@@ -93,10 +93,16 @@ def unresolved_steps(
     not a chord tone, and neither `extension` nor the strategy in force maps it
     onto a substitute. Reported so a user can see what `--fallback diminished`
     would buy without enabling it.
+
+    A triple with no melody note is never unresolved: there is no note to be a
+    non-chord tone, so §9.2's rule holds - the rescue fires at an onset, not
+    under silence.
     """
     unresolved: List[int] = []
     for index, (note, quality, name) in enumerate(triples):
         if quality == NO_CHORD or not name:
+            continue
+        if note is None:
             continue
         melody = Note(note)
         if VoiceLeadingEngine.is_chord_tone(melody, quality, name):
@@ -151,16 +157,19 @@ def midi_to_note_name(pitch: int) -> str:
 
 
 def _next_chord_tone_melody(
-    triples: Sequence[Tuple[str, str, str]], index: int
+    triples: Sequence[Tuple[Optional[str], str, str]], index: int
 ) -> Optional[str]:
     """The next melody note that is a chord tone of its own chord, if any.
 
     Read by the diminished retry: a substituted chord is easier to sing and easier
     to voice when there is a following note the ear can move to, so this is what
     the retry offers the engine as `next_melody`.
+
+    A slot with no melody note is stepped over - silence carries no pitch to move
+    to, and the scan keeps looking past it.
     """
     for melody, quality, name in triples[index + 1:]:
-        if quality == NO_CHORD or not name:
+        if melody is None or quality == NO_CHORD or not name:
             continue
         if VoiceLeadingEngine.is_chord_tone(Note(melody), quality, name):
             return melody
@@ -218,7 +227,7 @@ def bass_cost(voicing_midis: Sequence[int], bass_pc: Optional[int]) -> int:
 
 
 def arrange_slots(
-    triples: Sequence[Tuple[str, str, str]],
+    triples: Sequence[Tuple[Optional[str], str, str]],
     timings: Sequence[Tuple[Optional[int], Optional[float], Optional[float]]] = (),
     non_chord_tone: str = "extension",
     fallback: Optional[str] = None,
@@ -320,6 +329,11 @@ def arrange_slots(
             # corpus bug rather than a shadowing one. The same trap `_corpus_options`
             # dodges for `bass`, documented beside its own loop.
             note, quality, name = triples[index]
+            if note is None:
+                # Not produced by `unresolved_steps`, which skips a slot with no
+                # melody - there is no onset for the rescue to fire at. Kept so the
+                # widened triple type's None has an answer that is not `Note(None)`.
+                continue
             resolved = engine.resolve_non_chord_tone(
                 Note(note), quality, name, "diminished",
                 next_melody=_next_chord_tone_melody(triples, index),
@@ -347,7 +361,7 @@ def arrange_slots(
     return steps, rescued, notes
 
 def _slot_options(
-    triples: Sequence[Tuple[str, str, str]],
+    triples: Sequence[Tuple[Optional[str], str, str]],
     timings: Sequence[Tuple[Optional[int], Optional[float], Optional[float]]],
     non_chord_tone: str,
     grips: Tuple[str, ...],

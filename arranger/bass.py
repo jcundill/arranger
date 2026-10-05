@@ -486,7 +486,11 @@ class _Slot:
 
 
 def _walking_slots(
-    progression: List[Tuple[str, str, str]],
+    # `Sequence` + `Optional`, for the same reason as `timings` below: the engine's
+    # triples carry an `Optional` melody (§9.3 step B), and `List` is invariant - the
+    # covariance note on `timings` is this signature's whole reason for spelling both
+    # this way.
+    progression: Sequence[Tuple[Optional[str], str, str]],
     # `Sequence`, not `List`, and that is load-bearing rather than stylistic: the two
     # callers hold *different* timing types. `arrange_progression` supplies
     # `Tuple[int, float, ...]`, while `arrange_slots` builds
@@ -629,7 +633,7 @@ def _melody_timeline(
 
 
 def _bass_slots(
-    progression: List[Tuple[str, str, str]],
+    progression: Sequence[Tuple[Optional[str], str, str]],
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
     bass_line: List[BassNote],
     beats_per_bar: int = 4,
