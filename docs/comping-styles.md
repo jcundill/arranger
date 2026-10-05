@@ -20,6 +20,11 @@ rather than re-derived. It follows
 proposal that says what was measured, what is proposed and what is deliberately
 not built.
 
+**§9 is the next stage of the same work**, and it is the one that turns "comping" from a
+voice selection into a route with its own behaviour: what was measured about the melody's
+actual influence on a comping part, the rule that follows from it, and six steps in
+dependency order. Nothing in it is built.
+
 It is deliberately **not** in `docs/history/`, which is for completed plans and is never
 extended. The shipped `voices=` axis is described in [voices-axis.md](voices-axis.md); this
 document is about the **other two axes**, and about the fact that all three overlap.
@@ -274,13 +279,19 @@ split:
   All six `but_not_for_me` arrangements are byte-identical to their pre-change output, so
   the cost of this is paid entirely by the head that had the problem.
 
-  **`--skeleton` and `--pick` are gone from `arranger head`**, and the flag table with
-  them: the reduction they configured no longer exists, so keeping four names for one
-  behaviour would be a lie. The Weimar corpus keeps both, because it still reduces —
-  `wjazzd._slot_key` quantises and its `first`/`longest` still differ there, where
-  `head`'s no longer can. **The two paths therefore mean different things by these names
-  today**, which is recorded rather than papered over; converging `wjazzd` on the same
-  rule is the obvious follow-up and is not this change.
+   **`--skeleton` and `--pick` are gone from `arranger head`**, and the flag table with
+   them: the reduction they configured no longer exists, so keeping four names for one
+   behaviour would be a lie. They had already stopped being flags — they were parameters
+   of `add_common_arguments`, gated on a vocabulary belonging to `wjazzd`, which
+   `head_cli` never passed — and the Weimar path has since been removed as well, so there
+   is no second reducer left to converge. `arranger/slots.py` is what remains of the slot
+   layer, and it is the engine's own rather than a loader's.
+
+   **Passages elsewhere in this document still discuss `--skeleton` as if it were live** —
+   §4.2's worked examples and §6 Q1 among them. They are left in place rather than
+   rewritten because they record *why* the grid was built the way it was, and deleting the
+   reasoning would lose the constraint that produced it. They describe a flag the tree no
+   longer has; §9 is where the grid's behaviour now actually lives.
 
   The four table rows above (`beats`, `eighths`, `sixteenths`, `notes`) are therefore a
   record of a decision that has been *acted on*, not a live menu. The chord axis that
@@ -465,6 +476,28 @@ Two live facts in the tree that this section did not know about, both settled in
 ---
 
 ## 6. Open questions
+
+**Read this before the list.** Several of these were answered by work recorded in §9, and a
+reader who stops here will think they are still open when they are not. The list is kept
+rather than pruned because the reasoning behind each answer is the useful part.
+
+| | status now |
+|---|---|
+| Q1 grid vs `--skeleton`'s lattice | **moot.** `--skeleton` is gone (§4.2), and stage 3 of open-issues item 10 settled the substance: the grid *generates* positions rather than selecting from a lattice. |
+| Q2 `harmony=guide` under `sings=yes` | settled as **(C)** — `harmony=` is scoped to the melody-free comping route. |
+| Q3 rename `--voices` to `harmony=` | still deferred, and **§9.4 argues it should stay deferred longer than planned.** |
+| Q4 does `--texture` survive? | **open**, with §9.6 giving the argument against removing it. |
+| Q5 where does the style table live? | open; gated on the DAG test. |
+| Q6 free-form grid spelling | open, and still the main tension in the proposal. |
+| Q7 `walking_bass`'s fate | open. |
+| Q8 integer eighths or float? | **settled by implementation** — `SUB` is an integer and has been all along. |
+| `melody_alone_case`'s fifth kind | **specified in §9.2** and scheduled as part of step B. |
+| stab duration | **open, and not covered by §9.** It is not `hold=` (withdrawn); the claim is that the grid owns the rhythm, so a stab lasts until the next grid position. Worth deciding with Q6, since a free-form spelling would have to say it too. |
+| the input's shape | **open, and the thing §9 is about** — a harmonisation engine whose input is a chord timeline rather than a list of melody notes. §9.4 finds it again from the arity side. |
+
+**Q8 deserves a note, because the document still calls it unresolved.** `SUB` is `1` in
+`textures.py` and is documented as *"the subdivision of a beat, in whole eighths. Integer on
+purpose"*. The integer won by implementation and the question was never revisited.
 
 1. **How does a placement grid sit on `--skeleton`'s lattice?** These are different
    things and they do not collide, which took a measurement to establish.
@@ -767,18 +800,592 @@ a comping baseline of `--voices alto,tenor`. "—" means not separately measured
 | flag | under a comping selection | when the guitar sings |
 |---|---|---|
 | `--texture` | changes | changes |
-| `--skeleton` | changes (`chords`, `beats`; the rest collapse to one) | changes |
 | `--grips` | changes — see §2 oddity 3 | changes |
-| `--non-chord-tone` | **inert** | changes |
+| `--non-chord-tone` | **inert** — see §9 | changes |
 | `--fallback` | changes | changes |
 | `--fret-min` / `--fret-max` | changes | — |
 | `--bass none` | inert (already the default) | — |
-| `--pick longest` | inert | — |
 | `--bars`, `--part` | input scope | input scope |
 | `--tab`, `--melody`, `--mutes`, `--bars-per-line` | render only | render only |
 | `--html`, `--musicxml`, `--gp5` | output format | output format |
 
-Only `--non-chord-tone` goes inert on the comping route for a reason a user could act on.
-`--bass none` and `--pick longest` are inert because they name the default, not because
-of the route. Everything else is either live and orthogonal, or already spoken for by a
-stage above.
+Only `--non-chord-tone` goes inert on the comping route for a reason a user could act on,
+and §9 is that reason: it is not inert by policy but because the code path that implements
+the three strategies is only reached from the melody-bearing branch. `--bass none` is inert
+because it names the default, not because of the route. Everything else is either live and
+orthogonal, or already spoken for by a stage above.
+
+`--skeleton` and `--pick` were in this table until the Weimar path was removed; they had
+become unreachable parameters rather than flags, and both are gone. `--melody` is proposed
+for removal in §9 as well.
+
+---
+
+## 9. The comping route, measured — a staged plan
+
+**Nothing in this section is built.** It records what was measured while answering "what
+does a pure comping part need?", and the order the work has to happen in. Every number
+below was measured on the committed fixtures; none is predicted.
+
+**Where the work stands, for whoever picks this up cold:**
+
+- **Nothing in §9 is implemented.** No engine behaviour has changed. The only edit to the
+  tree is this document.
+- **Every decision in §9 is settled.** The questions that shaped it — what `every_note` means
+  on a head with no melody, whether the melody-less file warns or is silent, what an unknown
+  grid does, whether `--fallback` reaches this route — are all answered below and marked as
+  decisions rather than left open.
+- **Read §9.1 and §9.2 first** for what is true of the code today, then §9.3 for the order.
+  §9.4 is the one item that reorders the plan if adopted, and §9.5 has the commands and the
+  fixture needed to re-measure any of it.
+- **Two traps are load-bearing and easy to undo.** Step 0 must land before step C, or C's
+  intended change to the *harmony* is indistinguishable from a regression in *placement*.
+  And the chords-only fixture does not exist in the tree — §9.5 carries its content, because
+  `/tmp` does not survive.
+
+The intent this serves: the project makes **chord-melody** arrangements, and should also be
+able to comp a lead sheet for a band where a horn takes the tune and a bass player takes
+the root. That is not an extension of the current entry point — it is a different question
+about the same chords — and §8's stages do not reach it.
+
+### 9.1 Five measurements
+
+**The comping route is already melody-independent, and structurally so.** Every melody pitch
+in `but_not_for_me.mxl` was replaced with a wild high non-chord tone (F♯5–F6), keeping every
+chord, bar, beat and duration:
+
+| selection | steps | melody scrambled |
+|---|---|---|
+| `alto,tenor` | 102 | **identical** |
+| `bass` | 102 | **identical** |
+| `tenor` / `alto` | 102 | **identical** |
+| `alto,tenor,bass` | 102 | **identical** |
+
+Not one fret moves, and the same holds on hand-written input. Two independent points
+enforce it: `get_comping_voicings` takes no melody argument at all, and `steps.py` passes
+`melody_pc=None` into `voicing_cost` deliberately — *"there is no melody on the guitar for
+the wrong-note count to excuse."* `melody_pc` is the only melody input to the cost tuple,
+so with it absent no melody can reach selection.
+
+**But the melody still decides how many comps, and when.** `every_note` yields one slot per
+written note (80 of 80); `freddie` yields 102, because stage 3 unions the grid's own
+positions in. So a horn player's phrasing determines the guitar's *rhythm* even though it
+cannot touch its *shapes*. That split is right for a comping part — the grid choosing when to
+stab is the whole point of the axis — and it is the reason `every_note` is the shipped
+default rather than a bug.
+
+**`--non-chord-tone` is inert on the comping route, and the table above predicted it.**
+Measured on this document's own example, a passing D over Cmaj7:
+
+| | `--non-chord-tone extension` | `diminished` |
+|---|---|---|
+| `voices=auto` | `harmonized_as=Cmaj9` | `harmonized_as=Bdim7` |
+| `voices=alto,tenor` | `None` | `None` |
+| `voices=alto,tenor,bass` | `None` | `None` |
+
+The cause is structural rather than a policy decision: all three strategies live in
+`prepare_step`, and `prepare_step` is called only from the melody-bearing branch. The
+comping branch calls `get_comping_voicings` directly. **`--non-chord-tone` is not a
+melody-route option that leaks; it is unimplemented on half the engine.**
+
+**Naming the soprano and the grid are coupled exactly where they should be free.** The two
+examples that motivated this section:
+
+| | steps | notes/step |
+|---|---|---|
+| `grid=freddie --voices alto,tenor` | 102 | 2 — **the guide tones, as asked** |
+| `grid=joe_pass --voices soprano,alto,tenor,bass` | **80** | 4 — **the grid is ignored** |
+
+`joe_pass` lands on offbeats, and `voices_have_soprano` routes the whole arrangement to the
+melody-bearing branch, whose slots come from `head_skeleton` — one per *written note*. A
+grid can only filter there, never add, because adding a position with no melody note means
+inventing a top note and the melody route's contract is that the melody pins the voicing.
+So one predicate decides both *how the harmony is built* and *whether the guitar sings the
+tune*, and naming a soprano quietly moves every slot to the branch where grids cannot
+create anything.
+
+**A chords-only file is refused, and two separate melody dependencies hide behind that
+one error.** Measured on a synthetic four-bar lead sheet — six `<harmony>` elements, zero
+pitched notes:
+
+```
+$ python -m arranger head leadsheet.musicxml --voices alto,tenor
+arranger head: error: leadsheet.musicxml has no readable melody part
+```
+
+Bypassing the loader does not get further. `Head.bars` is derived from `head.notes` and
+returns `(1, 1)` when there are none, and `chord_slots` iterates `range(lo, hi)` from it —
+so **every** grid produces nothing, not just the melody-anchored one:
+
+```
+notes = 0    chords(timeline) = 6    head.bars = (1, 1)
+grid=every_note  chord_slots= 0
+grid=freddie     chord_slots= 0     <- a real pattern, silently inert
+grid=joe_pass    chord_slots= 0
+```
+
+Supplying the bar range from the timeline instead makes the grids work immediately, and
+`joe_pass` lands on the offbeats as it should — the pattern was never the problem:
+
+```
+grid=freddie    16 slots   bar 1 beat 1.0 Dm7, bar 1 beat 2.0 Dm7, ...
+grid=joe_pass   16 slots   bar 1 beat 1.5 Dm7, bar 1 beat 2.5 Dm7, ...
+grid=final_and   4 slots   bar 1 beat 4.5 Dm7, bar 2 beat 4.5 Cmaj7, ...
+```
+
+**Every one of those slots carried the placeholder melody**, so this route is 100% sentinel —
+which is what makes step B blocking rather than cosmetic.
+### 9.2 The rule this gives
+
+> Where the guitar sings, a grid position carries the melody plus whatever chord voices the
+> slot warrants. Where it does not, the grid position is the chord's own voices. Where no
+> melody note is sounding, the slot is harmony-only and the melody is not consulted — except
+> for reharmonisation, and **only at an onset**.
+
+Three states, not two, and the middle one is not a rare edge case. Every `chord_slots`
+position across the six fixtures and two grids:
+
+| | onset | **held** | silent |
+|---|---|---|---|
+| `The_Jitterbug_Waltz` | 56 | **122** | 42 |
+| `Trouble_in_Mind_Blues` | 54 | 16 | 42 |
+| `but_not_for_me` | 82 | 16 | 28 |
+| `heres_that_rainy_day` | 88 | 28 | 16 |
+| `i_was_doing_all_right` | 112 | 24 | 4 |
+| `tenor_madness` | 304 | 68 | 44 |
+| **total** | **696** | **274** | **176** |
+
+**A quarter of all positions carry a note held across rather than articulated.**
+`melody_at` returns those happily — "last onset at or before" is the right rule for
+*alignment*, so a stab under a held note is labelled with the note actually sounding — which
+is why they have to be distinguished explicitly rather than left to a two-way answer. A held
+note was **already harmonised at its onset**; substituting the chord beneath it now would
+re-decide a decision already made, under the very note that motivated the original one.
+
+| state | the slot is | reharmonise? |
+|---|---|---|
+| **onset** here | melody articulates on it | **yes** — the anticipation a comping player makes |
+| **held** across | a note already sounding | **no** — decided at its onset |
+| **silent** | nothing sounding | **no** — the chord symbol stands |
+
+### 9.3 The steps, in dependency order
+
+**Step B moved ahead of step A, and step A' was added.** B is blocking rather than cosmetic:
+a chords-only head is *100% placeholder melody*, so `melody: Optional[str]` has to land
+before that route can exist at all. A' is the chords-only entry the measurements above
+called for, and it depends on both.
+
+**Step 0 — pin melody independence as a test.** Scramble every melody pitch; assert no fret
+moves on any non-soprano selection. **This lands before step C deliberately**: C makes the
+melody affect the *harmony* on this route for the first time, and this test is the only way
+to tell "the harmony changed, as intended" from "placement regressed". Nothing may re-tune
+the comping selector to consider the melody.
+
+**Step B — report the melody state instead of inventing one.** `melody_at` keeps its two-way
+answer for callers that only need "is a note sounding" (the staff renderer, the bass walker);
+a sibling returns **onset / held / silent**. `chord_slots` stops inventing a melody for a slot
+that has none, `ArrangementStep.melody` becomes `Optional[str]`, and `_PLACEHOLDER_MELODY` is
+**deleted rather than hidden**. It exists only because a harmony-only step needed *a* melody
+string to satisfy `melody: str`, and under §9.2 it has no reason to exist.
+
+It is also the visible half of item 10's deferral: `Cmaj7  C4  (shell - 3rd & 7th, partial)`
+is printed by the default line tab today, 14 times on `but_not_for_me` under
+`--voices alto,tenor --grid freddie`, and reads as a claim that the guitar played C4. It did
+not. The sentinel is indistinguishable from a real note by equality — all 30 `"C4"` slots
+across the fixtures sit on genuinely written C4s — so any test asserting
+`melody == _PLACEHOLDER_MELODY` can pass for the wrong reason, including the one that
+currently documents the deferral.
+
+**Step A — `every_note` as a declared property.** It is not a rhythm pattern but the *absence*
+of one: `GridPattern(positions=())`, `on_grid` true for every beat, `grid_allowed` true
+unconditionally because reading it off `grid_positions` would report "places nothing in every
+metre" — the false reading that check exists to avoid. Four sites compare
+`== GRID_EVERY_NOTE` by name (`textures.py` twice, `headxml.py` twice) and a fifth returns
+it as `resolve_grid`'s fallback. Replace them with a `GRID_DEFERS_TO_MELODY` table read, so a
+second melody-anchored grid later is a table entry rather than five more branches. **Stays
+the default.** Gate: all 96 arrangements across the six fixtures byte-identical.
+
+**And `grid=auto` goes with it.** The sentinel is a pure alias, which is the one axis-wide
+convention it can safely break:
+
+```
+GRID_POLICIES = {'auto': 'every_note'}
+grid=auto         2/4 -> every_note   warnings=0
+grid=every_note   2/4 -> every_note   warnings=0
+voices=alto,tenor   auto == every_note: True    (identical voicings)
+voices=auto         auto == every_note: True
+```
+
+Every other axis's `auto` **decides something** — `bass=auto` walks under a thumb texture and
+stops otherwise, `voices=auto` is a sentinel that must be resolved before use and skipping
+that step has already been one bug in this codebase. `grid=auto` resolves to `every_note`
+unconditionally and is then never read again: five sites define or pass it, none branches on
+it. Its only remaining job would be to name the default, and `every_note` is already a
+selectable member of `GRID_STYLES` that the CLI help already calls the default.
+
+**This was nearly withdrawn, and the reason it was is worth recording.** An earlier draft of
+this plan made `auto` resolve against the head — `every_note` when there is a melody,
+`freddie` when there is not — so that a chords-only file would harmonise without a named grid.
+The measurement above is why that was a bad idea rather than a good one: **`auto` resolving by
+melody presence looks correct on all six committed fixtures, every one of which has a
+melody**, so the context-sensitivity would be invisible to the entire suite. It was also
+rejected on its merits — the default arrangement of a chords-only file is empty, and that is
+the decision, not an oversight (step A').
+
+So the departure from the house rule that every axis carries a `*_AUTO` sentinel stands, and
+is recorded here so a later reader does not "restore" it. The sentinel's purpose is to let an
+axis defer to context; on this one there is no context to defer to.
+
+`resolve_grid`'s metre-mismatch fallback stays, because it is not `auto`'s: it fires for an
+explicitly named metre-relative figure such as `charleston` asked of a 2/2 bar. It can never
+fire for `auto`, because `every_note` is allowed in every metre by construction.
+
+**Three tests encode the reason rather than the spelling, and are inverted rather than
+deleted.** `test_auto_resolves_to_every_note` and `test_a_resolved_auto_never_warns` state
+that the default is inert; both properties survive under `every_note` and are worth keeping
+in that spelling. `test_a_pattern_may_be_named_on_the_command_line` asserted
+`parse_grid(GRID_AUTO) == GRID_AUTO`; the inverse is that `auto` is no longer vocabulary and
+is now refused like any other unknown name.
+
+**One line here is a behaviour change rather than a rename, and it is decided.**
+`headxml.py` currently coerces anything unrecognised before parsing:
+
+```python
+resolved = grid if grid in GRID_STYLES else GRID_AUTO
+```
+
+That line is what makes `grid=auto` reach `parse_grid` at all, and it also means a library
+caller passing `grid="half-time"` is **silently given `every_note`** — the exact guess
+`parse_grid`'s own docstring refuses (*"a pattern name is a musical claim about where a chord
+lands, so guessing one would return a part that comps somewhere the caller did not ask for"*).
+The CLI is unaffected, because `argparse` choices reject it first.
+
+**Decided: delete the coercion and let `parse_grid` raise.** The library and the CLI should
+answer an unknown grid the same way, and the rule the codebase already states — *"a spelling
+nobody recognises is a question, and answering it by dropping the voice would hand back a part
+missing something nobody asked it to drop"* — says the answer is to refuse. `auto` was the
+only thing that ever made this line reachable, so removing the sentinel removes the guess with
+it rather than relocating it.
+
+**This is a behaviour change for library callers, not a rename**, and it belongs in the commit
+message as one: `arrange_xml_head(..., grid="half-time")` returned `every_note`'s arrangement
+and will raise `ValueError` instead. Nothing in the committed fixtures or the CLI is affected,
+so it is observable only from library code — which is also why nothing in the suite will
+catch its absence, and why it needs its own test rather than being left to the gate.
+
+**Step A' — a chords-only head is a valid input.** Three settled decisions:
+
+1. **The loader records the measure count**, and `Head.bars` reports it. `bars` becomes a
+   fact about the file rather than about the melody, so a head with no parseable `<harmony>`
+   still knows how long it is, and a head whose changes span bars 1 and 20 with nothing
+   between is 20 bars rather than a span of the same two numbers by accident.
+   `_choose_part` stops requiring `_part_note_count(p) > 0`.
+2. **`every_note` defers to the melody, so a chords-only head produces nothing — by default
+   as well as when named.** `auto` resolves to `every_note`, so
+   `arranger head leadsheet.musicxml --voices alto,tenor` on a chords-only file arranges
+   **nothing at all**. That is the decision, and it is the honest reading: `every_note` is
+   "the absence of a rhythm restriction", so something else has to supply the positions, and
+   here there is no melody to supply them. *Decided against a warning* — naming
+   `--grid freddie` was considered and rejected, on the grounds that an empty arrangement is
+   the flag's own instruction rather than a hole to report.
+
+   **What "works fine" means for a chords-only file is therefore narrower than it first
+   sounds, and the distinction is the whole point of this step.** Today such a file is
+   *refused* — `arranger head: error: leadsheet.musicxml has no readable melody part` — and
+   that is a hard failure a user cannot act on without reading the source. After this step the
+   file **loads, reports its bars and metre, and arranges to the rhythm the grid names**:
+   `--grid freddie`, `--grid joe_pass` and the rest all produce a part, measured in §9.1. So
+   the chords-only route works; what it does not do is guess a rhythm for itself. The user
+   names one, exactly as they already must for any head whose melody does not sit on a beat.
+
+   The cost is recorded because it is real: the most natural command returns an empty
+   arrangement with no output and no explanation, and silence is indistinguishable from a bug
+   on first run. A clause in `--grid`'s help — *"'every_note' needs a melody"* — would reach
+   exactly the user who would be stuck, at no runtime cost. Offered, not assumed.
+3. **A soprano-only selection on a chords-only head produces nothing**, for the same reason
+   and by the same decision. This is not a special case to be caught — it falls out of
+   `every_note`-style deference once "the guitar sings" is separated from "the guitar has
+   voices". Today it is the worst outcome of the three: measured, it takes the melody-bearing
+   route, tries to voice the sentinel against every chord, and warns sixteen times —
+   `melody C4 is not a chord tone of Emaj7 and the 'extension' strategy found no voicing`.
+
+Gate: a committed chords-only fixture, and the six existing fixtures byte-identical.
+
+**Step C — `--non-chord-tone` reaches the comping route.** Extract the strategy block from
+`prepare_step` so the comping generator honours the flag **at harmony level**, with
+`melody_pc` still `None`. `--non-chord-tone diminished` under `--voices alto,tenor` then gives
+`D5 over Cmaj7 → Bdim7`, and the guide-tone voices play the dim7. The onset guard from §9.2
+lives here, and `next_melody` for the diminished strategy's resolution target is the horn's
+next note, available from `head_skeleton` even when the current slot has none.
+
+**`--fallback diminished` is the same concern, and comes with it.** It is a *harmony-only*
+change: the retry replaces the written chord in the triple (`working[index] = (note,
+resolved[0], resolved[1])`) and the melody note is untouched. That is why it belongs with
+step C rather than needing machinery of its own — it answers the same question, at the same
+level, one step later. Leaving it on the melody route only would mean `--non-chord-tone` means
+one thing on this route and the flag that rescues it means another.
+
+**What it is not is a harmony-*only-slot* concern, and that distinction is the load-bearing
+one.** The retry is driven by `unresolved_steps`, which asks whether a *melody note* is a
+chord tone that no strategy could resolve — so it needs a melody note to fire at all. On a
+harmony-only slot there is nothing to rescue: the chord is whatever the symbol says, it gets
+voiced, and no failure occurs. The rule is therefore the same §9.2 rule rather than a
+separate one: `--fallback` fires **at an onset**, where a melody note articulates and can be
+unresolvable, and not under a held note or a silent position.
+
+Its `next_melody` argument makes the dependency explicit. `_next_chord_tone_melody` scans
+forward for the next note that is a chord tone of its own chord, because *"a substituted chord
+is easier to sing and easier to voice when there is a following note the ear can move to"* —
+so the rescue is a claim about the tune's motion, not about the chord in isolation. On the
+comping route that scan still has an answer: the horn's next note is in `head_skeleton` even
+when the current slot has none. A chords-only head has no notes to scan, so `--fallback` never
+fires there, which is correct rather than a gap.
+
+No new flag. `--non-chord-tone` already states the user's intent about non-chord tones, and a
+second flag meaning "also do something about non-chord tones" would split one intent across
+two — the shape `harmony=` was built to avoid. The tension worth naming: this is the first
+step in which the melody affects the comping output at all. It is opt-in, already flagged,
+and confined to the harmony — the placement invariant of step 0 still holds — but a
+guitarist reading `Cmaj7 → Bdim7` with no melody on their part needs a diagnostic saying why.
+
+**Step D — the soprano is per slot, not per route.** `voices_have_soprano` currently decides
+the branch for every slot at once. Separate "how the harmony is built" (from the grid) from
+"does the guitar sing" (from the voices): a grid position with no note sounding and a named
+soprano takes the chord's voices at the requested arity, with no top note. **One new case** —
+the other three cells of the table are today's behaviour — and it is what makes
+`grid=joe_pass --voices soprano,alto,tenor,bass` place chords on the offbeats.
+
+**Step E — `--voices soprano` = the melody alone.** Today naming soprano alone arranges exactly
+like `auto`, because `notes=len(voices)` is passed *only* when `melody_voiced` is False and the
+melody-bearing route has no arity concept. Measured: `texture=melody` already produces exactly
+the wanted one note per step, byte-identically for `voices=soprano` and `voices=auto`, so the
+machinery exists and only the route refuses it.
+
+**Shipped as the next minor release.** Three independent breaking changes land here —
+`melody` becomes `Optional[str]`, the loader accepts a class of file it previously refused,
+and `--voices soprano` changes what it plays — and on a 0.x version the minor digit is the
+breaking one. They are not folded into the current release, which was the corpus removal and
+is already tagged by its own commit. The number is deliberately not written here:
+`tests/test_docs.py` asserts that every version a document states equals
+`arranger.__version__`, so a plan cannot name the version it will ship as until it ships.
+
+### 9.4 A four-note comping chord, and the inversion that would allow one
+
+**There is no way to ask for this today, and the reason is an assumption that does not
+always hold.** Measured on `Dm7`:
+
+```
+get_comping_voicings(notes=1) -> 4 candidates
+get_comping_voicings(notes=2) -> 4 candidates
+get_comping_voicings(notes=3) -> 6 candidates
+get_comping_voicings(notes=4) -> 0 candidates          <- nothing at all
+
+voices=alto,tenor,bass          notes/step=[3]  melody_is_top=0/3
+voices=soprano,alto,tenor,bass  notes/step=[4]  melody_is_top=3/3
+voices=alto,tenor              notes/step=[2]  melody_is_top=0/3
+```
+
+**Four notes is reachable only by naming soprano, and naming soprano always pins the melody
+to the top** — `melody_is_top=3/3` in every case. The arity and the pin are welded together,
+because arity is `len(voices)` and soprano is the bit that selects the melody route.
+
+`get_comping_voicings` refuses arity 4 deliberately: *"with no melody to support, a fourth
+voice would be the root or the 5th — the two notes that carry no information about the chord's
+quality"*, and every `shell` string set is three strings. **But that reasoning holds only
+while the melody cannot supply the fourth voice.** When the melody note *is* a chord tone —
+which it often is — a fourth voice can be **the melody itself, placed anywhere in the shape
+rather than on top of it**. That note carries information; the root does not. It is also
+exactly what a comping player does under a horn.
+
+**The inversion: the degree family should own the arity, not the voice count.** Measured,
+`harmony_allowed` *already derives* an arity from the degree family and refuses
+incompatible selections:
+
+| family | declared arity | behaviour |
+|---|---|---|
+| `root` | 1 | refuses anything but `voices=bass`, naming the required count |
+| `shell_root` | 3 | refuses a two-voice selection, naming the required count |
+| `guide` | 2 | always allowed |
+| **`full`** | **none** | **never refused, and silently capped by `len(voices)`** |
+
+`full` is the odd one out. Its docstring says *"the chord in full: every tone the quality
+defines"* — four for a 7th chord, three for a triad — and that is precisely why it declares no
+fixed count: **its arity comes from the quality, not from a constant.** It is then quietly
+limited to whatever the selection happens to ask for, so `voices=alto,tenor,bass
+--harmony=full` sounds three of Dm7's four tones while claiming to sound the chord in full.
+
+So the design is not a new `harmony=` value. It is the other way round:
+
+- **`harmony=` owns how many notes sound**, because a degree family is a claim about degrees
+  and a 7th chord's full tone set is four notes. Three of the four families already enforce
+  this; `full` is the one that has not been given the rule.
+- **`voices=` owns whether the tune is among them, and where** — soprano on top (chord-melody),
+  or present in the shape but not pinned (comping).
+
+That inverts the current wiring, where `notes=len(voices)` is computed in `arrange_progression`
+and passed down, and the degree family is squeezed into whatever room is left. It also means
+the "melody available in any voice" claim lands where it belongs: not as a fifth
+`HARMONY_*` value, but as a distinction between *the tune is the top voice* and *the tune is
+one of the voices* — a `voices` question, because it is a question about who is playing.
+
+**Two pieces of real work sit behind it, and neither is a policy change.** Every `shell`
+string set is three strings, so a four-note comping shape needs new string sets in `grips.py`
+— this is the substantive part. And `get_comping_voicings` takes no melody argument at all
+today, which is what has kept it melody-free; permitting the melody note as a *candidate
+degree* is a deliberate loosening of exactly the invariant step 0 pins, and it needs to be
+opt-in rather than a consequence of asking for four notes.
+
+**Not built, and not yet a step.** It is recorded here because it is the sharpest thing this
+discussion found, and because it reorders the plan if it is adopted: it is a prerequisite for
+step E, because `--voices soprano` meaning "the melody alone" cannot be stated while soprano
+also silently means "four notes, melody pinned on top". Step E should be decided after this.
+
+### 9.5 Reproducing §9, and the fixture it needs
+
+**Every number in this section came from the commands below, and none of them will survive a
+fresh checkout on their own** — in particular the chords-only lead sheet exists only as
+`/tmp/leadsheet.musicxml`, which is not in the tree. Step A' needs it committed, and the
+content is here so it can be written rather than reconstructed.
+
+`tests/support.py` already has `write_score`, which is the helper the committed MusicXML
+fixtures are built with; this one is written out longhand because its point is that it
+contains **no pitched notes at all**.
+
+```python
+DIV = 4   # divisions per quarter, so one beat is 4
+
+def bar(i, changes):
+    out = [f'  <measure number="{i}">']
+    for root, kind in changes:
+        out.append('    <harmony print-frame="no">'
+                   f'<root><root-step>{root}</root-step></root>'
+                   f'<kind text="">{kind}</kind></harmony>')
+        # A rest, not a pitched note: _choose_part counts pitches, and this is the
+        # whole reason the file is refused today.
+        out.append(f'    <note><rest/><duration>{DIV}</duration><voice>1</voice></note>')
+    out.append('  </measure>')
+    return "\n".join(out)
+
+BARS = [bar(1, [('D', 'minor-seventh'), ('G', 'dominant')]),
+        bar(2, [('C', 'major-seventh')]),
+        bar(3, [('F', 'major-seventh'), ('B', 'dominant')]),
+        bar(4, [('E', 'major-seventh')])]
+
+XML = ('<?xml version="1.0" encoding="UTF-8"?>\n'
+       '<score-partwise version="3.1">'
+       '<part-list><score-part id="P1">'
+       '<part-name>Lead Sheet</part-name></score-part></part-list>\n'
+       '<part id="P1">\n' + "\n".join(BARS) + '\n</part></score-partwise>')
+```
+
+Four bars, six `<harmony>` elements, **zero pitched notes**. The timeline spans bars 1–4,
+which is what makes it a useful probe: `Head.bars` returns `(1, 1)` for it today.
+
+**The refusal, and the two dependencies behind it:**
+
+```bash
+python -m arranger head tests/data/lead_sheet_chords_only.musicxml --voices alto,tenor
+# arranger head: error: ... has no readable melody part
+```
+
+**The melody-independence measurement** (step 0's test, in miniature) — every melody pitch in
+a real fixture replaced with a high non-chord tone, keeping chords, bars, beats and durations:
+
+```bash
+python - <<'PY'
+import copy, hashlib
+from headxml import load_musicxml, head_skeleton, _merge_chord_slots
+from arranger.slots import arrange_slots
+from arranger.textures import parse_voices, resolve_voices, voices_have_soprano
+from arranger import Diagnostics
+
+def run(head, vox, grid):
+    slots = head_skeleton(head, None)
+    if not voices_have_soprano(resolve_voices(parse_voices(vox), 'uniform', Diagnostics())):
+        slots = _merge_chord_slots(slots, head, None, grid) or slots
+    steps, _, _ = arrange_slots(
+        [s[0] for s in slots], [(s[1], s[2], s[3]) for s in slots],
+        melody=vox, grid=grid, beats_per_bar=head.beats_per_bar)
+    return tuple((s.bar, s.beat, s.chord, tuple(s.voicing.frets)) for s in steps)
+
+for vox in ('alto,tenor', 'bass', 'tenor', 'alto', 'alto,tenor,bass'):
+    h = load_musicxml('tests/data/but_not_for_me.mxl')
+    before = run(h, vox, 'freddie')
+    h2 = copy.deepcopy(h)
+    for i, n in enumerate(h2.notes):
+        n.pitch = 81 + (i * 3) % 14        # F#5-F6, mostly outside every chord
+    h2.notes.sort(key=lambda n: (n.bar, n.beat))
+    print(vox, 'identical:', run(h2, vox, 'freddie') == before)
+PY
+# every voice: identical: True
+```
+
+`HeadNote.note_name` is a property derived from `pitch`, so assigning `pitch` alone is enough
+— assigning `note_name` raises.
+
+**The three-state split** (§9.2), which is the measurement step B exists to make expressible:
+
+```bash
+python - <<'PY'
+import glob, os
+from headxml import load_musicxml, chord_slots, melody_at
+
+def state(head, bar, beat):
+    if melody_at(head.notes, bar, beat) is None:
+        return 'silent'
+    onset = [n for n in head.notes if n.bar == bar and abs(n.beat - beat) < 1e-9]
+    return 'onset' if onset else 'held'
+
+for path in sorted(glob.glob('tests/data/*.mxl') + glob.glob('tests/data/*.musicxml')):
+    head = load_musicxml(path)
+    counts = {'onset': 0, 'held': 0, 'silent': 0}
+    for grid in ('freddie', 'every_note'):
+        for slot in chord_slots(head, grid=grid):
+            counts[state(head, slot[3], slot[4])] += 1
+    print(os.path.basename(path), counts)
+PY
+```
+
+**The four-note gap** (§9.4):
+
+```bash
+python -c "
+from arranger.grips import get_comping_voicings
+for n in (1, 2, 3, 4):
+    print(n, len(get_comping_voicings('m7', 'Dm7', notes=n)), 'candidates')"
+# 4 -> 0 candidates
+```
+
+### 9.6 What is deliberately not in this plan
+
+**A melody-less lead sheet is in scope for *loading*, and not for guessing.** It was
+measured and refused — `_choose_part` filters on `_part_note_count(p) > 0` — and step A'
+makes it load and arrange to a named grid. What it does not do is supply a rhythm the user
+did not ask for: with the default grid it is empty, because `every_note` has nothing to defer
+to. That is the decision, and the distinction between *the file is accepted* and *the file
+guesses* is the one worth keeping from this step.
+
+**`texture` is not proposed for removal.** Its overlap with `grid` is real — `targets` already
+means "full on strong beats, thin between", and a grid position carrying a content hint
+(`freddie: beat 1 full, offbeat guide tones`) is a coherent next idea. Two things stop it being
+a merge. `melody` and `melody_bass` are textures with **empty grip tuples on both roles** —
+"harmonise nothing, ever" — which is not a rhythm. And `metric_roles` decides targets by
+harmonic and melodic *change*, not only position: a slot is a target only when it is metrically
+strong **and** something new happens there, because a passing slot is exactly where the
+non-chord-tone strategies would rewrite the harmony. `grid_positions` returns positions and
+has no access to the timeline, so a pattern that carried content would have to stop being a
+rhythm table. If a grid gains a content hint it defers to the texture; it does not replace it.
+
+**Step A is not a default change.** `every_note` stays the default — `GRID_AUTO` is withdrawn
+entirely (step A), and repointing the default at a real pattern is the comping-first question,
+which belongs after step D, when `grid` means the same thing on both routes.
+
+**Stab duration is not in this plan.** It is a real gap rather than a deferral: nothing
+currently says how long a comp lasts, and the natural answer — that the grid owns the rhythm,
+so a stab sounds until the next grid position — is not implemented anywhere. `chord_slots`
+computes a `length` from the following position and `head_skeleton` from the melody note, but
+no axis decides which of the two a *comping* step obeys. It was not `hold=`, which is
+withdrawn, and it belongs with §6 Q6 rather than here: a free-form grid spelling would have to
+say it as well, so designing one without settling it would mean designing the grammar twice.
+This is the fifth kind `open-issues.md` item 10 predicts for `melody_alone_case`: an invented
+slot has no melody note to be alone *with*, so it cannot be reached by the existing four.

@@ -408,6 +408,73 @@ class TestTheCompingArrangement(unittest.TestCase):
         )
 
 
+class TestCompingMelodyIndependence(unittest.TestCase):
+    """Step 0 of `docs/comping-styles.md` §9.3: the comping route is melody-independent.
+
+    Scrambling every melody pitch must move no fret on any non-soprano
+    selection. This lands **before** step C deliberately: C is the first step in
+    which the melody affects the comping *harmony*, and without this pin that
+    intended change would be indistinguishable from a regression in *placement*.
+    """
+
+    def _arrange(self, head, voices, grid="freddie"):
+        """The `arrange_xml_head` comping path over an already-loaded head."""
+        from arranger.slots import arrange_slots
+        from headxml import _merge_chord_slots, head_skeleton
+
+        slots = head_skeleton(head, None)
+        if not voices_have_soprano(
+            resolve_voices(parse_voices(voices), "uniform", Diagnostics())
+        ):
+            slots = _merge_chord_slots(slots, head, None, grid) or slots
+        steps, _, _ = arrange_slots(
+            [slot[0] for slot in slots],
+            [(slot[1], slot[2], slot[3]) for slot in slots],
+            melody=voices,
+            grid=grid,
+            beats_per_bar=head.beats_per_bar,
+        )
+        return tuple((step.bar, step.beat, step.chord, tuple(step.voicing.frets)) for step in steps)
+
+    def test_scrambling_the_melody_moves_no_fret(self):
+        """Every pitch replaced by a wild high non-chord tone; nothing moves.
+
+        Keeps every chord, bar, beat and duration, so only the melody pitches
+        change. `HeadNote.note_name` derives from `pitch`, so assigning `pitch`
+        alone is enough — and assigning `note_name` raises.
+        """
+        import copy
+        import os
+
+        from headxml import load_musicxml
+
+        path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "data",
+            "but_not_for_me.mxl",
+        )
+        for voices in (
+            "alto,tenor",
+            "bass",
+            "tenor",
+            "alto",
+            "alto,tenor,bass",
+        ):
+            with self.subTest(voices=voices):
+                head = load_musicxml(path)
+                before = self._arrange(head, voices)
+                self.assertTrue(before, "an arrangement with no steps at all is a defect")
+                scrambled = copy.deepcopy(head)
+                for index, note in enumerate(scrambled.notes):
+                    note.pitch = 81 + (index * 3) % 14  # F#5-F6, mostly outside
+                scrambled.notes.sort(key=lambda n: (n.bar, n.beat))
+                self.assertEqual(
+                    self._arrange(scrambled, voices),
+                    before,
+                    f"{voices}: a melody pitch reached the comping part",
+                )
+
+
 class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
     """The thumb line must not be refused for a palette the comping route never plays.
 
