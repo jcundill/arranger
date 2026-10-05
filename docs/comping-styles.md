@@ -23,7 +23,7 @@ not built.
 **§9 is the next stage of the same work**, and it is the one that turns "comping" from a
 voice selection into a route with its own behaviour: what was measured about the melody's
 actual influence on a comping part, the rule that follows from it, and six steps in
-dependency order. Nothing in it is built.
+dependency order. Steps 0 and B have landed; the rest of §9 is still proposal.
 
 It is deliberately **not** in `docs/history/`, which is for completed plans and is never
 extended. The shipped `voices=` axis is described in [voices-axis.md](voices-axis.md); this

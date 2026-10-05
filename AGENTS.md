@@ -473,7 +473,7 @@ Each of these cost real time, or nearly shipped a defect.
 | [docs/reharmonisation-proposals.md](docs/reharmonisation-proposals.md) | tritone substitution (shipped) and chromatic approach chords (measured, not built), with the corpus numbers behind each |
 | [docs/history/](docs/history/) | completed plans: corpus, walking bass, texture, arranging guide - a record of the past, not of what exists |
 | [docs/voices-axis.md](docs/voices-axis.md) | **in progress** - the `voices=` axis, awaiting QA |
-| [docs/comping-styles.md](docs/comping-styles.md) | **proposal** - the comping axes (`harmony=`, the rhythm grid), with the measurements behind them; nothing in it is built |
+| [docs/comping-styles.md](docs/comping-styles.md) | the comping axes (`harmony=`, the rhythm grid): **partly built** - Stage C shipped `harmony=`, Stage D shipped the named `grid=` rows, and §9 steps 0 and B have landed; the measurements behind them, §6's open questions and §9's remaining steps are still proposal |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | what CI runs, and which tests it does *not* run |
 
 `common_grips.md` is generated from the engine's own tables by `grip_chart.py` and

@@ -1,6 +1,6 @@
 # `voices=` — a third axis: which voices the guitar plays
 
-**Status: implemented, awaiting QA. Not committed.** The code is complete and the gate is
+**Status: implemented and committed, awaiting QA.** The code is complete and the gate is
 green; nobody has yet read a rendered part and asked whether it is *good*. That is the job
 this document exists to hand over.
 
