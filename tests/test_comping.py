@@ -21,7 +21,8 @@ What is verified, in order:
 - the **refusals**: a texture that harmonises nothing cannot also give the melody away,
   and an `NC` bar is reported rather than silently dropped;
 - the **renderer**: a repeated melody holds the whole shape when the guitar is not
-  singing, instead of re-striking a soprano that is not there.
+  singing, instead of re-striking a soprano that is not there, and the melody marker
+  stars no string on a part that is not singing;
 """
 
 import unittest
@@ -1072,6 +1073,67 @@ class TestRepeatedStepsHoldTheShape(unittest.TestCase):
                 _strikes_here(step, string_index),
                 f"string {string_index}: the two renderers disagree",
             )
+
+
+class TestTheMelodyMarkerKnowsWhoIsSinging(unittest.TestCase):
+    """The staff's melody marker reads `melody_voiced`, not the shape.
+
+    The `*` on the ASCII staff and the `soprano` class on the HTML page say **the
+    guitar has the tune here** - which is exactly what `melody_voiced` states.
+    Deriving the marker from the shape instead - the highest sounding note, on its
+    string - stars a string on a comping part too, because a guide-tone shell
+    built from the chord alone still has a top note. The marker is a claim about
+    *who has the melody*, and only the flag answers that.
+    """
+
+    def test_no_string_is_starred_when_the_guitar_is_not_singing(self):
+        """`show_melody` stars nothing on a comping part."""
+        from tabstaff import format_tab_staff
+        from tests.support import make_step
+
+        steps = [
+            make_step([-1, -1, -1, 10, 12, 10], melody_voiced=False),
+            make_step([-1, -1, -1, 8, 10, 10], melody_voiced=False),
+        ]
+        starred = [
+            row for row in format_tab_staff(steps, show_melody=True).split("\n")
+            if len(row) > 1 and row[0] in "eBGDAE" and row[1] == "*"
+        ]
+        self.assertEqual(starred, [])
+
+    def test_no_row_is_marked_soprano_when_the_guitar_is_not_singing(self):
+        """The page marks no row the soprano either - one predicate, two renderers."""
+        from tabstaff import format_tab_html
+        from tests.support import make_step
+
+        steps = [
+            make_step([-1, -1, -1, 10, 12, 10], melody_voiced=False),
+            make_step([-1, -1, -1, 8, 10, 10], melody_voiced=False),
+        ]
+        self.assertNotIn('class="soprano"', format_tab_html(steps))
+
+    def test_the_marker_still_finds_the_soprano_when_the_guitar_sings(self):
+        """The same shapes with the flag set star the string that carries the tune.
+
+        The positive control, without which the two tests above could not tell a
+        fix from the marker having been deleted outright.
+        """
+        from tabstaff import format_tab_html, format_tab_staff
+        from tests.support import make_step
+
+        steps = [
+            make_step([-1, -1, -1, 10, 12, 10]),
+            make_step([-1, -1, -1, 8, 10, 10]),
+        ]
+        staff = format_tab_staff(steps, show_melody=True).split("\n")
+        # The fret list is indexed low E first, so `frets[5]` is the high E - and
+        # the highest pitch of both shapes sits there, so the e row is the one the
+        # marker must find.
+        self.assertTrue(
+            any(row.startswith("e*") for row in staff),
+            "\n".join(staff),
+        )
+        self.assertIn('class="soprano"', format_tab_html(steps))
 
 
 class TestTheHarmonyAxis(unittest.TestCase):

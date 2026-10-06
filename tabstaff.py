@@ -524,9 +524,19 @@ def _strikes_here(step: ArrangementStep, string_index: int) -> bool:
 
 
 def _carries_melody(steps: List[ArrangementStep], string_index: int) -> bool:
-    """True when the melody rides on this string somewhere in the progression."""
+    """True when the melody rides on this string somewhere in the progression.
+
+    `melody_voiced` is read rather than re-derived from the shape, because the two
+    disagree on the comping route: a guide-tone shell built from the chord alone
+    still has a highest sounding note, so deriving the marker from the shape stars
+    a string on a part that is not singing - and the staff claims the tune for the
+    guitar exactly where the arrangement handed it to the horn. The marker is a
+    claim about *who has the melody*, and `melody_voiced` is that claim; the shape
+    only says where a note sits.
+    """
     return any(
-        step.voicing.frets[string_index] >= 0
+        step.melody_voiced
+        and step.voicing.frets[string_index] >= 0
         and step.voicing.soprano_string() == string_index
         for step in steps
     )
