@@ -390,6 +390,50 @@ class TestTheCompingArrangement(unittest.TestCase):
         for step in silent:
             self.assertFalse(step.melody_voiced)
 
+    def test_the_bass_axis_takes_the_option_spelling(self):
+        """`ArrangeOptions.bass` reaches the engine, which it never did before.
+
+        The test above spells `bass` as a keyword and this one spells it as an
+        options field, and the two diverged for the field's whole life: the engine
+        never read `options.bass` back out, so a walk handed over as options - which
+        is how the slot layer hands over every request, `arranger head` among them -
+        was silently dropped while the keyword test above stayed green.
+        """
+        by_keyword = self.comped(texture="targets", bass="walk", timings=self.timings)
+        by_option = self.engine.arrange_progression(
+            PROGRESSION,
+            options=ArrangeOptions(
+                melody=VOICES_ARG, texture="targets", bass="walk",
+                timings=self.timings,
+            ),
+        )
+        self.assertTrue(any(step.bass is not None for step in by_option))
+        self.assertEqual(format_progression(by_keyword), format_progression(by_option))
+
+    def test_passing_both_bass_spellings_raises(self):
+        """As for every other knob: two spellings of one value is a bug, not a merge."""
+        with self.assertRaises(ValueError):
+            self.engine.arrange_progression(
+                PROGRESSION, bass="walk", options=ArrangeOptions(melody=VOICES_ARG)
+            )
+
+    def test_the_bass_axis_survives_the_slot_layer(self):
+        """The head command's own path: `--bass` becomes an `ArrangeOptions` here.
+
+        `arrange_slots` is the layer that builds the options and calls the engine,
+        so this is the route `arranger head` actually takes and the one the unread
+        field broke. Asserted on the thumb notes rather than on any warning, because
+        a fix that quieted a warning while still dropping the line would pass
+        otherwise.
+        """
+        from arranger.slots import arrange_slots
+
+        steps, _rescued, _notes = arrange_slots(
+            PROGRESSION, self.timings, melody=VOICES_ARG, bass="walk",
+        )
+        self.assertTrue(steps, "an arrangement with no steps at all is a defect")
+        self.assertTrue(any(step.bass is not None for step in steps))
+
     def test_an_nc_bar_is_reported_rather_than_silently_dropped(self):
         """An `NC` bar has no chord, so there is no guide tone to state.
 

@@ -814,14 +814,17 @@ class VoiceLeadingEngine:
                     ("fret_max", fret_max),
                     ("grips", grips),
                     ("texture", texture),
-                    # `bass` is absent here and has been since it was added: it is an
-                    # axis whose *default* (`auto`) resolves from the texture rather
-                    # than being the historical value, so it cannot be compared against
-                    # `ArrangeOptions.bass`'s default and has never been read back out
-                    # of `options` either. `melody` is copied here rather than repeating
-                    # that omission, because its default is a plain value and a caller
-                    # who builds the options and then overrides the keyword must not
-                    # silently lose the override.
+                    # `bass` is compared here like every other knob, which it was not
+                    # for its whole life: `ArrangeOptions.bass` defaulted to the
+                    # resolved "none" while the keyword defaults to the `BASS_AUTO`
+                    # sentinel, so the two could never be compared - and the field was
+                    # never read back out of `options` either, which is what made
+                    # `--bass` silently inert on every slot-path caller (`arranger
+                    # head` among them) while the walking-bass tests, which pass the
+                    # keyword directly, stayed green. The field default is the sentinel
+                    # now, so the comparison below holds, and the unpack below reads the
+                    # field back.
+                    ("bass", bass),
                     ("melody", melody),
                     ("harmony", harmony),
                     ("grid", grid),
@@ -840,6 +843,7 @@ class VoiceLeadingEngine:
             fret_max = options.fret_max
             grips = options.grips
             texture = options.texture
+            bass = options.bass
             melody = options.melody
             harmony = options.harmony
             grid = options.grid

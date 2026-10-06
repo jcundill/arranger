@@ -20,6 +20,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Mapping, Optional, Sequence, Tuple
 
+from .bass import BASS_AUTO
 from .grips import GRIP_PREFERENCE
 from .textures import GRID_AUTO, HARMONY_AUTO, MELODY_AUTO
 from .tuning import MELODY_STRING_CHOICES_FULL, NECK_FRET_MAX, NECK_FRET_MIN
@@ -44,9 +45,19 @@ class ArrangeOptions:
     # Which bass **policy** the thumb line is written on: "none", "anchors" or "walk".
     # An axis of its own rather than a property of the texture, because the pattern is
     # the composer's choice and the set of patterns is open - see `BASS_STYLES` in
-    # `bass.py`, where a new one is a row in a table. The default changes nothing that
-    # worked before it.
-    bass: str = "none"
+    # `bass.py`, where a new one is a row in a table.
+    #
+    # The default is the **sentinel** `BASS_AUTO` ("auto"), not the resolved "none",
+    # for the same reason `melody`'s and `harmony`'s defaults are sentinels: it matches
+    # `arrange_progression`'s keyword default, so the two spellings can be compared
+    # field-by-field, and a default that disagreed with the keyword's would make every
+    # slot-path call look like a caller who had passed both. The sentinel resolves from
+    # the texture, so a bare options value leaves the thumb line exactly where the
+    # keyword always left it. The field said "none" for its whole life and nothing
+    # measured it, because the engine never read the field back out of the options -
+    # which is what made `--bass` silently inert on `arranger head`; see the unpack in
+    # `steps.py`.
+    bass: str = BASS_AUTO
     # Which voices the guitar plays, from `MELODY_POLICIES` in `textures.py` (which
     # resolves the `auto` sentinel). `soprano` keeps the melody pinned to the soprano
     # string - the default, and the historical arrangement - and dropping it gives the
@@ -70,8 +81,10 @@ class ArrangeOptions:
     # can be compared field-by-field. That comparison is load-bearing: `arrange_slots`
     # builds an `ArrangeOptions` and passes it, so a default that disagreed with the
     # keyword's would make every corpus call look like a caller who had passed both.
-    # `bass` does not have this problem because it is deliberately *not* read back out
-    # of the options - see the note beside that unpack.
+    # `bass` follows the same rule now, having spent its life as the counterexample:
+    # its field default was the resolved "none" while the keyword's was the sentinel,
+    # so the comparison could never be made and the field was never read back at all.
+    # See the note beside its own field above.
     melody: str = MELODY_AUTO
     # Which **degrees** this part states when it is not singing, from `HARMONY_STYLES`
     # in `textures.py`: "guide" is the shipped comping shape (the 3rd and the 7th).
