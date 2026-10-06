@@ -57,6 +57,7 @@ DOCUMENTS = [
     "docs/open-issues.md",
     "docs/comping-styles.md",
     "docs/voices-axis.md",
+    "docs/one-fact.md",
     "docs/reharmonisation-proposals.md",
 ]
 
