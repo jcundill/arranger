@@ -1080,7 +1080,6 @@ class VoiceLeadingEngine:
                         avg_fret=0.0,
                         grip="rest",
                     ),
-                    grip="rest",
                     bar=bar,
                     beat=beat,
                     duration=duration,
@@ -1109,7 +1108,6 @@ class VoiceLeadingEngine:
                         chord=name,
                         melody=note_str,
                         voicing=solo_voicing,
-                        grip="melody",
                         partial=False,
                         bar=bar,
                         beat=beat,
@@ -1159,14 +1157,10 @@ class VoiceLeadingEngine:
                         None if transposed == note_str else note_str
                     ),
                     melody_only=True,
-                    # Mirrors the voicing rather than resting on the step's "drop2"
-                    # default, because the two fields are one fact stated twice: this
-                    # is a single-fret shape the playability invariant exempts, and a
-                    # step that said "drop2" while its voicing said "melody" would
-                    # make the two readers of the pair disagree. The voicing sets its
-                    # own field for exactly this reason - see
-                    # `grips.get_melody_only_voicing` - and the step must not undo it.
-                    grip=solo_voicing.grip,
+                    # `step.grip` is a derived view of `voicing.grip`, so nothing is
+                    # passed here: the voicing says "melody" and the step cannot
+                    # disagree with it. The property is what keeps the two spellings
+                    # one fact with one home - see `docs/one-fact.md`, commit 1.
                     bar=bar,
                     beat=beat,
                     duration=duration,
@@ -1298,7 +1292,6 @@ class VoiceLeadingEngine:
                             bass_pcs.get(index) if bass_pcs else None,
                             bass_cost_for,
                         ) or candidates[0],
-                        grip="shell",
                         # A comping shape is three voices by construction, so `partial`
                         # is always true and is not worth re-deriving per step.
                         partial=True,
@@ -1356,7 +1349,6 @@ class VoiceLeadingEngine:
                             chord=name,
                             melody=note_str,
                             voicing=solo_voicing,
-                            grip="melody",
                             partial=False,
                             bar=bar,
                             beat=beat,
@@ -1475,7 +1467,6 @@ class VoiceLeadingEngine:
                         chord=name,
                         melody=note_str,
                         voicing=solo,
-                        grip="melody",
                         partial=False,
                         bar=bar,
                         beat=beat,
@@ -1506,7 +1497,6 @@ class VoiceLeadingEngine:
                 harmonized_as=harmonized_as,
                 original_melody=original_melody,
                 repeated=repeated,
-                grip=best_voicing.grip,
                 # A shell or a duo leaves part of the chord unsounded, so the chord name
                 # printed above the step describes the harmony rather than every note in
                 # it. The renderers annotate this.

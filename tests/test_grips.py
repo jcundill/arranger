@@ -1386,6 +1386,24 @@ class TestPartialHarmonisation(unittest.TestCase):
             self.assertEqual(step.grip, step.voicing.grip)
             self.assertIn(step.grip, GRIP_PREFERENCE)
 
+    def test_step_grip_is_one_fact_with_one_home(self):
+        """
+        `step.grip` is a derived view of `voicing.grip`, not a second field.
+
+        It used to be a stored mirror, and on a no-chord step the two disagreed
+        - the step said "drop2" while the voicing said "melody" - which is the
+        defect `docs/one-fact.md` commit 1 exists to make impossible. The
+        proof is the assignment: a view that cannot be written cannot disagree
+        with the fact it reads, and assigning to it raises.
+        """
+        step = VoiceLeadingEngine.arrange_progression(
+            [("D4", "m7", "Dm7")]
+        )[0]
+        self.assertEqual(step.grip, step.voicing.grip)
+        self.assertIn(step.grip, GRIP_PREFERENCE)
+        with self.assertRaises(AttributeError):
+            step.grip = "shell"  # type: ignore[assignment]
+
 
 class TestDerivedGripShapes(unittest.TestCase):
     """

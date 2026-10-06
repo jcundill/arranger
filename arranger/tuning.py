@@ -330,10 +330,6 @@ class ArrangementStep:
     # F-7, Bb-7, Eb7): the inner voices sounding under the held note belong to the
     # chord the hold started on, not the one written above it.
     repeated: bool = False
-    # Which grip family harmonised this step, mirroring voicing.grip. One of
-    # GRIP_PREFERENCE for an ordinary chord, "melody" for a no-chord step. Defaulted,
-    # so an existing hand-built ArrangementStep is unaffected.
-    grip: str = "drop2"
     # True when a chorded step is harmonised with fewer than four voices, i.e. it is a
     # shell or a duo rather than a complete chord. The chord name printed above such a
     # step describes the harmony, not every note sounding under it, so the renderers
@@ -396,6 +392,24 @@ class ArrangementStep:
     # carrying the tune, so a `repeated` melody can no longer be a soprano-only
     # re-strike. See `render._step_cells`, which holds the whole shape instead.
     melody_voiced: bool = True
+
+    @property
+    def grip(self) -> str:
+        """
+        Which grip family harmonised this step: one of GRIP_PREFERENCE for an
+        ordinary chord, "melody" for a melody-alone step, "rest" for a rest.
+
+        A **derived view** of `voicing.grip` rather than a second stored field,
+        deliberately: the two were one fact stated twice, and on a no-chord step
+        they disagreed - the step said "drop2" while the voicing said "melody"
+        - which is the bug class `docs/one-fact.md` exists to remove. The
+        voicing owns the fact, because it is set at construction by whichever
+        generator produced the shape and read by `voicing_cost`; the step
+        answers in its own spelling and cannot be written apart from the
+        voicing, which is what makes disagreement impossible rather than merely
+        asserted against.
+        """
+        return self.voicing.grip
 
     @property
     def has_timing(self) -> bool:
