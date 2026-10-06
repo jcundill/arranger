@@ -454,6 +454,21 @@ class TestNoChordSteps(unittest.TestCase):
         self.assertIsNone(step.strategy)
         self.assertEqual(step.tab_line(), "x-x-x-x-x-1")
 
+    def test_nc_step_grip_mirrors_the_voicing(self):
+        """`step.grip` says what `voicing.grip` says, not the "drop2" default.
+
+        The two fields are one fact stated twice, and on this path they
+        disagreed for the field's whole life: the voicing said "melody" (set
+        in `grips.get_melody_only_voicing` precisely so a reader would not
+        conclude a four-note drop-2 had been chosen) while the step rested on
+        its "drop2" default. Whatever reads the step rather than its voicing
+        would read the lie.
+        """
+        steps = self.engine.arrange_progression([("F4", NO_CHORD, NO_CHORD)])
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(steps[0].grip, steps[0].voicing.grip)
+        self.assertEqual(steps[0].grip, "melody")
+
     def test_nc_is_detected_from_chord_type_or_chord_name(self):
         """Either slot carrying "NC" marks the step as unaccompanied."""
         for progression in ([("F4", NO_CHORD, "NC")], [("F4", "NC", NO_CHORD)]):

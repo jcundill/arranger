@@ -1159,6 +1159,14 @@ class VoiceLeadingEngine:
                         None if transposed == note_str else note_str
                     ),
                     melody_only=True,
+                    # Mirrors the voicing rather than resting on the step's "drop2"
+                    # default, because the two fields are one fact stated twice: this
+                    # is a single-fret shape the playability invariant exempts, and a
+                    # step that said "drop2" while its voicing said "melody" would
+                    # make the two readers of the pair disagree. The voicing sets its
+                    # own field for exactly this reason - see
+                    # `grips.get_melody_only_voicing` - and the step must not undo it.
+                    grip=solo_voicing.grip,
                     bar=bar,
                     beat=beat,
                     duration=duration,
