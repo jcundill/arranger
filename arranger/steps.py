@@ -1585,7 +1585,6 @@ class VoiceLeadingEngine:
             )
             return
         midi, string_index, fret = placed
-        step.bass = midi
         step.voicing.bass_midi = midi
         step.voicing.bass_string = string_index
         step.voicing.frets[string_index] = fret

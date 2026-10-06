@@ -1171,6 +1171,40 @@ class TestBassPlacement(unittest.TestCase):
         upper = upper_shape([5, 5, 5, 5, 5, 5])
         self.assertIsNone(_place_bass(upper, pc("D")))
 
+    def test_step_bass_is_one_fact_with_one_home(self):
+        """
+        `step.bass` is a derived view of `voicing.bass_midi`, not a second field.
+
+        The two were written together in `_attach_bass`, and a stored copy was
+        another field that could disagree - the bug class `docs/one-fact.md`
+        exists to remove. The proof is the assignment: a view that cannot be
+        written cannot disagree with the fact it reads.
+        """
+        steps = walk(
+            [("F5", "maj7", "Fmaj7"), ("A4", "7", "G7")],
+            [(0, 1.0), (0, 2.0), (0, 3.0), (0, 4.0), (1, 1.0)],
+        )
+        self.assertTrue(any(step.bass is not None for step in steps))
+        for step in steps:
+            self.assertEqual(step.bass, step.voicing.bass_midi, step.tab_line())
+        with self.assertRaises(AttributeError):
+            steps[0].bass = 41  # type: ignore[assignment]
+
+    def test_a_late_attach_bass_merge_is_visible_through_the_step(self):
+        """
+        The view follows the post-selection write rather than a copy.
+
+        The thumb is merged into the voicing only after the upper shape has
+        been chosen, so a copy taken at construction would report no bass
+        forever. Writing the voicing's own field on a hand-built step and
+        reading the step's is the proof that one is derived from the other.
+        """
+        voicing = make_voicing([-1, -1, 9, 9, 8, 8])
+        step = ArrangementStep(chord="Cmaj7", melody="E5", voicing=voicing)
+        self.assertIsNone(step.bass)
+        voicing.bass_midi = 41
+        self.assertEqual(step.bass, 41)
+
 
 class TestTheInvariant(unittest.TestCase):
     """
@@ -1601,7 +1635,7 @@ class TestWalkingBassRendering(unittest.TestCase):
         voicing = make_voicing([8, 10, 9, 10, 10, 13], bass_midi=41, bass_string=0)
         step = ArrangementStep(
             chord="Fmaj7", melody="F5", voicing=voicing, repeated=True,
-            bass=41, bass_role="connect",
+            bass_role="connect",
         )
         self.assertEqual(
             [index for index in range(6) if _strikes_here(step, index)],

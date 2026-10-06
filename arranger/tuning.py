@@ -349,12 +349,8 @@ class ArrangementStep:
     metric_weight: int = 0
     # --- Walking bass (texture="walking_bass") ---
     #
-    # MIDI pitch of the thumb note under this step, or None when there is none. Like
-    # Voicing.bass_midi it is attached only after the upper shape has been chosen, so it
-    # never enters the voicing cost.
-    bass: Optional[int] = None
     # The bass note's role, one of the BASS_ROLE_* constants. Defaulted and a plain
-    # string, like `grip` and `role`.
+    # string, like `role`.
     bass_role: Optional[str] = None
     # The step exists for the thumb and **nothing above it strikes**: the upper voices
     # are held from the previous strike and the melody is not re-attacked. This is the
@@ -410,6 +406,23 @@ class ArrangementStep:
         asserted against.
         """
         return self.voicing.grip
+
+    @property
+    def bass(self) -> Optional[int]:
+        """
+        MIDI pitch of the thumb note under this step, or None when there is none.
+
+        A **derived view** of `voicing.bass_midi`, for the same reason `grip` is a
+        view of `voicing.grip`: the two were one fact stated twice, written
+        together in `_attach_bass`, and a stored copy was another field that
+        could disagree - see `docs/one-fact.md`, commit 2. The voicing owns the
+        fact, because the thumb is merged into its fret vector and its string
+        recorded beside the pitch; deriving the step's spelling from it is also
+        what makes a copy taken *before* the merge impossible, which is the
+        failure a defaulted field could not prevent. Attached only after the
+        upper shape has been chosen, so it never enters the voicing cost.
+        """
+        return self.voicing.bass_midi
 
     @property
     def has_timing(self) -> bool:
