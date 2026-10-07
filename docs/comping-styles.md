@@ -448,9 +448,10 @@ simultaneously. One flag; the property that the contradiction goes away and
 reverses an earlier recommendation, and it reverses because a constraint has been
 withdrawn: option (1) was picked because it "breaks nothing", and the project is pre-1.0
 (no CHANGELOG, no deprecation policy, no stability classifier) with **compatibility of
-shipped flags explicitly not a constraint** — a claim `0.10.0` then acted on, by removing
-the `corpus` subcommand and two flags outright. Re-documenting a flag that is about to be
-replaced is work done twice.
+shipped flags explicitly not a constraint** — a claim the corpus-removal release then
+acted on, by removing the `corpus` subcommand and two flags outright, and Stage 2 acted
+on again by deleting the `melody` and `melody_bass` textures. Re-documenting a flag that
+is about to be replaced is work done twice.
 
 **The rename did not happen in Stage C, and that was the plan rather than an omission.**
 §6 Q2 settled as (C) — `harmony=` covers the melody-free comping route only — which means

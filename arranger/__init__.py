@@ -173,7 +173,14 @@ from .tuning import (
 # into the package as `arranger.slots`, so the slot layer it always was is now
 # importable from the engine. The MusicXML path is unchanged: byte-identical
 # output on every committed fixture across sixteen flag combinations.
-__version__ = "0.10.0"
+# 0.11.0 collapses one fact to one home: `ArrangementStep.grip` and
+# `ArrangementStep.bass` become read-only derived views of the voicing's own
+# fields, and the melody-only claim moves from the texture axis to the voices
+# axis - `voices=soprano` is the melody and nothing else, and the `melody` and
+# `melody_bass` textures are removed (a breaking change to the public surface,
+# same rule as 0.10.0). Measured byte-identical against the old spellings on
+# both committed heads and the engine's own fixture - see `docs/one-fact.md`.
+__version__ = "0.11.0"
 
 
 # The whole-progression staff renderers live in `tabstaff`, which imports this
