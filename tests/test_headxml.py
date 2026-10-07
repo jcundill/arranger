@@ -1323,6 +1323,31 @@ class TestSilentSlotsCarryNoMelody(unittest.TestCase):
         )
 
 
+class TestAnUnknownGridIsRefused(unittest.TestCase):
+    """§9.3 step A: the library refuses an unknown grid instead of coercing it.
+
+    `headxml._merge_chord_slots` used to coerce anything unrecognised to the
+    melody-anchored grid, so `arrange_xml_head(..., grid="half-time")` silently
+    returned `every_note`'s arrangement on the comping route - the exact guess
+    `parse_grid` refuses. The coercion is gone: `auto` was the only thing that ever
+    made it reachable, and once the sentinel was withdrawn the guess went with it.
+    The CLI is unaffected (argparse rejects an unknown choice first), so this is
+    observable only from library code - which is why it needs its own test rather
+    than being left to the gate.
+    """
+
+    def test_an_unknown_grid_raises_on_the_comping_route(self):
+        """The path that used to coerce now refuses, naming the real vocabulary."""
+        with self.assertRaises(ValueError) as caught:
+            arrange_xml_head(RAINY_DAY, melody="alto,tenor", grid="half-time")
+        self.assertIn("joe_pass", str(caught.exception))
+
+    def test_auto_is_no_longer_a_grid_a_library_caller_can_pass(self):
+        """`auto` was withdrawn, so the library refuses it too - not just the CLI."""
+        with self.assertRaises(ValueError):
+            arrange_xml_head(RAINY_DAY, melody="alto,tenor", grid="auto")
+
+
 class TestKeySignature(unittest.TestCase):
     """Reading a `<key>`, which is what the export needs to state the right key.
 

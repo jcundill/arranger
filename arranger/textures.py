@@ -35,14 +35,13 @@ from .tuning import ROLE_FILL, ROLE_TARGET
 
 __all__ = [
     "ALL",
-    "GRID_AUTO",
     "GRID_CHARLESTON",
+    "GRID_DEFERS_TO_MELODY",
     "GRID_EVERY_NOTE",
     "GRID_FINAL_AND",
     "GRID_FREDDIE",
     "GRID_JOE_PASS",
     "GRID_PATTERNS",
-    "GRID_POLICIES",
     "GRID_STYLES",
     "GridPattern",
     "LAST",
@@ -68,6 +67,7 @@ __all__ = [
     "HARMONY_STYLES",
     "SUB",
     "grid_allowed",
+    "grid_defers_to_melody",
     "grid_positions",
     "on_grid",
     "parse_grid",
@@ -534,29 +534,62 @@ GRID_PATTERNS: Dict[str, GridPattern] = {
     GRID_JOE_PASS: GridPattern(positions=((ALL, SUB),), bar_relative=False),
 }
 
-#: `auto` means "wherever a chord already fell", which is the shipped behaviour and
-#: the reason the axis is inert by default. It resolves to `every_note` because a
-#: head read from a score gives every written note its own slot, and that is what
-#: this axis must reproduce exactly when nobody has asked for anything.
-GRID_AUTO = "auto"
-GRID_POLICIES: Dict[str, str] = {GRID_AUTO: GRID_EVERY_NOTE}
+#: `grid=auto` is **withdrawn**, and `every_note` is the default outright. It was the
+#: one axis-wide `*_AUTO` sentinel that decided nothing: it resolved to `every_note`
+#: unconditionally and was then never read again, so it named the default rather than
+#: deferring to a context - and `every_note` is already a selectable member of
+#: `GRID_STYLES`. See `docs/comping-styles.md` §9.3 for the departure from the house
+#: rule that every axis carries a sentinel.
+#:
+#: Which grids name **no positions of their own**, so the melody decides where a chord
+#: falls: `every_note` is the *absence* of a pattern rather than a pattern. That one
+#: fact is what `on_grid` answers with "every beat", `grid_allowed` with "every metre",
+#: and `resolve_grid` falls back to. Derived from `GRID_PATTERNS`, so a grid cannot be
+#: emptied without becoming melody-anchored, and a second melody-anchored grid is a row
+#: in that table rather than a branch at each of the call sites that read this -
+#: `on_grid`, `grid_allowed` and `resolve_grid` here, and `chord_slots` and
+#: `_merge_chord_slots` in `headxml`.
+GRID_DEFERS_TO_MELODY: Dict[str, bool] = {
+    name: not pattern.positions for name, pattern in GRID_PATTERNS.items()
+}
+
+
+def grid_defers_to_melody(grid: str) -> bool:
+    """Whether this grid names no positions, so the melody places its chords.
+
+    The table read the call sites use in place of `grid == GRID_EVERY_NOTE`. An
+    unknown grid is not melody-anchored - the same answer `grid_allowed` gives it,
+    which is to refuse it rather than silently defer to the melody.
+    """
+    return GRID_DEFERS_TO_MELODY.get(grid, False)
+
+
+def _melody_anchored_grid() -> str:
+    """The grid every refusal falls back to: the one that names no positions.
+
+    `every_note` today. Resolved from `GRID_DEFERS_TO_MELODY` rather than named here,
+    so the fallback cannot point at a grid that has stopped being melody-anchored.
+    """
+    for name, defers in GRID_DEFERS_TO_MELODY.items():
+        if defers:
+            return name
+    raise AssertionError("no melody-anchored grid is registered")
 
 
 def parse_grid(argument: str) -> str:
-    """A `grid` argument as one of `GRID_STYLES`, or the `GRID_AUTO` sentinel.
+    """A `grid` argument as one of `GRID_STYLES`.
 
     The same rule as `parse_harmony`: a single name out of a closed set, and
     `ValueError` on anything else. A pattern name is a musical claim about where a
     chord lands, so guessing one would return a part that comps somewhere the caller
-    did not ask for - worse than refusing, and worse than silence.
+    did not ask for - worse than refusing, and worse than silence. `grid=auto` is no
+    longer vocabulary and is refused like any other unknown name.
     """
     text = argument.strip().lower()
-    if text == GRID_AUTO:
-        return GRID_AUTO
     if text not in GRID_STYLES:
         raise ValueError(
             f"Unknown grid {argument!r}; expected any of "
-            f"{', '.join(GRID_STYLES)}, or 'auto'"
+            f"{', '.join(GRID_STYLES)}"
         )
     return text
 
@@ -620,10 +653,10 @@ def on_grid(beat: Optional[float], grid: str, beats_per_bar: int) -> bool:
     keeps a hand-written progression - which carries no timings at all -
     byte-identical, and it is the same reason the default is inert.
 
-    `every_note` is `True` for every beat, which is what makes the axis inert by
-    default rather than merely defaulting to something harmless.
+    A melody-anchored grid (`every_note`) is `True` for every beat, which is what makes
+    the axis inert by default rather than merely defaulting to something harmless.
     """
-    if beat is None or grid == GRID_EVERY_NOTE:
+    if beat is None or grid_defers_to_melody(grid):
         return True
     target = float(beat)
     return any(
@@ -649,9 +682,10 @@ def grid_allowed(grid: str, beats_per_bar: int) -> Tuple[bool, str]:
     `grid_positions` instead would report it as placing nothing in every metre,
     which is the false reading that this check exists to avoid: "places nothing" and
     "has no positions to place" are different claims about a pattern, and only the
-    first is a mismatch.
+    first is a mismatch. `grid_defers_to_melody` is that same distinction as a table
+    read, so a second melody-anchored grid is a row rather than a branch here.
     """
-    if grid == GRID_EVERY_NOTE:
+    if grid_defers_to_melody(grid):
         return True, ""
     if grid_positions(grid, beats_per_bar):
         return True, ""
@@ -670,24 +704,23 @@ def grid_allowed(grid: str, beats_per_bar: int) -> Tuple[bool, str]:
 
 
 def resolve_grid(grid: str, beats_per_bar: int, diagnostics: Any) -> str:
-    """The grid to actually place chords on: `auto` resolved, validated, or refused.
+    """The grid to actually place chords on: validated, or refused.
 
-    The same two-step shape as `resolve_harmony` and for the same reason: the
-    resolved value is the shipped behaviour, so an arrangement naming no grid is
-    byte-identical to one from before this axis existed.
+    Unlike `resolve_harmony` there is no sentinel to resolve - `grid=auto` is
+    withdrawn and the default is `every_note` outright - so an arrangement naming no
+    grid is byte-identical to one from before this axis existed.
 
     A grid this metre cannot express is **refused rather than degraded**, on the rule
-    every axis in this module follows. The fallback is `every_note` - one chord per
-    written note - which is the *inert* answer and what the part said before this
-    axis existed, rather than a silent substitution of some other figure that does
-    fit.
+    every axis in this module follows. The fallback is the melody-anchored grid -
+    `every_note`, one chord per written note - which is the *inert* answer and what
+    the part said before this axis existed, rather than a silent substitution of some
+    other figure that does fit.
     """
-    resolved = GRID_POLICIES.get(grid, grid)
-    allowed, reason = grid_allowed(resolved, beats_per_bar)
+    allowed, reason = grid_allowed(grid, beats_per_bar)
     if not allowed:
         diagnostics.warn(f"Warning: {reason}")
-        return GRID_EVERY_NOTE
-    return resolved
+        return _melody_anchored_grid()
+    return grid
 
 
 def _metric_weight(

@@ -236,7 +236,7 @@ def arrange_slots(
     bass: str = "auto",
     melody: str = "auto",
     harmony: str = "auto",
-    grid: str = "auto",
+    grid: str = "every_note",
     beats_per_bar: int = 4,
     diagnostics: Optional[Diagnostics] = None,
 ) -> Tuple[List[ArrangementStep], List[int], List[str]]:
@@ -370,7 +370,7 @@ def _slot_options(
     bass: str = "auto",
     melody: str = "auto",
     harmony: str = "auto",
-    grid: str = "auto",
+    grid: str = "every_note",
 ) -> ArrangeOptions:
     """The request `arrange_slots` makes of the engine, as one value.
 

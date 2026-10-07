@@ -1028,8 +1028,11 @@ warn twice or hand the horn's line back to the guitarist.
 
 `harmony=` answers *which degrees* a stab states; this answers *where one lands*. A
 comping style needs both, and `bass=` supplies a third orthogonal question (what plays the
-bottom). The vocabulary is `GRID_STYLES` + `GRID_PATTERNS` + `GRID_AUTO` in `textures.py`,
-with `parse_grid` / `resolve_grid` / `grid_allowed` beside the other axes' functions.
+bottom). The vocabulary is `GRID_STYLES` + `GRID_PATTERNS` in `textures.py`, with
+`GRID_DEFERS_TO_MELODY` (derived from `GRID_PATTERNS`) and `parse_grid` / `resolve_grid` /
+`grid_allowed` / `grid_defers_to_melody` beside the other axes' functions. There is **no
+`GRID_AUTO`**: `every_note` is the default outright, and `grid=auto` is refused like any
+other unknown name (see [comping-styles.md](comping-styles.md) §9.3).
 
 **Positions are `(beat, eighths)` pairs, and `beat` may be a sentinel.** `LAST` resolves
 to the metre's final beat and `ALL` to every beat of the bar, so a pattern names *a
@@ -1090,7 +1093,7 @@ The **ordering of those guards is load-bearing and was got wrong twice** — see
 
 **The grid does not touch the bass line**, and that is orthogonality tested rather than
 asserted: measured on `but_not_for_me` with `texture=targets, melody=alto,tenor,
-bass=walk`, the walked notes are `[51, None, 52, None]` at both `grid=auto` and
+bass=walk`, the walked notes are `[51, None, 52, None]` at both `grid=every_note` and
 `grid=freddie`. A grid removes chords, never the thumb.
 
 ### What is not built

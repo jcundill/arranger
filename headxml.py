@@ -42,15 +42,13 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union
 from xml.etree import ElementTree
 
 from arranger import (
-    GRID_AUTO,
-    GRID_EVERY_NOTE,
-    GRID_STYLES,
     GRIP_PREFERENCE,
     NO_CHORD,
     PITCH_CLASS_NAMES,
     ArrangementStep,
     ChordParser,
     default_diagnostics,
+    grid_defers_to_melody,
     grid_positions,
     parse_grid,
     parse_voices,
@@ -1340,16 +1338,17 @@ def chord_slots(
     # and re-deriving a position here is how a metre-relative pattern quietly became a
     # bar-relative one.
     #
-    # **`every_note` is the special case and needs saying out loud.** Its
+    # **A melody-anchored grid is the special case and needs saying out loud.** Its
     # `GRID_PATTERNS` row is `positions=()` — "the absence of a pattern", which is why
     # `on_grid` short-circuits on it and why reading "does it place anything?" off
     # `grid_positions` correctly answers *nothing*. But "place a chord on every note" is
-    # precisely this function's job, so here `every_note` means every beat of the bar.
-    # That is the same distinction `on_grid` documents: *places nothing* and *has no
-    # positions to place* are different claims, and only the first is true of this row.
+    # precisely this function's job, so here a melody-anchored grid means every beat of
+    # the bar. That is the same distinction `on_grid` documents: *places nothing* and
+    # *has no positions to place* are different claims, and only the first is true of
+    # this row. `grid_defers_to_melody` is that distinction as a table read.
     positions: List[Tuple[int, float]] = []
     for bar in range(lo, hi):
-        if grid == GRID_EVERY_NOTE:
+        if grid_defers_to_melody(grid):
             positions.extend((bar, float(beat)) for beat in range(1, beats_per_bar + 1))
             continue
         for _marker, beats in grid_positions(grid, beats_per_bar):
@@ -1473,7 +1472,7 @@ def arrange_xml_head(
     bass: str = "auto",
     melody: str = "auto",
     harmony: str = "auto",
-    grid: str = "auto",
+    grid: str = "every_note",
 ) -> Tuple[List[ArrangementStep], Head, List[str]]:
     """Loads a MusicXML head, reduces it and arranges it, end to end.
 
@@ -1544,22 +1543,21 @@ def _merge_chord_slots(
     the better description of that instant. The grid's contribution is the positions where
     there is no note, which is the only thing this function adds.
 
-    **`grid=every_note` returns the melody slots untouched**, which is what keeps the
-    default byte-identical: it names every beat of the bar, so its union with the notes
-    would include positions the note path already covers and *drop* positions it does not
-    — the melody runs at sixteenths and the grid at beats, so the union would thin the
-    part. That is the one case where the two lists must not be merged at all, and it is
-    checked rather than assumed.
+    **A melody-anchored grid (`every_note`) returns the melody slots untouched**, which
+    is what keeps the default byte-identical: it names every beat of the bar, so its
+    union with the notes would include positions the note path already covers and *drop*
+    positions it does not — the melody runs at sixteenths and the grid at beats, so the
+    union would thin the part. That is the one case where the two lists must not be
+    merged at all, and it is checked rather than assumed.
 
     **Order is `(bar, beat)`, which is what both producers already emit.** Sorting is
     done here rather than trusted from either, because the step loop indexes the melody
     and a `bass_only`-style union that arrived out of order would attribute the wrong
     note to the wrong beat — open-issues item 5's failure, reached from a new direction.
     """
-    resolved = grid if grid in GRID_STYLES else GRID_AUTO
-    grid_policy = resolve_grid(parse_grid(resolved), head.beats_per_bar,
+    grid_policy = resolve_grid(parse_grid(grid), head.beats_per_bar,
                                default_diagnostics())
-    if grid_policy == GRID_EVERY_NOTE:
+    if grid_defers_to_melody(grid_policy):
         return slots
 
     extra = chord_slots(head, section, grid_policy)

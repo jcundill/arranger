@@ -23,7 +23,7 @@ not built.
 **§9 is the next stage of the same work**, and it is the one that turns "comping" from a
 voice selection into a route with its own behaviour: what was measured about the melody's
 actual influence on a comping part, the rule that follows from it, and six steps in
-dependency order. Steps 0 and B have landed; the rest of §9 is still proposal.
+dependency order. Steps 0, B and A have landed; the rest of §9 is still proposal.
 
 It is deliberately **not** in `docs/history/`, which is for completed plans and is never
 extended. The shipped `voices=` axis is described in [voices-axis.md](voices-axis.md); this
@@ -685,11 +685,13 @@ the table that exists.
 The largest genuinely new work, and the only stage that adds a concept rather than
 renaming one. `joe_pass` and `charleston` are the payoff.
 
-**Landed: the `grid=` axis.** `GRID_STYLES`, `GRID_PATTERNS`, `GRID_AUTO`,
-`grid_allowed`, `parse_grid` and `resolve_grid` are in `textures.py`; the keyword
-threads through `arrange_progression`, `ArrangeOptions`, `arrange_slots`,
-`arrange_xml_head`, `arrange_head` and both CLIs as `--grid`. Inert by default —
-`auto` resolves to `every_note`, and every published arrangement is byte-identical.
+**Landed: the `grid=` axis.** `GRID_STYLES`, `GRID_PATTERNS`, `grid_allowed`, `parse_grid`
+and `resolve_grid` are in `textures.py`; the keyword threads through
+`arrange_progression`, `ArrangeOptions`, `arrange_slots`, `arrange_xml_head`, `arrange_head`
+and both CLIs as `--grid`. Inert by default — the default is `every_note`, and every
+published arrangement is byte-identical. (This stage shipped a `GRID_AUTO` sentinel that
+resolved to `every_note` unconditionally; §9.3 step A later **withdrew** it, and
+`GRID_DEFERS_TO_MELODY` in `textures.py` is what the call sites read now.)
 
 Three things the implementation settled that this section did not say:
 
@@ -1083,6 +1085,19 @@ message as one: `arrange_xml_head(..., grid="half-time")` returned `every_note`'
 and will raise `ValueError` instead. Nothing in the committed fixtures or the CLI is affected,
 so it is observable only from library code — which is also why nothing in the suite will
 catch its absence, and why it needs its own test rather than being left to the gate.
+
+**Landed.** `GRID_DEFERS_TO_MELODY` — **derived** from `GRID_PATTERNS` (`positions == ()`), so a
+grid cannot be emptied without becoming melody-anchored — and its `grid_defers_to_melody` read
+replace the five `== GRID_EVERY_NOTE` sites (`on_grid`, `grid_allowed`, `resolve_grid`, and
+`chord_slots` and `_merge_chord_slots` in `headxml`). `GRID_AUTO` and `GRID_POLICIES` are
+**withdrawn**: the default is `every_note` outright, `parse_grid("auto")` raises like any
+unknown name, and `headxml._merge_chord_slots` no longer coerces an unrecognised grid to
+`every_note`. Three tests encode the reason and were **inverted rather than deleted**:
+`parse_grid(GRID_AUTO) == GRID_AUTO` became "`auto` is refused", `test_auto_resolves_to_every_note`
+was re-spelled as the default naming `every_note` (`ArrangeOptions().grid`), and
+`test_a_resolved_auto_never_warns` became `test_the_default_grid_never_warns`. A new
+`tests/test_headxml.py::TestAnUnknownGridIsRefused` covers the library-only behaviour change.
+Gate: all six fixtures byte-identical, plus the new tests.
 
 **Step A' — a chords-only head is a valid input.** Three settled decisions:
 

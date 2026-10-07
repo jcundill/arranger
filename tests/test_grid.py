@@ -14,8 +14,9 @@ What is verified, in order:
   bar's last beat in 2/2, 3/4 and 4/4 alike. This is the claim
   `docs/comping-styles.md` section 4.2 makes about `LAST`, and it is a table of three
   metres rather than a comment;
-- **the default**: `grid=auto` resolves to `every_note`, which is on the grid at every
-  beat - so the axis is inert and every existing arrangement is unaffected;
+- **the default**: `every_note` is the default outright (there is no `auto` sentinel),
+  and it is on the grid at every beat - so the axis is inert and every existing
+  arrangement is unaffected;
 - **the refusal**: a metre-relative figure asked of a metre it was not written for
   warns and falls back, and the test is **one-directional** - a bar with no note on a
   grid position is not a warning, because that is the answer rather than an error.
@@ -31,8 +32,8 @@ from contextlib import contextmanager
 from typing import Tuple
 
 from arranger import (
-    GRID_AUTO,
     GRID_CHARLESTON,
+    GRID_DEFERS_TO_MELODY,
     GRID_EVERY_NOTE,
     GRID_FINAL_AND,
     GRID_FREDDIE,
@@ -43,11 +44,13 @@ from arranger import (
     Diagnostics,
     GridPattern,
     grid_allowed,
+    grid_defers_to_melody,
     grid_positions,
     on_grid,
     parse_grid,
     resolve_grid,
 )
+from arranger.options import ArrangeOptions
 
 PROGRESSION: Tuple[Tuple[str, str, str], ...] = (
     ("D5", "m7", "Dm7"),
@@ -100,6 +103,23 @@ class TestTheGridTable(unittest.TestCase):
         self.assertEqual(sorted(GRID_STYLES), sorted(GRID_PATTERNS))
         self.assertNotIn("auto", GRID_STYLES)
 
+    def test_the_melody_anchored_set_is_derived_from_the_patterns(self):
+        """`GRID_DEFERS_TO_MELODY` names every grid, and exactly one defers.
+
+        The table is derived from `GRID_PATTERNS` (`positions == ()`), so a grid
+        cannot be emptied without becoming melody-anchored, and a second one is a row
+        rather than a branch at each call site. `every_note` is the shipped one.
+        """
+        self.assertEqual(sorted(GRID_DEFERS_TO_MELODY), sorted(GRID_PATTERNS))
+        self.assertEqual(
+            sorted(name for name, defers in GRID_DEFERS_TO_MELODY.items() if defers),
+            [GRID_EVERY_NOTE],
+        )
+        self.assertTrue(grid_defers_to_melody(GRID_EVERY_NOTE))
+        self.assertFalse(grid_defers_to_melody(GRID_FREDDIE))
+        # An unknown grid is not melody-anchored: it is refused, not deferred to.
+        self.assertFalse(grid_defers_to_melody("half-time"))
+
     def test_a_pattern_may_be_named_on_the_command_line(self):
         """`parse_grid` reads what the documentation tells a user to type.
 
@@ -113,7 +133,11 @@ class TestTheGridTable(unittest.TestCase):
             self.assertEqual(parse_grid(style), style)
             self.assertEqual(parse_grid(style.upper()), style)
         self.assertEqual(parse_grid("Charleston"), GRID_CHARLESTON)
-        self.assertEqual(parse_grid(GRID_AUTO), GRID_AUTO)
+        # `auto` was withdrawn in Step A (it named the default rather than deferring to
+        # any context), so it is refused like any other unknown name - the inverse of
+        # the assertion that used to stand here.
+        with self.assertRaises(ValueError):
+            parse_grid("auto")
         with self.assertRaises(ValueError):
             parse_grid("half-time")
 
@@ -182,11 +206,16 @@ class TestPositionsAreBarRelative(unittest.TestCase):
 
 
 class TestTheDefaultIsInert(unittest.TestCase):
-    """`auto` resolves to a grid that is on everywhere, which is what "no change" means."""
+    """`every_note` is the default and is on everywhere, which is what "no change" means."""
 
-    def test_auto_resolves_to_every_note(self):
-        """The resolved value is the shipped behaviour, not merely a harmless one."""
-        self.assertEqual(resolve_grid(GRID_AUTO, 4, Diagnostics()), GRID_EVERY_NOTE)
+    def test_the_default_grid_is_every_note(self):
+        """The default is the shipped behaviour, not merely a harmless one.
+
+        `grid=auto` used to be the sentinel that resolved to this; Step A withdrew it,
+        so the default names `every_note` outright - matching `arrange_progression`'s
+        keyword default, which is what makes the two spellings comparable.
+        """
+        self.assertEqual(ArrangeOptions().grid, GRID_EVERY_NOTE)
 
     def test_every_note_is_on_the_grid_at_every_beat(self):
         """So a caller that names no grid places exactly the chords it always did."""
@@ -309,10 +338,10 @@ class TestTheRefusalIsOneDirectional(unittest.TestCase):
         self.assertEqual(resolve_grid(GRID_FINAL_AND, 2, diagnostics), GRID_FINAL_AND)
         self.assertEqual(diagnostics.warnings, [])
 
-    def test_a_resolved_auto_never_warns(self):
+    def test_the_default_grid_never_warns(self):
         """`every_note` places everywhere, so the default is silent in every metre."""
         for beats in (1, 2, 3, 4, 7):
             with self.subTest(metre=beats):
                 diagnostics = Diagnostics()
-                resolve_grid(GRID_AUTO, beats, diagnostics)
+                resolve_grid(GRID_EVERY_NOTE, beats, diagnostics)
                 self.assertEqual(diagnostics.warnings, [])

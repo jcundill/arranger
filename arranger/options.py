@@ -22,7 +22,7 @@ from typing import Callable, Mapping, Optional, Sequence, Tuple
 
 from .bass import BASS_AUTO
 from .grips import GRIP_PREFERENCE
-from .textures import GRID_AUTO, HARMONY_AUTO, MELODY_AUTO
+from .textures import GRID_EVERY_NOTE, HARMONY_AUTO, MELODY_AUTO
 from .tuning import MELODY_STRING_CHOICES_FULL, NECK_FRET_MAX, NECK_FRET_MIN
 
 # `(bar, beat, duration)` for one slot. `bar` is signed - a pickup is negative -
@@ -115,12 +115,14 @@ class ArrangeOptions:
     # every beat and a guide-tone shell on the ands are all four combinations, and a
     # style name is a shorthand for one of them rather than a mode.
     #
-    # The default is the `GRID_AUTO` sentinel for the same reason `harmony`'s is: it
-    # matches `arrange_progression`'s keyword default, so the two spellings can be
-    # compared field-by-field and a default that disagreed would make every corpus
-    # call look like a caller who had passed both. It resolves to `every_note`, which
-    # is what a score-imported head already produced, so the axis is inert by default.
-    grid: str = GRID_AUTO
+    # The default is `every_note` **outright, with no `*_AUTO` sentinel** - a
+    # deliberate departure from the convention `harmony`, `melody` and `bass` follow,
+    # because `grid=auto` resolved to `every_note` unconditionally and was then never
+    # read again, so it named the default rather than deferring to any context. It
+    # still matches `arrange_progression`'s keyword default, so the two spellings can
+    # be compared field-by-field, and `every_note` is what a score-imported head
+    # already produced, so the axis is inert by default.
+    grid: str = GRID_EVERY_NOTE
     beats_per_bar: int = 4
     # `Sequence`, not `List`, and that is load-bearing rather than stylistic: the
     # library and the corpus hold *different* timing types - `Tuple[int, float, ...]`

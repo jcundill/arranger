@@ -131,7 +131,7 @@ python -m arranger head tests/data/i_was_doing_all_right.mxl --bars 1-3 --html h
 | `--bass` | follows `--texture` | `none`, `anchors`, `walk` — see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
 | `--voices` | `auto` (all four) | any subset of `soprano,alto,tenor,bass` — see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
 | `--harmony` | `auto` (= `guide`) | `full`, `guide`, `shell_root`, `root` — which degrees the part states when it is *not* singing; see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
-| `--grid` | `auto` (= `every_note`) | `every_note`, `freddie`, `charleston`, `joe_pass`, `final_and` — where a chord *falls* in the bar; see [where a chord falls](#where-a-chord-falls-the-grid-axis) |
+| `--grid` | `every_note` | `every_note`, `freddie`, `charleston`, `joe_pass`, `final_and` — where a chord *falls* in the bar; see [where a chord falls](#where-a-chord-falls-the-grid-axis) |
 | `--fret-min` / `--fret-max` | `2` / `13` | the neck window to aim for |
 | `--grips` | all six | which grip families to consider, **most preferred first** |
 | `--tab` | `line` | `staff` lays the head on one six-line staff, spaced on its real rhythm |
@@ -919,11 +919,11 @@ one place this axis needs two answers rather than one:
 
 **The bass line is not affected.** A grid removes *chords*, never the thumb: measured on
 `but_not_for_me` with `--texture targets --bass walk`, the walked notes are identical
-under `--grid auto` and `--grid freddie`. The two axes are orthogonal, which is the point
+under `--grid every_note` and `--grid freddie`. The two axes are orthogonal, which is the point
 of having both.
 
-**Nothing changes until you ask.** `--grid` defaults to `auto`, which resolves to
-`every_note` — one chord per written melody note, which is what the library already did.
+**Nothing changes until you ask.** `--grid` defaults to `every_note` — one chord per
+written melody note, which is what the library already did.
 Every published arrangement is byte-identical.
 
 A **free-form grid** — naming positions directly, rather than choosing a row — is not

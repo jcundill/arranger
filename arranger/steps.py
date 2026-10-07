@@ -72,7 +72,7 @@ from .grips import (
 )
 from .options import ArrangeOptions
 from .textures import (
-    GRID_AUTO,
+    GRID_EVERY_NOTE,
     HARMONY_AUTO,
     HARMONY_SHELL_ROOT,
     MELODY_AUTO,
@@ -680,7 +680,7 @@ class VoiceLeadingEngine:
         bass: str = BASS_AUTO,
         melody: str = MELODY_AUTO,
         harmony: str = HARMONY_AUTO,
-        grid: str = GRID_AUTO,
+        grid: str = GRID_EVERY_NOTE,
         beats_per_bar: int = 4,
         diagnostics: Optional[Diagnostics] = None,
         options: Optional[ArrangeOptions] = None,

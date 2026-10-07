@@ -68,7 +68,7 @@ from .chords import NON_CHORD_TONE_STRATEGIES
 from .grips import GRIP_PREFERENCE
 from .render import format_progression
 from .textures import (
-    GRID_AUTO,
+    GRID_EVERY_NOTE,
     GRID_STYLES,
     HARMONY_AUTO,
     HARMONY_STYLES,
@@ -237,8 +237,8 @@ def add_common_arguments(
     )
     parser.add_argument(
         "--grid",
-        choices=list(GRID_STYLES) + [GRID_AUTO],
-        default=GRID_AUTO,
+        choices=list(GRID_STYLES),
+        default=GRID_EVERY_NOTE,
         help=(
             "where a chord falls in the bar: 'every_note' (the default) states one "
             "under every written melody note, 'freddie' on every beat of the notated "
