@@ -165,11 +165,12 @@ you whether a change is an improvement or a different library.
     transposes. `get_all_drop2_voicings` is this pinned to `grips=("drop2",)`.
   - `voicing_cost(voicing, previous, fret_min, fret_max, allowed_tones)` — the whole
     selection rule as one comparable tuple: notes outside the chord, then frets
-    outside the window, then missing voices, then **span**, then neck position (the
-    difference of average frets from the previous voicing), then pitch movement, then
-    grip preference. Lexicographic, not a weighted sum, because these priorities must
-    not be traded against each other. `_best_voicing` is its argmin and is stable, so
-    the engine is deterministic.
+    outside the window, then missing voices, then **span** (with spans 0 and 1
+    bucketed to the same value — see §"Span outranks neck position"), then neck
+    position (the difference of average frets from the previous voicing), then pitch
+    movement, then grip preference. Lexicographic, not a weighted sum, because these
+    priorities must not be traded against each other. `_best_voicing` is its argmin
+    and is stable, so the engine is deterministic.
   - `get_octave_down_candidates(melody_note, chord_type, chord_name=None,
     top_strings=MELODY_STRING_CHOICES)` — the same for the melody an octave lower,
     on the strings below the high E. Empty when the transposed melody is unvoiceable,
@@ -303,6 +304,24 @@ promotion is also below the correctness criteria: a shape sounding a foreign not
 a partial harmonisation still loses to a correct one however tight it is, which
 `tests/test_grips.py::TestVoicingCost` asserts directly on the tuple rather than only
 through a result.
+
+**Span 0 and span 1 are bucketed together.** The span index reports `0.0` for both,
+so a zero-span barre and a one-fret reach tie and the decision falls through to neck
+position. One fret of stretch is not a stretch worth moving the hand for, and the
+case that showed it was a player reading the tab rather than a corpus measurement:
+`Bb7` under `F4 → G4 → F4` with `--grips shell` was voiced `x-x-6-7-6-x`,
+`x-x-x-3-3-3`, `x-x-6-7-6-x` — down to a fret-3 barre for one note and straight back,
+because the barre spans zero and the natural shape at frets 7–8 spans one. The
+bucket keeps the hand at 6–8 (`x-x-8-7-8-x`). The bucket is applied to the *value*
+at the span index, not by reordering the tuple, so **every span of two or more still
+outranks position exactly as before**: the `8-x-8-8-13-x` case below is untouched,
+and so is the low-Dm7 trade measured below it. Measured over the suite, the change
+moves exactly one pinned tab — the last fill of the `targets` texture, `x-x-x-5-5-5`
+→ `x-x-10-9-10-x`, which is the same stay-in-place behaviour on a different chord.
+A bucket of `0/1/2` was measured too and **rejected**: it costs 13 tests, including
+the low-Dm7 trade reverting to `5-x-3-5-3-x` and two walking-bass anchor
+diagnostics, because a four-fret reach competing with barres on position is a
+different decision than a one-fret reach doing so.
 
 **The one case it costs, and why it is not tuned away.** A low Dm7 under D4 is now
 `x-3-3-2-3-x` (span 1, lowest voice C3) where it was `5-x-3-5-3-x` on 6-4-3-2 (span 2,

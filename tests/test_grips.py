@@ -1887,6 +1887,67 @@ class TestVoicingCost(unittest.TestCase):
         assert best is not None  # pyright does not narrow through assertIsNotNone
         self.assertLessEqual(best.fret_span(), chosen.fret_span())
 
+    def test_span_zero_and_one_tie_so_position_decides(self):
+        """
+        One fret of stretch does not outrank keeping the hand where it is.
+
+        Span 0 and span 1 are bucketed to the same value at the span index, so a
+        zero-span barre loses to a one-fret shape on position rather than beating it
+        on span. Bb7 under F4 -> G4 is the motivating case, and it came from a
+        player reading the tab: the sequence was voiced `x-x-6-7-6-x`,
+        `x-x-x-3-3-3`, `x-x-6-7-6-x` - down to a fret-3 barre for one note and back.
+        The alternative at frets 7-8 is span 1 against the barre's span 0, and the
+        barre won only on that index. Now position decides and the hand stays put.
+
+        Asserted on the cost tuple directly, because that is where the bucket lives;
+        the arrangement below is the same fact end-to-end. Span 2 is asserted too:
+        it must still outrank position, or the bucket has quietly become the swap
+        that `docs/engine.md` measured and rejected.
+        """
+        barre = Voicing(
+            frets=[-1, -1, -1, 3, 3, 3], top_fret=3, avg_fret=3.0, grip="shell"
+        )
+        in_position = Voicing(
+            frets=[-1, 8, -1, 7, 8, -1], top_fret=8, avg_fret=7.6667, grip="shell"
+        )
+        wide = Voicing(
+            frets=[-1, -1, 8, 9, 10, -1], top_fret=10, avg_fret=9.0, grip="shell"
+        )
+        # Both are tight, so span ties (0.0) and the position index decides:
+        # in_position sits 1.33 frets from the previous shape, the barre 3.33.
+        previous = Voicing(
+            frets=[-1, -1, 6, 7, 6, -1], top_fret=6, avg_fret=6.3333, grip="shell"
+        )
+        self.assertEqual(
+            self.engine.voicing_cost(barre, previous)[3],
+            self.engine.voicing_cost(in_position, previous)[3],
+        )
+        self.assertLess(
+            self.engine.voicing_cost(in_position, previous),
+            self.engine.voicing_cost(barre, previous),
+        )
+        # A span-2 shape still loses on span alone, position notwithstanding.
+        self.assertGreater(
+            self.engine.voicing_cost(wide, previous)[3],
+            self.engine.voicing_cost(barre, previous)[3],
+        )
+        self.assertLess(
+            self.engine.voicing_cost(barre, previous),
+            self.engine.voicing_cost(wide, previous),
+        )
+
+        # End-to-end: the G4 keeps the hand at frets 6-8 instead of jumping to 3.
+        # `grips=("shell",)` is the original report; the full palette also holds
+        # position (`6-x-6-7-6-x`, `8-8-x-7-8-x`, `6-x-6-7-6-x`).
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("F4", "7", "Bb7"), ("G4", "7", "Bb7"), ("F4", "7", "Bb7")],
+            grips=("shell",),
+        )
+        self.assertEqual(
+            [s.voicing.tab_string() for s in steps],
+            ["x-x-6-7-6-x", "x-x-8-7-8-x", "x-x-6-7-6-x"],
+        )
+
     def test_span_is_only_promoted_over_position_not_over_correctness(self):
         """
         The promotion is a trade between two preferences, not a licence to be wrong.

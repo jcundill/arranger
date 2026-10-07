@@ -632,8 +632,10 @@ just outside it, because losing a chord of the tune is worse than being a fret o
 position.
 
 The cost function weighs **fret span above position**, so it prefers a shape the hand can
-hold over one nearer the middle of the neck. That was measured, not assumed — the
-reasoning and what the reordering cost are in [docs/engine.md](docs/engine.md).
+hold over one nearer the middle of the neck. Spans of 0 and 1 frets are treated as
+equal — one fret of stretch is not worth moving the hand for — so between two tight
+shapes the one that keeps the hand where it is wins. That was measured, not assumed —
+the reasoning and what the reordering cost are in [docs/engine.md](docs/engine.md).
 
 A melody whose only position sits above `HIGH_FRET_LIMIT` is voiced an octave down, so
 `step.melody` may be an octave below the written note; the written pitch stays in

@@ -41,10 +41,10 @@ treat a contradiction between them as a bug in one of them.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **889 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **890 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 12 of those 889, and it is the one that fails if this
+(`tests/test_docs.py` is 12 of those 890, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree. It also fails if a document
 exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
 new file cannot be added without being registered.)
@@ -290,7 +290,10 @@ melody whose only position sits above `HIGH_FRET_LIMIT` is voiced an octave down
 positionally in `tests/test_grips.py::TestVoicingCost`. Moving the code is safe;
 **reordering it is a musical decision, not a refactor.** Span is the one criterion
 promoted above position, and that was measured rather than guessed — the reasoning
-and the table of what it cost are in [docs/engine.md](docs/engine.md).
+and the table of what it cost are in [docs/engine.md](docs/engine.md). Changing what
+a criterion *reports* is the same decision: spans 0 and 1 are bucketed to one value
+at the span index (a one-fret reach does not outrank keeping the hand in place),
+measured at one moved pin, and the `0/1/2` bucket was measured at 13 and rejected.
 
 Likewise the 54 hardcoded tab strings in the tests stay: they are the acceptance
 gate, and a snapshot mechanism would let a regression pass by regenerating itself.

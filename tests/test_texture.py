@@ -561,11 +561,19 @@ class TestBackwardCompatibility(unittest.TestCase):
         pin moved here rather than the set being withdrawn.
 
         The last two fills moved back onto the contiguous 5-4-3 (`x-x-x-9-10-8` and
-        `x-x-x-5-5-5`) from the non-contiguous 6-4-2 shapes that preceded them. Span
+        then `x-x-10-9-10-x`) from the non-contiguous 6-4-2 shapes that preceded them. Span
         is now ranked above neck position, and the 6-4-2 versions needed frets 12 and
         13 against 9 and 10 - a five-fret spread for a fill. The 5-4-3 shapes put the
         same notes within two frets, and keep the B string carrying the melody, so the
         three-layer split the walking bass needs still holds.
+
+        The very last fill is `x-x-10-9-10-x` rather than `x-x-x-5-5-5`: span 0 and
+        span 1 are bucketed together at the span index of `voicing_cost`, so a
+        zero-span barre no longer beats a one-fret shape sitting where the hand
+        already is. Both are legal and both are tight - the previous fill is at
+        frets 9-10 - so the selector holds the position instead of jumping to fret 5
+        for the last chord of the phrase. Span 2 and above still outrank position
+        untouched, which is the trade `docs/engine.md` measures.
         """
         steps = VoiceLeadingEngine.arrange_progression(
             BUT_NOT_FOR_ME, timings=BUT_NOT_FOR_ME_TIMINGS, texture="targets"
@@ -580,7 +588,7 @@ class TestBackwardCompatibility(unittest.TestCase):
                 "x-x-10-12-10-10",
                 "x-x-x-12-11-13",
                 "x-x-x-9-10-8",
-                "x-x-x-5-5-5",
+                "x-x-10-9-10-x",
             ],
         )
 
