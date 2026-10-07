@@ -23,7 +23,8 @@ not built.
 **§9 is the next stage of the same work**, and it is the one that turns "comping" from a
 voice selection into a route with its own behaviour: what was measured about the melody's
 actual influence on a comping part, the rule that follows from it, and six steps in
-dependency order. Steps 0, B and A have landed; the rest of §9 is still proposal.
+dependency order. Steps 0, B, A and A' have landed; the rest of §9 (C, D, E) is still
+proposal.
 
 It is deliberately **not** in `docs/history/`, which is for completed plans and is never
 extended. The shipped `voices=` axis is described in [voices-axis.md](voices-axis.md); this
@@ -651,7 +652,7 @@ behaving correctly rather than a hole in it, but it means reachability is a weak
 than it looks: a document linked once, in one place, is fully protected by that one link.
 
 `AGENTS.md`'s stated counts moved with it, and have moved again since — the tree is at
-**952 tests OK (skipped=2)** after Stage C, with `tests/test_docs.py` still 12 of those.
+**873 tests OK (skipped=2)**, with `tests/test_docs.py` still 12 of those.
 The old line said "11 of those 926" while the line above it said 938, so it was already
 internally inconsistent before Stage B touched it.
 
@@ -829,14 +830,18 @@ for removal in §9 as well.
 
 ## 9. The comping route, measured — a staged plan
 
-**Nothing in this section is built.** It records what was measured while answering "what
-does a pure comping part need?", and the order the work has to happen in. Every number
-below was measured on the committed fixtures; none is predicted.
+**Steps 0, B, A and A' of this section are built; C, D and E are not.** It records what
+was measured while answering "what does a pure comping part need?", and the order the
+work has to happen in. Every number below was measured on the committed fixtures; none is
+predicted.
 
 **Where the work stands, for whoever picks this up cold:**
 
-- **Nothing in §9 is implemented.** No engine behaviour has changed. The only edit to the
-  tree is this document.
+- **Steps 0, B, A and A' are implemented.** Step 0 pinned melody independence as a test,
+  step B made a slot's melody `Optional`, step A declared `every_note` a property rather
+  than a sentinel, and step A' made a **chords-only lead sheet** loadable — `Head.bars` is
+  now the file's measure extent rather than the melody's span. Steps C, D and E are still
+  proposal, and each description below carries its own **Landed** marker where it has one.
 - **Every decision in §9 is settled.** The questions that shaped it — what `every_note` means
   on a head with no melody, whether the melody-less file warns or is silent, what an unknown
   grid does, whether `--fallback` reaches this route — are all answered below and marked as
@@ -1137,6 +1142,30 @@ Gate: all six fixtures byte-identical, plus the new tests.
 
 Gate: a committed chords-only fixture, and the six existing fixtures byte-identical.
 
+**Landed.** `Head` carries a `measure_range`, set by `_read_notes` from the measures it
+walks, and `bars` reports it — falling back to the note span only for a `Head` built by
+hand, which has no file behind it to state a range. `_choose_part` now scores on
+`(notes, chords)` through a new `_part_harmony_count`, so a part carrying changes but no
+melody is chosen instead of returning `None`: the file that used to raise
+`has no readable melody part` now loads. The fixture is committed as
+`tests/data/lead_sheet_chords_only.musicxml`, exactly the document §9.5 prints. Measured:
+it reports `(1, 5)`, six chords, zero notes, 4/4; the default grid and a soprano-only
+selection each arrange **nothing**, while `--grid freddie` places 16 chords, `joe_pass` 16
+and `final_and` 4 — §9.1's numbers, now reproducible on the committed tree.
+
+**One measurement this section did not have, and it reshapes the gate.** Making `bars` the
+file's extent is not free. Three fixtures — `Trouble_in_Mind_Blues`,
+`heres_that_rainy_day`, `i_was_doing_all_right` — have changes that outlast their last note,
+so on the **comping route with a named grid** their parts now run to the file's end:
+`freddie` 79→87, 103→109, 124→126 and `joe_pass` 83→91, 114→120, 159→161. The other three
+fixtures, and **every default arrangement**, are byte-identical. So "the six fixtures
+byte-identical" holds for the acceptance criterion §8 actually states — *an arrangement
+with no flags passed* — and the comping-route counts are **re-baselined rather than kept**,
+because the change *is* the fix: a chord still in force in a trailing bar was being dropped.
+`TestChordSlots`'s pinned counts move with it, and
+`TestAHeldNoteIsOneNoteAcrossABarline.test_the_held_note_outlasts_the_last_note_and_bars_reports_the_file`
+is **inverted** from `(1, 16)` to `(1, 18)` rather than deleted (AGENTS.md trap 5).
+
 **Step C — `--non-chord-tone` reaches the comping route.** Extract the strategy block from
 `prepare_step` so the comping generator honours the flag **at harmony level**, with
 `melody_pc` still `None`. `--non-chord-tone diminished` under `--voices alto,tenor` then gives
@@ -1305,13 +1334,18 @@ XML = ('<?xml version="1.0" encoding="UTF-8"?>\n'
 ```
 
 Four bars, six `<harmony>` elements, **zero pitched notes**. The timeline spans bars 1–4,
-which is what makes it a useful probe: `Head.bars` returns `(1, 1)` for it today.
+which is what made it a useful probe: `Head.bars` returned `(1, 1)` for it, and the loader
+refused it outright. It is now committed as
+`tests/data/lead_sheet_chords_only.musicxml` (§9.3 step A'), where it loads and reports
+`(1, 5)`.
 
-**The refusal, and the two dependencies behind it:**
+**The refusal, and the two dependencies behind it — fixed by step A':**
 
 ```bash
+python -m arranger head tests/data/lead_sheet_chords_only.musicxml --voices alto,tenor --grid freddie
+# 4/4, C major, 0 melody note(s), bars 1-4   -- a part, once a grid names the rhythm
 python -m arranger head tests/data/lead_sheet_chords_only.musicxml --voices alto,tenor
-# arranger head: error: ... has no readable melody part
+# nothing: every_note defers to a melody that is not there
 ```
 
 **The melody-independence measurement** (step 0's test, in miniature) — every melody pitch in

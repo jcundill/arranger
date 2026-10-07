@@ -498,6 +498,15 @@ class Head:
     # 8, 16, 24 and 32 vanish from the arrangement entirely, and on
     # `i_was_doing_all_right` bar 34. See `HeadChange`.
     chords: List[HeadChange] = field(default_factory=list)
+    # The (first, last) measure numbers the loader walked, or `None` for a `Head`
+    # built by hand. `bars` reads it, so the head's length is a fact about the
+    # **file** rather than about the melody - §9.3 step A' of `docs/comping-styles.md`.
+    #
+    # It is carried because a chords-only lead sheet has no notes to measure and still
+    # knows how long it is, and because a head whose changes outlast its last note must
+    # not be cut short at the tune's end. `None` keeps a hand-built `Head`'s note span
+    # working, since it has no file behind it to state a range.
+    measure_range: Optional[Tuple[int, int]] = None
 
     def __len__(self) -> int:
         return len(self.notes)
@@ -507,7 +516,20 @@ class Head:
 
     @property
     def bars(self) -> Tuple[int, int]:
-        """The (first, last + 1) measure range the head occupies."""
+        """The (first, last + 1) measure range the head occupies.
+
+        **A fact about the file, not about the melody** (§9.3 step A'). The loader
+        records the measures it walked, so this is right for a head whose last chord
+        outlasts its last note and for one with no notes at all - a chords-only lead
+        sheet, which the loader used to refuse outright. Nothing to guess: an empty
+        file still has its measure count.
+
+        A `Head` built by hand carries no such range, so it falls back to the melody's
+        span, which is what every fixture in the tests is.
+        """
+        if self.measure_range is not None:
+            first, last = self.measure_range
+            return (first, last + 1)
         if not self.notes:
             return (1, 1)
         return min(n.bar for n in self.notes), max(n.bar for n in self.notes) + 1
@@ -595,27 +617,50 @@ def _part_note_count(part: ElementTree.Element) -> int:
     )
 
 
+def _part_harmony_count(part: ElementTree.Element) -> int:
+    """How many `<harmony>` symbols a part declares, used alongside the note count.
+
+    The counterpart of `_part_note_count`, and the reason a **chords-only lead
+    sheet** is a readable part: such a score has zero pitched notes, so a selection
+    rule keyed on notes alone calls the file unreadable even though its whole
+    content is the chord timeline (§9.3 step A' of `docs/comping-styles.md`).
+    """
+    return sum(
+        len(measure.findall("harmony")) for measure in part.findall("measure")
+    )
+
+
 def _choose_part(
     parts: Sequence[ElementTree.Element], part_id: Optional[str]
 ) -> Optional[ElementTree.Element]:
-    """The part to read the melody from.
+    """The part to read the head from.
 
     An explicit id wins. Otherwise TAB staves are excluded - this library's own
     export has one, and its notes are the same music written per string - and the
     part with the most pitched notes wins, which is the melody rather than a
     doubling staff.
+
+    **A part with chords but no notes is readable too.** A chords-only lead sheet
+    carries no melody, so a rule keyed on `_part_note_count` alone reported the file
+    as having no readable part and refused it. Scoring on `(notes, chords)` keeps the
+    melody winning wherever both exist - the note count is the first key - while a
+    score that has only changes still yields the chord part rather than `None`.
     """
+
+    def score(part: ElementTree.Element) -> Tuple[int, int]:
+        return (_part_note_count(part), _part_harmony_count(part))
+
     if part_id is not None:
         for candidate in parts:
             if candidate.get("id") == part_id:
                 return candidate
         return None
-    readable = [p for p in parts if not _part_is_tab(p) and _part_note_count(p) > 0]
+    readable = [p for p in parts if not _part_is_tab(p) and score(p) != (0, 0)]
     if not readable:
-        readable = [p for p in parts if _part_note_count(p) > 0]
+        readable = [p for p in parts if score(p) != (0, 0)]
     if not readable:
         return None
-    return max(readable, key=_part_note_count)
+    return max(readable, key=score)
 
 
 def _score_metadata(
@@ -905,8 +950,10 @@ def load_musicxml(path: Union[str, Path], part: Optional[str] = None) -> Head:
     Handles both forms of the format: a bare `.musicxml` document and a zipped
     `.mxl` container, read through its `META-INF/container.xml`.
 
-    `part` selects a part by its `<score-part>` id; by default the melody is taken
-    from the first part that is not a TAB staff and has the most pitched notes.
+    `part` selects a part by its `<score-part>` id; by default the part with the most
+    pitched notes is taken, which is the melody. A part carrying only `<harmony>`
+    symbols and no notes is read too - a chords-only lead sheet has an empty melody
+    but a full chord timeline - so such a file loads rather than being refused.
 
     The melody of a chord-melody part is its **top line**, so the highest note of a
     `<chord>` group is the note and the rest are counted in `skipped`: a
@@ -996,6 +1043,10 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
     group_lyrics: Tuple[str, ...] = ()
     divisions = 1
     bar_index = 1
+    # Every measure number walked, in document order, so `Head.bars` is a fact about
+    # the file rather than about the melody (§9.3 step A'). The first and last are
+    # what `bars` reports; a chords-only head has no notes to derive them from.
+    measure_numbers: List[int] = []
 
     def skip(reason: str) -> None:
         skipped[reason] = skipped.get(reason, 0) + 1
@@ -1013,6 +1064,7 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
             bar = bar_index
             if number:
                 skip(f'measures not numbered with an integer ("{number}")')
+        measure_numbers.append(bar)
 
         cursor = 0
         group.clear()
@@ -1149,6 +1201,11 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
 
     head.notes = notes
     head.chords = changes
+    # The file's measure extent, so `Head.bars` reports the file's length rather than
+    # the melody's - which is what makes a chords-only head arrangeable at all (§9.3
+    # step A'). Recorded here because this is the one place the measures are walked.
+    if measure_numbers:
+        head.measure_range = (measure_numbers[0], measure_numbers[-1])
     head.unmapped = tuple(dict.fromkeys(unmapped))
     head.skipped = tuple(f"{count} {reason}" for reason, count in sorted(skipped.items()))
     report: List[str] = []

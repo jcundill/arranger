@@ -52,6 +52,8 @@ from tabxml import _events, _substitute_steps
 #                                 notation one, and chords music21 could not classify
 #   Trouble_in_Mind_Blues.musicxml  a 4/4 blues with ties written across barlines, which
 #                                 is the case `TestAHeldNoteIsOneNoteAcrossABarline` pins
+#   lead_sheet_chords_only.musicxml  written by hand: four bars, six <harmony> symbols and
+#                                 **no pitched notes** - the chords-only case (step A')
 DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 RAINY_DAY = os.path.join(DATA, "heres_that_rainy_day.musicxml")
 TROUBLE_IN_MIND = os.path.join(DATA, "Trouble_in_Mind_Blues.musicxml")
@@ -78,6 +80,9 @@ def chord_or_fail(changes, bar: int, beat: float) -> HeadChange:
 BUT_NOT_FOR_ME = os.path.join(DATA, "but_not_for_me.mxl")
 TENOR_MADNESS = os.path.join(DATA, "tenor_madness.musicxml")
 I_WAS_DOING_ALL_RIGHT = os.path.join(DATA, "i_was_doing_all_right.mxl")
+# A lead sheet with **no melody at all**: four bars, six `<harmony>` symbols and not
+# one pitched note (§9.3 step A'). It is the fixture the loader used to refuse.
+CHORDS_ONLY = os.path.join(DATA, "lead_sheet_chords_only.musicxml")
 
 
 def score(
@@ -698,17 +703,25 @@ class TestAHeldNoteIsOneNoteAcrossABarline(unittest.TestCase):
         self.assertAlmostEqual(end, 9.0, places=6)
         self.assertAlmostEqual(end - 8.0, 1.0, places=6)
 
-    def test_a_bar_the_held_note_reaches_past_its_last_note_is_still_not_lost(self):
-        """`Head.bars` stops at the last *note*, so the music's true end is later.
+    def test_the_held_note_outlasts_the_last_note_and_bars_reports_the_file(self):
+        """`Head.bars` is now a fact about the *file*, so it does not stop at the note.
 
-        The last note begins in bar 15 and is held to bar 17 beat 2.0, so the range is
-        `(1, 16)`. Asserted because it looks like truncation and is not: the sound
-        past bar 15 is inside a note's duration, and a duration is what carries it.
+        **Inverted rather than deleted** (§9.3 step A', and AGENTS.md trap 5). The old
+        assertion was `(1, 16)` and its premise was *"`Head.bars` stops at the last
+        note"*. Step A' made `bars` the file's measure extent, because a chords-only
+        head has no notes to measure and still knows how long it is - so the premise
+        is gone and the assertion would be wrong to keep. The file runs to measure 17,
+        so the range is `(1, 18)`: the last note begins in bar 15 and is held to bar 17
+        beat 2.0, and the range now reaches that bar rather than stopping short of it.
+
+        The note's own sound past bar 15 is still carried by its duration, and the
+        arithmetic that proves it is kept - that part was never about `bars`.
         """
-        self.assertEqual(self.head.bars, (1, 16))
+        self.assertEqual(self.head.bars, (1, 18))
         last = self._notes_in(15)[-1]
         self.assertEqual((last.beat, last.note_name), (4.5, "G4"))
-        # Two whole bars is 8.0 quarters, so 9.0 lands inside bar 17 - past the range.
+        # Two whole bars is 8.0 quarters, so 9.0 lands inside bar 17 - which the file's
+        # own last measure is, now that the range is the file's rather than the tune's.
         self.assertAlmostEqual((last.beat - 1.0) + last.duration * 4.0, 9.0, places=6)
 
     def test_no_note_is_duplicated_where_two_are_tied(self):
@@ -1043,14 +1056,22 @@ class TestChordSlots(unittest.TestCase):
     melody-bearing route's "a chord under each melody note" is the chord-melody idiom and
     a grid must not add positions to it.
 
-    Measured over three fixtures and fourteen flag combinations, six arrangements change
-    and thirty-six do not:
+    Phase 3 measured this over three fixtures and fourteen flag combinations: six
+    arrangements changed and thirty-six did not.
 
-        comps+freddie   80 -> 102,  81 -> 103,  110 -> 124 steps
-        comps+joe_pass  80 -> 105,  81 -> 114,  110 -> 159 steps
+    **Step A' of §9 moved these numbers, for the same three fixtures.** `Head.bars` is
+    now the file's measure extent, so a fixture whose changes outlast its last note
+    comps to the end of the file rather than stopping at the end of the tune. Current
+    counts (`--voices alto,tenor`):
 
-    Every other combination — including all four `grid=` ones on the singing route, and
-    `make demo` — is byte-identical.
+        comps+freddie   80 -> 102,  81 -> 109,  110 -> 126 steps
+        comps+joe_pass  80 -> 105,  81 -> 120,  110 -> 161 steps
+
+    Still only the comping route with a named grid, and still only the fixtures whose
+    chord timeline runs past their last note (`Trouble_in_Mind_Blues`,
+    `heres_that_rainy_day`, `i_was_doing_all_right`) — the other three, and every
+    default arrangement, are unchanged. §8's acceptance criterion holds: an arrangement
+    with no flags passed is byte-identical, `grid=` on the singing route included.
     """
 
     def setUp(self):
@@ -1346,6 +1367,79 @@ class TestAnUnknownGridIsRefused(unittest.TestCase):
         """`auto` was withdrawn, so the library refuses it too - not just the CLI."""
         with self.assertRaises(ValueError):
             arrange_xml_head(RAINY_DAY, melody="alto,tenor", grid="auto")
+
+
+class TestChordsOnlyHead(unittest.TestCase):
+    """§9.3 step A': a chords-only lead sheet is a valid input.
+
+    Four bars, six `<harmony>` elements, **zero pitched notes** — measured, the loader
+    used to refuse it outright (`has no readable melody part`) because `_choose_part`
+    selected on the note count alone. It now reads, reports its metre and bar count, and
+    arranges **to the rhythm the grid names**. What it does *not* do is guess a rhythm:
+    the default grid (`every_note`) defers to the melody, and a head with no melody has
+    nothing to defer to, so the default arrangement is empty — the decision, not a gap.
+    """
+
+    def setUp(self):
+        self.head = load_musicxml(CHORDS_ONLY)
+
+    def test_the_loader_accepts_it_and_reports_the_files_length(self):
+        """It loads, and `bars` is the file's four measures, not `(1, 1)`.
+
+        The measurement §9.5 records as the probe: `Head.bars` returned `(1, 1)` for
+        this file because it was derived from notes that do not exist. Now it is the
+        file's own measure extent, so a head with no melody still knows how long it is.
+        """
+        self.assertEqual(len(self.head.notes), 0)
+        self.assertEqual(len(self.head.chords), 6)
+        self.assertEqual(self.head.bars, (1, 5))
+        self.assertEqual((self.head.beats_per_bar, self.head.beat_type), (4, 4))
+
+    def test_the_default_grid_arranges_nothing(self):
+        """`every_note` defers to a melody that is not there, so nothing is placed.
+
+        No warning: an empty arrangement is the default grid's own instruction rather
+        than a hole to report (step A', decision 2). A comping part is what the user has
+        to ask for by naming a rhythm — exactly as for any head whose tune is off-beat.
+        """
+        steps, _head, _notes = arrange_xml_head(CHORDS_ONLY, melody="alto,tenor")
+        self.assertEqual(steps, [])
+
+    def test_a_soprano_only_selection_arranges_nothing(self):
+        """Naming soprano routes to the melody-bearing branch, where there is no tune.
+
+        Decision 3: it falls out of the same deference rather than needing a case of its
+        own. It used to take the melody route, voice the placeholder against every chord
+        and warn; with step B's honest `None` there is simply no slot to build.
+        """
+        steps, _head, _notes = arrange_xml_head(CHORDS_ONLY, melody="soprano")
+        self.assertEqual(steps, [])
+
+    def test_a_named_grid_places_the_chords(self):
+        """`freddie`, `joe_pass` and `final_and` each produce a part — the payoff.
+
+        Exactly the rhythm each pattern names on a 4/4 bar: `freddie` a chord on every
+        beat (16 = 4 bars x 4), `joe_pass` on the *ands* (first at bar 1 beat 1.5), and
+        `final_and` on the final beat's upbeat (first at bar 1 beat 4.5). Every slot
+        carries `melody=None`, because the file has no tune — the honest absence step B
+        made expressible, not the deleted placeholder.
+        """
+        expected = {
+            "freddie": ((1.0, "Dm7"), 16),
+            "joe_pass": ((1.5, "Dm7"), 16),
+            "final_and": ((4.5, "Dm7"), 4),
+        }
+        for grid, (first, count) in expected.items():
+            with self.subTest(grid=grid):
+                steps, _head, _notes = arrange_xml_head(
+                    CHORDS_ONLY, melody="alto,tenor", grid=grid
+                )
+                self.assertEqual(len(steps), count, f"grid={grid}")
+                self.assertEqual((steps[0].beat, steps[0].chord), first)
+                self.assertTrue(
+                    all(step.melody is None for step in steps),
+                    f"grid={grid} invented a melody for a chords-only head",
+                )
 
 
 class TestKeySignature(unittest.TestCase):
