@@ -1321,14 +1321,17 @@ class TestSilentSlotsCarryNoMelody(unittest.TestCase):
             html = write_tab_html(steps, os.path.join(tmp, "silent.html"))
             self.assertNotIn("None", html)
 
-    def test_a_no_note_slot_on_a_singing_route_is_refused_with_a_warning(self):
-        """The combination no shipped flow produces is refused, not guessed.
+    def test_a_no_note_slot_on_a_singing_route_is_comped(self):
+        """§9.3 step D: a note-less slot on a *singing* selection is comped, not refused.
 
-        Silent slots arrive only through the comping union, which runs only when the
-        voice selection has no soprano. A caller who hand-builds a `None` under a
-        singing selection gets a warning and a skipped slot: the guitar cannot sing
-        what is not there, and inventing a pitch is the rule the deleted placeholder
-        broke.
+        The old rule refused it, with a warning and a skipped slot, because a note-less
+        slot could arrive only through the comping union - which ran only when the
+        selection had no soprano. Step D made the soprano per slot, so a note-less slot
+        on a singing selection is a real case: the guitar has no tune here, so it states
+        the chord instead of inventing one (the rule the deleted placeholder broke) or
+        dropping the bar. The chord still sounds; only the melody is absent, which the
+        renderers print blank. This is the inversion AGENTS.md trap 5 asks for - the
+        premise the old assertion rested on is gone.
         """
         diagnostics = Diagnostics()
         steps, _rescued, _notes = arrange_slots(
@@ -1337,8 +1340,11 @@ class TestSilentSlotsCarryNoMelody(unittest.TestCase):
             melody="auto",
             diagnostics=diagnostics,
         )
-        self.assertEqual([s.chord for s in steps], ["Cmaj7"])
-        self.assertTrue(
+        self.assertEqual([s.chord for s in steps], ["Dm7", "Cmaj7"])
+        self.assertIsNone(steps[0].melody)
+        self.assertFalse(steps[0].melody_voiced, "the guitar does not sing a note it has not got")
+        self.assertTrue(steps[1].melody_voiced)
+        self.assertFalse(
             any("has no melody note" in w for w in diagnostics.warnings),
             diagnostics.warnings,
         )

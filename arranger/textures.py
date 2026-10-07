@@ -213,6 +213,12 @@ def voices_have_soprano(voices: Tuple[str, ...]) -> bool:
     depending on whether the top voice is ours, because **the melody is what pins a
     voicing** - with no soprano there is no note to pin, which is why
     `get_comping_voicings` exists and takes none.
+
+    **It is half of the engine's route, not the whole of it** (§9.3 step D). The route
+    is asked **per slot** - `sings_here = voices_have_soprano(voices) and a note sounds
+    here` - so a soprano-named selection still comps the grid positions its tune does not
+    sing. This predicate answers only the arrangement-level half: *would* this selection
+    sing the tune, wherever there is one.
     """
     return MELODY_SOPRANO in voices
 

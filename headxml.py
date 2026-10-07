@@ -50,11 +50,11 @@ from arranger import (
     default_diagnostics,
     grid_defers_to_melody,
     grid_positions,
+    melody_only_selection,
     parse_grid,
     parse_voices,
     resolve_grid,
     resolve_voices,
-    voices_have_soprano,
 )
 from arranger.slots import (
     arrange_slots,
@@ -1553,12 +1553,16 @@ def arrange_xml_head(
     """
     head = load_musicxml(path, part)
     slots = head_skeleton(head, section)
-    # **The comping union, and only on the comping route.** `melody=auto` means every
-    # voice, which is the melody-bearing route and is unchanged by this — "a chord under
-    # each melody note" is the chord-melody idiom, and merging a grid's positions into it
-    # would put chords where there is no tune. `melody=none` is the ensemble answer: the
-    # guitar states the chord while somebody else sings, so a position with no melody
-    # note is a position the chord of the tune still occupies.
+    # **The comping union is gated on whether the guitar comps at all, not on the
+    # route.** `melody=none` is the ensemble answer: the guitar states the chord while
+    # somebody else sings, so a position with no melody note is a position the chord of
+    # the tune still occupies. `melody=auto` is the same claim *and* the guitar sings
+    # the tune — the grid still places chords where the tune is silent, which is
+    # `docs/comping-styles.md` §9.3 **step D**: the soprano is per slot, not per route.
+    # A *melody-only* selection (`soprano`, `soprano,bass`) is the one case that is not
+    # merged: it plays the tune and nothing else, so a position with no tune has nothing
+    # for it to play. `_merge_chord_slots` returns the slots untouched for a
+    # melody-anchored grid, so the default (`every_note`, no flags) is a no-op.
     #
     # **Both `parse_voices` and `resolve_voices`, and the second one is not optional.**
     # `parse_voices("auto")` returns the **sentinel** `("auto",)`, which contains no
@@ -1570,10 +1574,10 @@ def arrange_xml_head(
     #
     # This is trap 12 arriving from a new direction — a *resolution* step skipped, so a
     # policy reads as something it is not. The predicate itself is the engine's own
-    # (`VoiceLeadingEngine.arrange_progression` reaches the same question through
-    # `voices_have_soprano`), which is why it is imported rather than re-tested.
+    # (`VoiceLeadingEngine.arrange_progression` routes each slot through the same
+    # question), which is why it is imported rather than re-tested.
     resolved_voices = resolve_voices(parse_voices(melody))
-    if not voices_have_soprano(resolved_voices):
+    if not melody_only_selection(resolved_voices):
         slots = _merge_chord_slots(slots, head, section, grid) or slots
     triples = [slot[0] for slot in slots]
     timings = [(slot[1], slot[2], slot[3]) for slot in slots]

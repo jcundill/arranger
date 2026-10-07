@@ -157,17 +157,23 @@ def melody_alone_case(
       Both are needed because the first alone would change `--grips shell
       --texture walking_bass`, and the second alone would miss every narrowed palette.
 
-    **`melody_voiced` is the fourth clause, and it is a guard rather than a route.**
-    Every answer here ends at `get_melody_only_voicing`, which is the melody on its
-    own - so under `melody="none"` this function cannot be allowed to answer
-    `MELODY_ALONE_TEXTURE`, or a fill would put the tune straight back on the guitar
-    and the axis would be honoured only on targets. Measured: under
-    `--texture targets --bass walk` every fill came back `x-7-x-x-x-8`, a bare melody
-    note, which is exactly the part that was supposed to be somebody else's.
+    **`melody_voiced` is the fourth clause, and it is a guard rather than a route -
+    and it is asked per *slot*, not once per arrangement.** Under §9.3 step D of
+    `docs/comping-styles.md` the engine passes `sings_here` here, not the arrangement's
+    route: a slot the guitar does not sing is either one whose selection has no soprano
+    or one carrying no melody note. Every answer here ends at
+    `get_melody_only_voicing`, which is the melody on its own - so this function cannot
+    be allowed to answer `MELODY_ALONE_TEXTURE` for a slot the guitar is not singing, or
+    a fill would put the tune straight back on the guitar and the axis would be honoured
+    only on targets. Measured: under `--texture targets --bass walk` every fill came
+    back `x-7-x-x-x-8`, a bare melody note, which is exactly the part that was supposed
+    to be somebody else's. The per-slot reading is what keeps that true for a note-less
+    grid position a *singing* selection receives: the guitar has no note there, so it
+    must not answer the texture case.
 
-    So when the guitar is not singing, only an `NC` bar may take this route - and that
-    one is *also* wrong, for a different reason: an NC bar has no chord, so there is no
-    guide tone to state and nothing for the guitar to play. It is answered as
+    So for a slot the guitar is not singing, only an `NC` bar may take this route - and
+    that one is *also* wrong, for a different reason: an NC bar has no chord, so there is
+    no guide tone to state and nothing for the guitar to play. It is answered as
     `MELODY_ALONE_NONE` and the caller warns instead, which keeps the tune's silence
     visible rather than quietly handing the horn's line to the guitarist.
 

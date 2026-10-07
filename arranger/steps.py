@@ -77,6 +77,7 @@ from .textures import (
     HARMONY_SHELL_ROOT,
     MELODY_AUTO,
     MELODY_BASS,
+    MELODY_SOPRANO,
     TEXTURE_GRIPS,
     TEXTURE_STYLES,
     THUMB_TEXTURES,
@@ -1045,20 +1046,41 @@ class VoiceLeadingEngine:
             index = slot.index
             note_str, chord_type, name = progression[index]
             if note_str is None:
-                if melody_voiced:
-                    # Defensive, and never taken by a shipped flow: a slot with no
-                    # melody note arrives only through the comping union
-                    # (`headxml._merge_chord_slots`), which runs only when the voice
-                    # selection has no soprano. Refusing loudly rather than inventing
-                    # a note is the rule the deleted placeholder used to break.
+                if melody_only:
+                    # A melody-only selection plays the tune and nothing else, so a
+                    # position with no note has nothing for the guitar to play. It is
+                    # kept as the *only* refusal here because §9.3 step D made the other
+                    # case a real one: a *singing* selection (soprano named) now receives
+                    # note-less slots from the grid union - positions the tune is silent
+                    # at - and the guitar **comps** them rather than being refused, which
+                    # is why they fall through to the comping branch below.
                     diagnostics.warn(
-                        f"Warning: slot {index} has no melody note but this voice "
-                        f"selection asks the guitar to sing; skipping the slot"
+                        f"Warning: slot {index} has no melody note and this voice "
+                        f"selection plays the tune alone; skipping the slot"
                     )
                     continue
                 melody_note = None
             else:
                 melody_note = Note(note_str)
+
+            # **Does the guitar sing *this* slot?** (§9.3 step D: the soprano is per
+            # slot, not per route.) The guitar sings a slot only where its voice
+            # selection has a soprano *and* the slot is a melody **onset** - a written
+            # note articulating here. Every other slot it comps, except on a melody-only
+            # selection, whose note-less slots were skipped above.
+            #
+            # §9.2's onset signal is reused rather than re-derived: `melody_onsets` is
+            # the same set the comping route's reharmonise guard reads, and a grid
+            # position the tune merely *sustains* through is not an onset, so the guitar
+            # states the chord there rather than re-articulating a note it did not begin
+            # - which is why a note-bearing merged position still comps. `None` means
+            # every slot is an onset, the honest default for a hand-built progression
+            # with no timeline, which keeps a bare `arrange_progression` unchanged.
+            sings_here = (
+                melody_voiced
+                and melody_note is not None
+                and (melody_onsets is None or index in melody_onsets)
+            )
 
             # Where this slot falls in the bar, and therefore what it is for. Read
             # defensively, exactly as wjazzd.arrange_slots guards its own timings: a
@@ -1132,9 +1154,15 @@ class VoiceLeadingEngine:
             # in: the grid is bar-relative, so the same beat number means different
             # positions in different bars of different metres, and `textures.on_grid`
             # is the one place that knows the metre.
+            #
+            # `melody_voiced` here is the **per-slot** `sings_here`, not the route: a
+            # slot the guitar does not sing (no soprano, or no note at this position)
+            # takes the comping-route branches inside `melody_alone_case`, so an
+            # off-grid note-less slot rests rather than asserting a melody it has not
+            # got. §9.3 step D.
             melody_alone = melody_alone_case(
                 texture, role, slot_grips, chord_type, name, has_thumb,
-                melody_voiced=melody_voiced,
+                melody_voiced=sings_here,
                 on_grid=on_grid(beat, grid_pattern, beats_per_bar),
             )
             if melody_alone == MELODY_ALONE_REST:
@@ -1163,7 +1191,10 @@ class VoiceLeadingEngine:
                     duration=duration,
                     role=role,
                     metric_weight=weight,
-                    melody_voiced=melody_voiced,
+                    # A rest is a slot the guitar does **not** sing - which is `sings_here`,
+                    # False here by construction. The route-level `melody_voiced` would
+                    # claim the guitar sings a slot it just declined to play.
+                    melody_voiced=sings_here,
                 ))
                 # The thumb still walks on a rest. A comping grid thins the **chords**,
                 # not the bass line - that is the whole difference between `grid=` and
@@ -1265,10 +1296,11 @@ class VoiceLeadingEngine:
             # Deliberately *after* the NC branch above and the melody-alone branch
             # before it, because both are cases where there is no harmony to state:
             # an NC bar has no chord at all, and a melody-only selection's fill has
-            # already committed to playing one note. This branch cannot be reached
-            # with nothing to play, because it requires no soprano in the selection -
-            # and every melody-only selection has one.
-            if not melody_voiced:
+            # already committed to playing one note. Under §9.3 step D this branch is
+            # reached whenever the guitar does not **sing** this slot - a selection
+            # without a soprano, or a position the tune is silent at - and never on a
+            # melody-only selection, whose note-less slots were skipped at the top.
+            if not sings_here and not melody_only:
                 # An `NC` bar has no chord, so there is no guide tone to state and
                 # nothing at all for the guitar to play under the horn's line. That is
                 # a real hole in the part and it is reported as one, in one sentence -
@@ -1326,16 +1358,27 @@ class VoiceLeadingEngine:
                             f"({comp_strategy}) to accommodate the melody note "
                             f"{note_str}"
                         )
+                # How many chord voices the guitar states here. **A voice is a *role*
+                # in the stack, not a count of parts played twice** - `--voices
+                # alto,tenor` is two notes, and padding it to three would put a voice
+                # in the part that belongs to the bassist.
+                #
+                # **A named soprano that is not singing is not one of the sounding
+                # voices** (§9.3 step D). On the comping route the selection has no
+                # soprano and this is `len(voices)`, exactly as before. On a *singing*
+                # selection reaching this branch - a grid position the tune is silent
+                # at - the soprano has no note to sing, so the shape is built from the
+                # voices that do sound: `soprano,alto,tenor,bass` states a three-voice
+                # shell on the offbeats, not a four-voice shape with a redundant root.
+                # (That four-note comping shape is `docs/comping-styles.md` §9.4, and it
+                # needs new string sets - deliberately not this step.)
+                comp_notes = len([voice for voice in voices if voice != MELODY_SOPRANO])
                 candidates = cls.get_comping_voicings(
                     comp_chord_type,
                     chord_name=comp_name,
                     fret_min=fret_min,
                     fret_max=fret_max,
-                    # How many notes were asked for. A voice is a *role* in the stack,
-                    # so this is the length of the selection and not a count of parts
-                    # played twice - `--voices alto,tenor` is two notes, and padding it
-                    # to three would put a voice in the part that belongs to the bassist.
-                    notes=len(voices),
+                    notes=comp_notes,
                     # **Whether this selection is the bass voice and nothing else**,
                     # which arity cannot say: `alto`, `tenor` and `bass` all ask for one
                     # note. Measured before this was passed, all three produced

@@ -23,7 +23,7 @@ not built.
 **§9 is the next stage of the same work**, and it is the one that turns "comping" from a
 voice selection into a route with its own behaviour: what was measured about the melody's
 actual influence on a comping part, the rule that follows from it, and six steps in
-dependency order. Steps 0, B, A, A' and C have landed; the rest of §9 (D, E) is still
+dependency order. Steps 0, B, A, A', C and D have landed; §9's last step (E) is still
 proposal.
 
 It is deliberately **not** in `docs/history/`, which is for completed plans and is never
@@ -830,20 +830,21 @@ for removal in §9 as well.
 
 ## 9. The comping route, measured — a staged plan
 
-**Steps 0, B, A, A' and C of this section are built; D and E are not.** It records what
+**Steps 0, B, A, A', C and D of this section are built; E is not.** It records what
 was measured while answering "what does a pure comping part need?", and the order the
 work has to happen in. Every number below was measured on the committed fixtures; none is
 predicted.
 
 **Where the work stands, for whoever picks this up cold:**
 
-- **Steps 0, B, A, A' and C are implemented.** Step 0 pinned melody independence as a test,
-  step B made a slot's melody `Optional`, step A declared `every_note` a property rather
-  than a sentinel, step A' made a **chords-only lead sheet** loadable (`Head.bars` is
-  now the file's measure extent rather than the melody's span), and step C made
-  `--non-chord-tone` reach the comping route at harmony level with the §9.2 onset guard.
-  Steps D and E are still proposal, and each description below carries its own **Landed**
-  marker where it has one.
+- **Steps 0, B, A, A', C and D are implemented.** Step 0 pinned melody independence as a
+  test, step B made a slot's melody `Optional`, step A declared `every_note` a property
+  rather than a sentinel, step A' made a **chords-only lead sheet** loadable (`Head.bars`
+  is now the file's measure extent rather than the melody's span), step C made
+  `--non-chord-tone` reach the comping route at harmony level with the §9.2 onset guard,
+  and step D made the soprano **per slot** so a soprano-named selection comps the grid
+  positions its tune does not articulate at. Step E is still proposal, and each
+  description below carries its own **Landed** marker where it has one.
 - **Every decision in §9 is settled.** The questions that shaped it — what `every_note` means
   on a head with no melody, whether the melody-less file warns or is silent, what an unknown
   grid does, whether `--fallback` reaches this route — are all answered below and marked as
@@ -909,13 +910,21 @@ examples that motivated this section:
 | `grid=freddie --voices alto,tenor` | 102 | 2 — **the guide tones, as asked** |
 | `grid=joe_pass --voices soprano,alto,tenor,bass` | **80** | 4 — **the grid is ignored** |
 
-`joe_pass` lands on offbeats, and `voices_have_soprano` routes the whole arrangement to the
+`joe_pass` lands on offbeats, and `voices_have_soprano` routed the whole arrangement to the
 melody-bearing branch, whose slots come from `head_skeleton` — one per *written note*. A
-grid can only filter there, never add, because adding a position with no melody note means
+grid could only filter there, never add, because adding a position with no melody note means
 inventing a top note and the melody route's contract is that the melody pins the voicing.
-So one predicate decides both *how the harmony is built* and *whether the guitar sings the
-tune*, and naming a soprano quietly moves every slot to the branch where grids cannot
+So one predicate decided both *how the harmony is built* and *whether the guitar sings the
+tune*, and naming a soprano quietly moved every slot to the branch where grids could not
 create anything.
+
+**Step D fixed this — that panel is the "before" measurement.** The same command now yields
+**105** steps: the 80 written onsets still sing, and the 25 grid positions the tune does not
+*articulate* at carry a comping shape instead — a three-note shell, because a silent soprano
+is not one of the sounding voices. The grid **adds** now; it no longer merely filters. (A
+position the tune merely *sustains* through is not an onset either, so it comps too; that is
+§9.3 step D below, and it is why the count is 105 rather than 80 plus only the silent
+positions.)
 
 **A chords-only file is refused, and two separate melody dependencies hide behind that
 one error.** Measured on a synthetic four-bar lead sheet — six `<harmony>` elements, zero
@@ -1229,12 +1238,46 @@ step in which the melody affects the comping output at all. It is opt-in, alread
 and confined to the harmony — the placement invariant of step 0 still holds — but a
 guitarist reading `Cmaj7 → Bdim7` with no melody on their part needs a diagnostic saying why.
 
-**Step D — the soprano is per slot, not per route.** `voices_have_soprano` currently decides
-the branch for every slot at once. Separate "how the harmony is built" (from the grid) from
+**Step D — the soprano is per slot, not per route.** `voices_have_soprano` decided the
+branch for every slot at once. Separate "how the harmony is built" (from the grid) from
 "does the guitar sing" (from the voices): a grid position with no note sounding and a named
 soprano takes the chord's voices at the requested arity, with no top note. **One new case** —
 the other three cells of the table are today's behaviour — and it is what makes
 `grid=joe_pass --voices soprano,alto,tenor,bass` place chords on the offbeats.
+
+**Landed.** The route is now the per-slot predicate `sings_here`, and the grid union is gated
+on `melody_only_selection` rather than on the soprano, so a soprano-named selection receives
+the grid positions it does not sing. Four things the implementation settled that this text
+did not say, each measured on `but_not_for_me`:
+
+- **"No note sounding" means "no melody *onset*, and it is read from §9.2's signal rather
+  than re-derived.** A `chord_slots` position under a *held* note carries that note in force
+  (`melody_at`), not `None`, so the deciding split is `melody_onsets` — the same set step C's
+  reharmonise guard reads. A position the tune merely *sustains* through is therefore not an
+  onset, and the guitar comps it too. Measured: `grid=joe_pass --voices
+  soprano,alto,tenor,bass` gives **105** steps — 80 written onsets singing and **25** comps
+  (0 silent, 25 held); `grid=freddie` gives **102** — 80 singing and **22** comps (8 held, 14
+  silent). `None` for `melody_onsets` still means "every slot is an onset", so a bare
+  `arrange_progression` is unchanged.
+- **The comping arity is the voices that will actually *sound*, so a silent soprano is not
+  one of them.** `soprano,alto,tenor,bass` states a **three-note shell** on the offbeats, not
+  a four-voice shape with a redundant root — the four-note comping shape is §9.4 and needs
+  new string sets, deliberately not this step. On the comping route (no soprano) the arity is
+  `len(voices)` exactly as before, so nothing there moved.
+- **A *melody-only* selection is the one case that is not merged.** `soprano` and
+  `soprano,bass` play the tune and nothing else, so a grid position with no tune has nothing
+  for them to play; they are left unmerged and unchanged. This is why the union is gated on
+  `melody_only_selection` and not on `voices_have_soprano`.
+- **The default is still inert.** `every_note` names no positions of its own, so
+  `_merge_chord_slots` returns the slots untouched and every no-flags arrangement on all
+  seven fixtures is byte-identical — the acceptance criterion of §7, and the property that
+  makes the change safe to ship.
+
+The one behaviour change beyond the axis itself is at the library surface: a hand-built
+`None` melody under a *singing* selection used to be refused with a warning and a skipped
+slot, and is now **comped** — the note-less slot the grid union produces on that route is a
+real case now, and dropping the bar is worse than stating its chord. `TestSilentSlotsCarry
+NoMelody`'s assertion was inverted rather than deleted (AGENTS.md trap 5).
 
 **Step E — `--voices soprano` = the melody alone.** Today naming soprano alone arranges exactly
 like `auto`, because `notes=len(voices)` is passed *only* when `melody_voiced` is False and the

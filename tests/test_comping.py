@@ -475,7 +475,7 @@ class TestCompingMelodyIndependence(unittest.TestCase):
         from headxml import _merge_chord_slots, head_skeleton, melody_state
 
         slots = head_skeleton(head, None)
-        if not voices_have_soprano(resolve_voices(parse_voices(voices))):
+        if not melody_only_selection(resolve_voices(parse_voices(voices))):
             slots = _merge_chord_slots(slots, head, None, grid) or slots
         onsets = {
             index
@@ -563,6 +563,97 @@ class TestCompingMelodyIndependence(unittest.TestCase):
             legacy,
             "the non-chord-tone strategy did not reach the comping harmony",
         )
+
+class TestTheSopranoIsPerSlotNotPerRoute(unittest.TestCase):
+    """§9.3 step D: the guitar sings a slot only where the tune *articulates*.
+
+    `voices_have_soprano` answers the arrangement-level half of the route; the other
+    half is per slot. A soprano-named selection still **comps** the grid positions its
+    tune is silent at, or merely sustains through, so `grid=joe_pass --voices
+    soprano,...` places chords on the offbeats instead of ignoring the grid. The written
+    onsets are untouched - that is the acceptance criterion, and the default (no grid)
+    is byte-identical because `every_note` names no positions of its own.
+
+    "Does the guitar sing this slot?" reuses §9.2's onset signal rather than re-deriving
+    it: a position the melody only *holds* through is not an onset, so the guitar states
+    the chord there rather than re-articulating a note it did not begin under.
+    """
+
+    def _path(self):
+        import os
+
+        return os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "data", "but_not_for_me.mxl"
+        )
+
+    def _arrange(self, voices=VOICES_ALL_ARG, grid="joe_pass"):
+        from headxml import arrange_xml_head
+
+        return arrange_xml_head(self._path(), melody=voices, grid=grid)
+
+    def test_a_singing_selection_comps_the_grid_positions_it_does_not_sing(self):
+        """The grid is no longer ignored when the guitar has the tune."""
+        steps, _head, _notes = self._arrange()
+        comps = [s for s in steps if not s.melody_voiced]
+        self.assertTrue(comps, "the grid was ignored on a singing selection")
+        for step in comps:
+            # A comp states the chord and invents no melody; the written symbol is kept.
+            self.assertTrue(step.voicing.active_frets(), step.tab_line())
+            self.assertFalse(step.grip == "melody", step.tab_line())
+
+    def test_the_comp_arity_excludes_the_silent_soprano(self):
+        """The shape is the voices that will sound: four voices state a three-note shell.
+
+        The soprano has no note to sing at these positions, so it is not one of the
+        sounding voices - which is why `soprano,alto,tenor,bass` states three notes on
+        the offbeats, not a four-voice shape with a redundant root. (The four-note
+        comping shape is §9.4 and needs new string sets - deliberately not this step.)
+        """
+        steps, _head, _notes = self._arrange()
+        comps = [s for s in steps if not s.melody_voiced]
+        self.assertTrue(comps)
+        for step in comps:
+            self.assertEqual(len(step.voicing.active_frets()), 3, step.tab_line())
+
+    def test_every_comp_sounds_only_chord_tones(self):
+        """A comping shape is held to the full tone set of the chord it states."""
+        steps, head, _notes = self._arrange()
+        for step in steps:
+            if step.melody_voiced:
+                continue
+            allowed = chord_pcs(step.chord)
+            sounding = {pitch % 12 for pitch in step.voicing.midi_notes()}
+            self.assertTrue(sounding <= allowed, step.tab_line())
+
+    def test_no_written_note_is_dropped_by_the_grid(self):
+        """The grid *adds* positions; it never removes a written note's slot."""
+        from headxml import head_skeleton
+
+        steps, head, _notes = self._arrange()
+        at = {(step.bar, step.beat): step for step in steps}
+        written = head_skeleton(head, None)
+        self.assertTrue(written)
+        for triple, bar, beat, _duration in written:
+            note = triple[0]
+            self.assertIn((bar, beat), at, f"{note} at bar {bar} beat {beat} went missing")
+            self.assertEqual(at[(bar, beat)].melody, note)
+
+    def test_the_default_grid_adds_nothing(self):
+        """No grid means every slot is a written note: the axis is inert by default."""
+        from headxml import head_skeleton
+
+        steps, head, _notes = self._arrange(grid="every_note")
+        self.assertTrue(all(step.melody_voiced for step in steps))
+        self.assertEqual(len(steps), len(head_skeleton(head, None)))
+
+    def test_a_melody_only_selection_adds_nothing(self):
+        """`soprano` plays the tune and nothing else, so it never comps a grid position."""
+        steps, _head, _notes = self._arrange(voices="soprano")
+        self.assertTrue(steps)
+        self.assertTrue(all(step.melody_voiced for step in steps))
+        self.assertTrue(all(len(step.voicing.active_frets()) == 1 for step in steps))
+
+
 
 
 class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
@@ -975,8 +1066,14 @@ class TestParseVoices(unittest.TestCase):
             resolve_voices((MELODY_AUTO,)), VOICES_ALL
         )
 
-    def test_voices_have_soprano_is_the_one_predicate_that_matters(self):
-        """Whether the tune is ours is what decides the engine's route."""
+    def test_voices_have_soprano_answers_the_arrangement_level_half_of_the_route(self):
+        """Whether the tune is *ours* is one input to the route, not the route (§9.3 D).
+
+        Named for the question the data answers rather than the decision: the engine's
+        route is per **slot** now (`sings_here`), and this predicate answers only the
+        arrangement-level half - *would* this selection sing the tune, wherever there is
+        one. `TestTheSopranoIsPerSlotNotPerRoute` pins the other half.
+        """
         self.assertTrue(voices_have_soprano(VOICES_ALL))
         self.assertFalse(voices_have_soprano(VOICES_NONE))
         self.assertTrue(voices_have_soprano((MELODY_SOPRANO, MELODY_BASS)))
