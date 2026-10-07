@@ -23,8 +23,8 @@ not built.
 **§9 is the next stage of the same work**, and it is the one that turns "comping" from a
 voice selection into a route with its own behaviour: what was measured about the melody's
 actual influence on a comping part, the rule that follows from it, and six steps in
-dependency order. Steps 0, B, A, A', C and D have landed; §9's last step (E) is still
-proposal.
+dependency order. Steps 0, B, A, A', C, D and E have landed; §9.4's four-note comping
+chord is the remaining item, and it is still a proposal.
 
 It is deliberately **not** in `docs/history/`, which is for completed plans and is never
 extended. The shipped `voices=` axis is described in [voices-axis.md](voices-axis.md); this
@@ -830,7 +830,8 @@ for removal in §9 as well.
 
 ## 9. The comping route, measured — a staged plan
 
-**Steps 0, B, A, A', C and D of this section are built; E is not.** It records what
+**Steps 0, B, A, A', C, D and E of this section are built**; §9.4's four-note comping
+chord is the one remaining proposal. It records what
 was measured while answering "what does a pure comping part need?", and the order the
 work has to happen in. Every number below was measured on the committed fixtures; none is
 predicted.
@@ -843,8 +844,10 @@ predicted.
   is now the file's measure extent rather than the melody's span), step C made
   `--non-chord-tone` reach the comping route at harmony level with the §9.2 onset guard,
   and step D made the soprano **per slot** so a soprano-named selection comps the grid
-  positions its tune does not articulate at. Step E is still proposal, and each
-  description below carries its own **Landed** marker where it has one.
+  positions its tune does not articulate at, and step E — `--voices soprano` giving the
+  melody and nothing else — landed ahead of the others as Stage 2 (`docs/one-fact.md`).
+  §9.4 is the one item still a proposal; each description below carries its own **Landed**
+  marker where it has one.
 - **Every decision in §9 is settled.** The questions that shaped it — what `every_note` means
   on a head with no melody, whether the melody-less file warns or is silent, what an unknown
   grid does, whether `--fallback` reaches this route — are all answered below and marked as
@@ -1279,17 +1282,26 @@ slot, and is now **comped** — the note-less slot the grid union produces on th
 real case now, and dropping the bar is worse than stating its chord. `TestSilentSlotsCarry
 NoMelody`'s assertion was inverted rather than deleted (AGENTS.md trap 5).
 
-**Step E — `--voices soprano` = the melody alone.** Today naming soprano alone arranges exactly
-like `auto`, because `notes=len(voices)` is passed *only* when `melody_voiced` is False and the
-melody-bearing route has no arity concept. Measured: `texture=melody` already produces exactly
-the wanted one note per step, byte-identically for `voices=soprano` and `voices=auto`, so the
-machinery exists and only the route refuses it.
+**Step E — `--voices soprano` = the melody alone. Landed, and ahead of the others.**
 
-**Shipped as the next minor release.** Three independent breaking changes land here —
-`melody` becomes `Optional[str]`, the loader accepts a class of file it previously refused,
-and `--voices soprano` changes what it plays — and on a 0.x version the minor digit is the
-breaking one. They are not folded into the current release, which was the corpus removal and
-is already tagged by its own commit. The number is deliberately not written here:
+The plan made this the last step, on the assumption that soprano alone still arranged like
+`auto`: `notes=len(voices)` is passed *only* when `melody_voiced` is False, and the
+melody-bearing route has no arity concept, so the soprano's only remaining job was to switch
+the engine onto that route. **Stage 2 (`docs/one-fact.md`) closed it first**, by keying "the
+tune and nothing else" on the voice selection — `melody_only_selection` in `textures.py` —
+rather than on a texture. That also deleted the `melody` and `melody_bass` textures the plan
+referred to, so the "measure `texture=melody`" step no longer exists to run.
+
+Measured on `tests/data/but_not_for_me.mxl`, all 80 steps: `--voices soprano` gives **one
+note per step** — the written melody, no left hand under it — while `--voices auto` (all four
+voices) still gives **four**. They are no longer the same arrangement, which is the whole of
+this step.
+
+**Landed as Stage 2 and released with the one-fact collapse** (`docs/one-fact.md`), not with
+the later §9 steps. The plan had bundled this with two other breaking changes — `melody`
+becoming `Optional[str]` (step B) and the loader accepting a chords-only file (step A') —
+under "the next minor release"; the soprano change shipped earlier, and B and A' followed it
+on `comping` with no release of their own. The number is deliberately not written here:
 `tests/test_docs.py` asserts that every version a document states equals
 `arranger.__version__`, so a plan cannot name the version it will ship as until it ships.
 
@@ -1360,9 +1372,12 @@ degree* is a deliberate loosening of exactly the invariant step 0 pins, and it n
 opt-in rather than a consequence of asking for four notes.
 
 **Not built, and not yet a step.** It is recorded here because it is the sharpest thing this
-discussion found, and because it reorders the plan if it is adopted: it is a prerequisite for
-step E, because `--voices soprano` meaning "the melody alone" cannot be stated while soprano
-also silently means "four notes, melody pinned on top". Step E should be decided after this.
+discussion found, and because it reorders the plan if it is adopted. The plan once called it a
+**prerequisite for step E** — `--voices soprano` meaning "the melody alone" could not be stated
+while soprano also silently meant "four notes, melody pinned on top". **That constraint has
+since gone**: Stage 2 made soprano alone the melody and nothing else (step E, above), so §9.4
+now stands on its own rather than gating anything. It is the one item in this section still a
+proposal.
 
 ### 9.5 Reproducing §9, and the fixture it needs
 
