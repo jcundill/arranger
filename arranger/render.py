@@ -180,6 +180,19 @@ def _step_cells(step: ArrangementStep) -> List[str]:
 
     The step still carries a full drop-2 `voicing`: the engine voice-leads from
     it and a caller wanting the literal shape still has `step.tab_line()`.
+
+    **`melody_voiced=False` removes the soprano from the `repeated` rule.** A repeat is
+    a soprano-only re-strike, which presumes there *is* a soprano carrying the tune; under
+    `melody="none"` the guitar has none, so striking "the soprano" would strike a
+    guide tone and the shape would change on a beat where nothing has. The rule becomes
+    **hold the whole shape**, which is what a guitarist comping behind a horn actually
+    does while the horn repeats the note.
+
+    This is not a corner case: measured over 2,243 corpus steps, 152 carry `repeated`,
+    and a filter that kept the old rule rendered every one of them as a single moving
+    note - the part would have played a melody line the arrangement had explicitly given
+    away. `tabstaff._strikes_here` reads the same predicate, so the ASCII staff, the HTML
+    and this one cannot disagree about what attacks.
     """
     frets = step.voicing.frets
     partial = (step.repeated or step.bass_only) and not step.melody_only
@@ -189,6 +202,12 @@ def _step_cells(step: ArrangementStep) -> List[str]:
     if step.bass_only:
         struck.add(step.voicing.bass_string)
     if step.repeated:
+        if not step.melody_voiced:
+            # Hold the whole shape: the soprano is not ours to re-strike, and the
+            # inner voices are still ringing from the step before. `bass_only` is a
+            # separate case above and composes with this one, exactly as it does when
+            # the guitar does sing.
+            return _cells_from_frets(frets)
         struck.add(step.voicing.soprano_string())
         # A repeated melody still moves the thumb: the bass is a moving voice, not a
         # held one, so blanking it here would silently delete the walking line.
@@ -231,7 +250,7 @@ def format_progression(steps: List[ArrangementStep]) -> str:
         The rendered tab, with steps separated by newlines.
     """
     return "\n".join(
-        f"{step.chord:<8} {step.melody:<3} "
+        f"{step.chord:<8} {(step.melody or ''):<3} "
         f"{_step_annotation(step)} {'-'.join(_step_cells(step))}".rstrip()
         for step in steps
     )
@@ -241,6 +260,6 @@ def _print_step(step: ArrangementStep) -> None:
     """Prints one arranged step, including which string carries the melody."""
     melody_string = 6 - step.voicing.soprano_string()  # guitar string number, 1 = high E
     print(
-        f"Chord: {step.chord:<8} | Melody: {step.melody:<3}{_step_annotation(step)} | "
+        f"Chord: {step.chord:<8} | Melody: {(step.melody or ''):<3}{_step_annotation(step)} | "
         f"Tab [E-A-D-G-B-E]: {'-'.join(_step_cells(step))} | Melody string: {melody_string}"
     )

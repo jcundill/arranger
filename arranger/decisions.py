@@ -56,6 +56,7 @@ from .tuning import NO_CHORD, ROLE_FILL, ROLE_TARGET, ArrangementStep, Voicing
 MELODY_ALONE_NONE = "none"        # look it up through the grips, as usual
 MELODY_ALONE_TEXTURE = "texture"  # a texture case: has a harmony, not spelled out
 MELODY_ALONE_NO_CHORD = "nc"      # an NC bar: no harmony to voice at all
+MELODY_ALONE_REST = "rest"        # off the grid: the guitar plays nothing here
 
 
 def resolve_texture_grips(
@@ -117,6 +118,9 @@ def melody_alone_case(
     slot_grips: Tuple[str, ...],
     quality: str,
     name: str,
+    has_thumb: bool = False,
+    melody_voiced: bool = True,
+    on_grid: bool = True,
 ) -> str:
     """Which of the three "play this as a single note" routes this slot takes.
 
@@ -132,18 +136,114 @@ def melody_alone_case(
 
     - **an `NC` bar** carries melody but no harmony, so there is nothing to voice.
       Taken before any chord logic, so it is never reharmonised and never warns.
-    - **a walking-bass fill**, and **a walking-bass target no shell can sound.** A
-      fill is *meant* to be thin, and a target that cannot be voiced must not be
-      dropped: the note of the tune survives and the harmony is stated at the next
-      target. Both are branches because the fill's grip tuple is *empty* - the
-      generic path would read "no candidates" as a failure and promote the fill to a
-      target, the exact opposite of the texture - and because `grips=("shell",)` is
-      the whole target tuple, so a melody with no shell (D over Bbm7) would be
-      dropped with only a warning.
+    - **a fill under a thumb texture**, **a target no shell can sound**, and **every
+      slot of a melody-only voice selection.** A fill is *meant* to be thin; a target that
+      cannot be voiced must not be dropped, because the note of the tune survives and
+      the harmony is stated at the next target; and a melody-only selection's slot
+      is *defined* to be a single note. All three reach it the same way, and the
+      condition is deliberately **two** clauses rather than one:
+
+      - `slot_grips == ()` is the declaration. `TEXTURE_GRIPS` says "the left hand
+        plays nothing" with an empty tuple and never by omitting a key, and the loop
+        hands an empty palette to a melody-only selection for the same reason, so
+        this is where a melody-only selection, a walking-bass fill, and a
+        narrowed-to-nothing palette all arrive.
+      - `has_thumb and role == ROLE_FILL` covers the one case the
+        declaration misses: `--grips shell --texture walking_bass`, where the caller
+        narrows a fill to `("shell",)` and the palette is no longer empty. Without
+        this clause that fill would try to voice a shell, which is the opposite of
+        what the texture means.
+
+      Both are needed because the first alone would change `--grips shell
+      --texture walking_bass`, and the second alone would miss every narrowed palette.
+
+    **`melody_voiced` is the fourth clause, and it is a guard rather than a route -
+    and it is asked per *slot*, not once per arrangement.** Under §9.3 step D of
+    `docs/comping-styles.md` the engine passes `sings_here` here, not the arrangement's
+    route: a slot the guitar does not sing is either one whose selection has no soprano
+    or one carrying no melody note. Every answer here ends at
+    `get_melody_only_voicing`, which is the melody on its own - so this function cannot
+    be allowed to answer `MELODY_ALONE_TEXTURE` for a slot the guitar is not singing, or
+    a fill would put the tune straight back on the guitar and the axis would be honoured
+    only on targets. Measured: under `--texture targets --bass walk` every fill came
+    back `x-7-x-x-x-8`, a bare melody note, which is exactly the part that was supposed
+    to be somebody else's. The per-slot reading is what keeps that true for a note-less
+    grid position a *singing* selection receives: the guitar has no note there, so it
+    must not answer the texture case.
+
+    So for a slot the guitar is not singing, only an `NC` bar may take this route - and
+    that one is *also* wrong, for a different reason: an NC bar has no chord, so there is
+    no guide tone to state and nothing for the guitar to play. It is answered as
+    `MELODY_ALONE_NONE` and the caller warns instead, which keeps the tune's silence
+    visible rather than quietly handing the horn's line to the guitarist.
+
+    **`on_grid=False` is the grid axis, and it is the one case where the guitar plays
+    nothing rather than one note.** Every other answer ends at
+    `get_melody_only_voicing`, which is the tune on its own; there is no such thing
+    when the tune is somebody else's, so an off-grid slot on the comping route is a
+    **rest** - `MELODY_ALONE_REST`, a fourth kind. This is `docs/comping-styles.md`
+    §4.2's "a melody note with no chord position on it sounds alone", and it needs two
+    different answers rather than one: with the guitar singing, the note still sounds
+    (the texture case); with it not singing, the note is the horn's and the guitar has
+    nothing to add. A single bool would have had to pick one.
     """
+    # **The ordering of the three guards below is load-bearing, and each one has been
+    # got wrong in a way its test caught.**
+    #
+    # The grid is asked *inside* the voice guard rather than after it. Answering the
+    # voice guard first made `grid=` silently inert on the comping route: measured, all
+    # four patterns returned 80 of 80 comps on `but_not_for_me` under
+    # `melody=alto,tenor`, byte-identical to the default. That is safe because a grid
+    # only ever *removes* chords, so it cannot reintroduce a soprano the voice
+    # selection removed.
+    if not melody_voiced:
+        # An `NC` bar is **not** a rest. It has no chord, so there is no guide tone to
+        # place and nothing to comp: the caller drops the bar and warns, which is the
+        # honest report. Answering `REST` here would emit a step where there should be
+        # none and swallow that warning - measured: the `NC` bar reappeared in the
+        # arrangement as a silent step, and
+        # `test_an_nc_bar_is_reported_rather_than_silently_dropped` caught it
+        # returning `['Dm7', 'NC', 'A7']` where it had returned `['Dm7', 'A7']`.
+        #
+        # So the grid only decides whether the guitar is silent *about a chord it
+        # could otherwise state*. "Nothing here to play" and "nothing to say here" are
+        # different claims, and only the first is a rest.
+        if quality == NO_CHORD or name == NO_CHORD:
+            return MELODY_ALONE_NONE
+        return MELODY_ALONE_REST if not on_grid else MELODY_ALONE_NONE
+    # The singing route answers `NC` the way it always has, and it must keep doing so
+    # even though the comping route above returns `NONE` for the same slot: the two
+    # routes build different steps there (the caller drops the bar and warns, versus
+    # `get_melody_only_voicing` with `melody_only=True`), which is the reason this
+    # function returns a *kind* and not a bool. Dropping the `NC` answer along with the
+    # comping one sent the note through the harmonised path instead, where it found no
+    # voicing and vanished - 11 tests across four files, all `NC`.
     if quality == NO_CHORD or name == NO_CHORD:
         return MELODY_ALONE_NO_CHORD
-    if texture == "walking_bass" and (role == ROLE_FILL or slot_grips == ()):
+    if not on_grid:
+        # **Off the grid.** The answer depends on whether the guitar is singing, which
+        # is the whole reason this cannot be a bool on the texture case:
+        #
+        # - singing: the note of the tune still sounds, alone. This is
+        #   `docs/comping-styles.md` §4.2's "a melody note with no chord position on
+        #   it sounds alone", and it is the *texture* case - the step has a harmony,
+        #   it is simply not being spelled out here, so `melody_only` must stay False.
+        # - not singing: there is no melody on this guitar to play alone, and the
+        #   tune belongs to the horn. The guitar is **silent**, which is what a comping
+        #   grid means - a stab on the ands and nothing on the beats - and it is a
+        #   fourth kind because no existing answer is that.
+        #
+        # Without the second case an off-grid slot fell through to the comping route
+        # and comped anyway, the exact opposite of what `grid=joe_pass` asks for.
+        # Without the first case it rested, and the guitar lost notes of the tune it
+        # was supposed to be singing - measured at 39 of 80 steps on
+        # `but_not_for_me` under `grid=freddie`, where every note off the beat went
+        # silent instead of sounding alone.
+        # Reached only when the guitar **is** singing, since the guard above answers
+        # the comping route - so this is unconditionally the texture case: the note of
+        # the tune still sounds, alone.
+        return MELODY_ALONE_TEXTURE
+    if (has_thumb and role == ROLE_FILL) or slot_grips == ():
         return MELODY_ALONE_TEXTURE
     return MELODY_ALONE_NONE
 
@@ -189,6 +289,8 @@ def should_promote_fill(
     prepared_is_none: bool,
     slot_grips: Tuple[str, ...],
     requested: Tuple[str, ...],
+    has_thumb: bool = False,
+    melody_only: bool = False,
 ) -> bool:
     """Whether a fill that produced nothing should be re-prepared as a principal note.
 
@@ -197,15 +299,17 @@ def should_promote_fill(
     before it is reported as missing - the same argument that makes `NECK_FRET_MIN`
     a penalty rather than a filter.
 
-    Disabled under `walking_bass`, where a fill is *meant* to be empty: the
-    melody-alone branch has already handled it, so promoting here would undo the
-    texture one step at a time.
+    Disabled wherever a fill is *meant* to be empty - under `walking_bass`, and on a
+    melody-only voice selection (`voices=soprano`) - because the melody-alone branch
+    has already handled it, so promoting here would undo the selection one step at a
+    time. The caller passes the selection fact from `melody_only_selection`, so it is
+    derived in one place rather than re-decided here.
 
     `slot_grips != requested` is the "the role narrowed the caller's grips" case. If
     the two are equal the retry would ask for exactly what just failed, so it is
     skipped rather than repeated.
     """
-    if texture == "walking_bass":
+    if has_thumb or melody_only:
         return False
     return prepared_is_none and role == ROLE_FILL and slot_grips != requested
 

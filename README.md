@@ -20,8 +20,8 @@ picks among them with one position-aware cost function.
   6/dim7 substitution, or by holding the chord shape under a passing tone.
 - **Three textures**, not one: every note in full, chords on the strong beats with
   thinner fills between, or a walking bass line under the melody ([texture](#texture)).
-- **Heads from real sources** — a MusicXML score, or any of the 456 Weimar Jazz
-  Database transcriptions.
+- **Heads from real sources** — a MusicXML score, read as the harmony *timeline* it
+  is rather than as a chord attribute on each note.
 - **Dependency-light**: Python 3.11+ and [musthe](https://pypi.org/project/musthe/)
   only. Reading a MusicXML head needs no extra at all; MusicXML *export* and Guitar
   Pro export each live behind their own optional extra.
@@ -125,11 +125,13 @@ python -m arranger head tests/data/i_was_doing_all_right.mxl --bars 1-3 --html h
 |---|---|---|
 | `--part` | the melody part | a `<score-part>` id, when a score has several |
 | `--bars` | the whole head | half-open `LO-HI`; **bounds may be negative** for pickups |
-| `--skeleton` | `eighths` | how finely to read the melody — see below |
-| `--pick` | `first` | which note to take when one slot holds several |
 | `--non-chord-tone` | `extension` | how to harmonise a melody note outside the chord |
 | `--fallback` | off | `diminished` — see [the trade-off](#the-fallback-trade-off) |
 | `--texture` | `uniform` | `uniform`, `targets`, `walking_bass` — see [texture](#texture) |
+| `--bass` | follows `--texture` | `none`, `anchors`, `walk` — see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
+| `--voices` | `auto` (all four) | any subset of `soprano,alto,tenor,bass` — see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
+| `--harmony` | `auto` (= `guide`) | `full`, `guide`, `shell_root`, `root` — which degrees the part states when it is *not* singing; see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
+| `--grid` | `every_note` | `every_note`, `freddie`, `charleston`, `joe_pass`, `final_and` — where a chord *falls* in the bar; see [where a chord falls](#where-a-chord-falls-the-grid-axis) |
 | `--fret-min` / `--fret-max` | `2` / `13` | the neck window to aim for |
 | `--grips` | all six | which grip families to consider, **most preferred first** |
 | `--tab` | `line` | `staff` lays the head on one six-line staff, spaced on its real rhythm |
@@ -137,14 +139,14 @@ python -m arranger head tests/data/i_was_doing_all_right.mxl --bars 1-3 --html h
 | `--bars-per-line` | `4` | with `--tab staff`: bars per staff line |
 | `--html` / `--musicxml` / `--gp5` | off | also write the head to a file — see [rendering](#rendering) |
 
-**`--skeleton` picks the rhythmic grid.** One step per *chord change*, per *beat*, per
-*eighth*, per *sixteenth*, or per *notated note* — so `eighths` is the default because a
-chord-melody line is usually eighths, and `notes` is the most literal reading of a
-written melody. A denser grid means more steps and more decisions, not a different tune.
-
-**`--pick` matters only where the score is dense.** Where several notes share one slot
-(chord changes are often notated as a single melody note), `first` takes the first in
-the score and `longest` takes the longest value.
+**Every written note sounds.** There is no reduction: `arranger head` plays the tune as
+written, one step per note, each on the beat it was written on. That was not always true.
+`--skeleton` used to name a grid — one step per chord change, beat, eighth, sixteenth or
+note — and every note was quantised onto it, so two notes closer together than the grid
+shared a step and one was **silently dropped**. On a 32-bar head with triplets it lost
+24 of 110 notes, and only 11 were in the triplet bars: 13 were in the straight ones. A
+note of the tune going missing without a word is worse than a busy tab, so the flag and
+its companion `--pick` are gone from `head`.
 
 **`--grips` is ordered.** It is a preference list, not a set: putting `shell` first
 will displace a four-note drop-2 whenever the two cost the same. Leave it alone unless
@@ -181,131 +183,20 @@ is listed in `Head.unmapped` and the run says so.
 
 ### It is the same arrangement code
 
-A head read from a score is voiced by `wjazzd.arrange_slots` — the corpus path's own
-step loop. The non-chord-tone strategies, the opt-in diminished retry, the repeated-melody
-hold and the walking bass are therefore identical whichever source a head was read from;
-only the *selection* differs.
+A head read from a score is voiced by `arranger.slots.arrange_slots` — the engine's own
+slot layer, and the only step loop in the project. The non-chord-tone strategies, the
+opt-in diminished retry, the repeated-melody hold and the walking bass are therefore the
+engine's rather than the importer's; only the *selection* is the importer's business.
 
 ```python
 from headxml import load_musicxml, head_skeleton
 
 head = load_musicxml("tests/data/but_not_for_me.mxl")   # melody, timing, chords
 print(head.title, head.beats_per_bar, len(head))
-for triple, bar, beat, duration in head_skeleton(head, "eighths"):
+for triple, bar, beat, duration in head_skeleton(head):
     print(bar, beat, triple)
 ```
 
-
-## Rendering a head from the Weimar Jazz Database
-
-The database holds 456 jazz transcriptions. `arranger corpus` turns the **head**
-— the tune — of any of them into a chord-melody arrangement:
-
-```bash
-python -m arranger corpus --melid 218     # Coltrane, "Blue Train"
-```
-
-```text
-Blue Train - John Coltrane (melid 218, Eb-maj)
-  melid 218: head at bars 1-12 (12 bars), anchored on Eb7 Ab7 Eb7 Ab7 Eb7 C7 F-7 Bb7 Eb7 [A-block is 79 bars; trimmed to one statement]
-  neck window: frets 2-13 (a preference, not a constraint); grips: drop2, drop3, drop24, drop2_6432, shell, duo
-  note: lifted an octave: 59 -> 60 of 62 steps voiced
-  note: 13 unresolved tension(s) could be rescued with --fallback diminished, which replaces the written chord
-
-Eb7      F5   (non-chord tone -> Eb9 via extension) x-x-11-12-11-13
-Ab7      Eb5  x-x-10-11-9-11
-Ab7      F5   (non-chord tone -> Ab13 via extension) x-13-13-x-13-13
-Ab7      Db5  (non-chord tone -> Ab7sus4 via extension) x-9-x-8-9-9
-Ab7      Eb5  x-9-10-x-9-11
-Ab7      F5   (non-chord tone -> Ab13 via extension) x-13-13-x-13-13
-Eb7      E5   (non-chord tone) x-13-13-x-14-12
-```
-
-Every reharmonised note says so, in the form `(non-chord tone -> Ab13 via extension)` —
-this head is a good illustration of [Heads are not harmonically simpler than
-solos](#three-things-to-know-before-you-rely-on-it) above.
-
-This needs `wjazzd.db` (42 MB) from [jazzomat.hfm-weimar.de](http://jazzomat.hfm-weimar.de/),
-placed beside the package or pointed at by `WJAZZD_DB`. It is not committed, and
-nothing in the library requires it.
-
-```bash
-python -m arranger corpus --list                        # the 456 transcriptions
-python -m arranger corpus --melid 342 --tab staff       # "All the Things You Are", Metheny
-python -m arranger corpus --melid 266 --bars -4-1       # the pickups, below bar 0
-python -m arranger corpus --melid 218 --section chorus:1  # a solo chorus instead
-```
-
-| flag | default | what it does |
-|---|---|---|
-| `--melid` | — | the transcription to read; required unless `--list` |
-| `--list` | — | list all 456 transcriptions and exit |
-| `--section` | the head | pick a span: `form:A1`, `chorus:1`, `phrase:2`, `idea:lick` |
-| `--lift` | `auto` | `auto`, `none`, `always`, `per-note` — see below |
-| `--bars` | the whole span | half-open `LO-HI`; **bounds may be negative** for pickups |
-| `--skeleton` | `eighths` | one step per chord / beat / eighth / sixteenth / note |
-| `--pick` | `first` | which note to take when one slot holds several |
-| `--non-chord-tone` | `extension` | how to harmonise a melody note outside the chord |
-| `--fallback` | off | `diminished` — see [the trade-off](#the-fallback-trade-off) |
-| `--texture` | `uniform` | `uniform`, `targets`, `walking_bass` — see [texture](#texture) |
-| `--fret-min` / `--fret-max` | `2` / `13` | the neck window to aim for |
-| `--grips` | all six | which grip families to consider, **most preferred first** |
-| `--tab` | `line` | `staff` lays the head on one six-line staff, on its real rhythm |
-| `--melody` / `--mutes` | off | with `--tab staff`: add a melody row / spell muted strings as `x` |
-| `--bars-per-line` | `4` | with `--tab staff`: bars per staff line |
-| `--html` / `--musicxml` / `--gp5` | off | also write the head to a file — see [rendering](#rendering) |
-
-**`--section` selects a span, not a form name.** The four kinds are `form:` (an A-block),
-`chorus:`, `phrase:` and `idea:`; a `*` glob is allowed (`form:A*` takes every A-block),
-and several can be given as one comma-separated selection. A Weimar transcription has no
-notated form, so this walks the transcribed sections.
-
-**`--lift` decides whether to transpose the whole head an octave.** `auto` builds the
-head twice and keeps whichever voices more steps, ties going to the original; `always`
-and `none` force it; `per-note` lifts each note on its own merits — **and it can distort
-melodic intervals**, which is why it is not the default.
-
-**`--grips` is ordered.** It is a preference list, not a set: putting `shell` first will
-displace a four-note drop-2 whenever the two cost the same.
-
-**The fret window is an aim, not a filter.** A step with no voicing inside your window is
-still played, outside it, and the header echoes your window whether or not it was met.
-
-### How the head is found
-
-Not from the form label: on all four "All the Things You Are" transcriptions the real
-8-bar head sits in a block the form label does not point at. The head is found on the
-**chord progression** — matched modulo transposition, so the same progression returning
-in a new key still counts. The command reports the bars and anchor chords it chose, so
-you can see the selection and override it with `--bars`.
-
-This is a heuristic and does not land on the head every time: across the corpus 434 of
-456 transcriptions yield a head, and the median head is 8 bars.
-
-### Three things to know before you rely on it
-
-**Heads are not harmonically simpler than solos.** This is the most common surprise. A
-standard tune is built from passing tones between widely spaced chord tones, so it is
-*more* non-chordal, not less — the chord-tone rate for a head is statistically
-indistinguishable from solo material. Roughly half the steps need the non-chord-tone
-strategy. The measurements are in [docs/corpus.md](docs/corpus.md).
-
-**`--lift auto` may transpose the head an octave.** It is threshold-free, so a head whose
-median sits one or two semitones above an arbitrary cut-off cannot defeat it — but it
-does move the music. Blue Train's head is lifted, because it dips to E♭3. The decision is
-printed on every run.
-
-### The fallback trade-off
-
-**`--fallback diminished` replaces the written chord.** It works mechanically, but
-harmonically it rewrites the tune, and on a blues most substitutions land on the tonic,
-so the tonic bar stops being a plain dominant. A head is supposed to be the written
-tune, so it is **off by default** and the count of steps it *would* rescue is always
-reported. Pass it only when you want that colour.
-
-A bar marked `NC` in the database is melody with no harmony; it is played alone on
-a single fret rather than harmonised, which is why such a step does not obey the
-four-string rule.
 
 ## Rendering
 
@@ -423,8 +314,8 @@ Three more options do most of the work:
   A rest breaks the ring, so the next shape is struck again.
 - **`rhythm=True` (the default)** spaces the chords on their real beats, so a held chord
   is drawn with room around it rather than jammed against the next one. This needs each
-  step to carry `bar` and `beat`, which the corpus loader supplies; a hand-written
-  progression has no timing and falls back to one chord per beat.
+  step to carry `bar` and `beat`, which `arrange_xml_head` supplies from the score; a
+  hand-written progression has no timing and falls back to one chord per beat.
 - **`show_mutes=False` (the default)** leaves unsounded strings as plain dashes, because
   in chord-melody a voice that is still ringing is not restruck. Pass `True` to spell them
   out as `x`.
@@ -434,7 +325,7 @@ Three more options do most of the work:
 From the command line, the same renderer is `--tab staff`:
 
 ```bash
-python -m arranger corpus --melid 218 --tab staff --melody --bars-per-line 4
+python -m arranger head but_not_for_me.mxl --tab staff --melody --bars-per-line 4
 ```
 
 For a single voicing, `Voicing.tab_string()` gives the one-line form while
@@ -478,10 +369,10 @@ Two options shape the output:
 From the command line it is `--musicxml PATH`:
 
 ```bash
-python -m arranger corpus --melid 218 --musicxml head.musicxml
+python -m arranger head but_not_for_me.mxl --musicxml head.musicxml
 ```
 
-A chord name music21 cannot classify — the Weimar notation produces several — is
+A chord name music21 cannot classify — some published notation produces several — is
 written as text with the root still parsed out, rather than dropped.
 
 ### Guitar Pro 5, for a tabber
@@ -496,7 +387,7 @@ write_gp5(steps, "head.gp5", title="Blue Train", subtitle="John Coltrane")
 ```
 
 ```bash
-python -m arranger corpus --melid 218 --gp5 head.gp5
+python -m arranger head but_not_for_me.mxl --gp5 head.gp5
 ```
 
 GP5 is a *tab* format, so every note carries its own fret and string and a shape
@@ -683,6 +574,36 @@ Gmaj9/F# D4   (duo - melody + b3, partial) x-x-x-4-3-x
 *Expect the sparsest thing this library will play — the harmony implied rather than
 stated, for a solo voice or for leaving room over a band.*
 
+**5b. The tune on its own** — `--voices soprano` plays the melody and nothing else, so
+a lead sheet in gives you the line out. The chord names are still printed above it as
+context; nothing under them is being voiced. (This used to be `--texture melody`;
+"which voices the guitar plays" is the question `voices=` answers, and it took the
+fact over from the texture axis.)
+
+```bash
+python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-2 --voices soprano
+```
+
+```text
+Gmaj9    D4   x-x-x-x-3-x
+Gmaj9    D4   x-x-x-x-3-x
+Gmaj9/F# D4   x-x-x-x-3-x
+```
+
+`--voices soprano,bass` is the same line with a walking thumb under it, and still
+nothing harmonising it — a bass voice and the tune, with no chords anywhere:
+
+```text
+Gmaj9    D4   (bass: G2, anchor) 3-x-x-x-3-x
+Gmaj9    D4   x-x-x-x-3-x
+Gmaj9    D4   (bass: F#2, connect) 2-----
+Gmaj9/F# D4   x-x-x-x-3-x
+```
+
+*Expect a single melodic line, played where the hand can play it. `--texture
+walking_bass` is the other end of this: a shell stating the harmony on the strong
+beats, this line between them.*
+
 **6. Rewriting unresolved tensions** — `--fallback diminished` substitutes a Barry Harris
 dim7 wherever nothing else can voice a melody note:
 
@@ -775,8 +696,10 @@ committed test scores are in cut time.
 
 **A fill never costs the tune a chord.** If a fill slot has nothing thin to play, the step
 is re-prepared as a principal note rather than skipped — a texture is lighter, never
-missing. Over six corpus heads this takes the mean sounding notes per melody note from
-**3.86 to 3.39** and four-voice steps from **87% to 51%**, with no head losing a step.
+missing. Measured over six Weimar transcriptions this takes the mean sounding notes per
+melody note from **3.86 to 3.39** and four-voice steps from **87% to 51%**, with no head
+losing a step. (That measurement was taken before the database path was removed; the
+finding stands and the corpus that produced it no longer ships.)
 
 ### `walking_bass` — a thumb line under the melody
 
@@ -820,6 +743,193 @@ A step with no free bass string below the melody keeps its upper voicing and say
 barline, which costs the tune that note in cut time. It carries the measurements and
 the candidate fixes.
 
+## Who plays which voice: `bass` and `voices`
+
+`texture` and `bass` answer two separate questions — *where do notes fall* and *who plays
+the bottom* — and `voices` adds a third: **who plays the tune**. All three are orthogonal,
+so a band setting is a combination rather than a mode:
+
+| axis | question it answers | values |
+|---|---|---|
+| `texture=` | where notes fall, how thick the left hand is | `uniform`, `targets`, `walking_bass` |
+| `bass=` | the bass voice | `none`, `anchors`, `walk` |
+| `voices=` | which voices the guitar plays | any subset of `soprano`, `alto`, `tenor`, `bass`; `soprano` alone is the tune and nothing else |
+| `harmony=` | **which degrees** the part states, when it is not singing | `full`, `guide`, `shell_root`, `root` |
+
+**`harmony=` is read only when the guitar has no tune of its own**, so it composes with
+`--voices` rather than competing with it: `voices` says *how many* notes and whether the
+soprano is ours, `harmony` says *which degrees those notes are*.
+
+| `harmony=` | the part sounds | needs |
+|---|---|---|
+| `guide` (the default) | the 3rd and the 7th — the notes that say major or minor | two notes |
+| `shell_root` | both guide tones **and** a root or 5th underneath them | three notes |
+| `root` | a root, or a 5th where the root is out of reach — a bass note on its own | `--voices bass` alone |
+| `full` | the whole chord | the ordinary chord-melody route |
+
+`--harmony shell_root --voices alto,tenor,bass` is a horn on the tune with the guitar
+stating quality *and* root underneath; it needs the three notes, and asking for it with
+two is refused with a warning rather than quietly thinned. On an arrangement where the
+guitar *is* singing, `--harmony` does nothing at all — for that, a chord-melody on shells
+is `--grips shell`, which is a grip choice rather than a degree family and keeps the
+melody pinned to the top string.
+
+`--bass none` and `--voices alto,tenor` together are the ensemble this library was asked
+for: a bassist on the root, a sax on the melody, and the guitar comping the two middle
+voices. Each is chosen separately because each is a different decision — "I'm next to a
+bass player so I want none of the 1s and 5s and none of the walking motion" is `bass=none`,
+"and the melody isn't mine either" is dropping `soprano` from `voices`, and leaving either
+alone keeps that voice the guitarist's job.
+
+`--voices` takes a **comma-separated list of the SATB voices**, because the question a
+player asks is never "how many notes" but *which voices am I playing*:
+
+| `--voices` | notes | the part |
+|---|---|---|
+| `auto` *(default)* | 4 | all four voices — the historical chord-melody |
+| `none` | 2 | shorthand for `alto,tenor` |
+| `alto,tenor` | 2 | the two middle voices |
+| `alto` | 1 | one guide tone, high on the neck |
+| `bass` | 1 | one note in a **bass register**, root or 5th |
+
+Order does not matter (`tenor,alto` and `alto,tenor` are the same request) and neither do
+capital letters or stray spaces. An unknown voice name is an error rather than a silently
+dropped voice.
+
+**Naming one voice says *which* one, and `bass` is not the same request as `alto`.**
+`alto` and `tenor` alone are a guide tone under somebody else's melody — the 3rd, on a
+high string, which is where a player puts one. `bass` alone is the bottom of the band:
+it sounds the **root, or the 5th where the root is unreachable**, on the low E, A or D.
+Both are one note, so the arity cannot tell them apart, and for a while it did not:
+`--voices bass`, `alto` and `tenor` produced identical arrangements, with the bass voice
+sounding a 3rd in the middle of the neck. `--voices bass` is a bass *line* and states
+nothing about the chord's quality; name an inner voice as well if you want the quality
+said.
+
+```bash
+python -m arranger head tests/data/but_not_for_me.mxl --voices bass
+```
+
+```text
+Bb7      F4   (shell - 3rd & 7th, partial) x-x-3-x-x-x
+Bb7      G4   (shell - 3rd & 7th, partial) x-x-3-x-x-x
+Ebmaj    G4   (shell - 3rd & 7th, partial) 6-x-x-x-x-x
+```
+
+One note per step, on the low E, A or D, sounding the chord's root — `Bb7` gives `Bb`, not
+the `D` a guide-tone shape would. The third column is the *written* melody, which this
+guitar is not playing (`melody_voiced` is `False`); it is still on the step so the band can
+line up against it. The `(shell - 3rd & 7th, partial)` annotation is stale wording for this
+selection — the shape is a single bass note, not a shell — and is left as-is rather than
+special-cased, because the grip label is shared with the shapes that genuinely are shells.
+
+`bass` is only treated this way when named **alone**. `--voices tenor,bass` and
+`--voices alto,tenor,bass` are a duo and a shell, and their lowest note belongs to the
+shape's own string set.
+
+### `voices=none` — guide-tone comping
+
+With `voices=none` the guitar stops singing and states the chord instead. The shape is a
+**shell**: the 3rd and the 7th, plus one more. Those are the two notes that decide whether
+the ear hears a major or a minor chord, and with no melody to support them there is nothing
+to add — a fourth voice would be the root or the 5th, which carry no information about the
+chord's quality.
+
+```bash
+python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-2 \
+    --texture targets --voices alto,tenor --bass none
+```
+
+```text
+Gmaj9    D4   (shell - 3rd & 7th, partial) x-x-x-x-7-7
+Gmaj9    D4   (shell - 3rd & 7th, partial) x-x-x-x-7-7
+Gmaj9/F# D4   (shell - 3rd & 7th, partial) x-x-x-x-7-7
+```
+
+*Expect **two** notes per step — one per voice you named. `--voices alto` gives one and
+`--voices alto,tenor,bass` gives three; the arity follows the selection rather than a
+constant, because a part sounding more notes than the caller named is a voice somebody
+else was supposed to have. `step.melody` still carries the note the horn is playing, and
+`step.melody_voiced` is `False` because the guitar is not the one playing it — that is what
+makes the two flags different things: the first is the written tune, the second is who sounds
+it.*
+
+**The shape is chosen from the chord alone.** `get_comping_voicings` takes no melody
+argument, and asking it for `D5` and `G3` under the same chord returns the *identical*
+candidate set — a generator that read the melody could not do that. What it does mean is
+that a chord tone in the shell may land on the same pitch class as the melody: measured over
+three Weimar transcriptions, **409 of 2,069 steps contain the melody's exact pitch**. That is
+unremarkable — it is the guide tone the ear needs anyway — and it is not the guitar singing.
+
+Every quality the engine can voice has a comping shape in some playable position — checked
+over `CHORD_TONES_FROM_ROOT` rather than a hand-picked list, so a quality added later cannot
+join the engine without being measured. A quality with no readable root still gets nothing,
+on the same rule as every other guide-tone generator: a shell is a claim about *this* chord's
+3rd and 7th, and guessing them without a root is how a wrong note gets in.
+
+**`texture` still decides where the chords go.** The axes are independent, not one mode
+between them: `--texture targets --voices none` gives a shell on beats 1 and 3 and a thinner
+shell between, with the horn's line untouched throughout.
+
+**A repeated melody holds the whole shape.** Normally a repeat is a soprano-only
+re-strike with the inner voices held — but there is no soprano to re-strike when the guitar
+isn't singing, so the shape is held instead. Measured over 2,243 Weimar steps, 152 carry
+`repeated`; without this the guitar part would have played a moving melody line on exactly
+the beats where the arrangement handed the tune away.
+
+**The tune, on its own or with a thumb.** `voices=soprano` is the melodic voice and
+nothing else — every slot is the melody alone, and `soprano,bass` is the same line
+with a walking thumb under it. A selection without the soprano comps under the horn
+on every texture. An `NC` bar under `voices=none`
+is likewise reported rather than quietly dropped: there is no chord, so there are no guide
+tones, and the guitar is genuinely silent while the horn is not.
+
+**Nothing changes until you ask.** `voices` defaults to `auto`, which resolves to `guitar`:
+the melody pinned to the soprano string, exactly as before. All 883 existing tests pass
+unchanged, and no published arrangement moves.
+
+## Where a chord falls: the `grid` axis
+
+`--harmony` says *which degrees* a stab states and `--voices` says *whether the guitar is
+singing*. `--grid` is the third question: **where in the bar a chord lands.**
+
+| `--grid` | a chord falls on |
+|---|---|
+| `every_note` (the default) | every written melody note |
+| `freddie` | every beat of the notated bar |
+| `charleston` | beat 1, and the upbeat of beat 2 |
+| `joe_pass` | the upbeat of every beat |
+| `final_and` | the upbeat of the bar's **final** beat |
+
+**The positions are bar-relative, which is what lets one name work in any metre.**
+"the upbeat of the final beat" is 4.5 in 4/4, 2.5 in 2/2 and 3.5 in 3/4 — the same musical
+idea at three different beat numbers. Spelling the pattern as a literal beat (`beat 4`)
+would make it look, on a 2/2 head, like a pattern naming a beat that does not exist.
+
+**What happens to a note with no chord on it depends on who is singing**, which is the
+one place this axis needs two answers rather than one:
+
+- **guitar singing** — the note of the tune still sounds, on its own. No note is ever
+  dropped: a chord-melody under `--grid joe_pass` plays the melody throughout and places
+  chords only on the ands.
+- **guitar comping** (`--voices alto,tenor`) — the guitar is **silent** on that beat,
+  because the melody belongs to the horn and there is nothing for the guitar to add. The
+  step is still emitted, so the part keeps its position in the bar and lines up against
+  the tune; it draws as an empty column.
+
+**The bass line is not affected.** A grid removes *chords*, never the thumb: measured on
+`but_not_for_me` with `--texture targets --bass walk`, the walked notes are identical
+under `--grid every_note` and `--grid freddie`. The two axes are orthogonal, which is the point
+of having both.
+
+**Nothing changes until you ask.** `--grid` defaults to `every_note` — one chord per
+written melody note, which is what the library already did.
+Every published arrangement is byte-identical.
+
+A **free-form grid** — naming positions directly, rather than choosing a row — is not
+built yet. See [docs/comping-styles.md §4.2](docs/comping-styles.md) for the design and
+what remains.
+
 ## High melodies: the octave-down move
 
 The B string is five semitones *below* the high E, so the same written pitch sits five
@@ -855,9 +965,9 @@ Two deliberate limits:
   pitch (`B5` is fret 19, `C6` is fret 20 — both past the end of the board) is still
   skipped with a warning rather than silently respelled, so the real problem stays
   visible.
-- **The decision is per step and the melody only.** Unlike `--lift auto` in the corpus
-  front end, this does not transpose a phrase as a unit, so a melody that leaps across
-  the limit can arrive an octave apart from its neighbour. That is the intended
+- **The decision is per step and the melody only.** It does not transpose a phrase as a
+  unit, so a melody that leaps across the limit can arrive an octave apart from its
+  neighbour. That is the intended
   trade-off: no step is ever left unplayable, at the cost of one melodic interval.
 
 `get_all_drop2_voicings` is deliberately *not* filtered by fret — it stays pure
@@ -907,6 +1017,15 @@ legacy      x-10-10-x-12-10 None
 Every `ArrangementStep` records what happened: `non_chord_tone`, `strategy` and
 `harmonized_as` (e.g. `"Cmaj9"`). Melodies that are already chord tones are
 arranged exactly as before, whichever strategy is selected.
+
+On a **comping** selection (`voices=` with no soprano, where the guitar states the
+chord while somebody else sings) the same flag moves the chord the guitar *states*,
+never anything it sings. A non-chord note at an **onset** reharmonises the guitar's
+chord, so `D5` over `Cmaj7` under `voices="alto,tenor"` gives `Cmaj9` (`extension`)
+or `Bdim7` (`diminished`) in the guide-tone voices, with `harmonized_as` reporting
+it and a diagnostic naming the note that forced it. A held note and a silent grid
+position state the written chord unchanged, and `legacy` (or `sustain`) leaves the
+comping part's harmony exactly as the chord symbol writes it.
 
 ## Supported chord qualities
 
@@ -968,16 +1087,16 @@ dependencies (`make install-dev`).
 (`-t .` is what lets `tests.support` import as a package module).
 
 **CI runs `make check` on Python 3.11 through 3.14**, with both optional extras installed
-so the guarded tests are not silently skipped. One thing to know: `wjazzd.db` is 42 MB and
-gitignored, so **85 of the 820 tests are skipped on a clean clone** — a green check does
-not mean the Weimar path was exercised. A separate `corpus` job covers those, on manual
-dispatch only.
+so the guarded tests are not silently skipped. That is the whole gate in one job: there
+is nothing a clean clone cannot run, so a green check means the entire suite ran. (There
+used to be a second, manual-dispatch job for the 42 MB Weimar Jazz Database, and a green
+check here did *not* mean the corpus path had been exercised. The database is gone, and
+so is that caveat.)
 
-The engine lives in the `arranger` package, twelve modules in a strict dependency order
-that `tests/test_package_dag.py` asserts from the AST. `wjazzd.py` is separate, optional
-glue that nothing in the package imports, so the library works with no database present.
-See `AGENTS.md` for the module map and the conventions, and [docs/](docs/) for the
-reasoning behind the engine, the renderers and the corpus.
+The engine lives in the `arranger` package, thirteen modules in a strict dependency order
+that `tests/test_package_dag.py` asserts from the AST. See `AGENTS.md` for the module map
+and the conventions, and [docs/](docs/) for the reasoning behind the engine and the
+renderers.
 
 ## Known limitations
 
@@ -1003,10 +1122,9 @@ reasoning behind the engine, the renderers and the corpus.
 - The neck window is a preference, not a filter, so `--fret-min`/`--fret-max` may not be
   honoured where nothing playable exists inside it. The header echoes the window whether or
   not it was met.
-- From the corpus side: the head selector is a heuristic and misses the head on some
-  transcriptions; `wjazzd.db` is a 42 MB download that must be supplied separately; a slash
-  bass is honoured as a preference rather than a hard constraint. See
-  [How the head is found](#how-the-head-is-found).
+- A slash bass is honoured as a preference rather than a hard constraint: the selector
+  narrows the candidates by it and then applies the engine's own rule within that set, so
+  a voicing that cannot honour the bass is still playable.
 - No release has been published to PyPI.
 
 ## License

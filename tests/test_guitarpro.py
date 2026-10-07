@@ -472,46 +472,93 @@ class TestRhythm(GuitarProTestCase):
         """Every measure sums to at most the bar, as the reader requires it.
 
         The property a notation program actually checks, and the one that produced
-        the "voice 1 is too long" error. Asserted over a real corpus head rather
-        than a hand-built case, because the failure needs the transcribed grid - a
+        the "voice 1 is too long" error. Asserted over real committed scores rather
+        than a hand-built case, because the failure needs a notated grid - a
         triplet division and a step sharing a bar line - to appear at all.
+
+        **This was asserted over the Weimar corpus and skipped without it.** It read
+        melid 218, which is where the triplet grid that triggered the bug was
+        found, and it was one of the 164 tests the database's absence removed. So it
+        needed a replacement rather than a deletion, and the replacement is three
+        committed scores chosen for the property rather than for being a tune:
+
+            i_was_doing_all_right.mxl    2/2   110 notes   39 triplets
+            Trouble_in_Mind_Blues       4/4    53 notes    3 triplets
+            tenor_madness.musicxml      4/4   200 notes    6 triplets
+
+        `i_was_doing_all_right` is the important one: **39 triplets**, more than the
+        corpus head had. Measured over all three: **0 measures over**, with the
+        longest bar exactly full in each - the "at most" boundary reached rather than
+        merely respected, so this is a real measurement and not a vacuous one.
+
+        **And the limit is computed, not written as 4.** A 2/2 bar is four quarters,
+        so `beats_per_bar` on its own is wrong for every metre that is not 4/4 - and
+        `The_Jitterbug_Waltz` is 3/4, where it is wrong by a quarter note. This is
+        trap 9 (`docs/open-issues.md`) arriving precisely where that document says it
+        would, and the first version of this test made exactly that error and
+        reported 32 of a 2/2 head's measures as over-long.
         """
+        import headxml
         from tabgp import _measures
         from tabxml import _events, _substitute_steps
-        from wjazzd import DEFAULT_DB, arrange_head, load_solo, select_head
 
-        if not DEFAULT_DB.is_file():
-            self.skipTest("no Weimar database available")
+        data = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+        scores = ("i_was_doing_all_right.mxl", "Trouble_in_Mind_Blues.musicxml",
+                  "tenor_madness.musicxml")
+        for name in scores:
+            with self.subTest(score=name):
+                steps, head, _notes = headxml.arrange_xml_head(
+                    os.path.join(data, name)
+                )
+                # A count without a denominator is not a metre, and this is trap 9
+                # arriving exactly where the document says it would: `beats_per_bar`
+                # alone is the wrong number of quarters for every metre that is not
+                # 4/4. A 2/2 bar is four quarters, not two - the beat is a half note -
+                # so the limit is `beats_per_bar` beats of `4 / beat_type` quarters.
+                # Writing `float(head.beats_per_bar)` here reports 32 of 35 measures
+                # of a 2/2 head as over-long, which is the test being wrong and
+                # sounding exactly like a renderer bug.
+                limit = float(head.beats_per_bar) * (4.0 / float(head.beat_type))
+                events, pickup = _events(
+                    _substitute_steps(steps), head.beats_per_bar, True,
+                    head.beat_type,
+                )
+                for number, beats in enumerate(
+                    _measures(events, pickup, head.beats_per_bar), start=1
+                ):
+                    total = sum(length for _s, length, _tie in beats)
+                    self.assertLessEqual(
+                        total, limit + 1e-6,
+                        msg=f"{name} bar {number} is {total} quarters, "
+                            f"longer than {limit}",
+                    )
 
-        head = select_head(218)
-        steps = arrange_head(
-            load_solo(218), head=head, strategy="eighths"
-        ).steps
-        events, pickup = _events(_substitute_steps(steps), 4, True)
-        for number, beats in enumerate(_measures(events, pickup, 4), start=1):
-            # The exact lengths the renderer was asked for. A bar is at most a bar
-            # long: the closing one is shorter, because the head stops there.
-            self.assertLessEqual(
-                sum(length for _s, length, _tie in beats),
-                4.0 + 1e-6,
-                msg=f"bar {number} is longer than 4/4",
-            )
-
-        # And the same check on what actually reaches the file, with tuplets
-        # resolved the way the reader resolves them.
-        song = self.song(steps=steps)
-        for number, measure in enumerate(song.tracks[0].measures, start=1):
-            total = 0.0
-            for beat in measure.voices[0].beats:
-                length = 4.0 / beat.duration.value
-                tuplet = beat.duration.tuplet
-                if tuplet and (tuplet.enters, tuplet.times) != (1, 1):
-                    length = length * tuplet.times / tuplet.enters
-                total += length
-            self.assertLessEqual(
-                total, 4.0 + 1e-6,
-                f"bar {number} is {total} quarters, longer than 4/4",
-            )
+                # And the same check on what actually reaches the file, with
+                # tuplets resolved the way the reader resolves them. The metre is
+                # passed rather than defaulted: `format_gp5` writes a 4/4 measure
+                # unless told otherwise, so a cut-time head read as common time
+                # would produce a bar twice as long as the file claims - which is
+                # this very property, failing one layer down.
+                song = self.song(
+                    steps=steps,
+                    beats_per_bar=head.beats_per_bar,
+                    beat_type=head.beat_type,
+                )
+                for number, measure in enumerate(
+                    song.tracks[0].measures, start=1
+                ):
+                    total = 0.0
+                    for beat in measure.voices[0].beats:
+                        length = 4.0 / beat.duration.value
+                        tuplet = beat.duration.tuplet
+                        if tuplet and (tuplet.enters, tuplet.times) != (1, 1):
+                            length = length * tuplet.times / tuplet.enters
+                        total += length
+                    self.assertLessEqual(
+                        total, limit + 1e-6,
+                        f"{name} bar {number} is {total} quarters, longer than "
+                        f"{limit}",
+                    )
 
     def test_a_step_crossing_a_bar_line_is_split_not_stretched(self):
         """A step running over a bar line is written in two measures, in order.
@@ -722,7 +769,7 @@ class TestRhythm(GuitarProTestCase):
         path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "data", "but_not_for_me.mxl"
         )
-        steps, head, _notes = arrange_xml_head(path, strategy="eighths")
+        steps, head, _notes = arrange_xml_head(path)
         song = self.song(
             steps=steps,
             beats_per_bar=head.beats_per_bar,
@@ -830,7 +877,7 @@ class TestRhythm(GuitarProTestCase):
         path = os.path.join(
             os.path.dirname(os.path.abspath(__file__)), "data", "but_not_for_me.mxl"
         )
-        steps, head, _notes = arrange_xml_head(path, strategy="eighths")
+        steps, head, _notes = arrange_xml_head(path)
         song = self.song(
             steps=steps,
             beats_per_bar=head.beats_per_bar,
@@ -925,7 +972,6 @@ class TestRhythm(GuitarProTestCase):
         steps, head, _notes = arrange_xml_head(
             os.path.join(os.path.dirname(os.path.abspath(__file__)),
                          "data", "but_not_for_me.mxl"),
-            strategy="eighths",
         )
         song = self.song(
             steps=steps,

@@ -19,19 +19,25 @@ from typing import Optional
 from xml.etree import ElementTree
 
 import arranger
-from arranger import NO_CHORD, ChordParser
+from arranger import NO_CHORD, ChordParser, Diagnostics, format_progression
+from arranger.slots import arrange_slots
 from headxml import (
     Head,
+    HeadChange,
     _key_label,
     _part_is_tab,
     arrange_xml_head,
+    chord_at,
+    chord_slots,
     head_cli,
     head_skeleton,
     load_musicxml,
+    melody_at,
+    melody_state,
     parse_musicxml_chord,
 )
+from tabstaff import format_tab_staff, write_tab_html
 from tabxml import _events, _substitute_steps
-from wjazzd import arrange_slots
 
 # The real scores the importer's tests read, in `tests/data/`. They are committed
 # and are NOT guarded: a missing fixture is a broken checkout, not a reason to
@@ -44,11 +50,39 @@ from wjazzd import arrange_slots
 #   heres_that_rainy_day.musicxml MuseScore 3 (3.1), slash chords, <degree> alterations
 #   tenor_madness.musicxml        this library's own export: a TAB staff beside a
 #                                 notation one, and chords music21 could not classify
+#   Trouble_in_Mind_Blues.musicxml  a 4/4 blues with ties written across barlines, which
+#                                 is the case `TestAHeldNoteIsOneNoteAcrossABarline` pins
+#   lead_sheet_chords_only.musicxml  written by hand: four bars, six <harmony> symbols and
+#                                 **no pitched notes** - the chords-only case (step A')
 DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 RAINY_DAY = os.path.join(DATA, "heres_that_rainy_day.musicxml")
+TROUBLE_IN_MIND = os.path.join(DATA, "Trouble_in_Mind_Blues.musicxml")
+
+
+def chord_or_fail(changes, bar: int, beat: float) -> HeadChange:
+    """`chord_at`, raising rather than returning `None`.
+
+    **`Optional` is the right return type for the library and the wrong one for a test.**
+    A position with no chord in force is a legitimate answer the function must be able to
+    give, so it cannot raise; but a test that asks for a chord and gets nothing has found
+    a defect, and should stop rather than compare against `None`. Pyright does not narrow
+    through `assertIsNotNone` either, so every assertion would otherwise need a cast or a
+    second `assert` — twelve of them, for one rule.
+
+    The same reasoning as `guide_pcs` in `test_comping.py`.
+    """
+    change = chord_at(changes, bar, beat)
+    if change is None:
+        raise AssertionError(
+            f"bar {bar} beat {beat}: no chord is in force, so the query cannot be checked"
+        )
+    return change
 BUT_NOT_FOR_ME = os.path.join(DATA, "but_not_for_me.mxl")
 TENOR_MADNESS = os.path.join(DATA, "tenor_madness.musicxml")
 I_WAS_DOING_ALL_RIGHT = os.path.join(DATA, "i_was_doing_all_right.mxl")
+# A lead sheet with **no melody at all**: four bars, six `<harmony>` symbols and not
+# one pitched note (§9.3 step A'). It is the fixture the loader used to refuse.
+CHORDS_ONLY = os.path.join(DATA, "lead_sheet_chords_only.musicxml")
 
 
 def score(
@@ -181,7 +215,7 @@ class TestChordParsing(unittest.TestCase):
         """The bass is returned separately, so the quality stays a bare '7'.
 
         Glued onto the quality it would be '7/F', which matches no table - the
-        same trap `wjazzd.parse_weimar_chord` documents for the database.
+        same trap `arranger.slots._slash_bass` documents for a slash chord.
         """
         self.assertEqual(self.parse(harmony("G", "major-ninth", bass="F#")), ("G", "maj9", "F#"))
         self.assertEqual(self.parse(harmony("D", "dominant", bass="C")), ("D", "7", "C"))
@@ -584,6 +618,836 @@ class TestRealScores(unittest.TestCase):
         self.assertAlmostEqual(written, float(bars), delta=bars * 0.2)
 
 
+class TestAHeldNoteIsOneNoteAcrossABarline(unittest.TestCase):
+    """`Trouble in Mind`: ties written across barlines, on a real 4/4 blues.
+
+    **This fixture is here because of a misdiagnosis, and the reason is the point.**
+    A guard was once added to `headxml._flush_group` - `and notes[-1].bar == bar` -
+    on the belief that merging a tie-stop into the previous note "ate the new bar's
+    downbeat" on this head. It does the opposite. A `tie type="stop"` in a new bar
+    *is* the continuation the merge exists to absorb, so the guard turned every
+    cross-barline tie into a second note at the same pitch: **53 notes became 63
+    here**, and `but_not_for_me` went 80 to 84. Ten tests failed against it.
+
+    The premise read **merged** as **lost**. Bars 8, 16 and 17 carry no note of their
+    own, and the second and third tests below say why that is correct rather than
+    alarming. Verified by mutation: adding the guard back fails **4 of the 5** - the
+    fifth asserts the fixture's premises, which hold either way.
+
+    The synthetic counterpart is `TestLoading.test_a_tie_across_a_bar_line_is_one_note`;
+    this one is on a file a notation program wrote, which is the only thing that can
+    show the rule survives real bar lengths, real divisions and real ties.
+    """
+
+    def setUp(self):
+        self.head = load_musicxml(TROUBLE_IN_MIND)
+
+    def _notes_in(self, bar):
+        return [n for n in self.head.notes if n.bar == bar]
+
+    def test_the_fixture_really_does_tie_across_barlines(self):
+        """The premise, asserted on the file's own `<tie>` elements.
+
+        Without this the rest of the class could pass on a fixture that stopped
+        containing the thing it exists to check.
+        """
+        root = ElementTree.parse(TROUBLE_IN_MIND).getroot()
+        starts = sum(
+            1 for tie in root.iter("tie") if tie.get("type") == "start"
+        )
+        stops = sum(1 for tie in root.iter("tie") if tie.get("type") == "stop")
+        self.assertGreater(starts, 0, "the fixture must contain tie starts")
+        self.assertGreater(stops, 0, "the fixture must contain tie stops")
+        # At least one stop is the first note of its measure, which is the only
+        # arrangement that makes a tie cross a barline rather than sit inside one.
+        boundaries = 0
+        for measure in root.iter("measure"):
+            notes = measure.findall("note")
+            if notes and any(t.get("type") == "stop" for t in notes[0].findall("tie")):
+                boundaries += 1
+        self.assertGreater(
+            boundaries, 0, "the fixture must contain a tie crossing a barline"
+        )
+
+    def test_the_two_halves_of_a_tie_are_one_note(self):
+        """Bar 2's A4 eighth and bar 3's A4 half are one note of 3.5 beats.
+
+        The merge is what makes that true, and its length is the proof it happened:
+        a note that was never extended is a quarter of a whole note, not 0.875.
+        """
+        last = self._notes_in(2)[-1]
+        self.assertEqual((last.beat, last.note_name), (4.5, "A4"))
+        self.assertAlmostEqual(last.duration, 0.875, places=6)
+        # And it is *one* note: bar 3 opens with no note at all, because its downbeat
+        # is still sounding this one. A duplicate would sit at bar 3 beat 1.0.
+        self.assertEqual([n.beat for n in self._notes_in(3) if n.beat < 2.0], [])
+
+    def test_a_bar_covered_by_a_held_note_carries_no_note_of_its_own(self):
+        """Bar 8 is empty, and the note that empties it is asserted, not assumed.
+
+        **This is what the misdiagnosis read as data loss.** Bar 7's A4 is held for
+        5.5 beats from beat 4.5: half a beat to the barline, all four beats of bar 8,
+        and one more beat into bar 9. It therefore ends on bar 9 beat 2.0, which is
+        exactly where bar 9's written rests begin. Bar 8 having no note is the tie
+        working, and the arithmetic below is what makes that checkable rather than
+        merely asserted.
+        """
+        self.assertEqual(self._notes_in(8), [], "bar 8 must be covered, not dropped")
+        held = self._notes_in(7)[-1]
+        self.assertEqual((held.beat, held.note_name), (4.5, "A4"))
+        self.assertAlmostEqual(held.duration * 4.0, 5.5, places=6)
+        # Quarters from the start of bar 7: the note starts 3.5 in, and bar 9 beat 1.0
+        # is 8.0 in, so ending 1.0 quarter past that is bar 9 beat 2.0 - where the
+        # rests in bar 9 begin.
+        end = (held.beat - 1.0) + held.duration * 4.0
+        self.assertAlmostEqual(end, 9.0, places=6)
+        self.assertAlmostEqual(end - 8.0, 1.0, places=6)
+
+    def test_the_held_note_outlasts_the_last_note_and_bars_reports_the_file(self):
+        """`Head.bars` is now a fact about the *file*, so it does not stop at the note.
+
+        **Inverted rather than deleted** (§9.3 step A', and AGENTS.md trap 5). The old
+        assertion was `(1, 16)` and its premise was *"`Head.bars` stops at the last
+        note"*. Step A' made `bars` the file's measure extent, because a chords-only
+        head has no notes to measure and still knows how long it is - so the premise
+        is gone and the assertion would be wrong to keep. The file runs to measure 17,
+        so the range is `(1, 18)`: the last note begins in bar 15 and is held to bar 17
+        beat 2.0, and the range now reaches that bar rather than stopping short of it.
+
+        The note's own sound past bar 15 is still carried by its duration, and the
+        arithmetic that proves it is kept - that part was never about `bars`.
+        """
+        self.assertEqual(self.head.bars, (1, 18))
+        last = self._notes_in(15)[-1]
+        self.assertEqual((last.beat, last.note_name), (4.5, "G4"))
+        # Two whole bars is 8.0 quarters, so 9.0 lands inside bar 17 - which the file's
+        # own last measure is, now that the range is the file's rather than the tune's.
+        self.assertAlmostEqual((last.beat - 1.0) + last.duration * 4.0, 9.0, places=6)
+
+    def test_no_note_is_duplicated_where_two_are_tied(self):
+        """53 notes, and no two consecutive ones share a barline and a pitch.
+
+        The count is the blunt check; the scan is the one that names the defect if a
+        future change reintroduces it, because it fails on the *pair* rather than on a
+        total that has to be re-baselined every time the fixture is re-read.
+        """
+        self.assertEqual(len(self.head.notes), 53)
+        for before, after in zip(self.head.notes, self.head.notes[1:]):
+            if before.pitch == after.pitch and before.bar != after.bar:
+                self.fail(
+                    f"bar {before.bar} and bar {after.bar} both sound "
+                    f"{after.note_name}: a tie became two notes"
+                )
+
+
+class TestChordTimeline(unittest.TestCase):
+    """`Head.chords`: the harmony as a timeline, independent of the melody.
+
+    **Phase 1 of open-issues item 10**, and this class tests only the *recording* — the
+    timeline is built and nothing consumes it yet, so every arrangement is
+    byte-identical. The arrangement-level tests belong to the phase that fixes the
+    defect, and writing them now would be testing a fix that does not exist.
+
+    The loss it records is real and is in the committed scores: 6 of their 154
+    `<harmony>` elements precede no note at all, so the chord they declare is in force
+    over material no note describes.
+
+    The load-bearing test is `test_the_timeline_reproduces_every_notes_own_chord`. It
+    states that the timeline, built independently, **agrees with the shipped note path
+    on all 271 notes** — so a change that disagrees with the notes is a change that is
+    wrong, not a second opinion. That is the only check that makes the others mean
+    anything.
+    """
+
+    def _chords_in_bar(self, head: Head, bar: int):
+        return [(round(c.beat, 6), c.chord) for c in head.chords if c.bar == bar]
+
+    def _notes_in_bar(self, head: Head, bar: int):
+        return [(round(n.beat, 6), n.chord) for n in head.notes if n.bar == bar]
+
+    def load(self, measures: str, **kwargs) -> Head:
+        """A score written to a temp file and read back, as `TestKeySignature` does."""
+        path = write_score(score(measures, **kwargs))
+        self.addCleanup(os.unlink, path)
+        return load_musicxml(path)
+
+    def test_a_chord_no_note_follows_is_still_recorded(self):
+        """The defect itself, on a committed score: bar 2 of `i_was_doing_all_right`.
+
+        Written as `HARMONY(m7), NOTE(D5), HARMONY(7), rest` — an `Am7` under the D5 and
+        a `D7` that governs the rest of the bar. Only the first has a note.
+        """
+        head = load_musicxml(I_WAS_DOING_ALL_RIGHT)
+        self.assertEqual(self._notes_in_bar(head, 2), [(1.0, "Am7")])
+        self.assertEqual(self._chords_in_bar(head, 2), [(1.0, "Am7"), (2.5, "D7")])
+
+    def test_a_bar_of_nothing_but_rests_still_has_its_chords(self):
+        """Bar 32 of `heres_that_rainy_day` has **no notes at all** and two changes.
+
+        This is the case that cannot even be asked of the note path — there is no note to
+        ask with — so it is the strongest of the three.
+        """
+        head = load_musicxml(RAINY_DAY)
+        self.assertEqual(self._notes_in_bar(head, 32), [])
+        self.assertEqual(self._chords_in_bar(head, 32), [(1.0, "Am7"), (2.0, "D9")])
+
+    def test_the_timeline_reproduces_every_notes_own_chord(self):
+        """The cross-check: 271 of 271, on all three fixtures.
+
+        `notes[i].chord` is the shipped fact and `head.chords` is the new one; the
+        timeline is forward-filled to a note's own `(bar, beat)` and must agree. A
+        disagreement would mean one of the two is wrong, and `notes` is the one with
+        every published arrangement behind it.
+
+        Notes whose chord the loader could not translate are skipped, because they are
+        counted in `Head.unmapped` and never recorded — the same rule as on the note
+        path, and asserting otherwise would be asserting a guess.
+        """
+        checked = 0
+        for path in (BUT_NOT_FOR_ME, RAINY_DAY, I_WAS_DOING_ALL_RIGHT):
+            head = load_musicxml(path)
+            for note in head.notes:
+                if note.quality is None:
+                    continue
+                checked += 1
+                in_force = chord_or_fail(head.chords, note.bar, note.beat).chord
+                self.assertEqual(
+                    in_force, note.chord,
+                    f"{path}: bar {note.bar} beat {note.beat} - the timeline says "
+                    f"{in_force!r} and the note says {note.chord!r}",
+                )
+        # A count as well as an agreement, so an empty fixture cannot make this vacuous.
+        self.assertEqual(checked, 271)
+
+    def test_a_hand_built_case_isolates_it(self):
+        """One note, then a chord that only rests follow.
+
+        The synthetic counterpart to the two fixtures above: it says the rule without
+        depending on a particular score's contents, and it is the shape a test of the
+        *fix* should be written against.
+        """
+        body = (
+            harmony("D", "minor") + note("D", 5)
+            + harmony("A", "dominant") + rest() + rest()
+        )
+        head = self.load(body, divisions=4, beats=4)
+        self.assertEqual([n.chord for n in head.notes], ["Dm"])
+        self.assertEqual(
+            [(c.beat, c.chord) for c in head.chords], [(1.0, "Dm"), (2.0, "A7")]
+        )
+
+    def test_the_timeline_is_empty_for_a_head_with_no_harmony(self):
+        """Defaulted, so a `Head` built by hand or by a test is unaffected.
+
+        A new field that had to be populated to be safe would be a breaking change to
+        every construction site; an empty default is what keeps phase 1 additive.
+        """
+        self.assertEqual(Head().chords, [])
+        self.assertEqual(len(Head().notes), 0)
+
+    def test_a_change_is_a_head_change_carrying_its_position(self):
+        """The record's own shape, which is what a consumer will read.
+
+        `quality` and `bass` are carried rather than re-derived: `bass` is a slash bass
+        the file spells separately from the quality, and re-parsing the chord name to
+        recover it would lose a spelling the loader already resolved. `key` rounds the
+        beat to six places, because the timeline is compared against `HeadNote.beat` and
+        two floats that differ only in the seventh decimal are the same position.
+        """
+        head = load_musicxml(I_WAS_DOING_ALL_RIGHT)
+        # **The second** change in the bar, not the first: bar 2 is
+        # `Am7` under a written note and `D7` under a rest, and the `D7` is the one
+        # no note would ever record.
+        change = next(c for c in head.chords if c.bar == 2 and c.chord == "D7")
+        self.assertIsInstance(change, HeadChange)
+        self.assertEqual((change.bar, change.chord), (2, "D7"))
+        self.assertEqual(change.quality, "7")
+        self.assertIsNone(change.bass)
+        self.assertEqual(change.key, (2, round(change.beat, 6)))
+        # And `key` names the beat the change takes effect on, which is the beat the
+        # rest begins - the note path has no step here to compare against.
+        self.assertEqual(change.key, (2, 2.5))
+
+    def test_an_untranslatable_chord_is_still_counted_and_not_recorded(self):
+        """Never guessed, on the timeline exactly as on the note path.
+
+        A `<harmony>` this library cannot voice is appended to `unmapped` and skipped. If
+        it were also recorded, a later fix to the alias table would silently start
+        emitting a chord nobody asked for.
+        """
+        unvoiceable = (
+            "<harmony><root><root-step>G</root-step></root>"
+            "<kind>not-a-real-kind</kind></harmony>"
+        )
+        body = harmony("C", "major") + note("C", 5) + unvoiceable
+        head = self.load(body, divisions=4, beats=4)
+        self.assertEqual(len(head.unmapped), 1)
+        # `harmony("C", "major")` spells a major triad `Cmaj`, and the unvoiceable
+        # element must not appear - so this is one entry, not two.
+        self.assertEqual([c.chord for c in head.chords], ["Cmaj"])
+
+    def test_the_beat_of_a_change_is_where_its_note_would_have_been(self):
+        """The `<harmony>` position and the note it precedes agree, in a 2/2 bar.
+
+        Trap 9's denominator: a 2/2 bar and a 4/4 bar are both four quarters long, so
+        reading a raw division count as a beat number is right in one and wrong in the
+        other. Every fixture here is 2/2, which is exactly the metre that catches it —
+        a quarter note is on beat 1.5, not beat 3.
+        """
+        head = load_musicxml(BUT_NOT_FOR_ME)
+        self.assertEqual((head.beats_per_bar, head.beat_type), (2, 2))
+        changes = self._chords_in_bar(head, 2)
+        notes = self._notes_in_bar(head, 2)
+        self.assertTrue(changes and notes)
+        # A change and the note it governs must name the same beat and the same chord,
+        # or the timeline is describing a different music from the notes.
+        self.assertEqual(changes[0], notes[0])
+
+    def test_nothing_consumes_the_timeline_yet(self):
+        """Phase 1 is additive: `head_skeleton` still reads `notes` alone.
+
+        Asserted rather than assumed, because it is the property that makes this phase
+        safe to land on its own — and it will start failing when the fix arrives, at
+        which point this test should be **replaced**, not deleted (AGENTS.md trap 5).
+        """
+        head = load_musicxml(RAINY_DAY)
+        skeleton = head_skeleton(head)
+        self.assertEqual(len(skeleton), len(head.notes))
+        self.assertTrue(head.chords, "the fixture must actually carry harmony")
+
+
+class TestChordAt(unittest.TestCase):
+    """`chord_at`: which chord is in force at a position, by forward fill.
+
+    **Phase 2 of open-issues item 10** — the query, with no consumer. The next phase uses
+    it for a beat no melody note describes; until then nothing calls it but tests, so
+    this is a specification written before its first use, which is the only honest time
+    to write one.
+
+    The three rules it has to get right, each measured rather than assumed:
+
+    - a chord holds until the next change replaces it, **including at its own beat**;
+    - where a bar declares two chords on the same beat, **the last one wins** — bars 33
+      and 35 of `i_was_doing_all_right` are written `Gmaj` then `Eb7`, and the note in
+      each bar carries `Eb7`, so first-wins would disagree with the shipped output;
+    - a position before the first change has **no** chord, and says so rather than
+      guessing.
+    """
+
+    def test_a_chord_holds_until_the_next_one_replaces_it(self):
+        """Bar 2 of `i_was_doing_all_right`: `Am7` at beat 1, `D7` at beat 2.5.
+
+        Two positions strictly between them, and one exactly on the change.
+        """
+        head = load_musicxml(I_WAS_DOING_ALL_RIGHT)
+        self.assertEqual(chord_or_fail(head.chords, 2, 1.0).chord, "Am7")
+        self.assertEqual(chord_or_fail(head.chords, 2, 1.5).chord, "Am7")
+        self.assertEqual(chord_or_fail(head.chords, 2, 2.0).chord, "Am7")
+        # **On** the change, not before it: the note path captures the chord before a
+        # note, so a change sharing a beat with the note it governs still applies.
+        self.assertEqual(chord_or_fail(head.chords, 2, 2.5).chord, "D7")
+
+    def test_it_answers_for_a_position_no_note_describes(self):
+        """Bar 32 of `heres_that_rainy_day` has no notes and two changes.
+
+        This is the query's reason to exist, and it is the position the note path cannot
+        be asked about at all.
+        """
+        head = load_musicxml(RAINY_DAY)
+        self.assertEqual(chord_or_fail(head.chords, 32, 1.0).chord, "Am7")
+        self.assertEqual(chord_or_fail(head.chords, 32, 1.5).chord, "Am7")
+        self.assertEqual(chord_or_fail(head.chords, 32, 2.0).chord, "D9")
+        # Past the end of the bar it still carries the last thing declared, which is
+        # what "holds until the next one replaces it" means across a barline.
+        self.assertEqual(chord_or_fail(head.chords, 32, 9.0).chord, "D9")
+
+    def test_the_last_change_at_a_position_wins(self):
+        """Bars 33 and 35 declare two chords on beat 1.0, and the note carries the second.
+
+        Not a synthetic tie: measured on the committed score. First-wins would put
+        `Gmaj` and `G6` under notes that ship with `Eb7`, so this is the rule that keeps
+        the query from disagreeing with the output it will one day feed.
+        """
+        head = load_musicxml(I_WAS_DOING_ALL_RIGHT)
+        for bar, first in ((33, "Gmaj"), (35, "G6")):
+            at_bar = [(c.beat, c.chord) for c in head.chords if c.bar == bar]
+            self.assertEqual(at_bar, [(1.0, first), (1.0, "Eb7")], f"bar {bar} changed")
+            self.assertEqual(chord_or_fail(head.chords, bar, 1.0).chord, "Eb7", f"bar {bar}")
+            # And the note in that bar agrees, which is what makes the rule measurable
+            # rather than merely asserted.
+            self.assertEqual(
+                [n.chord for n in head.notes if n.bar == bar], ["Eb7"], f"bar {bar}"
+            )
+
+    def test_a_position_before_the_first_change_has_no_chord(self):
+        """`None`, not the first chord — a position no chord has reached has no harmony.
+
+        The failure this avoids is the one the rest of the module refuses everywhere: a
+        chord invented where the file states none.
+        """
+        head = load_musicxml(I_WAS_DOING_ALL_RIGHT)
+        self.assertIsNone(chord_at(head.chords, 0, 1.0))
+        self.assertIsNone(chord_at([], 1, 1.0))
+        # A bar before the head's first bar is a plausible phase-3 caller, so the
+        # out-of-range case is asserted rather than assumed.
+        self.assertIsNone(chord_at(head.chords, -1, 1.0))
+
+    def test_a_pickup_bar_is_ordered_before_bar_one(self):
+        """Bars are signed — a pickup is negative — so a plain integer compare is right.
+
+        Stated because "a signed bar sorts correctly" is an assumption a reader has to
+        make, and the day it is wrong is the day a pickup vanishes from a part.
+        """
+        head = load_musicxml(I_WAS_DOING_ALL_RIGHT)
+        first = head.chords[0]
+        if first.bar > 0:
+            self.assertIsNone(chord_at(head.chords, first.bar - 1, 1.0))
+        self.assertEqual(chord_at(head.chords, first.bar, first.beat), first)
+
+    def test_it_agrees_with_the_note_path_on_every_note(self):
+        """The cross-check, now over the shipped function: 271 of 271.
+
+        `TestChordTimeline` proved the *data* reproduces the notes; this proves the
+        *query* over that data does, which is a different thing and could have been wrong
+        at the boundary the duplicate-position rule covers.
+        """
+        checked = 0
+        for path in (BUT_NOT_FOR_ME, RAINY_DAY, I_WAS_DOING_ALL_RIGHT):
+            head = load_musicxml(path)
+            for note in head.notes:
+                if note.quality is None:
+                    continue
+                checked += 1
+                change = chord_at(head.chords, note.bar, note.beat)
+                assert change is not None, (
+                    f"{path}: bar {note.bar} beat {note.beat} has no chord in force"
+                )
+                self.assertEqual(
+                    change.chord, note.chord,
+                    f"{path}: bar {note.bar} beat {note.beat} - {change.chord!r} vs "
+                    f"{note.chord!r}",
+                )
+        self.assertEqual(checked, 271)
+
+    def test_an_unsorted_timeline_still_answers_correctly(self):
+        """A hand-built `Head.chords` need not be in position order.
+
+        The scan is not broken out of early, precisely so this works: a forward fill that
+        stopped at the first entry past the target would answer `D7` here instead of
+        `Am7`, and the caller would have no way to know the list was the problem.
+        """
+        unsorted = [
+            HeadChange(bar=2, beat=1.0, chord="Am7", quality="m7"),
+            HeadChange(bar=3, beat=1.0, chord="D7", quality="7"),
+            HeadChange(bar=1, beat=1.0, chord="Gmaj", quality="maj"),
+        ]
+        self.assertEqual(chord_or_fail(unsorted, 2, 1.5).chord, "Am7")
+        self.assertEqual(chord_or_fail(unsorted, 3, 1.0).chord, "D7")
+        self.assertEqual(chord_or_fail(unsorted, 1, 1.0).chord, "Gmaj")
+        self.assertIsNone(chord_at(unsorted, 0, 1.0))
+
+
+class TestChordSlots(unittest.TestCase):
+    """`chord_slots` and the union: the comping route stops losing positions.
+
+    **Phase 3 of open-issues item 10, and the first phase that changes output.** Phases 1
+    and 2 were additive and left every arrangement byte-identical; this one adds steps.
+    The scope is pinned below: **only the comping route with a named grid**, because the
+    melody-bearing route's "a chord under each melody note" is the chord-melody idiom and
+    a grid must not add positions to it.
+
+    Phase 3 measured this over three fixtures and fourteen flag combinations: six
+    arrangements changed and thirty-six did not.
+
+    **Step A' of §9 moved these numbers, for the same three fixtures.** `Head.bars` is
+    now the file's measure extent, so a fixture whose changes outlast its last note
+    comps to the end of the file rather than stopping at the end of the tune. Current
+    counts (`--voices alto,tenor`):
+
+        comps+freddie   80 -> 102,  81 -> 109,  110 -> 126 steps
+        comps+joe_pass  80 -> 105,  81 -> 120,  110 -> 161 steps
+
+    Still only the comping route with a named grid, and still only the fixtures whose
+    chord timeline runs past their last note (`Trouble_in_Mind_Blues`,
+    `heres_that_rainy_day`, `i_was_doing_all_right`) — the other three, and every
+    default arrangement, are unchanged. §8's acceptance criterion holds: an arrangement
+    with no flags passed is byte-identical, `grid=` on the singing route included.
+    """
+
+    def setUp(self):
+        self.rainy = load_musicxml(RAINY_DAY)
+        self.iwas = load_musicxml(I_WAS_DOING_ALL_RIGHT)
+
+    def _melody_positions(self, head):
+        return {(s[1], round(s[2], 6)) for s in head_skeleton(head)}
+
+    def _chord_positions(self, head, grid):
+        return {(s[3], round(s[4], 6)) for s in chord_slots(head, grid=grid)}
+
+    def test_a_bar_with_no_notes_now_gets_its_chords(self):
+        """Bar 32 of `heres_that_rainy_day`: the defect, and the reason for the phase.
+
+        No notes at all, two changes (`Am7` then `D9`), and before this the bar produced
+        nothing whatever — it was not quiet, it was absent.
+        """
+        self.assertEqual([n.bar for n in self.rainy.notes if n.bar == 32], [])
+        positions = sorted(
+            (beat, chord) for _m, _q, chord, bar, beat, _d in
+            chord_slots(self.rainy, grid="freddie") if bar == 32
+        )
+        self.assertEqual(positions, [(1.0, "Am7"), (2.0, "D9")])
+
+    def test_the_union_adds_exactly_the_positions_without_a_note(self):
+        """The two lists are disjoint where it matters, and the union is their sum.
+
+        Stated as a count rather than eyeballed, because the claim is arithmetic: every
+        grid position either already had a melody note or was added. `chord_slots` returns
+        the grid's positions alone and `_merge_chord_slots` does the union, so this
+        measures the two separately and checks the arithmetic rather than trusting either.
+        """
+        melody = self._melody_positions(self.iwas)
+        chords = self._chord_positions(self.iwas, "freddie")
+        added = chords - melody
+        self.assertGreater(
+            len(added), 0,
+            "the fixture must actually have positions with no melody note",
+        )
+        # A position with both is one slot, not two, and the melody slot wins it — so the union
+        # is exactly the two sets, and its size is the arithmetic the step loop then sees.
+        self.assertEqual(len(chords), len(chords & melody) + len(added))
+        self.assertEqual(len(melody | chords), len(melody) + len(added))
+
+    def test_every_named_grid_places_something(self):
+        """`joe_pass` and `charleston` were silent on all three fixtures before this.
+
+        Stage D of `docs/comping-styles.md` records `charleston` coming out silent on a
+        2/2 head and attributes it to the figure being 4/4. That was a misdiagnosis: the
+        grid could only filter melody slots, so a position with no note was unreachable
+        whatever the pattern said. Measured now, on a 2/2 head:
+
+            every_note  63   charleston  63   joe_pass  64   final_and  32
+        """
+        for grid in ("every_note", "freddie", "charleston", "joe_pass", "final_and"):
+            with self.subTest(grid=grid):
+                self.assertTrue(
+                    self._chord_positions(self.rainy, grid),
+                    f"grid={grid} places nothing at all",
+                )
+
+    def test_a_stab_is_never_a_whole_note(self):
+        """The duration is the grid's, not the melody note's — which is the point.
+
+        Under `every_note` and `freddie` every duration on a 2/2 fixture is 0.5 — one
+        notated beat. A stab that inherited the melody's length would be a whole note on a
+        bar the melody holds, which is the confusion item 10 records.
+
+        `joe_pass` is 0.25 or 0.5 because it names the *ands*, so the distance to the next
+        position is half a beat — asserted here because it is the same rule producing a
+        different number, which is what makes "the grid decides" a claim rather than a
+        coincidence.
+        """
+        for grid, expected in (("every_note", {0.5}), ("freddie", {0.5}),
+                               ("joe_pass", {0.25, 0.5})):
+            with self.subTest(grid=grid):
+                durations = {round(s[5], 6) for s in chord_slots(self.rainy, grid=grid)}
+                self.assertEqual(durations, expected, f"grid={grid}")
+                # And never a whole note, whichever grid asked.
+                self.assertNotIn(1.0, durations, f"grid={grid} produced a whole note")
+
+    def test_a_position_with_no_chord_in_force_is_skipped(self):
+        """Never guessed: bar 1 beat 1 of `but_not_for_me` is a rest under no harmony.
+
+        The file writes a quarter rest, and the first `<harmony>` arrives on beat 1.5, so
+        beat 1.0 has neither a note nor a chord. `chord_at` returns `None` and the position
+        is dropped rather than filled with the chord arriving half a beat later.
+        """
+        head = load_musicxml(BUT_NOT_FOR_ME)
+        self.assertIsNone(chord_at(head.chords, 1, 1.0))
+        first = min(beat for bar, beat in self._chord_positions(head, "freddie")
+                    if bar == 1)
+        self.assertGreater(first, 1.0, "a position with no harmony was filled in")
+
+    def test_the_singing_route_is_not_touched(self):
+        """`melody=auto` unions nothing, and no invented note reaches a singing part.
+
+        The regression that makes this necessary, and it was measured rather than
+        predicted: `parse_voices("auto")` returns the **sentinel** `("auto",)`, which has
+        no soprano, so testing the route on the parsed value alone classified the *default*
+        arrangement as the comping route. Fourteen steps of a singing `grid=freddie`
+        arrangement carried the placeholder melody before `resolve_voices` was added.
+        """
+        body = harmony("C", "major") + note("C", 5)
+        path = write_score(score(body, divisions=4, beats=4))
+        self.addCleanup(os.unlink, path)
+        singing, _head, _notes = arrange_xml_head(path)
+        self.assertEqual([s.melody for s in singing], ["C5"])
+        self.assertNotIn(None, [s.melody for s in singing])
+
+    def test_a_slot_whose_melody_has_stopped_carries_no_melody(self):
+        """Where no note is sounding, the slot carries `None` rather than an invention.
+
+        Bar 32 of `heres_that_rainy_day` follows the last melody note, so there is no tune
+        under the chord. The deleted `_PLACEHOLDER_MELODY` stood in with a pitch that
+        parsed but was not playing; `None` is the honest value, and the assertion is
+        `assertIsNone` rather than an equality a placeholder could have satisfied — all
+        30 real `C4` slots across the fixtures sat on genuinely written C4s, which is why
+        equality against a sentinel could pass for the wrong reason (§9.3 step B).
+        """
+        slots = [s for s in chord_slots(self.rainy, grid="freddie") if s[3] == 32]
+        self.assertTrue(slots, "bar 32 must place its chords")
+        for melody, _quality, _name, _bar, _beat, _duration in slots:
+            self.assertIsNone(melody)
+
+
+class TestMelodyState(unittest.TestCase):
+    """`melody_state`: onset / held / silent, the split `melody_at` cannot give (§9.3 step B).
+
+    Only an onset is a position to reharmonise under (§9.2): a held note was decided
+    where it began, and a silent position has nothing to decide beneath. `melody_at`'s
+    two-way answer collapses the first two, so these tests keep them apart on a real
+    score rather than on a constructed tuple.
+    """
+
+    def setUp(self):
+        self.head = load_musicxml(RAINY_DAY)
+        self.notes = self.head.notes
+
+    def _integer_onset(self):
+        """A note beginning on an exact beat, so the rounding test cannot wobble."""
+        return next(n for n in self.notes if n.beat == int(n.beat))
+
+    def test_a_written_onset_reports_onset(self):
+        """A position a note begins at is its onset - the note's own `key`."""
+        note = self._integer_onset()
+        self.assertEqual(melody_state(self.notes, note.bar, note.beat), "onset")
+
+    def test_a_position_inside_a_sounding_note_reports_held(self):
+        """A probe between a note's onset and its end inherits that note.
+
+        The probe is the note's own midpoint (`duration * 2` in beats, half of the
+        `duration * 4` that `melody_at` adds), so where no other note begins and this
+        one is in force the answer must be "held" - asserted as *some* position on the
+        fixture qualifying, because one colliding with a later onset merely drops out.
+        """
+        probes = [
+            (note.bar, round(note.beat + note.duration * 2.0, 6))
+            for note in self.notes
+            if note.duration > 0
+        ]
+        held = [
+            (bar, beat) for bar, beat in probes
+            if melody_state(self.notes, bar, beat) == "held"
+        ]
+        self.assertTrue(held, "no position inside a sounding note reports held")
+
+    def test_a_bar_after_the_melody_ends_reports_silent(self):
+        """Bar 32 of `heres_that_rainy_day` has chords and no tune over them."""
+        for beat in (1.0, 1.5, 2.0):
+            with self.subTest(beat=beat):
+                self.assertEqual(melody_state(self.notes, 32, beat), "silent")
+
+    def test_the_onset_test_rounds_the_beat_like_head_note_key(self):
+        """A beat differing in the seventh decimal is the same position, not a new one.
+
+        The rule is `HeadNote.key`'s rounding - one rule, one answer - and §9.5's
+        measurement snippet (`abs(n.beat - beat) < 1e-9`) is a *different* rule that
+        would call an offset of 1e-7 a separate position and report "held" here. Two
+        roundings of the same beat is the disagreement `HeadNote.key`'s docstring
+        exists to forbid.
+        """
+        note = self._integer_onset()
+        self.assertEqual(melody_state(self.notes, note.bar, note.beat + 1e-7), "onset")
+
+
+class TestSilentSlotsCarryNoMelody(unittest.TestCase):
+    """§9.3 step B at the step level: `ArrangementStep.melody` is `Optional`, honestly.
+
+    The deletion's visible half (open-issues item 10): `Cmaj7  C4  (shell - 3rd & 7th,
+    partial)` was printed by the default line tab 14 times on `but_not_for_me` under
+    `--voices alto,tenor --grid freddie`, reading as a claim that the guitar played C4.
+    It did not. What is asserted here is the replacement: a slot the tune does not
+    occupy carries `None` and prints blank, while a slot it does occupy is unchanged -
+    held notes still carry the note in force (Option A), so this step moves nothing
+    under a sounding melody.
+    """
+
+    def _arrange(self):
+        """The comping union over `heres_that_rainy_day`, whose melody ends before bar 32."""
+        return arrange_xml_head(RAINY_DAY, melody="alto,tenor", grid="freddie")
+
+    def test_a_slot_where_the_melody_stopped_carries_none(self):
+        """Bar 32 sits under a chord and over no note; the step says so plainly."""
+        steps, _head, _notes = self._arrange()
+        silent = [s for s in steps if s.bar == 32]
+        self.assertTrue(silent, "bar 32 must place its chords")
+        for step in silent:
+            self.assertIsNone(step.melody, step.tab_line())
+            self.assertNotIn("C4", step.tab_line())
+            self.assertNotIn("None", step.tab_line())
+
+    def test_every_step_carries_the_note_actually_in_force(self):
+        """The invariant the placeholder could not state: `step.melody` *is* `melody_at`.
+
+        Every slot - written-note position or grid position - holds exactly the note
+        the tune sounds there, and `None` exactly where it sounds nothing. The
+        placeholder failed this by construction: all 30 real `C4` slots across the
+        fixtures sat on genuinely written C4s, so an equality against a sentinel could
+        pass for the wrong reason on either side.
+        """
+        steps, head, _notes = self._arrange()
+        self.assertTrue(steps)
+        for step in steps:
+            if step.bar is None or step.beat is None:
+                continue
+            self.assertEqual(
+                step.melody,
+                melody_at(head.notes, step.bar, step.beat),
+                f"bar {step.bar} beat {step.beat}: {step.tab_line()}",
+            )
+
+    def test_the_renderers_print_the_absence_blank(self):
+        """No renderer says `None`, and none invents the deleted `C4`.
+
+        The three surfaces that read `step.melody`: the line tab and the diagnostic
+        line (`arranger.render`), the ASCII staff's width and melody row (`tabstaff`),
+        and the HTML melody row. Each had its own formatting path, and each raised or
+        lied on a `None` before step B.
+        """
+        steps, _head, _notes = self._arrange()
+        self.assertNotIn("None", format_progression(steps))
+        staff = format_tab_staff(steps, show_melody=True)
+        self.assertNotIn("None", staff)
+        with tempfile.TemporaryDirectory() as tmp:
+            html = write_tab_html(steps, os.path.join(tmp, "silent.html"))
+            self.assertNotIn("None", html)
+
+    def test_a_no_note_slot_on_a_singing_route_is_comped(self):
+        """§9.3 step D: a note-less slot on a *singing* selection is comped, not refused.
+
+        The old rule refused it, with a warning and a skipped slot, because a note-less
+        slot could arrive only through the comping union - which ran only when the
+        selection had no soprano. Step D made the soprano per slot, so a note-less slot
+        on a singing selection is a real case: the guitar has no tune here, so it states
+        the chord instead of inventing one (the rule the deleted placeholder broke) or
+        dropping the bar. The chord still sounds; only the melody is absent, which the
+        renderers print blank. This is the inversion AGENTS.md trap 5 asks for - the
+        premise the old assertion rested on is gone.
+        """
+        diagnostics = Diagnostics()
+        steps, _rescued, _notes = arrange_slots(
+            [(None, "m7", "Dm7"), ("C5", "maj7", "Cmaj7")],
+            [(1, 1.0, 0.5), (1, 2.0, 0.5)],
+            melody="auto",
+            diagnostics=diagnostics,
+        )
+        self.assertEqual([s.chord for s in steps], ["Dm7", "Cmaj7"])
+        self.assertIsNone(steps[0].melody)
+        self.assertFalse(steps[0].melody_voiced, "the guitar does not sing a note it has not got")
+        self.assertTrue(steps[1].melody_voiced)
+        self.assertFalse(
+            any("has no melody note" in w for w in diagnostics.warnings),
+            diagnostics.warnings,
+        )
+
+
+class TestAnUnknownGridIsRefused(unittest.TestCase):
+    """§9.3 step A: the library refuses an unknown grid instead of coercing it.
+
+    `headxml._merge_chord_slots` used to coerce anything unrecognised to the
+    melody-anchored grid, so `arrange_xml_head(..., grid="half-time")` silently
+    returned `every_note`'s arrangement on the comping route - the exact guess
+    `parse_grid` refuses. The coercion is gone: `auto` was the only thing that ever
+    made it reachable, and once the sentinel was withdrawn the guess went with it.
+    The CLI is unaffected (argparse rejects an unknown choice first), so this is
+    observable only from library code - which is why it needs its own test rather
+    than being left to the gate.
+    """
+
+    def test_an_unknown_grid_raises_on_the_comping_route(self):
+        """The path that used to coerce now refuses, naming the real vocabulary."""
+        with self.assertRaises(ValueError) as caught:
+            arrange_xml_head(RAINY_DAY, melody="alto,tenor", grid="half-time")
+        self.assertIn("joe_pass", str(caught.exception))
+
+    def test_auto_is_no_longer_a_grid_a_library_caller_can_pass(self):
+        """`auto` was withdrawn, so the library refuses it too - not just the CLI."""
+        with self.assertRaises(ValueError):
+            arrange_xml_head(RAINY_DAY, melody="alto,tenor", grid="auto")
+
+
+class TestChordsOnlyHead(unittest.TestCase):
+    """§9.3 step A': a chords-only lead sheet is a valid input.
+
+    Four bars, six `<harmony>` elements, **zero pitched notes** — measured, the loader
+    used to refuse it outright (`has no readable melody part`) because `_choose_part`
+    selected on the note count alone. It now reads, reports its metre and bar count, and
+    arranges **to the rhythm the grid names**. What it does *not* do is guess a rhythm:
+    the default grid (`every_note`) defers to the melody, and a head with no melody has
+    nothing to defer to, so the default arrangement is empty — the decision, not a gap.
+    """
+
+    def setUp(self):
+        self.head = load_musicxml(CHORDS_ONLY)
+
+    def test_the_loader_accepts_it_and_reports_the_files_length(self):
+        """It loads, and `bars` is the file's four measures, not `(1, 1)`.
+
+        The measurement §9.5 records as the probe: `Head.bars` returned `(1, 1)` for
+        this file because it was derived from notes that do not exist. Now it is the
+        file's own measure extent, so a head with no melody still knows how long it is.
+        """
+        self.assertEqual(len(self.head.notes), 0)
+        self.assertEqual(len(self.head.chords), 6)
+        self.assertEqual(self.head.bars, (1, 5))
+        self.assertEqual((self.head.beats_per_bar, self.head.beat_type), (4, 4))
+
+    def test_the_default_grid_arranges_nothing(self):
+        """`every_note` defers to a melody that is not there, so nothing is placed.
+
+        No warning: an empty arrangement is the default grid's own instruction rather
+        than a hole to report (step A', decision 2). A comping part is what the user has
+        to ask for by naming a rhythm — exactly as for any head whose tune is off-beat.
+        """
+        steps, _head, _notes = arrange_xml_head(CHORDS_ONLY, melody="alto,tenor")
+        self.assertEqual(steps, [])
+
+    def test_a_soprano_only_selection_arranges_nothing(self):
+        """Naming soprano routes to the melody-bearing branch, where there is no tune.
+
+        Decision 3: it falls out of the same deference rather than needing a case of its
+        own. It used to take the melody route, voice the placeholder against every chord
+        and warn; with step B's honest `None` there is simply no slot to build.
+        """
+        steps, _head, _notes = arrange_xml_head(CHORDS_ONLY, melody="soprano")
+        self.assertEqual(steps, [])
+
+    def test_a_named_grid_places_the_chords(self):
+        """`freddie`, `joe_pass` and `final_and` each produce a part — the payoff.
+
+        Exactly the rhythm each pattern names on a 4/4 bar: `freddie` a chord on every
+        beat (16 = 4 bars x 4), `joe_pass` on the *ands* (first at bar 1 beat 1.5), and
+        `final_and` on the final beat's upbeat (first at bar 1 beat 4.5). Every slot
+        carries `melody=None`, because the file has no tune — the honest absence step B
+        made expressible, not the deleted placeholder.
+        """
+        expected = {
+            "freddie": ((1.0, "Dm7"), 16),
+            "joe_pass": ((1.5, "Dm7"), 16),
+            "final_and": ((4.5, "Dm7"), 4),
+        }
+        for grid, (first, count) in expected.items():
+            with self.subTest(grid=grid):
+                steps, _head, _notes = arrange_xml_head(
+                    CHORDS_ONLY, melody="alto,tenor", grid=grid
+                )
+                self.assertEqual(len(steps), count, f"grid={grid}")
+                self.assertEqual((steps[0].beat, steps[0].chord), first)
+                self.assertTrue(
+                    all(step.melody is None for step in steps),
+                    f"grid={grid} invented a melody for a chords-only head",
+                )
+
+
 class TestKeySignature(unittest.TestCase):
     """Reading a `<key>`, which is what the export needs to state the right key.
 
@@ -770,14 +1634,24 @@ class TestReductionAndArranging(unittest.TestCase):
             divisions=8,
         )
         # Four quarter notes fill the bar: beats 1, 2, 3, 4, which both grids keep.
-        self.assertEqual([s[2] for s in head_skeleton(head, "eighths")], [1.0, 2.0, 3.0, 4.0])
-        self.assertEqual([s[2] for s in head_skeleton(head, "beats")], [1.0, 2.0, 3.0, 4.0])
+        self.assertEqual([s[2] for s in head_skeleton(head)], [1.0, 2.0, 3.0, 4.0])
+        self.assertEqual([s[2] for s in head_skeleton(head)], [1.0, 2.0, 3.0, 4.0])
 
-    def test_eighths_are_kept_where_a_beat_grid_would_drop_them(self):
-        """Four eighths a bar: the eighth grid keeps four, the beat grid fewer.
+    def test_the_strategy_no_longer_changes_which_notes_are_played(self):
+        """Four eighths a bar sound once under **every** setting, not just `eighths`.
 
-        This is the density decision the corpus path measures (`eighths` is its
-        default for the same reason), asserted on a score rather than a database.
+        **This inverts the density test that stood here**, which asserted that a coarser
+        grid kept strictly fewer slots - `beats` dropping the notes between the beats.
+        That was the grid doing a melody reduction, which is what cost 24 notes on the
+        committed triplet head, and it is gone: `--skeleton` is a melody-*selection* flag
+        and no setting of it removes a note of the tune.
+
+        The density decision that this test used to make is not lost, it **moved**: where
+        chords fall is now the rhythm axis's question rather than this flag's, and it is
+        not built yet. Until it is, every setting plays the tune and differs only in
+        nothing at all - which is the honest state of the flag and the reason it wants a
+        floor (`beats` / `eighths` / `sixteenths` are placeholders for that axis) rather
+        than five live densities.
         """
         # Four of eight divisions is an eighth, so four of them are a half bar.
         head = self.load(
@@ -786,47 +1660,120 @@ class TestReductionAndArranging(unittest.TestCase):
             + note("G", duration=4) + note("A", duration=4),
             divisions=8,
         )
-        eighths = [s[2] for s in head_skeleton(head, "eighths")]
-        beats = [s[2] for s in head_skeleton(head, "beats")]
-        self.assertEqual(eighths, [1.0, 1.5, 2.0, 2.5])
-        # A note between two beats rounds onto one of them, so the beat grid keeps
-        # strictly fewer slots - which is the whole point of the finer default.
-        self.assertLess(len(beats), len(eighths))
-        self.assertEqual(beats[0], 1.0)
+        self.assertEqual([s[2] for s in head_skeleton(head)], [1.0, 1.5, 2.0, 2.5])
 
-    def test_a_note_off_the_grid_lands_on_it(self):
-        """A triplet note rounds to the nearest eighth, so it is voiced on one.
+    def test_every_written_note_keeps_the_beat_it_was_written_on(self):
+        """No note of the tune is moved, merged, or dropped by the reduction.
 
-        The written onsets fall between the eighths; the slots do not, because the
-        grid is what the voicings are spaced on and a chord a sixteenth off the beat
-        would sit between two columns of the staff.
+        **This is the model, stated in one assertion.** `--skeleton` is a
+        *melody-selection* flag: it says which notes the soprano is asked to sound, and
+        the answer is every one of them, down to the floor. It is **not** a spacing
+        rule, and where chords fall is a separate axis with its own question.
+
+        The previous behaviour quantised every note to a grid, which cost 24 of 110 notes
+        on the committed triplet head - 11 in the tuplet bars and **13 in the straight
+        ones** - because two notes closer together than the grid shared a slot and the
+        `pick` rule silently dropped one. A note of the tune going missing is worse than
+        a chord sitting slightly off a column of the staff, and the loss was invisible.
         """
-        # divisions=12, so a quarter is 12. Two triplet eighths written as 8 are
-        # divided to 5 each, so the onsets fall on 1 + 5/12 and 1 + 10/12.
         head = self.load(
             harmony("C", "major")
             + note("E", duration=8, tuplet=True) + note("F", duration=8, tuplet=True)
             + note("G", duration=12),
             divisions=12,
         )
-        # Read raw, the onsets really are off the eighth grid...
-        self.assertAlmostEqual(head.notes[1].beat, 1 + 5 / 12, places=6)
-        self.assertAlmostEqual(head.notes[2].beat, 1 + 10 / 12, places=6)
-        # ...and every slot lands on one.
-        for _triple, _bar, beat, _duration in head_skeleton(head, "eighths"):
-            self.assertAlmostEqual((beat - 1.0) % 0.5, 0.0, places=6)
+        # The tuplets are marked as written, and they are a third of a beat apart.
+        self.assertEqual([n.tuplet for n in head.notes], [True, True, False])
+        beats = [beat for _t, _bar, beat, _d in head_skeleton(head)]
+        # **The slot carries the note's own float, and this assertion was inverted to
+        # say so.** It used to compare against `round(n.beat, 6)`, because the slot
+        # stored the rounded beat: `head_skeleton` grouped notes by a six-place key
+        # and then emitted that key as the position. A triplet is where that costs
+        # something - `1/3` has no exact binary form, so rounding the first note of
+        # a triplet DOWN and the next UP made the gap between them longer than the
+        # note itself, and the surplus was written as a rest. Measured on the
+        # committed triplet head: 13 such rests, and none since. See
+        # `test_a_triplet_head_writes_no_rest_it_cannot_express`, which asserts that
+        # on the real score rather than on this fixture's hand-written durations.
+        self.assertEqual(beats, [n.beat for n in head.notes])
 
-    def test_the_chords_strategy_keeps_one_slot_per_change(self):
-        """The written harmony rather than the melody, at the change's own beat."""
+    def test_a_triplet_head_writes_no_rest_it_cannot_express(self):
+        """The end-to-end consequence, on the committed triplet score.
+
+        The defect was invisible in the tab and glaring in the score. `head_skeleton`
+        emitted six-place-rounded beats, which made the gap between two triplet notes
+        longer than the notes in it; `tabxml._events` caps a note at the length the
+        file wrote, so the surplus became a **rest of about 1e-06 quarters** - a
+        length MusicXML cannot express, and which music21 inflates to a whole
+        triplet note. Measured on `i_was_doing_all_right.mxl`: **13 such rests and
+        133 events before, 0 and 120 after.** Each one put an extra note inside a
+        `3` bracket and stretched the bar, so "Trouble in Mind" bar 1 came out two
+        beats long instead of one.
+
+        Asserted on the events rather than on the XML, because that is where the rest
+        is born and it needs no optional dependency to see it.
+        """
+        head = load_musicxml(I_WAS_DOING_ALL_RIGHT)
+        # The fixture must actually be a triplet head, or this proves nothing.
+        tuplets = sum(1 for n in head.notes if n.tuplet)
+        self.assertGreater(tuplets, 0, "this fixture must contain triplets")
+
+        slots = head_skeleton(head)
+        steps, _rescued, _notes = arrange_slots(
+            [s[0] for s in slots], [(s[1], s[2], s[3]) for s in slots]
+        )
+        events, _pickup = _events(_substitute_steps(steps), head.beats_per_bar, True,
+                                  head.beat_type)
+        # Every rest is a real one: at least a sixteenth. The sixteenth is the
+        # shortest event `_events` will write (`_MIN_EVENT_LENGTH`), so anything
+        # shorter is a rounding artefact rather than silence the score contains.
+        unexpressible = [
+            length for step, _strikes, length in events
+            if step is None and length < 0.25 - 1e-9
+        ]
+        self.assertEqual(unexpressible, [])
+
+    def test_a_tuplet_head_keeps_every_note_on_every_grid(self):
+        """The end-to-end claim, on the committed score rather than a hand-built one.
+
+        A hand-built fixture is fine for a rule but not for a count: the point here is
+        that the reduction no longer *loses notes of the tune*, and the only honest way
+        to say that is against a real score's note count. `i_was_doing_all_right.mxl`
+        carries 39 tuplets among its 110 notes, and before this rule `eighths` kept 86
+        of them - losing 11 in the tuplet bars and **13 in the straight ones**, because
+        any two notes closer together than the grid collided.
+        """
+        head = load_musicxml(I_WAS_DOING_ALL_RIGHT)
+        # Every written note, including all 39 tuplets. Under `eighths` this head used
+        # to keep 86 of 110 - losing 11 in the tuplet bars and **13 in the straight
+        # ones**, because two notes closer together than the grid shared a slot and one
+        # was dropped from the arrangement without a word.
+        self.assertEqual(len(head_skeleton(head)), len(head.notes))
+        self.assertEqual(sum(1 for n in head.notes if n.tuplet), 39)
+
+    def test_a_chord_change_sounds_under_every_note_it_governs(self):
+        """Two chords in the bar, six notes, and the harmony changes part-way through.
+
+        **This inverts the test that stood here**, which asserted the `chords` strategy
+        gave one slot per chord change - two slots for these six notes. That was a
+        reduction of the melody, which is the thing this module no longer does: the
+        soprano plays the tune. What survives is the part of it that was not about
+        reduction at all - **the harmony in force is right on every note**, and the
+        change lands where the file put it rather than on a downbeat.
+        """
         head = self.load(
             harmony("C", "major") + note("E") + note("F") + note("G")
             + harmony("F", "dominant") + note("A") + note("B"),
         )
-        slots = head_skeleton(head, "chords")
-        self.assertEqual([s[0][2] for s in slots], ["Cmaj", "F7"])
-        # The change lands on the fourth quarter, which is beat 4 - not the
-        # downbeat the grid would have put it on.
-        self.assertEqual([s[2] for s in slots], [1.0, 4.0])
+        slots = head_skeleton(head)
+        # Five written notes, five slots - none of them merged away.
+        self.assertEqual(len(slots), len(head.notes))
+        # The first three are under Cmaj and the last two under F7.
+        self.assertEqual([s[0][2] for s in slots],
+                         ["Cmaj", "Cmaj", "Cmaj", "F7", "F7"])
+        # And each note keeps the beat it was written on, so the change is heard at the
+        # fourth quarter (beat 4) rather than being snapped to a grid position.
+        self.assertEqual([s[2] for s in slots], [1.0, 2.0, 3.0, 4.0, 5.0])
 
     def test_a_leading_rest_still_takes_up_its_time(self):
         """A rest is not a note, but it is time, and the cursor must cross it.
@@ -880,7 +1827,7 @@ class TestReductionAndArranging(unittest.TestCase):
         # makes the renderers write that bar short rather than inventing a downbeat.
         events, pickup = _events(
             _substitute_steps(
-                arrange_xml_head(BUT_NOT_FOR_ME, strategy="eighths")[0]
+                arrange_xml_head(BUT_NOT_FOR_ME)[0]
             ),
             head.beats_per_bar,
             True,
@@ -911,28 +1858,36 @@ class TestReductionAndArranging(unittest.TestCase):
         self.assertEqual([n.beat for n in head.notes], [1.0, 1.5, 2.0, 2.5])
         # ...and the eighth grid keeps all four rather than folding the last onto 2.0.
         self.assertEqual(
-            [s[2] for s in head_skeleton(head, "eighths")], [1.0, 1.5, 2.0, 2.5]
+            [s[2] for s in head_skeleton(head)], [1.0, 1.5, 2.0, 2.5]
         )
 
-    def test_a_bar_line_overflow_is_still_pulled_back_inside(self):
-        """The clamp the last-eighth fix refines still does its original job.
+    def test_a_note_past_the_bar_line_is_still_pulled_back_inside(self):
+        """The clamp still does its job, which is now a narrower one.
 
-        A note that *rounds onto* the bar line - the last thing `_slot_key` is
-        documented to catch - is still pulled back to the last grid position inside
-        the bar, so a bar cannot gain a phantom step on its own downbeat and collide
-        with the first step of the next.
+        **The job changed with the model, and the assertion had to change with it.**
+        This used to be about a note that *rounded onto* the bar line: `eighths` put the
+        grid at 0.5, a note at 2.75 rounded to 3.0, and 3.0 is the bar line of a 2/2 bar,
+        so it was pulled back to the last eighth inside - 2.5.
+
+        There is no grid now, so nothing rounds: every note keeps the beat it was
+        written on, and a note written past the bar line is simply **over the line**
+        rather than rounding onto it. The clamp is still what stops that, and it is still
+        load-bearing - but what it pulls back to is the bar line approached from inside,
+        not the last grid step.
         """
         head = self.load(
             harmony("C", "major")
             + note("E", duration=8) + note("F", duration=8)
-            # A note at 2.75 rounds up to 3.0, which is the bar line in a 2/2 bar.
             + note("G", duration=6) + note("A", duration=2),
             divisions=8, beats=2, beat_type=2,
         )
-        beats = [s[2] for s in head_skeleton(head, "eighths")]
-        # Nothing lands on 3.0 or beyond: the overflow came back to 2.5.
-        self.assertTrue(all(b <= 2.5 for b in beats), beats)
-        self.assertIn(2.5, beats)
+        beats = [s[2] for s in head_skeleton(head)]
+        # The bar is two beats wide, so its last eighth is 2.375 and the bar line 3.0.
+        # Every note is where the file put it, none of them on the line, and the last
+        # one is still there rather than folded onto an earlier slot.
+        self.assertEqual(beats, [n.beat for n in head.notes])
+        self.assertTrue(all(b < head.beats_per_bar + 1.0 for b in beats), beats)
+        self.assertEqual(max(beats), 2.375)
 
     def test_a_cut_time_head_keeps_every_note_of_the_tune(self):
         """No note of a real 2/2 head is lost to the reduction.
@@ -947,7 +1902,7 @@ class TestReductionAndArranging(unittest.TestCase):
         # The last quarter of a 2/2 bar is beat 2.5, so these exist in the file...
         self.assertTrue(any(n.beat > head.beats_per_bar for n in head.notes))
         # ...and the eighth grid must not have folded them onto the second beat.
-        slots = head_skeleton(head, "eighths")
+        slots = head_skeleton(head)
         self.assertTrue(any(beat > head.beats_per_bar for _t, _b, beat, _d in slots))
         # Nothing may land on or past the bar line either.
         for _triple, _bar, beat, _duration in slots:
@@ -957,7 +1912,7 @@ class TestReductionAndArranging(unittest.TestCase):
         """The bass rides in the name, as the corpus path keeps it, and rule B
         promotes a triad whose bass is its own seventh."""
         head = self.load(harmony("A", "minor", bass="G") + note("E"))
-        _melody, quality, name = head_skeleton(head, "beats")[0][0]
+        _melody, quality, name = head_skeleton(head)[0][0]
         self.assertEqual(quality, "m7")  # A minor triad over G is a minor 7th
         self.assertEqual(name, "Am/G")
 
@@ -970,7 +1925,6 @@ class TestReductionAndArranging(unittest.TestCase):
         """
         steps, _head, _notes = arrange_xml_head(
             self.path(harmony("D", "dominant", bass="C") + note("F", octave=4)),
-            strategy="beats",
         )
         self.assertEqual(len(steps), 1)
         self.assertEqual(steps[0].chord, "D7/C")
@@ -982,7 +1936,7 @@ class TestReductionAndArranging(unittest.TestCase):
         """A note with no harmony is voiced alone, not under an invented chord."""
         path = write_score(score(note("C", octave=5) + harmony("C", "major") + note("E")))
         self.addCleanup(os.unlink, path)
-        steps, _head, _notes = arrange_xml_head(path, strategy="beats")
+        steps, _head, _notes = arrange_xml_head(path)
         self.assertTrue(steps[0].melody_only)
         self.assertEqual(steps[0].chord, NO_CHORD)
         self.assertFalse(steps[1].melody_only)
@@ -995,7 +1949,7 @@ class TestReductionAndArranging(unittest.TestCase):
             + harmony("G", "dominant") + note("B", octave=4)
             + harmony("C", "major-seventh") + note("B", octave=4)
         )
-        slots = head_skeleton(head, "beats")
+        slots = head_skeleton(head)
         steps, _rescued, _notes = arrange_slots(
             [s[0] for s in slots], [(s[1], s[2], s[3]) for s in slots]
         )
@@ -1026,7 +1980,7 @@ class TestReductionAndArranging(unittest.TestCase):
                   + harmony("C", "major-seventh") + note("B", octave=4))
         )
         self.addCleanup(os.unlink, source)
-        steps, _head, _notes = arrange_xml_head(source, strategy="beats")
+        steps, _head, _notes = arrange_xml_head(source)
 
         exported = write_score(format_musicxml(steps, title="Round trip"), suffix=".musicxml")
         self.addCleanup(os.unlink, exported)

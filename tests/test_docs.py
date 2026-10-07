@@ -37,13 +37,28 @@ ROOT = Path(__file__).resolve().parent.parent
 #: The documents an agent is most likely to read first. A fact asserted here is
 #: asserted because it was wrong in one of these, not because it is worth asserting
 #: in the abstract.
+#:
+#: `comping-styles.md` and `voices-axis.md` are here because of a measured omission,
+#: not a principle: both were added while this list was not updated, and the
+#: link-resolution and reachability checks below then passed *vacuously* over both.
+#: `docs/comping-styles.md` was found on disk with its body duplicated, its last
+#: section spliced mid-word and 37 U+FFFD replacement characters in it, while
+#: `make check` reported 938 tests OK, pyright 0 errors and ruff clean. The gate was
+#: green because it was not looking - a check that enumerates its inputs by hand
+#: silently skips whatever was added last, which is AGENTS.md trap 1 applied to
+#: documentation. **A new document must be added here in the same commit that
+#: creates it**, and the routing table in `AGENTS.md` must link it, or the next
+#: agent inherits an unverified file.
 DOCUMENTS = [
     "AGENTS.md",
     "README.md",
     "docs/engine.md",
     "docs/renderers.md",
-    "docs/corpus.md",
     "docs/open-issues.md",
+    "docs/comping-styles.md",
+    "docs/voices-axis.md",
+    "docs/one-fact.md",
+    "docs/reharmonisation-proposals.md",
 ]
 
 #: Matches a version as stated in prose: `0.9.0`, `` `0.9.0` ``, "currently 0.9.0".
@@ -76,6 +91,22 @@ def _layout_block() -> str:
     if found is None:
         raise AssertionError("AGENTS.md has no '## Repository layout' block")
     return found.group(1)
+
+
+def _topic_documents_on_disk() -> List[str]:
+    """Every topic document under `docs/`, as repository-relative POSIX paths.
+
+    `docs/history/` is excluded because it is deliberately not extended and is
+    already reachable through the `docs/history/` directory link; everything else
+    is a document an agent may be sent to and therefore one whose links and stated
+    version the checks below must actually read.
+    """
+    return sorted(
+        path.relative_to(ROOT).as_posix()
+        for path in (ROOT / "docs").rglob("*.md")
+        if "history" not in path.relative_to(ROOT).parts
+    )
+
 
 class TestDocsMatchTheCode(unittest.TestCase):
     """Documentation drift fails the suite instead of misleading the next agent."""
@@ -150,6 +181,35 @@ class TestDocsMatchTheCode(unittest.TestCase):
                 if not path.exists():
                     broken.append(f"{name} -> {target}")
         self.assertEqual(broken, [], "a document links to a file that does not exist")
+
+    def test_every_document_on_disk_is_in_the_list(self):
+        """A document created without being registered fails the suite.
+
+        Every other check in this class reads `DOCUMENTS`, so a file missing from
+        it is a file **no check in this file looks at** - the links in it are never
+        resolved and any version it states is never compared. That is not a
+        hypothetical: `docs/comping-styles.md` was added without being listed, and
+        while it was unlisted it carried a duplicated body, a section spliced
+        mid-word and 37 U+FFFD replacement characters with `make check` reporting
+        938 tests OK, pyright 0 errors and ruff clean. The gate was green because
+        it was not looking.
+
+        This is AGENTS.md trap 1 - "a gate that enumerates its inputs by hand
+        silently skips whatever was added last" - applied to documentation, and it
+        is caught here by deriving the list from the filesystem rather than by
+        trusting the list to have been updated. A new document must be added to
+        `DOCUMENTS` in the same commit that creates it.
+        """
+        registered = set(DOCUMENTS)
+        unregistered = [
+            name for name in _topic_documents_on_disk() if name not in registered
+        ]
+        self.assertEqual(
+            unregistered,
+            [],
+            "a document on disk is not in DOCUMENTS, so no check in this file "
+            "reads it - add it to DOCUMENTS and link it from AGENTS.md",
+        )
 
     def test_the_routing_table_reaches_every_document(self):
         """Each topic document is reachable from `AGENTS.md`.
@@ -252,17 +312,58 @@ class TestTheCiWorkflowMatchesTheProject(unittest.TestCase):
             "a bare interpreter name makes pyright blind to every installed package",
         )
 
-    def test_the_workflow_says_the_database_tests_do_not_run(self):
-        """The header states that the corpus path is skipped, and how badly.
+    def test_the_workflow_says_the_whole_suite_runs_on_a_clean_clone(self):
+        """The header states that a green check now means *everything* ran.
 
-        Measured: 85 skipped on a clean clone against 2 with the database
-        present. An agent reading a green check must not conclude the Weimar path
-        was exercised, so the file has to say so in its own words rather than
-        leaving it to be inferred from a `skipUnless`.
+        **This asserted the opposite for most of the project's life.** The corpus
+        job was manual-dispatch only and the database was gitignored, so 85 of the
+        suite's tests were skipped on any clean clone and the header said so in the
+        strongest terms available ("a green check does NOT mean the Weimar path was
+        exercised"). That was the right claim to make while the caveat existed.
+
+        With the database gone the caveat is gone, and the claim that was worth
+        making has to be restated in the other direction: a green check here means
+        the entire suite ran, because there is nothing a clean clone cannot run. A
+        header that kept the old wording would be warning about a problem that no
+        longer exists, which is its own kind of wrong - it teaches a reader to
+        distrust a green run that is now trustworthy.
         """
         header = self.workflow().split("jobs:")[0]
-        self.assertIn("85", header)
-        self.assertIn("does NOT mean", header)
+        self.assertIn("whole suite ran", header)
+        # And the shape of the old caveat must be gone, not merely unmentioned:
+        # "85 skipped" is a number that would now be false.
+        self.assertNotIn("85", header)
+
+    def test_no_gate_is_gated_behind_a_variable(self):
+        """Nothing in the workflow can skip silently, because nothing is gated.
+
+        **This replaces `test_the_corpus_job_fails_loudly_when_its_variable_is_unset`,
+        and it keeps the property rather than the job.** That test asserted the
+        `corpus` job read `vars.WJAZZD_DB_URL` and `exit 1` when it was unset - a
+        gated job that skips quietly is indistinguishable in the checks UI from one
+        that ran, which was the exact failure mode the header warned about.
+
+        The job is gone, so there is nothing to read and nothing to exit on. The
+        reason the assertion existed still applies to whatever comes next, and it
+        now has a stronger form: **the workflow has exactly one job and it is not
+        conditional on anything.** A future gate added behind a variable or a
+        dispatch event would reintroduce the silent-skip failure, and this catches
+        it where the old test caught the one instance that then existed.
+        """
+        text = self.workflow()
+        jobs = re.findall(r"^  ([a-z_]+):$", text.split("jobs:")[1], re.M)
+        self.assertEqual(jobs, ["check"], "a second job means a gate that may not run")
+        # No `if:` on a job, and no repository variable gating a step.
+        self.assertNotIn("vars.", text, "a gated step can skip without saying so")
+        # `workflow_dispatch` belongs to the `on:` block and is a *more* trigger,
+        # not a gate - it lets a human re-run the gate. What must not appear is a
+        # conditional on the job, and `if:` inside it is how the corpus job was
+        # restricted to manual dispatch.
+        job_body = text.split("jobs:")[1]
+        self.assertNotIn(
+            "\n    if:", job_body,
+            "the gate job is conditional, so a push may not run it at all",
+        )
 
     def test_the_workflow_declares_the_permissions_it_uses(self):
         """The root carries `permissions`, and no job asks for more than it needs.
@@ -291,21 +392,6 @@ class TestTheCiWorkflowMatchesTheProject(unittest.TestCase):
                 text,
                 f"{scope} is held by a workflow that only reads the repository",
             )
-
-    def test_the_corpus_job_fails_loudly_when_its_variable_is_unset(self):
-        """A gated job that skips silently is indistinguishable from one that ran.
-
-        The database has no stable download URL this repository can name, so the
-        job reads `vars.WJAZZD_DB_URL`. Until that is set the job must **exit
-        non-zero** rather than skip: a silently-skipped corpus job looks exactly
-        like a passing one in the checks UI, which is the failure mode the header
-        is warning about in the first place.
-        """
-        text = self.workflow()
-        corpus = text.split("  corpus:")[1]
-        self.assertIn("vars.WJAZZD_DB_URL", corpus)
-        self.assertIn("exit 1", corpus)
-        self.assertIn("workflow_dispatch", text)
 
 
 if __name__ == "__main__":

@@ -509,6 +509,13 @@ def _strikes_here(step: ArrangementStep, string_index: int) -> bool:
     if step.bass_only:
         return string_index == step.voicing.bass_string
     if step.repeated:
+        if not step.melody_voiced:
+            # No soprano to re-strike: the whole comping shape is held, because the
+            # horn repeating the note is not something the guitar articulates. The same
+            # rule `render._step_cells` applies, and the reason it is stated in both is
+            # that this pair is what keeps the ASCII staff, the HTML and the one-line
+            # renderer from disagreeing about what attacks.
+            return True
         struck = {step.voicing.soprano_string()}
         if step.voicing.bass_midi is not None:
             struck.add(step.voicing.bass_string)  # type: ignore[arg-type]
@@ -517,9 +524,19 @@ def _strikes_here(step: ArrangementStep, string_index: int) -> bool:
 
 
 def _carries_melody(steps: List[ArrangementStep], string_index: int) -> bool:
-    """True when the melody rides on this string somewhere in the progression."""
+    """True when the melody rides on this string somewhere in the progression.
+
+    `melody_voiced` is read rather than re-derived from the shape, because the two
+    disagree on the comping route: a guide-tone shell built from the chord alone
+    still has a highest sounding note, so deriving the marker from the shape stars
+    a string on a part that is not singing - and the staff claims the tune for the
+    guitar exactly where the arrangement handed it to the horn. The marker is a
+    claim about *who has the melody*, and `melody_voiced` is that claim; the shape
+    only says where a note sits.
+    """
     return any(
-        step.voicing.frets[string_index] >= 0
+        step.melody_voiced
+        and step.voicing.frets[string_index] >= 0
         and step.voicing.soprano_string() == string_index
         for step in steps
     )
@@ -749,7 +766,7 @@ def format_tab_staff(
             if show_chords:
                 width = max(width, len(step.chord))
             if show_melody:
-                width = max(width, len(step.melody))
+                width = max(width, len(step.melody or ""))
         if show_timing:
             width = max(width, len(_meter_label(beats_per_bar, beat_type)))
             for label, _kind in values:
@@ -937,7 +954,7 @@ def format_tab_staff(
             lines.append(row)
         if show_melody:
             lines.append(line(
-                width, system, lambda step: step.melody if step else "",
+                width, system, lambda step: (step.melody or "") if step else "",
                 when_struck=False,
             )[0])
         lines.extend(string_line(width, system, index) for index in range(5, -1, -1))
@@ -1199,7 +1216,7 @@ def _html_melody_row(
         # An empty cell is one with no step on it; pyright cannot see that the
         # conditional already guards it, so the binding is named explicitly.
         step = columns[index][1]
-        cells.append(_html_cell(_escape(step.melody) if step else ""))
+        cells.append(_html_cell(_escape(step.melody or "") if step else ""))
     return _html_row(_CLASS_MELODY, cells)
 
 

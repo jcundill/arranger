@@ -21,7 +21,7 @@ order down the strings: the A string is tuned five semitones above the D. See
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from musthe import Note
 
@@ -30,6 +30,8 @@ from .tuning import (
     HIGH_FRET_LIMIT,
     MELODY_STRING_CHOICES,
     MELODY_STRING_CHOICES_FULL,
+    NECK_FRET_MAX,
+    NECK_FRET_MIN,
     STANDARD_TUNING,
     GuitarFretboard,
     Voicing,
@@ -323,6 +325,40 @@ DUO_DEGREES: Tuple[int, int] = (0, 7)
 BASS_DEGREES_6432: Tuple[int, ...] = (0, 7)
 
 
+# Every single-string set, because a one-note shape may legitimately occupy any of them.
+#
+# This table exists because the one-voice comping shape was, until the `voices=` axis
+# learned to tell a bass voice from an inner one, generated only on the **top** string
+# of each `duo` pair - strings 5, 4 and 3 - and `supported_string_sets()` listed no
+# singletons at all. So every one-note shape the library could produce was already
+# violating the invariant "the sounding strings are exactly one supported set", and
+# nothing caught it: `tests/test_grips.py` asserts that invariant per *shape*, and the
+# one shape that broke it was asserted only for its note count.
+#
+# Listing all six is the honest statement rather than the convenient one. A single
+# note on one string has no span to exceed and no second voice to clash with, so it is
+# playable wherever it is wanted; the constraint that makes `drop2` refuse the bottom
+# four strings (`_BOTTOM_FOUR`) is about four voices crowding there, and does not
+# apply to one. Which of the six a given voice *may* use is a separate question, and
+# that question is `BASS_VOICE_STRING_SETS` below.
+SINGLE_NOTE_STRING_SETS: Tuple[Tuple[int, ...], ...] = tuple((s,) for s in range(6))
+
+# The strings a **single bass voice** may occupy: the bottom three - low E, A and D.
+#
+# The bass voice is the one selection whose register is part of what it *is*. An alto
+# or a tenor stated alone is a guide tone under somebody else's melody, and the top of
+# a duo pair is where a player puts one. A bass stated alone is not a guide tone at all:
+# it is the bottom of the band, and on a guitar that means the bottom of the neck.
+# Measured on `tests/data/but_not_for_me.mxl` before this table existed, every one of
+# the 80 `--voices bass` steps landed on strings 1-3 - high E, B and G - sounding MIDI
+# 59 to 74, which is the middle of the neck and not a bass register at all.
+#
+# Six strings would technically reach further down, but the root of any chord is
+# reachable on these three well inside the neck window, so the wider choice would only
+# add positions for the selector to reject.
+BASS_VOICE_STRING_SETS: Tuple[Tuple[int, ...], ...] = ((0,), (1,), (2,))
+
+
 def supported_string_sets() -> List[frozenset]:
     """
     Every set of strings a generated voicing may sound, as a set of frozensets.
@@ -335,6 +371,14 @@ def supported_string_sets() -> List[frozenset]:
     than re-deriving the rule, so a new grip cannot quietly escape the invariant.
 
     The bottom four strings are excluded, deliberately: see `_BOTTOM_FOUR`.
+
+    The single-string sets are included, and that is a **consequence** rather than an
+    addition: `SINGLE_NOTE_STRING_SETS` states that one note on one string is playable
+    anywhere, and an invariant a shape can violate is not an invariant. Before it, the
+    one-note comping shape was generated on strings 5, 4 and 3 - none of them listed -
+    so every one-voice shape the library produced was already outside this set and no
+    test said so, because the per-shape assertions in `tests/test_grips.py` never
+    generated one. See `SINGLE_NOTE_STRING_SETS` for the measurement.
     """
     sets = {
         frozenset(range(top - 3, top + 1))
@@ -343,6 +387,7 @@ def supported_string_sets() -> List[frozenset]:
     }
     for shapes in GRIP_STRING_SETS.values():
         sets.update(frozenset(strings) for strings, _ in shapes)
+    sets.update(frozenset(strings) for strings in SINGLE_NOTE_STRING_SETS)
     return sorted(sets, key=lambda s: sorted(s))
 
 
@@ -1467,6 +1512,309 @@ def _chord_context(
             root_pc = None
     tones = ChordParser.CHORD_TONES_FROM_ROOT.get(canonical, ())
     return canonical, root_pc, tones
+
+
+def _shell_voicing(
+    frets_by_string: Tuple[int, ...],
+    frets: Tuple[int, ...],
+    midis: List[int],
+    canonical: str,
+    root_pc: int,
+    tones: Tuple[int, ...],
+    notes: int = 3,
+    bass_voice: bool = False,
+    shell_root: bool = False,
+) -> Optional[Voicing]:
+    """
+    One comping candidate, or None when it does not state the chord.
+
+    Both guide tones must sound and nothing outside the chord may, which is the rule
+    `_place_shell` already enforces and the reason this is a helper rather than being
+    written twice. Shared by the melody-bearing shell and the melody-free one so the
+    two cannot drift apart on what counts as a shell.
+
+    `notes` is **how many voices the guitar was asked to play**, which is the arity of the
+    shape: `alto,tenor` is two notes and `alto,tenor,tenor`-style requests are still two
+    because a voice is a *role* in the stack, not a count. The pair case is the reason
+    this is a parameter and not a constant -- with two voices there is no room for the
+    third note a three-voice shell spends on the root or the 5th, and asking for a shape
+    that sounds three notes when two were named is how a part ends up with a voice in it
+    that belongs to somebody else.
+
+    **`bass_voice` changes which note the shape must sound, because it changes what the
+    shape is.** Every other selection here is stating a chord *quality* to somebody
+    else's ear, so the guide tones are the claim. A lone bass note is stating the chord's
+    *function*, and a 3rd or a 7th down there does not sound like a bass note at all - it
+    sounds like the wrong chord. The library already states that rule for the one place
+    it had to: `BASS_DEGREES_6432` carries the comment "the lowest voice is what *defines*
+    the chord, so a 3rd or a 7th down there sounds like the wrong harmony rather than a
+    voicing of this one", and this is that same rule read from that same table rather than
+    a second one written here.
+
+    So a bass voice takes the **root, or the 5th where the root is unreachable**, in
+    preference order, and keeps the same rule as every other shape: nothing outside the
+    chord may sound. The 5th is a fallback rather than a co-equal choice because the
+    root is the note that names the chord; a 5th names it only in company.
+
+    **`shell_root` is the third way to spend the bottom of the shape**, and the only one
+    that asks for *more* than a plain guide-tone shape: both guide tones, and a bass
+    degree underneath them, so the ear hears which chord it is as well as what quality.
+    It is checked as the conjunction of the two rules above rather than as a third list,
+    which is why it can be added without deciding anything new about degrees - see
+    `HARMONY_STYLES` in `textures.py`, which is where the *vocabulary* lives.
+    """
+    guide = SHELL_DEGREES.get(canonical)
+    if guide is None:
+        return None
+    if len(frets_by_string) < notes:
+        return None
+    pcs = {midi % 12 for midi in midis}
+    if bass_voice:
+        # The same containment check every other candidate makes, before anything else.
+        allowed = {(root_pc + tone) % 12 for tone in tones}
+        if not pcs <= allowed:
+            return None
+        # Root first, then the 5th: the degree order is `BASS_DEGREES_6432`'s, and it is
+        # tried as a preference rather than required, so a chord whose root cannot be
+        # fretted here still gets a bass note instead of no note.
+        for degree in BASS_DEGREES_6432:
+            if (root_pc + degree) % 12 in pcs:
+                break
+        else:
+            return None
+    elif shell_root:
+        # **The new case, and it is a conjunction of two rules rather than a third one.**
+        # A `shell_root` shape says both things at once: the guide tones state the chord's
+        # *quality*, and a bass degree underneath says which chord it is. Each half is
+        # already stated by a table - `SHELL_DEGREES` for the first, `BASS_DEGREES_6432`
+        # for the second - so the check is both of those, applied, and not a new list
+        # written here that could drift from either.
+        #
+        # The containment check comes first and unconditionally, exactly as in every
+        # other branch: a shape sounding a note outside the chord is not a voicing of
+        # this one whatever else it gets right.
+        allowed = {(root_pc + tone) % 12 for tone in tones}
+        if not pcs <= allowed:
+            return None
+        needed = {(root_pc + degree) % 12 for degree in guide}
+        if not needed <= pcs:
+            return None
+        # **The lowest note, not merely *a* note of that degree.** This is the whole
+        # difference between this family and a guide-tone shape, and it is the part that
+        # is easy to get wrong: on an `Ebmaj` whose guide tones are D and G, a shape of
+        # `D G Bb` already *contains* a fifth (Bb), so a check for "some bass degree is
+        # sounding" is satisfied by the plain guide-tone shape and this family would
+        # silently be a synonym for `guide`. Stating the harmony from the bottom up
+        # means the bass degree is the one the ear hears **first**, so it is checked on
+        # the lowest sounding note rather than on the set.
+        #
+        # Root first, 5th as the fallback: the same preference order `BASS_DEGREES_6432`
+        # states, read here rather than re-decided, because the root is the note that
+        # names the chord and a 5th names it only in company.
+        lowest = min(midis) % 12
+        if lowest not in {(root_pc + degree) % 12 for degree in BASS_DEGREES_6432}:
+            return None
+    else:
+        # **One voice is a weaker claim, and the rule says so rather than refusing.** Two
+        # notes can sound both guide tones, which is what states the chord; one note cannot,
+        # and a single note *is* the whole of a `duo` - the grip family this library has
+        # always offered for "the melody plus one guide tone". So a one-voice selection keeps
+        # the **first** guide tone (the 3rd, or the 4th on a sus chord) and drops the second,
+        # which is the same preference order `_duo_offsets` already applies.
+        #
+        # Refusing here instead would have made `--voices alto` fall through to the ordinary
+        # melody-bearing route - measured, it warned on every step and handed the horn's line
+        # back to the guitarist, which is the opposite of what naming one voice asked for.
+        keep = 2 if notes >= 2 else 1
+        needed = {(root_pc + degree) % 12 for degree in guide[:keep]}
+        allowed = {(root_pc + tone) % 12 for tone in tones}
+        if not needed <= pcs or not pcs <= allowed:
+            return None
+
+    vector = [-1] * len(STANDARD_TUNING)
+    for string, fret in zip(frets_by_string, frets):
+        vector[string] = fret
+    active = list(frets)
+    return Voicing(
+        frets=vector,
+        top_fret=frets[0],
+        avg_fret=sum(active) / len(active),
+        grip="shell",
+        bass_pc=min(midis) % 12,
+    )
+
+
+def get_comping_voicings(
+    chord_type: str,
+    chord_name: Optional[str] = None,
+    fret_min: int = NECK_FRET_MIN,
+    fret_max: int = NECK_FRET_MAX,
+    notes: int = 3,
+    bass_voice: bool = False,
+    shell_root: bool = False,
+) -> List[Voicing]:
+    """
+    Guide-tone comping shapes: the chord stated **without** the melody on top.
+
+    This is the guitarist's part when somebody else has the tune - a horn in front of
+    the band - which is why it takes no melody argument at all. Every other candidate
+    in this module is built around pinning the melody to the soprano string; this is
+    the one that has none to pin.
+
+    **It is `_place_shell`'s own search with nothing held at the top.** A shell is
+    already a claim about the chord's 3rd and 7th rather than about the tune, so
+    `_place_shell` needed no change: it already tries every fret combination on the
+    remaining strings and keeps the ones where both guide tones sound and nothing
+    outside the chord does. The only difference is that the top fret is searched too
+    rather than fixed by a melody, and the shape is ranked on spread and position
+    instead of against a pinned note. Because the window is exactly `GRIP_MAX_SPAN`,
+    the search stays exhaustive within the playability invariant.
+
+    Only the `shell` string sets are offered, and that is the musical claim rather
+    than a limitation: with no melody to support, a fourth voice would be the root or
+    the 5th - the two notes that carry no information about the chord's quality. The
+    guide tones are what state whether the ear hears a major or a minor chord.
+
+    `notes` is the **arity asked for**, and it is honoured rather than treated as a
+    preference: `2` is the alto-and-tenor comping pair, `3` the shell. A string set too
+    small for the request is **skipped rather than padded**, because a part sounding more
+    notes than the caller named is worse than a thinner one - the extra note is a voice
+    somebody else was supposed to have.
+
+    **`bass_voice` is what stops the arity from being the whole question.** It is True
+    only for a selection naming the bass and nothing else, and it does two things: it
+    offers the bottom-of-neck string sets instead of the `duo` tops (so the note lands
+    in a bass register rather than the middle of the neck), and it takes the note from
+    `BASS_DEGREES_6432` rather than `SHELL_DEGREES` (so it is a root or a 5th rather than
+    a 3rd). Both are needed and neither is enough: a low 3rd is still not a bass note.
+
+    **`shell_root` asks for both guide tones *and* a root or 5th under them**, which is
+    the claim neither flag above can state: `bass_voice` spends the whole shape on the
+    bass, and the default spends it on the guide tones alone. It is a `harmony=` value
+    rather than a change of arity, because it is a claim about *which degrees sound* and
+    not about how many notes there are - the same reason `HARMONY_STYLES` is a table of
+    degree families and not a count. Measured at 11 of 11 chords on the **existing**
+    `(5,4,3)` shell sets, so no new string set is involved.
+
+    Every candidate sounds only chord tones, holds a fret span of at most
+    `GRIP_MAX_SPAN["shell"]`, and occupies one string set from `GRIP_STRING_SETS["shell"]`
+    - or, for a bass voice, one from `BASS_VOICE_STRING_SETS` / the `duo` tops. **Unlike
+    every other candidate in the library, none of these carries a melody**, so the
+    invariant that a voicing sounds the melody on its topmost string does not apply to
+    them and is not asserted - see `tests/test_comping.py`.
+
+    `fret_min`/`fret_max` bound the search the way they bound the selector everywhere
+    else: as a **preference**, never a filter. A chord whose comping shape sits
+    outside the window is still generated and still playable, because losing a chord
+    of the tune is worse than being a fret out of position.
+    """
+    canonical, root_pc, tones = _chord_context(chord_type, chord_name)
+    # No root, no claim to make: a guide tone is a claim about *this* chord's 3rd and
+    # 7th, and guessing them without a root is how a wrong note gets in. The same
+    # rule, and the same reason, as `get_grip_voicings`'s shell and duo branches.
+    if root_pc is None:
+        return []
+
+    limit = GRIP_MAX_SPAN["shell"]
+    # The board, not the window: `fret_max` is a preference `voicing_cost` applies, so
+    # searching past it and letting the selector rank is what keeps a chord of the tune
+    # from vanishing. Clamped at 18, which is the end of the neck.
+    hi = min(fret_max + limit, 18)
+    lo = max(0, fret_min - limit)
+
+    valid: List[Voicing] = []
+    for used in _comping_string_sets(notes, bass_voice):
+        best: Optional[Tuple[Tuple[int, float], Voicing]] = None
+        for frets in _frets_in_span(used, lo, hi, limit):
+            midis = sorted(
+                GuitarFretboard.fret_to_midi(string, fret)
+                for string, fret in zip(used, frets)
+            )
+            found = _shell_voicing(
+                used, frets, midis, canonical, root_pc, tones, notes, bass_voice,
+                shell_root,
+            )
+            if found is None:
+                continue
+            # Ranked here rather than by `voicing_cost`, because this is a *generator*
+            # and choosing is the selector's job - the split every other family keeps.
+            # One per string set: a tighter shape lower on the neck is the one a player
+            # would pick, and offering the rest would only give the selector a worse
+            # shape to lose.
+            key = (max(frets) - min(frets), sum(frets) / len(frets))
+            if best is None or key < best[0]:
+                best = (key, found)
+        if best is not None:
+            valid.append(best[1])
+    return valid
+
+
+def _comping_string_sets(
+    notes: int, bass_voice: bool = False
+) -> List[Tuple[int, ...]]:
+    """The string sets a comping shape of `notes` voices may occupy, most preferred first.
+
+    **The arity picks the family, rather than truncating one.** Truncating a `shell` set
+    to two strings looks free and is not: it yields pairs the library has never vetted -
+    `(0, 2)` skips the A string, `(5, 3)` skips the B - and those would enter the tab as
+    if they had been designed for the job. They have not. A two-note shape is a `duo`,
+    the family this library has always offered for exactly that, and its four sets are
+    measured for reach and span.
+
+    Three notes take the `shell` sets unchanged, which is the whole point of the shell.
+    One note takes the `duo` sets' top strings, since a single note is the limiting case
+    of a pair and any of those strings will do.
+
+    **`bass_voice` moves the one-note case to the bottom of the neck, and it is a
+    different question rather than a different arity.** "A single note is the limiting
+    case of a pair" is true of an *inner* voice - an alto or a tenor is a guide tone
+    under somebody else's melody, and the top of a duo pair is where a player puts one.
+    A bass stated alone is not a guide tone at all; it is the bottom of the band, so on a
+    guitar it belongs on the bottom of the neck, which the `duo` sets never offer.
+
+    This is why the flag is a parameter and not a fourth arity: `alto`, `tenor` and
+    `bass` all request **one note** and all reach this function, so arity alone cannot
+    tell them apart - and it did not. Measured before this parameter, on
+    `tests/data/but_not_for_me.mxl`, `--voices alto`, `--voices tenor` and `--voices
+    bass` produced byte-identical arrangements, all 80 steps on strings 1-3.
+
+    It applies only at arity one, because that is the only arity where the selection
+    names nothing but the bass: at two or more voices the shape is a pair or a shell
+    whose lowest note is placed by its own string set, and moving that would be
+    re-deciding a shape that is already correct.
+    """
+    if notes <= 1:
+        if bass_voice:
+            return list(BASS_VOICE_STRING_SETS)
+        return [(strings[0],) for strings, _ in GRIP_STRING_SETS["duo"]]
+    if notes == 2:
+        return [strings for strings, _ in GRIP_STRING_SETS["duo"]]
+    return [strings for strings, _ in GRIP_STRING_SETS["shell"]]
+
+
+def _frets_in_span(
+    strings: Tuple[int, ...], lo: int, hi: int, limit: int
+) -> Iterable[Tuple[int, ...]]:
+    """Every fret tuple on `strings` inside `lo`..`hi` whose span is at most `limit`.
+
+    Written as a recursive generator rather than one nested loop per arity, because
+    `notes` is a parameter and the alternative is a separate copy of this search for
+    every arity - which is exactly how the melody-bearing shell and this one drifted
+    apart the first time they were written separately.
+
+    The window narrows as it recurses (`first - limit` .. `first + limit`), so the
+    search is still exhaustive over span-legal combinations and never materialises the
+    ones the span rule would reject.
+    """
+    if not strings:
+        yield ()
+        return
+    rest = strings[1:]
+    for first in range(lo, hi + 1):
+        window_lo = max(lo, first - limit)
+        window_hi = min(hi, first + limit)
+        for tail in _frets_in_span(rest, window_lo, window_hi, limit):
+            yield (first,) + tail
 
 
 def get_grip_voicings(

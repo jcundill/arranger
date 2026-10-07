@@ -21,9 +21,22 @@ directly rather than trusting the refactor:
 was one of the six whose help both commands agreed on, so the eleven are
 unchanged. The counts are asserted in both directions below.
 
-`head_cli` builds its parser from a fixture score and never touches the database,
-so none of this needs `wjazzd.db`; `corpus_cli`'s parser is read without arranging
-anything, for the same reason.
+**The corpus half is gone, and what replaced it is stated where it was removed.**
+This file existed to hold two parsers to each other: `corpus` and `head` shared an
+argparse block, and the assertions were that they agreed on every flag they shared
+and differed only where they had to. With the database removed there is one parser,
+so those assertions had nothing to compare - and rather than delete the class, it
+now asserts the two properties that survived and are still capable of breaking:
+
+- **the flag count**, which was a tripwire for "a flag was added to one command and
+  not the other" and is now a tripwire for "a flag appeared or vanished";
+- **`CommonHelp` is wired to the parser**, which was "the table and the measurement
+  agree" and is now "every declared field reaches a flag, and reaches it with that
+  text". That is the check that catches a field added to the dataclass and never
+  passed to `add_argument`.
+
+The `corpus` command's own vocabulary assertions - that `--skeleton`'s choices were
+`SKELETON_STRATEGIES` - were the other half, and they went with the flags.
 """
 
 from __future__ import annotations
@@ -32,21 +45,19 @@ import argparse
 import contextlib
 import io
 import os
+import sys
 import tempfile
 import unittest
-from pathlib import Path
 from typing import Dict, List
 
 import arranger
 from arranger.cli import (
-    CORPUS_HELP,
     HEAD_HELP,
     CommonHelp,
     add_common_arguments,
     render_and_write,
 )
 from arranger.tuning import NECK_FRET_MAX, NECK_FRET_MIN
-from wjazzd import SKELETON_STRATEGIES, SLOT_PICKS, corpus_cli
 
 
 def _parser_of(run: object) -> argparse.ArgumentParser:
@@ -98,53 +109,71 @@ def _semantics(action: argparse.Action) -> tuple:
     )
 
 class TestTheFlagsAreOneDefinition(unittest.TestCase):
-    """The two parsers agree on every flag they share, and differ only where they must.
+    """The parser is one definition, and this is what still needs asserting.
 
     The invariant defect #4 was about is structural now - one `add_common_arguments`
-    builds both - but a *structural* fix still needs an assertion, or the next edit
+    builds it - but a *structural* fix still needs an assertion, or the next edit
     reintroduces the copy and nothing says so.
+
+    **This class compared two parsers and now checks one, which is not the same
+    test.** `corpus` and `head` each had their own; the assertions were that they
+    agreed on every shared flag and differed only where they had to. That is not a
+    weaker statement about a single parser - it is a *different* one, because "the
+    two agree" and "this one is complete" fail in different ways. So the surviving
+    assertions are the two halves of the old subject that still have teeth, and the
+    rest of the class is a record of what was there and why it went.
     """
 
-    def parsers(self):
-        """Both CLIs' parsers as `_actions` mappings."""
+    def parser(self):
+        """`head`'s parser as an `_actions` mapping."""
         from headxml import head_cli
 
-        corpus = _actions(_parser_of(corpus_cli))
-        head = _actions(_parser_of(head_cli))
-        return corpus, head, sorted((set(corpus) & set(head)) - {"help"})
+        return _actions(_parser_of(head_cli))
 
-    def test_the_two_parsers_agree_on_every_shared_flag(self):
-        """Same spelling, type, choices, default, nargs and metavar - flag for flag.
+    def test_the_flag_count_is_what_it_was(self):
+        """Counted, not derived, deliberately.
 
-        This is the assertion that makes the copy impossible to reintroduce: a
-        flag added to one CLI and not the other cannot satisfy it, because the
-        other simply has no such option.
+        This was "the two parsers agree on every shared flag", and it was a
+        tripwire for *a flag added to one command and not the other* - a number that
+        recomputed itself from the parsers would have noticed nothing. With one
+        parser there is nothing to disagree with, so what the count is for changes:
+        it is now a tripwire for a flag appearing or vanishing unnoticed.
+
+        **20, and it was 20 before this change too**, which is the interesting part.
+        `--skeleton` and `--pick` were `add_common_arguments` parameters, gated on a
+        vocabulary the one real caller never passed - so `head` never offered them
+        and removing the gate removed no flag from this parser. The count is
+        unchanged because what was removed was a branch nothing took, not an option
+        anyone could type. See `test_the_reduction_flags_are_gone`.
+
+        `_actions` already drops `help`, so this is the length of the mapping and
+        not the parser's action count.
         """
-        corpus, head, shared = self.parsers()
-        self.assertEqual(len(shared), 16, "the shared flag count moved")
+        flags = self.parser()
+        self.assertEqual(len(flags), 20, "the flag count moved; remeasure")
 
-        disagreeing = [
-            f"{dest}: corpus={_semantics(corpus[dest])!r} head={_semantics(head[dest])!r}"
-            for dest in shared
-            if _semantics(corpus[dest]) != _semantics(head[dest])
-        ]
-        self.assertEqual(disagreeing, [], "a shared flag means two different things")
+    def test_every_flag_is_one_somewhere(self):
+        """No flag is registered without a decision behind it.
 
-    def test_each_command_keeps_exactly_its_own_flags(self):
-        """`corpus` alone names a transcription; `head` alone names a score.
-
-        These are the flags that are *not* duplication, pinned so a shared flag
-        cannot quietly absorb one: `--melid` only means something against the
-        database, and `file` only against a file on disk.
+        **This is the assertion that replaced `test_each_command_keeps_exactly_its_own_flags`.**
+        That test held that `corpus` alone named a transcription and `head` alone a
+        file - `--melid` only meant something against the database, `file` only
+        against a file on disk. With one command the surviving claim is the weaker
+        but still real one that *every* flag reaches the parser: `file` and `part`
+        are `head`'s own, and they are named rather than derived.
         """
-        corpus, head, _shared = self.parsers()
         self.assertEqual(
-            sorted(set(corpus) - set(head)), ["lift", "list", "melid", "section"]
+            sorted(self.parser()),
+            [
+                "bars", "bars_per_line", "bass", "fallback", "file", "fret_max",
+                "fret_min", "gp5", "grid", "grips", "harmony", "html",
+                "melody", "musicxml", "mutes", "non_chord_tone", "part", "tab",
+                "texture", "voices",
+            ],
         )
-        self.assertEqual(sorted(set(head) - set(corpus)), ["file", "part"])
 
     def test_the_help_text_is_not_one_shared_string(self):
-        """Eleven flags are worded differently, and that difference is load-bearing.
+        """Eleven flags carry written prose, and eight carry none from the table.
 
         Measured before `arranger/cli.py` existed: of the seventeen shared flags,
         all seventeen agreed on every field of *meaning*, and eleven disagreed on
@@ -152,43 +181,33 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         and none at all in `head`. A refactor that "tidied" the prose would have
         silently changed what both commands print, with nothing to catch it.
 
-        So the difference is asserted in both directions: each of the eleven is
-        different, and the five that are identical are named, so a sixth drifting
-        into `CommonHelp` fails here instead of being noticed by a user.
+        With one parser there is no "differing" set any more, so this asserts the
+        partition that produced it instead: **eleven flags get their text from
+        `CommonHelp` and eight get it written inline**, and both halves are named.
+        That is the property the split was built on - a flag whose help is the same
+        wherever it is read is written once at the `add_argument` call, and one
+        whose wording carries an arrangement of its own lives in the table.
 
-        The counts are sixteen and eleven now, not seventeen and eleven:
-        `--vertical` was removed along with the `format_progression` branch it
-        selected, and it was one of the six whose help the commands spelled
-        identically. Only that side of the split moved, which is why the eleven are
-        named one by one below rather than counted - a flag leaving the *differing*
-        set would change what both commands print, and one leaving the *identical*
-        set only changes the number.
-        """
-        corpus, head, shared = self.parsers()
-        differing = sorted(d for d in shared if corpus[d].help != head[d].help)
-        self.assertEqual(
-            differing,
-            [
-                "bars", "bars_per_line", "fret_max", "fret_min", "gp5", "html",
-                "melody", "musicxml", "mutes", "tab", "texture",
-            ],
-        )
-        self.assertEqual(
-            sorted(set(shared) - set(differing)),
-            ["fallback", "grips", "non_chord_tone", "pick", "skeleton"],
-            "a flag gained or lost its differing help - remeasure before editing",
-        )
-
-    def test_the_help_tables_cover_exactly_the_differing_flags(self):
-        """`CommonHelp` names the eleven, and nothing else.
-
-        A field for a flag the two commands already agree on would be a second
-        place to state the same prose - the duplication this module exists to
-        remove - so the table and the measurement are asserted against each other.
+        The eight: `bass`, `fallback`, `grid`, `grips`, `harmony`, `non_chord_tone`
+        and `voices` are arranging choices that mean the same thing against a
+        transcription and against a score, so they print one help string rather
+        than two - that was the original reason each is *not* in `CommonHelp`, and
+        the reason survives the corpus. `file` and `part` are prose argparse writes
+        from the flag name.
         """
         from dataclasses import fields
 
+        flags = self.parser()
         declared = {field.name for field in fields(CommonHelp)}
+        self.assertEqual(
+            sorted(flags),
+            [
+                "bars", "bars_per_line", "bass", "fallback", "file", "fret_max",
+                "fret_min", "gp5", "grid", "grips", "harmony", "html",
+                "melody", "musicxml", "mutes", "non_chord_tone", "part", "tab",
+                "texture", "voices",
+            ],
+        )
         self.assertEqual(
             declared,
             {
@@ -196,14 +215,43 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
                 "melody", "musicxml", "mutes", "tab", "texture",
             },
         )
-        corpus, head, shared = self.parsers()
+        # Every declared field reaches its flag, and reaches it with that text.
+        # This is the half of the old "table and measurement agree" test that
+        # still has teeth: it catches a field added to the dataclass and never
+        # passed to `add_argument`, which nothing else here would notice.
+        for name in sorted(declared):
+            with self.subTest(flag=name):
+                self.assertEqual(flags[name].help, getattr(HEAD_HELP, name))
+        # And nothing claims to come from the table without declaring it.
         self.assertEqual(
-            declared,
-            {d for d in shared if corpus[d].help != head[d].help},
-            "CommonHelp and the measured difference disagree",
+            sorted(flags),
+            sorted(declared | {"bass", "fallback", "file", "grid", "grips",
+                               "harmony", "non_chord_tone", "part", "voices"}),
         )
 
-    def test_head_states_the_fret_window_too(self):
+    def test_the_reduction_flags_are_gone(self):
+        """`--skeleton` and `--pick` went with the database, and that is asserted.
+
+        Both were a *reduction* - they decided which melody notes were dropped -
+        and the MusicXML path does not reduce: every written note of a score sounds,
+        because a note of the tune going missing silently is worse than a busy tab.
+        The corpus command kept both while it existed, which is why they were
+        *parameters* of `add_common_arguments` rather than flags: their vocabularies
+        belonged to `wjazzd`, and `head` never passed them.
+
+        So these two flags were unreachable before this change - gated on a
+        vocabulary the one caller had no way to supply. Removing the gate is what
+        makes them removable, and the assertion is that they are not offered: a flag
+        reaching a parameter that had gone would be a `TypeError` at first run rather
+        than a parser error, which is the worse of the two.
+        """
+        flags = self.parser()
+        for name in ("--skeleton", "--pick", "--vertical", "--melid", "--list",
+                     "--lift", "--section"):
+            with self.subTest(flag=name):
+                self.assertNotIn(name, flags)
+
+    def test_head_states_the_fret_window(self):
         """The one omission, filled deliberately rather than quietly preserved.
 
         `corpus` told the user what its fret window defaulted to and `head` said
@@ -214,54 +262,40 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         Someone looked, and filled it: a flag the reader can pass but cannot
         understand is worse than either state. The gap is closed here.
 
-        So this asserts the *new* deliberate difference rather than deleting the
-        test. Both commands state the window now, so what must be pinned is the
-        remaining asymmetry - the two spellings are **not** the same text, because
-        `head`'s has to say what `corpus`'s cannot (that the window is an aim
-        rather than a filter). If someone copies `CORPUS_HELP`'s wording across to
-        make them "consistent", the two move into the identical set and
-        `test_the_help_text_is_not_one_shared_string` fails - which is the point.
-        The warning survives the fix: still remeasure before editing.
+        **What this asserts now that there is one command.** The old version pinned
+        that the two spellings differed, so that copying one across to "tidy" them
+        would fail. With the other half deleted there is nothing to differ *from* -
+        so the surviving claim is the one that was always the point: the window is
+        an aim and not a filter, and only the text can say so.
         """
-        for help_text in (CORPUS_HELP, HEAD_HELP):
-            self.assertIsNotNone(help_text.fret_min)
-            self.assertIsNotNone(help_text.fret_max)
-        self.assertNotEqual(CORPUS_HELP.fret_min, HEAD_HELP.fret_min)
-        self.assertNotEqual(CORPUS_HELP.fret_max, HEAD_HELP.fret_max)
-        # Both state the window, and both say it is an aim rather than a filter -
-        # the one thing a reader cannot infer from the flag name.
-        for help_text in (CORPUS_HELP, HEAD_HELP):
-            self.assertIn(str(NECK_FRET_MIN), str(help_text.fret_min))
-            self.assertIn(str(NECK_FRET_MAX), str(help_text.fret_max))
+        self.assertIsNotNone(HEAD_HELP.fret_min)
+        self.assertIsNotNone(HEAD_HELP.fret_max)
+        self.assertIn(str(NECK_FRET_MIN), str(HEAD_HELP.fret_min))
+        self.assertIn(str(NECK_FRET_MAX), str(HEAD_HELP.fret_max))
+        # The one thing a reader cannot infer from the flag name: the window is a
+        # preference and never a filter, so a step with no voicing inside it is
+        # still played rather than dropped.
         self.assertIn("filter", str(HEAD_HELP.fret_min))
+        # And the text that states it is the one the parser prints, so the promise
+        # is a promise about what `arranger head --help` says.
+        flags = self.parser()
+        self.assertEqual(flags["fret_min"].help, HEAD_HELP.fret_min)
 
-    def test_vertical_is_no_longer_a_shared_flag(self):
-        """`--vertical` was removed, and the removal is asserted rather than assumed.
-
-        It selected a six-line block per chord from `format_progression`, which is
-        a branch that no longer exists. A whole-progression staff is what a player
-        reads, and `--tab staff` renders one. The flag used to be one of the six
-        whose help both commands spelled identically, so leaving it in place would
-        have been a flag reaching a parameter that had gone - a `TypeError` at the
-        first run rather than a parser error, which is the worse of the two.
-
-        So the assertion is the opposite of the one it replaces: neither parser
-        offers it, which is what "both commands agree" now means for a flag neither
-        of them has.
-        """
-        corpus, head, shared = self.parsers()
-        for name, flags in (("corpus", corpus), ("head", head)):
-            self.assertNotIn("--vertical", flags, name)
-        self.assertNotIn("vertical", shared)
 
 class TestTheSharedDispatch(unittest.TestCase):
-    """`render_and_write` is one function, and it serves both commands.
+    """`render_and_write` is one function, and what `head` hands it.
 
-    Read through the function rather than through either CLI: `head` needs a
-    committed score and `corpus` needs the 42 MB database, and neither is what
-    this behaviour *is*. The two end-to-end CLIs are still exercised where they
-    live - in `tests/test_headxml.py` and `tests/test_wjazzd.py` - so nothing here
-    replaces them; this only states the shared half where the shared half is.
+    Read through the function rather than through the CLI: `head` needs a
+    committed score, and that is not what this behaviour *is*. The end-to-end CLI
+    is still exercised where it lives - in `tests/test_headxml.py` - so nothing here
+    replaces it; this only states the dispatch itself, which is reachable without
+    a file on disk.
+
+    **These were the "shared" half of a pair of commands**, and every test here
+    existed to hold the two callers to one definition: a metre passed by one and
+    defaulted by the other had to land in the same place. That comparison is gone,
+    and what remains is the weaker and still real claim that the defaults are the
+    writers' own - which is what the tests assert.
     """
 
     def steps(self, count: int = 2):
@@ -275,12 +309,7 @@ class TestTheSharedDispatch(unittest.TestCase):
     def args(self, **overrides):
         """A parsed namespace, as `render_and_write` is handed one by a CLI."""
         parser = argparse.ArgumentParser(prog="test")
-        add_common_arguments(
-            parser,
-            HEAD_HELP,
-            skeleton_strategies=SKELETON_STRATEGIES,
-            slot_picks=SLOT_PICKS,
-        )
+        add_common_arguments(parser, HEAD_HELP)
         namespace = parser.parse_args([])
         for name, value in overrides.items():
             setattr(namespace, name, value)
@@ -405,11 +434,15 @@ class TestTheSharedDispatch(unittest.TestCase):
             self.assertEqual(calls[name]["beat_type"], 2, name)
 
     def test_the_metre_defaults_to_the_writers_own_four(self):
-        """`corpus` passes no metre, because a Weimar transcription is 4/4.
+        """`None` becomes the writers' own 4 rather than being forwarded as a null.
 
-        So `None` has to become the writers' own 4 rather than being forwarded as
-        a null, which `format_tab_html` would take as "lay out against no grid" -
-        so this is a crash that only a score command could have triggered.
+        `format_tab_html` takes a null `beats_per_bar` as "lay out against no grid",
+        so forwarding it is a crash rather than a default. **This was written when
+        `corpus` passed no metre and `head` did** - a Weimar transcription is 4/4 -
+        and the default existed so the two callers could share one dispatch. With
+        `head` the only caller it always has a score's own metre, so the branch is
+        unreachable from the CLI. It stays because every writer has that default
+        anyway and a caller with no metre should land on it rather than raise.
         """
         calls = self.captured_calls()
         for name in ("staff", "html", "musicxml", "gp5"):
@@ -433,11 +466,13 @@ class TestTheSharedDispatch(unittest.TestCase):
             self.assertNotIn("fifths", calls[name], name)
 
     def test_the_key_defaults_to_the_writers_own_zero(self):
-        """`corpus` passes no key, and a Weimar transcription is usually C.
+        """`None` becomes 0 rather than being forwarded as a null.
 
-        So `None` has to become 0 rather than being forwarded as a null, which is
-        what lets the two commands share one dispatch - the same bargain the metre
-        makes two paragraphs above.
+        The same bargain the metre makes above, and for the same original reason:
+        a Weimar transcription is usually C, so `corpus` passed no key and `head`
+        passed the score's. It was also the right default on its own terms - 0 is
+        C major, which is what a MusicXML document with no `<key>` already means,
+        so a caller with no signature is asking for C rather than for "unknown".
         """
         calls = self.captured_calls()
         for name in ("musicxml", "gp5"):
@@ -445,12 +480,14 @@ class TestTheSharedDispatch(unittest.TestCase):
             self.assertEqual(calls[name]["mode"], "", name)
 
     def test_the_subtitle_reaches_the_renderers_that_have_one(self):
-        """`corpus` names performer and key; `head` has neither.
+        """The subtitle is metadata on all three file writers and a heading on the
+        HTML.
 
-        The subtitle is metadata on all three file writers and a heading on the
-        HTML, so it is one of the few places the two commands' *output* genuinely
-        differs - which is why it is a parameter here rather than something the
-        dispatch infers.
+        It was one of the few places the two commands' *output* genuinely differed
+        - `corpus` named performer and key, `head` has neither - which is why it is
+        a parameter here rather than something the dispatch infers. `head` passes
+        the score's own composer when there is one, and `""` otherwise, which is
+        also the writers' own default.
         """
         import tabstaff
 
@@ -477,40 +514,61 @@ class TestTheSharedDispatch(unittest.TestCase):
         self.assertEqual(calls["subtitle"], "John Coltrane - Bb")
 
 
-class TestTheVocabularyIsPassedIn(unittest.TestCase):
-    """The reduction vocabularies are arguments, not imports.
+class TestAMainThatKnowsWhatItDoesNotHave(unittest.TestCase):
+    """An unrecognised subcommand is a usage error, not the demo.
 
-    `SKELETON_STRATEGIES` and `SLOT_PICKS` belong to `wjazzd`, a top-level module
-    outside the package's DAG. An import here would reach out of the package and
-    the layering would stop meaning anything - and it would make `import
-    arranger.cli` depend on the database module, which is the laziness
-    `docs/corpus.md` goes to some trouble to preserve.
+    **This is a trap the removal of `corpus` opened, and it was not new.** With two
+    subcommands, an unknown first argument fell through to the built-in
+    demonstration and exited 0 - so `arranger corpus --melid 218` printed three
+    arrangements and reported success, to a user who had asked for a head and got
+    nothing resembling one. That was survivable while the fallthrough was merely
+    sloppy. It is not survivable now: `corpus` *was* a command, so the exact
+    invocation in the README before this change now silently produces the demo, and
+    the exit code says it worked.
+
+    The test is on the shape of the argument, not on the word: `argv[1]` being a
+    bare alphabetic word is a subcommand or a typo for one, and a leading option is
+    not. `arranger --grips shell` must still reach the demo.
     """
 
-    def test_the_cli_module_does_not_import_wjazzd(self):
-        """Read from the source, so it holds whatever the import style becomes."""
-        import ast
+    def run_main(self, argv):
+        """`main()` under a given `sys.argv`, with its streams captured."""
+        buffer = io.StringIO()
+        errors = io.StringIO()
+        saved = sys.argv
+        sys.argv = ["arranger"] + argv
+        code = 0
+        try:
+            with contextlib.redirect_stdout(buffer), contextlib.redirect_stderr(errors):
+                try:
+                    arranger.main()
+                except SystemExit as exit_code:
+                    code = exit_code.code if exit_code.code is not None else 0
+        finally:
+            sys.argv = saved
+        return code, buffer.getvalue(), errors.getvalue()
 
-        tree = ast.parse((Path(arranger.__file__).parent / "cli.py").read_text())
-        imported = {
-            node.module
-            for node in ast.walk(tree)
-            if isinstance(node, ast.ImportFrom) and node.module
-        }
-        imported.update(
-            alias.name
-            for node in ast.walk(tree)
-            if isinstance(node, ast.Import)
-            for alias in node.names
-        )
-        self.assertNotIn("wjazzd", imported)
+    def test_the_removed_corpus_command_is_reported_not_run(self):
+        """The README's own example from before the removal, now an error."""
+        code, out, err = self.run_main(["corpus", "--melid", "218"])
+        self.assertEqual(code, 2, "a removed command must not exit 0")
+        self.assertIn("Unknown command", err)
+        self.assertIn("'head'", err)
+        # The trap this closes: the demo is *silent* on stdout, so a user who only
+        # looked at the arrangements would see nothing at all.
+        self.assertEqual(out, "", "the demo must not run behind a usage error")
 
-    def test_the_vocabulary_is_the_one_the_reduction_uses(self):
-        """The choices offered are the reduction's own, not a copy that can drift."""
-        self.assertEqual(
-            SKELETON_STRATEGIES, ("chords", "beats", "eighths", "sixteenths", "notes")
-        )
-        self.assertEqual(SLOT_PICKS, ("first", "longest"))
+    def test_no_arguments_still_prints_the_demo(self):
+        code, out, err = self.run_main([])
+        self.assertEqual(code, 0)
+        self.assertIn("ARRANGEMENT", out)
+        self.assertEqual(err, "")
+
+    def test_a_leading_option_is_not_mistaken_for_a_subcommand(self):
+        """`--grips shell` is a demo argument, and saying otherwise would break it."""
+        code, out, _err = self.run_main(["--grips", "shell"])
+        self.assertEqual(code, 0)
+        self.assertIn("ARRANGEMENT", out)
 
 
 if __name__ == "__main__":

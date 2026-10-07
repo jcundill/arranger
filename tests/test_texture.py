@@ -22,6 +22,7 @@ from musthe import Note
 
 import arranger
 from arranger import (
+    BASS_STRING_INDICES,
     GRIP_MAX_SPAN,
     GRIP_STRING_SETS,
     ROLE_FILL,
@@ -29,6 +30,7 @@ from arranger import (
     SHELL_DEGREES,
     TEXTURE_GRIPS,
     TEXTURE_STYLES,
+    THUMB_TEXTURES,
     ChordParser,
     VoiceLeadingEngine,
     _interval_offsets,
@@ -225,14 +227,27 @@ class TestRoles(unittest.TestCase):
             for role in (ROLE_TARGET, ROLE_FILL):
                 self.assertIn(role, TEXTURE_GRIPS[texture])
 
-    def test_only_the_walking_bass_fill_is_empty(self):
+    def test_every_empty_palette_is_a_texture_that_means_it(self):
         """
-        An empty grip tuple is a decision, so it is asserted to be exactly one.
+        An empty grip tuple is a decision, and the set of them is asserted exactly.
 
         `arrange_progression` treats `()` as "the left hand plays nothing" and routes
         the step through the melody-alone path. Any *other* texture reaching that branch
         would silently lose its harmony, which is the failure the walking-bass rule is
         careful not to create anywhere else.
+
+        **This assertion was narrowed, not deleted, when the melody-only textures
+        moved to the voices axis.** It used to list the `melody` and `melody_bass`
+        palettes alongside `walking_bass`'s fill; those two textures are gone, and
+        the fact they stated is keyed on the voice selection now - the loop hands
+        the empty palette to a melody-only selection (`melody_only_selection`)
+        without consulting this table at all, which is why a selection cannot miss
+        the melody-alone route by being absent from it.
+
+        What survives is the rule the test was for: the only empty palette a
+        *texture* carries is `walking_bass`'s fill, declared by name in the same
+        tables `arrange_progression` reads - so a texture that harmonises something
+        cannot reach the melody-alone route by accident.
         """
         empty = [
             (texture, role)
@@ -240,7 +255,18 @@ class TestRoles(unittest.TestCase):
             for role in (ROLE_TARGET, ROLE_FILL)
             if not TEXTURE_GRIPS[texture][role]
         ]
-        self.assertEqual(empty, [("walking_bass", ROLE_FILL)])
+        self.assertEqual(
+            empty,
+            [("walking_bass", ROLE_FILL)],
+            "an empty palette appeared or disappeared - name the texture that means it",
+        )
+        # And the table that routes it is the one declaring the textures, so a
+        # thumb texture cannot gain an empty palette without reaching the right branch.
+        for texture, _role in empty:
+            self.assertTrue(
+                texture in THUMB_TEXTURES,
+                f"{texture} has an empty palette but is not a thumb texture",
+            )
 
     def test_the_walking_bass_texture_is_declared(self):
         """
@@ -675,6 +701,138 @@ class TestTimingsDefensive(unittest.TestCase):
             texture="targets",
         )
         self.assertEqual([s.melody for s in plain], [s.melody for s in timed])
+
+
+class TestMelodyOnlySelections(unittest.TestCase):
+    """`melody=soprano` and `melody=soprano,bass`: the tune alone, and the tune
+    with a thumb under it.
+
+    Both answer "lead sheet in, melody out". They are voice selections rather
+    than grips because what they change is *which voices sound at all* - a grip
+    would have to win a cost comparison it should not be in, and
+    `GRIP_PREFERENCE` deliberately leaves `melody` out for exactly that reason.
+    They were the `melody` and `melody_bass` textures until the melody-only
+    claim moved to the voices axis, which is the question `voices=` answers -
+    see `docs/one-fact.md`, commit 3.
+    """
+
+    PROGRESSION = BUT_NOT_FOR_ME
+    TIMINGS = BUT_NOT_FOR_ME_TIMINGS
+
+    def arrange(self, voices, **kwargs):
+        return VoiceLeadingEngine.arrange_progression(
+            self.PROGRESSION, timings=self.TIMINGS, melody=voices, **kwargs
+        )
+
+    def test_every_slot_is_the_melody_alone(self):
+        """Neither selection harmonises anything, on any slot, strong or weak.
+
+        Counted on `upper_midi_notes`, not on `active_frets`: `_attach_bass` merges the
+        thumb into the voicing *after* the upper voice is chosen, so a
+        `soprano,bass` step legitimately has two sounding frets. The thing under
+        test is that the **left hand** plays one note, and that is what the
+        upper voices are.
+        """
+        for voices in ("soprano", "soprano,bass"):
+            steps = self.arrange(voices)
+            self.assertTrue(steps, voices)
+            for step in steps:
+                self.assertEqual(step.grip, "melody", f"{voices} {step.melody}")
+                self.assertEqual(
+                    len(step.voicing.upper_midi_notes()),
+                    1,
+                    f"{voices} {step.melody} harmonised the melody",
+                )
+                self.assertEqual(
+                    max(step.voicing.upper_midi_notes()),
+                    Note(step.melody).midi_note(),
+                    f"{voices} {step.melody}: the melody is not the top note",
+                )
+                self.assertFalse(step.melody_only, voices)
+                # The harmony still exists; it is simply not spelled out. `melody_only`
+                # would make the annotation claim "no chord - melody alone", which is
+                # false here - the chord name is printed as context.
+                self.assertTrue(step.chord)
+                self.assertFalse(
+                    step.partial, f"{voices} {step.melody} claims a partial chord"
+                )
+
+    def test_the_two_differ_only_in_the_thumb_line(self):
+        """`soprano` alone has no bass; `soprano,bass` walks one under every bar."""
+        for voices in ("soprano", "soprano,bass"):
+            steps = self.arrange(voices)
+            with_bass = [s for s in steps if s.bass is not None]
+            if voices == "soprano":
+                self.assertEqual(with_bass, [], "soprano alone must not carry a thumb")
+            else:
+                self.assertTrue(
+                    with_bass, "soprano,bass must carry a thumb line"
+                )
+                for step in with_bass:
+                    self.assertIn(
+                        step.voicing.bass_string,
+                        BASS_STRING_INDICES,
+                        f"thumb on string {step.voicing.bass_string}",
+                    )
+
+    def test_soprano_bass_keeps_every_note_of_the_tune(self):
+        """The thumb is added underneath; the melody is not thinned to make room.
+
+        A step invented purely for the thumb holds the melody rather than re-striking
+        it, which is what `is_bass_only` decides from the role - so a bar of running
+        notes must still sound every note it was given.
+        """
+        played = [s.melody for s in self.arrange("soprano,bass") if not s.bass_only]
+        self.assertEqual(
+            played,
+            [t[0] for t in self.PROGRESSION],
+            "soprano,bass dropped, duplicated or reordered the melody",
+        )
+
+    def test_they_need_no_grip_to_be_honoured(self):
+        """A caller asking for these selections under any `grips` still gets the melody.
+
+        The loop hands a melody-only selection the empty palette without consulting
+        `resolve_texture_grips` at all - the selection means the left hand plays
+        nothing whatever the grips say, and skipping the resolution skips its
+        empty-intersection warnings too. So `--grips duo --voices soprano` must
+        still produce the tune, silently.
+        """
+        for voices in ("soprano", "soprano,bass"):
+            for grips in (("duo",), ("shell",), ("drop2",), ()):
+                steps = VoiceLeadingEngine.arrange_progression(
+                    self.PROGRESSION, timings=self.TIMINGS, melody=voices, grips=grips
+                )
+                self.assertTrue(steps, f"{voices} {grips} produced nothing")
+                for step in steps:
+                    self.assertEqual(step.grip, "melody", f"{voices} {grips}")
+
+    def test_a_solo_note_is_a_supported_single_string_set(self):
+        """A solo note is a singleton, and the invariant now says so.
+
+        **This assertion was inverted, not deleted.** It previously read
+        `assertNotIn(..., supported_string_sets())`, pinning the fact that a one-string
+        shape was *outside* the playability invariant. That was true and it was a real
+        gap: the invariant claims "the sounding strings are exactly one
+        `supported_string_sets()` entry", and a melody-only selection violates it on every
+        slot, so the library shipped shapes it had not agreed to be playable.
+
+        `grips.SINGLE_NOTE_STRING_SETS` fixes that rather than excusing it: one note on
+        one string has no span to exceed and no second voice to clash with, so it is
+        playable anywhere, and `supported_string_sets()` now lists all six singletons.
+        The claim this test protects is unchanged - that the solo note is one string, and
+        that the library says so in one place - only the direction of it has moved.
+
+        Measured alongside: the same gap existed for the one-note *comping* shape, which
+        `SINGLE_NOTE_STRING_SETS` also closes; see `tests/test_comping.py`.
+        """
+        for step in self.arrange("soprano"):
+            self.assertEqual(len(step.voicing.active_frets()), 1)
+            self.assertIn(
+                frozenset(step.voicing.active_strings),
+                supported_string_sets(),
+                "a solo note must be one of the singleton sets",
+            )
 
 
 class TestTargetsTexture(unittest.TestCase):

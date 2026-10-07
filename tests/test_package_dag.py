@@ -46,6 +46,7 @@ ORDER = [
     "options",      # the knobs, as one value
     "decisions",    # the decisions both step loops share
     "steps",        # the engine and the one step loop
+    "slots",        # the slot layer: triples to steps, the one pre-pass over them
     "render",       # per-step rendering
     "cli",          # the two front ends' shared argparse block and output dispatch
 ]

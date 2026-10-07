@@ -42,6 +42,7 @@ from arranger import (
     ArrangementStep,
     ChordParser,
     VoiceLeadingEngine,
+    Voicing,
     _place_bass,
     _step_annotation,
     format_progression,
@@ -609,7 +610,7 @@ class TestEveryHeadCarriesTheMelodyInForce(unittest.TestCase):
         for name in self.HEADS:
             with self.subTest(head=name):
                 head = load_musicxml(f"tests/data/{name}")
-                skeleton = head_skeleton(head, "eighths", None, "first")
+                skeleton = head_skeleton(head)
                 triples = [slot[0] for slot in skeleton]
                 timings = [(slot[1], slot[2], slot[3]) for slot in skeleton]
                 slots = _walking_slots(triples, timings, head.beats_per_bar)
@@ -1170,6 +1171,40 @@ class TestBassPlacement(unittest.TestCase):
         upper = upper_shape([5, 5, 5, 5, 5, 5])
         self.assertIsNone(_place_bass(upper, pc("D")))
 
+    def test_step_bass_is_one_fact_with_one_home(self):
+        """
+        `step.bass` is a derived view of `voicing.bass_midi`, not a second field.
+
+        The two were written together in `_attach_bass`, and a stored copy was
+        another field that could disagree - the bug class `docs/one-fact.md`
+        exists to remove. The proof is the assignment: a view that cannot be
+        written cannot disagree with the fact it reads.
+        """
+        steps = walk(
+            [("F5", "maj7", "Fmaj7"), ("A4", "7", "G7")],
+            [(0, 1.0), (0, 2.0), (0, 3.0), (0, 4.0), (1, 1.0)],
+        )
+        self.assertTrue(any(step.bass is not None for step in steps))
+        for step in steps:
+            self.assertEqual(step.bass, step.voicing.bass_midi, step.tab_line())
+        with self.assertRaises(AttributeError):
+            steps[0].bass = 41  # type: ignore[assignment]
+
+    def test_a_late_attach_bass_merge_is_visible_through_the_step(self):
+        """
+        The view follows the post-selection write rather than a copy.
+
+        The thumb is merged into the voicing only after the upper shape has
+        been chosen, so a copy taken at construction would report no bass
+        forever. Writing the voicing's own field on a hand-built step and
+        reading the step's is the proof that one is derived from the other.
+        """
+        voicing = make_voicing([-1, -1, 9, 9, 8, 8])
+        step = ArrangementStep(chord="Cmaj7", melody="E5", voicing=voicing)
+        self.assertIsNone(step.bass)
+        voicing.bass_midi = 41
+        self.assertEqual(step.bass, 41)
+
 
 class TestTheInvariant(unittest.TestCase):
     """
@@ -1600,7 +1635,7 @@ class TestWalkingBassRendering(unittest.TestCase):
         voicing = make_voicing([8, 10, 9, 10, 10, 13], bass_midi=41, bass_string=0)
         step = ArrangementStep(
             chord="Fmaj7", melody="F5", voicing=voicing, repeated=True,
-            bass=41, bass_role="connect",
+            bass_role="connect",
         )
         self.assertEqual(
             [index for index in range(6) if _strikes_here(step, index)],
@@ -1678,3 +1713,214 @@ class TestWalkingBassRendering(unittest.TestCase):
         self.assertEqual(steps[0].voicing.grip, "shell")
         self.assertEqual(len(upper_pitches(steps[0])), 3)
 
+
+class TestUpperVoicesExcludeTheThumbByStringNotPosition(unittest.TestCase):
+    """`upper_midi_notes` must drop the thumb by **string**, never by list position.
+
+    Both renderers read this to decide hold-versus-strike, and `_step_annotation` reads
+    it to name an interval or a duo, so getting it wrong is not cosmetic: it returns the
+    wrong *notes*.
+
+    This is a regression test for a real defect. The method used to `enumerate(...)` the
+    sounding **pitches** and compare that counter - a position in the filtered list -
+    against `bass_string`, which is a string index. The two coincide only when the thumb
+    is the lowest-indexed active string, which for a low-E thumb under a shell they do:
+    every existing walking-bass fixture put the thumb on the 6th string, so the suite was
+    green over a method that returned the *thumb* and dropped the melody the moment the
+    thumb moved to the 5th or 4th. The comment above the code said "filtered by string
+    index, never by position in a filtered list" while doing the opposite.
+    """
+
+    def voicing(self, frets, bass_midi, bass_string):
+        active = [f for f in frets if f >= 0]
+        return Voicing(
+            frets=frets,
+            top_fret=max(active),
+            avg_fret=sum(active) / len(active),
+            grip="melody",
+            bass_midi=bass_midi,
+            bass_string=bass_string,
+        )
+
+    def test_a_thumb_on_the_a_string_keeps_the_melody(self):
+        """The case the old code got backwards: melody on the high E, thumb on the A."""
+        # A string fret 8 = F3, high E fret 8 = C5. The thumb is NOT the lowest-indexed
+        # active string, so a positional filter keeps position 0 - the thumb - and drops
+        # the melody at position 1.
+        v = self.voicing([-1, 8, -1, -1, -1, 8], bass_midi=53, bass_string=1)
+        self.assertEqual(sorted(v.midi_notes()), [53, 72])
+        self.assertEqual(
+            sorted(v.upper_midi_notes()),
+            [72],
+            "upper_midi_notes returned the thumb instead of the melody",
+        )
+
+    def test_every_thumb_string_gives_the_same_upper_voices(self):
+        """The result must not depend on *which* string the thumb landed on.
+
+        The same melody against a low-E, A-string and D-string thumb has to read the
+        same, because `_place_bass` picks the string per note by fret proximity.
+        """
+        cases = [
+            (0, 40),   # low E, open
+            (1, 45),   # A, open
+            (2, 50),   # D, open
+        ]
+        for thumb_string, thumb_midi in cases:
+            frets = [-1] * 6
+            frets[thumb_string] = 0
+            frets[5] = 8                       # C5 on the high E
+            v = self.voicing(frets, bass_midi=thumb_midi, bass_string=thumb_string)
+            self.assertEqual(
+                sorted(v.upper_midi_notes()),
+                [72],
+                f"thumb on string {thumb_string} changed the upper voices",
+            )
+
+    def test_a_step_with_no_thumb_is_untouched(self):
+        """No bass recorded means every note is an upper voice, which is the default."""
+        v = self.voicing([-1, -1, -1, -1, -1, 8], bass_midi=None, bass_string=None)
+        self.assertEqual(sorted(v.upper_midi_notes()), [72])
+
+    def test_a_four_voice_shell_keeps_three_notes_over_any_thumb(self):
+        """The walking-bass case the renderers actually depend on: shell plus thumb."""
+        for thumb_string, thumb_midi in ((0, 40), (1, 45), (2, 50)):
+            frets = [-1] * 6
+            frets[thumb_string] = 0
+            # G string fret 5 = C4, B string fret 5 = E4, high E fret 8 = C5.
+            frets[3], frets[4], frets[5] = 5, 5, 8
+            v = self.voicing(frets, bass_midi=thumb_midi, bass_string=thumb_string)
+            self.assertEqual(
+                sorted(v.upper_midi_notes()),
+                [60, 64, 72],
+                f"thumb on string {thumb_string} changed the shell",
+            )
+
+
+class TestTheBassPolicyIsAnAxis(unittest.TestCase):
+    """`bass=` selects the pattern; the texture no longer carries it.
+
+    `walking_bass` used to mean "a thumb line" as part of its name. Now it means "a
+    thumb line, by default", and the same line is reachable from a texture that has
+    never heard of walking bass. What must not change is that the default produces
+    exactly what it always did - which is the whole of the equivalence below.
+    """
+
+    PROGRESSION = [
+        ("F5", "maj7", "Fmaj7"),
+        ("E5", "maj7", "Emaj7"),
+        ("D5", "maj7", "Dmaj7"),
+        ("C5", "7", "C7"),
+        ("C5", "maj7", "Fmaj7"),
+        ("B4", "m7", "Bm7"),
+        ("A4", "maj7", "Amaj7"),
+        ("G4", "7", "G7"),
+    ]
+    ONSETS: List[Tuple[int, float]] = [(0, 1.0 + 0.5 * i) for i in range(8)]
+
+    def arrange(self, **kwargs):
+        timings = [
+            (bar, beat, None) for bar, beat in self.ONSETS
+        ]
+        return VoiceLeadingEngine.arrange_progression(
+            self.PROGRESSION, timings=timings, **kwargs
+        )
+
+    def tabs(self, steps):
+        return [s.voicing.tab_string() for s in steps]
+
+    def test_auto_reproduces_walking_bass_exactly(self):
+        """The default resolves to a walk, byte for byte.
+
+        This is the equivalence that makes the axis safe: `texture="walking_bass"` was
+        the only way to ask for a line before, and every published walking-bass tab is
+        pinned against it.
+        """
+        self.assertEqual(
+            self.tabs(self.arrange(texture="walking_bass")),
+            self.tabs(self.arrange(texture="walking_bass", bass="auto")),
+        )
+        self.assertEqual(
+            self.tabs(self.arrange(texture="walking_bass")),
+            self.tabs(self.arrange(texture="walking_bass", bass="walk")),
+        )
+
+    def test_auto_follows_the_selection_under_a_melody_only_part(self):
+        """
+        `BASS_AUTO` reads the voice selection, not just the texture.
+
+        `(soprano, bass)` walks - it is the old `melody_bass` texture under the
+        new spelling, measured byte for byte in `docs/one-fact.md`'s build
+        notes. `(soprano,)` alone keeps no thumb, and a lone `bass` selection
+        keeps none either: that part already is the bass line, and a thumb
+        under it would double it.
+        """
+        alone = self.arrange(melody="soprano")
+        self.assertTrue(alone)
+        self.assertTrue(all(s.bass is None for s in alone))
+        with_thumb = self.arrange(melody="soprano,bass")
+        self.assertTrue(any(s.bass is not None for s in with_thumb))
+        lone = self.arrange(melody="bass")
+        self.assertTrue(lone)
+        self.assertTrue(all(s.bass is None for s in lone))
+
+    def test_bass_none_drops_the_thumb_and_keeps_the_shells(self):
+        """A walking bass with no bass is still a coherent texture: shells on the beats.
+
+        Dropping the policy drops the thumb and nothing else - the texture's own claim,
+        which is a shell on a strong beat and the melody alone between them, is about
+        the *left* hand and is unaffected by how many notes the thumb writes.
+        """
+        with_thumb = self.arrange(texture="walking_bass")
+        without = self.arrange(texture="walking_bass", bass="none")
+        self.assertTrue(any(s.bass is not None for s in with_thumb))
+        self.assertEqual([s.bass for s in without], [None] * len(without))
+        shells = [s for s in without if s.grip == "shell"]
+        self.assertTrue(shells, "the strong beats lost their shell")
+        self.assertTrue(
+            all(s.role == ROLE_TARGET for s in shells),
+            "a shell appeared on a fill",
+        )
+        self.assertEqual(
+            len(without), len(self.PROGRESSION),
+            "without a grid the slot count should be one per melody note",
+        )
+
+    def test_anchors_writes_fewer_notes_than_a_walk(self):
+        """Same texture, two policies, and the line is measurably sparser."""
+        walked = self.arrange(texture="walking_bass")
+        anchored = self.arrange(texture="walking_bass", bass="anchors")
+        walked_notes = sum(1 for s in walked if s.bass is not None)
+        anchored_notes = sum(1 for s in anchored if s.bass is not None)
+        self.assertGreater(walked_notes, anchored_notes)
+        self.assertGreater(anchored_notes, 0, "anchors wrote nothing at all")
+        self.assertEqual(
+            {s.bass_role for s in anchored if s.bass is not None},
+            {"anchor"},
+            "anchors wrote a connective role",
+        )
+
+    def test_a_texture_that_never_had_a_thumb_can_carry_one(self):
+        """`targets` harmonises in full, and a thumb line under it is now expressible."""
+        plain = self.arrange(texture="targets")
+        walked = self.arrange(texture="targets", bass="walk")
+        self.assertEqual([s.bass for s in plain], [None] * len(plain))
+        self.assertTrue(any(s.bass is not None for s in walked))
+
+    def test_uniform_refuses_the_line_and_says_so_rather_than_dropping_quietly(self):
+        """The one combination the left hand cannot accommodate is reported, not guessed."""
+        messages = []
+        diagnostics = arranger.Diagnostics(emit=messages.append)
+        steps = self.arrange(texture="uniform", bass="walk", diagnostics=diagnostics)
+        self.assertTrue(messages, "the refusal was silent")
+        self.assertTrue(
+            any("no bass string free" in m for m in messages), messages
+        )
+        self.assertEqual([s.bass for s in steps], [None] * len(steps))
+        # And the arrangement still sounds: losing a bass beats losing the tune.
+        self.assertEqual(len(steps), len(self.PROGRESSION))
+        self.assertTrue(all(s.voicing.active_frets() for s in steps))
+
+    def test_an_unknown_policy_raises(self):
+        with self.assertRaises(ValueError):
+            self.arrange(texture="targets", bass="stride")

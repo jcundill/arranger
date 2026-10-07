@@ -26,12 +26,15 @@ Adding a public name means adding it to `__all__` here, and
 `tests/test_tab_rendering.py::TestTabstaffModuleBoundary` checks the list against
 the module's real surface so the two cannot drift.
 
-**Seven private names are re-exported too** - `_bass_harmony`, `_place_bass`,
-`_walking_bass_line`, `_interval_offsets`, `_metric_weight`, `_roles_for_slot` and
-`_step_annotation`. They are not API and are deliberately absent from `__all__`,
+**Eight private names are re-exported too** - `_bass_harmony`, `_place_bass`,
+`_walking_bass_line`, `_interval_offsets`, `_metric_weight`, `_roles_for_slot`,
+`_step_annotation` and `_comping_no_room_reason`. They are not API and are
+deliberately absent from `__all__`,
 but the tests reach into them to state a rule directly rather than infer it from
 the engine's output ("the walk's pitch-class set is exactly the chord's tones plus
-its extensions", "a fill is chosen by the role rule"). Moving the code would
+its extensions", "a fill is chosen by the role rule", "this refusal must not tell
+the player to change a texture, because on this route a texture changes nothing").
+Moving the code would
 otherwise have forced those tests to reimplement the rule they are checking, which
 is the copy-paste failure Phase 1 removed. They are listed here so the cost of
 moving a function - "also re-export it" - is visible rather than discovered.
@@ -45,19 +48,30 @@ from typing import TYPE_CHECKING, Any, List
 
 from musthe import Note  # re-exported: `from arranger import Note` is used by tests
 
-from . import cli, cost, decisions, options
+from . import cli, cost, decisions, options, slots
 from .bass import (
+    BASS_ANCHORS,
+    BASS_AUTO,
+    BASS_NONE,
+    BASS_POLICY_ROLES,
     BASS_ROLE_ANCHOR,
     BASS_ROLE_APPROACH,
     BASS_ROLE_CONNECT,
     BASS_ROLE_ENCLOSURE,
     BASS_ROLE_HOLD,
     BASS_STRING_INDICES,
+    BASS_STYLES,
+    BASS_WALK,
     BassNote,
     _bass_harmony,
+    _comping_no_room_reason,
     _place_bass,
     _walking_bass_line,
+    bass_allowed,
     bass_cost,
+    bass_line_for,
+    comping_capacity,
+    thumb_capacity,
 )
 from .chords import ChordParser, normalised_harmony, sounding_harmony
 from .diagnostics import Diagnostics, default_diagnostics
@@ -69,18 +83,63 @@ from .grips import (
     GRIP_STRING_SETS,
     SHELL_DEGREES,
     _interval_offsets,
+    get_comping_voicings,
     supported_string_sets,
 )
 from .render import _print_step, _step_annotation, format_progression
+from .slots import arrange_slots, parse_bar_range, unresolved_steps
 from .steps import StepPreparation, VoiceLeadingEngine
 from .textures import (
+    ALL,
+    GRID_CHARLESTON,
+    GRID_DEFERS_TO_MELODY,
+    GRID_EVERY_NOTE,
+    GRID_FINAL_AND,
+    GRID_FREDDIE,
+    GRID_JOE_PASS,
+    GRID_PATTERNS,
+    GRID_STYLES,
+    HARMONY_AUTO,
+    HARMONY_BUILT,
+    HARMONY_FULL,
+    HARMONY_GUIDE,
+    HARMONY_POLICIES,
+    HARMONY_ROOT,
+    HARMONY_SHELL_ROOT,
+    HARMONY_STYLES,
+    LAST,
+    MELODY_ALTO,
+    MELODY_AUTO,
+    MELODY_BASS,
+    MELODY_POLICIES,
+    MELODY_SOPRANO,
+    MELODY_TENOR,
     ROLE_FILL,
     ROLE_TARGET,
+    SUB,
     TARGET_BEATS,
     TEXTURE_GRIPS,
     TEXTURE_STYLES,
+    THUMB_TEXTURES,
+    VOICE_NAMES,
+    VOICES_ALL,
+    VOICES_NONE,
+    GridPattern,
     _metric_weight,
     _roles_for_slot,
+    grid_allowed,
+    grid_defers_to_melody,
+    grid_positions,
+    harmony_allowed,
+    melody_only_selection,
+    on_grid,
+    parse_grid,
+    parse_harmony,
+    parse_voices,
+    resolve_grid,
+    resolve_harmony,
+    resolve_voices,
+    voices_have_soprano,
 )
 from .tuning import (
     _MUTED_CELL,  # re-exported: `tabstaff` imports it from here
@@ -107,7 +166,21 @@ from .tuning import (
 # lowest voice can be a root by decision rather than by string-set accident.
 # 0.9.0 adds the walking-bass texture: a thumb line on the bass strings under a
 # light left hand.
-__version__ = "0.9.0"
+# 0.10.0 REMOVES the Weimar Jazz Database path: the `wjazzd` and `lead_sheet`
+# modules, the `arranger corpus` subcommand, and the `--skeleton`/`--pick` flags.
+# That is a breaking change to the public surface - hence the minor bump on a
+# 0.x version, where the minor digit is the breaking one. `arrange_slots` moved
+# into the package as `arranger.slots`, so the slot layer it always was is now
+# importable from the engine. The MusicXML path is unchanged: byte-identical
+# output on every committed fixture across sixteen flag combinations.
+# 0.11.0 collapses one fact to one home: `ArrangementStep.grip` and
+# `ArrangementStep.bass` become read-only derived views of the voicing's own
+# fields, and the melody-only claim moves from the texture axis to the voices
+# axis - `voices=soprano` is the melody and nothing else, and the `melody` and
+# `melody_bass` textures are removed (a breaking change to the public surface,
+# same rule as 0.10.0). Measured byte-identical against the old spellings on
+# both committed heads and the engine's own fixture - see `docs/one-fact.md`.
+__version__ = "0.11.0"
 
 
 # The whole-progression staff renderers live in `tabstaff`, which imports this
@@ -146,28 +219,42 @@ def __dir__() -> List[str]:
 
 def main() -> None:
     """
-    Entry point: the built-in demonstration, or a subcommand.
+    Entry point: the built-in demonstration, or the `head` subcommand.
 
     With no arguments this prints the built-in demonstration arrangements.
 
-    With `corpus` as the first argument it hands over to `wjazzd.corpus_cli`, the
-    Weimar Jazz Database front end, which is where the transcribed-head feature
-    lives. The import is deliberately lazy and inside the branch: the database
-    module is optional glue over a 42 MB file that most users do not have, and
-    `import arranger` must never depend on it.
+    With `head` as the first argument it hands over to `headxml.head_cli`, the
+    MusicXML front end. The import is deliberately lazy and inside the branch, so
+    `import arranger` does not pull in the importer - nor, through it, the renderers
+    it uses - for somebody who only wants the library.
+
+    **Anything else that looks like a subcommand is a usage error, not the demo.**
+    Until the `corpus` subcommand was removed this fell through silently, so
+    `arranger corpus --melid 218` printed three arrangements and exited 0 - to a
+    user who asked for a head and was given nothing resembling one. A removed
+    command that quietly becomes the demo is worse than one that is gone: the exit
+    code says it worked.
+
+    The test is `argv[1]` being a bare word, so an option (`--grips shell`) still
+    reaches the demo rather than being rejected, and `--help` is handled by the
+    caller's own flag handling below.
     """
-    if len(sys.argv) > 1 and sys.argv[1] == "corpus":
-        from wjazzd import corpus_cli
-
-        raise SystemExit(corpus_cli(sys.argv[2:]))
-
     if len(sys.argv) > 1 and sys.argv[1] == "head":
-        # The MusicXML importer, imported here for the same reason as the corpus
-        # front end above: both are optional entry points, and neither may be a
-        # cost - or a dependency - to somebody who only wants the library.
         from headxml import head_cli
 
         raise SystemExit(head_cli(sys.argv[2:]))
+
+    if len(sys.argv) > 1 and sys.argv[1].isalpha() and not sys.argv[1].startswith("-"):
+        # A bare leading word that is not `head` was a subcommand, or a typo for
+        # one. Say so rather than arranging a demonstration nobody asked for.
+        print(
+            f"Unknown command {sys.argv[1]!r}. The only subcommand is "
+            f"'head':\n"
+            f"  python -m arranger head FILE.musicxml [options]\n"
+            f"With no arguments, this prints the built-in demonstrations.",
+            file=sys.stderr,
+        )
+        raise SystemExit(2)
 
     engine = VoiceLeadingEngine()
 
@@ -331,13 +418,61 @@ __all__ = [
     "BASS_DEGREES_6432",
     "BASS_ROLE_ANCHOR",
     "BASS_ROLE_APPROACH",
+    "BASS_ANCHORS",
+    "BASS_AUTO",
+    "BASS_NONE",
+    "BASS_POLICY_ROLES",
     "BASS_ROLE_CONNECT",
     "BASS_ROLE_ENCLOSURE",
     "BASS_ROLE_HOLD",
+    "BASS_STYLES",
     "BASS_STRING_INDICES",
+    "BASS_WALK",
     "BassNote",
     "DUO_DEGREES",
     "GRIP_MAX_SPAN",
+    "ALL",
+    "GRID_CHARLESTON",
+    "GRID_DEFERS_TO_MELODY",
+    "GRID_EVERY_NOTE",
+    "GRID_FINAL_AND",
+    "GRID_FREDDIE",
+    "GRID_JOE_PASS",
+    "GRID_PATTERNS",
+    "GRID_STYLES",
+    "GridPattern",
+    "LAST",
+    "SUB",
+    "grid_allowed",
+    "grid_defers_to_melody",
+    "grid_positions",
+    "on_grid",
+    "parse_bar_range",
+    "parse_grid",
+    "resolve_grid",
+    "HARMONY_AUTO",
+    "HARMONY_BUILT",
+    "HARMONY_FULL",
+    "HARMONY_GUIDE",
+    "HARMONY_POLICIES",
+    "HARMONY_ROOT",
+    "HARMONY_SHELL_ROOT",
+    "HARMONY_STYLES",
+    "MELODY_ALTO",
+    "MELODY_AUTO",
+    "MELODY_BASS",
+    "MELODY_POLICIES",
+    "MELODY_SOPRANO",
+    "MELODY_TENOR",
+    "VOICES_ALL",
+    "VOICES_NONE",
+    "VOICE_NAMES",
+    "parse_voices",
+    "resolve_voices",
+    "harmony_allowed",
+    "parse_harmony",
+    "resolve_harmony",
+    "voices_have_soprano",
     "GRIP_PREFERENCE",
     "GRIP_STRING_SETS",
     "HIGH_FRET_LIMIT",
@@ -355,7 +490,9 @@ __all__ = [
     "TARGET_BEATS",
     "TEXTURE_GRIPS",
     "TEXTURE_STYLES",
+    "THUMB_TEXTURES",
     "ArrangementStep",
+    "arrange_slots",
     "ChordParser",
     "Diagnostics",
     "GuitarFretboard",
@@ -363,8 +500,11 @@ __all__ = [
     "VoiceLeadingEngine",
     "Voicing",
     "bass",
+    "bass_allowed",
     "bass_cost",
+    "bass_line_for",
     "chords",
+    "comping_capacity",
     "cli",
     "cost",
     "decisions",
@@ -375,16 +515,21 @@ __all__ = [
     "format_musicxml",
     "format_tab_html",
     "format_tab_staff",
+    "get_comping_voicings",
     "grips",
     "main",
     "normalised_harmony",
+    "melody_only_selection",
     "options",
     "render",
+    "slots",
     "sounding_harmony",
     "steps",
     "supported_string_sets",
+    "thumb_capacity",
     "textures",
     "tuning",
+    "unresolved_steps",
     "write_musicxml",
     "write_tab_html",
     "write_gp5",

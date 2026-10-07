@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1"><part-list><score-part id="P1"><part-name>Lead Sheet</part-name></score-part></part-list>
+<part id="P1">
+  <measure number="1">
+    <harmony print-frame="no"><root><root-step>D</root-step></root><kind text="">minor-seventh</kind></harmony>
+    <note><rest/><duration>4</duration><voice>1</voice></note>
+    <harmony print-frame="no"><root><root-step>G</root-step></root><kind text="">dominant</kind></harmony>
+    <note><rest/><duration>4</duration><voice>1</voice></note>
+  </measure>
+  <measure number="2">
+    <harmony print-frame="no"><root><root-step>C</root-step></root><kind text="">major-seventh</kind></harmony>
+    <note><rest/><duration>4</duration><voice>1</voice></note>
+  </measure>
+  <measure number="3">
+    <harmony print-frame="no"><root><root-step>F</root-step></root><kind text="">major-seventh</kind></harmony>
+    <note><rest/><duration>4</duration><voice>1</voice></note>
+    <harmony print-frame="no"><root><root-step>B</root-step></root><kind text="">dominant</kind></harmony>
+    <note><rest/><duration>4</duration><voice>1</voice></note>
+  </measure>
+  <measure number="4">
+    <harmony print-frame="no"><root><root-step>E</root-step></root><kind text="">major-seventh</kind></harmony>
+    <note><rest/><duration>4</duration><voice>1</voice></note>
+  </measure>
+</part></score-partwise>

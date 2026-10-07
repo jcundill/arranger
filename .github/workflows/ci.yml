@@ -5,12 +5,18 @@ name: CI
 # install step below, because getting this wrong is how a real defect shipped
 # silently.
 #
-# THE DATABASE DOES NOT RUN HERE. `wjazzd.db` is 42 MB and gitignored, so on a
-# clean clone the corpus tests are SKIPPED: **85 skipped, 751 run** - of which 83
-# are database-guarded, 77 of them `@requires_db` classes in `test_wjazzd.py` and
-# `test_lead_sheet.py` and the rest individual guards in `test_guitarpro.py`. A
-# green check here does NOT mean the corpus path was exercised. The `corpus` job at
-# the bottom does that, and only on manual dispatch.
+# ONE JOB, AND IT IS THE WHOLE GATE. There used to be a second `corpus` job here,
+# manual-dispatch only, gated on a repository variable holding a download URL for
+# the 42 MB Weimar Jazz Database. It existed because the database could not be
+# committed, so on a clean clone most of the suite's tests were SKIPPED and a green
+# run did not mean the corpus path had been exercised - a caveat that had to be
+# restated in the header, in `AGENTS.md` and in `docs/corpus.md`.
+#
+# The database and its loader are gone, so the caveat is gone with them: there is
+# nothing here that a clean clone cannot run, and a green check here means the
+# whole suite ran - not merely the part of it a runner can reach. The only guards
+# left are the optional-extra ones, and this job installs both extras precisely so
+# those do not skip either.
 on:
   push:
     branches: ["**"]
@@ -109,68 +115,3 @@ jobs:
       - name: Report the interpreter
         if: always()
         run: python -VV
-
-  # The corpus half. Manual dispatch only, and gated on a repository variable
-  # holding the download URL - see the note in the step itself.
-  corpus:
-    name: corpus (database present)
-    # Manual only. The database is 42 MB, and pulling it over a network on every
-    # commit is a poor trade for tests that only need it on demand.
-    if: github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.14"
-
-      # Same install as the `check` job: the gate this runs is the same gate, so a
-      # corpus run that skipped the extras would report a different suite than the
-      # push did. See the note there for why all three are wanted at once.
-      - name: Install the package with every extra
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e '.[xml,gp,dev]'
-
-      # THE REPOSITORY VARIABLE. Set `vars.WJAZZD_DB_URL` to a URL serving
-      # `wjazzd.db` (the Weimar Jazz Database, 42 MB) and this step fetches it.
-      # Until it is set the job **fails loudly rather than skipping**, because a
-      # corpus job that quietly no-ops looks identical in the UI to one that ran -
-      # and the point of running it is the few hundred tests the main job skips.
-      # There is deliberately no default URL: the database is not distributed
-      # from a stable location this repository can name, and a hardcoded one
-      # would rot into a 404 that reads as a network failure.
-      #
-      # `docs/corpus.md` is where a user looks for where the database comes from;
-      # if the URL is set, that document should gain it too.
-      - name: Fetch the Weimar Jazz Database
-        env:
-          WJAZZD_DB_URL: ${{ vars.WJAZZD_DB_URL }}
-        run: |
-          if [ -z "$WJAZZD_DB_URL" ]; then
-            echo "::error::vars.WJAZZD_DB_URL is not set."
-            echo "Set it to a URL serving wjazzd.db, or run without dispatching"
-            echo "this workflow - the main 'check' job does not need the database."
-            exit 1
-          fi
-          curl --fail --location --silent --show-error \
-               "$WJAZZD_DB_URL" --output wjazzd.db
-          ls -l wjazzd.db
-
-      # `make check` again, now with the database in place. `DEFAULT_DB` resolves
-      # to a `wjazzd.db` beside `wjazzd.py`, which is the repository root, so
-      # downloading it there is all the setup this needs - no environment
-      # variable and no `WJAZZD_DB` override. Note the guard reads the *file*,
-      # not the variable, so the download has to be in the default location.
-      #
-      # The tail is why the suite runs twice here rather than trusting the result
-      # above: the skip count drops from 85 to 2 once the guards stop skipping,
-      # and that difference is the whole point of this job. It is printed rather
-      # than asserted, because an exact figure would fail every time an unrelated
-      # test is added.
-      - name: make check (with the database)
-        run: |
-          make check PYTHON="$(command -v python)" PYRIGHT=pyright RUFF=ruff
-          echo "--- the corpus tests ran this time; the skipped count is below ---"
-          python -m unittest discover -s tests -t . 2>&1 | tail -3

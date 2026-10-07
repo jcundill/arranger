@@ -205,16 +205,16 @@ class Voicing:
             return self.midi_notes()
         bass_string = self.bass_string
         # Filtered by string index, never by position in a filtered list: the two are
-        # different things, and comparing a string number against a list offset drops
-        # whichever voice happens to come first.
+        # different things. This used to `enumerate(...)` the *pitches* and compare the
+        # resulting counter against `bass_string`, which is a position, not a string -
+        # so it kept the thumb and dropped the melody whenever the thumb was not the
+        # lowest-indexed active string. It read correctly only when the thumb was on the
+        # low E, where the two happen to coincide, which is the one case the existing
+        # walking-bass fixtures all cover.
         return [
-            midi
-            for index, midi in enumerate(
-                GuitarFretboard.fret_to_midi(index, fret)
-                for index, fret in enumerate(self.frets)
-                if fret >= 0
-            )
-            if index != bass_string
+            GuitarFretboard.fret_to_midi(index, fret)
+            for index, fret in enumerate(self.frets)
+            if fret >= 0 and index != bass_string
         ]
 
     def active_frets(self) -> List[int]:
@@ -285,7 +285,12 @@ class Voicing:
 class ArrangementStep:
     """Represents one chord-melody step in an arranged progression."""
     chord: str
-    melody: str
+    # The melody this step carries, or None when no note sounds at its position: a
+    # comping slot placed by the grid where the tune is silent says so plainly rather
+    # than borrowing a pitch (the deleted `_PLACEHOLDER_MELODY`, §9.3 step B). A held
+    # position keeps the note in force, so None means *silent*, not *held* - the
+    # onset/held/silent split is `headxml.melody_state` when the difference is asked.
+    melody: Optional[str]
     voicing: Voicing
     # Non-chord-tone bookkeeping, filled in by arrange_progression. Defaults keep
     # the dataclass and its dict-style shim backward compatible.
@@ -325,10 +330,6 @@ class ArrangementStep:
     # F-7, Bb-7, Eb7): the inner voices sounding under the held note belong to the
     # chord the hold started on, not the one written above it.
     repeated: bool = False
-    # Which grip family harmonised this step, mirroring voicing.grip. One of
-    # GRIP_PREFERENCE for an ordinary chord, "melody" for a no-chord step. Defaulted,
-    # so an existing hand-built ArrangementStep is unaffected.
-    grip: str = "drop2"
     # True when a chorded step is harmonised with fewer than four voices, i.e. it is a
     # shell or a duo rather than a complete chord. The chord name printed above such a
     # step describes the harmony, not every note sounding under it, so the renderers
@@ -348,12 +349,8 @@ class ArrangementStep:
     metric_weight: int = 0
     # --- Walking bass (texture="walking_bass") ---
     #
-    # MIDI pitch of the thumb note under this step, or None when there is none. Like
-    # Voicing.bass_midi it is attached only after the upper shape has been chosen, so it
-    # never enters the voicing cost.
-    bass: Optional[int] = None
     # The bass note's role, one of the BASS_ROLE_* constants. Defaulted and a plain
-    # string, like `grip` and `role`.
+    # string, like `role`.
     bass_role: Optional[str] = None
     # The step exists for the thumb and **nothing above it strikes**: the upper voices
     # are held from the previous strike and the melody is not re-attacked. This is the
@@ -376,6 +373,56 @@ class ArrangementStep:
     # walk-invented downbeat the melody moved onto arrived carrying both and every
     # renderer obeyed the flag and dropped the chord.
     bass_only: bool = False
+    # The guitar does **not** sound the melody on this step: the melodic voice belongs
+    # to another instrument, and this one is a guide-tone comping shape underneath it.
+    # Set from `melody=` (MELODY_NONE) rather than inferred, so a renderer can ask the
+    # question without re-deriving it from the grip - and so the answer survives on a
+    # step a caller built by hand.
+    #
+    # `step.melody` still carries the tune. That is deliberate: it is the *written* note
+    # the horn is playing, the chord name above the step belongs to it, and dropping it
+    # would leave a band part with nothing to line up against. What is missing is the
+    # guitar playing it, which is what this says.
+    #
+    # It changes what a renderer draws in one specific way: there is no soprano string
+    # carrying the tune, so a `repeated` melody can no longer be a soprano-only
+    # re-strike. See `render._step_cells`, which holds the whole shape instead.
+    melody_voiced: bool = True
+
+    @property
+    def grip(self) -> str:
+        """
+        Which grip family harmonised this step: one of GRIP_PREFERENCE for an
+        ordinary chord, "melody" for a melody-alone step, "rest" for a rest.
+
+        A **derived view** of `voicing.grip` rather than a second stored field,
+        deliberately: the two were one fact stated twice, and on a no-chord step
+        they disagreed - the step said "drop2" while the voicing said "melody"
+        - which is the bug class `docs/one-fact.md` exists to remove. The
+        voicing owns the fact, because it is set at construction by whichever
+        generator produced the shape and read by `voicing_cost`; the step
+        answers in its own spelling and cannot be written apart from the
+        voicing, which is what makes disagreement impossible rather than merely
+        asserted against.
+        """
+        return self.voicing.grip
+
+    @property
+    def bass(self) -> Optional[int]:
+        """
+        MIDI pitch of the thumb note under this step, or None when there is none.
+
+        A **derived view** of `voicing.bass_midi`, for the same reason `grip` is a
+        view of `voicing.grip`: the two were one fact stated twice, written
+        together in `_attach_bass`, and a stored copy was another field that
+        could disagree - see `docs/one-fact.md`, commit 2. The voicing owns the
+        fact, because the thumb is merged into its fret vector and its string
+        recorded beside the pitch; deriving the step's spelling from it is also
+        what makes a copy taken *before* the merge impossible, which is the
+        failure a defaulted field could not prevent. Attached only after the
+        upper shape has been chosen, so it never enters the voicing cost.
+        """
+        return self.voicing.bass_midi
 
     @property
     def has_timing(self) -> bool:

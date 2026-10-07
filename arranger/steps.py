@@ -32,12 +32,17 @@ from . import chords as _chords
 from . import cost as _cost
 from . import grips as _grips
 from .bass import (
+    BASS_AUTO,
+    BASS_NONE,
+    BASS_STYLES,
+    BASS_WALK,
     BassNote,
     _held_shape,
     _place_bass,
     _previous_bass,
     _Slot,
     _walking_slots,
+    bass_allowed,
 )
 from .chords import (
     NON_CHORD_TONE_EXTENSIONS,
@@ -47,6 +52,7 @@ from .chords import (
 )
 from .decisions import (
     MELODY_ALONE_NO_CHORD,
+    MELODY_ALONE_REST,
     MELODY_ALONE_TEXTURE,
     is_bass_only,
     is_repeated_step,
@@ -66,16 +72,34 @@ from .grips import (
 )
 from .options import ArrangeOptions
 from .textures import (
+    GRID_EVERY_NOTE,
+    HARMONY_AUTO,
+    HARMONY_SHELL_ROOT,
+    MELODY_AUTO,
+    MELODY_BASS,
+    MELODY_SOPRANO,
     TEXTURE_GRIPS,
     TEXTURE_STYLES,
+    THUMB_TEXTURES,
     _metric_weight,
     _roles_for_slot,
+    melody_only_selection,
+    on_grid,
+    parse_grid,
+    parse_harmony,
+    parse_voices,
+    resolve_grid,
+    resolve_harmony,
+    resolve_voices,
+    voices_have_soprano,
 )
 from .tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
+    NO_CHORD,
     PITCH_CLASS_NAMES,
     ROLE_TARGET,
+    STANDARD_TUNING,
     ArrangementStep,
     Voicing,
     _note_name,
@@ -111,6 +135,132 @@ class StepPreparation:
     harmonized_as: Optional[str]
 
 
+
+
+
+def _resolve_bass(
+    texture: str,
+    bass: str,
+    voices: Tuple[str, ...],
+    diagnostics: Diagnostics,
+) -> str:
+    """The policy to actually run: `BASS_AUTO` resolved, validated, or refused.
+
+    Three outcomes, in the order they are decided:
+
+    - `auto` resolves from the texture and the selection. `texture="walking_bass"`
+      walks; so does a melody-only selection that names the bass voice -
+      `melody="soprano,bass"` is the tune with a thumb under it, the part the
+      `melody_bass` texture used to spell. A lone `bass` selection is **not**
+      melody-only (it has no soprano) and keeps no thumb: that part already is the
+      bass line, and a thumb under it would double it.
+    - an unknown spelling raises. The same rule as everywhere else in the library: a
+      policy nobody recognises is a question, and answering it by defaulting to a walk
+      would put a bass line under an arrangement that did not ask for one.
+    - a combination the left hand cannot accommodate is **refused with a warning**, and
+      the arrangement proceeds without a thumb line. Not dropped and not degraded: a
+      walking line with gaps in it is worse than no line, and losing the bass costs less
+      than losing the tune. The warning names a texture that would work.
+
+    **The selection is passed rather than the flags derived from it** - the route
+    (`voices_have_soprano`), the comping arity (`len(voices)`), the lone-bass case
+    and the melody-only case are all decided here from the one fact, so the two
+    spellings of one request cannot disagree. Which left-hand shapes an arrangement
+    will generate is decided by the selection, and no texture can express it:
+    `uniform` is a real grip palette on the melody-bearing route and a
+    **meaningless name** on the comping one, where the shapes come from
+    `get_comping_voicings`, and inert a third time over on a melody-only selection,
+    whose shapes are single frets. So this function asks `bass_allowed` about the
+    comping route's capacity when that is the route, the melody-only route's when
+    that is, and the texture's otherwise.
+
+    This is why the call site resolves the melody axis **first**. That ordering is
+    deliberate rather than incidental - see `arrange_progression`, and note that the two
+    resolutions are independent of each other, so swapping them back would only
+    reintroduce the bug. What must not change is that both happen *before*
+    `has_thumb` is read, because that flag gates whether the walked-beat union is built
+    at all.
+    """
+    melody_voiced = voices_have_soprano(voices)
+    melody_only = melody_only_selection(voices)
+    if bass == BASS_AUTO:
+        bass = (
+            BASS_WALK
+            if texture in THUMB_TEXTURES
+            or (melody_only and MELODY_BASS in voices)
+            else BASS_NONE
+        )
+    if bass not in BASS_STYLES:
+        raise ValueError(
+            f"Unknown bass policy {bass!r}; expected one of {BASS_STYLES}, "
+            f"or 'auto'"
+        )
+    allowed, reason = bass_allowed(
+        texture,
+        bass,
+        # `None` for the melody-bearing route, so `bass_allowed` asks the route's
+        # own capacity - the melody-only route's, or the texture's palette.
+        # `len(voices)` on the comping one, which is the arity the comping
+        # generator will actually build.
+        None if melody_voiced else len(voices),
+        voices == (MELODY_BASS,),
+        melody_only=melody_only,
+    )
+    if not allowed:
+        diagnostics.warn(f"Warning: {reason}")
+        return BASS_NONE
+    return bass
+
+
+def _resolve_melody(voices: str) -> Tuple[str, ...]:
+    """The voices to actually play: `auto` resolved, parsed, validated.
+
+    Two steps and they are not the same step. **Parsing** turns the caller's string into a
+    canonical tuple of voice names, so `tenor,alto` and `alto,tenor` are one request -
+    `textures.parse_voices` owns the vocabulary and the ordering. **Resolution** is what
+    `textures.resolve_voices` owns: `auto` becomes every voice.
+
+    An unknown voice name raises from `parse_voices`, before any voicing work, on the
+    library's standing rule: a spelling nobody recognises is a question, and answering it
+    by dropping the voice would hand back a part missing something nobody asked it to drop.
+    """
+    return resolve_voices(parse_voices(voices))
+
+
+
+def _resolve_harmony(
+    harmony: str, voices: Tuple[str, ...], diagnostics: Diagnostics
+) -> str:
+    """The degree family to actually voice: `auto` resolved, parsed, or refused.
+
+    The same two-step shape as `_resolve_melody` above - parse, then resolve - because
+    it is the same rule about the same thing: `textures` owns the vocabulary and the
+    refusal, this function owns nothing but the wiring.
+
+    Takes **no texture**, and that is deliberate rather than an oversight: whether a
+    degree family can be voiced depends on how many notes were asked for, and on
+    nothing about where the notes fall. `guide` under `walking_bass` and `guide` under
+    `uniform` are the same two degrees.
+
+    Resolved **once per arrangement**, next to `_resolve_melody` and for the reason
+    stated there: the band does not change halfway through a tune.
+    """
+    return resolve_harmony(parse_harmony(harmony), voices, diagnostics)
+
+
+def _resolve_grid(grid: str, beats_per_bar: int, diagnostics: Diagnostics) -> str:
+    """The grid to place chords on: parsed, `auto` resolved, validated or refused.
+
+    The same two-step shape as `_resolve_melody` and `_resolve_harmony` above,
+    because it is the same rule about the same kind of thing: `textures` owns the
+    vocabulary and the refusal, this function owns only the wiring.
+
+    **Takes the metre rather than a texture**, and that is what distinguishes it from
+    `harmony`. Whether a rhythm fits is a property of the metre - `final_and` is the
+    upbeat of the last beat whatever the arrangement is doing - so it is resolved
+    against `beats_per_bar` and nothing else.
+    """
+    return resolve_grid(parse_grid(grid), beats_per_bar, diagnostics)
 
 
 class VoiceLeadingEngine:
@@ -156,6 +306,27 @@ class VoiceLeadingEngine:
     ) -> Tuple[str, Optional[int], Tuple[int, ...]]:
         """See `grips._chord_context`."""
         return _grips._chord_context(chord_type, chord_name)
+
+    @staticmethod
+    def get_comping_voicings(
+        chord_type: str,
+        chord_name: Optional[str] = None,
+        fret_min: int = NECK_FRET_MIN,
+        fret_max: int = NECK_FRET_MAX,
+        notes: int = 3,
+        bass_voice: bool = False,
+        shell_root: bool = False,
+    ) -> List[Voicing]:
+        """See `grips.get_comping_voicings`."""
+        return _grips.get_comping_voicings(
+            chord_type,
+            chord_name,
+            fret_min,
+            fret_max,
+            notes,
+            bass_voice,
+            shell_root,
+        )
 
     @staticmethod
     def _lower_soprano_strings(top_strings: Tuple[int, ...]) -> Tuple[int, ...]:
@@ -349,9 +520,49 @@ class VoiceLeadingEngine:
 
 
     @classmethod
+    def _resolve_substitute_harmony(
+        cls,
+        melody_note: Note,
+        chord_type: str,
+        name: str,
+        strategy: str,
+        next_melody: Optional[str] = None,
+    ) -> Optional[Tuple[str, str, str]]:
+        """The `(quality, name, strategy)` that makes a non-chord melody note a chord tone.
+
+        **Extracted from `prepare_step` so the comping route reaches it too**
+        (`docs/comping-styles.md` §9.3 step C). The melody route pins the note and
+        re-voices a substituted chord around it; the comping route never sounds the note
+        but must still *state* the chord the horn's line implies, so the two have to make
+        the same decision the same way - otherwise `--non-chord-tone` means one thing on
+        one route and another on the other, which is the split this codebase keeps having
+        to close.
+
+        Returns `None` when the note is already a chord tone, when the chord is outside
+        `CHORD_TONES_FROM_ROOT` (nothing to substitute against), when `name` is empty, or
+        when `resolve_non_chord_tone` finds no route for the strategy. `sustain` is
+        deliberately excluded up front: it holds the *previous shape's* inner voices,
+        which is a melody-route move with no meaning where the generator builds a fresh
+        comping shape on every slot.
+        """
+        if strategy in ("legacy", "sustain") or not name:
+            return None
+        canonical = ChordParser.canonical_quality(chord_type)
+        if canonical not in ChordParser.CHORD_TONES_FROM_ROOT:
+            return None
+        if cls.is_chord_tone(melody_note, chord_type, name):
+            return None
+        resolved = cls.resolve_non_chord_tone(
+            melody_note, chord_type, name, strategy, next_melody=next_melody
+        )
+        if resolved is None:
+            return None
+        return resolved[0], resolved[1], strategy
+
+    @classmethod
     def prepare_step(
         cls,
-        progression: List[Tuple[str, str, str]],
+        progression: Sequence[Tuple[Optional[str], str, str]],
         index: int,
         previous: Optional[Voicing] = None,
         previous_chord: Optional[str] = None,
@@ -382,6 +593,12 @@ class VoiceLeadingEngine:
         if diagnostics is None:
             diagnostics = default_diagnostics()
         note_str, chord_type, name = progression[index]
+        if note_str is None:
+            # No melody to pin. `arrange_progression` skips such a slot before it can
+            # reach here - every singing route needs a note, and the comping route
+            # never calls this - so this is the widened triple type's honest answer
+            # rather than a `Note(None)` waiting for a caller that lies.
+            return None
         melody_note = Note(note_str)
 
         # Chord-tone match first, quality-only fallback second, across every
@@ -434,15 +651,15 @@ class VoiceLeadingEngine:
 
             # Strategies 1 and 2 reharmonise the note as a genuine chord tone.
             if strategy_used is None:
-                resolved = cls.resolve_non_chord_tone(
+                substitute = cls._resolve_substitute_harmony(
                     sounding_melody,
                     chord_type,
                     name,
                     non_chord_tone,
                     next_melody=cls._next_resolution_melody(progression, index),
                 )
-                if resolved is not None:
-                    substitute_quality, substitute_name = resolved
+                if substitute is not None:
+                    substitute_quality, substitute_name = substitute[0], substitute[1]
                     substituted = cls.get_all_grip_voicings(
                         sounding_melody,
                         substitute_quality,
@@ -486,7 +703,7 @@ class VoiceLeadingEngine:
     @classmethod
     def arrange_progression(
         cls,
-        progression: List[Tuple[str, str, str]],
+        progression: Sequence[Tuple[Optional[str], str, str]],
         top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
         non_chord_tone: str = "extension",
         fret_min: int = NECK_FRET_MIN,
@@ -501,7 +718,17 @@ class VoiceLeadingEngine:
         # allowed to delegate here.
         timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]] = None,
         texture: str = "uniform",
+        bass: str = BASS_AUTO,
+        melody: str = MELODY_AUTO,
+        harmony: str = HARMONY_AUTO,
+        grid: str = GRID_EVERY_NOTE,
         beats_per_bar: int = 4,
+        # The progression indexes whose melody note articulates, for the §9.2
+        # reharmonise rule on the comping route (§9.3 step C). `None` means every slot
+        # is an onset - the correct answer for a hand-built progression with no
+        # timeline, and what keeps a bare `arrange_progression(..., melody="alto,tenor")`
+        # honouring `--non-chord-tone`. See `ArrangeOptions.melody_onsets`.
+        melody_onsets: Optional[Container[int]] = None,
         diagnostics: Optional[Diagnostics] = None,
         options: Optional[ArrangeOptions] = None,
     ) -> List[ArrangementStep]:
@@ -549,6 +776,29 @@ class VoiceLeadingEngine:
         default, means the caller has told us nothing about where its notes fall, and
         then every slot is a principal note and this function behaves exactly as it
         always has.
+
+        `bass` selects the **policy** the thumb line is written on, from BASS_STYLES:
+        `"none"` (the default, no thumb line), `"anchors"` (a note only where the
+        harmony changes, carrying that chord's root), or `"walk"` (a note on every beat,
+        which is what makes the line a walk). It is an argument of its own rather than a
+        property of the texture, because the pattern is the composer's choice and the set
+        of patterns is open - a new one is a row in `BASS_POLICY_ROLES`.
+
+        `BASS_AUTO`, the default here, resolves from the texture and the voice
+        selection: `texture="walking_bass"` walks, and so does a melody-only selection
+        that names the bass voice (`melody="soprano,bass"` - the tune with a thumb under
+        it); everything else does not. So `texture="walking_bass"` and
+        `texture="walking_bass", bass="walk"` are the same arrangement, and
+        `bass="none"` on a walking bass gives the same strong-beat shells with the thumb
+        dropped - a coherent texture in its own right. A lone `melody="bass"` selection
+        keeps no thumb: that part already is the bass line, and a thumb under it
+        would double it.
+
+        A combination the left hand cannot accommodate is **refused rather than
+        degraded**. `uniform` leaves no bass string free, because its four-note grips can
+        span all three, so a thumb line under it would come and go; the refusal names a
+        texture that would work and the arrangement still sounds, because losing a bass
+        costs less than shipping a line with holes in it.
 
         `texture="targets"` uses the timing to arrange the way the guide describes:
         a full four-note chord on beats 1 and 3 of the bar, and a shell, a 3rd/6th
@@ -626,7 +876,22 @@ class VoiceLeadingEngine:
                     ("fret_max", fret_max),
                     ("grips", grips),
                     ("texture", texture),
+                    # `bass` is compared here like every other knob, which it was not
+                    # for its whole life: `ArrangeOptions.bass` defaulted to the
+                    # resolved "none" while the keyword defaults to the `BASS_AUTO`
+                    # sentinel, so the two could never be compared - and the field was
+                    # never read back out of `options` either, which is what made
+                    # `--bass` silently inert on every slot-path caller (`arranger
+                    # head` among them) while the walking-bass tests, which pass the
+                    # keyword directly, stayed green. The field default is the sentinel
+                    # now, so the comparison below holds, and the unpack below reads the
+                    # field back.
+                    ("bass", bass),
+                    ("melody", melody),
+                    ("harmony", harmony),
+                    ("grid", grid),
                     ("beats_per_bar", beats_per_bar),
+                    ("melody_onsets", melody_onsets),
                 )
                 if value != ArrangeOptions.__dataclass_fields__[name].default
             }
@@ -641,7 +906,12 @@ class VoiceLeadingEngine:
             fret_max = options.fret_max
             grips = options.grips
             texture = options.texture
+            bass = options.bass
+            melody = options.melody
+            harmony = options.harmony
+            grid = options.grid
             beats_per_bar = options.beats_per_bar
+            melody_onsets = options.melody_onsets
             if options.timings is not None:
                 timings = list(options.timings)
         bass_pcs = options.bass_pcs if options is not None else None
@@ -672,14 +942,71 @@ class VoiceLeadingEngine:
         # string: neither the octave nor the string can be decided before an upper
         # voicing exists, and only this function is downstream of one. `_place_bass`
         # resolves both together, after selection.
+
+        # The melody axis, resolved first and for the reason below. `auto` keeps
+        # every voice, which is why nothing below this line changes unless a caller
+        # opts in. Decided once rather than per step: the band does not change halfway
+        # through a tune.
+        #
+        # **This resolution comes before `_resolve_bass` because the bass policy needs
+        # to know which route the engine is on**, and only this line knows. `bass_allowed`
+        # measures thumb capacity against `TEXTURE_GRIPS`, which describes the shapes the
+        # melody-bearing route generates and is *inert* on the comping one - so asking it
+        # about a texture on that route refused a combination that is playable and, worse,
+        # told the player to change a setting that could not affect the result. See
+        # `comping_capacity`, and `docs/open-issues.md` for the measurement.
+        #
+        # The two resolutions are independent of each other, so the order between them
+        # carries no other meaning; what matters is that both finish before
+        # `has_thumb` is read, because that flag gates whether the walked-beat union is
+        # built at all.
+        voices = _resolve_melody(melody)
+        melody_voiced = voices_have_soprano(voices)
+        # The melody-only selection, decided once here and read by the bass policy,
+        # the grip resolution and the promotion rule below: `(soprano,)` is the
+        # tune alone and `(soprano, bass)` the tune with a thumb under it,
+        # whatever `texture=` says - the texture is inert on that route, the same
+        # way it is on the comping one.
+        melody_only = melody_only_selection(voices)
+
+        # The bass policy. `auto` means "whatever this texture and this selection
+        # mean", so `walking_bass` keeps walking and a melody-only selection that
+        # names the bass voice walks too; an explicit policy overrides both, which
+        # is what lets a texture that was never written for a thumb line carry one.
+        #
+        # The resolved `voices` are passed rather than the flags derived from them -
+        # the route, the arity and the lone-bass case are decided inside, from the
+        # selection, so the two spellings of one request cannot disagree.
+        bass = _resolve_bass(
+            texture,
+            bass,
+            voices,
+            diagnostics,
+        )
+        has_thumb = bass != BASS_NONE
+
+        # The harmony axis, resolved here for the same reason and read only by the
+        # comping route below. Resolving it unconditionally rather than inside
+        # `if not melody_voiced` is deliberate: a spelling nobody recognises must be
+        # reported **once, up front**, rather than never at all on an arrangement where
+        # the guitar happens to be singing - the same argument as `_resolve_melody`'s.
+        harmony_family = _resolve_harmony(harmony, voices, diagnostics)
+        # The grid axis, resolved here for the same reason and read by **both** routes
+        # below rather than only the comping one - unlike `harmony=`, which the guitar
+        # singing makes unreachable. A grid says where a chord lands, and that is a
+        # question about the part whether the guitar is singing it or comping under a
+        # horn, so scoping it to one route would make `grid=` silently inert on a
+        # melody-bearing arrangement rather than doing nothing there.
+        grid_pattern = _resolve_grid(grid, beats_per_bar, diagnostics)
+
         slots: Optional[List[_Slot]] = None
-        if texture == "walking_bass":
+        if has_thumb:
             # Decision B: the union is built here, before the melody loop, so the
             # loop's index still indexes the skeleton it was given. `_walking_slots`
             # is shared with `wjazzd.arrange_slots`, so the corpus and head paths
             # cannot walk a different line from this one - see its docstring for why
             # that duplication has already cost this project one bug.
-            slots = _walking_slots(progression, timings, beats_per_bar)
+            slots = _walking_slots(progression, timings, beats_per_bar, bass)
 
         # Harmony and melody state for the walking-bass role rule. Both are read from
         # what actually sounds, not from the written chord, so a substituted chord
@@ -718,7 +1045,42 @@ class VoiceLeadingEngine:
         for slot in loop:
             index = slot.index
             note_str, chord_type, name = progression[index]
-            melody_note = Note(note_str)
+            if note_str is None:
+                if melody_only:
+                    # A melody-only selection plays the tune and nothing else, so a
+                    # position with no note has nothing for the guitar to play. It is
+                    # kept as the *only* refusal here because §9.3 step D made the other
+                    # case a real one: a *singing* selection (soprano named) now receives
+                    # note-less slots from the grid union - positions the tune is silent
+                    # at - and the guitar **comps** them rather than being refused, which
+                    # is why they fall through to the comping branch below.
+                    diagnostics.warn(
+                        f"Warning: slot {index} has no melody note and this voice "
+                        f"selection plays the tune alone; skipping the slot"
+                    )
+                    continue
+                melody_note = None
+            else:
+                melody_note = Note(note_str)
+
+            # **Does the guitar sing *this* slot?** (§9.3 step D: the soprano is per
+            # slot, not per route.) The guitar sings a slot only where its voice
+            # selection has a soprano *and* the slot is a melody **onset** - a written
+            # note articulating here. Every other slot it comps, except on a melody-only
+            # selection, whose note-less slots were skipped above.
+            #
+            # §9.2's onset signal is reused rather than re-derived: `melody_onsets` is
+            # the same set the comping route's reharmonise guard reads, and a grid
+            # position the tune merely *sustains* through is not an onset, so the guitar
+            # states the chord there rather than re-articulating a note it did not begin
+            # - which is why a note-bearing merged position still comps. `None` means
+            # every slot is an onset, the honest default for a hand-built progression
+            # with no timeline, which keeps a bare `arrange_progression` unchanged.
+            sings_here = (
+                melody_voiced
+                and melody_note is not None
+                and (melody_onsets is None or index in melody_onsets)
+            )
 
             # Where this slot falls in the bar, and therefore what it is for. Read
             # defensively, exactly as wjazzd.arrange_slots guards its own timings: a
@@ -737,35 +1099,116 @@ class VoiceLeadingEngine:
             # what lets the second bar of a two-bar chord restate its shell when the
             # player re-articulates the line there and stay thin when they do not).
             harmony_key = normalised_harmony(name)
+            # A silent slot moves nothing onto the beat: `melody_moves` is False, and
+            # the tracked pitch clears to None so the next onset reads as the melody
+            # arriving there - a fresh attack after silence counts as movement, which
+            # is what the placeholder's C4 accidentally produced for the slot *after*
+            # a rest, minus its false claim about the silent slot itself.
+            melody_moves = (
+                melody_note is not None
+                and (previous_melody_midi is None
+                     or melody_note.midi_note() != previous_melody_midi)
+            )
             role = _roles_for_slot(
                 weight,
                 texture,
                 harmony_changed=(last_target_harmony is None
                                  or harmony_key != last_target_harmony),
-                melody_moves=(previous_melody_midi is None
-                              or melody_note.midi_note() != previous_melody_midi),
+                melody_moves=melody_moves,
+                has_thumb=has_thumb,
+                melody_only=melody_only,
             )[0]
             if role == ROLE_TARGET:
                 last_target_harmony = harmony_key
-            previous_melody_midi = melody_note.midi_note()
+            previous_melody_midi = (
+                melody_note.midi_note() if melody_note is not None else None
+            )
             # The texture decides which grips are *available* on this step. It is not a
             # term in the cost, so a fill cannot be outbid for being in position - the
             # point is that fewer notes are played here, not that this shape is better.
             # The narrowing rule itself, and why the default is not an intersection,
             # are documented once in decisions.resolve_texture_grips.
-            slot_grips = resolve_texture_grips(
-                role, texture, texture_grips, grips, diagnostics
+            #
+            # A melody-only selection never asks: the left hand plays nothing on
+            # every slot, whatever the texture's palettes say, so the loop hands the
+            # empty palette straight through - the same declaration `TEXTURE_GRIPS`
+            # makes with an empty tuple, and the one channel `melody_alone_case`
+            # reads. Skipping the resolution also skips its warnings, which is what
+            # makes `texture=` and `grips=` silently inert here rather than noisily so.
+            slot_grips = (
+                ()
+                if melody_only
+                else resolve_texture_grips(
+                    role, texture, texture_grips, grips, diagnostics
+                )
             )
 
             # A slot that is played as a single note rather than looked up. Which
             # slots those are, and why each is a branch rather than a missing case,
-            # is decisions.melody_alone_case. It returns a *kind*, because the two
+            # is decisions.melody_alone_case. It returns a *kind*, because the three
             # non-default routes build different steps: an NC bar sets
-            # `melody_only=True`, a texture case must not.
+            # `melody_only=True`, a texture case must not, and an off-grid slot on the
+            # comping route is a rest with no notes in it at all.
+            #
+            # `on_grid` is read from the **slot's own beat**, not from the bar it sits
+            # in: the grid is bar-relative, so the same beat number means different
+            # positions in different bars of different metres, and `textures.on_grid`
+            # is the one place that knows the metre.
+            #
+            # `melody_voiced` here is the **per-slot** `sings_here`, not the route: a
+            # slot the guitar does not sing (no soprano, or no note at this position)
+            # takes the comping-route branches inside `melody_alone_case`, so an
+            # off-grid note-less slot rests rather than asserting a melody it has not
+            # got. §9.3 step D.
             melody_alone = melody_alone_case(
-                texture, role, slot_grips, chord_type, name
+                texture, role, slot_grips, chord_type, name, has_thumb,
+                melody_voiced=sings_here,
+                on_grid=on_grid(beat, grid_pattern, beats_per_bar),
             )
+            if melody_alone == MELODY_ALONE_REST:
+                # The guitar is silent and the horn has the note. **The step is still
+                # emitted**, carrying the bar, the beat and the chord name: it is what
+                # keeps the melody's position in the tab staff, and a comping part
+                # whose bars collapsed to their stabs would no longer line up against
+                # the tune it is comping under.
+                #
+                # All six strings muted, so every renderer draws it as silence rather
+                # than as a held shape - `bass_only` would be the opposite claim (the
+                # thumb alone) and `repeated` would claim a melody this part does not
+                # play. `melody_only` stays **False**: the step does have a harmony,
+                # it simply is not being stated here.
+                arrangements.append(ArrangementStep(
+                    chord=name,
+                    melody=note_str,
+                    voicing=Voicing(
+                        frets=[-1] * len(STANDARD_TUNING),
+                        top_fret=0,
+                        avg_fret=0.0,
+                        grip="rest",
+                    ),
+                    bar=bar,
+                    beat=beat,
+                    duration=duration,
+                    role=role,
+                    metric_weight=weight,
+                    # A rest is a slot the guitar does **not** sing - which is `sings_here`,
+                    # False here by construction. The route-level `melody_voiced` would
+                    # claim the guitar sings a slot it just declined to play.
+                    melody_voiced=sings_here,
+                ))
+                # The thumb still walks on a rest. A comping grid thins the **chords**,
+                # not the bass line - that is the whole difference between `grid=` and
+                # `bass=none`, and dropping the attach here would silently delete the
+                # walk from every bar the grid thinned.
+                cls._attach_bass(
+                    arrangements[-1], slot.bass, arrangements, diagnostics
+                )
+                continue
             if melody_alone == MELODY_ALONE_TEXTURE:
+                # This kind is answered only when the guitar sings, and a singing slot
+                # with no note was refused at the top of this loop - so a note is
+                # pinned here, which is what lets the type say so below.
+                assert melody_note is not None
                 solo_voicing = cls.get_melody_only_voicing(
                     melody_note, prefer=top_strings
                 )
@@ -774,7 +1217,6 @@ class VoiceLeadingEngine:
                         chord=name,
                         melody=note_str,
                         voicing=solo_voicing,
-                        grip="melody",
                         partial=False,
                         bar=bar,
                         beat=beat,
@@ -795,6 +1237,9 @@ class VoiceLeadingEngine:
             # `melody_only` flag is set here and *only* here; a texture case above
             # reaches the same route deliberately without it.
             if melody_alone == MELODY_ALONE_NO_CHORD:
+                # As the texture branch above: this kind means the guitar sings, and
+                # that guard already refused a singing slot with no note.
+                assert melody_note is not None
                 solo_voicing = cls.get_melody_only_voicing(melody_note, prefer=top_strings)
                 if solo_voicing is None:
                     diagnostics.warn(
@@ -821,6 +1266,10 @@ class VoiceLeadingEngine:
                         None if transposed == note_str else note_str
                     ),
                     melody_only=True,
+                    # `step.grip` is a derived view of `voicing.grip`, so nothing is
+                    # passed here: the voicing says "melody" and the step cannot
+                    # disagree with it. The property is what keeps the two spellings
+                    # one fact with one home - see `docs/one-fact.md`, commit 1.
                     bar=bar,
                     beat=beat,
                     duration=duration,
@@ -835,6 +1284,204 @@ class VoiceLeadingEngine:
                 cls._attach_bass(arrangements[-1], slot.bass, arrangements, diagnostics)
                 continue
 
+            # --- The comping route: the guitar harmonises, somebody else sings ---
+            #
+            # Taken before `prepare_step`, because `prepare_step` is built around a
+            # melody to pin: it asks `get_all_grip_voicings` for shapes carrying this
+            # note on their topmost string, and every one of them would put the tune
+            # back on the guitar. There is nothing to subtract afterwards - the guitar's
+            # part was never generated - so the candidates have to come from the
+            # melody-free generator in the first place.
+            #
+            # Deliberately *after* the NC branch above and the melody-alone branch
+            # before it, because both are cases where there is no harmony to state:
+            # an NC bar has no chord at all, and a melody-only selection's fill has
+            # already committed to playing one note. Under §9.3 step D this branch is
+            # reached whenever the guitar does not **sing** this slot - a selection
+            # without a soprano, or a position the tune is silent at - and never on a
+            # melody-only selection, whose note-less slots were skipped at the top.
+            if not sings_here and not melody_only:
+                # An `NC` bar has no chord, so there is no guide tone to state and
+                # nothing at all for the guitar to play under the horn's line. That is
+                # a real hole in the part and it is reported as one, in one sentence -
+                # rather than reaching `get_comping_voicings`, which correctly refuses a
+                # chord with no root, and then falling through to a melody-bearing route
+                # that would either warn twice or hand the horn's line back to the
+                # guitarist. Skipping is the honest answer: the guitar is silent on this
+                # bar, and the horn is not.
+                if chord_type == NO_CHORD or name == NO_CHORD:
+                    diagnostics.warn(
+                        f"Warning: {name} has no chord and this voice selection "
+                        f"({', '.join(voices)}) leaves the guitar nothing to comp; "
+                        f"skipping the bar"
+                    )
+                    continue
+                # --- the non-chord-tone strategy, at harmony level (§9.3 step C) ---
+                #
+                # The melody is *not* on the guitar here - the horn has it - so a
+                # substitution changes what the guitar **states**, not what it sings.
+                # `melody_pc` stays None below, so a comping shape is still held to the
+                # substitute's full tone set; only the chord the shape is drawn from
+                # moves. `D5` over `Cmaj7` therefore gives `Cmaj9` (extension) or
+                # `Bdim7` (diminished) under the guide-tone voices, exactly as the
+                # melody route re-voices it.
+                comp_chord_type, comp_name = chord_type, name
+                comp_strategy: Optional[str] = None
+                comp_harmonized_as: Optional[str] = None
+                comp_is_non_chord_tone = False
+                # §9.2: reharmonise **at an onset**. A held position was decided where
+                # the note began, and a silent one has nothing to resolve. `melody_onsets`
+                # is the caller's onset set; None means every slot is an onset, the right
+                # answer for a hand-built progression that carries no timeline.
+                if (
+                    melody_note is not None
+                    and (melody_onsets is None or index in melody_onsets)
+                ):
+                    substitute = cls._resolve_substitute_harmony(
+                        melody_note,
+                        chord_type,
+                        name,
+                        non_chord_tone,
+                        next_melody=cls._next_resolution_melody(
+                            progression, index, melody_onsets
+                        ),
+                    )
+                    if substitute is not None:
+                        comp_chord_type, comp_name, comp_strategy = substitute
+                        comp_harmonized_as = comp_name
+                        comp_is_non_chord_tone = True
+                        # A guitarist handed `Cmaj7 -> Bdim7` with no melody on their own
+                        # part cannot see why the chord moved; the note that forced it is
+                        # the horn's, so it has to be named here or the part reads wrong.
+                        diagnostics.warn(
+                            f"Warning: comping {name} as {comp_name} "
+                            f"({comp_strategy}) to accommodate the melody note "
+                            f"{note_str}"
+                        )
+                # How many chord voices the guitar states here. **A voice is a *role*
+                # in the stack, not a count of parts played twice** - `--voices
+                # alto,tenor` is two notes, and padding it to three would put a voice
+                # in the part that belongs to the bassist.
+                #
+                # **A named soprano that is not singing is not one of the sounding
+                # voices** (§9.3 step D). On the comping route the selection has no
+                # soprano and this is `len(voices)`, exactly as before. On a *singing*
+                # selection reaching this branch - a grid position the tune is silent
+                # at - the soprano has no note to sing, so the shape is built from the
+                # voices that do sound: `soprano,alto,tenor,bass` states a three-voice
+                # shell on the offbeats, not a four-voice shape with a redundant root.
+                # (That four-note comping shape is `docs/comping-styles.md` §9.4, and it
+                # needs new string sets - deliberately not this step.)
+                comp_notes = len([voice for voice in voices if voice != MELODY_SOPRANO])
+                candidates = cls.get_comping_voicings(
+                    comp_chord_type,
+                    chord_name=comp_name,
+                    fret_min=fret_min,
+                    fret_max=fret_max,
+                    notes=comp_notes,
+                    # **Whether this selection is the bass voice and nothing else**,
+                    # which arity cannot say: `alto`, `tenor` and `bass` all ask for one
+                    # note. Measured before this was passed, all three produced
+                    # byte-identical arrangements on strings 1-3 - the middle of the
+                    # neck - and the bass voice is the one selection whose register is
+                    # part of what it *is*. Derived from the resolved voices rather than
+                    # an extra CLI flag, so the two spellings of one request cannot
+                    # disagree.
+                    bass_voice=voices == (MELODY_BASS,),
+                    # Whether this part states both guide tones **and** a root or 5th
+                    # under them. The one degree family neither `notes` nor
+                    # `bass_voice` can express, and derived from the resolved family
+                    # rather than passed as another flag, so the two spellings of one
+                    # request cannot disagree.
+                    shell_root=harmony_family == HARMONY_SHELL_ROOT,
+                )
+                if not candidates:
+                    if melody_note is None:
+                        # The ordinary fallback below voices *the melody*, and this
+                        # slot has none to voice - there is no thin shape to fall back
+                        # to either, so the chord of the tune cannot be stated here at
+                        # all. Reported as the hole it is and skipped; the next grid
+                        # position still gets its chance.
+                        diagnostics.warn(
+                            f"Warning: no guide-tone comping shape found for {name} "
+                            f"and no melody note at this position to fall back to; "
+                            f"skipping the slot"
+                        )
+                        continue
+                    # No guide-tone shape in a playable position. The chord of the tune
+                    # is still owed to the band, so fall through to the ordinary
+                    # melody-bearing route rather than dropping the bar - the same
+                    # trade `prepare_step` makes when a strategy finds nothing. The
+                    # guitar plays the tune here, which is a worse answer than a thin
+                    # one and a better one than silence.
+                    diagnostics.warn(
+                        f"Warning: no guide-tone comping shape found for {name}; "
+                        f"falling back to voicing the melody on the guitar"
+                    )
+                else:
+                    # The root, read once for the selector's bass-function tie-break.
+                    # `get_comping_voicings` has already refused to generate anything
+                    # without a root, so by this point it is never None - the check is
+                    # read from the same place the generator read it rather than
+                    # re-derived, so the two cannot disagree.
+                    _canonical, root_pc, _tones = cls._chord_context(comp_chord_type, comp_name)
+                    arrangements.append(ArrangementStep(
+                        chord=name,
+                        # The written note, which is the horn's line. The guitar does not
+                        # sound it - `melody_voiced=False` is what says so.
+                        melody=note_str,
+                        voicing=select_step_voicing(
+                            candidates,
+                            arrangements[-1].voicing if arrangements else None,
+                            fret_min,
+                            fret_max,
+                            # The tones the written chord allows. Passed even though the
+                            # generator already filters on them: `voicing_cost` counts
+                            # wrong notes itself, and a generator that could be wrong
+                            # should not be the only thing standing between a chord symbol
+                            # and a note that is not in it.
+                            ChordParser.get_chord_tones(comp_chord_type, comp_name),
+                            # The root, which enables the bass-function tie-break. None
+                            # for a chord whose name will not parse, which leaves that
+                            # criterion unasked rather than guessing a bass - the same
+                            # rule the ordinary route follows.
+                            root_pc,
+                            # No `melody_pc`: there is no melody on the guitar for the
+                            # wrong-note count to excuse, which is what lets a comping
+                            # shape be held to the chord's full tone set.
+                            None,
+                            # The corpus's slash bass, honoured before selection rather
+                            # than after, exactly as on the ordinary route.
+                            bass_pcs.get(index) if bass_pcs else None,
+                            bass_cost_for,
+                        ) or candidates[0],
+                        # A comping shape is three voices by construction, so `partial`
+                        # is always true and is not worth re-deriving per step.
+                        partial=True,
+                        bar=bar,
+                        beat=beat,
+                        duration=duration,
+                        role=role,
+                        metric_weight=weight,
+                        bass_only=is_bass_only(slot.bass_only, role),
+                        melody_voiced=False,
+                        # What the substitution changed about the *harmony*, reported the
+                        # way the melody route reports it: `chord` stays the written
+                        # symbol, and these three say what was actually stated under the
+                        # horn's line (§9.3 step C).
+                        non_chord_tone=comp_is_non_chord_tone,
+                        strategy=comp_strategy,
+                        harmonized_as=comp_harmonized_as,
+                    ))
+                    cls._attach_bass(
+                        arrangements[-1], slot.bass, arrangements, diagnostics
+                    )
+                    continue
+
+            # Every melody-bearing route below pins a note, and a slot with none has
+            # left the loop by now: the guard at the top refuses one the guitar is
+            # asked to sing, and the comping block above always steps or continues.
+            assert melody_note is not None
             # Everything up to choosing a shape is shared with the corpus loader,
             # which needs the same candidates but honours a slash bass first. See
             # prepare_step.
@@ -856,7 +1503,14 @@ class VoiceLeadingEngine:
                 # *dropped*, with a warning as the only sign. The melody-alone route a
                 # fill takes is the right one here too: the note of the tune survives,
                 # the thumb still walks, and the harmony is stated at the next target.
-                if texture == "walking_bass":
+                #
+                # A melody-only selection reaches this branch only when the melody
+                # cannot be played at all, which `get_melody_only_voicing` answers with
+                # None; there is nothing to fall back to and the step is skipped below
+                # with the warning. The branch is kept for it anyway so that a future
+                # spelling of "the tune and nothing else" inherits the rescue rather
+                # than needing this condition widened again.
+                if has_thumb or melody_only:
                     solo_voicing = cls.get_melody_only_voicing(
                         melody_note, prefer=top_strings
                     )
@@ -865,7 +1519,6 @@ class VoiceLeadingEngine:
                             chord=name,
                             melody=note_str,
                             voicing=solo_voicing,
-                            grip="melody",
                             partial=False,
                             bar=bar,
                             beat=beat,
@@ -883,7 +1536,9 @@ class VoiceLeadingEngine:
                 # re-prepared as a principal note before it is reported as missing.
                 # Same argument as NECK_FRET_MIN being a penalty and not a filter.
                 if should_promote_fill(
-                    texture, role, True, slot_grips, grips
+                    texture, role, True, slot_grips, grips,
+                    has_thumb=has_thumb,
+                    melody_only=melody_only,
                 ):
                     prepared = cls.prepare_step(
                         progression, index,
@@ -982,7 +1637,6 @@ class VoiceLeadingEngine:
                         chord=name,
                         melody=note_str,
                         voicing=solo,
-                        grip="melody",
                         partial=False,
                         bar=bar,
                         beat=beat,
@@ -1013,7 +1667,6 @@ class VoiceLeadingEngine:
                 harmonized_as=harmonized_as,
                 original_melody=original_melody,
                 repeated=repeated,
-                grip=best_voicing.grip,
                 # A shell or a duo leaves part of the chord unsounded, so the chord name
                 # printed above the step describes the harmony rather than every note in
                 # it. The renderers annotate this.
@@ -1102,7 +1755,6 @@ class VoiceLeadingEngine:
             )
             return
         midi, string_index, fret = placed
-        step.bass = midi
         step.voicing.bass_midi = midi
         step.voicing.bass_string = string_index
         step.voicing.frets[string_index] = fret
@@ -1113,14 +1765,30 @@ class VoiceLeadingEngine:
 
     @classmethod
     def _next_resolution_melody(
-        cls, progression: List[Tuple[str, str, str]], index: int
+        cls,
+        progression: Sequence[Tuple[Optional[str], str, str]],
+        index: int,
+        onsets: Optional[Container[int]] = None,
     ) -> Optional[str]:
         """
         The pitch the melody line resolves into: the first following step whose
         melody is a chord tone of its own chord (None when the phrase never
         resolves). Used to spell the dim7 substitution's root.
+
+        A slot with no melody note is stepped over: silence resolves into nothing.
+
+        `onsets`, when given, restricts the scan to slots whose melody **articulates**.
+        On the comping route a held position carries the note still sounding, not the
+        horn's *next* note, so the resolution target must be read from the written
+        onsets alone - otherwise a sustained note would name itself the thing the line
+        resolves into (§9.3 step C). `None` scans every slot, the melody route's rule.
         """
-        for note_str, chord_type, name in progression[index + 1:]:
+        for offset in range(index + 1, len(progression)):
+            if onsets is not None and offset not in onsets:
+                continue
+            note_str, chord_type, name = progression[offset]
+            if note_str is None:
+                continue
             if cls.is_chord_tone(Note(note_str), chord_type, name):
                 return note_str
         return None

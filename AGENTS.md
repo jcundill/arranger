@@ -6,7 +6,7 @@ Guidance for AI coding agents (and humans) working in this repository.
 Given `(melody note, chord quality, chord name)` triples it generates voicings in
 several grip families, pins the melody to the soprano string, and chooses among the
 candidates with one position-aware cost function. It can also read a written head out
-of a MusicXML file or the Weimar Jazz Database and arrange that.
+of a MusicXML file and arrange that.
 
 Runtime dependency: `musthe`, and nothing else. Everything else is optional.
 
@@ -22,8 +22,11 @@ gate and the conventions — not the explanation.
 | non-chord melody notes, a new chord quality | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` |
 | the step loop, `arrange_progression`, `Diagnostics` | [docs/engine.md](docs/engine.md) | `arranger/steps.py` |
 | tab staff, HTML, MusicXML, GP5, or the MusicXML importer | [docs/renderers.md](docs/renderers.md) | `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py` |
-| the Weimar corpus, head selection, skeletons | [docs/corpus.md](docs/corpus.md) | `wjazzd.py` |
+| the slot layer: triples to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
 | a known bug, with its measurement | [docs/open-issues.md](docs/open-issues.md) | — |
+| `voices=`, which voices the guitar plays | [docs/voices-axis.md](docs/voices-axis.md) | `arranger/textures.py` |
+| the comping axes (`harmony=`, `grid=`, the rhythm grid) | [docs/comping-styles.md](docs/comping-styles.md) | `arranger/textures.py` |
+| the step/voicing mirrored fields (`step.grip`, `step.bass`), or which voice selection is melody-only | [docs/one-fact.md](docs/one-fact.md) | `arranger/tuning.py`, `arranger/steps.py` |
 | how something was decided, historically | [docs/history/](docs/history/) | — |
 | user-facing behaviour and examples | [README.md](README.md) | — |
 
@@ -38,18 +41,62 @@ treat a contradiction between them as a bug in one of them.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **859 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **889 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 11 of those 859, and it is the one that fails if this
-document — or the CI workflow — stops describing the tree.)
+(`tests/test_docs.py` is 12 of those 889, and it is the one that fails if this
+document — or the CI workflow — stops describing the tree. It also fails if a document
+exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
+new file cannot be added without being registered.)
 
-**`make check` is what CI runs** (`.github/workflows/ci.yml`, Python 3.11–3.14, with
-the `xml` and `gp` extras so the optional-extra tests are not silently skipped). One
-thing the workflow's own header says and an agent should not have to rediscover:
-**the corpus tests do not run there.** `wjazzd.db` is 42 MB and gitignored, so 85 of
-the 859 are skipped on a clean clone. The `corpus` job covers them, and only on
-manual dispatch, gated on the `WJAZZD_DB_URL` repository variable.
+**Five axes, not one.** `texture=` (where notes fall), `bass=` (who plays the bottom,
+`BASS_STYLES`), `voices=` (which voices the guitar plays, `VOICE_NAMES`), `harmony=`
+(which *degrees* the part states when it is not singing, `HARMONY_STYLES`) and `grid=`
+(*where a chord falls* in the bar, `GRID_STYLES`) are **orthogonal**, and
+a band setting is a combination rather than a mode: `bass="none", voices="none"` is a
+bassist on the root, a horn on the melody and the guitar comping guide tones between them.
+Adding an axis means a new `*_STYLES` / `*_POLICIES` pair and a `*_AUTO` sentinel that
+is deliberately **not** in the styles list, plus a `*_allowed` refusal function derived from
+a table rather than listed — never another branch at the call sites. The trap: a loop
+variable shadowing a policy parameter (`melody` in `wjazzd.arrange_slots` did exactly this,
+and it only raised when a diminished retry had something to rescue).
+
+**`harmony=` was added by following that rule, and the three traps below are what it cost.**
+`HARMONY_STYLES` + `HARMONY_POLICIES` + `HARMONY_AUTO` + `harmony_allowed` in
+`textures.py`, resolved once per arrangement next to `_resolve_melody`, and inert twice
+over: `auto` resolves to the shipped `guide`, and the axis is read only by the comping
+route, so it cannot touch a melody-bearing arrangement. Three things to know before adding
+a fifth:
+
+- **A degree family is not an arity.** `guide` and `shell_root` are two different claims
+  that both need three notes available, so `harmony_allowed` refuses on **how many notes
+  were asked for** and not on a table of combinations. Deriving the rule is what kept it
+  to two entries instead of a list to extend.
+- **A family that "contains" a degree is not that family.** The first `shell_root`
+  implementation asked whether *some* root or 5th was sounding, and on an `Ebmaj` whose
+  guide tones are D and G the plain shape `D G Bb` already contains the 5th — so the new
+  family was silently a synonym for `guide` and every other test still passed. The check
+  is on the **lowest** note. `test_shell_root_is_not_merely_a_shape_that_contains_a_bass_degree`
+  exists only because of that, and its docstring says so.
+- **The shell chord-melody is not on this axis.** `--grips shell` is a *grip* choice
+  layered on the same degrees, with the melody pinned to the soprano string;
+  `harmony=guide` is the melody-free part. They are deliberately separate — see
+  [docs/comping-styles.md §4.1](docs/comping-styles.md) — and `harmony=` is inert on any
+  arrangement the guitar sings, so `--grips shell` is untouched by it. **This was a
+  decision, not an oversight**: `harmony=guide` with `sings=yes` could instead have been
+  routed through the shell grip, which would have made `--grips shell` redundant and given
+  the axis one spelling for both routes. That is §6 Q2 option (A), and it is **deferred
+  along with the `--voices` rename**, because until it lands `harmony=` cannot express
+  `soprano` and so cannot replace `--voices`. A fifth axis inherits this constraint: scope
+  it to the comping route, and do not let it reach the melody-bearing one by accident.
+
+**`make check` is what CI runs**, in one job (`.github/workflows/ci.yml`, Python
+3.11–3.14, with the `xml` and `gp` extras so the optional-extra tests are not silently
+skipped). **There is no second job and nothing a clean clone cannot run** — that used
+to need stating here and in the workflow header, because the 42 MB Weimar Jazz
+Database was gitignored and 85 of the suite's tests skipped on every fresh checkout.
+The database is gone, so a green check means the whole suite ran, and the only guards
+left are the optional-extra ones this job installs against.
 
 **`make check` runs one interpreter, and the matrix runs four.** It is the 3.14 dev
 one. A construct that is version-dependent passes here and fails on the 3.11 job —
@@ -76,21 +123,20 @@ arranger/
 │   ├── options.py       #   ArrangeOptions - the knobs as one value
 │   ├── decisions.py     #   decisions both step loops share
 │   ├── steps.py         #   VoiceLeadingEngine and the one step loop
+│   ├── slots.py         #   the slot layer: triples to steps, the one pre-pass
 │   ├── render.py        #   format_progression and per-step rendering
-│   └── cli.py           #   the two CLIs' shared flags and output dispatch
+│   └── cli.py           #   the head CLI's flags and output dispatch
 ├── tabstaff.py          # whole-progression staff renderers (ASCII + HTML)
 ├── tabxml.py            # MusicXML export (optional extra: music21)
 ├── tabgp.py             # Guitar Pro 5 export (optional extra: PyGuitarPro)
 ├── headxml.py           # MusicXML import: a melody + chord symbols
-├── wjazzd.py            # Weimar Jazz Database glue (stdlib sqlite3 only)
-├── lead_sheet.py        # JSON lead-sheet export over the same database
 ├── grip_chart.py        # generates common_grips.md from the engine's tables
 ├── tests/               # unittest, one file per concern, + support.py
 │   └── data/            # committed MusicXML fixtures (music21, MuseScore, ours)
 ├── docs/                # the documents the routing table above points at
 ├── pyproject.toml       # PEP 621 + PEP 639 metadata (setuptools backend)
 ├── Makefile             # the gate, above
-├── .github/workflows/   # CI: make check on 3.11-3.14, plus a manual corpus job
+├── .github/workflows/   # CI: one job, make check on 3.11-3.14
 ├── AGENTS.md            # this file
 ├── README.md            # user-facing overview
 └── .venv/               # local virtualenv (not committed)
@@ -105,16 +151,16 @@ dynamically from `arranger.__version__` — that is the single source of truth, 
 ### The engine is a package, and the order is enforced
 
 The engine was one 4290-line module until Phase 5 of the package refactor. It is
-now twelve modules in a strict dependency order:
+now thirteen modules in a strict dependency order:
 
 ```
 tuning -> diagnostics -> chords -> grips -> cost -> textures
                                                    |
                             bass <- options -----+----> decisions
                                                    |
-                                                 steps -> render -> cli
-                                                            |
-                                                          (facade)
+                                                 steps -> slots -> render -> cli
+                                                            |              |
+                                                          (facade) <-------+
 ```
 
 A module may import only what is *below* it, and
@@ -283,27 +329,20 @@ gate, and a snapshot mechanism would let a regression pass by regenerating itsel
    optionally to the `DROP2_INTERVAL_SETS[...] = ...` block).
 5. To make the quality reachable by the `extension` strategy, add it to
    `NON_CHORD_TONE_EXTENSIONS`.
-6. **If the Weimar Jazz Database should be able to spell it**, add the matching
-   suffix to `WEIMAR_QUALITY_ALIASES` in `wjazzd.py`. The database has 108
-   distinct suffixes in its own notation, and one that is absent resolves to
-   `None` and is *counted and reported* rather than guessed - so a new quality
-   the corpus cannot reach is silent until this step is done.
-7. **If a MusicXML file should be able to spell it**, add the matching
+6. **If a MusicXML file should be able to spell it**, add the matching
    `kind-value` to `MUSICXML_KIND_QUALITIES` in `headxml.py`, and any `<degree>`
    alteration that reaches it to `_DEGREE_REFINEMENTS`. The same rule applies: an
    absent kind resolves to `None` and is counted in `Head.unmapped`, so a new
    quality MusicXML cannot spell stays silent until this step is done. Note the
    table is keyed on the *library* quality, so a `kind` that only a `<degree>`
    reaches (a 7b5, say) needs a degree entry rather than a kind entry.
-8. Add tests to `tests/test_voicings.py` for the drop-2 fingerings and to
+7. Add tests to `tests/test_voicings.py` for the drop-2 fingerings and to
    `tests/test_grips.py` for the other grips: exact fingerings, pitch classes a subset
    of `ChordParser.get_chord_tones(...)`, `fret_span() <= 5`, and the sounding strings
    a member of `supported_string_sets()`.
    `TestQualityTableInvariants` checks the template and degree lists stay the same
    length, and `tests/test_non_chord_tones.py` covers any new
-   `NON_CHORD_TONE_EXTENSIONS` route. `tests/test_wjazzd.py` asserts every
-   `WEIMAR_QUALITY_ALIASES` entry resolves to a quality the library can voice, so
-   a table entry naming an unvoiceable quality fails the suite.
+   `NON_CHORD_TONE_EXTENSIONS` route.
    `tests/test_headxml.py::TestChordParsing::test_every_kind_the_table_names_is_voiceable`
    is the same assertion for `MUSICXML_KIND_QUALITIES`.
 
@@ -396,6 +435,33 @@ Each of these cost real time, or nearly shipped a defect.
     The general form: **a two-argument `Enum(...)` is not a value lookup, it is class
     definition**, and `make check` cannot catch this because it runs one version.
     Anything version-sensitive has to be exercised on each version CI runs.
+12. **A new guard clause is not a new route — and moving one can break the case it
+    did not name.** Adding `grid=` meant asking `decisions.melody_alone_case` what an
+    **off-grid** slot should do, and the answer differs by route: with the guitar
+    singing the note sounds alone, with it comping the guitar is *silent*. That is a
+    fourth *kind*, `MELODY_ALONE_REST`, not a flag — a bool could not express both,
+    which is trap 6's shape arriving again from a new direction.
+
+    The ordering of that function's three guards is what cost the time — 12 tests over
+    two attempts, because each ordering fixes one route and breaks the other:
+
+    - placing the grid test **after** the `melody_voiced` guard makes `grid=`
+      **silently inert on the comping route**: measured, all four patterns returned
+      80/80 comps, byte-identical to the default, with no warning anywhere;
+    - hoisting the `NO_CHORD` test **above** that guard lets an `NC` bar reach the
+      comping route, where it must be *dropped with a warning*; it instead survived as
+      a step — `['Dm7', 'NC', 'A7']` where it had been `['Dm7', 'A7']`;
+    - fixing that by returning `NONE` for `NC` everywhere breaks the **singing**
+      route, which needs `MELODY_ALONE_NO_CHORD`; the note then found no voicing and
+      vanished, taking **11 tests across four files**, every one of them `NC`.
+
+    The general form: **before reordering a decision function's guards, ask what each
+    guard is load-bearing *for*, and then check the two routes separately.** Both
+    routes build different steps from one function — which is the whole reason it
+    returns a kind — so an ordering right for one is not thereby right for the other.
+    An `NC` bar is also what proves "off the grid" is not universal: it has *no chord
+    to place*, so "silent here" and "no chord here" are different claims, and only the
+    first is a rest.
 
 ## Where things are documented
 
@@ -404,10 +470,12 @@ Each of these cost real time, or nearly shipped a defect.
 | [README.md](README.md) | user-facing overview, worked examples, limitations |
 | [docs/engine.md](docs/engine.md) | grips, the selector, texture, the cost tuple, non-chord tones |
 | [docs/renderers.md](docs/renderers.md) | tab staff, MusicXML import/export, GP5, and their traps |
-| [docs/corpus.md](docs/corpus.md) | the Weimar database, head selection, skeletons |
 | [docs/open-issues.md](docs/open-issues.md) | diagnosed bugs with their measurements; fixed items stay, with what the fix was |
 | [docs/reharmonisation-proposals.md](docs/reharmonisation-proposals.md) | tritone substitution (shipped) and chromatic approach chords (measured, not built), with the corpus numbers behind each |
-| [docs/history/](docs/history/) | completed plans: corpus, walking bass, texture, arranging guide |
+| [docs/history/](docs/history/) | completed plans: corpus, walking bass, texture, arranging guide - a record of the past, not of what exists |
+| [docs/voices-axis.md](docs/voices-axis.md) | **in progress** - the `voices=` axis, awaiting QA |
+| [docs/comping-styles.md](docs/comping-styles.md) | the comping axes (`harmony=`, the rhythm grid): **partly built** - Stage C shipped `harmony=`, Stage D shipped the named `grid=` rows, and §9 steps 0, B, A, A', C, D and E have landed (E, `--voices soprano` = the melody and nothing else, landed earlier as Stage 2 — `docs/one-fact.md`; A' makes a **chords-only lead sheet** loadable, `Head.bars` a fact about the file; C makes `--non-chord-tone` reach the comping route at harmony level, onset-guarded by `melody_onsets`; D makes the soprano **per slot**, so a soprano-named selection comps the grid positions its tune does not articulate at); §9.4's four-note comping chord, and §6's open questions, are still proposal |
+| [docs/one-fact.md](docs/one-fact.md) | the Stage-2 collapse, **landed**: one field per fact (`step.grip`, `step.bass` as derived views), and the melody-only signal moved from `texture=` to `voices=` |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | what CI runs, and which tests it does *not* run |
 
 `common_grips.md` is generated from the engine's own tables by `grip_chart.py` and
@@ -422,11 +490,11 @@ make demo                            # the built-in demonstration arrangements
 .venv/bin/jazz-arranger              # the console script, once installed
 ```
 
-`main()` also dispatches two subcommands, both imported lazily inside the branch so
-`import arranger` depends on neither:
+`main()` also dispatches one subcommand, imported lazily inside the branch so
+`import arranger` does not pull in the importer - nor, through it, the renderers it
+uses - for a caller who only wants the library:
 
 ```bash
-.venv/bin/python -m arranger corpus --melid 218    # needs the 42 MB wjazzd.db
 .venv/bin/python -m arranger head FILE.musicxml    # the MusicXML importer
 ```
 
