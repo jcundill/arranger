@@ -34,7 +34,7 @@ so it needs no entry in `ALLOWED_EDGES`.
 from __future__ import annotations
 
 import re
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Container, Dict, List, Optional, Sequence, Tuple
 
 from musthe import Note
 
@@ -86,6 +86,7 @@ def parse_bar_range(text: str) -> Tuple[int, Optional[int]]:
 def unresolved_steps(
     triples: Sequence[Tuple[Optional[str], str, str]],
     non_chord_tone: str = "extension",
+    onsets: Optional[Container[int]] = None,
 ) -> List[int]:
     """Indexes of steps no non-chord-tone strategy could resolve.
 
@@ -97,9 +98,16 @@ def unresolved_steps(
     A triple with no melody note is never unresolved: there is no note to be a
     non-chord tone, so §9.2's rule holds - the rescue fires at an onset, not
     under silence.
+
+    `onsets`, when given, restricts the scan to slots whose melody **articulates**
+    (§9.2). A held position carries the note still sounding rather than a fresh one,
+    and a silent slot has no note at all; neither is a place to reharmonise, so on the
+    comping route the retry must not fire there. `None` scans every slot.
     """
     unresolved: List[int] = []
     for index, (note, quality, name) in enumerate(triples):
+        if onsets is not None and index not in onsets:
+            continue
         if quality == NO_CHORD or not name:
             continue
         if note is None:
@@ -157,7 +165,9 @@ def midi_to_note_name(pitch: int) -> str:
 
 
 def _next_chord_tone_melody(
-    triples: Sequence[Tuple[Optional[str], str, str]], index: int
+    triples: Sequence[Tuple[Optional[str], str, str]],
+    index: int,
+    onsets: Optional[Container[int]] = None,
 ) -> Optional[str]:
     """The next melody note that is a chord tone of its own chord, if any.
 
@@ -167,8 +177,16 @@ def _next_chord_tone_melody(
 
     A slot with no melody note is stepped over - silence carries no pitch to move
     to, and the scan keeps looking past it.
+
+    `onsets`, when given, restricts the scan to slots whose melody articulates. On the
+    comping route a held position carries the note still sounding, not the horn's
+    *next* note, so the resolution target has to come from the written onsets alone
+    (§9.3 step C).
     """
-    for melody, quality, name in triples[index + 1:]:
+    for offset in range(index + 1, len(triples)):
+        if onsets is not None and offset not in onsets:
+            continue
+        melody, quality, name = triples[offset]
         if melody is None or quality == NO_CHORD or not name:
             continue
         if VoiceLeadingEngine.is_chord_tone(Note(melody), quality, name):
@@ -239,6 +257,7 @@ def arrange_slots(
     grid: str = "every_note",
     beats_per_bar: int = 4,
     diagnostics: Optional[Diagnostics] = None,
+    onsets: Optional[Container[int]] = None,
 ) -> Tuple[List[ArrangementStep], List[int], List[str]]:
     """Voices a list of (note, quality, name) triples, one step per slot.
 
@@ -312,7 +331,7 @@ def arrange_slots(
     # written chord. Under `targets` the role does not read the harmony, so nothing
     # moved; under `walking_bass` it does. That ordering change is measured rather
     # than assumed - `tests/test_wjazzd.py::TestTheRetryReordersNothingVisible`.
-    unresolved = unresolved_steps(list(triples), non_chord_tone)
+    unresolved = unresolved_steps(list(triples), non_chord_tone, onsets)
     retry = set(unresolved) if fallback == "diminished" else set()
     rescued: List[int] = []
     working = list(triples)
@@ -336,7 +355,7 @@ def arrange_slots(
                 continue
             resolved = engine.resolve_non_chord_tone(
                 Note(note), quality, name, "diminished",
-                next_melody=_next_chord_tone_melody(triples, index),
+                next_melody=_next_chord_tone_melody(triples, index, onsets),
             )
             if resolved is not None:
                 working[index] = (note, resolved[0], resolved[1])
@@ -353,6 +372,7 @@ def arrange_slots(
         harmony=harmony,
         grid=grid,
         beats_per_bar=beats_per_bar,
+        melody_onsets=onsets,
     )
 
     steps = engine.arrange_progression(
@@ -371,6 +391,7 @@ def _slot_options(
     melody: str = "auto",
     harmony: str = "auto",
     grid: str = "every_note",
+    melody_onsets: Optional[Container[int]] = None,
 ) -> ArrangeOptions:
     """The request `arrange_slots` makes of the engine, as one value.
 
@@ -438,4 +459,5 @@ def _slot_options(
         timings=typed_timings,
         bass_pcs=bass_pcs or None,
         bass_cost=bass_cost,
+        melody_onsets=melody_onsets,
     )

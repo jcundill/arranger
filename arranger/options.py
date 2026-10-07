@@ -18,7 +18,7 @@ accepts the same keywords directly; see its docstring for how the two interact.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Mapping, Optional, Sequence, Tuple
+from typing import Callable, Container, Mapping, Optional, Sequence, Tuple
 
 from .bass import BASS_AUTO
 from .grips import GRIP_PREFERENCE
@@ -148,3 +148,15 @@ class ArrangeOptions:
     # Both halves are needed: `bass_pcs` says which pitch the caller wants, and this
     # says how near a candidate is to it. Neither alone narrows anything.
     bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]] = None
+    # The progression indexes whose melody note **articulates** (an onset), for the
+    # §9.2 reharmonise rule on the comping route: a non-chord melody note is
+    # substituted where it begins, not under a held note and not where the tune is
+    # silent. `None` means *every* slot is an onset - the honest default for a
+    # hand-built progression that carries no timeline, so a bare
+    # `arrange_progression(..., melody="alto,tenor")` still honours `--non-chord-tone`.
+    # The head layer computes it from `headxml.melody_state`, which is the one place
+    # that knows a note is sounding rather than merely in force.
+    #
+    # It sits beside `bass_pcs` rather than on the harmony axis because it is per-slot
+    # *data* about the input, like the timings, not a policy a caller chooses.
+    melody_onsets: Optional[Container[int]] = None

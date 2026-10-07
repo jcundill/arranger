@@ -453,48 +453,75 @@ class TestTheCompingArrangement(unittest.TestCase):
 
 
 class TestCompingMelodyIndependence(unittest.TestCase):
-    """Step 0 of `docs/comping-styles.md` §9.3: the comping route is melody-independent.
+    """Step 0 of `docs/comping-styles.md` §9.3, **re-scoped by step C**.
 
-    Scrambling every melody pitch must move no fret on any non-soprano
-    selection. This lands **before** step C deliberately: C is the first step in
-    which the melody affects the comping *harmony*, and without this pin that
-    intended change would be indistinguishable from a regression in *placement*.
+    Step 0 pinned the comping route as melody-independent: scramble every melody pitch
+    and no fret moves. It landed *before* step C deliberately, because C is the first
+    step in which the melody affects the comping **harmony** - and once C lands the
+    original claim is false by design. So it is **inverted rather than deleted**
+    (AGENTS.md trap 5): the *placement* invariant survives (a slot's `bar`/`beat` never
+    depends on the melody) while the *harmony* now does, under a strategy that
+    substitutes. Both halves are asserted below.
     """
 
-    def _arrange(self, head, voices, grid="freddie"):
-        """The `arrange_xml_head` comping path over an already-loaded head."""
+    def _arrange(self, head, voices, grid="freddie", non_chord_tone="extension"):
+        """The `arrange_xml_head` comping path over an already-loaded head.
+
+        `onsets` is computed the way `arrange_xml_head` computes it, so this exercises
+        the real §9.2 guard rather than the all-onsets default a bare `arrange_slots`
+        call would take.
+        """
         from arranger.slots import arrange_slots
-        from headxml import _merge_chord_slots, head_skeleton
+        from headxml import _merge_chord_slots, head_skeleton, melody_state
 
         slots = head_skeleton(head, None)
         if not voices_have_soprano(resolve_voices(parse_voices(voices))):
             slots = _merge_chord_slots(slots, head, None, grid) or slots
+        onsets = {
+            index
+            for index, slot in enumerate(slots)
+            if melody_state(head.notes, slot[1], slot[2]) == "onset"
+        }
         steps, _, _ = arrange_slots(
             [slot[0] for slot in slots],
             [(slot[1], slot[2], slot[3]) for slot in slots],
             melody=voices,
             grid=grid,
             beats_per_bar=head.beats_per_bar,
+            non_chord_tone=non_chord_tone,
+            onsets=onsets,
         )
         return tuple((step.bar, step.beat, step.chord, tuple(step.voicing.frets)) for step in steps)
 
-    def test_scrambling_the_melody_moves_no_fret(self):
-        """Every pitch replaced by a wild high non-chord tone; nothing moves.
-
-        Keeps every chord, bar, beat and duration, so only the melody pitches
-        change. `HeadNote.note_name` derives from `pitch`, so assigning `pitch`
-        alone is enough — and assigning `note_name` raises.
-        """
+    def _scrambled(self, head):
+        """The head's chords, bars, beats and durations intact; only the pitches wild."""
         import copy
+
+        scrambled = copy.deepcopy(head)
+        for index, note in enumerate(scrambled.notes):
+            note.pitch = 81 + (index * 3) % 14  # F#5-F6, mostly outside
+        scrambled.notes.sort(key=lambda n: (n.bar, n.beat))
+        return scrambled
+
+    def _path(self):
         import os
 
-        from headxml import load_musicxml
-
-        path = os.path.join(
+        return os.path.join(
             os.path.dirname(os.path.abspath(__file__)),
             "data",
             "but_not_for_me.mxl",
         )
+
+    def test_scrambling_the_melody_moves_no_fret_without_a_strategy(self):
+        """Under `legacy` the melody cannot move a fret - the original step 0 claim.
+
+        `legacy` substitutes nothing, so this is the placement invariant alone: every
+        pitch replaced by a wild high non-chord tone and nothing moves. `HeadNote.note_name`
+        derives from `pitch`, so assigning `pitch` alone is enough - assigning
+        `note_name` raises.
+        """
+        from headxml import load_musicxml
+
         for voices in (
             "alto,tenor",
             "bass",
@@ -503,18 +530,142 @@ class TestCompingMelodyIndependence(unittest.TestCase):
             "alto,tenor,bass",
         ):
             with self.subTest(voices=voices):
-                head = load_musicxml(path)
-                before = self._arrange(head, voices)
+                head = load_musicxml(self._path())
+                before = self._arrange(head, voices, non_chord_tone="legacy")
                 self.assertTrue(before, "an arrangement with no steps at all is a defect")
-                scrambled = copy.deepcopy(head)
-                for index, note in enumerate(scrambled.notes):
-                    note.pitch = 81 + (index * 3) % 14  # F#5-F6, mostly outside
-                scrambled.notes.sort(key=lambda n: (n.bar, n.beat))
                 self.assertEqual(
-                    self._arrange(scrambled, voices),
+                    self._arrange(self._scrambled(head), voices, non_chord_tone="legacy"),
                     before,
-                    f"{voices}: a melody pitch reached the comping part",
+                    f"{voices}: a melody pitch reached the comping part with no strategy",
                 )
+
+    def test_a_substituted_melody_reaches_the_harmony_and_not_the_placement(self):
+        """Under the default strategy the melody moves the *harmony*, never a *position*.
+
+        Two claims in one, and the split between them is why step 0 existed: the
+        `(bar, beat)` positions are identical whatever the melody does (the placement
+        invariant survives), while the chord the guitar states at an onset now follows
+        the horn's note (step C's intended change).
+        """
+        from headxml import load_musicxml
+
+        head = load_musicxml(self._path())
+        scrambled = self._scrambled(head)
+        substituted = self._arrange(scrambled, "alto,tenor")  # default extension
+        legacy = self._arrange(scrambled, "alto,tenor", non_chord_tone="legacy")
+        self.assertEqual(
+            [(step[0], step[1]) for step in substituted],
+            [(step[0], step[1]) for step in legacy],
+            "a melody pitch moved a slot's position",
+        )
+        self.assertNotEqual(
+            substituted,
+            legacy,
+            "the non-chord-tone strategy did not reach the comping harmony",
+        )
+
+
+class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
+    """§9.3 step C: `--non-chord-tone` harmonises the guitar's *comping* part too.
+
+    The melody is the horn's, so the flag moves the chord the guitar **states** and
+    nothing it sings: `melody_voiced` stays `False`, the shape is still a guide-tone
+    comping shape, drawn now from the substituted chord, and `melody_pc` stays `None`
+    so that shape is held to the substitute's full tone set.
+    """
+
+    def _comp(self, progression, strategy, **kwargs):
+        steps = VoiceLeadingEngine.arrange_progression(
+            progression, melody=VOICES_ARG, non_chord_tone=strategy, **kwargs
+        )
+        self.assertTrue(steps, "an arrangement with no steps at all is a defect")
+        return steps
+
+    def test_extension_absorbs_the_note_as_an_extension(self):
+        steps = self._comp([("D5", "maj7", "Cmaj7")], "extension")
+        self.assertEqual([s.harmonized_as for s in steps], ["Cmaj9"])
+        # `chord` stays the written symbol; `harmonized_as` says what was stated.
+        self.assertEqual([s.chord for s in steps], ["Cmaj7"])
+        self.assertTrue(steps[0].non_chord_tone)
+        self.assertEqual(steps[0].strategy, "extension")
+
+    def test_diminished_states_the_dim7_a_semitone_below_the_resolution(self):
+        steps = self._comp([("D5", "maj7", "Cmaj7")], "diminished")
+        self.assertEqual([s.harmonized_as for s in steps], ["Bdim7"])
+        self.assertEqual(steps[0].strategy, "diminished")
+
+    def test_the_guitar_still_does_not_sing_the_substitute(self):
+        """`melody_voiced` stays false and the shape is only the substitute's tones.
+
+        `melody_pc` is `None` on this route, so the selector cannot excuse a wrong note
+        for coinciding with the tune - every sounding pitch must be a tone of the chord
+        actually stated, `Bdim7`.
+        """
+        steps = self._comp([("D5", "maj7", "Cmaj7")], "diminished")
+        self.assertFalse(steps[0].melody_voiced)
+        sounding = {pitch % 12 for pitch in steps[0].voicing.midi_notes()}
+        self.assertTrue(sounding <= chord_pcs("Bdim7"), steps[0].tab_line())
+
+    def test_legacy_and_sustain_substitute_nothing(self):
+        """The two strategies with no comping meaning leave the written chord alone."""
+        for strategy in ("legacy", "sustain"):
+            with self.subTest(strategy=strategy):
+                steps = self._comp([("D5", "maj7", "Cmaj7")], strategy)
+                self.assertIsNone(steps[0].harmonized_as, strategy)
+                self.assertIsNone(steps[0].strategy, strategy)
+                self.assertFalse(steps[0].non_chord_tone, strategy)
+
+    def test_a_chord_tone_melody_is_untouched(self):
+        """A melody the chord already contains is not reharmonised under any strategy."""
+        for strategy in ("extension", "diminished"):
+            with self.subTest(strategy=strategy):
+                steps = self._comp([("C5", "maj7", "Cmaj7")], strategy)
+                self.assertIsNone(steps[0].harmonized_as, strategy)
+
+    def test_the_onset_guard_skips_a_held_position(self):
+        """§9.2: a non-chord note is substituted where it **begins**, not where it holds.
+
+        Index 1 is deliberately absent from `melody_onsets`, so it is a held position
+        carrying the same note - it must be voiced as the written chord, not re-decided
+        under a note whose onset already decided it.
+        """
+        progression = [("D5", "maj7", "Cmaj7"), ("D5", "maj7", "Cmaj7")]
+        steps = self._comp(progression, "diminished", melody_onsets={0})
+        self.assertEqual(steps[0].harmonized_as, "Bdim7")
+        self.assertIsNone(steps[1].harmonized_as)
+
+    def test_a_bare_call_with_no_timeline_treats_every_slot_as_an_onset(self):
+        """`melody_onsets=None` (the default) is all-onsets - the hand-built caller's rule."""
+        progression = [("D5", "maj7", "Cmaj7"), ("D5", "maj7", "Cmaj7")]
+        steps = self._comp(progression, "diminished")
+        self.assertEqual([s.harmonized_as for s in steps], ["Bdim7", "Bdim7"])
+
+    def test_the_substitution_is_reported(self):
+        """A guitarist with no melody on their part must be told why the chord moved."""
+        diagnostics = Diagnostics()
+        self._comp([("D5", "maj7", "Cmaj7")], "diminished", diagnostics=diagnostics)
+        self.assertTrue(
+            any("Bdim7" in warning for warning in diagnostics.warnings),
+            diagnostics.warnings,
+        )
+
+    def test_the_fallback_fires_at_onsets_only(self):
+        """`--fallback` obeys the same §9.2 guard, at the slot layer where it lives.
+
+        `D` over `Bbm7` is the major 3rd over a minor chord - no `NON_CHORD_TONE_EXTENSIONS`
+        route - so `--fallback diminished` rescues it at an onset. The same note held at
+        index 1 is not an onset and must be left alone.
+        """
+        from arranger.slots import arrange_slots
+
+        progression = [("D5", "m7", "Bbm7"), ("D5", "m7", "Bbm7")]
+        timings = [(0, 1.0, 1.0), (0, 1.5, 0.5)]
+        steps, rescued, _notes = arrange_slots(
+            progression, timings, melody=VOICES_ARG, fallback="diminished", onsets={0},
+        )
+        self.assertEqual(rescued, [0])
+        self.assertNotEqual(steps[0].chord, "Bbm7")
+        self.assertEqual(steps[1].chord, "Bbm7")
 
 
 class TestTheCompingRouteCarriesAThumb(unittest.TestCase):

@@ -1018,6 +1018,15 @@ Every `ArrangementStep` records what happened: `non_chord_tone`, `strategy` and
 `harmonized_as` (e.g. `"Cmaj9"`). Melodies that are already chord tones are
 arranged exactly as before, whichever strategy is selected.
 
+On a **comping** selection (`voices=` with no soprano, where the guitar states the
+chord while somebody else sings) the same flag moves the chord the guitar *states*,
+never anything it sings. A non-chord note at an **onset** reharmonises the guitar's
+chord, so `D5` over `Cmaj7` under `voices="alto,tenor"` gives `Cmaj9` (`extension`)
+or `Bdim7` (`diminished`) in the guide-tone voices, with `harmonized_as` reporting
+it and a diagnostic naming the note that forced it. A held note and a silent grid
+position state the written chord unchanged, and `legacy` (or `sustain`) leaves the
+comping part's harmony exactly as the chord symbol writes it.
+
 ## Supported chord qualities
 
 Seventh chords: `maj7`, `6`, `m7`, `m7b5`, `dim7`, `m6`, `mMaj7`, `7`, `7b9`,

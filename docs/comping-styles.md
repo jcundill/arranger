@@ -23,7 +23,7 @@ not built.
 **§9 is the next stage of the same work**, and it is the one that turns "comping" from a
 voice selection into a route with its own behaviour: what was measured about the melody's
 actual influence on a comping part, the rule that follows from it, and six steps in
-dependency order. Steps 0, B, A and A' have landed; the rest of §9 (C, D, E) is still
+dependency order. Steps 0, B, A, A' and C have landed; the rest of §9 (D, E) is still
 proposal.
 
 It is deliberately **not** in `docs/history/`, which is for completed plans and is never
@@ -652,7 +652,7 @@ behaving correctly rather than a hole in it, but it means reachability is a weak
 than it looks: a document linked once, in one place, is fully protected by that one link.
 
 `AGENTS.md`'s stated counts moved with it, and have moved again since — the tree is at
-**873 tests OK (skipped=2)**, with `tests/test_docs.py` still 12 of those.
+**883 tests OK (skipped=2)**, with `tests/test_docs.py` still 12 of those.
 The old line said "11 of those 926" while the line above it said 938, so it was already
 internally inconsistent before Stage B touched it.
 
@@ -830,18 +830,20 @@ for removal in §9 as well.
 
 ## 9. The comping route, measured — a staged plan
 
-**Steps 0, B, A and A' of this section are built; C, D and E are not.** It records what
+**Steps 0, B, A, A' and C of this section are built; D and E are not.** It records what
 was measured while answering "what does a pure comping part need?", and the order the
 work has to happen in. Every number below was measured on the committed fixtures; none is
 predicted.
 
 **Where the work stands, for whoever picks this up cold:**
 
-- **Steps 0, B, A and A' are implemented.** Step 0 pinned melody independence as a test,
+- **Steps 0, B, A, A' and C are implemented.** Step 0 pinned melody independence as a test,
   step B made a slot's melody `Optional`, step A declared `every_note` a property rather
-  than a sentinel, and step A' made a **chords-only lead sheet** loadable — `Head.bars` is
-  now the file's measure extent rather than the melody's span. Steps C, D and E are still
-  proposal, and each description below carries its own **Landed** marker where it has one.
+  than a sentinel, step A' made a **chords-only lead sheet** loadable (`Head.bars` is
+  now the file's measure extent rather than the melody's span), and step C made
+  `--non-chord-tone` reach the comping route at harmony level with the §9.2 onset guard.
+  Steps D and E are still proposal, and each description below carries its own **Landed**
+  marker where it has one.
 - **Every decision in §9 is settled.** The questions that shaped it — what `every_note` means
   on a head with no melody, whether the melody-less file warns or is silent, what an unknown
   grid does, whether `--fallback` reaches this route — are all answered below and marked as
@@ -1172,6 +1174,30 @@ is **inverted** from `(1, 16)` to `(1, 18)` rather than deleted (AGENTS.md trap 
 `D5 over Cmaj7 → Bdim7`, and the guide-tone voices play the dim7. The onset guard from §9.2
 lives here, and `next_melody` for the diminished strategy's resolution target is the horn's
 next note, available from `head_skeleton` even when the current slot has none.
+
+**Landed.** `_resolve_substitute_harmony` is the extracted block, and both `prepare_step`
+and the comping branch call it. The comping branch reharmonises at the harmony level with
+`melody_pc` still `None`, so a comping shape is held to the substituted chord's full tone
+set; `chord` stays the written symbol and `harmonized_as`/`strategy`/`non_chord_tone` report
+what was actually stated, exactly as the melody route reports it.
+
+The §9.2 onset guard is a **threaded signal, not a re-derived one**:
+`ArrangeOptions.melody_onsets` / `arrange_slots(onsets=...)` /
+`arrange_progression(melody_onsets=...)` carry the indexes whose melody articulates,
+`headxml.arrange_xml_head` computes them from `melody_state`, and `None` means every slot
+is an onset — the honest default for a hand-built progression, which is why a bare
+`arrange_progression(..., melody="alto,tenor")` honours the flag too. `_next_resolution_melody`
+and the slot layer's `unresolved_steps` / `_next_chord_tone_melody` take the same set, so
+`--fallback diminished` fires at onsets only.
+
+Measured on the committed fixtures: on the comping route `--non-chord-tone legacy` is
+byte-identical to the pre-step tree, while every fixture changes under the default
+`extension`; every **default (no-flags) arrangement is byte-identical**, which is §7's
+acceptance criterion. `TestCompingMelodyIndependence` (step 0) is **re-scoped rather than
+deleted** (AGENTS.md trap 5): its placement invariant survives under `legacy`, and the
+melody's new reach into the *harmony* is asserted separately. The strategy is on by default
+because `--non-chord-tone` already defaults to `extension`; a user who wants the written
+chord stated as-is passes `legacy`.
 
 **`--fallback diminished` is the same concern, and comes with it.** It is a *harmony-only*
 change: the retry replaces the written chord in the triple (`working[index] = (note,

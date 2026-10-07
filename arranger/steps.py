@@ -519,6 +519,46 @@ class VoiceLeadingEngine:
 
 
     @classmethod
+    def _resolve_substitute_harmony(
+        cls,
+        melody_note: Note,
+        chord_type: str,
+        name: str,
+        strategy: str,
+        next_melody: Optional[str] = None,
+    ) -> Optional[Tuple[str, str, str]]:
+        """The `(quality, name, strategy)` that makes a non-chord melody note a chord tone.
+
+        **Extracted from `prepare_step` so the comping route reaches it too**
+        (`docs/comping-styles.md` §9.3 step C). The melody route pins the note and
+        re-voices a substituted chord around it; the comping route never sounds the note
+        but must still *state* the chord the horn's line implies, so the two have to make
+        the same decision the same way - otherwise `--non-chord-tone` means one thing on
+        one route and another on the other, which is the split this codebase keeps having
+        to close.
+
+        Returns `None` when the note is already a chord tone, when the chord is outside
+        `CHORD_TONES_FROM_ROOT` (nothing to substitute against), when `name` is empty, or
+        when `resolve_non_chord_tone` finds no route for the strategy. `sustain` is
+        deliberately excluded up front: it holds the *previous shape's* inner voices,
+        which is a melody-route move with no meaning where the generator builds a fresh
+        comping shape on every slot.
+        """
+        if strategy in ("legacy", "sustain") or not name:
+            return None
+        canonical = ChordParser.canonical_quality(chord_type)
+        if canonical not in ChordParser.CHORD_TONES_FROM_ROOT:
+            return None
+        if cls.is_chord_tone(melody_note, chord_type, name):
+            return None
+        resolved = cls.resolve_non_chord_tone(
+            melody_note, chord_type, name, strategy, next_melody=next_melody
+        )
+        if resolved is None:
+            return None
+        return resolved[0], resolved[1], strategy
+
+    @classmethod
     def prepare_step(
         cls,
         progression: Sequence[Tuple[Optional[str], str, str]],
@@ -610,15 +650,15 @@ class VoiceLeadingEngine:
 
             # Strategies 1 and 2 reharmonise the note as a genuine chord tone.
             if strategy_used is None:
-                resolved = cls.resolve_non_chord_tone(
+                substitute = cls._resolve_substitute_harmony(
                     sounding_melody,
                     chord_type,
                     name,
                     non_chord_tone,
                     next_melody=cls._next_resolution_melody(progression, index),
                 )
-                if resolved is not None:
-                    substitute_quality, substitute_name = resolved
+                if substitute is not None:
+                    substitute_quality, substitute_name = substitute[0], substitute[1]
                     substituted = cls.get_all_grip_voicings(
                         sounding_melody,
                         substitute_quality,
@@ -682,6 +722,12 @@ class VoiceLeadingEngine:
         harmony: str = HARMONY_AUTO,
         grid: str = GRID_EVERY_NOTE,
         beats_per_bar: int = 4,
+        # The progression indexes whose melody note articulates, for the §9.2
+        # reharmonise rule on the comping route (§9.3 step C). `None` means every slot
+        # is an onset - the correct answer for a hand-built progression with no
+        # timeline, and what keeps a bare `arrange_progression(..., melody="alto,tenor")`
+        # honouring `--non-chord-tone`. See `ArrangeOptions.melody_onsets`.
+        melody_onsets: Optional[Container[int]] = None,
         diagnostics: Optional[Diagnostics] = None,
         options: Optional[ArrangeOptions] = None,
     ) -> List[ArrangementStep]:
@@ -844,6 +890,7 @@ class VoiceLeadingEngine:
                     ("harmony", harmony),
                     ("grid", grid),
                     ("beats_per_bar", beats_per_bar),
+                    ("melody_onsets", melody_onsets),
                 )
                 if value != ArrangeOptions.__dataclass_fields__[name].default
             }
@@ -863,6 +910,7 @@ class VoiceLeadingEngine:
             harmony = options.harmony
             grid = options.grid
             beats_per_bar = options.beats_per_bar
+            melody_onsets = options.melody_onsets
             if options.timings is not None:
                 timings = list(options.timings)
         bass_pcs = options.bass_pcs if options is not None else None
@@ -1236,9 +1284,51 @@ class VoiceLeadingEngine:
                         f"skipping the bar"
                     )
                     continue
+                # --- the non-chord-tone strategy, at harmony level (§9.3 step C) ---
+                #
+                # The melody is *not* on the guitar here - the horn has it - so a
+                # substitution changes what the guitar **states**, not what it sings.
+                # `melody_pc` stays None below, so a comping shape is still held to the
+                # substitute's full tone set; only the chord the shape is drawn from
+                # moves. `D5` over `Cmaj7` therefore gives `Cmaj9` (extension) or
+                # `Bdim7` (diminished) under the guide-tone voices, exactly as the
+                # melody route re-voices it.
+                comp_chord_type, comp_name = chord_type, name
+                comp_strategy: Optional[str] = None
+                comp_harmonized_as: Optional[str] = None
+                comp_is_non_chord_tone = False
+                # §9.2: reharmonise **at an onset**. A held position was decided where
+                # the note began, and a silent one has nothing to resolve. `melody_onsets`
+                # is the caller's onset set; None means every slot is an onset, the right
+                # answer for a hand-built progression that carries no timeline.
+                if (
+                    melody_note is not None
+                    and (melody_onsets is None or index in melody_onsets)
+                ):
+                    substitute = cls._resolve_substitute_harmony(
+                        melody_note,
+                        chord_type,
+                        name,
+                        non_chord_tone,
+                        next_melody=cls._next_resolution_melody(
+                            progression, index, melody_onsets
+                        ),
+                    )
+                    if substitute is not None:
+                        comp_chord_type, comp_name, comp_strategy = substitute
+                        comp_harmonized_as = comp_name
+                        comp_is_non_chord_tone = True
+                        # A guitarist handed `Cmaj7 -> Bdim7` with no melody on their own
+                        # part cannot see why the chord moved; the note that forced it is
+                        # the horn's, so it has to be named here or the part reads wrong.
+                        diagnostics.warn(
+                            f"Warning: comping {name} as {comp_name} "
+                            f"({comp_strategy}) to accommodate the melody note "
+                            f"{note_str}"
+                        )
                 candidates = cls.get_comping_voicings(
-                    chord_type,
-                    chord_name=name,
+                    comp_chord_type,
+                    chord_name=comp_name,
                     fret_min=fret_min,
                     fret_max=fret_max,
                     # How many notes were asked for. A voice is a *role* in the stack,
@@ -1291,7 +1381,7 @@ class VoiceLeadingEngine:
                     # without a root, so by this point it is never None - the check is
                     # read from the same place the generator read it rather than
                     # re-derived, so the two cannot disagree.
-                    _canonical, root_pc, _tones = cls._chord_context(chord_type, name)
+                    _canonical, root_pc, _tones = cls._chord_context(comp_chord_type, comp_name)
                     arrangements.append(ArrangementStep(
                         chord=name,
                         # The written note, which is the horn's line. The guitar does not
@@ -1307,7 +1397,7 @@ class VoiceLeadingEngine:
                             # wrong notes itself, and a generator that could be wrong
                             # should not be the only thing standing between a chord symbol
                             # and a note that is not in it.
-                            ChordParser.get_chord_tones(chord_type, name),
+                            ChordParser.get_chord_tones(comp_chord_type, comp_name),
                             # The root, which enables the bass-function tie-break. None
                             # for a chord whose name will not parse, which leaves that
                             # criterion unasked rather than guessing a bass - the same
@@ -1332,6 +1422,13 @@ class VoiceLeadingEngine:
                         metric_weight=weight,
                         bass_only=is_bass_only(slot.bass_only, role),
                         melody_voiced=False,
+                        # What the substitution changed about the *harmony*, reported the
+                        # way the melody route reports it: `chord` stays the written
+                        # symbol, and these three say what was actually stated under the
+                        # horn's line (§9.3 step C).
+                        non_chord_tone=comp_is_non_chord_tone,
+                        strategy=comp_strategy,
+                        harmonized_as=comp_harmonized_as,
                     ))
                     cls._attach_bass(
                         arrangements[-1], slot.bass, arrangements, diagnostics
@@ -1625,7 +1722,10 @@ class VoiceLeadingEngine:
 
     @classmethod
     def _next_resolution_melody(
-        cls, progression: Sequence[Tuple[Optional[str], str, str]], index: int
+        cls,
+        progression: Sequence[Tuple[Optional[str], str, str]],
+        index: int,
+        onsets: Optional[Container[int]] = None,
     ) -> Optional[str]:
         """
         The pitch the melody line resolves into: the first following step whose
@@ -1633,8 +1733,17 @@ class VoiceLeadingEngine:
         resolves). Used to spell the dim7 substitution's root.
 
         A slot with no melody note is stepped over: silence resolves into nothing.
+
+        `onsets`, when given, restricts the scan to slots whose melody **articulates**.
+        On the comping route a held position carries the note still sounding, not the
+        horn's *next* note, so the resolution target must be read from the written
+        onsets alone - otherwise a sustained note would name itself the thing the line
+        resolves into (§9.3 step C). `None` scans every slot, the melody route's rule.
         """
-        for note_str, chord_type, name in progression[index + 1:]:
+        for offset in range(index + 1, len(progression)):
+            if onsets is not None and offset not in onsets:
+                continue
+            note_str, chord_type, name = progression[offset]
             if note_str is None:
                 continue
             if cls.is_chord_tone(Note(note_str), chord_type, name):

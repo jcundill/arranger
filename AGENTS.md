@@ -41,10 +41,10 @@ treat a contradiction between them as a bug in one of them.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **873 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **883 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 12 of those 873, and it is the one that fails if this
+(`tests/test_docs.py` is 12 of those 883, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree. It also fails if a document
 exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
 new file cannot be added without being registered.)
@@ -474,7 +474,7 @@ Each of these cost real time, or nearly shipped a defect.
 | [docs/reharmonisation-proposals.md](docs/reharmonisation-proposals.md) | tritone substitution (shipped) and chromatic approach chords (measured, not built), with the corpus numbers behind each |
 | [docs/history/](docs/history/) | completed plans: corpus, walking bass, texture, arranging guide - a record of the past, not of what exists |
 | [docs/voices-axis.md](docs/voices-axis.md) | **in progress** - the `voices=` axis, awaiting QA |
-| [docs/comping-styles.md](docs/comping-styles.md) | the comping axes (`harmony=`, the rhythm grid): **partly built** - Stage C shipped `harmony=`, Stage D shipped the named `grid=` rows, and §9 steps 0, B, A and A' have landed (A' makes a **chords-only lead sheet** loadable, `Head.bars` a fact about the file); the measurements behind them, §6's open questions and §9's remaining steps (C, D, E) are still proposal |
+| [docs/comping-styles.md](docs/comping-styles.md) | the comping axes (`harmony=`, the rhythm grid): **partly built** - Stage C shipped `harmony=`, Stage D shipped the named `grid=` rows, and §9 steps 0, B, A, A' and C have landed (A' makes a **chords-only lead sheet** loadable, `Head.bars` a fact about the file; C makes `--non-chord-tone` reach the comping route at harmony level, onset-guarded by `melody_onsets`); the measurements behind them, §6's open questions and §9's remaining steps (D, E) are still proposal |
 | [docs/one-fact.md](docs/one-fact.md) | the Stage-2 collapse, **landed**: one field per fact (`step.grip`, `step.bass` as derived views), and the melody-only signal moved from `texture=` to `voices=` |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | what CI runs, and which tests it does *not* run |
 

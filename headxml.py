@@ -1577,11 +1577,23 @@ def arrange_xml_head(
         slots = _merge_chord_slots(slots, head, section, grid) or slots
     triples = [slot[0] for slot in slots]
     timings = [(slot[1], slot[2], slot[3]) for slot in slots]
+    # §9.3 step C: which slots the melody **articulates** on. On the note path every
+    # slot is a written note, so every one is an onset; the comping union adds grid
+    # positions a note only *sustains* through or is silent at, and §9.2 reharmonises at
+    # an onset only - a held position was decided where the note began. Computed here
+    # because `melody_state` reads the head's own notes, which only this layer has, and
+    # the engine's comping branch is downstream of the merge that produced the order.
+    onsets = {
+        index
+        for index, slot in enumerate(slots)
+        if melody_state(head.notes, slot[1], slot[2]) == "onset"
+    }
     steps, _rescued, notes = arrange_slots(
         triples, timings, non_chord_tone=non_chord_tone, fallback=fallback,
         grips=grips, texture=texture, bass=bass, melody=melody,
         harmony=harmony, grid=grid,
         beats_per_bar=head.beats_per_bar,
+        onsets=onsets,
     )
     return steps, head, list(head.report) + notes
 

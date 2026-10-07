@@ -1208,8 +1208,9 @@ means slots a grid position can create, which changes:
 That is a different order of change from anything in this file so far, and it is the
 same boundary the restructure draws: **a harmonisation engine whose input is a chord
 timeline, not a list of melody notes.** Three independent findings now point at it —
-this item, item 9's "name the generator, not the axis value", and the inertness of
-`harmony=` and `non_chord_tone` on the melody-bearing route.
+this item, item 9's "name the generator, not the axis value", and the fact that
+`harmony=` is inert on the melody-bearing route while `non_chord_tone` was inert on the
+comping one (the latter **closed by §9.3 step C**).
 
 ### The rule it suggests
 
