@@ -1,15 +1,20 @@
 # One fact, one home — the Stage-2 collapse plan
 
-**Status: planned, not built.** Stage 1 of the voices-axis QA has landed; this document is
-Stage 2, and *nothing in it is implemented yet*. It is committed before implementation
-because the Stage-1 plan lived only in a conversation and had to be reconstructed from the
-tree — a plan that exists only in a conversation is not a plan the next session can read,
-which is AGENTS.md trap 1 ("a gate that enumerates its inputs by hand silently skips
-whatever was added last") applied to planning itself: the plan was never on disk, so no
-check could look at it.
+**Status: landed.** Commits 1–3 are on `comping` — `d3fb13a` (`step.grip`), `1f0ed54`
+(`step.bass`), `12fd804` (the melody-only signal) — each gated on a green `make check`;
+this document's own update is commit 4, and the version bump is commit 5. The body below
+is the plan as written before implementation; §5 records where the landing differed, and
+that is the only part that supersedes it.
 
-Measured state at the time of writing: **860 tests OK (skipped=2)**, pyright 0 errors
-0 warnings, ruff clean, on `comping` at `11f68eb`.
+It was committed before implementation because the Stage-1 plan lived only in a
+conversation and had to be reconstructed from the tree — a plan that exists only in a
+conversation is not a plan the next session can read, which is AGENTS.md trap 1 ("a
+gate that enumerates its inputs by hand silently skips whatever was added last")
+applied to planning itself: the plan was never on disk, so no check could look at it.
+
+Measured state after commit 3: **866 tests OK (skipped=2)**, pyright 0 errors
+0 warnings, ruff clean, on `comping` at `12fd804`. At plan time it was **860**, on
+`comping` at `11f68eb`.
 
 ## 1. What Stage 1 landed, and the class of bug it exposed
 
@@ -79,10 +84,14 @@ that fact lives on the texture axis, `MELODY_ONLY_TEXTURES = ("melody", "melody_
   `get_melody_only_voicing` (today's `MELODY_ALONE_TEXTURE` path) whatever `texture=`
   says, so `texture=` is inert on that selection — the `harmony=` precedent ("inert twice
   over"), and silent for the same reason.
-- The predicate is fed **into** `decisions.melody_alone_case` as an input rather than
-  branched around it, because that function's guard ordering is load-bearing (trap 12):
-  an `NC` bar and an off-grid slot must still answer first, and both get new tests under
-  `voices=soprano`, on the rule "check the two routes separately".
+- The predicate is fed to the existing machinery **through the one channel it already
+  reads, the empty palette**, rather than as a new input to `decisions.melody_alone_case`
+  (§5 notes the plan as written said "fed in as an input"; landing it that way would have
+  made a *second* channel for the same declaration, which is the class of bug this stage
+  removes). The loop hands a melody-only selection `slot_grips = ()` without consulting
+  `resolve_texture_grips`, so `texture=` and `grips=` are inert and silent there, and the
+  guard ordering the plan worried about (trap 12) is untouched by construction — asserted
+  anyway, with new tests for the `NC` and off-grid cases under `voices=soprano`.
 - The thumb: `BASS_AUTO` resolves to walk when `texture == "walking_bass"` **or** the
   selection is melody-only with the bass voice named. `--voices soprano,bass` is today's
   `texture="melody_bass"`; `--voices soprano` alone is today's `texture="melody"` (no
@@ -145,3 +154,36 @@ meaning).
   are read twice against the diff before the commit.
 - **Trap 1** is why this document exists at all, and why it is registered in
   `tests/test_docs.py` and linked from AGENTS.md in the same commit that creates it.
+
+## 5. Build notes — what the plan's own enumeration missed
+
+Three sites the plan's survey did not name, each caught by a gate rather than by a
+re-read, and each a lesson about which gate:
+
+- **A seventh `grip=` mirror** on the comping route's own step construction
+  (`steps.py`, the `select_step_voicing(...) or candidates[0]` site), which the
+  plan's grep had mis-classified as a `Voicing` construction. **pyright caught it** —
+  "No parameter named `grip`" — which is what a static check is for: the failure is
+  about a *name*, not a behaviour, so no test run would have described it faster.
+- **`headxml.py`'s own `resolve_voices` call**, which the plan never listed because
+  its caller survey grepped the engine and the tests but not the importer. The
+  trap-8 equivalence capture caught it — `arranger head` raised `TypeError` before
+  the gate ever reached the rewritten tests, which is why the capture is run end to
+  end through the CLI and not only through the library.
+- **`_roles_for_slot`'s `uniform` catch-all sat above the thumb-line strong-beat
+  rule.** The old `melody_bass` was never `uniform`, so the ordering never mattered
+  until the melody-only selection arrived under the *default* texture — and the
+  capture showed `soprano,bass` re-striking the melody on every walk-invented beat
+  instead of holding it. The fix lets a melody-only selection with a thumb reach the
+  rule (`texture == "uniform" and not (has_thumb and melody_only)`), and the first
+  draft of it **dropped the `weight < 0` half of the guard** — "we were never told
+  where this note falls" — which no equivalence capture on a *timed* fixture would
+  have caught. Caught by re-reading the diff against the original, which is trap 7's
+  rule and the reason it applies to a two-line change as much as to a 4000-line one.
+
+The equivalence itself, measured per trap 8 from a clean tree at `1f0ed54`:
+`--voices soprano` is byte-identical to the old `--texture melody`, and
+`--voices soprano,bass` to the old `--texture melody_bass`, on both committed heads
+(`but_not_for_me.mxl` and `heres_that_rainy_day.musicxml`, bars 1-8) and on the
+engine fixture with an `NC` bar. The capture scripts stayed under `/tmp` and did not
+outlive the commit, by design.

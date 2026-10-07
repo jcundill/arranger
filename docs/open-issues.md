@@ -1302,7 +1302,8 @@ arrangement is still unplayable.
 ## 8. `upper_midi_notes` dropped the melody and kept the thumb (walking bass)
 
 **Status:** FIXED. See "The fix" below. Found while adding the `melody` and
-`melody_bass` textures, which are the first outputs built entirely from single-note
+`melody_bass` textures — since deleted in favour of the `voices=soprano` spelling
+(`docs/one-fact.md`) — which are the first outputs built entirely from single-note
 voicings and so the first to ask that method what it returns.
 
 ### The symptom

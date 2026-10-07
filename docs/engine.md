@@ -735,62 +735,71 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
     not added: nothing in the pipeline supplies a key, and inferring one from the
     chord progression would be a guess.
 
-### Melody alone: `melody` and `melody_bass`
+### Melody alone: `voices=soprano` and `voices=soprano,bass`
 
-Two textures that answer "lead sheet in, the tune out". `texture="melody"` plays the
-melody and nothing else, and `texture="melody_bass"` plays the same line with a walking
+Two selections that answer "lead sheet in, the tune out". `melody="soprano"` plays the
+melody and nothing else, and `melody="soprano,bass"` plays the same line with a walking
 thumb under it and still nothing harmonising it. Neither is a *grip*, for the reason
-above: what they change is what may be played at all, and a grip would have to win a
-cost comparison it should not be in.
+above: what they change is which voices sound at all, and a grip would have to win a
+cost comparison it should not be in. They were the `melody` and `melody_bass` textures
+until the fact moved to the voices axis — the question `voices=` answers — which is
+`docs/one-fact.md`'s own subject.
 
-Both are declared by an empty tuple on **both** roles in `TEXTURE_GRIPS`, which is the
-same word `walking_bass` already used for its fills to mean "the left hand plays
-nothing here". The route is `get_melody_only_voicing`, and the step it builds keeps
+The declaration is the empty palette on **both** roles — the same word
+`TEXTURE_GRIPS` already used to mean "the left hand plays nothing here", handed to the
+step loop directly for a melody-only selection (`melody_only_selection` in
+`textures.py`) so the declaration arrives at `melody_alone_case` through the one channel
+it always had. The route is `get_melody_only_voicing`, and the step it builds keeps
 `melody_only=False` — the harmony still exists and the chord name is still printed as
 context, so the flag that would annotate "(no chord - melody alone)" would be claiming
 something false.
 
 Three decisions are load-bearing:
 
-- **One table names the textures, read by four call sites.** `MELODY_ONLY_TEXTURES` and
-  `THUMB_TEXTURES` in `textures.py` are the single source for "harmonises nothing" and
-  "builds a thumb line". `melody_alone_case`, `should_promote_fill`, the walked-slot
-  union in `arrange_progression` and its `prepared is None` rescue all read them.
-  Each site naming `walking_bass` as a literal is how a texture joins the melody-alone
-  route in one place and misses it in another, and `tests/test_texture.py` asserts the
-  two tables cover every empty palette so the gap cannot open silently.
+- **One predicate names the selections, derived from the quartet.**
+  `melody_only_selection` reads the resolved voices — soprano present, alto and tenor
+  absent — and every site that decides "does this slot become a single note" reads it
+  through the same channel: the empty palette the loop hands the step loop,
+  `BASS_AUTO`'s rule, `should_promote_fill`'s `melody_only=`. A site naming a texture as
+  a literal is how a spelling joins the melody-alone route in one place and misses it
+  in another.
 - **The empty tuple is the declaration; it is never absent.** `()` and a missing key
   mean opposite things — "the left hand plays nothing" against "this role is
   unhandled" — so the assertion is over the *set* of empty palettes, not over the
-  presence of one. That set widened from one entry to five when these were added, and
-  the test was widened with it rather than relaxed.
-- **A solo note is one string, and that is outside the playability invariant.**
-  `supported_string_sets()` is sets of two to four strings; a melody-alone step has one
-  active fret. That has always been true of an `NC` bar and a walking-bass fill; two
-  textures built entirely on it make it a headline output, so it is stated and pinned
-  in `TestMelodyOnlyTextures` rather than left implied by a test that happens not to
-  look at it.
+  presence of one. That set is `walking_bass`'s fill alone since the melody-only
+  palettes left it for the selection, and `tests/test_texture.py` asserts the one
+  entry and the tables behind it.
+- **A solo note is one string, and that is inside the playability invariant.**
+  `supported_string_sets()` lists the six singletons; a melody-alone step has one
+  active fret. That has always been true of an `NC` bar and a walking-bass fill; a
+  selection that builds an entire output on it makes it a headline, so it is stated
+  and pinned in `TestMelodyOnlySelections` rather than left implied by a test that
+  happens not to look at it.
 
-`melody` and `melody_bass` differ in exactly one thing — the thumb line — which is
-what makes them the obvious candidates for collapsing into a single texture with a
-`bass=` policy. They are separate names for now because the policy does not exist yet,
-and building two vocabularies at once would be the duplication `bass.py`'s module
-docstring warns about.
+The two selections differ in exactly one thing — the thumb line — which is what makes
+them one selection plus a `bass=` answer rather than two spellings: `soprano,bass` is
+`soprano` with the thumb named, and `BASS_AUTO` reads the selection (the table below).
 
 ### The bass policy: `bass=` as its own axis
 
 The thumb line used to be part of a texture's *name*: `walking_bass` meant both "a
 shell on the strong beats" and "a note on every beat below". Two separable decisions
 wearing one identifier. It is now `texture=` (the left hand) crossed with `bass=` (the
-thumb), with `BASS_AUTO` resolving from the texture so nothing has to be rewritten:
+thumb), with `BASS_AUTO` resolving from the texture and the voice selection so nothing
+has to be rewritten:
 
 | texture | default bass | equivalent to |
 |---|---|---|
 | `walking_bass` | `walk` | `texture="walking_bass", bass="walk"` |
-| `melody_bass` | `walk` | `texture="melody", bass="walk"` |
 | everything else | `none` | `texture=..., bass="none"` |
 
-All four equivalences are asserted byte-for-byte against the rendered tab, which is
+and on the voices axis, a melody-only selection that names the bass voice walks too:
+`melody="soprano,bass"` and `melody="soprano", bass="walk"` are the same arrangement
+— the old `melody_bass` texture under its new spelling — while `melody="soprano"`
+alone keeps no thumb. A lone `melody="bass"` selection keeps none either: that part
+already is the bass line, and a thumb under it would double it.
+
+All the equivalences are asserted byte-for-byte against the rendered tab, which is
 what makes the axis safe to add: every published walking-bass output is pinned against
 the `auto` default, so nothing moved.
 
@@ -819,10 +828,14 @@ left hand's palette is the whole question — so a texture added later cannot re
 thumb-line route without its capacity being measured too. Measured here:
 
 ```
-melody, melody_bass, a walking_bass fill   all three free
+a walking_bass fill                        all three free
 targets, a walking_bass target             one
 uniform                                     zero
 ```
+
+A melody-only **selection** is not in the table at all: its upper shapes are single
+frets, so all three thumb strings are free whatever the texture's palette says, and
+`bass_allowed` answers its capacity unbounded when the route is known.
 
 `uniform` is the only one that fails, and it fails for a reason worth naming: its
 palette is four-note grips and `drop24`'s `(4,2,1,0)` set spans all three thumb strings
@@ -853,9 +866,9 @@ sounds*, and it is an axis of the same kind rather than a mode — a band settin
 
 | axis | question | values |
 |---|---|---|
-| `texture=` | where notes fall, how thick the left hand is | `uniform`, `targets`, `walking_bass`, `melody`, `melody_bass` |
+| `texture=` | where notes fall, how thick the left hand is | `uniform`, `targets`, `walking_bass` |
 | `bass=` | the bass voice | `none`, `anchors`, `walk` |
-| `voices=` | which voices the guitar plays | any subset of `soprano`, `alto`, `tenor`, `bass` |
+| `voices=` | which voices the guitar plays | any subset of `soprano`, `alto`, `tenor`, `bass`; `soprano` alone is the tune and nothing else |
 
 **The four names are the SATB quartet, and they are the argument's whole grammar.**
 `--voices` takes a **comma-separated list**, not one identifier out of a fixed set, because
@@ -988,12 +1001,13 @@ asserts they agree, string by string.
 
 ### Two consequences, both derived rather than listed
 
-**A texture that harmonises nothing cannot also give the melody away.** `melody_allowed`
-derives the refusal from `MELODY_ONLY_TEXTURES` — those two textures *are* the melodic
-voice, every slot being the melody alone, so `voices="none"` under either would leave the
-guitar with nothing to play on any slot. Refused **with a warning naming
-`texture='targets'`**, and the arrangement still sounds with the guitar keeping the tune.
-Measured across the tree: those two are the only textures that fail.
+**A texture that harmonises nothing cannot also give the melody away — and no texture
+harmonises nothing any more.** The refusal `melody_allowed` used to make —
+`voices="none"` on a texture that *was* the melodic voice — dissolved when the
+melody-only claim moved onto the selection: a soprano-less selection simply comps, on
+every texture, and nothing is self-contradictory anywhere. The equivalent fact on the
+selection axis is `melody_only_selection`, which is derived from the quartet rather
+than listed, so a spelling that cannot be voiced cannot miss it either.
 
 **`melody_alone_case` gains a guard, because its routes all end at the melody alone.** Every
 answer it gives reaches `get_melody_only_voicing`, so under `voices="none"` it must not

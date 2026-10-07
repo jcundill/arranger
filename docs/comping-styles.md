@@ -80,12 +80,15 @@ Three shipped flags. **Two of them answer the same question.**
 
 The overlap is not theoretical. It produces three observable oddities:
 
-1. **`--voices soprano` is a no-op.** It is byte-identical to `--voices auto`, because the
-   soprano's only remaining job is to switch the engine onto the melody-bearing route:
-   `melody_voiced = voices_have_soprano(voices)` in `steps.py`.
-2. **The flags can contradict, so one must be refused.** `melody_allowed` refuses
-   `--texture melody --voices alto` with a warning, because `melody` *already* means
-   "nothing but the tune". **That refusal is the seam showing.**
+1. **`--voices soprano` was a no-op.** It was byte-identical to `--voices auto`, because
+   the soprano's only remaining job was to switch the engine onto the melody-bearing
+   route: `melody_voiced = voices_have_soprano(voices)` in `steps.py`. **Stage 2 closed
+   this**: soprano alone is the melody and nothing else now — see `docs/one-fact.md`.
+2. **The flags could contradict, so one had to be refused.** `melody_allowed` refused
+   `--texture melody --voices alto` with a warning, because `melody` *already* meant
+   "nothing but the tune". **That refusal was the seam showing, and Stage 2 closed it**:
+   the melody-only claim is keyed on the voice selection, the two textures are gone,
+   and a soprano-less selection comps on every texture.
 3. **`--grips` is _not_ inert on a comping selection. An earlier draft of this document
    claimed it was, and the claim was wrong.** The route calls `get_comping_voicings`
    directly and never consults `slot_grips`, so `--grips duo`, `--grips shell`,
@@ -113,8 +116,10 @@ questions**: what is stated × does the guitar sing.
 | `uniform` | 6 grips | 6 grips | full chord | yes |
 | `targets` | drop2, drop3 | shell, interval, melody | full chord | yes |
 | `walking_bass` | **shell** | — | **comping** | **yes** |
-| `melody` | — | — | none | yes |
-| `melody_bass` | — | — | none | yes + thumb |
+
+(The table also carried `melody` and `melody_bass` rows — empty on both roles — until
+Stage 2 keyed "the tune and nothing else" on the voice selection and deleted the two
+textures; see `docs/one-fact.md`.)
 
 **`walking_bass` is a comping style that also keeps the melody on top**, and the table says
 so directly: its only target grip is `shell`, with no melody-bearing grip involved. Yet
@@ -126,8 +131,6 @@ measured, **80/80 steps** carry the written melody as the highest sounding note,
 | `uniform` | 4 | 80/80 | 11/80 |
 | `targets` | 4 | 80/80 | 11/80 |
 | `walking_bass` | 2, 3, 4 | 80/80 | 11/80 |
-| `melody` | 1 | 80/80 | refused |
-| `melody_bass` | 2 | 80/80 | refused |
 
 So `walking_bass` is a point in a 2-D space that the enumeration flattens into a
 list. That is the design problem: **the three axes are not orthogonal, and the fix is to
@@ -486,7 +489,7 @@ rather than pruned because the reasoning behind each answer is the useful part.
 | Q1 grid vs `--skeleton`'s lattice | **moot.** `--skeleton` is gone (§4.2), and stage 3 of open-issues item 10 settled the substance: the grid *generates* positions rather than selecting from a lattice. |
 | Q2 `harmony=guide` under `sings=yes` | settled as **(C)** — `harmony=` is scoped to the melody-free comping route. |
 | Q3 rename `--voices` to `harmony=` | still deferred, and **§9.4 argues it should stay deferred longer than planned.** |
-| Q4 does `--texture` survive? | **open**, with §9.6 giving the argument against removing it. |
+| Q4 does `--texture` survive? | **partly answered by Stage 2**: it lost `melody` and `melody_bass` to the voices axis (`docs/one-fact.md`), and §9.6 still argues against removing the rest. |
 | Q5 where does the style table live? | open; gated on the DAG test. |
 | Q6 free-form grid spelling | open, and still the main tension in the proposal. |
 | Q7 `walking_bass`'s fate | open. |
@@ -1375,8 +1378,11 @@ guesses* is the one worth keeping from this step.
 **`texture` is not proposed for removal.** Its overlap with `grid` is real — `targets` already
 means "full on strong beats, thin between", and a grid position carrying a content hint
 (`freddie: beat 1 full, offbeat guide tones`) is a coherent next idea. Two things stop it being
-a merge. `melody` and `melody_bass` are textures with **empty grip tuples on both roles** —
-"harmonise nothing, ever" — which is not a rhythm. And `metric_roles` decides targets by
+a merge. **One of the two things that used to stop it moved off the axis entirely:**
+the `melody` and `melody_bass` textures — **empty grip tuples on both roles**,
+"harmonise nothing, ever" — were not a rhythm, and Stage 2 keyed that fact on the voice
+selection (`docs/one-fact.md`), so nothing of it sits on the texture axis any more.
+What still stops the merge is that `metric_roles` decides targets by
 harmonic and melodic *change*, not only position: a slot is a target only when it is metrically
 strong **and** something new happens there, because a passing slot is exactly where the
 non-chord-tone strategies would rewrite the harmony. `grid_positions` returns positions and

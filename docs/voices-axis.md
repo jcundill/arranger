@@ -2,7 +2,10 @@
 
 **Status: implemented and committed, awaiting QA.** The code is complete and the gate is
 green; nobody has yet read a rendered part and asked whether it is *good*. That is the job
-this document exists to hand over.
+this document exists to hand over. Stage 1's QA landed three fixes off the §4 checklist,
+and Stage 2 moved the melody-only claim onto this axis — `soprano` alone is the tune and
+nothing else, and the `melody`/`melody_bass` textures are gone — see
+[docs/one-fact.md](one-fact.md).
 
 Deliberately **not** in `docs/history/` — that directory is for completed plans and is not
 extended. This one is open, and the "Known limitations" section is the part most likely to
@@ -44,9 +47,9 @@ Two notes per step: one per voice named.
 
 | axis | question | values |
 |---|---|---|
-| `texture=` | where notes fall, how thick the left hand is | `uniform`, `targets`, `walking_bass`, `melody`, `melody_bass` |
+| `texture=` | where notes fall, how thick the left hand is | `uniform`, `targets`, `walking_bass` |
 | `bass=` | the bass voice | `none`, `anchors`, `walk` *(pre-existing)* |
-| `voices=` | which voices the guitar plays | any subset of `soprano`, `alto`, `tenor`, `bass` *(new)* |
+| `voices=` | which voices the guitar plays | any subset of `soprano`, `alto`, `tenor`, `bass`; `soprano` alone is the tune and nothing else *(new)* |
 
 Orthogonal, deliberately. `bass="none"` was already there and already covers "I am next to a
 bass player, so none of the 1s and 5s and none of the walking motion". `voices` is the
@@ -61,6 +64,8 @@ is never "how many notes" but *which voices am I playing*.
 |---|---|---|
 | `auto` *(default)* | 4 | all four voices: the historical chord-melody |
 | `soprano,alto,tenor,bass` | 4 | the same, said explicitly |
+| `soprano` | 1 | the melody and nothing else — the old `--texture melody` *(Stage 2)* |
+| `soprano,bass` | 2 | the tune with a walking thumb — the old `--texture melody_bass` *(Stage 2)* |
 | `none` | 2 | shorthand for `alto,tenor` |
 | `alto,tenor` | 2 | the two middle voices |
 | `alto` | 1 | one voice |
@@ -91,7 +96,7 @@ Each row is a command worth running. The first three are the claim; the rest are
 | 5 | `--voices tenor,alto` | identical output to `alto,tenor` |
 | 6 | `--voices banjo` | usage error, nothing printed |
 | 7 | `--voices auto,alto` | usage error |
-| 8 | `--voices alto,tenor --texture melody` | warns, **keeps the tune** |
+| 8 | `--voices alto,tenor` under any texture | comps — the old `--texture melody` refusal dissolved when the melody-only claim moved onto the selection |
 | 9 | `--voices alto,tenor --tab staff --melody` | staff draws; no soprano string marked |
 | 10 | `--voices alto,tenor --bass walk` | thumb walks *under* a 2-note shape, or refuses |
 | 11 | a head containing an `NC` bar | warns once, skips the bar |
@@ -178,10 +183,13 @@ a small change and a real decision.
 5. **`--voices` is not validated by `argparse`.** It is a free string, so a bad value is
    reported as a usage error by the parser rather than by `choices=`. That was the price of
    accepting a comma list, and it means `--help` no longer lists the vocabulary.
-6. **A `--voices` selection with the soprano still in it does not change the shape.** The
-   melody-bearing route is untouched by which of the other three voices you also name, so
-   `--voices soprano,alto` currently arranges exactly like `--voices auto`. Stated because
-   it is a plausible reading of the flag that is *not* implemented.
+6. **A `--voices` selection with the soprano *and an inner voice* in it does not change
+   the shape.** The melody-bearing route is untouched by which of the other three voices
+   you also name, so `--voices soprano,alto` currently arranges exactly like
+   `--voices auto`. **Soprano alone is the exception, and it is Stage 2:** it is the
+   melody and nothing else, the old `--texture melody` — see
+   [docs/one-fact.md](one-fact.md). Stated because the distinction is a plausible
+   reading of the flag that is only half implemented.
 
 ## 8a. `--voices bass` was not a bass voice, and now is
 
@@ -224,7 +232,7 @@ they are guide tones under somebody else's melody and that is where a player put
 
 **A fourth defect, pre-existing and not about `voices=` at all:**
 `supported_string_sets()` listed **no singletons**, so every one-note shape the library
-could produce — `alto`, `tenor`, `bass`, a `melody` texture, an `NC` bar — violated the
+could produce — `alto`, `tenor`, `bass`, a melody-only part, an `NC` bar — violated the
 invariant *"the sounding strings are exactly one `supported_string_sets()` entry"*, and
 nothing caught it because the per-shape assertions never generated one.
 `SINGLE_NOTE_STRING_SETS` fixes it rather than excusing it: one note on one string has no

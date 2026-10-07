@@ -574,12 +574,14 @@ Gmaj9/F# D4   (duo - melody + b3, partial) x-x-x-4-3-x
 *Expect the sparsest thing this library will play — the harmony implied rather than
 stated, for a solo voice or for leaving room over a band.*
 
-**5b. The tune on its own** — `--texture melody` plays the melody and nothing else, so a
-lead sheet in gives you the line out. The chord names are still printed above it as
-context; nothing under them is being voiced.
+**5b. The tune on its own** — `--voices soprano` plays the melody and nothing else, so
+a lead sheet in gives you the line out. The chord names are still printed above it as
+context; nothing under them is being voiced. (This used to be `--texture melody`;
+"which voices the guitar plays" is the question `voices=` answers, and it took the
+fact over from the texture axis.)
 
 ```bash
-python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-2 --texture melody
+python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-2 --voices soprano
 ```
 
 ```text
@@ -588,7 +590,7 @@ Gmaj9    D4   x-x-x-x-3-x
 Gmaj9/F# D4   x-x-x-x-3-x
 ```
 
-`--texture melody_bass` is the same line with a walking thumb under it, and still
+`--voices soprano,bass` is the same line with a walking thumb under it, and still
 nothing harmonising it — a bass voice and the tune, with no chords anywhere:
 
 ```text
@@ -749,9 +751,9 @@ so a band setting is a combination rather than a mode:
 
 | axis | question it answers | values |
 |---|---|---|
-| `texture=` | where notes fall, how thick the left hand is | `uniform`, `targets`, `walking_bass`, `melody`, `melody_bass` |
+| `texture=` | where notes fall, how thick the left hand is | `uniform`, `targets`, `walking_bass` |
 | `bass=` | the bass voice | `none`, `anchors`, `walk` |
-| `voices=` | which voices the guitar plays | any subset of `soprano`, `alto`, `tenor`, `bass` |
+| `voices=` | which voices the guitar plays | any subset of `soprano`, `alto`, `tenor`, `bass`; `soprano` alone is the tune and nothing else |
 | `harmony=` | **which degrees** the part states, when it is not singing | `full`, `guide`, `shell_root`, `root` |
 
 **`harmony=` is read only when the guitar has no tune of its own**, so it composes with
@@ -875,10 +877,10 @@ isn't singing, so the shape is held instead. Measured over 2,243 Weimar steps, 1
 `repeated`; without this the guitar part would have played a moving melody line on exactly
 the beats where the arrangement handed the tune away.
 
-**Refused, not degraded, where it cannot work.** The `melody` and `melody_bass` textures
-*are* the melodic voice — every slot is the melody alone — so `voices=none` under either
-would leave the guitar with nothing to play on any slot. That is refused with a warning
-naming `texture='targets'`, and the arrangement still sounds. An `NC` bar under `voices=none`
+**The tune, on its own or with a thumb.** `voices=soprano` is the melodic voice and
+nothing else — every slot is the melody alone, and `soprano,bass` is the same line
+with a walking thumb under it. A selection without the soprano comps under the horn
+on every texture. An `NC` bar under `voices=none`
 is likewise reported rather than quietly dropped: there is no chord, so there are no guide
 tones, and the guitar is genuinely silent while the horn is not.
 
