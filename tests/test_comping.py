@@ -43,7 +43,6 @@ from arranger import (
     MELODY_ALTO,
     MELODY_AUTO,
     MELODY_BASS,
-    MELODY_ONLY_TEXTURES,
     MELODY_POLICIES,
     MELODY_SOPRANO,
     SHELL_DEGREES,
@@ -57,7 +56,7 @@ from arranger import (
     format_progression,
     get_comping_voicings,
     harmony_allowed,
-    melody_allowed,
+    melody_only_selection,
     parse_harmony,
     parse_voices,
     resolve_voices,
@@ -468,9 +467,7 @@ class TestCompingMelodyIndependence(unittest.TestCase):
         from headxml import _merge_chord_slots, head_skeleton
 
         slots = head_skeleton(head, None)
-        if not voices_have_soprano(
-            resolve_voices(parse_voices(voices), "uniform", Diagnostics())
-        ):
+        if not voices_have_soprano(resolve_voices(parse_voices(voices))):
             slots = _merge_chord_slots(slots, head, None, grid) or slots
         steps, _, _ = arrange_slots(
             [slot[0] for slot in slots],
@@ -578,10 +575,6 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
         """
         baseline = None
         for texture in TEXTURE_STYLES:
-            if texture in MELODY_ONLY_TEXTURES:
-                # These harmonise nothing and refuse a voice selection without the
-                # soprano outright (`melody_allowed`), so they never reach this route.
-                continue
             steps = self.comped(bass="walk", texture=texture)
             frets = [step.voicing.frets for step in steps]
             if baseline is None:
@@ -628,37 +621,131 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
         )
 
 
-class TestTheRefusal(unittest.TestCase):
-    """A texture that harmonises nothing cannot also give the melody away."""
+class TestMelodyOnlySelections(unittest.TestCase):
+    """The melody-only selections: what they are, and what they are not.
 
-    def test_the_two_melody_only_textures_are_refused(self):
-        """Derived from `MELODY_ONLY_TEXTURES`, not listed, so it cannot drift."""
-        for texture in MELODY_ONLY_TEXTURES:
-            allowed, reason = melody_allowed(texture, VOICES_NONE)
-            self.assertFalse(allowed, texture)
-            self.assertIn("voices='alto,tenor'", reason)
+    This replaces `TestTheRefusal`, which asserted `melody_allowed` - the rule
+    that refused a no-soprano selection on a texture that played the melody
+    and nothing else. That refusal dissolved when the melody-only claim moved
+    onto the voice selection: a soprano-less selection simply comps, on every
+    texture, and nothing is self-contradictory anywhere. What the class still
+    owes the suite is the fact the two textures used to state, asserted on its
+    new home - the same shape as trap 5: the premise moved, the protection
+    moved with it.
+    """
 
-    def test_every_other_texture_is_allowed(self):
-        """Measured across the tree: only those two fail."""
-        for texture in TEXTURE_STYLES:
-            allowed, _reason = melody_allowed(texture, VOICES_NONE)
-            self.assertEqual(allowed, texture not in MELODY_ONLY_TEXTURES, texture)
+    def test_the_predicate_is_derived_from_the_quartet(self):
+        """Soprano present, alto and tenor absent - and nothing else is melody-only.
 
-    def test_a_selection_keeping_the_soprano_is_allowed_under_every_texture(self):
-        """The refusal is about giving the melody away, not about the axis itself."""
-        for texture in TEXTURE_STYLES:
-            allowed, _reason = melody_allowed(texture, VOICES_ALL)
-            self.assertTrue(allowed, texture)
+        `(soprano,)` is the tune alone; `(soprano, bass)` the tune with a thumb
+        under it. A selection without the soprano is a comping part whatever
+        else it names, and `soprano,alto` - the melody plus a guide tone - is
+        real voice allocation, deliberately not built: it keeps the full
+        chord-melody.
+        """
+        self.assertTrue(melody_only_selection((MELODY_SOPRANO,)))
+        self.assertTrue(melody_only_selection((MELODY_SOPRANO, MELODY_BASS)))
+        self.assertFalse(melody_only_selection(VOICES_ALL))
+        self.assertFalse(melody_only_selection(VOICES_NONE))
+        self.assertFalse(melody_only_selection((MELODY_SOPRANO, MELODY_ALTO)))
+        self.assertFalse(melody_only_selection((MELODY_BASS,)))
 
-    def test_a_refused_combination_warns_and_keeps_the_melody(self):
-        """Refused rather than degraded: the arrangement still sounds."""
+    def test_a_soprano_less_selection_comps_on_every_texture(self):
+        """The refusal that dissolved: nothing is self-contradictory anywhere now.
+
+        Before the collapse, `melody=alto,tenor` on a melody-only texture was
+        refused with a warning and the melody handed back to the guitar. With
+        the claim keyed on the selection, the same request comps, on every
+        texture, without a warning.
+        """
         diagnostics = Diagnostics()
+        for texture in TEXTURE_STYLES:
+            steps = VoiceLeadingEngine().arrange_progression(
+                PROGRESSION, melody=VOICES_ARG, texture=texture,
+                diagnostics=diagnostics,
+            )
+            self.assertTrue(steps, texture)
+            self.assertTrue(
+                all(not step.melody_voiced for step in steps), texture
+            )
+        self.assertEqual(diagnostics.warnings, [])
+
+    def test_soprano_alone_arranges_the_melody_and_nothing_else(self):
+        """The old texture's behaviour, unchanged under its new spelling.
+
+        Every slot is the melody alone, and no step is flagged `melody_only` -
+        the chord name is context, not a claim that there is no chord. The
+        byte-for-byte equivalence against the old `texture="melody"` output is
+        asserted in `docs/one-fact.md`'s build notes; this is the invariant
+        statement of it.
+        """
         steps = VoiceLeadingEngine().arrange_progression(
-            PROGRESSION, melody=VOICES_ARG, texture="melody", diagnostics=diagnostics
+            PROGRESSION, melody="soprano"
         )
         self.assertTrue(steps)
-        self.assertTrue(all(step.melody_voiced for step in steps))
-        self.assertTrue(diagnostics.warnings)
+        for step in steps:
+            self.assertEqual(step.grip, "melody")
+            self.assertEqual(len(step.voicing.active_frets()), 1)
+            self.assertFalse(step.melody_only)
+            self.assertFalse(step.bass_only)
+
+    def test_the_old_spellings_are_gone_from_the_vocabulary(self):
+        """An unknown texture is a usage error, not a silent alias.
+
+        The precedent the corpus removal set for removed flags: a deprecated
+        spelling kept working would be the same fact stated twice, which is
+        what this stage exists to collapse.
+        """
+        self.assertNotIn("melody", TEXTURE_STYLES)
+        self.assertNotIn("melody_bass", TEXTURE_STYLES)
+        with self.assertRaises(ValueError):
+            VoiceLeadingEngine().arrange_progression(
+                PROGRESSION, texture="melody"
+            )
+
+    def test_an_nc_bar_under_soprano_takes_the_no_chord_route(self):
+        """
+        The NC guard answers before the empty palette, under the new spelling too.
+
+        A no-chord bar under a melody-only selection is `MELODY_ALONE_NO_CHORD`
+        rather than the texture case: the bar has no harmony at all, and the
+        flag is what makes the annotation read "no chord - melody alone"
+        truthfully. This is trap 12's rule applied to the re-keyed route - ask
+        what each guard is load-bearing *for*, then assert it - and the guard's
+        answer is byte-identical to the old texture's, which the engine capture
+        in `docs/one-fact.md`'s build notes shows.
+        """
+        steps = VoiceLeadingEngine().arrange_progression(
+            [("F4", "NC", "NC"), ("E4", "7", "G7")], melody="soprano"
+        )
+        self.assertEqual([s.chord for s in steps], ["NC", "G7"])
+        self.assertTrue(steps[0].melody_only)
+        self.assertFalse(steps[1].melody_only)
+        self.assertEqual(steps[0].grip, "melody")
+
+    def test_an_off_grid_slot_under_soprano_still_sounds(self):
+        """
+        The grid guard answers before the empty palette too, on both routes.
+
+        An off-grid slot is the one case where the guitar may play nothing
+        rather than one note: under a comping selection it is a rest, and under
+        a melody-only selection the note of the tune still sounds, alone -
+        which is what every slot of that selection is anyway, so the ordering
+        is asserted rather than left to read as a coincidence. Measured under
+        `grid=joe_pass`, which places no chord on beat 1.0: every slot of the
+        soprano-only arrangement still sounds its note.
+        """
+        progression = [
+            ("F5", "maj7", "Fmaj7"), ("E5", "7", "A7"),
+            ("D5", "NC", "NC"), ("C5", "m7", "Dm7"),
+        ]
+        timings = [(0, 1.0, 1.0), (0, 2.5, 0.5), (1, 1.0, 1.0), (1, 3.0, 1.0)]
+        steps = VoiceLeadingEngine.arrange_progression(
+            progression, timings=timings, melody="soprano", grid="joe_pass"
+        )
+        self.assertEqual(len(steps), 4, "an off-grid slot of the tune went missing")
+        for step in steps:
+            self.assertEqual(len(step.voicing.active_frets()), 1)
 
     def test_the_registry_is_keyed_by_the_spellings_parse_voices_accepts(self):
         """A policy row is a row `parse_voices` can be asked for, not a private name.
@@ -734,7 +821,7 @@ class TestParseVoices(unittest.TestCase):
     def test_resolve_voices_turns_auto_into_every_voice(self):
         """Which is what keeps the whole axis inert until a caller opts in."""
         self.assertEqual(
-            resolve_voices((MELODY_AUTO,), "uniform", Diagnostics()), VOICES_ALL
+            resolve_voices((MELODY_AUTO,)), VOICES_ALL
         )
 
     def test_voices_have_soprano_is_the_one_predicate_that_matters(self):
@@ -1339,7 +1426,7 @@ class TestTheHarmonyAxis(unittest.TestCase):
 
         `harmony_allowed` is derived from how many notes were asked for, so the two
         refusals are arithmetic rather than a list to extend - and refusing rather than
-        degrading is the rule `melody_allowed` and `bass_allowed` both follow.
+        degrading is the rule `bass_allowed` follows.
         """
         self.assertTrue(harmony_allowed(HARMONY_SHELL_ROOT, ("alto", "tenor", "bass"))[0])
         self.assertFalse(harmony_allowed(HARMONY_SHELL_ROOT, ("alto", "tenor"))[0])

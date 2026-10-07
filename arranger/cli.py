@@ -203,8 +203,9 @@ def add_common_arguments(
         help=(
             "which pattern the thumb line is written on: 'walk' puts a note on every "
             "beat, 'anchors' only where the harmony changes, 'none' (the default with "
-            "--texture uniform or targets) no line at all. 'auto' follows the texture, "
-            "so --texture walking_bass walks unless you say otherwise. Refused, with a "
+            "--texture uniform or targets) no line at all. 'auto' follows the texture "
+            "and the voice selection, so --texture walking_bass walks, as does "
+            "--voices soprano,bass, unless you say otherwise. Refused, with a "
             "warning, where the left hand leaves the thumb no string"
         ),
     )
@@ -217,8 +218,8 @@ def add_common_arguments(
             "historical chord-melody). 'none' is shorthand for 'alto,tenor' - the "
             "ensemble answer, with a horn on the tune and a bassist on the root. "
             "Dropping soprano hands the melody to another instrument and leaves a "
-            "guide-tone comping part; refused, with a warning, on a texture that "
-            "plays the melody and nothing else"
+            "guide-tone comping part; soprano alone is the melody and nothing else "
+            "(the tune, with a thumb under it when bass is named too)"
         ),
     )
     parser.add_argument(

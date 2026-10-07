@@ -507,8 +507,14 @@ class TestThumbCapacityAndRefusal(unittest.TestCase):
         assert targets_capacity is not None, "a grip palette cannot be unbounded"
         self.assertGreaterEqual(targets_capacity, 1)
         # An empty palette means the left hand plays nothing: every string is free.
-        self.assertIsNone(thumb_capacity("melody", "target"))
         self.assertIsNone(thumb_capacity("walking_bass", "fill"))
+        # A melody-only *selection* is not in the grip tables at all: its upper
+        # shapes are single frets, so all three thumb strings are free whatever
+        # the texture's palette says, and the capacity is answered where the
+        # route is known - `bass_allowed`'s `melody_only`, unbounded by
+        # construction rather than measured.
+        allowed, _why = bass_allowed("uniform", "walk", melody_only=True)
+        self.assertTrue(allowed, "a single-fret upper shape leaves every string free")
 
     def test_uniform_is_refused_for_every_policy_and_the_reason_names_a_texture(self):
         for policy in (p for p in BASS_STYLES if p != "none"):

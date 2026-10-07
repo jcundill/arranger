@@ -1516,9 +1516,7 @@ def arrange_xml_head(
     # policy reads as something it is not. The predicate itself is the engine's own
     # (`VoiceLeadingEngine.arrange_progression` reaches the same question through
     # `voices_have_soprano`), which is why it is imported rather than re-tested.
-    resolved_voices = resolve_voices(
-        parse_voices(melody), texture, default_diagnostics()
-    )
+    resolved_voices = resolve_voices(parse_voices(melody))
     if not voices_have_soprano(resolved_voices):
         slots = _merge_chord_slots(slots, head, section, grid) or slots
     triples = [slot[0] for slot in slots]

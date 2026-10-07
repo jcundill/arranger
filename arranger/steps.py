@@ -77,12 +77,12 @@ from .textures import (
     HARMONY_SHELL_ROOT,
     MELODY_AUTO,
     MELODY_BASS,
-    MELODY_ONLY_TEXTURES,
     TEXTURE_GRIPS,
     TEXTURE_STYLES,
     THUMB_TEXTURES,
     _metric_weight,
     _roles_for_slot,
+    melody_only_selection,
     on_grid,
     parse_grid,
     parse_harmony,
@@ -140,17 +140,19 @@ class StepPreparation:
 def _resolve_bass(
     texture: str,
     bass: str,
+    voices: Tuple[str, ...],
     diagnostics: Diagnostics,
-    melody_voiced: bool = True,
-    notes: int = 4,
-    bass_voice: bool = False,
 ) -> str:
     """The policy to actually run: `BASS_AUTO` resolved, validated, or refused.
 
     Three outcomes, in the order they are decided:
 
-    - `auto` resolves from the texture, which is what keeps `texture="walking_bass"`
-      walking without the caller repeating itself.
+    - `auto` resolves from the texture and the selection. `texture="walking_bass"`
+      walks; so does a melody-only selection that names the bass voice -
+      `melody="soprano,bass"` is the tune with a thumb under it, the part the
+      `melody_bass` texture used to spell. A lone `bass` selection is **not**
+      melody-only (it has no soprano) and keeps no thumb: that part already is the
+      bass line, and a thumb under it would double it.
     - an unknown spelling raises. The same rule as everywhere else in the library: a
       policy nobody recognises is a question, and answering it by defaulting to a walk
       would put a bass line under an arrangement that did not ask for one.
@@ -159,14 +161,17 @@ def _resolve_bass(
       walking line with gaps in it is worse than no line, and losing the bass costs less
       than losing the tune. The warning names a texture that would work.
 
-    **`melody_voiced` is the route, and it is an argument rather than something derived
-    from `texture`.** Which left-hand shapes an arrangement will generate is decided by
-    `voices_have_soprano`, and no texture can express it: `uniform` is a real grip
-    palette on the melody-bearing route and a **meaningless name** on the comping one,
-    where the shapes come from `get_comping_voicings` and the texture is inert (measured
-    80/80 shapes byte-identical across `uniform` and `targets`). So this function asks
-    `bass_allowed` about the comping route's capacity when that is the route, and about
-    the texture's otherwise.
+    **The selection is passed rather than the flags derived from it** - the route
+    (`voices_have_soprano`), the comping arity (`len(voices)`), the lone-bass case
+    and the melody-only case are all decided here from the one fact, so the two
+    spellings of one request cannot disagree. Which left-hand shapes an arrangement
+    will generate is decided by the selection, and no texture can express it:
+    `uniform` is a real grip palette on the melody-bearing route and a
+    **meaningless name** on the comping one, where the shapes come from
+    `get_comping_voicings`, and inert a third time over on a melody-only selection,
+    whose shapes are single frets. So this function asks `bass_allowed` about the
+    comping route's capacity when that is the route, the melody-only route's when
+    that is, and the texture's otherwise.
 
     This is why the call site resolves the melody axis **first**. That ordering is
     deliberate rather than incidental - see `arrange_progression`, and note that the two
@@ -175,8 +180,15 @@ def _resolve_bass(
     `has_thumb` is read, because that flag gates whether the walked-beat union is built
     at all.
     """
+    melody_voiced = voices_have_soprano(voices)
+    melody_only = melody_only_selection(voices)
     if bass == BASS_AUTO:
-        bass = BASS_WALK if texture in THUMB_TEXTURES else BASS_NONE
+        bass = (
+            BASS_WALK
+            if texture in THUMB_TEXTURES
+            or (melody_only and MELODY_BASS in voices)
+            else BASS_NONE
+        )
     if bass not in BASS_STYLES:
         raise ValueError(
             f"Unknown bass policy {bass!r}; expected one of {BASS_STYLES}, "
@@ -185,11 +197,13 @@ def _resolve_bass(
     allowed, reason = bass_allowed(
         texture,
         bass,
-        # `None` for the melody-bearing route, so `bass_allowed` asks the texture's
-        # palette. `len(voices)` on the comping one, which is the arity the comping
+        # `None` for the melody-bearing route, so `bass_allowed` asks the route's
+        # own capacity - the melody-only route's, or the texture's palette.
+        # `len(voices)` on the comping one, which is the arity the comping
         # generator will actually build.
-        None if melody_voiced else notes,
-        bass_voice,
+        None if melody_voiced else len(voices),
+        voices == (MELODY_BASS,),
+        melody_only=melody_only,
     )
     if not allowed:
         diagnostics.warn(f"Warning: {reason}")
@@ -197,22 +211,19 @@ def _resolve_bass(
     return bass
 
 
-def _resolve_melody(
-    voices: str, texture: str, diagnostics: Diagnostics
-) -> Tuple[str, ...]:
-    """The voices to actually play: `auto` resolved, parsed, validated, or refused.
+def _resolve_melody(voices: str) -> Tuple[str, ...]:
+    """The voices to actually play: `auto` resolved, parsed, validated.
 
     Two steps and they are not the same step. **Parsing** turns the caller's string into a
     canonical tuple of voice names, so `tenor,alto` and `alto,tenor` are one request -
     `textures.parse_voices` owns the vocabulary and the ordering. **Resolution** is what
-    `textures.resolve_voices` owns: `auto` becomes every voice, and a selection a texture
-    cannot carry is refused with a warning naming one that would work.
+    `textures.resolve_voices` owns: `auto` becomes every voice.
 
     An unknown voice name raises from `parse_voices`, before any voicing work, on the
     library's standing rule: a spelling nobody recognises is a question, and answering it
     by dropping the voice would hand back a part missing something nobody asked it to drop.
     """
-    return resolve_voices(parse_voices(voices), texture, diagnostics)
+    return resolve_voices(parse_voices(voices))
 
 
 
@@ -726,11 +737,15 @@ class VoiceLeadingEngine:
         property of the texture, because the pattern is the composer's choice and the set
         of patterns is open - a new one is a row in `BASS_POLICY_ROLES`.
 
-        `BASS_AUTO`, the default here, resolves from the texture: one of
-        `THUMB_TEXTURES` walks, everything else does not. So `texture="walking_bass"` and
+        `BASS_AUTO`, the default here, resolves from the texture and the voice
+        selection: `texture="walking_bass"` walks, and so does a melody-only selection
+        that names the bass voice (`melody="soprano,bass"` - the tune with a thumb under
+        it); everything else does not. So `texture="walking_bass"` and
         `texture="walking_bass", bass="walk"` are the same arrangement, and
         `bass="none"` on a walking bass gives the same strong-beat shells with the thumb
-        dropped - a coherent texture in its own right.
+        dropped - a coherent texture in its own right. A lone `melody="bass"` selection
+        keeps no thumb: that part already is the bass line, and a thumb under it
+        would double it.
 
         A combination the left hand cannot accommodate is **refused rather than
         degraded**. `uniform` leaves no bass string free, because its four-note grips can
@@ -896,25 +911,28 @@ class VoiceLeadingEngine:
         # carries no other meaning; what matters is that both finish before
         # `has_thumb` is read, because that flag gates whether the walked-beat union is
         # built at all.
-        voices = _resolve_melody(melody, texture, diagnostics)
+        voices = _resolve_melody(melody)
         melody_voiced = voices_have_soprano(voices)
+        # The melody-only selection, decided once here and read by the bass policy,
+        # the grip resolution and the promotion rule below: `(soprano,)` is the
+        # tune alone and `(soprano, bass)` the tune with a thumb under it,
+        # whatever `texture=` says - the texture is inert on that route, the same
+        # way it is on the comping one.
+        melody_only = melody_only_selection(voices)
 
-        # The bass policy. `auto` means "whatever this texture means", so
-        # `walking_bass` keeps walking and everything else keeps having no thumb; an
-        # explicit policy overrides that, which is what lets a texture that was never
-        # written for a thumb line carry one.
+        # The bass policy. `auto` means "whatever this texture and this selection
+        # mean", so `walking_bass` keeps walking and a melody-only selection that
+        # names the bass voice walks too; an explicit policy overrides both, which
+        # is what lets a texture that was never written for a thumb line carry one.
         #
-        # `notes=len(voices)` and `bass_voice` are the comping route's own arity
-        # arguments, passed for both routes and used only when `melody_voiced` is
-        # False. They are derived from the resolved voices rather than passed as another
-        # flag, so the two spellings of one request cannot disagree.
+        # The resolved `voices` are passed rather than the flags derived from them -
+        # the route, the arity and the lone-bass case are decided inside, from the
+        # selection, so the two spellings of one request cannot disagree.
         bass = _resolve_bass(
             texture,
             bass,
+            voices,
             diagnostics,
-            melody_voiced=melody_voiced,
-            notes=len(voices),
-            bass_voice=voices == (MELODY_BASS,),
         )
         has_thumb = bass != BASS_NONE
 
@@ -1028,6 +1046,7 @@ class VoiceLeadingEngine:
                                  or harmony_key != last_target_harmony),
                 melody_moves=melody_moves,
                 has_thumb=has_thumb,
+                melody_only=melody_only,
             )[0]
             if role == ROLE_TARGET:
                 last_target_harmony = harmony_key
@@ -1039,8 +1058,19 @@ class VoiceLeadingEngine:
             # point is that fewer notes are played here, not that this shape is better.
             # The narrowing rule itself, and why the default is not an intersection,
             # are documented once in decisions.resolve_texture_grips.
-            slot_grips = resolve_texture_grips(
-                role, texture, texture_grips, grips, diagnostics
+            #
+            # A melody-only selection never asks: the left hand plays nothing on
+            # every slot, whatever the texture's palettes say, so the loop hands the
+            # empty palette straight through - the same declaration `TEXTURE_GRIPS`
+            # makes with an empty tuple, and the one channel `melody_alone_case`
+            # reads. Skipping the resolution also skips its warnings, which is what
+            # makes `texture=` and `grips=` silently inert here rather than noisily so.
+            slot_grips = (
+                ()
+                if melody_only
+                else resolve_texture_grips(
+                    role, texture, texture_grips, grips, diagnostics
+                )
             )
 
             # A slot that is played as a single note rather than looked up. Which
@@ -1186,10 +1216,10 @@ class VoiceLeadingEngine:
             #
             # Deliberately *after* the NC branch above and the melody-alone branch
             # before it, because both are cases where there is no harmony to state:
-            # an NC bar has no chord at all, and a `melody`-texture fill has already
-            # committed to playing one note. `melody_allowed` refuses the two textures
-            # where *every* slot would land here, so this cannot be reached with
-            # nothing to play.
+            # an NC bar has no chord at all, and a melody-only selection's fill has
+            # already committed to playing one note. This branch cannot be reached
+            # with nothing to play, because it requires no soprano in the selection -
+            # and every melody-only selection has one.
             if not melody_voiced:
                 # An `NC` bar has no chord, so there is no guide tone to state and
                 # nothing at all for the guitar to play under the horn's line. That is
@@ -1334,13 +1364,13 @@ class VoiceLeadingEngine:
                 # fill takes is the right one here too: the note of the tune survives,
                 # the thumb still walks, and the harmony is stated at the next target.
                 #
-                # `melody` and `melody_bass` reach this branch only when the melody
+                # A melody-only selection reaches this branch only when the melody
                 # cannot be played at all, which `get_melody_only_voicing` answers with
                 # None; there is nothing to fall back to and the step is skipped below
-                # with the warning. The branch is kept for them anyway so that a future
-                # texture added to `MELODY_ONLY_TEXTURES` inherits the rescue rather
+                # with the warning. The branch is kept for it anyway so that a future
+                # spelling of "the tune and nothing else" inherits the rescue rather
                 # than needing this condition widened again.
-                if has_thumb or texture in MELODY_ONLY_TEXTURES:
+                if has_thumb or melody_only:
                     solo_voicing = cls.get_melody_only_voicing(
                         melody_note, prefer=top_strings
                     )
@@ -1368,7 +1398,7 @@ class VoiceLeadingEngine:
                 if should_promote_fill(
                     texture, role, True, slot_grips, grips,
                     has_thumb=has_thumb,
-                    melody_only_texture=texture in MELODY_ONLY_TEXTURES,
+                    melody_only=melody_only,
                 ):
                     prepared = cls.prepare_step(
                         progression, index,

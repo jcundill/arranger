@@ -49,7 +49,6 @@ __all__ = [
     "MELODY_ALTO",
     "MELODY_AUTO",
     "MELODY_BASS",
-    "MELODY_ONLY_TEXTURES",
     "MELODY_POLICIES",
     "MELODY_SOPRANO",
     "MELODY_TENOR",
@@ -77,7 +76,7 @@ __all__ = [
     "VOICES_NONE",
     "VOICE_NAMES",
     "harmony_allowed",
-    "melody_allowed",
+    "melody_only_selection",
     "parse_harmony",
     "parse_voices",
     "resolve_harmony",
@@ -90,28 +89,21 @@ __all__ = [
 # Texture styles, in the order that breaks a tie. `uniform` is the historical
 # behaviour - every slot is a target and the cost tuple's completeness criterion
 # decides, which is why it is the default and why existing output is unchanged.
+# `melody` and `melody_bass` are gone from this list: "the guitar plays the tune
+# and nothing else" is a fact about *which voices sound*, and it is keyed on the
+# voices selection now - `melody_only_selection` below, and `docs/one-fact.md`.
 TEXTURE_STYLES: Tuple[str, ...] = (
-    "uniform", "targets", "walking_bass", "melody", "melody_bass",
+    "uniform", "targets", "walking_bass",
 )
-
-
-# Textures that **harmonise nothing**: every slot is the melody alone, whatever the
-# chord symbol says. Declared by name so that the four places that decide "does this
-# slot become a single note" all read one table instead of each naming `walking_bass`
-# in its own words - which is how a texture added to `TEXTURE_STYLES` silently misses
-# a branch and harmonises nothing, or drops its melody.
-#
-# The pair differs in exactly one thing, which is the other table below: `melody` has
-# no thumb line and `melody_bass` has one. Both are declared here rather than derived
-# from `TEXTURE_GRIPS`, because a texture whose palettes happen to be empty is not the
-# same claim as one that means to harmonise nothing.
-MELODY_ONLY_TEXTURES: Tuple[str, ...] = ("melody", "melody_bass")
 
 # Textures that build a **thumb line**: the walked-beat grid is unioned with the melody
 # grid before the step loop, so a bar whose melody is one whole note still carries four
-# bass notes. Separate from `MELODY_ONLY_TEXTURES` because `walking_bass` has a thumb
-# and *does* harmonise, on its strong beats.
-THUMB_TEXTURES: Tuple[str, ...] = ("walking_bass", "melody_bass")
+# bass notes. `walking_bass` is the one texture that *means* a thumb and harmonises on
+# its strong beats; a melody-only selection that names the bass voice - `(soprano,
+# bass)` - means a thumb too, and that half of `BASS_AUTO`'s rule is read from the
+# selection rather than from here, because it is a fact about the band rather than
+# about where notes fall.
+THUMB_TEXTURES: Tuple[str, ...] = ("walking_bass",)
 
 # --- The melody axis: which voices the guitar plays ---
 #
@@ -225,51 +217,46 @@ def voices_have_soprano(voices: Tuple[str, ...]) -> bool:
     return MELODY_SOPRANO in voices
 
 
-def melody_allowed(texture: str, voices: Tuple[str, ...]) -> Tuple[bool, str]:
-    """Whether `texture` can carry this voice selection, and why not when it cannot.
+def melody_only_selection(voices: Tuple[str, ...]) -> bool:
+    """Whether this voice selection is the melody and nothing else.
 
-    **The refusal rule, and it is derived rather than listed.** `MELODY_ONLY_TEXTURES`
-    are the textures that harmonise nothing: every slot is the melody alone, whatever
-    the chord symbol says (see `TEXTURE_GRIPS`, where both of their palettes are the
-    empty tuple). So a selection without the soprano is self-contradictory there - the
-    texture *is* the melodic voice, and removing it leaves the guitar with nothing to
-    play.
+    Soprano present, alto and tenor absent: `(soprano,)` is the tune with no
+    left hand under it, and `(soprano, bass)` is the same line with a thumb
+    under it. This is the fact the `melody` and `melody_bass` textures used to
+    state on the texture axis, and a selection is where it belongs - "which
+    voices the guitar plays" is the question `voices=` answers, and a texture
+    that could also answer it was a second spelling of one fact that could
+    disagree with it (see `docs/one-fact.md`, commit 3).
 
-    Measured across this tree, `melody` and `melody_bass` are the only two that fail;
-    every other texture keeps at least one voice to play. A selection that *does* keep the
-    soprano is allowed everywhere, because then the guitar plays the tune as it always has.
+    Derived rather than listed, like `voices_have_soprano` beside it: the
+    rule is about the quartet's middle voices rather than an enumeration of
+    selections. A selection without the soprano is a comping part whatever
+    else it names, and `soprano,alto` - the melody plus a guide tone - is real
+    voice allocation, deliberately not built (`docs/comping-styles.md` §6 Q2
+    option 3): it keeps the full chord-melody for now.
     """
-    if voices_have_soprano(voices):
-        return True, ""
-    if texture not in MELODY_ONLY_TEXTURES:
-        return True, ""
-    return False, (
-        f"{texture} plays the melody and nothing else, so it cannot also give the "
-        f"melody away - every slot would be empty. Try texture='targets' with "
-        f"voices='alto,tenor' for a guide-tone comping part."
+    return (
+        MELODY_SOPRANO in voices
+        and MELODY_ALTO not in voices
+        and MELODY_TENOR not in voices
     )
 
 
-def resolve_voices(
-    voices: Tuple[str, ...], texture: str, diagnostics: Any
-) -> Tuple[str, ...]:
-    """The voices to actually play: validated, ordered, or refused with the guitar intact.
+def resolve_voices(voices: Tuple[str, ...]) -> Tuple[str, ...]:
+    """The voices to actually play: `auto` resolved, everything else as parsed.
 
-    `auto` resolves to `VOICES_ALL`, which is what keeps the axis inert. Note the one
-    asymmetry with `bass`: `BASS_AUTO` reads the texture because `walking_bass` *means* a
-    thumb line, whereas **no texture means "somebody else sings"** - a fact about the band
-    rather than about the texture.
+    `auto` resolves to `VOICES_ALL`, which is what keeps the axis inert. Note
+    the one asymmetry with `bass`: `BASS_AUTO` reads the texture because
+    `walking_bass` *means* a thumb line, whereas **no texture means "somebody
+    else sings"** - a fact about the band rather than about the texture.
 
-    A selection with **no soprano** is refused on a melody-only texture, and refused
-    rather than degraded, on the rule `bass_allowed` follows: an arrangement that says
-    nothing is worse than one that says something, and the caller is told which texture
-    would work.
+    No selection is refused here any more. The one refusal `melody_allowed`
+    used to make - no soprano, on a texture that played the melody and nothing
+    else - dissolved when the melody-only claim moved onto the selection
+    (`melody_only_selection` above): a soprano-less selection simply comps,
+    on every texture, and nothing is self-contradictory anywhere.
     """
     if voices == (MELODY_AUTO,):
-        return VOICES_ALL
-    allowed, reason = melody_allowed(texture, voices)
-    if not allowed:
-        diagnostics.warn(f"Warning: {reason}")
         return VOICES_ALL
     return voices
 
@@ -369,12 +356,12 @@ def resolve_harmony(
     resolved value is the shipped behaviour, so an arrangement that names no harmony is
     byte-identical to one that never had the axis.
 
-    A combination the generator cannot voice is **refused rather than degraded**, on the
-    rule `melody_allowed` and `bass_allowed` both follow: an arrangement that says
-    something other than what was asked for is worse than one that says nothing, and the
-    caller is told which selection would work. Returning `guide` here is deliberate and
-    is the *inert* answer rather than a silent substitution - it is what the part said
-    before this axis existed.
+    A combination the generator cannot voice is **refused rather than degraded**, on
+    the rule `bass_allowed` follows: an arrangement that says something other than what
+    was asked for is worse than one that says nothing, and the caller is told which
+    selection would work. Returning `guide` here is deliberate and is the *inert*
+    answer rather than a silent substitution - it is what the part said before this
+    axis existed.
     """
     resolved = HARMONY_POLICIES.get(harmony, harmony)
     allowed, reason = harmony_allowed(resolved, voices)
@@ -454,23 +441,14 @@ TEXTURE_GRIPS: Dict[str, Dict[str, Tuple[str, ...]]] = {
         "target": ("shell",),
         "fill": (),
     },
-    # `melody` is the lead sheet in, the tune out: every slot is the melody alone, so
-    # nothing under it is ever harmonised and the chord name above it is context rather
-    # than a claim about what is sounding. It is a texture rather than a grip because
-    # "what may be played at all" is the question it answers, and a grip would have to
-    # win a cost comparison it should not be in - see `GRIP_PREFERENCE`.
-    #
-    # The empty tuple on **both** roles is the declaration, in the same words
-    # `walking_bass`'s fill uses for its fills: `arrange_progression` reads `()` as "the
-    # left hand plays nothing" and routes the slot through `get_melody_only_voicing`.
-    # It is never absent and never approximated by an empty list elsewhere.
-    "melody": {"target": (), "fill": ()},
-    # The same line with a thumb under it, and no shell above it anywhere: a bass voice
-    # walking under the tune with nothing harmonising it. `walking_bass` states the
-    # harmony on its strong beats and leaves the thumb to fill the gaps; this one is
-    # thumb-and-melody throughout, which is why its **target** palette is empty too and
-    # not only its fill's.
-    "melody_bass": {"target": (), "fill": ()},
+    # The two melody-only palettes that used to live here - `"melody"` and
+    # `"melody_bass"`, both empty on both roles - are gone, and the fact they
+    # stated is keyed on the voices selection instead: `arrange_progression`
+    # hands the loop an empty palette for a melody-only selection
+    # (`textures.melody_only_selection`), so the declaration "the left hand
+    # plays nothing" still arrives at `decisions.melody_alone_case` through
+    # this one channel - the empty palette - whatever spelling asked for it.
+    # See `docs/one-fact.md`, commit 3.
 }
 
 # --- The grid axis: where a chord FALLS inside the bar -------------------------
@@ -753,6 +731,7 @@ def _roles_for_slot(
     harmony_changed: bool = True,
     melody_moves: bool = False,
     has_thumb: bool = False,
+    melody_only: bool = False,
 ) -> List[str]:
     """
     The metric roles a slot of the given weight may take under `texture`.
@@ -791,8 +770,14 @@ def _roles_for_slot(
         raise ValueError(
             f"Unknown texture {texture!r}; expected one of {TEXTURE_STYLES}"
         )
-    if texture == "uniform" or weight < 0:
+    if (texture == "uniform" and not (has_thumb and melody_only)) or weight < 0:
         # Historical behaviour, and "we were never told where this note falls".
+        # The one case that must not land here is a melody-only selection with a
+        # thumb - `voices=soprano,bass` under this, the default, texture: the walk
+        # invents beats the melody never articulated, and whether those hold the
+        # tune or re-strike it is the strong-beat rule below. `uniform`'s "every
+        # slot a target" would re-strike the melody on every walked beat, which is
+        # the one thing a tune-with-a-thumb part must not do.
         return [ROLE_TARGET]
     if has_thumb:
         # `weight > 0` is kept *inside* the conjunction, and that is the off-beat
@@ -811,7 +796,8 @@ def _roles_for_slot(
         # not). Everything else is a fill, and a fill is the melody alone.
         #
         # Checked before `uniform`'s catch-all below so no later branch can return
-        # TARGET first; `uniform` itself never reaches here.
+        # TARGET first; `uniform` reaches here only through a melody-only selection
+        # with a thumb, which is the case the catch-all's own comment names.
         #
         # `has_thumb` rather than the texture name, because the thumb line is now an
         # argument of its own (`bass=`): any texture may carry one. The reason this

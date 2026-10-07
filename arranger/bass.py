@@ -1005,13 +1005,16 @@ def thumb_capacity(texture: str, role: str) -> Optional[int]:
     cannot join the thumb-line route without its capacity being measured too. Measured
     across this tree:
 
-        melody, melody_bass, a walking_bass fill   all three free
+        a walking_bass fill                        all three free
         targets, a walking_bass target             one
         uniform                                     **zero** - `drop24`'s (4,2,1,0)
                                                     set spans the whole thumb range
 
     which is why `walk` is refused under `uniform` and `anchors` is not: an anchors
-    line needs one string and survives on the single one `uniform` leaves.
+    line needs one string and survives on the single one `uniform` leaves. A
+    melody-only **selection** is not in this table at all: its upper shapes are
+    single frets, and its capacity is answered in `bass_allowed`, where the route
+    is known.
     """
     # Imported here rather than at module scope: `grips` sits above `bass` in the
     # package order, so a top-level import would be legal but would make `bass` read as
@@ -1111,6 +1114,7 @@ def bass_allowed(
     bass: str,
     notes: Optional[int] = None,
     bass_voice: bool = False,
+    melody_only: bool = False,
 ) -> Tuple[bool, str]:
     """Whether `texture` can carry `bass`, and why not when it cannot.
 
@@ -1141,8 +1145,18 @@ def bass_allowed(
     passing them rather than inferred from the texture, because the texture cannot
     distinguish it: `uniform` is a real palette on one route and a meaningless name on
     the other, and only the engine's own route decision knows which.
+
+    **`melody_only` is the melody-only route's half, and it is unbounded rather than
+    measured.** A selection that plays the melody and nothing else (`voices=soprano`,
+    with or without the bass voice named) puts a single fret above the thumb on every
+    slot, so all three thumb strings are free whatever the texture's palette says -
+    asking the palette would refuse a line with the whole neck to walk under, on the
+    say-so of grips that route never generates. The texture is inert on that route for
+    the same reason it is on the comping one.
     """
     if bass == BASS_NONE:
+        return True, ""
+    if melody_only and notes is None:
         return True, ""
     if notes is not None:
         # The comping route: measured 1..3 free thumb strings at every arity, so this

@@ -137,17 +137,18 @@ def melody_alone_case(
     - **an `NC` bar** carries melody but no harmony, so there is nothing to voice.
       Taken before any chord logic, so it is never reharmonised and never warns.
     - **a fill under a thumb texture**, **a target no shell can sound**, and **every
-      slot of a melody-only texture.** A fill is *meant* to be thin; a target that
+      slot of a melody-only voice selection.** A fill is *meant* to be thin; a target that
       cannot be voiced must not be dropped, because the note of the tune survives and
-      the harmony is stated at the next target; and a `melody` or `melody_bass` slot
+      the harmony is stated at the next target; and a melody-only selection's slot
       is *defined* to be a single note. All three reach it the same way, and the
       condition is deliberately **two** clauses rather than one:
 
       - `slot_grips == ()` is the declaration. `TEXTURE_GRIPS` says "the left hand
-        plays nothing" with an empty tuple and never by omitting a key, so this is
-        where a melody-only texture, a walking-bass fill, and a narrowed-to-nothing
-        palette all arrive.
-      - `texture in THUMB_TEXTURES and role == ROLE_FILL` covers the one case the
+        plays nothing" with an empty tuple and never by omitting a key, and the loop
+        hands an empty palette to a melody-only selection for the same reason, so
+        this is where a melody-only selection, a walking-bass fill, and a
+        narrowed-to-nothing palette all arrive.
+      - `has_thumb and role == ROLE_FILL` covers the one case the
         declaration misses: `--grips shell --texture walking_bass`, where the caller
         narrows a fill to `("shell",)` and the palette is no longer empty. Without
         this clause that fill would try to voice a shell, which is the opposite of
@@ -283,7 +284,7 @@ def should_promote_fill(
     slot_grips: Tuple[str, ...],
     requested: Tuple[str, ...],
     has_thumb: bool = False,
-    melody_only_texture: bool = False,
+    melody_only: bool = False,
 ) -> bool:
     """Whether a fill that produced nothing should be re-prepared as a principal note.
 
@@ -292,17 +293,17 @@ def should_promote_fill(
     before it is reported as missing - the same argument that makes `NECK_FRET_MIN`
     a penalty rather than a filter.
 
-    Disabled wherever a fill is *meant* to be empty - `walking_bass`, and the two
-    melody-only textures - because the melody-alone branch has already handled it, so
-    promoting here would undo the texture one step at a time. Named by table rather
-    than by literal, so a texture added to `TEXTURE_STYLES` cannot join the melody-alone
-    route while missing this.
+    Disabled wherever a fill is *meant* to be empty - under `walking_bass`, and on a
+    melody-only voice selection (`voices=soprano`) - because the melody-alone branch
+    has already handled it, so promoting here would undo the selection one step at a
+    time. The caller passes the selection fact from `melody_only_selection`, so it is
+    derived in one place rather than re-decided here.
 
     `slot_grips != requested` is the "the role narrowed the caller's grips" case. If
     the two are equal the retry would ask for exactly what just failed, so it is
     skipped rather than repeated.
     """
-    if has_thumb or melody_only_texture:
+    if has_thumb or melody_only:
         return False
     return prepared_is_none and role == ROLE_FILL and slot_grips != requested
 

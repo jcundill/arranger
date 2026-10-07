@@ -1845,6 +1845,25 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
             self.tabs(self.arrange(texture="walking_bass", bass="walk")),
         )
 
+    def test_auto_follows_the_selection_under_a_melody_only_part(self):
+        """
+        `BASS_AUTO` reads the voice selection, not just the texture.
+
+        `(soprano, bass)` walks - it is the old `melody_bass` texture under the
+        new spelling, measured byte for byte in `docs/one-fact.md`'s build
+        notes. `(soprano,)` alone keeps no thumb, and a lone `bass` selection
+        keeps none either: that part already is the bass line, and a thumb
+        under it would double it.
+        """
+        alone = self.arrange(melody="soprano")
+        self.assertTrue(alone)
+        self.assertTrue(all(s.bass is None for s in alone))
+        with_thumb = self.arrange(melody="soprano,bass")
+        self.assertTrue(any(s.bass is not None for s in with_thumb))
+        lone = self.arrange(melody="bass")
+        self.assertTrue(lone)
+        self.assertTrue(all(s.bass is None for s in lone))
+
     def test_bass_none_drops_the_thumb_and_keeps_the_shells(self):
         """A walking bass with no bass is still a coherent texture: shells on the beats.
 
