@@ -1172,6 +1172,52 @@ class TestBassPlacement(unittest.TestCase):
         upper = upper_shape([5, 5, 5, 5, 5, 5])
         self.assertIsNone(_place_bass(upper, pc("D")))
 
+    def test_a_hand_that_cannot_hold_the_thumb_refuses_the_note(self):
+        """
+        The other reason a note is refused, and it is the one `sounding_frets` cannot see.
+
+        "Tenor Madness" bar 40 under `--texture targets --bass anchors`: the hand is holding
+        `x-9-x-8-12-10`, and the walk's `B` has exactly one candidate - the low E at fret 7,
+        because the A string is spoken for by the held shape and a `B` on the D at fret 9
+        would sound above the shape's F#3. Fret 7 is a fret the hand is not on, so the shape
+        would need five frets from four fingers. Before the budget this returned
+        `(47, 0, 7)` and every renderer wrote it; see `docs/open-issues.md` item 12.
+        """
+        upper = upper_shape([-1, -1, -1, -1, -1, 10])
+        self.assertIsNone(
+            _place_bass(upper, pc("B"), held=([-1, 9, -1, 8, 12, 10], None))
+        )
+
+    def test_one_fret_less_in_the_held_shape_and_the_same_thumb_is_placed(self):
+        """
+        The same note, the same string, the same fret - and a held shape one fret smaller.
+
+        This is the pair that shows the *budget* is what decided the refusal and not the
+        string: dropping the held shape's fret 12 leaves the hand on four frets, the low E at
+        fret 7 is placed, and nothing else about the call changed.
+        """
+        upper = upper_shape([-1, -1, -1, -1, -1, 10])
+        self.assertEqual(
+            _place_bass(upper, pc("B"), held=([-1, 9, -1, 8, -1, 10], None)),
+            (47, 0, 7),
+        )
+
+    def test_the_fret_budget_outranks_proximity(self):
+        """
+        Playability beats comfort, which is the order `voicing_cost` already applies.
+
+        The hand is on fret 5. `F#` is available on the A at fret 6 and the D at fret 4 -
+        one fret of travel each - and on the low E at fret 2, three frets away. Both near
+        candidates would put the hand on five frets, so both are refused and the far one is
+        taken. The alternative would be the nearest *unplayable* placement, which is the
+        defect rather than the fix.
+        """
+        upper = upper_shape([-1, -1, -1, -1, -1, 4])
+        self.assertEqual(
+            _place_bass(upper, pc("F#"), held=([5, -1, -1, 7, 9, 11], 0)),
+            (42, 0, 2),
+        )
+
     def test_step_bass_is_one_fact_with_one_home(self):
         """
         `step.bass` is a derived view of `voicing.bass_midi`, not a second field.
@@ -1310,6 +1356,79 @@ class TestTheInvariant(unittest.TestCase):
                         if step.voicing.bass_string is not None:
                             checked += 1
         self.assertGreater(checked, 0, "no step carried a bass, so nothing was tested")
+
+    def test_the_left_hand_never_needs_more_than_four_frets(self) -> None:
+        """The **left-hand** half of the budget, swept over every committed head.
+
+        The string budget above is the right hand's question; these are the other four digits.
+        One finger holds one fret, so a step whose frets span five distinct positions is not a
+        hard shape but an impossible one - and the only way a fifth appears in this engine is a
+        `bass_only` step, where the thumb's fret joins a shape the hand is still holding. A
+        generated grip cannot do it: every family sounds at most four strings, and
+        `grips.thumb_safe_grips` already budgets the *strings* a target may add a thumb to.
+
+        Two decisions about how the hand is counted, each of which moves the count by a lot:
+
+        - it is the shape **still ringing**, not the step's own vector and not
+          `_sounding_frets`. Under `bass_only` nothing above the thumb strikes at all, so a
+          melody carried on a string the held shape does not use is a note the hand is not
+          holding - it is already sounding elsewhere. Charging for its string counts **10**
+          steps instead of 1, which is the item-4 mistake made backwards;
+        - the previous thumb note **is** included: that string is still ringing, so it is
+          still fretted. `bass._held_shape` drops it from `structure` for harmonic reasons,
+          which is right for the three questions it answers - and on the committed heads the
+          two readings give the same answer, so this one is chosen on the physics rather than
+          on a count.
+
+        Measured both ways, because a sweep that has only ever seen a clean tree proves
+        nothing: **1** step violates this on the commit before the fix - "Tenor Madness"
+        bar 40 under `targets`/`anchors`, pinned also in
+        `test_fingers.TestTheFourFretBudget` - and **0** after it.
+        """
+        from headxml import arrange_xml_head
+
+        paths = sorted(
+            glob.glob("tests/data/*.mxl") + glob.glob("tests/data/*.musicxml")
+        )
+        self.assertGreaterEqual(len(paths), 6, "the committed heads went missing")
+        checked = 0
+        for path in paths:
+            for texture, bass in (
+                ("targets", "walk"),
+                ("targets", "anchors"),
+                ("walking_bass", "walk"),
+                ("walking_bass", "anchors"),
+            ):
+                with self.subTest(head=path, texture=texture, bass=bass):
+                    steps, _head, _notes = arrange_xml_head(
+                        path, texture=texture, bass=bass
+                    )
+                    held = None
+                    for step in steps:
+                        voicing = step.voicing
+                        if step.bass_only and not step.melody_only and held is not None:
+                            # The held shape with the thumb's own string replaced by the fret
+                            # the walk placed there. One string sounds one fret, so the thumb
+                            # overwrites rather than adding.
+                            hand = list(held)
+                            if voicing.bass_string is not None:
+                                hand[voicing.bass_string] = voicing.frets[
+                                    voicing.bass_string
+                                ]
+                            checked += 1
+                        else:
+                            hand = list(voicing.frets)
+                        frets = {fret for fret in hand if fret >= 1}
+                        self.assertLessEqual(
+                            len(frets),
+                            4,
+                            f"{texture}/{bass}: bar {step.bar} beat {step.beat} "
+                            f"{step.tab_line()} asks the left hand for {len(frets)} "
+                            f"frets {sorted(frets)}",
+                        )
+                        if not (step.bass_only or step.repeated or step.melody_only):
+                            held = list(voicing.frets)
+        self.assertGreater(checked, 0, "no step held a shape, so nothing was tested")
 
     def test_the_bass_is_outside_the_cost_tuple_by_construction(self):
         """

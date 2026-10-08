@@ -1486,7 +1486,10 @@ Rejected alternatives, with their costs:
   inside four frets. It leaves the five *plucks* intact, which is the defect; and in the
   measured case no playable candidate exists at all (the A string is occupied by the shape,
   and the only B below the chord's lowest pitch is fret 7 of the low E), so it would delete
-  281 thumb notes rather than fix them.
+  281 thumb notes rather than fix them. **The last number is wrong and item 12 corrects it**:
+  stated over the hand rather than over `sounding_frets` the fret budget deletes exactly
+  **one** note in the committed heads. The rejection still stands for *this* defect - it
+  leaves the five plucks - and the budget is what item 12 ends up using for its own.
 - **Refuse the axis, as `uniform` does.** Consistent - it is what `bass_allowed` does when a
   palette can never host a thumb - but it removes every thumb note under `targets` (529 of
   839 steps on the walk row), where thinning the target keeps both the harmony and the line.
@@ -1535,5 +1538,157 @@ against the pre-fix tree:
 ```bash
 git worktree add /tmp/pre d288fce
 cd /tmp/pre && PYTHONPATH=/tmp/pre <repo>/.venv/bin/python /tmp/count_plucks.py
+```
+
+---
+
+## 12. A `bass_only` step could need five frets, and no left hand has five fingers
+
+**Status:** FIXED. Item 11's sibling: the same step, the same merge, and the *other* hand. Item
+11 budgeted the strings a step **plucks**; this one budgets the frets a step **holds**, and the
+two are stated over different parts of the step, which is why neither could see the other's
+defect. It is also the first defect `arranger/fingers.py` was written for, and the first one it
+fixes - [docs/fingering.md](fingering.md) §4.3 opened with the question.
+
+### The symptom
+
+"Tenor Madness" bar 40 beat 1.0, `--texture targets --bass anchors`, printed
+
+```
+x-x-x-x-x-10     <- the step's own vector: the melody D5, tied
+```
+
+on top of a shape the hand is still holding:
+
+```
+x-9-x-8-12-10    <- the previous strike, a drop-3 Bmaj: F#3, D#4, B4, D5
+```
+
+A `bass_only` step re-states nothing above the thumb, so those four notes are still ringing -
+and the walk's `B` lands on the low E at **fret 7**, which is a fret none of them uses. The
+hand must cover `{7, 8, 9, 10, 12}`: **five frets for four fingers.** One finger holds one fret
+and no finger holds two, so the step is not hard, it is impossible.
+
+There is no better placement to choose. The candidates for `B` under this hand are:
+
+| string | fret | verdict |
+|---|---|---|
+| low E | 7 | sounds `B2`, below the shape - **the only survivor**, and five frets |
+| A | - | occupied by the held shape (fret 9) |
+| D | 9 | sounds `B3`, which is *above* the shape's `F#3`, so `_place_bass` forbids it |
+
+So the choice is between an unplayable tab and a missing note.
+
+### Why the obvious check misses it
+
+- **Item 11's sweep counts plucks.** A `bass_only` step plucks one string, so it passes a
+  four-string budget with room to spare - correctly, since the right hand really is fine. What
+  fails is the left one.
+- **`fret_span()` reads the step's own vector**, which for a `bass_only` step is the melody and
+  the thumb - two frets. Item 1 already records that a per-step span is the wrong measure for a
+  merged step at all.
+- **`test_the_thumb_stays_within_reach_of_the_fingers` measures distance**, from the thumb's
+  fret to the held shape's range. It is satisfied here: fret 7 is one fret below the shape's
+  lowest (8). Distance is not the question; the count of frets is.
+- **No test swept the fret budget over an arrangement.** `TestTheInvariant` swept the string
+  budget, and said so in its own docstring.
+
+### The two counts this measurement had to get right
+
+The same tree, three ways of stating "the hand" (seven committed heads x five
+`texture`/`bass` rows, **3,697 steps**):
+
+| the hand is… | steps needing five frets |
+|---|---|
+| the ringing shape, plus the thumb (`held` + candidate) | **1** |
+| `sounding_frets`, plus the thumb - what `_place_bass` already maintains | **10** |
+| `structure`, plus the thumb - the previous thumb note dropped | **1** |
+
+The middle row is the trap, and it is **item 4's mistake made backwards**. `sounding_frets`
+carries the step's own vector as well as the held shape, and under `bass_only` nothing above
+the thumb strikes at all: a melody carried on a string the held shape does not use is a note
+the hand is *not* holding, because it is already sounding elsewhere. Item 4's Stage 4 found the
+mirror-image error when it compared a melody by string instead of by pitch ("wrongly counts a
+step whose melody is already sounding on a different string"). Charging nine playable steps for
+a note nobody plays is that mistake in the other direction, and it is a factor of ten.
+
+The last row is recorded as **agreeing** rather than differing: on every committed step the
+previous thumb note's fret is one the shape already holds, so dropping it changes no answer.
+`can_fret` is called on `held` rather than on `structure` anyway, and that is a decision about
+physics - the string is ringing, so it is fretted - rather than about the count.
+
+### The fix
+
+A **filter**, in the one place a fifth fret can appear. `fingers.can_fret` is §4.3's refusal
+stated over a bare vector (`len({fret for fret in frets if fret >= 1}) <= 4`), because the
+caller has two shapes merged into one hand and no `Voicing` to point at. `bass._place_bass`
+calls it on the held vector with the candidate fret written in, and skips a candidate that
+fails:
+
+```python
+hand = list(hand_base)          # the shape still ringing
+hand[string_index] = fret       # the thumb's own string replaced, not added to
+if not can_fret(hand):
+    continue
+```
+
+`_attach_bass` already had the right answer for a refused note - **the step survives and the
+bass is reported** - so nothing else needed to change. Three things are worth stating:
+
+- **It is a filter and not a preference, and that was measured rather than assumed.** Item 11
+  rejected a fret *preference* for its own defect, and for this one there is nothing to prefer:
+  only one candidate survives `_place_bass`'s existing filters. The rejection in item 11 still
+  stands for the five-string defect; its cost estimate for the filter was wrong, and that is
+  corrected there and in the count above.
+- **It is the fourth thing `held` decides.** `_place_bass`'s docstring lists three questions
+  the held shape answers - which string is free, whether the note sounds below the structure,
+  and where the hand is - and this is the fourth.
+- **A refused bass note is now two different failures** sharing one message: no free string
+  below the melody, or a hand that would need five frets. The warning names both, because a
+  diagnostic that names the wrong cause is how item 4's diagnosis went wrong twice.
+
+### Measured after
+
+| row | before | after |
+|---|---|---|
+| `targets --bass anchors`, "Tenor Madness" bar 40 beat 1.0 | 5 frets for 4 fingers | **0** - the thumb is refused, the step keeps its upper voicing |
+| every step of seven heads x five rows (3,697 steps) | **1** | **0** |
+| pinned tabs, whole suite | - | **none moved**: green at the same count, plus the new tests |
+
+What the rule costs: **one** bass note, on one beat, in the committed corpus. That is the trade
+this fix takes deliberately - a bass note a player cannot finger is not a bass note, and the
+alternative was a tab nobody can execute. It is also why the rule is a filter rather than a
+palette change: thinning the *target one slot earlier* would have kept the note, and it would
+have touched the **7** slots that hold a four-fret shape into a `bass_only` step in order to
+fix one, of which 6 were already playable.
+
+### The tests
+
+- `tests/test_walking_bass.py::TestTheInvariant::test_the_left_hand_never_needs_more_than_four_frets`
+  - the invariant's left-hand half, swept over every committed head. It reads **1** on the
+  pre-fix tree and **0** after, and its docstring carries both counting decisions above.
+- `tests/test_walking_bass.py::TestBassPlacement` - three cases at the function: the refusal;
+  the same call with a held shape one fret smaller, so the *budget* is what decided it; and a
+  pair where the two nearest candidates are refused and the far one is taken, so the budget
+  outranks proximity.
+- `tests/test_fingers.py::TestTheFourFretBudget` - the predicate itself: open strings and mutes
+  cost nothing, four frets is the limit, one shared fret is one finger, and the merged hand the
+  engine refused.
+- `tests/test_fingers.py::TestTheEngineUsesItForOneQuestion` - **the inverted inertness test**
+  (`AGENTS.md` trap 5): the set of engine modules importing `fingers` is asserted to be exactly
+  `{bass}`. It was `TestTheModuleIsInert`, and inverting rather than deleting it is what makes a
+  *second* caller visible.
+
+### Reproducing
+
+The counts come from throwaway scripts (not committed - `AGENTS.md` trap 8): load each
+`tests/data/` head with `headxml.arrange_xml_head`, walk the steps keeping the last *struck*
+one (the same rule as `bass._held_shape`), and for a `bass_only` step count the distinct frets
+of the held vector with the thumb's string overwritten by its fret. Run the same script against
+the pre-fix tree to see the defect:
+
+```bash
+git worktree add /tmp/pre HEAD
+cd /tmp/pre && PYTHONPATH=/tmp/pre <repo>/.venv/bin/python /tmp/count_frets.py
 ```
 

@@ -737,13 +737,17 @@ where the hand already is" are in permanent opposition; the placement step order
 proximity to the upper voicing and takes the nearest, so the 4th string is used only when
 the hand is genuinely low.
 
-A step with no free bass string below the melody keeps its upper voicing and says so
-(`no bass string free below the melody for bass ...`) rather than dropping the note.
+A step whose bass note cannot be played keeps its upper voicing and says so rather than
+writing a tab nobody can finger: either there is no free string below the melody, or the
+thumb's fret would be a **fifth** one for a hand already holding the shape
+(`no playable bass note for bass ... - no free string below the melody, or the hand would
+need a fifth fret`).
 
-`docs/open-issues.md` records the three defects this texture has had — two fixed, and
-**one open**: a walk-invented beat takes the wrong melody where a note is held across a
-barline, which costs the tune that note in cut time. It carries the measurements and
-the candidate fixes.
+`docs/open-issues.md` records this texture's defects, and nearly all of them are fixed. The
+merged step — a bass note written under an upper shape — has had several; the two most recent
+are items 11 and 12, the pair of budgets that ask how many strings a step **plucks** and how
+many frets it **holds**. **One defect is still open**: item 10, where a chord in force is
+stored per melody note, so a bar the melody skips is silent.
 
 ## Who plays which voice: `bass` and `voices`
 

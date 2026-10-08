@@ -1719,12 +1719,16 @@ class VoiceLeadingEngine:
         """
         Merges one walked beat into a step: records it, then places it on a string.
 
-        Deliberately after selection (see the caller). Two independent failures are
-        both handled the same way - **the step survives and the bass is reported**:
+        Deliberately after selection (see the caller). Three independent failures are
+        all handled the same way - **the step survives and the bass is reported**:
 
         - no candidate string survives `_place_bass`'s filters, so there is nowhere to
           put the thumb. Same argument as the neck window being a penalty rather than
           a filter: losing a step is worse than losing its bass.
+        - a candidate string exists, but every one of them would need a **fifth fret**
+          from a hand already holding the shape - the `bass_only` case of
+          `docs/open-issues.md` item 12. A bass note a player cannot finger is not a
+          bass note, so it is refused rather than written.
         - a step that already carries a bass, which cannot happen while the union is
           one walked note per slot, but is checked rather than assumed.
 
@@ -1756,8 +1760,9 @@ class VoiceLeadingEngine:
         )
         if placed is None:
             (diagnostics or default_diagnostics()).warn(
-                f"Warning: no bass string free below the melody for bass "
-                f"{PITCH_CLASS_NAMES[note.pitch_class % 12]}; "
+                f"Warning: no playable bass note for bass "
+                f"{PITCH_CLASS_NAMES[note.pitch_class % 12]} - no free string "
+                f"below the melody, or the hand would need a fifth fret; "
                 f"the step keeps its upper voicing"
             )
             return

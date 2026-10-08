@@ -24,7 +24,7 @@ gate and the conventions — not the explanation.
 | tab staff, HTML, MusicXML, GP5, or the MusicXML importer | [docs/renderers.md](docs/renderers.md) | `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py` |
 | the slot layer: triples to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
 | a known bug, with its measurement | [docs/open-issues.md](docs/open-issues.md) | — |
-| which finger frets which string, or a per-finger cost criterion | [docs/fingering.md](docs/fingering.md) | `arranger/fingers.py` (inert: `tests/test_fingers.py` is its only caller; no per-finger cost yet). Its §4.3 measurement landed a *right-hand* rule instead — `grips.thumb_safe_grips`, read by `decisions.resolve_texture_grips` |
+| which finger frets which string, or a per-finger cost criterion; which strings the right hand's `p-i-m-a` pluck, and the gaps between them | [docs/fingering.md](docs/fingering.md) | `arranger/fingers.py` (not inert any more: `bass` reads `can_fret` for the four-fret budget — `tests/test_fingers.py` holds the caller set to exactly `{bass}`; no per-finger cost yet). Its §4.3 measurement landed a *right-hand* rule first (`grips.thumb_safe_grips`, read by `decisions.resolve_texture_grips`) and then a *left-hand* one (`fingers.can_fret`, read by `bass._place_bass`); its §4.4 right-hand string-skip measurement changed no output at all |
 | `voices=`, which voices the guitar plays | [docs/voices-axis.md](docs/voices-axis.md) | `arranger/textures.py` |
 | the comping axes (`harmony=`, `grid=`, the rhythm grid) | [docs/comping-styles.md](docs/comping-styles.md) | `arranger/textures.py` |
 | the step/voicing mirrored fields (`step.grip`, `step.bass`), or which voice selection is melody-only | [docs/one-fact.md](docs/one-fact.md) | `arranger/tuning.py`, `arranger/steps.py` |
@@ -45,10 +45,10 @@ frozen like the rest — it is not a home for an open plan.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **929 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **937 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 12 of those 918, and it is the one that fails if this
+(`tests/test_docs.py` is 12 of those 937, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree. It also fails if a document
 exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
 new file cannot be added without being registered.)
@@ -119,7 +119,7 @@ arranger/
 │   ├── __init__.py      #   facade: re-exports, __version__, main()
 │   ├── __main__.py      #   `python -m arranger`
 │   ├── tuning.py        #   STANDARD_TUNING, Voicing, ArrangementStep
-│   ├── fingers.py       #   which finger holds which fret (inert: nothing imports it)
+│   ├── fingers.py       #   which finger holds which fret; read by bass for the fret budget
 │   ├── diagnostics.py   #   Diagnostics - warnings are a value, not a print
 │   ├── chords.py        #   ChordParser, non-chord-tone routing
 │   ├── grips.py         #   grip tables and the candidate generators
@@ -169,11 +169,14 @@ tuning -> diagnostics -> chords -> grips -> cost -> textures
                                                           (facade) <-------+
 ```
 
-`fingers` — which finger holds which fret — hangs off `tuning` alone and feeds nothing, so it
-is drawn separately rather than as a branch of that chain:
+`fingers` — which finger holds which fret — hangs off `tuning` alone, so it is drawn
+separately rather than as a branch of that chain. It is **not inert**: `bass` reads
+`fingers.can_fret` for the four-fret budget of the playability invariants below, which is
+an *upward* import and so legal. `docs/fingering.md` §5 step 3 — a per-finger cost
+criterion — is still open.
 
 ```
-tuning -> fingers   (inert: step 1 of docs/fingering.md; no engine module imports it)
+tuning -> fingers   (step 1 of docs/fingering.md; `bass` reads can_fret for §4.3)
 ```
 
 A module may import only what is *below* it, and
@@ -290,6 +293,16 @@ correct:
 - `0 <= fret <= 18` and `fret_span() <= GRIP_MAX_SPAN[grip]` (5, or 4 for a duo).
   The span is checked on the frets actually placed, **not** as "within N of the
   soprano": those differ, and the second admits a span of ten;
+- **four fingers, four frets** — and unlike the four above, this one is stated over a
+  *step* rather than a shape, because that is the only level at which it can fail. A
+  generated grip sounds at most four strings and so spans at most four frets; a
+  `bass_only` step, though, merges the thumb into a shape the hand is still **holding**,
+  where its fret can be a fifth. `fingers.can_fret` is the check and `bass._place_bass`
+  is its one caller: a candidate needing five frets is refused, so the step keeps its
+  upper voicing and the omission is reported, exactly as when no string is free.
+  Measured over the committed heads: **1** such step before the fix, **0** after — see
+  `docs/open-issues.md` item 12. It is the smaller twin of the bullet above: the same
+  trap, the rule asserted on the part of the whole that happened to be checked;
 - every sounding pitch is a chord tone — except where the drop-2 tables have no
   inversion for the melody's degree and the quality-only fallback takes over. The
   selector's first cost criterion rejects such a shape whenever a correct one exists.
@@ -508,7 +521,7 @@ Each of these cost real time, or nearly shipped a defect.
 | [docs/renderers.md](docs/renderers.md) | tab staff, MusicXML import/export, GP5, and their traps |
 | [docs/open-issues.md](docs/open-issues.md) | diagnosed bugs with their measurements; fixed items stay, with what the fix was |
 | [docs/history/reharmonisation-proposals.md](docs/history/reharmonisation-proposals.md) | **retired** - tritone substitution (shipped) and chromatic approach chords (measured, not built), with the corpus numbers behind each. Its reproduction path went with the Weimar corpus |
-| [docs/fingering.md](docs/fingering.md) | **inert** - left-hand fingering: which finger frets which string. Step 1 of its §5 landed (`arranger/fingers.py` + `tests/test_fingers.py`: assignment, barres, movement, feasibility) and **no engine module imports it**, so no output changed. §5 step 2 has now been **measured**: its §4.3 half found a real defect (a merged step could sound five strings) which is fixed by `grips.thumb_safe_grips` + `decisions.resolve_texture_grips` with no finger assignment involved, and its movement half came back nearly empty, which is why §5 step 3 (the cost-tuple decision) is still open |
+| [docs/fingering.md](docs/fingering.md) | fingering: which finger frets which string, and which strings the right hand's `p-i-m-a` pluck. Step 1 of its §5 landed (`arranger/fingers.py` + `tests/test_fingers.py`: assignment, barres, movement, feasibility), and §5 step 2 is now **measured on all four of its halves**. Its §4.3 half found two real defects, one per hand: a merged step could sound five *strings* (fixed by `grips.thumb_safe_grips` + `decisions.resolve_texture_grips`) and a `bass_only` step could need five *frets* (fixed by `fingers.can_fret` + `bass._place_bass`, the module's only engine caller - so the module is no longer inert). Its movement half came back nearly empty, and its **§4.4 right-hand half** recorded that the only finger-skip string sets are four `drop24` sets and one `shell`, that the skip is the price the *span* criterion pays, and that every lever removing it is either inert or trades away a higher criterion - so **no engine output changed there**. §5 step 3 (the cost-tuple decision) is still open |
 | [docs/history/](docs/history/) | completed plans: corpus, walking bass, texture, arranging guide - a record of the past, not of what exists |
 | [docs/voices-axis.md](docs/voices-axis.md) | **in progress** - the `voices=` axis, awaiting QA |
 | [docs/comping-styles.md](docs/comping-styles.md) | the comping axes (`harmony=`, the rhythm grid): **partly built** - Stage C shipped `harmony=`, Stage D shipped the named `grid=` rows, and §9 steps 0, B, A, A', C, D and E have landed (E, `--voices soprano` = the melody and nothing else, landed earlier as Stage 2 — `docs/one-fact.md`; A' makes a **chords-only lead sheet** loadable, `Head.bars` a fact about the file; C makes `--non-chord-tone` reach the comping route at harmony level, onset-guarded by `melody_onsets`; D makes the soprano **per slot**, so a soprano-named selection comps the grid positions its tune does not articulate at); §9.4's four-note comping chord, and §6's open questions, are still proposal |

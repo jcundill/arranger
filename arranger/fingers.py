@@ -1,12 +1,17 @@
 """Which finger holds which fret, for one voicing.
 
 Stage 1 of [docs/fingering.md](../docs/fingering.md) §5: the assignment, the barres it
-implies, and the movement between two of them. **Nothing in the engine imports this yet,
-and no output changes** - `voicing_cost` does not read it, `decisions` does not call it,
-and every renderer is untouched. It is built first because the questions that remain about
-fingering are empirical (that document's §2.4 and §4.3) and can only be answered by code
-that exists; its §5 step 2 is the measurement that decides whether any of it earns a place
-in the cost tuple, and its §4.2 is why that decision is not taken here.
+implies, and the movement between two of them. It is built first because the questions
+that remain about fingering are empirical (that document's §2.4 and §4.3) and can only be
+answered by code that exists.
+
+**Exactly one engine call reaches this module, and it is §4.3's left-hand half.**
+`can_fret` is the four-frets-for-four-fingers check, and `bass._place_bass` is its caller:
+on a `bass_only` step the thumb is merged into a shape the hand is still *holding*, so the
+fret it adds joins frets that are not this step's own. Nothing else in the engine reads
+this module - `voicing_cost` does not, `decisions` does not, and every renderer is
+untouched. §5 step 3, whether a per-finger criterion earns a place in the cost tuple, is
+still open, and §4.2 is why that decision is not taken here.
 
 What is encoded is §2.1 and §2.2 of that document, in its order:
 
@@ -26,24 +31,28 @@ What is encoded is §2.1 and §2.2 of that document, in its order:
   (convention 8), so it is one criterion rather than the three it is written as - see
   `_assignment_score`.
 
-Deliberately **not** modelled, per §2.3 and §4.4: finger-pair asymmetry (fingers 3 and 4
+Deliberately **not** modelled, per §2.3 and §4.5: finger-pair asymmetry (fingers 3 and 4
 share a tendon), position-dependent reach (fret spacing narrows up the neck), thumb-over
 fretting, and crossed fingerings. None of them is a claim this module makes, so no cost
-criterion may be built on one from here.
+criterion may be built on one from here. The *right* hand has its own two questions in that
+document — §2.5 (which strings `p-i-m-a` pluck, and why the thumb-to-index gap is free while
+a gap between the fingers is not) and §4.4 (the measurement, which left the engine alone) —
+and both are answered in `grips.py`, not here.
 
 Nothing here decides playability. `GRIP_MAX_SPAN` is still the span bound and
 `voicing_cost` is still the selection rule; this module answers the narrower question -
 *which* finger - and returns `None` rather than guessing when no assignment exists. The one
 shape it can refuse, five distinct frets, is not reachable from a generated grip at all: it
-is the *merged* walking-bass step of §4.3, which is why the refusal is a return value that
-check can read rather than an exception or a silently crossed fingering.
+is the *merged* walking-bass step of §4.3, which is why the refusal is a return value the
+check reads - `can_fret`, called from `bass._place_bass` - rather than an exception or a
+silently crossed fingering.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
 from itertools import combinations
-from typing import Dict, Iterator, List, Optional, Tuple
+from typing import Dict, Iterable, Iterator, List, Optional, Tuple
 
 from .tuning import Voicing
 
@@ -153,6 +162,34 @@ def _assignment_score(offsets: List[int], choice: Tuple[int, ...]) -> int:
     return sum(abs(offset - (finger - INDEX)) for offset, finger in zip(offsets, choice))
 
 
+def fingers_needed(frets: Iterable[int]) -> int:
+    """How many left-hand fingers a fret vector asks for: its distinct frets at 1 or above.
+
+    Frets are grouped exactly, which is constraint 3 of [docs/fingering.md](../docs/fingering.md)
+    §2.1, and fret 0 is an open string that costs no finger - the same two rules
+    `assign_fingers` applies when it builds `frets_by_finger`. Stated over a bare vector
+    rather than a `Voicing` because the caller that needs it has two shapes merged into one
+    hand and no single `Voicing` to point at: see `can_fret`.
+    """
+    return len({fret for fret in frets if fret >= 1})
+
+
+def can_fret(frets: Iterable[int]) -> bool:
+    """False when a fret vector needs more frets than the left hand has fingers.
+
+    This is §4.3's refusal asked *before* the assignment rather than after it: one finger
+    holds one fret and no finger holds two, so five distinct frets is not a hard shape but
+    an impossible one, and no monotonising score can rescue it.
+
+    `bass._place_bass` is the caller, and it is the only one. Under a `bass_only` step the
+    thumb is merged into the shape the hand is still **holding**, so its fret joins frets
+    that are not this step's own - which is the one way a fifth can appear in an engine
+    whose every generated grip sounds at most four strings. See
+    [docs/open-issues.md](../docs/open-issues.md) item 12.
+    """
+    return fingers_needed(frets) <= len(FINGERS)
+
+
 def assign_fingers(voicing: Voicing) -> Optional[Fingering]:
     """Which finger holds which fret for `voicing`, or None when four cannot do it.
 
@@ -175,7 +212,7 @@ def assign_fingers(voicing: Voicing) -> Optional[Fingering]:
     "make the failure mode visible".
     """
     frets = sorted({fret for fret in voicing.frets if fret >= 1})
-    if len(frets) > len(FINGERS):
+    if not can_fret(frets):
         return None
 
     lowest = frets[0] if frets else 0

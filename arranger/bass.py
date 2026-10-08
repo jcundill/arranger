@@ -33,6 +33,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from musthe import Note
 
 from .chords import NON_CHORD_TONE_EXTENSIONS, ChordParser, normalised_harmony
+from .fingers import can_fret
 from .textures import (
     _BEAT_EPSILON,
     ROLE_FILL,
@@ -343,15 +344,18 @@ def _place_bass(
     string.
 
     `held` is the shape still ringing under a `bass_only` step - see `_held_shape`.
-    It matters for **three** of the questions below at once, and passing it is the
+    It matters for **four** of the questions below at once, and passing it is the
     fix for the unplayable walking bass in `docs/open-issues.md` item 1. A `bass_only`
     step's own vector holds only the melody, so measuring against it alone gets all
-    three wrong: the thumb is placed on a string the hand is already fingering, it is
-    allowed to sound *above* the held shape's bottom note, and its proximity is
-    measured from a fret the hand is not at. On "But Not For Me" bar 5 that put the
-    thumb on the D string at fret 1 while the hand held frets 6-8 - a seven-fret
-    stretch that no per-step span check can see, because every individual step is
-    tidy.
+    four wrong: the thumb is placed on a string the hand is already fingering, it is
+    allowed to sound *above* the held shape's bottom note, its proximity is measured
+    from a fret the hand is not at, and its fret is counted as though it stood alone
+    under the fingers rather than joining four frets already down. On "But Not For Me"
+    bar 5 the first three put the thumb on the D string at fret 1 while the hand held
+    frets 6-8 - a seven-fret stretch that no per-step span check can see, because
+    every individual step is tidy. The fourth is what a `targets` arrangement got
+    wrong instead, on "Tenor Madness" bar 40, and `fingers.can_fret` is what answers
+    it (`docs/open-issues.md` item 12).
 
     The rule is proximity, not string order. The thumb is part of the hand, and
     adjacent strings are five semitones apart, so "play the lowest string" and "stay
@@ -410,6 +414,10 @@ def _place_bass(
     # which is unambiguous, and the hand position still counts it: the thumb is part
     # of the hand whatever it last played.
     sounding_frets = list(upper.frets)
+    # What the fingers must actually cover, which is **not** `sounding_frets`: see the
+    # fret-budget filter in the loop below. Without a held shape the current voicing is
+    # the shape, so the two start the same.
+    hand_base = list(upper.frets)
     if held is not None:
         held_frets, held_thumb = held
         structure = [
@@ -432,6 +440,12 @@ def _place_bass(
             )
             for index in range(len(upper.frets))
         ]
+        # The hand covers the **whole** held vector, including the note the thumb last
+        # played: that string is still ringing, so it is still fretted. `structure` is the
+        # base the three questions above need, because it excludes that note - right for
+        # harmony, wrong for fingers. Measured on the committed heads the two readings give
+        # the same answer, so this one is chosen on the physics rather than on a count.
+        hand_base = list(held_frets)
 
     best: Optional[Tuple[Tuple[float, int, int], Tuple[int, int, int]]] = None
     for string_index in BASS_STRING_INDICES:
@@ -445,6 +459,20 @@ def _place_bass(
             midi = open_midi + fret
             if midi >= lowest_upper:
                 continue  # the thumb must sound below the structure it supports
+            # Four fingers, four frets - and this loop is the one place a fifth can appear.
+            # The hand is the shape still **ringing**, not this step's own vector and not
+            # `sounding_frets`: under a `bass_only` step nothing above the thumb strikes at
+            # all, so a melody carried on a string the held shape does not use is a note the
+            # hand is not holding - it is already sounding elsewhere, which is the item-4
+            # mistake made backwards. What the fingers cover is `hand_base` (the previous
+            # strike, thumb note and all) with the thumb's own string replaced by the fret
+            # chosen here. It is a filter rather than a preference because the alternative is
+            # not a worse placement but an unplayable one, and `fingers.can_fret` is what
+            # answers it (`docs/open-issues.md` item 12).
+            hand = list(hand_base)
+            hand[string_index] = fret
+            if not can_fret(hand):
+                continue
             # Nearest the hand first; then continuity with the previous thumb note,
             # so a line does not leap octaves for no reason; then the lower pitch.
             key = (

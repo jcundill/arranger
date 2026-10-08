@@ -1,34 +1,49 @@
-# Left-hand fingering: research notes
+# Fingering: research notes
 
-**Status: step 1 of §5 is built and inert — `arranger/fingers.py` and
-`tests/test_fingers.py` exist, no engine module imports them, and no existing
-output changed.** It records what is known about how the four fretting
-fingers can be arranged on the fretboard, how confident each claim is, and what
-each one would change in the current implementation. The plan agreed in session
-is: build the assignment and its feasibility tests first, *then* measure whether
-finger-level information deserves a place in `voicing_cost`, and only then touch
-the tuple. This document is the "before" state for that work — when a claim
-below is tested or refuted, the measurement lands here, beside the claim.
+**Status: step 1 of §5 is built; step 2's §4.3 measurement has landed on both hands, and it
+gave `arranger/fingers.py` its first engine caller.** §4.3's *string* budget needed the right
+hand (`grips.thumb_safe_grips`) and no code from this module; its *fret* budget needed the
+module itself (`fingers.can_fret`, read by `bass._place_bass`), so the module is **not inert**
+and `voicing_cost` is still untouched. One step in the committed heads changed. This document
+records what is known about how the four fretting fingers can be arranged on the fretboard,
+how confident each claim is, and what each one would change in the current implementation. The
+plan agreed in session is: build the assignment and its feasibility tests first, *then* measure
+whether finger-level information deserves a place in `voicing_cost`, and only then touch the
+tuple. This document is the "before" state for that work — when a claim below is tested or
+refuted, the measurement lands here, beside the claim.
 
-**§4.3's defect has since been measured, and it was real — and it needed the right hand,
-not this module.** A merged step could sound five strings, one more than the right hand
-has digits; the fix is a budget on the *palette* (`grips.thumb_safe_grips`, read by
-`decisions.resolve_texture_grips`), so `arranger/fingers.py` is still inert and
-`voicing_cost` is still untouched. The measurement and the fix are in §4.3 below, and in
-[docs/open-issues.md](open-issues.md) item 11.
+**Both hands are here, and the title says so.** The document began as the left
+hand's — which finger frets which string — but two of its measurements have been
+about the *right* hand: §4.3 (four digits, so at most four strings may sound at once)
+and §4.4 (the same four digits, and the string *gaps* the fingers reach across). The
+left hand owns §1–§3 and the module; the right hand owns no module, because in both
+cases the answer turned out to be either a rule in `grips.py` or nothing at all.
+
+**§4.3 has since been measured, and it was real — on both hands, and only the second one needed
+this module.** A merged step could sound five strings, one more than the right hand has digits;
+that fix is a budget on the *palette* (`grips.thumb_safe_grips`, read by
+`decisions.resolve_texture_grips`) and needs nothing from `fingers`. A `bass_only` step could
+also need five *frets* from four fingers, and that one is `fingers.can_fret`, read by
+`bass._place_bass` — the module's only engine caller. `voicing_cost` is untouched by both. The
+measurements and the fixes are in §4.3 below, and in [docs/open-issues.md](open-issues.md)
+items 11 and 12.
 
 Nothing in the routing table sends you here to change behaviour. Read it before
 writing `arranger/fingers.py`, before adding any criterion to `voicing_cost`
 that mentions fingers, and before anyone claims a shape is "unplayable" for a
 reason the span cap does not already catch.
 
-**Next step: step 2 of §5, and it has been measured — partly.** Its *§4.3* half is done:
-the five-finger check found a real defect, and it is fixed (see §4.3 and §5 step 2). Its
-*movement* half is measured too — where finger-level movement disagrees with `position`
-and `movement`, over every struck transition of the committed heads — but the re-ranking
-experiment that would decide **step 3** has not run, and the numbers as they stand argue
-against a tuple slot rather than for one. Until that experiment runs, `voicing_cost`
-stays untouched and this document is the state of record.
+**Next step: step 3 of §5, and nothing measured so far argues for it.** Step 2's *§4.3*
+half found a real defect and fixed it (the five-finger check; see §4.3 and §5 step 2). Its
+*movement* half is measured — where finger-level movement disagrees with `position` and
+`movement`, over every struck transition of the committed heads — and it came back nearly
+empty. Its **right-hand half is measured too** (§4.4: which strings `p-i-m-a` pluck, and
+whether a skip between the fingers costs anything the engine could avoid), and it comes
+back the same way: the skip is real and common, but every lever that would remove it trades
+away something a *higher* criterion is paying for. The re-ranking experiment that would
+decide **step 3** has still not run, and the numbers as they stand argue against a tuple
+slot rather than for one. Until it runs, `voicing_cost` stays untouched and this document is
+the state of record.
 
 ## 1. Why: what whole-hand measures cannot see
 
@@ -175,7 +190,53 @@ is corroborative rather than new: a jazz-guitar source treats thumb-over as
 non-idiomatic ("strictly speaking this is bad technique"), which supports the
 §2.1 item 5 decision.
 
-## 3. The algorithm (built, and inert)
+### 2.5 The right hand: `p-i-m-a`, and which gaps between plucks matter
+
+§2.1 item 5 gives the right hand four digits — thumb, index, middle, ring, `p-i-m-a` —
+and used them for one budget: a step may sound at most four strings. There is a second
+question the same four digits raise, and this section is it: **which strings they land
+on, and whether an unplucked string between two of them costs anything.**
+
+Take the strings a step actually plucks, sorted low to high, and hand them out in that
+order: the lowest takes the **thumb**, the next the **index**, then **middle**, then
+**ring** — `p-i-m-a` ascending, which is what a four-note shape on four neighbouring
+strings already is. The strings a step plucks are `tabgp._sounding_frets`' answer rather
+than the fret vector's, because a `repeated` or `bass_only` step is not re-striking its
+whole shape.
+
+Now the claim, and it is the one that makes this measurable:
+
+- **A gap in the *lowest two* sounding strings — between the thumb and the index — is
+  free.** The thumb strokes across the muted string to reach its note, so a skip under
+  it is ordinary equipment rather than a reach, and this is exactly the gap the
+  bass-skipping string sets create on purpose (§2.1's "6-4-3 skips the A"; `drop2`'s
+  `(1,3,4,5)` and `(0,2,3,4)`; `drop2_6432`'s whole reason to exist). Measured in §4.4:
+  **not one** shape in `drop2`, `drop3`, `drop2_6432` or `duo` carries a gap anywhere
+  else, so on this rule all four families are already clean.
+- **A gap between the three *fingers* — index↔middle, or middle↔ring — is the one that
+  costs.** Those three play in a fan above the planted thumb, and one of them reaching
+  over an unplucked string is a different hand from three on three neighbouring strings.
+
+So the metric is a single number — **the skipped strings in gaps crossed by the middle or
+ring finger** — and the thumb→index gap is the only exemption it needs. On the ascending
+strings `s1 < … < sk`, the gap before `s2` is the thumb's and is free; the gaps before `s3`
+and `s4` are the fingers' and count.
+
+**The trap, and it is the reason this section exists rather than a sentence.** The
+obvious metric — "are the plucked strings contiguous?" — **over-reports by an order of
+magnitude**. Counting *any* gap made 275 of the 307 gap-carrying `--bass walk` steps look
+like defects the post-selection bass merge had *created*; counting only the fingers' gaps
+makes the true figure **2**. A bass note merged under a shape lands directly beneath it,
+so the gap it opens is precisely the exempt one — the same "assert the rule on the whole"
+warning as [open-issues.md](open-issues.md) item 11, arriving from the other side. A
+metric that models the *fretboard* is not a metric that models the *hand*.
+
+**Confidence: a convention, adopted on the same footing as §2.2.** It is not measured
+here and could not be — it is a claim about how a hand feels, and the corpus can only say
+how often the shape occurs. What the corpus *can* do is size the consequence, which is
+§4.4, and confirm that the exempt gap is the one the string tables deliberately create.
+
+## 3. The algorithm (built, and read by `bass` for one question)
 
 A small exact enumeration, not a heuristic search:
 
@@ -221,6 +282,8 @@ pinned by a test rather than left in a docstring:
   holds one fret" stated as a return value rather than a crash or a crossed fingering.
   **No generated shape can reach it** — every grip sounds at most four strings, measured
   over 8,789 shapes — so the refusal exists for the merged step of §4.3 and nothing else.
+  That step became a caller: `fingers.can_fret` is the same claim asked *before* the
+  assignment, `bass._place_bass` is what asks it, and §4.3 records the one step it found.
 - **Movement's known under-report** belongs here rather than in §5, because it is a
   property of the design this section specifies and not an implementation slip: a finger
   handed a fret another finger held contributes two zeroes, so a substitution can total 0
@@ -244,9 +307,14 @@ as an importer — deliberately, because reaching the facade is what a facade is
 for. So the facade binds `arranger.fingers`, `"fingers"` is in `arranger.__all__`
 (the star-import surface is checked against the module's own namespace, so a bound
 public name missing from that list fails), and the honest form of stage 1's
-inertness is the narrower one: **no engine module imports it**. That is what
-`tests/test_fingers.py::TestTheModuleIsInert` asserts from the AST, and it is the
-assertion a step-3 change inverts rather than deletes (AGENTS.md trap 5).
+inertness was the narrower one: **no engine module imports it**, asserted from the
+AST by `tests/test_fingers.py::TestTheModuleIsInert`.
+
+**That narrower claim has since been falsified, and the test was inverted rather
+than deleted** (`AGENTS.md` trap 5). §4.3's left-hand half is a real engine caller, so
+the class is now `TestTheEngineUsesItForOneQuestion` and what it asserts is the *set*
+of callers — exactly `{bass}`. Naming the set instead of counting it is the point:
+the next caller has to be considered rather than merely noticed.
 
 ### 4.2 The cost tuple
 
@@ -322,14 +390,125 @@ this document records: the first real playability defect in this area was a *str
 not a finger assignment. Full measurement, the cost, and the rejected alternatives are in
 [docs/open-issues.md](open-issues.md) item 11.
 
-The left-hand half of the question is still open at the margin, and is now stated where it
-can be tested: `tests/test_walking_bass.py::TestTheInvariant` sweeps the *string* budget over
-every committed head, and no test sweeps the fret budget.
+**The left-hand half closed too, one release later, and the answer was the one this section
+rejected as a fix for the other half.** Measured on the tree the string fix left behind — the
+seven committed heads × five `texture`/`bass` rows, 3,697 steps — exactly **one** step
+violated the fret budget: "Tenor Madness" bar 40 under `--texture targets --bass anchors`,
+where the hand holds `x-9-x-8-12-10` and the walk's `B` has a single candidate, the low E at
+fret 7. The A string is spoken for by the held shape, and a `B` on the D at fret 9 would
+sound above the shape's F#3, which `_place_bass` forbids. Five frets from four fingers, and
+there is no placement to prefer: a *filter* is the only thing that can answer it. Dropping
+the note is defensible here precisely because it is not defensible as a general rule — a bass
+note no player can finger is not a bass note, and the step keeps its upper voicing exactly as
+it does when no string is free, with the omission reported. `fingers.can_fret` is the check
+and `bass._place_bass` is its only caller, so `arranger/fingers.py` is no longer inert.
+After: **0**. [docs/open-issues.md](open-issues.md) item 12 has the measurement, the two
+counting decisions below, and the alternatives.
 
-### 4.4 Explicitly out of scope for now
+**One of those counting decisions moves the number by a factor of ten**, and both are about
+which hand the check is stated over:
+
+- counting `sounding_frets` — the vector `_place_bass` already maintains — **over-counts**.
+  Under a `bass_only` step nothing above the thumb strikes, so a melody carried on a string
+  the held shape does not use is a note the hand is not holding; it is already sounding
+  elsewhere. That is item 4's mistake made backwards, and it reads **10** where the answer is
+  **1**.
+- dropping the previous thumb note from the hand, the way `bass._held_shape`'s `structure`
+  does for harmonic reasons, **makes no difference on the committed heads** — measured, both
+  readings give the same answer. `can_fret` is called on the held vector itself plus the
+  candidate rather than on `structure`, which is chosen on the physics: that string is still
+  ringing, so it is still fretted. The alternative is right for harmony and wrong for fingers,
+  and it is recorded here as agreeing rather than as differing.
+
+`tests/test_walking_bass.py::TestTheInvariant` now sweeps the fret budget over every committed
+head beside the string budget, and the two are stated over different parts of the step on
+purpose: one counts *plucks*, the other counts the *hand*. Keeping them apart is what makes
+either one able to fail.
+
+### 4.4 The right-hand finger skip: measured, and left alone
+
+§2.5's convention, sized on what the corpus and the committed heads can say. Throwaway
+scripts under `/tmp` (not committed — `AGENTS.md` trap 8), reading each step's plucks from
+`tabgp._sounding_frets` and counting only the gaps crossed by the middle or ring finger.
+
+**It is a two-family problem.** Finger skips by grip over the 8,789-shape corpus:
+
+| grip | shapes | clean | one finger skip |
+|---|---|---|---|
+| `drop2` | 3812 | **3812 (100%)** | 0 |
+| `drop3` | 1098 | **1098 (100%)** | 0 |
+| `drop2_6432` | 150 | **150 (100%)** | 0 |
+| `duo` | 1310 | **1310 (100%)** | 0 |
+| `shell` | 865 | 721 (83%) | 144 (17%) |
+| `drop24` | 1554 | 444 (29%) | **1110 (71%)** |
+
+Every gap in the first four families is the thumb's, so they are already clean — those are
+precisely the sets §2.1's bass-skipping rule *created*. **Exactly five string sets** carry a
+finger skip, four of them `drop24`'s:
+
+```
+drop24 (5, 4, 2, 1)  strings 1-2-4-5  skips the G  crossed by the middle
+drop24 (5, 3, 2, 0)  strings 1-3-4-6  skips the B  crossed by the ring
+drop24 (4, 3, 1, 0)  strings 2-3-5-6  skips the D  crossed by the middle
+drop24 (4, 2, 1, 0)  strings 2-4-5-6  skips the G  crossed by the ring
+shell  (5, 3, 2)     strings 1-3-4    skips the B  crossed by the middle
+```
+
+The sets `drop24`'s own comment calls its measured winners — strings 1-2-4-5 and 2-3-5-6,
+the first and third above — are both here, which is the whole tension in one line: the
+drop-2 & 4 shapes that fit the neck best are the ones whose fingers straddle an unplucked
+string.
+
+**In the committed heads** (six melody-bearing scores, the chords-only lead sheet has no
+steps), steps carrying a finger skip:
+
+| row | steps | finger skip | …created by the merged bass |
+|---|---|---|---|
+| `uniform` (the default) | 643 | **223 (34.7%)** | 0 |
+| `targets --bass walk` | 837 | 19 (2.3%) | 2 |
+| `targets --bass anchors` | 688 | 16 (2.3%) | 1 |
+| `walking_bass --bass walk` | 837 | 19 (2.3%) | 2 |
+| `walking_bass --bass anchors` | 688 | 19 (2.8%) | 2 |
+
+The bass textures are nearly clean because their target palettes are shells; the default
+`uniform` arrangement carries the full palette and shows the `drop24` cost plainly. And the
+merge is not the source — see §2.5's trap note for why the naive count said otherwise.
+
+**Three levers, and none of them is free.** Over 812 (quality, melody) selections, **265**
+pick a finger-skip winner, every one of them with a zero-skip candidate in the pool:
+
+- **A `voicing_cost` criterion is inert where it could sit.** Inserted *below* `position`
+  (after position, after movement, or after the bass term) it changes **0** picks; inserted
+  just *after* `span` it changes **17**. And the zero-skip alternative loses first at
+  **span 197**, missing 35, position 17, outside 15, foreign 1 — so the skip is
+  overwhelmingly what the *span* criterion buys. Preferring adjacency over span would undo
+  the deliberate promotion of span above neck position (see [engine.md](engine.md) §"Span
+  outranks neck position").
+- **Reordering the string-set tables is inert.** **0** of the 812 picks are decided by an
+  exact full-tuple tie, so generation order — which the table order sets — cannot change a
+  single selection. The apparent lever is not one.
+- **Removing the five sets is precise, and still a hard filter.** It replaces **exactly
+  those 265** winners and empties **0** pools, so no melody loses its only voicing — but it
+  changes 265 of 812 selections (32.6%) and gives up the span and coverage those two
+  `drop24` sets were kept for. That is a musical decision, not a tidy-up.
+
+**Recorded, not built.** No engine module changed, `voicing_cost` is untouched, no test
+moved — the same outcome as the movement half of §5 step 2, reached the same way. If it is
+ever taken up, the cheapest honest form is the third lever with its cost measured first,
+and the span trade decided on the record rather than by a tie-break nobody can see.
+
+**Caveats.** The selection probe is `previous=None` (no voice-leading history), one root
+(`C`), and the *upper* shapes only — the bass is merged after selection, so a selection-time
+term cannot see it (which is why the heads table above is what covers the whole step). It
+also does not model the textures' role palettes, the repeated-melody hold, or melody-only
+slots. So it sizes the candidate ranking, and the arrangement-level incidence is the heads
+table's number — not the probe's.
+
+### 4.5 Explicitly out of scope for now
 
 - rendering fingerings in tab, GP5 or MusicXML (`tabgp.py` has a fingering
-  field; MusicXML has `<technical>` — possible later, separable);
+  field; MusicXML has `<technical>` — possible later, separable) — and this
+  covers the right hand's `p-i-m-a` too, which is the same channel;
 - crossed (non-monotone) fingerings — excluded by choice, named in a test;
 - finger-pair asymmetry and position-dependent reach — scoring refinements,
   deferred until there is a measurement that needs them;
@@ -337,20 +516,24 @@ every committed head, and no test sweeps the fret budget.
   label, not a left-hand technique (§2.1 item 5); it stays merged after
   selection and out of the cost, though §4.3's playability check must add it
   back when that check is built.
+- a right-hand term in `voicing_cost`, and the removal of the five finger-skip
+  string sets — both measured in §4.4 and both left alone there, so neither is
+  an open question until the span trade is decided on the record.
 
 ## 5. The sequence we agreed
 
-**Status: step 1 is done and inert; step 2's §4.3 half is measured and fixed; step 2's
-movement half is measured; step 3 has not been started.** Research is done, and the
-remaining unknowns are empirical (see the note at the top and §4.3), which is why step 1
-had to exist before either measurement could run.
+**Status: step 1 is done; step 2 is measured on all four of its halves — §4.3 fixed on both
+hands, movement nearly empty, right-hand skip recorded; step 3 has not been started.**
+Research is done, and the remaining unknowns are empirical (see the note at the top, §4.3
+and §4.4), which is why step 1 had to exist before any of the measurements could run.
 
 1. **Built.** `arranger/fingers.py` + `tests/test_fingers.py`: assignment,
    barre detection, movement, feasibility over the whole generated corpus.
    The gate stayed green apart from the new tests — 890 test identities before,
    918 after, and the 890 diff empty — so **no existing test moved.** The one
-   correction to this plan is §4.1: the facade binds the module, so "inert" means
-   *no engine module imports it* rather than *nothing imports it*.
+   correction to this plan is §4.1: the facade binds the module, so "inert" meant
+   *no engine module imports it* rather than *nothing imports it* — and §4.3's
+   left-hand half later made even that false, so the module is not inert at all now.
 2. **Measured** with throwaway scripts under `/tmp` (not committed — see `AGENTS.md`
    trap 8), on what is left of the corpus now that `wjazzd.py` is gone: the seven
    committed heads and the 8,789-shape generated corpus.
@@ -358,6 +541,11 @@ had to exist before either measurement could run.
      of which 19 also needed five distinct frets (see §4.3 and
      [open-issues.md](open-issues.md) item 11). Note what the fix was *not*: no finger
      assignment was needed, and `voicing_cost` was not touched.
+   - **The same check's other hand was done later and it did need the assignment** — one
+     `bass_only` step held a four-fret shape and the walk's thumb had nowhere to land but a
+     fifth fret. `fingers.can_fret` refused it (item 12), which is the module's only engine
+     caller and the reason it is not inert. Measured before and after: **1** step, then
+     **0**, and no pinned tab in the suite moved.
    - **The movement comparison came back nearly empty, and the two numbers that did not
      argue against a tuple slot.** Over 1,330 struck transitions (six heads × `uniform`
      and `walking_bass`):
@@ -374,21 +562,46 @@ had to exist before either measurement could run.
        because a finger idle in *either* shape is skipped by design. So a per-finger `total`
        cannot simply replace `movement` at index 5: it says "nothing moved" on a quarter of
        the transitions, and the transitions where it says anything are the 4 above.
+   - **The right-hand half is measured too, and it comes back the same way** (§4.4). The
+     plucks are `p-i-m-a`, so only a skip between the three *fingers* costs anything — the
+     thumb→index gap is the one the bass-skipping sets create on purpose (§2.5). Measured:
+     `drop2`, `drop3`, `drop2_6432` and `duo` are **100% clean**; the skip is confined to
+     four `drop24` sets plus one shell, and to **223 of 643** steps of the default `uniform`
+     arrangement (2–3% under the bass textures). It is the price the *span* criterion pays —
+     the zero-skip alternative loses first at span on 197 of the 265 — so a `voicing_cost`
+     term is inert below `position` (0 of 812 picks) and changes 17 above it, table reordering
+     is inert (0 exact ties), and removing the five sets replaces exactly those 265 winners
+     with 0 pools emptied. Recorded, not built.
 3. **Not started, and step 2's numbers are the argument for leaving it alone.** 0.3% of
    transitions separate the two metrics, the separating case is a single-finger leap that
    `span` (criterion 3) and `movement` (criterion 5) between them already bound, and the one
    candidate that would touch every step — `finger_movement.total` in `movement`'s place —
    reports "nothing moved" on a quarter of them. If it is taken up anyway, the protocol is
    the span bucket's: implement, measure which pinned tabs move, re-pin only what the
-   measurement exonerates, record the rejected alternatives in [engine.md](engine.md),
-   update the counts here and in `AGENTS.md`, and **invert** `TestTheModuleIsInert` rather
-   than delete it (`AGENTS.md` trap 5).
+   measurement exonerates, record the rejected alternatives in [engine.md](engine.md), and
+   update the counts here and in `AGENTS.md`. The **inversion** that protocol named has
+   already happened, for §4.3 rather than for a tuple slot: `TestTheModuleIsInert` is now
+   `TestTheEngineUsesItForOneQuestion` (`AGENTS.md` trap 5), so a step-3 change inherits a
+   test that already expects callers rather than one built on the absence of them.
 
 The movement half of step 2 came back nearly empty, which is the outcome this document was
 written to allow for: hand-level measures already agree with finger-level ones on 99.7% of
 the transitions we generate, so what it records is *that*, rather than inventing a criterion
 to justify the module. The §4.3 half did not come back empty, and it is worth noting which
-hand found it — the left-hand question this document was written about was answered *not
-playable* on 25 steps, while the right hand's four digits were being exceeded on 281.
+hand found it — on the tree that measurement ran on, the left-hand question this document was
+written about was answered *not playable* on 25 steps, while the right hand's four digits were
+being exceeded on 281. The right-hand half that followed (§4.4) is the third shape of answer,
+and the one it is easiest to get wrong: the defect is real and common, every lever that
+removes it is either inert or trades away a higher criterion, and what gets recorded is the
+**trade** rather than a fix — which is what "measure before you decide" is for.
+
+**The left hand's own answer arrived last, and it is the one that needed the module.** The
+string budget's fix took the fret count down with it — 19 steps needing five frets became 1 —
+and that one could not be answered by preferring a different placement, because there was only
+one candidate. So the question this document was written for was finally answered by the thing
+it was written for, in the only way left: refuse the note. It is a small result beside the 281,
+and it is the one that turns `fingers.py` from a research note with a test into a module with a
+caller — which is also what makes §5 step 3 a decision about *where* a criterion goes rather
+than about whether the module should exist at all.
 
 
