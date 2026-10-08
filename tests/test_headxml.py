@@ -2080,6 +2080,38 @@ class TestHeadTexture(unittest.TestCase):
             self.assertEqual(step.role, "target")
 
 
+class TestANarrowPaletteNeverLosesTheTune(unittest.TestCase):
+    """A grip a chord cannot be voiced with must not take the melody note with it.
+
+    `--grips shell` is the caller naming one family for the whole arrangement, and
+    the family that has the least room to give: a shell states the chord's 3rd and
+    7th and may sound **nothing** outside the chord, so a melody the non-chord-tone
+    table cannot reharmonise has no candidate at all - where the four-note families
+    keep a quality-only fallback to thin. "But Not For Me" bar 2 beat 2 is the
+    smallest case: F4 over Ebmaj, the 9th over a plain triad.
+    """
+
+    def test_the_ninth_over_a_triad_is_voiced_rather_than_dropped(self):
+        """The `maj` row reaches the shell family, so the step exists again.
+
+        Before the row, this step had no candidate and `arrange_progression`
+        dropped it with a warning - 76 steps out of 80 notes. The other three
+        losses on this head are bars 18 and 22 (the same chord and note) and bar
+        28, which is a different degree over a different quality.
+        """
+        steps, _head, _notes = arrange_xml_head(BUT_NOT_FOR_ME, grips=("shell",))
+        bar2 = [s for s in steps if s.bar == 2 and abs((s.beat or 0) - 2.0) < 1e-6]
+        self.assertEqual(len(bar2), 1, "bar 2 beat 2 is missing again")
+        step = bar2[0]
+        self.assertEqual(step.melody, "F4")
+        self.assertEqual(step.chord, "Ebmaj")
+        self.assertEqual(step.harmonized_as, "Ebadd9")
+        self.assertEqual(step.strategy, "extension")
+        self.assertEqual(step.grip, "shell")
+        # The 3rd, the 5th and the 9th: G Bb F, the shape a shell of Ebadd9 is.
+        self.assertEqual({m % 12 for m in step.voicing.midi_notes()}, {5, 7, 10})
+
+
 class TestHeadCli(unittest.TestCase):
     """The `head` command, driven as a function over a temporary score."""
 

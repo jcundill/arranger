@@ -177,7 +177,7 @@ class TestNonChordToneResolution(unittest.TestCase):
 class TestExtendedExtensionMappings(unittest.TestCase):
     """The widened NON_CHORD_TONE_EXTENSIONS routing: 11ths, #11s, b13s and the
     half-diminished ninth now have somewhere to go instead of the legacy
-    quality-only fallback."""
+    quality-only fallback, and the 9th over a plain triad has a row at all."""
 
     def setUp(self):
         self.engine = VoiceLeadingEngine()
@@ -208,6 +208,12 @@ class TestExtendedExtensionMappings(unittest.TestCase):
             (Note("Eb5"), "7b9", "G7b9", ("7b13", "G7b13")),
             (Note("C#5"), "9", "G9", ("7#11", "G7#11")),
             (Note("C#5"), "13", "G13", ("7#11", "G7#11")),
+            # The plain triads. This is the case that reached no family at all
+            # under `--grips shell`: a 9th is not a chord tone of a triad, the
+            # table had no row to absorb it, and a shell may not sound a note
+            # outside the chord, so the step was dropped rather than thinned.
+            (Note("F4"), "maj", "Ebmaj", ("add9", "Ebadd9")),      # 9th over a major triad
+            (Note("D5"), "m", "Cm", ("madd9", "Cmadd9")),          # 9th over a minor triad
         ]
         for melody, quality, name, expected in cases:
             self.assertEqual(
@@ -222,8 +228,35 @@ class TestExtendedExtensionMappings(unittest.TestCase):
             (Note("C5"), "7", "G7"),
             (Note("F#5"), "maj7", "Cmaj7"),
             (Note("B4"), "m7b5", "Am7b5"),
+            (Note("F4"), "maj", "Ebmaj"),
         ):
             self.assertFalse(self.engine.is_chord_tone(melody, quality, name))
+
+    def test_the_shell_family_can_voice_a_ninth_over_a_triad_now(self):
+        """The row is worth nothing if the family the failure came from cannot use it.
+
+        A shell states the chord's 3rd and 7th and may sound **nothing** outside
+        the chord, so `Ebmaj` under `F4` had no shell at all - and unlike the
+        four-note families it has no quality-only fallback to thin, which is why
+        the step was dropped rather than played. `Ebadd9` has four shells, every
+        one of them the 3rd, the 5th and the 9th.
+        """
+        self.assertEqual(
+            self.engine.get_all_grip_voicings(
+                Note("F4"), "maj", chord_name="Ebmaj", grips=("shell",)
+            ),
+            [],
+        )
+        voicings = self.engine.get_all_grip_voicings(
+            Note("F4"), "add9", chord_name="Ebadd9", grips=("shell",)
+        )
+        self.assertEqual(len(voicings), 4)
+        allowed = {pc % 12 for pc in ChordParser.get_chord_tones("add9", "Ebadd9")}
+        for voicing in voicings:
+            self.assertEqual(voicing.grip, "shell")
+            sounding = {midi % 12 for midi in voicing.midi_notes()}
+            self.assertEqual(sounding, {5, 7, 10}, voicing.frets)
+            self.assertTrue(sounding <= allowed, voicing.frets)
 
     def test_a_dominant_b9_reaches_the_altered_dominant(self):
         """The b9 over a plain dominant is the one route with nowhere else to go.
