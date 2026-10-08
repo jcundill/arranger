@@ -40,6 +40,10 @@ you whether a change is an improvement or a different library.
   `6-4-3`, both `5-3-2`s and `6-4-3-2` are the four non-contiguous sets, each skipping
   one string; `6-4-3-2` and `(5,3,2)` skip one going *up* (the A to reach the B as
   soprano, and the B to reach the high E respectively).
+  **No set skips an *inner* string any more except the `(5,3,2)` shell**: the four
+  `drop24` sets that did - four of that family's eight, two of them its measured winners -
+  were removed because the right hand had to reach over an unplucked string to fret them.
+  [fingering.md](fingering.md) §4.4 holds the measurement and what the removal cost.
   `supported_string_sets()` is the playability invariant stated in
   one place, and adds the drop-2 blocks for all three sopranos (drop-2 is defined
   generically, so a caller passing their own `top_string` still works).
@@ -369,11 +373,21 @@ empty result offers nothing rather than borrowing another degree's template.
 **Drop-2 & 4** lowers the second and fourth voices of a close stack an octave each — the
 widest four-note shape there is, twenty semitones from melody to bass for a Cmaj7. It
 is unplayable on four neighbouring strings and becomes frettable only through the
-skipping rule below, and it needs to skip an *inner* string as well as the bass. Across
-sevenths, ninths and sixths over the working register, two sets win essentially every
-melody: **1-2-4-5** (skip the G) and **2-3-5-6** (skip the B), against one win for
-everything else combined. Not in `GRIP_PREFERENCE`: it is reachable, but it spans
-nearly two octaves and is a colour rather than the default four-note reading.
+skipping rule below: the bass voice takes a lower string. Four of its eight sets instead
+made it frettable by skipping an **inner** string — 1-2-4-5 (the G), 2-3-5-6 (the B),
+1-3-4-6 and 2-4-5-6 — and **those four are now removed**, because the digit that takes a
+string above an unplucked one has to reach over it. That is not a tidy-up: 1-2-4-5 and
+2-3-5-6 were this family's measured winners over sevenths, ninths and sixths, and over
+the committed heads the removal moves 260 of 1,204 selections and takes 57 of the 1,087
+four-note steps down to fewer voices — **41 of them to the melody alone**, 16 to a duo —
+because the best shape left at that melody position then sits at the top of the span
+budget and `should_demote_to_melody_alone` drops it, and two positions in the pinned
+fixtures lose their chord the same way (F5 at fret 13 over an F7, and C#5 over an Am7).
+The full measurement, including which of the lost shapes were span-0 barres that cost
+the hand nothing, the alternative that keeps every chord, and the open question of
+whether the rule should be per *set* or per *shape*, are in
+[fingering.md](fingering.md) §4.4. Not in `GRIP_PREFERENCE`: it is reachable, but it
+spans nearly two octaves and is a colour rather than the default four-note reading.
 
 Note the local names, which cost a wrong answer here: in `_, v1, v2, v3 = stack`, `v1`
 is the **second** voice. So drop-2 & 4 drops `v1` and `v3` and keeps `v2` beside the
@@ -848,33 +862,41 @@ thumb-line route without its capacity being measured too. Measured here:
 ```
 a walking_bass fill                        all three free
 targets, a walking_bass target             one
-uniform                                     zero
+uniform                                     one, and **zero** until the four
+                                           inner-skip `drop24` sets were removed
 ```
 
 A melody-only **selection** is not in the table at all: its upper shapes are single
 frets, so all three thumb strings are free whatever the texture's palette says, and
 `bass_allowed` answers its capacity unbounded when the route is known.
 
-`uniform` is the only one that fails, and it fails for a reason worth naming: its
-palette is four-note grips and `drop24`'s `(4,2,1,0)` set spans all three thumb strings
-at once. So `bass="walk"` under `uniform` is **refused with a warning that names a
-texture that would work**, and the arrangement still sounds — losing a bass costs less
-than losing a note of the tune.
+**Nothing in the tree is refused any more, and that is a consequence of the grip tables
+rather than of this rule.** `uniform` used to be the one that failed: its palette held
+`drop24`'s `(4,2,1,0)`, the one reachable set that spanned all three thumb strings, so
+`bass="walk"` under the default texture was refused with a warning naming a texture that
+would work. Removing the four inner-skip `drop24` sets for the right-hand reason in
+[fingering.md](fingering.md) §4.4 removed that set with them, so the worst case anywhere
+is now one free string — the rule's threshold — and `uniform` carries every policy. The
+refusal and its reason string stay, because the question is still the right one: the
+comping route is answered by `comping_capacity`, and a palette added later that reaches
+the whole thumb range is caught here without this function being taught about it.
 
 Two honest caveats, both measured rather than assumed:
 
 - This is the **worst case across the sets a grip may use**, and in practice the
   selector rarely picks the worst one. On "But Not For Me" every `uniform` step still
-  left a string. The rule is deliberately conservative: it refuses a combination that
-  would usually work rather than shipping a line that is occasionally holed.
+  left a string, even under the old tables that made the refusal fire. The rule is
+  deliberately conservative: it refuses a combination that would usually work rather than
+  shipping a line that is occasionally holed.
 - **A thumb line is lossy under any four-note or shell texture, and always was.**
   Measured on "But Not For Me" bars 1-2: `walking_bass` loses 9 of 151 thumb notes (6.0%)
   — that is pre-existing behaviour, not something this change introduced — and `targets`
   loses 11 of 151 (7.3%) under `walk`, 7 of 88 (8.0%) under `anchors`. The two melody
   textures lose **none**, because a single left-hand note leaves every thumb string
-  free. So the rule refuses the one combination that can *never* work and lets the
-  others through with their existing warning, rather than refusing a texture whose
-  loss rate is the same order as the flagship's.
+  free. So the rule was aimed at the one combination that can *never* work and let the
+  others through with their existing warning, rather than refusing a texture whose loss
+  rate is the same order as the flagship's — and the one it did refuse lost the set that
+  made it fail, so the rule now has nothing to fire on.
 
 **The other half of the budget: four fingers on the right hand.** A thumb line needs a
 free bass *string*; it also needs a free *finger*, and those are different questions.

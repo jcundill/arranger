@@ -76,9 +76,22 @@ def minor_cadence_tabs():
 
 
 def major_cadence_tabs():
-    """The published fingerings for MAJOR_CADENCE. See `minor_cadence_tabs`."""
+    """
+    The published fingerings for MAJOR_CADENCE. See `minor_cadence_tabs`.
+
+    The A-7 is `x-x-x-x-x-9` - the melody alone, its chord dropped - where it was a
+    complete four-note drop-2 & 4 at `x-10-10-x-10-9`. That shape came from one of the
+    four inner-skip `drop24` sets, removed because a finger had to reach over the
+    unplucked G to fret it (`docs/fingering.md` §4.4), and C#5 over an Am7 is a non-chord
+    tone, so the set that could harmonise it was doing the *fallback* work as well: the
+    only candidate left needs five frets (`x-10-x-5-10-9`), the four-fret budget refuses
+    it, and the step keeps the tune and loses the chord, with a diagnostic naming the
+    cause. It is the ban's one audible cost in the demos, and it is pinned rather than
+    re-pinned away - if that chord is judged worth more than the ban, the alternative is
+    to keep the sets and let the *selector* rank them last (measured in §4.4).
+    """
     return [
-        "x-x-10-10-10-10", "x-10-x-9-10-9", "x-10-10-x-10-9", "x-x-11-10-10-10",
+        "x-x-10-10-10-10", "x-10-x-9-10-9", "x-x-x-x-x-9", "x-x-11-10-10-10",
     ]
 
 
@@ -759,6 +772,9 @@ class TestBackwardCompatibility(unittest.TestCase):
         # that spelling does not parse, so it has no tone set, and counting wrong notes
         # against an empty set made a two-note duo look *better* than a four-note chord.
         # An unreadable chord now leaves the criterion unasked - see cost.voicing_cost.
+        # The A-7 of the other cadence is the exception, and it went the other way: the
+        # four-note shape it had was an inner-skip set, and no playable replacement exists
+        # at C#5 in that position, so `major_cadence_tabs` records the melody alone there.
 
     def test_the_targets_texture_pins_its_exact_tab(self):
         """
@@ -808,15 +824,21 @@ class TestBackwardCompatibility(unittest.TestCase):
         """
         The same fixture under `uniform`, pinned alongside the `targets` one.
 
-        A change to the grip tables can reach the default path too, so the two textures
-        are pinned on the same bar rather than the default being trusted to an older
-        fixture that carries no timing at all.
+        A change to the grip tables can reach the default path too - and this time it did -
+        so the two textures are pinned on the same bar rather than the default being
+        trusted to an older fixture that carries no timing at all.
 
-        Seven of the eight moved to `drop24` on the skipped-bass set. `x-x-7-9-6-8`
-        (F-A-C-F over Fmaj7) became `x-7-7-x-6-8` on strings 5-4-2-1 - the same four
-        pitches, span 1 against span 2, because a four-note shape may now put its bass
-        on a lower string than the contiguous block. `targets` is unchanged: its fills
-        are shells and its targets are drop-2, neither of which takes the new set.
+        Seven of the eight had moved to `drop24` on the skipped-bass set, and the ban has
+        put them back: `x-7-7-x-6-8` is `x-x-7-9-6-8` again, the contiguous drop-2. The
+        four pitches are still the four Fmaj7 tones (A3 E4 F4 C5 against E3 A3 F4 C5), but
+        the bass is the 5th where it was the root, and the span is 2 where it was 1 - so
+        this pin records a *trade*, not an improvement, and it is the same trade the
+        removed sets were kept for (see `docs/fingering.md` §4.4).
+
+        The last step moved the other way, and that one is an improvement: `x-5-5-x-5-5`
+        (D3 G3 E4 A4 under A4) became `8-x-8-9-10-x` (C3 Bb3 E4 A4), so C7 now sounds its
+        root and its b7 instead of a D and a G. `targets` is untouched: its fills are
+        shells and its targets are drop-2, and neither takes a set that was removed.
         """
         steps = VoiceLeadingEngine.arrange_progression(
             BUT_NOT_FOR_ME, timings=BUT_NOT_FOR_ME_TIMINGS, texture="uniform"
@@ -824,14 +846,14 @@ class TestBackwardCompatibility(unittest.TestCase):
         self.assertEqual(
             [s.tab_line() for s in steps],
             [
-                "x-7-7-x-6-8",
-                "x-7-7-x-6-8",
-                "x-7-7-x-6-7",
-                "x-7-7-x-6-8",
-                "x-10-10-x-10-10",
+                "x-x-7-9-6-8",
+                "x-x-7-9-6-8",
+                "x-x-7-9-6-7",
+                "x-x-7-9-6-8",
+                "x-x-10-12-10-10",
                 "x-x-12-12-11-13",
-                "x-7-7-x-6-8",
-                "x-5-5-x-5-5",
+                "x-x-7-9-6-8",
+                "8-x-8-9-10-x",
             ],
         )
 

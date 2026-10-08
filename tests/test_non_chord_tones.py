@@ -405,12 +405,13 @@ class TestNonChordToneStrategiesEndToEnd(unittest.TestCase):
         result = self.engine.arrange_progression(self.all_of_me, non_chord_tone="legacy")
         step = result[1]
         # The exact inversion is not asserted, and the docstring above says why: with
-        # `drop24` in the palette the fallback now lands on `x-10-10-x-12-10`
-        # (G-C-B-D) rather than `x-x-11-11-10-10` (Db-F#-A-D). Both are complete
-        # four-note shapes under a written Cmaj7, both put D5 on top, and both are
-        # wrong chords - which is the whole point of the `legacy` strategy. What is
-        # asserted below is that the strategy still declines to fix the melody.
-        self.assertEqual(step.voicing.grip, "drop24")
+        # `drop24` in the palette the fallback landed on `x-10-10-x-12-10` (G-C-B-D), and
+        # removing the four inner-skip `drop24` sets (`docs/fingering.md` §4.4) moved it to
+        # `x-x-9-12-13-10` (B-G-C-D) - a drop-3 on the contiguous block. That is the third
+        # inversion this line has carried, which is why only the strategy's own promise is
+        # asserted below: a complete four-note shape under a written Cmaj7, with D5 on top,
+        # that declines to fix the melody.
+        self.assertEqual(step.voicing.grip, "drop3")
         self.assertEqual(max(step.voicing.midi_notes()), Note("D5").midi_note())
         # A Cmaj7 is C E G B; nothing the fallback sounds belongs to it.
         self.assertFalse(set(step.voicing.pitch_classes()) <= {0, 4, 7, 11})

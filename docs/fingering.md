@@ -34,7 +34,10 @@ that mentions fingers, and before anyone claims a shape is "unplayable" for a
 reason the span cap does not already catch.
 
 **Next step: step 3 of §5, and nothing measured so far argues for it.** Step 2's *§4.3*
-half found a real defect and fixed it (the five-finger check; see §4.3 and §5 step 2). Its
+half found a real defect and fixed it (the five-finger check; see §4.3 and §5 step 2), and its
+follow-on — whether the *selector* should have left room for the thumb — came back small: **53**
+dropped bass notes, of which only **ten** could be recovered without changing the chord's notes,
+always at the span bucket (`docs/open-issues.md` item 13). Its
 *movement* half is measured — where finger-level movement disagrees with `position` and
 `movement`, over every struck transition of the committed heads — and it came back nearly
 empty. Its **right-hand half is measured too** (§4.4: which strings `p-i-m-a` pluck,
@@ -359,6 +362,17 @@ decide placement second. Candidates worth measuring, in likely order:
   first among the comfort criteria, and a second static comfort term would
   fight it for no measured gain.
 
+**The right hand's own criterion was the fourth candidate, and it is settled — and it is
+not in the tuple.** §4.4's finger skip was measured at every placement: **0** picks changed
+below `position`, **17** just after `span`, **94** of 1,204 pools on the committed heads —
+and the four `drop24` string sets that carry it were **removed from the tables instead**,
+at a price counted in chords (57 four-note steps lose a voice, 41 to the melody alone).
+So `voicing_cost` still has its 8 elements. The one place a finger question enters the
+engine as a *filter* rather than a score is the right hand's budget
+(`RIGHT_HAND_STRINGS`, `grips.thumb_safe_grips`), and the one place a finger question
+reaches the **tables** is `grips.finger_skip_count`, which the sets are held to by test
+rather than by the selector.
+
 ### 4.3 The interaction to check early: the bass note, and the digits on both hands
 
 The walking-bass note is fretted by the left hand like any other note
@@ -429,6 +443,21 @@ and `bass._place_bass` is its only caller, so `arranger/fingers.py` is no longer
 After: **0**. [docs/open-issues.md](open-issues.md) item 12 has the measurement, the two
 counting decisions below, and the alternatives.
 
+**The follow-on question this section leaves open has since been measured, and the answer is
+small.** Item 12 priced *one* dropped bass note; the question behind it was whether the
+**selector** should have left room for the thumb in the first place — the palette narrowing
+above, but at *candidate* level, where `_place_bass` runs only after `_best_voicing` has
+chosen. Measured over the same heads and rows: the warning fires **53** times, and the
+dominant cause is a third one that neither the message nor item 12 names — **52** of the 53
+are "no octave of the walk's pitch below the shape" (the chord's own bottom note is already
+that low), **1** is item 12's five frets, and **0** are "no free string". Of the 48 that
+another candidate *could* have hosted, only **ten** have a candidate sounding the identical
+notes, and every one of those ten pays the span bucket (0.0 → 2.0); the other 38 would change
+which notes the chord states — the inspected case drops the root and doubles the 3rd, and
+`voicing_cost` ties the two shapes because both are three chord tones. So nothing was built, a
+third time for the same reason. [docs/open-issues.md](open-issues.md) item 13 has the counts,
+the aliasing trap this instrumentation hit, and the four alternatives.
+
 **One of those counting decisions moves the number by a factor of ten**, and both are about
 which hand the check is stated over:
 
@@ -449,11 +478,19 @@ head beside the string budget, and the two are stated over different parts of th
 purpose: one counts *plucks*, the other counts the *hand*. Keeping them apart is what makes
 either one able to fail.
 
-### 4.4 The right-hand finger skip: measured, and left alone
+### 4.4 The right-hand finger skip: measured, and the four sets removed
 
-§2.5's convention, sized on what the corpus and the committed heads can say. Throwaway
-scripts under `/tmp` (not committed — `AGENTS.md` trap 8), reading each step's plucks from
-`tabgp._sounding_frets` and counting only the gaps crossed by the middle or ring finger.
+§2.5's convention, sized on what the corpus and the committed heads can say, and then
+**enforced**: four of the five string sets that carry a finger skip were removed from
+`GRIP_STRING_SETS`, and the rule they failed is now code — `grips.finger_skip_count`,
+with `THUMB_REACH_STRINGS` for the exemption — so the tables are held to it by
+`tests/test_grips.py` rather than by a paragraph. The measurements below are the
+reasoning, the price, and the alternatives that were rejected.
+
+The instrument: throwaway scripts under `/tmp` (not committed — `AGENTS.md` trap 8),
+reading each step's plucks from `tabgp._sounding_frets` — *plucks*, not the fret vector,
+which is §2.5's own trap — and counting only the gaps crossed by the middle or ring
+finger.
 
 **It is a two-family problem.** Finger skips by grip over the 8,789-shape corpus:
 
@@ -467,36 +504,86 @@ scripts under `/tmp` (not committed — `AGENTS.md` trap 8), reading each step's
 | `drop24` | 1554 | 444 (29%) | **1110 (71%)** |
 
 Every gap in the first four families is the thumb's, so they are already clean — those are
-precisely the sets §2.1's bass-skipping rule *created*. **Exactly five string sets** carry a
-finger skip, four of them `drop24`'s:
+precisely the sets §2.1's bass-skipping rule *created*. **Exactly five string sets** carried
+a finger skip, four of them `drop24`'s:
 
 ```
-drop24 (5, 4, 2, 1)  strings 1-2-4-5  skips the G  crossed by the middle
-drop24 (5, 3, 2, 0)  strings 1-3-4-6  skips the B  crossed by the ring
-drop24 (4, 3, 1, 0)  strings 2-3-5-6  skips the D  crossed by the middle
-drop24 (4, 2, 1, 0)  strings 2-4-5-6  skips the G  crossed by the ring
-shell  (5, 3, 2)     strings 1-3-4    skips the B  crossed by the middle
+drop24 (5, 4, 2, 1)  strings 1-2-4-5  skips the G  crossed by the middle   REMOVED
+drop24 (5, 3, 2, 0)  strings 1-3-4-6  skips the B  crossed by the ring     REMOVED
+drop24 (4, 3, 1, 0)  strings 2-3-5-6  skips the D  crossed by the middle   REMOVED
+drop24 (4, 2, 1, 0)  strings 2-4-5-6  skips the G  crossed by the ring     REMOVED
+shell  (5, 3, 2)     strings 1-3-4    skips the B  crossed by the middle   kept
 ```
 
-The sets `drop24`'s own comment calls its measured winners — strings 1-2-4-5 and 2-3-5-6,
-the first and third above — are both here, which is the whole tension in one line: the
-drop-2 & 4 shapes that fit the neck best are the ones whose fingers straddle an unplucked
-string.
+The sets `drop24`'s own comment called its measured winners — strings 1-2-4-5 and
+2-3-5-6, the first and third above — were both here, which is the whole tension in one
+line: the drop-2 & 4 shapes that fitted the neck best were the ones whose fingers straddled
+an unplucked string.
+
+**Why the four went and the fifth stayed.** §2.5's cost is a **right-hand fan** claim, not
+a left-hand one: the three fingers play above a planted thumb, and one of them reaching
+over an unplucked string is a different hand from three on three neighbouring strings.
+That makes it a *convention about the hand*, and it applies to a shape whose frets are all
+equal just as much as to one that stretches — a barre across `x-10-10-x-10-10` still has
+the middle finger crossing the silent G, and §2.5 says so. So the four sets were removed on
+the convention's own terms. The `(5,3,2)` shell is kept for reasons that outrank it: it is
+the high E's second shell (the table asymmetry it closes is in `docs/engine.md`), and it is
+the three-layer split the walking bass needs. The cost of that exception is measured below
+— it is the **1** step of the default row that still carries a skip.
 
 **In the committed heads** (six melody-bearing scores, the chords-only lead sheet has no
-steps), steps carrying a finger skip:
+steps), steps carrying a finger skip, either side of the removal:
 
-| row | steps | finger skip | …created by the merged bass |
+| row | steps | before | after |
 |---|---|---|---|
-| `uniform` (the default) | 643 | **223 (34.7%)** | 0 |
-| `targets --bass walk` | 837 | 19 (2.3%) | 2 |
-| `targets --bass anchors` | 688 | 16 (2.3%) | 1 |
-| `walking_bass --bass walk` | 837 | 19 (2.3%) | 2 |
-| `walking_bass --bass anchors` | 688 | 19 (2.8%) | 2 |
+| `uniform` (the default) | 643 | **223 (34.7%)** | **1** |
+| `targets --bass walk` | 837 | 19 (2.3%) | 19 (2.3%) |
+| `targets --bass anchors` | 688 | 16 (2.3%) | 16 (2.3%) |
+| `walking_bass --bass walk` | 837 | 19 (2.3%) | 19 (2.3%) |
+| `walking_bass --bass anchors` | 688 | 19 (2.8%) | 19 (2.8%) |
+| `uniform --bass walk` | 839 | refused outright | 95 (11.3%) |
+| `uniform --bass anchors` | 688 | refused outright | 27 (3.9%) |
 
-The bass textures are nearly clean because their target palettes are shells; the default
-`uniform` arrangement carries the full palette and shows the `drop24` cost plainly. And the
-merge is not the source — see §2.5's trap note for why the naive count said otherwise.
+The bass textures are nearly clean because their target palettes are shells — the one set
+the ban left — so **they do not move at all**; the default `uniform` arrangement carried the
+full palette, and its 223 is what the ban was for. The single step it still carries is a
+`(5,3,2)` shell (`x-x-10-11-x-8`, strings 2-3-5), which is the exception above showing up as
+a count. The two `uniform` bass rows are **new rather than unchanged**: removing the sets
+took `drop24`'s `(4,2,1,0)` — the one reachable shape spanning all three thumb strings —
+with them, so `thumb_capacity("uniform")` went 0 → 1 and the refusal *dissolved*
+(`docs/engine.md`). Their 95 and 27 steps carry the shell's skip, because a walking-bass
+target may sound at most three strings (`grips.thumb_safe_grips`) and the shell is what is
+left. The merge is not the source of any of it — see §2.5's trap note for why the naive
+count said otherwise.
+
+**What it cost, and this is the first time the convention's price has been counted in
+chords.** Two like-for-like measurements, on the five rows that exist either side:
+
+- **Selections: 260 of 1,204 pools change winner.** 199 of the 260 change the notes (192 of
+  them keeping the pitch classes — the same chord on another string set), and at pool level
+  16 change the voice count. The first criterion the replacement loses is **span in 184** of
+  them and position in 59: the removed sets were largely what the *span* criterion was
+  buying, which is the trade `docs/engine.md`'s span promotion has to answer for.
+- **Steps: 57 of the default row's 1,087 four-note steps come back with fewer voices** —
+  **41 playing the melody alone**, 16 a duo. No pool is emptied; the mechanism is
+  `decisions.should_demote_to_melody_alone`. With the span-0/1 shapes gone, the best
+  candidate left at that melody position sits at the top of the span budget and the policy
+  drops it, so the chord disappears with a diagnostic that names it
+  (`x-10-10-x-10-10 → x-x-x-x-x-10`, "needs a 5-fret stretch … playing the melody alone").
+  The pre-ban spans of those 41: **7 at 0, 3 at 1**, 3 at 2, 9 at 3, 19 at 4; the 16 duos
+  were 9 at span 1 and 7 at span 4. **Nineteen of the 57 lost shapes were left-hand-trivial**
+  — span 0 or 1, a barre or a one-fret reach — and they are still paid, because §2.5's cost
+  is the right hand's fan and a barre crosses the G exactly as much as a stretch does. That
+  asymmetry is the honest shape of this decision, and it is why the alternatives below are
+  recorded rather than deleted: if the convention is ever softened, the ten span-0/1 chord
+  losses are what softening would buy back.
+- **The demos**, which is where a player feels it: `major_cadence_tabs()`'s A-7 keeps the
+  melody and loses the chord (`C#5` over an Am7 — a non-chord melody that only the removed
+  set could harmonise in that position), and so does the `F7` of
+  `tests/test_grips.py::TestPartialHarmonisation`. The minor ii-V-i's Cm7 and Autumn
+  Leaves' Gm6 move `drop24 → drop3` with identical pitch classes, and "But Not For Me"
+  under `uniform` reverts four steps to the contiguous drop-2 — bass 5th instead of root,
+  span 1 → 2.
 
 **The exemption's own reach, measured: the thumb sweeps the low four strings, and narrowing it
 costs nothing.** §2.5's convention has a second half — the thumb is the digit on the bottom
@@ -540,37 +627,63 @@ the two `walk` rows and **49 of 60** (`targets`) and **49 of 68** (`walking_bass
 is marked — which is the fact the convention is stated from, and the one no reader of `bass=`
 would guess.
 
-**Recorded, not built, and there is nothing here to build.** No engine module assigns a
-right-hand digit: the only right-hand code is the four-string *budget* (`RIGHT_HAND_STRINGS`,
-`grip_pluck_count`, `grips.thumb_safe_grips`), which counts how many digits are spoken for
-rather than choosing which. So this convention has no engine consequence to weigh, and the
-metric's conclusion stands unchanged. What it does change is the *model*: a third of the `walk`
-rows' steps and nearly two thirds of the `anchors` rows' steps carry **no thumb in the right
-hand at all**, which is worth knowing before anyone reasons from "the thumb is on the bottom
-note".
+**No engine module assigns a right-hand digit, and that is still true** — the only
+right-hand code is the four-string *budget* (`RIGHT_HAND_STRINGS`, `grip_pluck_count`,
+`grips.thumb_safe_grips`), which counts how many digits are spoken for rather than choosing
+which. So *this half* of the convention — which string a lone note sits on, and how far the
+thumb reaches — has no engine consequence to weigh, and the reach measurement above stands
+as recorded. The **skip** half is the one that did have a consequence to weigh, and it was
+paid in the tables rather than in the tuple: the levers below. What the reach measurement
+changes is the *model*: a third of the `walk` rows' steps and nearly two thirds of the
+`anchors` rows' steps carry **no thumb in the right hand at all**, which is worth knowing
+before anyone reasons from "the thumb is on the bottom note".
 
-**Three levers, and none of them is free.** Over 812 (quality, melody) selections, **265**
-pick a finger-skip winner, every one of them with a zero-skip candidate in the pool:
+**The levers, all three measured, and the one that was taken.** Over 812 (quality, melody)
+selections, **265** picked a finger-skip winner, every one of them with a zero-skip
+candidate in the pool:
 
-- **A `voicing_cost` criterion is inert where it could sit.** Inserted *below* `position`
-  (after position, after movement, or after the bass term) it changes **0** picks; inserted
-  just *after* `span` it changes **17**. And the zero-skip alternative loses first at
-  **span 197**, missing 35, position 17, outside 15, foreign 1 — so the skip is
-  overwhelmingly what the *span* criterion buys. Preferring adjacency over span would undo
-  the deliberate promotion of span above neck position (see [engine.md](engine.md) §"Span
-  outranks neck position").
+- **A `voicing_cost` criterion is inert where it could sit, and small where it is not —
+  so it was rejected.** Inserted *below* `position` (after position, after movement, or
+  after the bass term) it changes **0** picks; inserted just *after* `span` it changes
+  **17**. And the zero-skip alternative loses first at **span 197**, missing 35, position
+  17, outside 15, foreign 1 — so the skip is overwhelmingly what the *span* criterion buys.
+  Preferring adjacency over span would undo the deliberate promotion of span above neck
+  position (see [engine.md](engine.md) §"Span outranks neck position"), and on the
+  committed heads the same placement changes 94 of 1,204 pools. It would also rank the
+  `(5,3,2)` shell down, and that shape is the walking bass's three-layer split — so the
+  criterion and the shell cannot both be kept as they stand. Measured, not built.
 - **Reordering the string-set tables is inert.** **0** of the 812 picks are decided by an
   exact full-tuple tie, so generation order — which the table order sets — cannot change a
   single selection. The apparent lever is not one.
-- **Removing the five sets is precise, and still a hard filter.** It replaces **exactly
-  those 265** winners and empties **0** pools, so no melody loses its only voicing — but it
-  changes 265 of 812 selections (32.6%) and gives up the span and coverage those two
-  `drop24` sets were kept for. That is a musical decision, not a tidy-up.
+- **Removing the sets is precise, and it is the one taken** — narrowed to the four `drop24`
+  sets, because the shell has reasons that outrank the convention. It replaces **exactly
+  those 265** probe winners, empties **0** pools, and takes 57 of the default row's 1,087
+  four-note steps down to fewer voices, 41 of them to the melody alone. The full price, and
+  the two rejected variants of this same lever, are the two sections above and the note
+  below.
 
-**Recorded, not built.** No engine module changed, `voicing_cost` is untouched, no test
-moved — the same outcome as the movement half of §5 step 2, reached the same way. If it is
-ever taken up, the cheapest honest form is the third lever with its cost measured first,
-and the span trade decided on the record rather than by a tie-break nobody can see.
+**Rejected, and recorded so that nothing here needs re-measuring.** Three forms of the
+third lever were considered once the price was known, and none was taken on the evidence:
+
+- **Ban all five sets.** One notch further than what shipped; the `(5,3,2)` shell would go
+  with the four, and it is the high E's second shell and the walking bass's three-layer
+  split. The shell's skip is the price of keeping it, and it is 1 step of the default row.
+- **Ban per *shape* rather than per *set*** — drop a candidate only where the gap coincides
+  with a real reach (`finger_skip_count > 0 and span >= 2`). Not built and not measured;
+  the measurement above says it would keep the **10** span-0/1 shapes among the 41 chord
+  losses, and leave the other 31, which are shapes that were reaching 2-4 frets anyway. If
+  the left-hand reading is ever preferred to the right-hand one, this is the rule to
+  measure first.
+- **Keep the sets and offer them only as a last resort** — a skip-carrying shape allowed
+  when nothing else at that position is playable. It would keep **all 41** chords by
+  construction, but it needs the span check that currently runs *after* selection
+  (`steps.py`, via `decisions.should_demote_to_melody_alone`) to run *inside* it, which is
+  a change to where selection ends rather than a table edit. Not built.
+
+**Recorded, and built.** `grips.finger_skip_count` states the rule, `GRIP_STRING_SETS`
+obeys it, and `tests/test_grips.py` holds both: the predicate's table (the exemption is the
+bottom gap only, and `(0,2,4,5)` pays for its second one), the four removed sets still
+failing it, and the shell being the only reachable set that does.
 
 **Caveats.** The selection probe is `previous=None` (no voice-leading history), one root
 (`C`), and the *upper* shapes only — the bass is merged after selection, so a selection-time
@@ -597,8 +710,10 @@ table's number — not the probe's.
 
 ## 5. The sequence we agreed
 
-**Status: step 1 is done; step 2 is measured on all four of its halves — §4.3 fixed on both
-hands, movement nearly empty, right-hand skip recorded; step 3 has not been started.**
+**Status: step 1 is done; step 2 is measured on all of its halves, and one half was acted
+on — §4.3 fixed on both hands, with its thumb-room follow-on measured and recorded (item 13),
+movement nearly empty, the right-hand skip **enforced** by removing four string sets (§4.4),
+and the thumb's reach recorded; step 3 has not been started.**
 Research is done, and the remaining unknowns are empirical (see the note at the top, §4.3
 and §4.4), which is why step 1 had to exist before any of the measurements could run.
 
@@ -621,6 +736,12 @@ and §4.4), which is why step 1 had to exist before any of the measurements coul
      fifth fret. `fingers.can_fret` refused it (item 12), which is the module's only engine
      caller and the reason it is not inert. Measured before and after: **1** step, then
      **0**, and no pinned tab in the suite moved.
+   - **The follow-on — would the *selector* leaving room for the thumb pay? — came back small.**
+     The warning fires **53** times over the same heads and rows, but **52** of those are a third
+     cause (no octave of the walk's pitch below the shape, because the chord's own bottom note is
+     already that low), not the fret budget; of the 48 that a different candidate could have
+     hosted, only **ten** have one that sounds the identical notes, and every one of those pays the
+     span bucket. Recorded as [open-issues.md](open-issues.md) item 13, not built.
    - **The movement comparison came back nearly empty, and the two numbers that did not
      argue against a tuple slot.** Over 1,330 struck transitions (six heads × `uniform`
      and `walking_bass`):
@@ -644,16 +765,22 @@ and §4.4), which is why step 1 had to exist before any of the measurements coul
      four `drop24` sets plus one shell, and to **223 of 643** steps of the default `uniform`
      arrangement (2–3% under the bass textures). It is the price the *span* criterion pays —
      the zero-skip alternative loses first at span on 197 of the 265 — so a `voicing_cost`
-     term is inert below `position` (0 of 812 picks) and changes 17 above it, table reordering
-     is inert (0 exact ties), and removing the five sets replaces exactly those 265 winners
-     with 0 pools emptied. Recorded, not built.
+     term is inert below `position` (0 of 812 picks) and changes 17 above it (94 pools on the
+     committed heads), table reordering is inert (0 exact ties), and **removing the sets is
+     what shipped**: the four `drop24` ones are gone, which takes the default row's
+     skip-carrying steps **223 → 1** and costs 57 of its 1,087 four-note steps a voice, **41
+     of them their chord**. The price, the barre asymmetry that comes with it (§2.5's cost is
+     the *right* hand's fan, so a span-0 barre pays too), and the three rejected forms of the
+     same lever are in §4.4; the removal also dissolved `uniform`'s bass refusal, because
+     `(4,2,1,0)` was the set spanning all three thumb strings.
      **The same question with the exemption narrowed to the thumb's real reach** — kept only
      where the bottom note is on the E, A, D or the G string — is measured beside it and moves
      **0** on every row, for a structural reason: the only reachable sets with their bottom note
      above the G are `duo`'s 1-2 pair and the two one-note comping shapes, all three contiguous,
      so the exempt gap never arises where the thumb cannot reach. It is a convention that is
      common in the arrangements (a third of the `walk` rows' steps, nearly two thirds of
-     `anchors`') and free in the tables, which is why it is recorded rather than built.
+     `anchors`') and free in the tables, which is why it is recorded rather than built — and
+     it is now stated once in code, as `grips.THUMB_REACH_STRINGS`.
 3. **Not started, and step 2's numbers are the argument for leaving it alone.** 0.3% of
    transitions separate the two metrics, the separating case is a single-finger leap that
    `span` (criterion 3) and `movement` (criterion 5) between them already bound, and the one
@@ -673,9 +800,12 @@ to justify the module. The §4.3 half did not come back empty, and it is worth n
 hand found it — on the tree that measurement ran on, the left-hand question this document was
 written about was answered *not playable* on 25 steps, while the right hand's four digits were
 being exceeded on 281. The right-hand half that followed (§4.4) is the third shape of answer,
-and the one it is easiest to get wrong: the defect is real and common, every lever that
-removes it is either inert or trades away a higher criterion, and what gets recorded is the
-**trade** rather than a fix — which is what "measure before you decide" is for.
+and the one it is easiest to get wrong: the defect is real and common, every criterion-shaped
+lever that removes it is either inert or trades away a *higher* criterion, and what shipped was
+therefore a **table** change rather than a `voicing_cost` term — the four `drop24` sets gone,
+with its price counted in chords and recorded beside it (41 of the default row's 1,087
+four-note steps lose their chord). That is what "measure before you decide" is for: the
+measurement did not choose between the levers, it priced them, and the price is on the record.
 
 **The left hand's own answer arrived last, and it is the one that needed the module.** The
 string budget's fix took the fret count down with it — 19 steps needing five frets became 1 —

@@ -1036,11 +1036,13 @@ def thumb_capacity(texture: str, role: str) -> Optional[int]:
 
         a walking_bass fill                        all three free
         targets, a walking_bass target             one
-        uniform                                     **zero** - `drop24`'s (4,2,1,0)
-                                                    set spans the whole thumb range
+        uniform                                     one - it was **zero** while
+                                                    `drop24`'s (4,2,1,0) set, which
+                                                    spanned the whole thumb range, existed
 
-    which is why `walk` is refused under `uniform` and `anchors` is not: an anchors
-    line needs one string and survives on the single one `uniform` leaves. A
+    Nothing in the tree is refused any more, and that follows from the grip tables rather
+    than from this rule: the worst case anywhere is now one free string, which is the
+    threshold. A
     melody-only **selection** is not in this table at all: its upper shapes are
     single frets, and its capacity is answered in `bass_allowed`, where the route
     is known.
@@ -1154,17 +1156,24 @@ def bass_allowed(
     the same threshold covers both, and a future policy is refused or allowed on the
     same terms without this function being taught about it.
 
-    Measured across this tree, `uniform` is the only texture that fails: its palette is
-    four-note grips, and `drop24`'s `(4,2,1,0)` set spans all three thumb strings at
-    once. Note this is the **worst case across the sets a grip may use**, and in practice
-    the selector rarely picks that one - measured on "But Not For Me" every step still
-    left a string. So the rule is deliberately conservative: it refuses a combination
-    that would *usually* work rather than shipping a line that is occasionally holed,
-    because a bass line with gaps in it is worse than no bass line, and the caller is
-    told what to use instead.
+    **No shipped texture fails it any more**, and that follows from the grip tables rather
+    than from this rule. `uniform` used to be the one that did: its palette held
+    `drop24`'s `(4,2,1,0)` set, which spanned all three thumb strings at once. That set was
+    removed for a right-hand reason of its own (`docs/fingering.md` §4.4), so the worst case
+    anywhere in the tree is now one free string - the rule's threshold - and every texture
+    carries every policy. The refusal and its reason string stay, because the question is
+    still the right one to ask: a *comping* arity that filled the neck is caught through
+    `comping_capacity`, and a texture added later whose palette reaches the whole thumb
+    range is caught here without this function being taught about it.
 
-    The alternative is named in the reason string, so the refusal is a sentence a player
-    can act on rather than a policy they have to reverse-engineer.
+    Note this is the **worst case across the sets a grip may use**, and in practice the
+    selector rarely picks the worst one - measured on "But Not For Me", every step under
+    the old tables still left a string. So the rule is deliberately conservative: it refuses
+    a combination that would *usually* work rather than shipping a line that is occasionally
+    holed, because a bass line with gaps in it is worse than no bass line.
+
+    The alternative is named in the reason string, so a refusal is a sentence a player can
+    act on rather than a policy they have to reverse-engineer.
 
     **`notes` and `bass_voice` are the comping route's half of the question, and they
     are why this function takes them.** On the comping route the left hand's shapes are

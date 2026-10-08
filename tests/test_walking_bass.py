@@ -2080,17 +2080,33 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
         self.assertEqual([s.bass for s in plain], [None] * len(plain))
         self.assertTrue(any(s.bass is not None for s in walked))
 
-    def test_uniform_refuses_the_line_and_says_so_rather_than_dropping_quietly(self):
-        """The one combination the left hand cannot accommodate is reported, not guessed."""
+    def test_uniform_no_longer_refuses_the_line_because_a_string_is_free(self):
+        """
+        This was the tree's one refusal, and the set behind it is gone.
+
+        `uniform`'s palette held `drop24`'s `(4,2,1,0)`, the one reachable shape spanning
+        all three thumb strings, so `bass_allowed` refused every policy and the caller was
+        told which texture would work instead. The four inner-skip `drop24` sets were
+        removed for a *finger* reason (`docs/fingering.md` §4.4) and that set was among
+        them, so the worst case `uniform` can reach now leaves one string free - the rule's
+        threshold - and the line is written.
+
+        **Inverted rather than deleted.** It used to demand the refusal message and no bass
+        notes; it now demands the opposite, and keeps the half that made the refusal safe -
+        the arrangement still sounds, one step per melody note - so a silently dropped
+        chord cannot pass for a working bass line.
+        """
         messages = []
         diagnostics = arranger.Diagnostics(emit=messages.append)
         steps = self.arrange(texture="uniform", bass="walk", diagnostics=diagnostics)
-        self.assertTrue(messages, "the refusal was silent")
-        self.assertTrue(
-            any("no bass string free" in m for m in messages), messages
+        self.assertEqual(
+            [m for m in messages if "no bass string free" in m], [],
+            "the refusal outlived the set that caused it",
         )
-        self.assertEqual([s.bass for s in steps], [None] * len(steps))
-        # And the arrangement still sounds: losing a bass beats losing the tune.
+        self.assertTrue(
+            any(s.bass is not None for s in steps), "the walk wrote no note at all"
+        )
+        # And the arrangement still sounds.
         self.assertEqual(len(steps), len(self.PROGRESSION))
         self.assertTrue(all(s.voicing.active_frets() for s in steps))
 

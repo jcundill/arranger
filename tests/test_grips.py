@@ -28,7 +28,7 @@ from arranger import (
     format_progression,
     supported_string_sets,
 )
-from arranger.grips import _string_sets_for
+from arranger.grips import THUMB_REACH_STRINGS, _string_sets_for, finger_skip_count
 from tests.support import note_name
 
 # A representative spread of the families the library voices well: sevenths, sixths,
@@ -88,6 +88,21 @@ def tones_with_an_inversion(chord_name, quality):
         for melody in every_chord_tone(chord_name, quality)
         if (Note(melody).midi_note() - root_pc) % 12 in degrees
     ]
+
+
+def a_shape_on(strings):
+    """A bare `Voicing` sounding exactly `strings`, for the table-level questions.
+
+    Frets are all zero - nothing here is about where the hand is - so the shape's *strings*
+    are the only thing under test. Built rather than taken from a generator because these
+    questions are asked of sets the tables may no longer offer: `finger_skip_count` is what
+    flagged the four removed `drop24` sets, and a test that could only ask about offered
+    sets could not show what the rule costs.
+    """
+    frets = [-1] * 6
+    for index in strings:
+        frets[index] = 0
+    return Voicing(frets=frets, top_fret=0, avg_fret=0.0)
 
 
 class TestGripGeneration(unittest.TestCase):
@@ -947,6 +962,64 @@ class TestGuideTones(unittest.TestCase):
 class TestStringSetTable(unittest.TestCase):
     """The GRIP_STRING_SETS table itself, which the generated paths do not read."""
 
+    def test_the_five_three_two_shell_is_the_only_set_that_crosses_a_string(self):
+        """
+        Every set a voicing may occupy leaves no finger reaching over a string - but one.
+
+        `docs/fingering.md` §4.4's rule, held against the tables rather than restated: a
+        gap between two sounding strings is the **thumb's** while the note below it is
+        inside `THUMB_REACH_STRINGS`, and any other gap costs the middle or ring finger
+        (`finger_skip_count`). Four `drop24` sets used to fail this and were **removed for
+        it** - 260 of 1,204 selections change shape, and 41 of the default row's four-note
+        steps lose their chord with it (§4.4 holds the price) - so this asserts the rule
+        holds of what remains, and that the one exception is the `(5,3,2)` shell, which is
+        kept on purpose for the walking bass's three-layer split rather than tolerated by
+        accident.
+
+        Checked over `supported_string_sets()`, because that - not the table - is what a
+        generated voicing's `active_strings` must be a member of, so the drop-2 blocks the
+        table does not list are covered here too.
+        """
+        crossing = {
+            frozenset(strings)
+            for strings in supported_string_sets()
+            if finger_skip_count(a_shape_on(strings)) > 0
+        }
+        self.assertEqual(
+            crossing,
+            {frozenset((2, 3, 5))},
+            "a reachable set puts a finger over an unplucked string, or the shell lost its",
+        )
+
+    def test_the_thumb_s_exemption_is_the_bottom_gap_only(self):
+        """
+        A gap is free only where it is the *bottom* one and the thumb is under it.
+
+        Three cases, and the third is why the exemption is not "any gap above a low note":
+        `(1,3,4,5)` is clean because its gap is the bottom one, under the A string;
+        `(2,3,5)` pays one because its bottom string is the G and its gap is above it; and
+        `(0,2,4,5)` - whose bottom gap *is* free - still pays for the second one, which is
+        the asymmetry the rule is stated with.
+
+        The four sets the ban removed are asked directly, since the point of the rule is
+        that it flags them and not merely that the table no longer lists them.
+        """
+        self.assertEqual(THUMB_REACH_STRINGS, frozenset((0, 1, 2, 3)))
+        self.assertEqual(
+            finger_skip_count(a_shape_on((1, 3, 4, 5))), 0, "the thumb is under the A",
+        )
+        self.assertEqual(
+            finger_skip_count(a_shape_on((2, 3, 5))), 1, "nothing is under the G",
+        )
+        self.assertEqual(
+            finger_skip_count(a_shape_on((0, 2, 4, 5))), 1, "the second gap is the cost",
+        )
+        for strings in ((5, 4, 2, 1), (5, 3, 2, 0), (4, 3, 1, 0), (4, 2, 1, 0)):
+            self.assertEqual(
+                finger_skip_count(a_shape_on(strings)), 1,
+                f"the removed set {strings} should fail the rule it was removed for",
+            )
+
     def test_every_grip_family_has_a_span_limit(self):
         """
         Every family in GRIP_STRING_SETS is also in GRIP_MAX_SPAN, and vice versa.
@@ -1324,24 +1397,38 @@ class TestPartialHarmonisation(unittest.TestCase):
         renderers said so, because a chord name above a duo describes a harmony that is
         not fully sounding.
 
-        It no longer does. `drop24` in the palette gives F7 under F5 a complete
-        four-note chord - `x-12-13-x-13-13` - where only the duo fitted before, so
-        nothing here is partial any more.
+        `drop24` in the palette then gave F7 under F5 a complete four-note chord -
+        `x-12-13-x-13-13` - where only the duo fitted before, so this test asserted that
+        nothing in the progression was partial any more. It is no longer four notes.
 
-        What is asserted is the *rule* on both sides: no step of this progression may be
-        partial, and a step that genuinely is partial must still be reported. The second
-        half keeps that intent alive on a case that still produces a duo, so a
-        regression to partial harmonisation cannot pass silently.
+        **That is the ban's cost, and it is asserted rather than re-pinned away.**
+        `x-12-13-x-13-13` was one of the four inner-skip `drop24` sets, removed because a
+        finger had to reach over the unplucked G to fret it (`docs/fingering.md` §4.4), and
+        F5 at fret 13 leaves nothing else a four-fret hand can hold: the only candidate
+        left is the five-fret `x-12-x-8-13-13`, which the budget refuses. So the step plays
+        the melody alone and the *diagnostic* says why - note that it is not marked
+        `partial`, because a melody with no chord under it is the melody-only shape rather
+        than a chord that failed to complete.
+
+        The rule this test exists for is still asserted on both sides: the steps that can
+        carry four notes do, and a genuinely partial harmonisation is still reported for a
+        melody low enough that no four-note block exists.
         """
         steps = VoiceLeadingEngine.arrange_progression(
             [("A5", "m7", "Dm7"), ("G5", "maj7", "Cmaj7"), ("F5", "7", "F7")]
         )
         self.assertEqual(
-            [s.tab_line() for s in steps if s.partial], [],
-            "a complete four-note shape now fits every step of this progression",
+            [s.tab_line() for s in steps],
+            ["10-x-10-10-10-x", "8-x-9-9-8-x", "x-x-x-x-x-13"],
+            "the F7 step is the one the ban cost",
         )
-        for step in steps:
+        for step in steps[:2]:
             self.assertEqual(len(step.voicing.active_frets()), 4, step.tab_line())
+        self.assertEqual(steps[2].grip, "melody")
+        self.assertEqual(
+            [note_name(n) for n in steps[2].voicing.midi_notes()], ["F5"],
+            "the melody sounds and the chord does not",
+        )
         self.assertNotIn("partial", format_progression(steps))
 
         # A partial harmonisation is still reachable - a melody low enough that no
@@ -1539,21 +1626,35 @@ class TestDerivedGripShapes(unittest.TestCase):
         self.assertIn(0, sounded, f"the root must sound: {pitches}")
         self.assertLessEqual(sounded, tones, f"Eb major sounding {sorted(sounded)}")
 
-    def test_a_drop24_is_offered_on_sets_that_skip_a_string(self):
+    def test_a_drop24_is_offered_only_on_sets_no_finger_has_to_cross(self):
         """
-        The shape spans nearly two octaves and needs a skipped string to be fretable.
+        The shape is still reachable, and no set it takes needs a finger to reach over one.
 
         Twenty semitones from the melody to the bass cannot sit on four neighbouring
         strings inside a five-fret span - the low voice lands below where a contiguous
-        block can reach. This asserts the two sets measurement found win, and that at
-        least one real voicing comes out, so the table cannot silently become a list of
-        sets nothing uses.
+        block can reach - and the answer is the **bass taking a lower string**, never a
+        finger skipping an inner one. The four sets that made an inner gap frettable were
+        removed for exactly that (crossing the G, the B, the D and the G again), at a
+        measured cost of 260 of 1,204 selections with no pool emptied; the table's comment
+        holds the full price.
+
+        This assertion was **inverted rather than deleted**. It used to demand that
+        `(5,4,2,1)` and `(4,3,1,0)` - this family's two measured winners - be *present*.
+        What survives the change is the reason they are gone, so the check is against the
+        rule rather than against a list, and a set edited back in without the reasoning
+        fails here rather than in a comment nobody re-reads.
         """
         # The table stores string *indices* high to low, like every entry in it, so the
         # conventional set names read 1-2-4-5 as (5, 4, 2, 1) and 2-3-5-6 as (4, 3, 1, 0).
         sets = {frozenset(strings) for strings, _s in GRIP_STRING_SETS["drop24"]}
-        self.assertIn(frozenset((5, 4, 2, 1)), sets, "1-2-4-5, which skips the G")
-        self.assertIn(frozenset((4, 3, 1, 0)), sets, "2-3-5-6, which skips the B")
+        self.assertNotIn(frozenset((5, 4, 2, 1)), sets, "1-2-4-5, which crossed the G")
+        self.assertNotIn(frozenset((4, 3, 1, 0)), sets, "2-3-5-6, which crossed the B")
+        for strings, soprano in GRIP_STRING_SETS["drop24"]:
+            self.assertEqual(
+                finger_skip_count(a_shape_on(strings)), 0,
+                f"drop24 {tuple(strings)} puts a finger over an unplucked string",
+            )
+            self.assertEqual(soprano, max(strings), "the soprano is the top of the set")
 
         produced = [
             v
@@ -1596,7 +1697,12 @@ class TestDerivedGripShapes(unittest.TestCase):
                         {p % 12 for p in v.midi_notes()}, tones,
                         f"{chord_name} {melody} -> {v.tab_string()}",
                     )
-        self.assertGreater(checked, 20, "the check covered almost nothing")
+        # The bound is "not nothing" rather than "many": this family kept four of its eight
+        # sets, so a melody counts here only if the quality has a template for it *and* the
+        # shape fits one of the four that remain under a high-E soprano - measured, two
+        # voicings. It used to be more than twenty, which is why the guard is stated as a
+        # property rather than a remembered number.
+        self.assertGreater(checked, 0, "the check covered nothing at all")
 
     def test_a_drop3_is_wider_than_the_close_stack_it_comes_from(self):
         """

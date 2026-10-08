@@ -853,7 +853,11 @@ string 5 (high E)  61 steps
 
 The thumb had the entire bottom of the neck. `uniform`'s grip palette really can occupy
 `(0, 1, 2)` — `drop24`'s `(4,2,1,0)` set spans all three thumb strings at once — but
-that is a fact about shapes the comping route never builds.
+that is a fact about shapes the comping route never builds. (That set has since been
+removed, with the family's other three inner-skip sets, for a right-hand reason of its
+own — [fingering.md](fingering.md) §4.4 — so the same worst-case question now answers
+"one string free" at every texture. The bug below was that the question was asked of the
+wrong generator, which is unchanged by that.)
 
 **The existing test passed throughout** because it spelled `texture="targets"`: the one
 texture that happened to fit. A test that pins a workaround is not a test of the
@@ -1691,4 +1695,153 @@ the pre-fix tree to see the defect:
 git worktree add /tmp/pre HEAD
 cd /tmp/pre && PYTHONPATH=/tmp/pre <repo>/.venv/bin/python /tmp/count_frets.py
 ```
+
+## 13. A refused thumb note is usually not the shape being unplayable, and the pool recovers only ten of them
+
+**Status:** DIAGNOSED, NOT FIXED — recorded, with the decision left open. This is the question
+[docs/fingering.md](fingering.md) §4.3 leaves hanging: item 12 asked whether a *step* is playable,
+and this asks whether the **selector** should have left room for the thumb in the first place. It
+was measured after §2.5's right-hand reach landed, on the same seven heads and five rows item 12
+counted. The refusals are **53**, not the one note item 12 priced; the dominant cause is a third one
+that neither the message nor item 12 names; and the pool can recover **10** of them without changing
+which notes the chord states — every one of those ten by giving up the span bucket.
+
+### The symptom
+
+The message that already exists,
+
+```
+Warning: no playable bass note for bass G - no free string below the melody, or the hand
+would need a fifth fret; the step keeps its upper voicing
+```
+
+fires **53** times over the seven committed heads under the four rows that run a bass line
+(`uniform` has none). Two independent counters agree: the engine's own warning text, and a wrapper
+on `bass._place_bass` recording every call and every `None`.
+
+| row | `_place_bass` calls | refusals (= the warnings) |
+|---|---|---|
+| `uniform` (the default) | 0 | 0 |
+| `targets --bass walk` | 544 | **15** |
+| `targets --bass anchors` | 206 | **12** |
+| `walking_bass --bass walk` | 544 | **15** |
+| `walking_bass --bass anchors` | 206 | **11** |
+
+Every refusal is a beat that was *meant* to carry a bass note (`slot.bass` is not None) and does
+not: the merge happens after selection, the placement is refused, and the step keeps its upper
+voicing. That is **53 of the 1,500** beats that were meant to be walked (3.5%), concentrated in four
+of the seven heads — and as **9 distinct figures** recurring across the rows ("The Jitterbug Waltz"
+26 events, "But Not For Me" 12, "I Was Doing All Right" 8, "Tenor Madness" 2).
+
+### Three causes, and the third is the common one
+
+`_place_bass` survives a candidate only if a string is free, the note sounds **below** the shape,
+and the hand can hold the resulting frets. Each refusal was attributed by replicating that loop,
+and the replica was checked against the real function's return on **every** one of the 1,500 calls,
+so a disagreement would be reported rather than believed (it was, at first — see the alias trap
+below).
+
+| cause | refusals |
+|---|---|
+| no free string (every `BASS_STRING_INDICES` string already sounds) | **0** |
+| **no octave of the walk's pitch below the shape** | **52** |
+| five frets for four fingers (item 12's own defect) | **1** |
+
+The middle row is the one nobody had counted, and the message does not name it. Worked case: "The
+Jitterbug Waltz" bar 5 beat 1, `--texture targets --bass walk`, `Ab9`, melody C4.
+
+```
+4-x-4-5-x-x   <- chosen: Ab2, F#3, C4 - root, 7th, 3rd
+```
+
+The walk wants `Ab`. Every fret for `Ab` on the free A string gives `Ab3` (54), which is *above* the
+shape's own `Ab2` (44); the only `Ab` below 44 is `Ab1` (32), which is below the instrument's low E
+(40). The string is free, the note is playable, and there is no octave of it beneath the shape.
+**30 of the 48** selected refusals are this shape: the chord's own bottom voice is already the
+walking note's pitch class, an octave up, so the thumb would double it rather than state anything
+new. The other 18 are a pitch the shape does not have down there at all.
+
+### What a retry would buy, and what it costs
+
+The question the plan asked was: *does the pool the selector chose from contain a shape that could
+have hosted the thumb?* It was answered with the real `_place_bass`, run over the pool captured from
+the real `select_step_voicing` call:
+
+| | refusals |
+|---|---|
+| a candidate in the same pool could host the thumb | **48** |
+| none could (measured) | 0 |
+| the shape was not a selection at all (`bass_only`: the melody alone) | 5 |
+
+So 48 of the 53 are "recoverable" — but not for free. Re-running the engine's own rule over the
+hosting subset (`select_step_voicing(hosts, …)`) gives a shape that is worse **by the tuple's own
+ranking** in every one of the 48:
+
+| first criterion to differ | refusals | the move |
+|---|---|---|
+| 3 span (bucketed) | **26** | 0.0 → 2.0: a 3-fret reach where the shape had 1 |
+| 5 movement | **10** | 19.0 → 24.0 (8), 5.0 → 10.0 (2) |
+| 4 position | **8** | 0.67 → 3.0 |
+| 1 neck window | **4** | 0.0 → 1.0: a note lands on fret 1, outside 2–13 |
+
+And the harmony is not always preserved:
+
+- **10 of the 48** have a hosting shape that sounds the **identical notes** (3 per `walk` row, 2 per
+  `anchors` row). Every one of those ten trades the span bucket (0.0 → 2.0) and nothing else, so it
+  is the only strictly harm-free form a retry could take.
+- **26 of the 48** have a host with the same pitch *classes* — the same chord, with an inner voice
+  in a different octave.
+- The other 22 would change which notes the chord states, and the worked case shows what that means:
+  the hosting shape there is `x-3-4-5-x-x` = `C3, F#3, C4` — **the root is gone and the 3rd is
+  doubled.** `voicing_cost` cannot see that: both shapes are three notes and both are all chord
+  tones, so criteria 0–2 tie and span decides. A bare retry would therefore swap a root-bearing shell
+  for a rootless one in order to keep a bass note.
+
+### Why this is not a defect in `_place_bass`
+
+All three filters are right, and dropping the note is deliberate policy — "a step is never dropped
+because the thumb could not reach it". What the measurement refutes is the *hope* that the selector
+could cheaply have left room: the shape-level lever exists, but it recovers **10 of 53** notes, it
+always pays the span bucket, and its wider form changes the harmony. That is the same shape of answer
+§4.4 reached for the finger skip, arrived at the same way — which is why nothing was built.
+
+### The two counting decisions
+
+- **The shape is snapshotted before the call, not after.** `steps._attach_bass` writes the bass note
+  into the very object it handed to `_place_bass` (`frets`, `bass_midi`, `bass_string`), so a wrapper
+  that keeps a reference and re-reads it later is describing a *post-merge* shape. The first run
+  reported that the replica "disagreed" with the function on **826 of 1,500** calls, every one of
+  them a successful placement. Freezing `list(frets)` and `list(midi_notes())` before the call takes
+  it to **0**. Any instrumentation of this merge has to do the same, and it is the same aliasing that
+  makes `_held_shape` return a copy.
+- **"A candidate could host it" is asked of `_place_bass` itself**, not of a re-derived rule, so the
+  three filters cannot drift from the answer. The pool is the one `select_step_voicing` was given,
+  captured before it returned and paired to its step **by object identity** — because a step whose
+  shape was not selected (a `bass_only` step's melody alone) has no pool, and is reported separately
+  rather than counted as unavoidable. Those 5 include item 12's five-fret case, whose shape is
+  exactly the melody alone: no selector lever can reach it.
+
+### Alternatives, recorded
+
+- **The identical-notes retry.** Keep the rule narrow: on a refusal, re-select over the hosting
+  shapes that sound the same notes. Recovers **10 of 53**, always at the span bucket. It overrides a
+  *tuple criterion* on those slots, which is what makes it a decision rather than a repair.
+- **A bare retry.** Recovers 48, costs span on 26 of them, and can degrade the harmony (the rootless
+  shell above). Rejected as a default: it trades a ranking criterion for a note without ranking the
+  note's own quality.
+- **A pre-selection palette rule**, the `thumb_capacity`-style demand on the target a walk plays
+  under. The same trade at family granularity, and it would thin palettes where a bass note is merely
+  *planned* — including the 30 slots where the note is already sounding an octave up.
+- **Name the third cause in the message.** The cheapest honest improvement, and the only one that is
+  not a musical decision: 52 of the 53 refusals are "no octave of that pitch below the shape", and
+  the text offers the reader two causes, neither of which is it.
+
+### Reproducing
+
+Throwaway script (not committed — `AGENTS.md` trap 8): wrap `steps.select_step_voicing` and
+`steps._place_bass` (snapshotting the shape *before* the call), wrap
+`VoiceLeadingEngine._attach_bass` for the bar/chord context, and wrap `Diagnostics.warn` for the
+independent count. Then load each `tests/data/` head with `headxml.arrange_xml_head` over the five
+rows and, for every refusal, replicate `_place_bass`'s candidate loop to name the cause and run the
+real `_place_bass` over the captured pool to find the hosts.
 

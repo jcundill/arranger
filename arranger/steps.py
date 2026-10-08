@@ -795,10 +795,14 @@ class VoiceLeadingEngine:
         would double it.
 
         A combination the left hand cannot accommodate is **refused rather than
-        degraded**. `uniform` leaves no bass string free, because its four-note grips can
-        span all three, so a thumb line under it would come and go; the refusal names a
-        texture that would work and the arrangement still sounds, because losing a bass
-        costs less than shipping a line with holes in it.
+        degraded**. No shipped texture is refused any more - the four inner-skip `drop24`
+        sets were removed for a right-hand reason (`docs/fingering.md` §4.4) and one of them
+        was the only reachable shape spanning all three thumb strings, so the worst case
+        anywhere is now one free string, which is the threshold - but the rule stands and is
+        derived from `TEXTURE_GRIPS` rather than listed, so a palette that reaches the whole
+        thumb range is caught the same way. When it fires, the refusal names a texture that
+        would work and the arrangement still sounds, because losing a bass costs less than
+        shipping a line with holes in it. `bass.bass_allowed` is the check.
 
         `texture="targets"` uses the timing to arrange the way the guide describes:
         a full four-note chord on beats 1 and 3 of the bar, and a shell, a 3rd/6th

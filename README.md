@@ -741,13 +741,19 @@ A step whose bass note cannot be played keeps its upper voicing and says so rath
 writing a tab nobody can finger: either there is no free string below the melody, or the
 thumb's fret would be a **fifth** one for a hand already holding the shape
 (`no playable bass note for bass ... - no free string below the melody, or the hand would
-need a fifth fret`).
+need a fifth fret`). The commonest case in practice is neither of those two, though: the
+chord's own lowest note is already so low that the walking note has no octave beneath it, and
+the note is left out for that reason — measured, and recorded with its counts in
+`docs/open-issues.md` item 13.
 
 `docs/open-issues.md` records this texture's defects, and nearly all of them are fixed. The
 merged step — a bass note written under an upper shape — has had several; the two most recent
 are items 11 and 12, the pair of budgets that ask how many strings a step **plucks** and how
 many frets it **holds**. **One defect is still open**: item 10, where a chord in force is
-stored per melody note, so a bar the melody skips is silent.
+stored per melody note, so a bar the melody skips is silent. Item 13 is a measured cost left
+unbuilt rather than a defect: most dropped bass notes are the shape sitting too low for the
+walk's pitch to have an octave under it, and the candidate pool can recover only ten of them
+without changing which notes the chord states.
 
 ## Who plays which voice: `bass` and `voices`
 
