@@ -1,6 +1,6 @@
 """`jazz-arranger`: playable jazz guitar chord-melody from a chord progression.
 
-This module is a **facade**. The engine is a package of eight modules with a
+This module is a **facade**. The engine is a package of fourteen modules with a
 strict dependency order, and nothing above imports anything below it by accident:
 
     tuning -> chords -> grips -> cost
@@ -10,6 +10,12 @@ strict dependency order, and nothing above imports anything below it by accident
               options ---------------> |
                  |                    |
               steps -> render -> (this module)
+
+`fingers` is a second edge off `tuning`, and it is **inert**: it is the left-hand fingering
+module of `docs/fingering.md`, `tests/test_fingers.py` is its only caller, and no engine
+module imports it - which is why the facade binds it while the diagram above omits it. Its
+placement is still in `test_package_dag.ORDER`, because a module missing from that list is
+unconstrained by the layering.
 
 `import arranger` gives the same names it always did - `VoiceLeadingEngine`,
 `Voicing`, `ArrangementStep`, `ChordParser`, the constants, and the renderers -
@@ -48,7 +54,7 @@ from typing import TYPE_CHECKING, Any, List
 
 from musthe import Note  # re-exported: `from arranger import Note` is used by tests
 
-from . import cli, cost, decisions, options, slots
+from . import cli, cost, decisions, fingers, options, slots
 from .bass import (
     BASS_ANCHORS,
     BASS_AUTO,
@@ -510,6 +516,7 @@ __all__ = [
     "decisions",
     "default_diagnostics",
     "diagnostics",
+    "fingers",
     "format_progression",
     "format_gp5",
     "format_musicxml",

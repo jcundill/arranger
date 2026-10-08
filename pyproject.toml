@@ -48,7 +48,7 @@ jazz-arranger = "arranger:main"
 
 [tool.setuptools]
 # `arranger` is a **package** (Phase 5): the engine was one 4290-line module and is
-# now eight modules in a dependency-ordered DAG, re-exported through
+# now fourteen modules in a dependency-ordered DAG, re-exported through
 # `arranger/__init__.py`. `packages` must be listed explicitly here, or a clean
 # install ships no engine at all - the same failure `diagnostics` had once.
 #

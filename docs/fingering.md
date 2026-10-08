@@ -1,7 +1,8 @@
 # Left-hand fingering: research notes
 
-**Status: research. No code depends on this document, and no behaviour described
-here is implemented.** It records what is known about how the four fretting
+**Status: step 1 of §5 is built and inert — `arranger/fingers.py` and
+`tests/test_fingers.py` exist, no engine module imports them, and no existing
+output changed.** It records what is known about how the four fretting
 fingers can be arranged on the fretboard, how confident each claim is, and what
 each one would change in the current implementation. The plan agreed in session
 is: build the assignment and its feasibility tests first, *then* measure whether
@@ -14,14 +15,13 @@ writing `arranger/fingers.py`, before adding any criterion to `voicing_cost`
 that mentions fingers, and before anyone claims a shape is "unplayable" for a
 reason the span cap does not already catch.
 
-**Next step: prototype — not yet started.** The research phase is complete
-(see §2.4 and §5): the constraints are settled to the confidence stated here,
-the external sources are exhausted, and the questions that remain are
-empirical and can only be answered by code. The agreed next piece of
-implementation is stage 1 of §5 — `arranger/fingers.py` plus
-`tests/test_fingers.py` — kept inert (no change to `voicing_cost` or any
-existing output). **This has not been started.** It is picked up again in the
-next session; until then this document is the state of record.
+**Next step: step 2 of §5 — the measurement, not yet started.** The research
+phase is complete (see §2.4 and §5) and step 1 has landed, with one correction
+to what this document predicted (§4.1). What remains is empirical and can only
+be answered by the throwaway script §5 step 2 describes: where finger-level
+movement disagrees with `position` and `movement` today, and how many merged
+walking-bass steps fail §4.3's five-finger check. Until that runs,
+`voicing_cost` stays untouched and this document is the state of record.
 
 ## 1. Why: what whole-hand measures cannot see
 
@@ -163,7 +163,7 @@ is corroborative rather than new: a jazz-guitar source treats thumb-over as
 non-idiomatic ("strictly speaking this is bad technique"), which supports the
 §2.1 item 5 decision.
 
-## 3. The algorithm (design, not implemented)
+## 3. The algorithm (built, and inert)
 
 A small exact enumeration, not a heuristic search:
 
@@ -192,15 +192,49 @@ the feasibility tests check is the *conventions*: monotone assignment exists,
 barre detected where the shape implies one, assignment deterministic, finger
 count ≤ 4, and every shape across all grips and qualities passes.
 
+**As built**, the three things this section left open are settled in code, and each is
+pinned by a test rather than left in a docstring:
+
+- **The score** is `Σ |offset − (finger − 1)|` over the distinct frets, `offset` being a
+  fret measured up from the shape's lowest. One rule rather than the two item 3 names,
+  because the misses *are* those two claims: adjacent fingers score zero on a bunched
+  shape, a four-fret reach is pulled to the pinky, and the lowest fret takes the index
+  unless a finger already lies below it — which is convention 8 arriving out of the score
+  instead of being asserted after it.
+- **The tie-break** is the lowest-numbered finger tuple, and it is not a comparison:
+  `itertools.combinations` yields in lexicographic order, so the first choice to reach the
+  best score *is* it. Reachable rather than theoretical — `{3, 5, 7}` ties between
+  `(1,3,4)` and `(2,3,4)` and takes the first.
+- **Feasibility** is `None` at five distinct frets, which is items 1 and 2's "one finger
+  holds one fret" stated as a return value rather than a crash or a crossed fingering.
+  **No generated shape can reach it** — every grip sounds at most four strings, measured
+  over 8,789 shapes — so the refusal exists for the merged step of §4.3 and nothing else.
+- **Movement's known under-report** belongs here rather than in §5, because it is a
+  property of the design this section specifies and not an implementation slip: a finger
+  handed a fret another finger held contributes two zeroes, so a substitution can total 0
+  while the hand visibly moves. Measured on `x-x-3-4-5-x → x-x-3-4-8-x`, which is `(0, 0)`.
+  §5 step 2 weighs it against real steps; it is pinned by a test so it cannot drift unseen.
+
 ## 4. Impact on the current implementation
 
-### 4.1 Where the module would live
+### 4.1 Where the module lives
 
 `arranger/fingers.py`, placed **after `tuning`** in the DAG — it only needs
-`Voicing`. `tests/test_package_dag.py`'s `ORDER` gains the entry in the same
+`Voicing`. `tests/test_package_dag.py`'s `ORDER` gained the entry in the same
 commit; the Makefile names the package as a directory, so lint and typecheck
-pick it up with no change. Nothing existing imports it until the measurement
-phase says so, which is what keeps stage 1 output-identical.
+picked it up with no change.
+
+**One prediction here was wrong, and the check that refuted it is why stage 1
+needed a facade import.** "Nothing existing imports it" is not available to an
+inert engine module: `test_package_dag.test_every_module_is_imported_by_something`
+asserts that *something* imports every module in `ORDER`, and it counts `__init__`
+as an importer — deliberately, because reaching the facade is what a facade is
+for. So the facade binds `arranger.fingers`, `"fingers"` is in `arranger.__all__`
+(the star-import surface is checked against the module's own namespace, so a bound
+public name missing from that list fails), and the honest form of stage 1's
+inertness is the narrower one: **no engine module imports it**. That is what
+`tests/test_fingers.py::TestTheModuleIsInert` asserts from the AST, and it is the
+assertion a step-3 change inverts rather than deletes (AGENTS.md trap 5).
 
 ### 4.2 The cost tuple
 
@@ -260,13 +294,16 @@ placed against the wrong reference point).
 
 ## 5. The sequence we agreed
 
-**Status: ready to begin step 1; nothing below has been started.** Research is
-done — the remaining unknowns are empirical (see the note at the top and §4.3),
-so step 1 is the next implementation, taken up in the next session.
+**Status: step 1 is done and inert; steps 2 and 3 have not been started.** Research
+is done, and the remaining unknowns are empirical (see the note at the top and
+§4.3), which is why step 1 had to exist before either measurement could run.
 
-1. **Build** `arranger/fingers.py` + `tests/test_fingers.py`: assignment,
+1. **Built.** `arranger/fingers.py` + `tests/test_fingers.py`: assignment,
    barre detection, movement, feasibility over the whole generated corpus.
-   Gate must stay green apart from the new tests; **no existing test moves.**
+   The gate stayed green apart from the new tests — 890 test identities before,
+   918 after, and the 890 diff empty — so **no existing test moved.** The one
+   correction to this plan is §4.1: the facade binds the module, so "inert" means
+   *no engine module imports it* rather than *nothing imports it*.
 2. **Measure** with a throwaway script under `/tmp` (not committed — see
    `AGENTS.md` trap 8): where would finger-level movement disagree with
    `position`/`movement` today, how many steps flip, do the flips look better

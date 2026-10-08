@@ -24,7 +24,7 @@ gate and the conventions — not the explanation.
 | tab staff, HTML, MusicXML, GP5, or the MusicXML importer | [docs/renderers.md](docs/renderers.md) | `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py` |
 | the slot layer: triples to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
 | a known bug, with its measurement | [docs/open-issues.md](docs/open-issues.md) | — |
-| which finger frets which string, or a per-finger cost criterion | [docs/fingering.md](docs/fingering.md) | — (research; no code yet) |
+| which finger frets which string, or a per-finger cost criterion | [docs/fingering.md](docs/fingering.md) | `arranger/fingers.py` (inert: `tests/test_fingers.py` is its only caller; no per-finger cost yet) |
 | `voices=`, which voices the guitar plays | [docs/voices-axis.md](docs/voices-axis.md) | `arranger/textures.py` |
 | the comping axes (`harmony=`, `grid=`, the rhythm grid) | [docs/comping-styles.md](docs/comping-styles.md) | `arranger/textures.py` |
 | the step/voicing mirrored fields (`step.grip`, `step.bass`), or which voice selection is melody-only | [docs/one-fact.md](docs/one-fact.md) | `arranger/tuning.py`, `arranger/steps.py` |
@@ -42,10 +42,10 @@ treat a contradiction between them as a bug in one of them.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **890 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **918 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 12 of those 890, and it is the one that fails if this
+(`tests/test_docs.py` is 12 of those 918, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree. It also fails if a document
 exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
 new file cannot be added without being registered.)
@@ -115,6 +115,7 @@ arranger/
 │   ├── __init__.py      #   facade: re-exports, __version__, main()
 │   ├── __main__.py      #   `python -m arranger`
 │   ├── tuning.py        #   STANDARD_TUNING, Voicing, ArrangementStep
+│   ├── fingers.py       #   which finger holds which fret (inert: nothing imports it)
 │   ├── diagnostics.py   #   Diagnostics - warnings are a value, not a print
 │   ├── chords.py        #   ChordParser, non-chord-tone routing
 │   ├── grips.py         #   grip tables and the candidate generators
@@ -152,7 +153,7 @@ dynamically from `arranger.__version__` — that is the single source of truth, 
 ### The engine is a package, and the order is enforced
 
 The engine was one 4290-line module until Phase 5 of the package refactor. It is
-now thirteen modules in a strict dependency order:
+now fourteen modules in a strict dependency order:
 
 ```
 tuning -> diagnostics -> chords -> grips -> cost -> textures
@@ -162,6 +163,13 @@ tuning -> diagnostics -> chords -> grips -> cost -> textures
                                                  steps -> slots -> render -> cli
                                                             |              |
                                                           (facade) <-------+
+```
+
+`fingers` — which finger holds which fret — hangs off `tuning` alone and feeds nothing, so it
+is drawn separately rather than as a branch of that chain:
+
+```
+tuning -> fingers   (inert: step 1 of docs/fingering.md; no engine module imports it)
 ```
 
 A module may import only what is *below* it, and
@@ -476,7 +484,7 @@ Each of these cost real time, or nearly shipped a defect.
 | [docs/renderers.md](docs/renderers.md) | tab staff, MusicXML import/export, GP5, and their traps |
 | [docs/open-issues.md](docs/open-issues.md) | diagnosed bugs with their measurements; fixed items stay, with what the fix was |
 | [docs/reharmonisation-proposals.md](docs/reharmonisation-proposals.md) | tritone substitution (shipped) and chromatic approach chords (measured, not built), with the corpus numbers behind each |
-| [docs/fingering.md](docs/fingering.md) | **research** - left-hand fingering: which finger frets which string. Constraints by confidence, the assignment algorithm on paper, and what finger-level cost would change; no code depends on it yet |
+| [docs/fingering.md](docs/fingering.md) | **inert** - left-hand fingering: which finger frets which string. Step 1 of its §5 landed (`arranger/fingers.py` + `tests/test_fingers.py`: assignment, barres, movement, feasibility) and **no engine module imports it**, so no output changed; §5 steps 2-3 - the measurement and the cost-tuple decision - are still open |
 | [docs/history/](docs/history/) | completed plans: corpus, walking bass, texture, arranging guide - a record of the past, not of what exists |
 | [docs/voices-axis.md](docs/voices-axis.md) | **in progress** - the `voices=` axis, awaiting QA |
 | [docs/comping-styles.md](docs/comping-styles.md) | the comping axes (`harmony=`, the rhythm grid): **partly built** - Stage C shipped `harmony=`, Stage D shipped the named `grid=` rows, and §9 steps 0, B, A, A', C, D and E have landed (E, `--voices soprano` = the melody and nothing else, landed earlier as Stage 2 — `docs/one-fact.md`; A' makes a **chords-only lead sheet** loadable, `Head.bars` a fact about the file; C makes `--non-chord-tone` reach the comping route at harmony level, onset-guarded by `melody_onsets`; D makes the soprano **per slot**, so a soprano-named selection comps the grid positions its tune does not articulate at); §9.4's four-note comping chord, and §6's open questions, are still proposal |

@@ -1095,7 +1095,7 @@ used to be a second, manual-dispatch job for the 42 MB Weimar Jazz Database, and
 check here did *not* mean the corpus path had been exercised. The database is gone, and
 so is that caveat.)
 
-The engine lives in the `arranger` package, thirteen modules in a strict dependency order
+The engine lives in the `arranger` package, fourteen modules in a strict dependency order
 that `tests/test_package_dag.py` asserts from the AST. See `AGENTS.md` for the module map
 and the conventions, and [docs/](docs/) for the reasoning behind the engine and the
 renderers.
