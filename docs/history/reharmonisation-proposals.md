@@ -1,6 +1,13 @@
 # Reharmonisation proposals: tritone substitution and chromatic approach chords
 
-Two mechanisms from [history/Arranging_Guide.md](history/Arranging_Guide.md) §1 that
+**Retired into `docs/history/` - a record, not a runnable recipe.** Everything below was
+measured on the Weimar corpus, and the corpus is gone: `arranger/wjazzd.py` and
+`tests/test_wjazzd.py` have been deleted and there is no `corpus` CI job any more. The
+numbers are kept because they are what the two decisions rest on, and they remain true
+*about the past*; the [Reproducing](#reproducing) block cannot be run as written. The
+chromatic-approach recipe under "If it is built later" is deliberately kept, unbuilt.
+
+Two mechanisms from [Arranging_Guide.md](Arranging_Guide.md) §1 that
 the engine does not yet have:
 
 - **Tritone Substitutions** — "Replace a dominant chord (e.g. G7) with a dominant
@@ -10,8 +17,8 @@ the engine does not yet have:
 
 This records what was measured, what was built, and what was deliberately **not**
 built — so the decision can be reviewed rather than re-derived. Measurements are over
-the first 40 heads of `wjazzd.db`, `eighths` skeleton (2,995 steps, 1,405 non-chord
-tones).
+the first 40 heads of the Weimar Jazz Database (`wjazzd.db`, since removed), `eighths`
+skeleton (2,995 steps, 1,405 non-chord tones).
 
 **Status:** tritone substitution **shipped**, as a table row
 (`arranger/chords.py`, `NON_CHORD_TONE_EXTENSIONS["7"][1] = "7b9"`). Chromatic
@@ -155,7 +162,7 @@ It was still declined, for reasons the measurements support:
    to a question that already has one — not a new capability.
 2. **It requires a new lookahead dimension.** The one phrase-level pass in the
    library, the walking bass, is documented at length in
-   [history/walking-bass.md](history/walking-bass.md) precisely because a lookahead
+   [walking-bass.md](walking-bass.md) precisely because a lookahead
    changes what the *pass* can decide. Adding a second is a design step, not a table
    row.
 3. **It contradicts a stated principle.** `AGENTS.md` records "no key model, by
@@ -174,7 +181,7 @@ It was still declined, for reasons the measurements support:
 - Route it through the existing `resolve_non_chord_tone` → `get_all_grip_voicings` →
   `harmonized_as` path. Rendering, annotation and the CLI's shared flag block all work
   unchanged.
-- Read `history/walking-bass.md` first: it records what a lookahead costs, and the
+- Read `walking-bass.md` first: it records what a lookahead costs, and the
   union/lookahead trap that produced the `_Slot` design.
 - Tests belong beside the new route in `tests/test_non_chord_tones.py`, which holds
   `TestExtendedExtensionMappings` and its table invariant — the invariant there
@@ -196,5 +203,7 @@ print(unresolved)   # 717 with the b9 route, 771 without
 PY
 ```
 
-Requires `wjazzd.db` (42 MB, gitignored). CI does **not** run this — see `AGENTS.md`;
-the `corpus` job covers it on manual dispatch.
+Requires `wjazzd.db` (42 MB, gitignored) and the `wjazzd` loader. **Both are gone**, so this
+block is history rather than a recipe: `arranger/wjazzd.py` and `tests/test_wjazzd.py` were
+deleted and there is no `corpus` CI job any more — see the retirement note at the top, and
+`AGENTS.md` for the single-job gate that replaced it.

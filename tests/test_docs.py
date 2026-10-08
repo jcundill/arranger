@@ -58,7 +58,6 @@ DOCUMENTS = [
     "docs/comping-styles.md",
     "docs/voices-axis.md",
     "docs/one-fact.md",
-    "docs/reharmonisation-proposals.md",
     "docs/fingering.md",
 ]
 
@@ -97,10 +96,10 @@ def _layout_block() -> str:
 def _topic_documents_on_disk() -> List[str]:
     """Every topic document under `docs/`, as repository-relative POSIX paths.
 
-    `docs/history/` is excluded because it is deliberately not extended and is
-    already reachable through the `docs/history/` directory link; everything else
-    is a document an agent may be sent to and therefore one whose links and stated
-    version the checks below must actually read.
+    `docs/history/` is excluded because it is not extended - a completed or retired
+    document is frozen rather than revised - and it is already reachable through the
+    `docs/history/` directory link; everything else is a document an agent may be sent
+    to and therefore one whose links and stated version the checks below must read.
     """
     return sorted(
         path.relative_to(ROOT).as_posix()

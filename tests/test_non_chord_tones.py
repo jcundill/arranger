@@ -231,7 +231,7 @@ class TestExtendedExtensionMappings(unittest.TestCase):
         It is also the note a tritone substitution exists to absorb: the b9 of G7
         is the 3rd of Db7, so both routes make the melody a chord tone. The
         table route keeps the written root, which is the narrower claim - see
-        docs/reharmonisation-proposals.md.
+        docs/history/reharmonisation-proposals.md.
         """
         self.assertEqual(
             self.engine.resolve_non_chord_tone(Note("Ab5"), "7", "G7", "extension"),

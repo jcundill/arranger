@@ -218,7 +218,7 @@ NON_CHORD_TONE_EXTENSIONS = {
     # It is also the note a tritone substitution exists to absorb: the b9 of G7 is
     # the 3rd of Db7, so both routes make the melody a chord tone. This one keeps
     # the written root and the other moves it, which is why it is a table row
-    # rather than a strategy - see docs/reharmonisation-proposals.md.
+    # rather than a strategy - see docs/history/reharmonisation-proposals.md.
     "7": {1: "7b9", 2: "9", 5: "7sus4", 6: "7#11", 8: "7b13", 9: "13"},
     "7b9": {5: "7sus4", 6: "7#11", 8: "7b13"},     # 11th, #11, b13
     "9": {6: "7#11", 9: "13"},                     # #11, 13th

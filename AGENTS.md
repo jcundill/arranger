@@ -31,10 +31,13 @@ gate and the conventions — not the explanation.
 | how something was decided, historically | [docs/history/](docs/history/) | — |
 | user-facing behaviour and examples | [README.md](README.md) | — |
 
-**`docs/history/` is deliberately not extended.** It is where a completed plan goes:
-it records why a decision was made and is never revised. If the code has moved on, the
-history is still true *about the past* — so read the current documents above first and
-treat a contradiction between them as a bug in one of them.
+**`docs/history/` is not extended, and the one exception is recorded here.** It is where a
+completed plan goes: it records why a decision was made and is never revised. If the code
+has moved on, the history is still true *about the past* — so read the current documents
+above first and treat a contradiction between them as a bug in one of them. The exception
+is a **retired** document: `reharmonisation-proposals.md` was moved here when the Weimar
+corpus its measurements depended on was removed. A retired document is added once and then
+frozen like the rest — it is not a home for an open plan.
 
 ## The gate
 
@@ -502,7 +505,7 @@ Each of these cost real time, or nearly shipped a defect.
 | [docs/engine.md](docs/engine.md) | grips, the selector, texture, the cost tuple, non-chord tones |
 | [docs/renderers.md](docs/renderers.md) | tab staff, MusicXML import/export, GP5, and their traps |
 | [docs/open-issues.md](docs/open-issues.md) | diagnosed bugs with their measurements; fixed items stay, with what the fix was |
-| [docs/reharmonisation-proposals.md](docs/reharmonisation-proposals.md) | tritone substitution (shipped) and chromatic approach chords (measured, not built), with the corpus numbers behind each |
+| [docs/history/reharmonisation-proposals.md](docs/history/reharmonisation-proposals.md) | **retired** - tritone substitution (shipped) and chromatic approach chords (measured, not built), with the corpus numbers behind each. Its reproduction path went with the Weimar corpus |
 | [docs/fingering.md](docs/fingering.md) | **inert** - left-hand fingering: which finger frets which string. Step 1 of its §5 landed (`arranger/fingers.py` + `tests/test_fingers.py`: assignment, barres, movement, feasibility) and **no engine module imports it**, so no output changed. §5 step 2 has now been **measured**: its §4.3 half found a real defect (a merged step could sound five strings) which is fixed by `grips.thumb_safe_grips` + `decisions.resolve_texture_grips` with no finger assignment involved, and its movement half came back nearly empty, which is why §5 step 3 (the cost-tuple decision) is still open |
 | [docs/history/](docs/history/) | completed plans: corpus, walking bass, texture, arranging guide - a record of the past, not of what exists |
 | [docs/voices-axis.md](docs/voices-axis.md) | **in progress** - the `voices=` axis, awaiting QA |
