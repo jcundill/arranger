@@ -24,6 +24,7 @@ gate and the conventions — not the explanation.
 | tab staff, HTML, MusicXML, GP5, or the MusicXML importer | [docs/renderers.md](docs/renderers.md) | `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py` |
 | the slot layer: triples to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
 | a known bug, with its measurement | [docs/open-issues.md](docs/open-issues.md) | — |
+| which finger frets which string, or a per-finger cost criterion | [docs/fingering.md](docs/fingering.md) | — (research; no code yet) |
 | `voices=`, which voices the guitar plays | [docs/voices-axis.md](docs/voices-axis.md) | `arranger/textures.py` |
 | the comping axes (`harmony=`, `grid=`, the rhythm grid) | [docs/comping-styles.md](docs/comping-styles.md) | `arranger/textures.py` |
 | the step/voicing mirrored fields (`step.grip`, `step.bass`), or which voice selection is melody-only | [docs/one-fact.md](docs/one-fact.md) | `arranger/tuning.py`, `arranger/steps.py` |
@@ -475,6 +476,7 @@ Each of these cost real time, or nearly shipped a defect.
 | [docs/renderers.md](docs/renderers.md) | tab staff, MusicXML import/export, GP5, and their traps |
 | [docs/open-issues.md](docs/open-issues.md) | diagnosed bugs with their measurements; fixed items stay, with what the fix was |
 | [docs/reharmonisation-proposals.md](docs/reharmonisation-proposals.md) | tritone substitution (shipped) and chromatic approach chords (measured, not built), with the corpus numbers behind each |
+| [docs/fingering.md](docs/fingering.md) | **research** - left-hand fingering: which finger frets which string. Constraints by confidence, the assignment algorithm on paper, and what finger-level cost would change; no code depends on it yet |
 | [docs/history/](docs/history/) | completed plans: corpus, walking bass, texture, arranging guide - a record of the past, not of what exists |
 | [docs/voices-axis.md](docs/voices-axis.md) | **in progress** - the `voices=` axis, awaiting QA |
 | [docs/comping-styles.md](docs/comping-styles.md) | the comping axes (`harmony=`, the rhythm grid): **partly built** - Stage C shipped `harmony=`, Stage D shipped the named `grid=` rows, and §9 steps 0, B, A, A', C, D and E have landed (E, `--voices soprano` = the melody and nothing else, landed earlier as Stage 2 — `docs/one-fact.md`; A' makes a **chords-only lead sheet** loadable, `Head.bars` a fact about the file; C makes `--non-chord-tone` reach the comping route at harmony level, onset-guarded by `melody_onsets`; D makes the soprano **per slot**, so a soprano-named selection comps the grid positions its tune does not articulate at); §9.4's four-note comping chord, and §6's open questions, are still proposal |
