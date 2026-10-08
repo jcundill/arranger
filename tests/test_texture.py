@@ -831,7 +831,7 @@ class TestTimingsDefensive(unittest.TestCase):
 
         The trailing steps were never located, so they are targets - the same
         "we know nothing" rule that governs a progression with no timings at all.
-        This is the guard `wjazzd.arrange_slots` already applies to its own timings,
+        This is the guard `slots.arrange_slots` already applies to its own timings,
         for the same reason: a hand-built list must not silently shift the rhythm.
         """
         steps = VoiceLeadingEngine.arrange_progression(

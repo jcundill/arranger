@@ -61,7 +61,7 @@ jazz-arranger = "arranger:main"
 #
 # `arranger.diagnostics` holds the warning collector the engine reports to,
 # `arranger.options` the knobs the engine reads, and `arranger.decisions` the
-# step-loop decisions both `arranger` and `wjazzd` share. All three are runtime
+# step-loop decisions the engine shares. All three are runtime
 # modules *of* the distribution, not optional extras alongside it.
 packages = ["arranger"]
 py-modules = [

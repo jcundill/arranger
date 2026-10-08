@@ -20,7 +20,7 @@ unconstrained by the layering.
 `import arranger` gives the same names it always did - `VoiceLeadingEngine`,
 `Voicing`, `ArrangementStep`, `ChordParser`, the constants, and the renderers -
 because everything public is re-exported here. The *code* moved; the spelling did
-not, so the README, the tests, `wjazzd` and `headxml` are unaffected.
+not, so the README, the tests and `headxml` are unaffected.
 
 Two things are deliberately still lazy, and Phase 6 removes both:
 
@@ -194,9 +194,9 @@ __version__ = "0.11.0"
 # top-level `from tabstaff import ...`, because that would be an import cycle:
 # importing `tabstaff` first would re-enter this half-initialised module and fail to
 # find the names. PEP 562 resolves each name on first access instead, so
-# `from arranger import format_tab_html` keeps working - the spelling the README,
-# the tests and wjazzd all use - without a lazy import at every call site. This is
-# the same lazy-import discipline main() uses for wjazzd, for the same reason.
+# `from arranger import format_tab_html` keeps working - the spelling the README
+# and the tests use - without a lazy import at every call site. This is
+# the same lazy-import discipline main() uses for the head importer, for the same reason.
 _TABSTAFF_EXPORTS = {
     # name -> the module it lives in. The MusicXML and Guitar Pro renderers live in
     # `tabxml` and `tabgp`, which `tabstaff` re-exports, so resolving them through

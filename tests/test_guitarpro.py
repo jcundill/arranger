@@ -1,8 +1,8 @@
 """Tests for the Guitar Pro renderer in `tabgp`.
 
 Guarded on PyGuitarPro being installed, exactly as the MusicXML tests are guarded on
-music21 and the database tests on `wjazzd.db`: it is an optional extra, and a fresh
-clone runs a reduced suite.
+music21: it is an optional extra, and a fresh clone without the extras runs a reduced
+suite.
 
 The core of these tests is a **round trip**: the file is written, parsed back with
 `guitarpro.parse`, and the notes compared against the frets the arrangement was built

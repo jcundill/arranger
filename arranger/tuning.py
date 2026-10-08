@@ -131,7 +131,7 @@ class Voicing:
     # Defaulted, so existing construction and the __getitem__ shim are unaffected.
     grip: str = "drop2"
     # The pitch class of the lowest sounding voice, or None for an all-muted shape.
-    # Cached so the corpus slash-bass rule (wjazzd.bass_cost) does not have to
+    # Cached so the slash-bass rule (`slots.bass_cost`) does not have to
     # re-derive it, and so a caller can ask "what is the bass of this grip" directly.
     bass_pc: Optional[int] = None
     # Which metric role produced this shape, mirroring ArrangementStep.role: ROLE_TARGET

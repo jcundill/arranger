@@ -1,7 +1,8 @@
 """The decisions both step loops make, in one implementation each.
 
-`VoiceLeadingEngine.arrange_progression` and `wjazzd.arrange_slots` are two loops
-over the same slots, and between them they used to hold **two copies** of six
+`VoiceLeadingEngine.arrange_progression` and the corpus path's `arrange_slots` (now
+`arranger.slots`, and a delegate rather than a loop) were two loops over the same
+slots, and between them they used to hold **two copies** of six
 decisions. The code said so itself, in comments that are the most honest thing in
 the repository:
 
@@ -26,10 +27,10 @@ the few values it needs and returning the answer.
 **The one place the two loops genuinely differ is not here.** The corpus honours a
 slash bass by partitioning candidates before selection, and the library does not.
 That difference is a filter over a list rather than a control-flow fork, and it is
-folded into one `select_step_voicing` when Phase 4 rewrites `arrange_slots` to
-delegate. It is not extracted in this phase because it is not a *duplicated*
-decision - only the corpus has it - and extracting it here would mean reaching
-back into `wjazzd` for `bass_cost`, which would close an import cycle.
+what `select_step_voicing` folds in - it is not a *duplicated* decision, which is
+why it was never extracted as one. The ranking itself lives in `arranger.slots`,
+which reaches this module through `steps`, so injecting it is what keeps the
+dependency acyclic and the preference visible at the call site.
 
 **Why this module imports the engine's vocabulary and the engine imports this
 module.** The dependency runs one way: `decisions` needs the engine's own
@@ -433,8 +434,9 @@ def select_step_voicing(
 ) -> Optional[Voicing]:
     """The candidate the engine's own rule prefers, honouring a slash bass first.
 
-    This is the Weimar corpus's rule C, and it is what lets `wjazzd.arrange_slots`
-    delegate to `arrange_progression` instead of running a second step loop. The
+    This is the rule the Weimar corpus brought (rule C), and it is what let
+    `wjazzd.arrange_slots` - now `arranger.slots` - delegate to `arrange_progression`
+    instead of running a second step loop. The
     library passes no `bass_pc` and gets exactly the behaviour it always had.
 
     The two rules that select a candidate - the slash bass and voice leading - are
@@ -448,10 +450,11 @@ def select_step_voicing(
     unachievable slash chord behaves exactly as if it had not been written - which
     is the same "never guess" rule the rest of this module follows.
 
-    `bass_cost` is passed in rather than imported because it lives in `wjazzd` and
-    `wjazzd` imports this module; a module-level import either way would be a cycle.
-    Passing it also makes the dependency visible at the call site, which is the
-    point: the corpus is the only caller that supplies one.
+    `bass_cost` is passed in rather than imported because it lives in
+    `arranger.slots`, which reaches this module through `steps`; a module-level
+    import either way would be a cycle. Passing it also makes the dependency visible
+    at the call site, which is the point: wanting a slash-bass preference is the only
+    reason to supply one.
     """
     if bass_pc is not None and bass_cost is not None and candidates:
         costs = [bass_cost(v.midi_notes(), bass_pc) for v in candidates]

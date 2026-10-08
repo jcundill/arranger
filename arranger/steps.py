@@ -14,7 +14,7 @@ implementation to drift.
 
 `prepare_step` and `arrange_progression` are the only substantial bodies left
 here, and they are byte-for-byte what they were. That is what makes the two entry
-points unable to disagree - `wjazzd.arrange_slots` delegates to this loop rather
+points unable to disagree - `slots.arrange_slots` delegates to this loop rather
 than running a second one. The project has already paid for the two-loop version:
 the corpus path was built separately, drifted, and voiced an `Am7` under a written
 `Bbm7` for twenty-five transcriptions before anyone noticed. The six decisions
@@ -280,8 +280,8 @@ class VoiceLeadingEngine:
     lives with the implementation; these say where that is.
     """
 
-    # Tables, re-exported as class attributes. `grip_chart`, `wjazzd`, `headxml`
-    # and the tests all read these off the class; they are the same objects, not
+    # Tables, re-exported as class attributes. `grip_chart`, `headxml` and the
+    # tests all read these off the class; they are the same objects, not
     # copies, so a caller editing one edits the one the engine reads.
     DROP2_INTERVAL_SETS = DROP2_INTERVAL_SETS
     DEGREE_OFFSETS_FROM_ROOT = DEGREE_OFFSETS_FROM_ROOT
@@ -811,7 +811,7 @@ class VoiceLeadingEngine:
         A `timings` list shorter than `progression` is not an error: the unlocated
         trailing steps are simply treated as principal notes, which is the same
         "we know nothing" rule that governs `timings=None`. The guard is the one
-        `wjazzd.arrange_slots` already applies to its own timings, for the same
+        `slots.arrange_slots` already applies to its own timings, for the same
         reason - a hand-built list must not silently shift the rhythm.
 
         `texture="walking_bass"` adds a thumb line on the bass strings under a light
@@ -1003,9 +1003,10 @@ class VoiceLeadingEngine:
         if has_thumb:
             # Decision B: the union is built here, before the melody loop, so the
             # loop's index still indexes the skeleton it was given. `_walking_slots`
-            # is shared with `wjazzd.arrange_slots`, so the corpus and head paths
-            # cannot walk a different line from this one - see its docstring for why
-            # that duplication has already cost this project one bug.
+            # is shared with `slots.arrange_slots`, so an imported head and a
+            # hand-built progression cannot walk a different line from this one - see
+            # its docstring for why that duplication has already cost this project one
+            # bug.
             slots = _walking_slots(progression, timings, beats_per_bar, bass)
 
         # Harmony and melody state for the walking-bass role rule. Both are read from
@@ -1083,7 +1084,7 @@ class VoiceLeadingEngine:
             )
 
             # Where this slot falls in the bar, and therefore what it is for. Read
-            # defensively, exactly as wjazzd.arrange_slots guards its own timings: a
+            # defensively, exactly as slots.arrange_slots guards its own timings: a
             # short list leaves the trailing steps unlocated, and an unlocated step is
             # a principal note rather than a fill. The bar and beat are also stamped
             # onto the step, because a caller that supplied the rhythm wants to read it

@@ -1739,7 +1739,7 @@ class TestTabstaffModuleBoundary(unittest.TestCase):
 
     def test_arranger_re_exports_the_renderers(self):
         """
-        The README, the tests and wjazzd all spell these as `from arranger import`,
+        The README and the tests all spell these as `from arranger import`,
         so the split must not move the public name even though it moved the code.
         The MusicXML renderers are included: they live in `tabxml`, which `tabstaff`
         re-exports, and all four must be reachable the same one way.

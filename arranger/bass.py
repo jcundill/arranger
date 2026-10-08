@@ -15,11 +15,12 @@ Three passes, in this order, and the order is the design:
 `BASS_ROLE_*` constants below and is called by `_walking_bass_line`; in `cost` it
 would need this module and this module would need `cost`.
 
-**One slot union, built once.** Both step loops reach `_walking_slots` -
-`VoiceLeadingEngine.arrange_progression` and `wjazzd.arrange_slots` - because a
-second copy is exactly the failure this library documents having had once already:
-the corpus path was built separately, drifted, and voiced an `Am7` under a
-written `Bbm7` for twenty-five transcriptions before anyone noticed. Walking bass
+**One slot union, built once.** The step loop reaches `_walking_slots` -
+`VoiceLeadingEngine.arrange_progression`, and through it the imported-head path -
+because a second copy is exactly the failure this library documents having had once
+already: the corpus path was built separately, drifted, and voiced an `Am7` under a
+written `Bbm7` for twenty-five transcriptions before anyone noticed. That path has
+since been removed, and the lesson outlived it. Walking bass
 is the same trap with the same stakes, since a path that arranged the shells but
 not the walk would look plausible and be wrong.
 """
@@ -513,8 +514,8 @@ def _walking_slots(
     works under textures `walk` is refused for. The union is built the same way either
     way - the grid is the grid - so a sparser line is sparser and nothing else.
 
-    **The one place the union is built.** Both step loops reach it -
-    `VoiceLeadingEngine.arrange_progression` and `wjazzd.arrange_slots` - because a
+    **The one place the union is built.** The step loop reaches it -
+    `VoiceLeadingEngine.arrange_progression` - because a
     second copy is exactly the failure this module documents having had once already:
     the corpus path was built separately, drifted from the library, and shipped a
     voiced `Am7` under a written `Bbm7` for twenty-five transcriptions before anyone

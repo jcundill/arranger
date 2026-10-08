@@ -25,7 +25,7 @@ from arranger.tuning import _MUTED_CELL, STRING_NAMES, ArrangementStep
 
 # The MusicXML and Guitar Pro renderers are ordinary top-level imports, re-exported
 # from `arranger` so that `from arranger import format_musicxml` - the spelling in
-# the README, the tests and `wjazzd` - keeps working.
+# the README and the tests - keeps working.
 #
 # They used to be resolved through a module-level `__getattr__`, on the stated
 # grounds that `tabxml` and `tabgp` "import this module" and would therefore

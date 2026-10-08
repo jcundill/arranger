@@ -329,8 +329,10 @@ def arrange_slots(
     #
     # It used to be applied *after* the slot's role had been computed from the
     # written chord. Under `targets` the role does not read the harmony, so nothing
-    # moved; under `walking_bass` it does. That ordering change is measured rather
-    # than assumed - `tests/test_wjazzd.py::TestTheRetryReordersNothingVisible`.
+    # moved; under `walking_bass` it does. That ordering change was measured, when the
+    # corpus existed, by `test_wjazzd.py::TestTheRetryReordersNothingVisible` - a file
+    # that went with the database. `tests/test_step_loop_equivalence.py` is the
+    # standing check that the two entry points still agree.
     unresolved = unresolved_steps(list(triples), non_chord_tone, onsets)
     retry = set(unresolved) if fallback == "diminished" else set()
     rescued: List[int] = []
