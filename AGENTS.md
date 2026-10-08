@@ -62,8 +62,8 @@ bassist on the root, a horn on the melody and the guitar comping guide tones bet
 Adding an axis means a new `*_STYLES` / `*_POLICIES` pair and a `*_AUTO` sentinel that
 is deliberately **not** in the styles list, plus a `*_allowed` refusal function derived from
 a table rather than listed — never another branch at the call sites. The trap: a loop
-variable shadowing a policy parameter (`melody` in `wjazzd.arrange_slots` did exactly this,
-and it only raised when a diminished retry had something to rescue).
+variable shadowing a policy parameter (`melody`, in the since-removed `wjazzd.arrange_slots`,
+did exactly this, and it only raised when a diminished retry had something to rescue).
 
 **`harmony=` was added by following that rule, and the three traps below are what it cost.**
 `HARMONY_STYLES` + `HARMONY_POLICIES` + `HARMONY_AUTO` + `harmony_allowed` in
@@ -99,8 +99,9 @@ a fifth:
 skipped). **There is no second job and nothing a clean clone cannot run** — that used
 to need stating here and in the workflow header, because the 42 MB Weimar Jazz
 Database was gitignored and 85 of the suite's tests skipped on every fresh checkout.
-The database is gone, so a green check means the whole suite ran, and the only guards
-left are the optional-extra ones this job installs against.
+The database **and its loader** are gone, so a green check means the whole suite ran, and
+the only guards left are the optional-extra ones this job installs against. (The 42 MB
+`wjazzd.db` file is gitignored, so a working copy may still have it; nothing reads it.)
 
 **`make check` runs one interpreter, and the matrix runs four.** It is the 3.14 dev
 one. A construct that is version-dependent passes here and fails on the 3.11 job —
@@ -397,7 +398,7 @@ Each of these cost real time, or nearly shipped a defect.
    a test fails because the structure it describes is gone, **invert the assertion —
    do not delete the test.** `test_both_loops_call_the_shared_decisions` asserted both
    step loops call each decision; Phase 4 made that false by design, and it now
-   asserts the opposite (the engine calls them, and `wjazzd` must contain none of it).
+   asserts the opposite (the engine calls them, and `slots` must contain none of it).
 
 6. **When consolidating two branches, check whether their *outputs* differ before
    unifying their predicates.** `melody_alone_case` nearly shipped as a `bool`, and
@@ -414,11 +415,12 @@ Each of these cost real time, or nearly shipped a defect.
 8. **A stale "before" measurement will invent differences that are not there.** When
    proving a refactor changed nothing, capture the fingerprint from the commit you
    think it is, not from a file that has been sitting in the tree since
-   (`git worktree add /tmp/pre HEAD`). The 42 MB database is gitignored, so copy
-   `wjazzd.db` across or the corpus half of such a capture comes back empty. The
-   capture itself is a throwaway script under `/tmp`, kept out of the repository:
-   `tests/test_step_loop_equivalence.py` is the standing check, and a measurement
-   that only matters during one refactor has no business outliving it.
+   (`git worktree add /tmp/pre HEAD`). The capture itself is a throwaway script under
+   `/tmp`, kept out of the repository: `tests/test_step_loop_equivalence.py` is the
+   standing check, and a measurement that only matters during one refactor has no
+   business outliving it. (This trap used to have a corpus half — the gitignored
+   database had to be copied across or the capture came back empty — and that half
+   retired with the loader.)
 
 9. **A count without a denominator is not a metre.** 2/2 and 2/4 are both two beats
    to the bar, and both readings of `4 / beat_type` agree in 4/4 — so the whole suite

@@ -253,11 +253,10 @@ you whether a change is an improvement or a different library.
    a member of `supported_string_sets()`.
    `TestQualityTableInvariants` checks the template and degree lists stay the same
    length, and `tests/test_non_chord_tones.py` covers any new
-   `NON_CHORD_TONE_EXTENSIONS` route. `tests/test_wjazzd.py` asserts every
-   `WEIMAR_QUALITY_ALIASES` entry resolves to a quality the library can voice, so
-   a table entry naming an unvoiceable quality fails the suite.
+   `NON_CHORD_TONE_EXTENSIONS` route.
    `tests/test_headxml.py::TestChordParsing::test_every_kind_the_table_names_is_voiceable`
-   is the same assertion for `MUSICXML_KIND_QUALITIES`.
+   asserts that every quality `MUSICXML_KIND_QUALITIES` names can be voiced, so a
+   table entry naming an unvoiceable quality fails the suite.
 
 ## Grips, and the position-aware selector
 

@@ -299,7 +299,8 @@ right, independent of the playability work.
 ### Stage 1 — fixed
 
 The rule turned out to have **one** implementation, not the two this document
-listed: `wjazzd.arrange_slots` routes through
+listed: `wjazzd.arrange_slots` (since removed; `arranger/slots.py` is what remains)
+routed through
 `decisions.resolve_texture_grips` like `arrange_progression` does, so the
 suppression is one `if` in `arranger/decisions.py` and both CLIs get it.
 
@@ -786,7 +787,8 @@ errors). They constrain any fix above, so they are recorded here:
   `grips` intersects the role's palette; the default does **not** intersect
   (`GRIP_PREFERENCE` omits `interval`, `melody` and `drop3`, so intersecting
   with it would delete grips the texture depends on). In
-  `arrange_progression` and `wjazzd.arrange_slots` — two copies of one loop.
+  `arrange_progression` and the slot layer — one loop now, since the corpus copy
+  (`arranger/slots.py`'s predecessor) was removed.
 - **A `targets` beat that cannot be *played* becomes the melody alone.** A
   target is only offered `("drop2", "drop3")`, so a narrow shell was never a
   candidate and the cost tuple would not have chosen it anyway (`missing` is

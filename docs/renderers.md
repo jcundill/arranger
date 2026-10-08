@@ -398,8 +398,9 @@ and why it is now plumbed all the way to the file headers.
 `MUSICXML_KIND_QUALITIES` rather than folded into a near neighbour —
 `Neapolitan`, `Italian`, `French`, `German`, `pedal`, `power`, `Tristan` and
 `none` are all real MusicXML kinds and all absent — and it is counted in
-`Head.unmapped` and printed, on the same principle as
-`WEIMAR_QUALITY_ALIASES`. A quality naming a chord the voicing tables do not hold
+`Head.unmapped` and printed, on the same principle `ChordParser` follows: a spelling
+the library cannot read resolves to `None` and is counted rather than guessed at. A
+quality naming a chord the voicing tables do not hold
 is reported as untranslatable rather than failing silently later.
 
 **The voicings are not re-implemented here.** `arrange_xml_head` hands its slots to
