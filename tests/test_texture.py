@@ -664,6 +664,60 @@ class TestTheRightHandBudget(unittest.TestCase):
         self.assertGreater(checked, 0, "no target carried a bass, so nothing was tested")
 
 
+class TestTheThumbReach(unittest.TestCase):
+    """§2.5's second half: the thumb sweeps the low four strings and no higher.
+
+    The right hand assigns **strings**, not roles - the thumb takes the bottom note of a two-
+    or three-note shape whenever that note sits on the E, A, D or G string, with or without a
+    bass line under the shape. `bass=` is an arrangement-level fact and never reaches it: the
+    merged bass note is written into the fret vector *after* selection. Above the G the thumb
+    is out of reach and the fingers take the bottom, which `duo`'s 1-2 pair and the two
+    one-note comping shapes are the only reachable sets to ask for. How often it happens is
+    measured in `docs/fingering.md` §4.4.
+
+    Asserted because of what it *buys*: a string set with nothing below the G can only contain
+    the B, the high E, or both - adjacent strings - so the thumb-to-index gap §2.5 exempts
+    cannot occur on a shape the thumb cannot reach, and narrowing the exemption to the thumb's
+    real reach moves §4.4's finger-skip count by **0**, measured on all five rows.
+    """
+
+    # Low E, A, D and G - what a right-hand thumb sweeps. Index 0 is the low E.
+    THUMB_STRINGS = frozenset((0, 1, 2, 3))
+
+    def test_only_three_reachable_sets_put_the_bottom_note_above_the_g(self) -> None:
+        """Named rather than counted, so a fourth one has to be considered."""
+        above_the_g = {
+            frozenset(strings)
+            for strings in supported_string_sets()
+            if min(strings) > max(self.THUMB_STRINGS)
+        }
+        self.assertEqual(
+            above_the_g,
+            {frozenset((4,)), frozenset((5,)), frozenset((4, 5))},
+            "the B alone, the high E alone, and the 1-2 pair - nothing else is up there",
+        )
+
+    def test_the_sets_the_thumb_cannot_reach_are_contiguous(self) -> None:
+        """Why the exemption can be narrowed without moving §4.4's count.
+
+        A gap needs a string *between* two sounding ones, and above the G there is no string
+        between the B and the high E - so all three sets are already gap-free and the exemption
+        was never doing any work for them.
+        """
+        above = [
+            sorted(strings)
+            for strings in supported_string_sets()
+            if min(strings) > max(self.THUMB_STRINGS)
+        ]
+        self.assertEqual(len(above), 3, "the sweep below is only as good as its denominator")
+        for strings in above:
+            self.assertEqual(
+                strings,
+                list(range(strings[0], strings[0] + len(strings))),
+                f"{strings} has a gap above the G string",
+            )
+
+
 class TestBackwardCompatibility(unittest.TestCase):
     """
     The guarantee: without timing, nothing about an arrangement changes.

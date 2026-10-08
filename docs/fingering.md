@@ -37,10 +37,13 @@ reason the span cap does not already catch.
 half found a real defect and fixed it (the five-finger check; see §4.3 and §5 step 2). Its
 *movement* half is measured — where finger-level movement disagrees with `position` and
 `movement`, over every struck transition of the committed heads — and it came back nearly
-empty. Its **right-hand half is measured too** (§4.4: which strings `p-i-m-a` pluck, and
-whether a skip between the fingers costs anything the engine could avoid), and it comes
-back the same way: the skip is real and common, but every lever that would remove it trades
-away something a *higher* criterion is paying for. The re-ranking experiment that would
+empty. Its **right-hand half is measured too** (§4.4: which strings `p-i-m-a` pluck,
+whether a skip between the fingers costs anything the engine could avoid, and how far the
+thumb reaches — the low four strings, which it sweeps for the bottom of a two- or three-note
+shape whether or not a bass voice is marked), and it comes back the same way: the skip is real
+and common, but every lever that would remove it trades away something a *higher* criterion is
+paying for, and narrowing the exemption to the thumb's actual reach moves the count by **0**.
+The re-ranking experiment that would
 decide **step 3** has still not run, and the numbers as they stand argue against a tuple
 slot rather than for one. Until it runs, `voicing_cost` stays untouched and this document is
 the state of record.
@@ -198,29 +201,45 @@ question the same four digits raise, and this section is it: **which strings the
 on, and whether an unplucked string between two of them costs anything.**
 
 Take the strings a step actually plucks, sorted low to high, and hand them out in that
-order: the lowest takes the **thumb**, the next the **index**, then **middle**, then
-**ring** — `p-i-m-a` ascending, which is what a four-note shape on four neighbouring
-strings already is. The strings a step plucks are `tabgp._sounding_frets`' answer rather
-than the fret vector's, because a `repeated` or `bass_only` step is not re-striking its
-whole shape.
+order — **provided the lowest of them lies on the low four strings**: the thumb takes the
+lowest, the next the **index**, then **middle**, then **ring** — `p-i-m-a` ascending, which
+is what a four-note shape on four neighbouring strings already is. A shape whose bottom note
+sits on the B or the high E has **no thumb in it at all**; its lowest is the index and the
+three fingers fan above from there. The strings a step plucks are `tabgp._sounding_frets`'
+answer rather than the fret vector's, because a `repeated` or `bass_only` step is not
+re-striking its whole shape.
+
+**The thumb's reach is a *string* fact, not a voice one, and that is the second half of this
+convention.** On a three- or even two-note shape the thumb sweeps whatever is lowest on the
+low four strings — the E, A, D and G — *including when that note is the **alto** or the
+**tenor** rather than a stated bass*. A shape does not have to be marked as carrying a bass
+voice for the thumb to be the digit on its bottom string, because the right hand assigns
+strings and knows nothing about the voices above them: `bass=` is an arrangement-level fact
+(handed to `bass.py`, which is a *left*-hand question), and the merged bass note is written
+into the fret vector only *after* selection, so no right-hand reading ever sees it. Measured
+in §4.4: **54** steps of the default `uniform` arrangement are a two- or three-note shape
+whose bottom note is the thumb's with **no** bass line under them at all.
 
 Now the claim, and it is the one that makes this measurable:
 
 - **A gap in the *lowest two* sounding strings — between the thumb and the index — is
-  free.** The thumb strokes across the muted string to reach its note, so a skip under
-  it is ordinary equipment rather than a reach, and this is exactly the gap the
-  bass-skipping string sets create on purpose (§2.1's "6-4-3 skips the A"; `drop2`'s
-  `(1,3,4,5)` and `(0,2,3,4)`; `drop2_6432`'s whole reason to exist). Measured in §4.4:
-  **not one** shape in `drop2`, `drop3`, `drop2_6432` or `duo` carries a gap anywhere
-  else, so on this rule all four families are already clean.
+  free**, *while the thumb is the digit on the bottom string*. The thumb strokes across the
+  muted string to reach its note, so a skip under it is ordinary equipment rather than a
+  reach, and this is exactly the gap the bass-skipping string sets create on purpose
+  (§2.1's "6-4-3 skips the A"; `drop2`'s `(1,3,4,5)` and `(0,2,3,4)`; `drop2_6432`'s whole
+  reason to exist). Measured in §4.4: **not one** shape in `drop2`, `drop3`, `drop2_6432`
+  or `duo` carries a gap anywhere else, so on this rule all four families are already clean.
 - **A gap between the three *fingers* — index↔middle, or middle↔ring — is the one that
   costs.** Those three play in a fan above the planted thumb, and one of them reaching
   over an unplucked string is a different hand from three on three neighbouring strings.
 
 So the metric is a single number — **the skipped strings in gaps crossed by the middle or
 ring finger** — and the thumb→index gap is the only exemption it needs. On the ascending
-strings `s1 < … < sk`, the gap before `s2` is the thumb's and is free; the gaps before `s3`
-and `s4` are the fingers' and count.
+strings `s1 < … < sk`, the gap before `s2` is the thumb's and is free **so long as `s1` is one
+of the low four**; the gaps before `s3` and `s4` are the fingers' and count. Restricting the
+exemption that way costs nothing, and §4.4 measures *why* rather than asserting it: a string
+set with nothing below the G can only be the B, the high E, or both — adjacent strings — so
+the exempt gap never arises on a shape the thumb cannot reach.
 
 **The trap, and it is the reason this section exists rather than a sentence.** The
 obvious metric — "are the plucked strings contiguous?" — **over-reports by an order of
@@ -235,6 +254,11 @@ metric that models the *fretboard* is not a metric that models the *hand*.
 here and could not be — it is a claim about how a hand feels, and the corpus can only say
 how often the shape occurs. What the corpus *can* do is size the consequence, which is
 §4.4, and confirm that the exempt gap is the one the string tables deliberately create.
+The **reach** half is a convention on the same footing, and it is the half the tables can
+answer outright: which digit a player puts on a lone note on the B string is a hand fact,
+but *how often a shape's bottom note sits above the G* is a fact about the string sets —
+**3 of the 24** reachable ones, **359 of 8,789** generated shapes, and between **12%** and
+**68%** of the steps of the five committed-head rows (§4.4).
 
 ## 3. The algorithm (built, and read by `bass` for one question)
 
@@ -474,6 +498,57 @@ The bass textures are nearly clean because their target palettes are shells; the
 `uniform` arrangement carries the full palette and shows the `drop24` cost plainly. And the
 merge is not the source — see §2.5's trap note for why the naive count said otherwise.
 
+**The exemption's own reach, measured: the thumb sweeps the low four strings, and narrowing it
+costs nothing.** §2.5's convention has a second half — the thumb is the digit on the bottom
+note only while that note sits on the E, A, D or G string — so this is what narrowing the
+exemption to that reach would do. It comes back empty, and the reason is structural rather
+than lucky:
+
+- **The tables: 3 sets of 24, and all three are contiguous.** `duo`'s 1-2 pair (the B and the
+  high E) and the two one-note comping shapes, on the B and on the high E, are the only
+  reachable sets whose bottom string is above the G. A set with nothing below the G can only
+  contain the B, the high E, or both — **adjacent strings** — so the thumb→index gap the
+  exemption exists for *cannot occur* on a shape the thumb cannot reach.
+  `tests/test_texture.py::TestTheThumbReach` pins that from `supported_string_sets()`, so a
+  set that breaks it fails there rather than in a paragraph nobody re-reads.
+- **The generated corpus: 359 of 8,789 shapes (4.1%)**, every one a `duo` (27.4% of the 1,310
+  duos), every one a two-string shape, and **0** of them carrying a gap at all.
+- **The committed heads**, counting every step `arrange_xml_head` returns — the denominator
+  `open-issues.md` item 11 uses. §4.4's table above reads 837 on the two `walk` rows because it
+  counts only the steps that pluck at least one string, and two of those 839 steps pluck nothing:
+
+| row | steps | …bottom note above the G | …carrying a gap at all | skips, exemption as documented | …narrowed to the thumb's reach |
+|---|---|---|---|---|---|
+| `uniform` (the default) | 643 | 80 (12.4%) | 0 | **223** | **223** |
+| `targets --bass walk` | 839 | 288 (34.3%) | 0 | 19 | **19** |
+| `targets --bass anchors` | 688 | 446 (64.8%) | 0 | 16 | **16** |
+| `walking_bass --bass walk` | 839 | 288 (34.3%) | 0 | 19 | **19** |
+| `walking_bass --bass anchors` | 688 | 466 (67.7%) | 0 | 19 | **19** |
+
+The last two columns are identical on every row, which is the narrowing being free rather than
+being argued to be. The sub-count column is 0 because every off-reach step is a
+**single** note — a lone voice on the high E (212 of the 288 on `targets --bass walk`, 365 of
+the 446 under `anchors`) or on the B (76 and 81), with `uniform` the one row that also reaches a
+pair, once, on 1-2 — and one pluck has no gap in it.
+
+Those lone notes are also where **§2.5's "a string, not a voice" half** shows up. They are the
+comping shapes an alto or a tenor gets, or a fill that is the melody alone, and most have no
+bass line under them at all: of the two- and three-note shapes whose bottom note is the thumb's,
+**54 of 54** carry no bass note in the default `uniform` arrangement, against **228 of 241** on
+the two `walk` rows and **49 of 60** (`targets`) and **49 of 68** (`walking_bass`) under
+`anchors`. The thumb plays the bottom of a two- or three-note shape whether or not a bass voice
+is marked — which is the fact the convention is stated from, and the one no reader of `bass=`
+would guess.
+
+**Recorded, not built, and there is nothing here to build.** No engine module assigns a
+right-hand digit: the only right-hand code is the four-string *budget* (`RIGHT_HAND_STRINGS`,
+`grip_pluck_count`, `grips.thumb_safe_grips`), which counts how many digits are spoken for
+rather than choosing which. So this convention has no engine consequence to weigh, and the
+metric's conclusion stands unchanged. What it does change is the *model*: a third of the `walk`
+rows' steps and nearly two thirds of the `anchors` rows' steps carry **no thumb in the right
+hand at all**, which is worth knowing before anyone reasons from "the thumb is on the bottom
+note".
+
 **Three levers, and none of them is free.** Over 812 (quality, melody) selections, **265**
 pick a finger-skip winner, every one of them with a zero-skip candidate in the pool:
 
@@ -572,6 +647,13 @@ and §4.4), which is why step 1 had to exist before any of the measurements coul
      term is inert below `position` (0 of 812 picks) and changes 17 above it, table reordering
      is inert (0 exact ties), and removing the five sets replaces exactly those 265 winners
      with 0 pools emptied. Recorded, not built.
+     **The same question with the exemption narrowed to the thumb's real reach** — kept only
+     where the bottom note is on the E, A, D or the G string — is measured beside it and moves
+     **0** on every row, for a structural reason: the only reachable sets with their bottom note
+     above the G are `duo`'s 1-2 pair and the two one-note comping shapes, all three contiguous,
+     so the exempt gap never arises where the thumb cannot reach. It is a convention that is
+     common in the arrangements (a third of the `walk` rows' steps, nearly two thirds of
+     `anchors`') and free in the tables, which is why it is recorded rather than built.
 3. **Not started, and step 2's numbers are the argument for leaving it alone.** 0.3% of
    transitions separate the two metrics, the separating case is a single-finger leap that
    `span` (criterion 3) and `movement` (criterion 5) between them already bound, and the one
