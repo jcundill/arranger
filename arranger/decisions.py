@@ -48,7 +48,7 @@ from typing import Any, Callable, Container, List, Optional, Sequence, Tuple
 from .chords import sounding_harmony
 from .cost import _best_voicing
 from .diagnostics import Diagnostics
-from .grips import GRIP_MAX_SPAN, GRIP_PREFERENCE
+from .grips import GRIP_MAX_SPAN, GRIP_PREFERENCE, thumb_safe_grips
 from .tuning import NO_CHORD, ROLE_FILL, ROLE_TARGET, ArrangementStep, Voicing
 
 # The three answers to "how is this slot played". Named rather than a bool because
@@ -65,6 +65,7 @@ def resolve_texture_grips(
     texture_grips: Any,
     requested: Tuple[str, ...],
     diagnostics: Diagnostics,
+    has_thumb: bool = False,
 ) -> Tuple[str, ...]:
     """Which grips this slot may use: the role's palette, narrowed by the caller.
 
@@ -72,6 +73,26 @@ def resolve_texture_grips(
     silently deletes from it. It used to be discarded outright
     (`slot_grips = texture_grips[role]`), so `--grips shell --texture targets` asked
     for shell-only and got a four-note drop-2 on every strong beat with nothing said.
+
+    `has_thumb` narrows it too, and it is a budget rather than a preference: the right
+    hand plucks with thumb, index, middle and ring, so a **target** may sound at most
+    three strings while a bass note is being placed under it - four fingers, and the
+    thumb is one of them. `thumb_safe_grips` is the rule, derived from the string
+    tables; a target palette of four-note grips (`targets`' `drop2`/`drop3`) resolves to
+    the widest statement that leaves a finger free, which is the `("shell",)` palette
+    `walking_bass` already names. Applied *before* `requested` narrows, so
+    `--grips drop2 --texture targets --bass walk` still reads as "that grip is not
+    available here" and takes the existing reported fallback rather than resurrecting a
+    five-pluck step.
+
+    **`has_thumb` is a fact about *this slot*, not about the arrangement**, and the
+    caller passes it that way: a bass policy places a note on some beats and not others
+    (`anchors` only where the harmony changes), and a target with nothing underneath it
+    may use all four strings. Narrowing every target in the arrangement would thin
+    chords the thumb never plays under.
+
+    A **fill** is not touched. A fill is heard *between* the thumb's notes rather than
+    under one, and the texture's fill palettes already hold inside the budget.
 
     The default is the case that matters, and it is why this is **not** a plain set
     intersection. `GRIP_PREFERENCE` is the order a *caller* ranks grips in, and it
@@ -97,6 +118,11 @@ def resolve_texture_grips(
     nothing: only the former is worth interrupting the output to mention.
     """
     role_grips: Tuple[str, ...] = texture_grips[role]
+    # The right hand's budget first, because it is a fact about the hand rather than a
+    # preference: a target that sounds four strings has no finger left for the thumb.
+    # A fill is left alone - it is heard between the thumb's notes, not under one.
+    if has_thumb and role == ROLE_TARGET:
+        role_grips = thumb_safe_grips(role_grips)
     if requested == GRIP_PREFERENCE:
         return role_grips
     narrowed = tuple(g for g in requested if g in role_grips)

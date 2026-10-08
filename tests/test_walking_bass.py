@@ -25,6 +25,7 @@ dependency and no database.
 
 from __future__ import annotations
 
+import glob
 import re
 import unittest
 from typing import List, Optional, Tuple
@@ -1215,6 +1216,16 @@ class TestTheInvariant(unittest.TestCase):
     `{0,1,2,3}`, which is not a supported set. The rule is therefore stated over the
     **upper voices**, with the thumb required to sit outside them and below them -
     the same spirit as the melody-only `NC` exemption that already exists.
+
+    **And the amendment has a second half, whose absence shipped a five-pluck tab.** The
+    upper-voices rule above is satisfied by a *four*-string upper shape plus a thumb: two
+    supported sets' worth of notes in one step, and one more string than the right hand
+    has digits. Stating the rule over the upper voices was correct for the texture it was
+    written for - a `walking_bass` target is a shell - and silently wrong for `targets`,
+    whose targets were four-note drop-2s. Measured before the fix, over the six committed
+    heads: `--texture targets --bass walk` sounded five strings on **151** steps,
+    `--bass anchors` on **130**, while `walking_bass` and `uniform` sounded none. The
+    budget is now `grips.thumb_safe_grips`; see `docs/open-issues.md` item 11.
     """
 
     def test_the_upper_voices_are_one_supported_set_and_the_thumb_is_outside_it(self):
@@ -1256,6 +1267,49 @@ class TestTheInvariant(unittest.TestCase):
             # budget, which is the whole point of placing it by proximity.
             self.assertLessEqual(step.voicing.fret_span(), GRIP_MAX_SPAN["shell"] + 5)
         self.assertGreater(checked, 0)
+
+    def test_no_step_plucks_more_strings_than_the_right_hand_has_digits(self) -> None:
+        """The budget half of the invariant, swept over every committed head.
+
+        Four digits - thumb, index, middle and ring - so four strings, and a four-note
+        target with a bass note merged under it is five. `_sounding_frets` is the
+        renderers' own answer to "what does this step play at this instant", which is the
+        right hand's question: a `bass_only` step plucks its thumb alone even though the
+        shape above it is still ringing, and a `repeated` one plucks the soprano and the
+        thumb. A check on the fret vector cannot tell those apart, which is how 281
+        five-pluck steps shipped (see `docs/open-issues.md` item 11).
+
+        `targets` is in the sweep because it *was* the defect. `uniform` is not, because
+        its `walk` is refused outright (`bass_allowed`) and so has no thumb to budget.
+        """
+        from headxml import arrange_xml_head
+
+        paths = sorted(
+            glob.glob("tests/data/*.mxl") + glob.glob("tests/data/*.musicxml")
+        )
+        self.assertGreaterEqual(len(paths), 6, "the committed heads went missing")
+        checked = 0
+        for path in paths:
+            for texture, bass in (
+                ("targets", "walk"),
+                ("targets", "anchors"),
+                ("walking_bass", "walk"),
+                ("walking_bass", "anchors"),
+            ):
+                with self.subTest(head=path, texture=texture, bass=bass):
+                    steps, _head, _notes = arrange_xml_head(
+                        path, texture=texture, bass=bass
+                    )
+                    for step in steps:
+                        plucks = len(_sounding_frets(step))
+                        self.assertLessEqual(
+                            plucks,
+                            4,
+                            f"{texture}/{bass}: {step.tab_line()} plucks {plucks} strings",
+                        )
+                        if step.voicing.bass_string is not None:
+                            checked += 1
+        self.assertGreater(checked, 0, "no step carried a bass, so nothing was tested")
 
     def test_the_bass_is_outside_the_cost_tuple_by_construction(self):
         """

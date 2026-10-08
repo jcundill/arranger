@@ -24,6 +24,7 @@ import arranger
 from arranger import (
     BASS_STRING_INDICES,
     GRIP_MAX_SPAN,
+    GRIP_PREFERENCE,
     GRIP_STRING_SETS,
     ROLE_FILL,
     ROLE_TARGET,
@@ -32,12 +33,20 @@ from arranger import (
     TEXTURE_STYLES,
     THUMB_TEXTURES,
     ChordParser,
+    Diagnostics,
     VoiceLeadingEngine,
     _interval_offsets,
     _metric_weight,
     _roles_for_slot,
     supported_string_sets,
 )
+
+# Imported from where they live rather than through the package facade, for the reason
+# `test_walking_bass` gives for the private `bass` helpers: these are the rule's own
+# spelling, and re-exporting them would enlarge the public surface for one test file's
+# benefit.
+from arranger.decisions import resolve_texture_grips
+from arranger.grips import RIGHT_HAND_STRINGS, grip_pluck_count, thumb_safe_grips
 
 # The library's own demonstration cadences. These are the progressions whose tab is
 # already asserted elsewhere in the suite, so they double as the fixture here: if the
@@ -504,6 +513,155 @@ class TestGripsIntersectTheTexture(unittest.TestCase):
             set(TEXTURE_GRIPS["targets"][ROLE_TARGET])
             & set(TEXTURE_GRIPS["targets"][ROLE_FILL])
         )
+
+
+class TestTheRightHandBudget(unittest.TestCase):
+    """The four digits on the right hand, and what a thumb line costs a target.
+
+    The right hand plucks with thumb, index, middle and ring - `p-i-m-a`, four digits -
+    so four strings is the most that can sound at once. That is the same four
+    `supported_string_sets()` states, and it states it for a **voicing**: a step is the
+    thing the renderers print, and the thumb note is merged into the step *after*
+    selection (`VoiceLeadingEngine._attach_bass`), so no check ever saw the two together.
+    `--texture targets` voiced a four-note target on its strong beats and then placed a
+    bass note under it, which is five simultaneous plucks - one more hand than a player
+    has. Measured over the six committed heads before this rule existed, **151** steps
+    under `--bass walk` and **130** under `--bass anchors` sounded five strings;
+    `walking_bass` and `uniform` sounded none, the first because its targets are shells
+    and the second because `bass_allowed` refuses the whole axis.
+
+    The rule is a **budget** rather than a preference, so it narrows the *target* palette
+    only, and only while a thumb line is running. See `docs/open-issues.md` item 11.
+    """
+
+    def test_every_grip_is_measured_from_its_widest_string_set(self) -> None:
+        """One number per grip, pinned as literals because these are what the rule compares.
+
+        A grip that gains a wider string set - or a new four-string grip - has to move one
+        of these values before the budget can admit it, which is the signal rather than a
+        silent widening.
+        """
+        counts = {grip: grip_pluck_count(grip) for grip in GRIP_STRING_SETS}
+        self.assertEqual(
+            {grip for grip, n in counts.items() if n == RIGHT_HAND_STRINGS},
+            {"drop2", "drop3", "drop24", "drop2_6432", "closed"},
+            "the four-string grips are the four-note families",
+        )
+        self.assertEqual(counts["shell"], 3)
+        self.assertEqual({grip for grip, n in counts.items() if n == 2}, {"duo", "interval"})
+
+    def test_a_palette_entry_that_is_not_a_grip_counts_as_one_string(self) -> None:
+        """`melody` is a palette entry a texture names, and the shape it builds is one note."""
+        self.assertEqual(grip_pluck_count("melody"), 1)
+        self.assertEqual(grip_pluck_count("a-name-no-table-knows"), 1)
+
+    def test_a_target_palette_of_four_note_grips_becomes_the_widest_thumb_safe_one(self) -> None:
+        """`("drop2", "drop3")` plus a thumb is five plucks.
+
+        So a target resolves to the widest statement that leaves a finger free - the
+        `("shell",)` palette `walking_bass` already names for its own targets.
+        """
+        self.assertEqual(thumb_safe_grips(("drop2", "drop3")), ("shell",))
+
+    def test_the_premise_that_the_targets_texture_names_four_string_grips(self) -> None:
+        """Without this the narrowing above is load-bearing for nothing.
+
+        The whole defect is a four-note target voiced on a beat the thumb is also playing.
+        If that palette ever becomes thumb-safe on its own, this fails so the rule can be
+        re-argued rather than quietly kept.
+        """
+        self.assertTrue(
+            any(
+                grip_pluck_count(grip) == RIGHT_HAND_STRINGS
+                for grip in TEXTURE_GRIPS["targets"][ROLE_TARGET]
+            ),
+            "targets no longer offers a four-string target, so nothing needs narrowing",
+        )
+
+
+    def test_an_empty_palette_comes_back_unchanged(self) -> None:
+        """`()` is the table saying "the left hand plays nothing", not a palette to fix.
+
+        Narrowing it would hand the thumb a chord it was never offered, on every fill of
+        the one texture that exists for a thumb.
+        """
+        self.assertEqual(TEXTURE_GRIPS["walking_bass"][ROLE_FILL], ())
+        self.assertEqual(thumb_safe_grips(()), ())
+
+    def test_the_shipped_palettes_that_are_already_thumb_safe_do_not_move(self) -> None:
+        """`walking_bass`'s targets and `targets`' fills are inside the budget as they stand."""
+        self.assertEqual(
+            thumb_safe_grips(TEXTURE_GRIPS["walking_bass"][ROLE_TARGET]), ("shell",)
+        )
+        self.assertEqual(
+            thumb_safe_grips(TEXTURE_GRIPS["targets"][ROLE_FILL]),
+            ("shell", "interval", "melody"),
+        )
+
+    def test_the_rule_is_inert_without_a_thumb(self) -> None:
+        """`has_thumb=False` is the shipped path for every arrangement with no bass line."""
+        for role in (ROLE_TARGET, ROLE_FILL):
+            self.assertEqual(
+                resolve_texture_grips(
+                    role, "targets", TEXTURE_GRIPS["targets"], GRIP_PREFERENCE, Diagnostics()
+                ),
+                TEXTURE_GRIPS["targets"][role],
+            )
+
+    def test_a_thumb_narrows_a_target_and_leaves_a_fill_alone(self) -> None:
+        """The budget is one palette's, not the slot's: a fill falls between thumb notes."""
+        target = resolve_texture_grips(
+            ROLE_TARGET, "targets", TEXTURE_GRIPS["targets"], GRIP_PREFERENCE,
+            Diagnostics(), has_thumb=True,
+        )
+        fill = resolve_texture_grips(
+            ROLE_FILL, "targets", TEXTURE_GRIPS["targets"], GRIP_PREFERENCE,
+            Diagnostics(), has_thumb=True,
+        )
+        self.assertEqual(target, ("shell",))
+        self.assertEqual(fill, TEXTURE_GRIPS["targets"][ROLE_FILL])
+
+    def test_a_requested_grip_that_spends_all_four_fingers_is_reported_not_restored(self) -> None:
+        """`--grips drop2` under a thumb reads as "that grip is not available here".
+
+        The budget is applied *before* the caller's narrowing, so the intersection with
+        `("shell",)` is empty and takes the existing reported fallback - rather than
+        resurrecting the five-pluck step the caller asked for by name.
+        """
+        diagnostics = Diagnostics()
+        resolved = resolve_texture_grips(
+            ROLE_TARGET, "targets", TEXTURE_GRIPS["targets"], ("drop2",), diagnostics,
+            has_thumb=True,
+        )
+        self.assertEqual(resolved, ("shell",))
+        self.assertTrue(
+            any("none of which is in the requested" in w for w in diagnostics.warnings),
+            "the fallback must be reported rather than silent",
+        )
+
+    def test_a_thumb_carrying_targets_arrangement_never_sounds_five_strings(self) -> None:
+        """The engine-level sweep, and the assertion whose absence let this ship."""
+        progression = [
+            ("F5", "maj7", "Fmaj7"), ("D5", "m7", "Dm7"),
+            ("C5", "7", "G7"), ("B4", "maj7", "Cmaj7"),
+        ]
+        timings = [(bar, 1.0 + 0.5 * n, None) for bar in range(4) for n in range(4)]
+        with contextlib.redirect_stdout(io.StringIO()):
+            steps = VoiceLeadingEngine.arrange_progression(
+                progression, timings=timings, texture="targets", bass="walk"
+            )
+        checked = 0
+        for step in steps:
+            sounding = [fret for fret in step.voicing.frets if fret >= 0]
+            self.assertLessEqual(len(sounding), RIGHT_HAND_STRINGS, step.tab_line())
+            if step.role == ROLE_TARGET and step.voicing.bass_string is not None:
+                self.assertLessEqual(
+                    grip_pluck_count(step.voicing.grip),
+                    RIGHT_HAND_STRINGS - 1,
+                    f"{step.tab_line()} spends every finger on the chord",
+                )
+                checked += 1
+        self.assertGreater(checked, 0, "no target carried a bass, so nothing was tested")
 
 
 class TestBackwardCompatibility(unittest.TestCase):

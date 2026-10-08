@@ -391,6 +391,60 @@ def supported_string_sets() -> List[frozenset]:
     return sorted(sets, key=lambda s: sorted(s))
 
 
+# The right hand plucks with thumb, index, middle and ring - `p-i-m-a`, four digits - so
+# four strings is the most that can sound at once. `supported_string_sets()` states the
+# same four from the shape's side ("two to four strings, every other muted"); this is the
+# same limit stated from the hand's, because a *step* is what has to be measured against
+# it once a thumb note is merged underneath the shape.
+RIGHT_HAND_STRINGS = 4
+
+
+def grip_pluck_count(grip: str) -> int:
+    """How many strings `grip` can sound at once: its widest string set.
+
+    The right hand's budget question, asked of one grip. `melody` is a palette entry
+    rather than a grip - a texture names it to mean "the left hand plays the tune alone" -
+    so it answers one, which is the shape that entry builds. A name the table does not
+    know answers one as well rather than raising, on the same reasoning: this measures a
+    palette the texture owns, and an entry that sounds one note cannot spend a finger the
+    thumb needs.
+    """
+    if grip == "melody":
+        return 1
+    sets = GRIP_STRING_SETS.get(grip, ())
+    return max((len(strings) for strings, _ in sets), default=1)
+
+
+def thumb_safe_grips(palette: Tuple[str, ...]) -> Tuple[str, ...]:
+    """The grips in `palette` a hand with a thumb on the bottom string can still play.
+
+    Four digits, one of them the thumb, so a target may sound at most **three** strings
+    while a thumb line is running: the fourth string is the bass note. A four-note grip
+    plus a thumb is five simultaneous plucks, which no right hand has at any fret - the
+    left hand can barre a four-fret shape, and that is exactly why the two budgets are
+    separate questions (see `docs/fingering.md` §4.3).
+
+    An **empty** palette comes back unchanged, because it is not a palette that fails the
+    budget - it is the table saying "the left hand plays nothing here" (`walking_bass`'s
+    fills), and "narrowing" it would hand the thumb a chord it was never offered.
+
+    When every grip the palette names spends all four fingers, the answer is the **widest
+    statement that leaves one free** rather than nothing: a target still has to state the
+    harmony, which is the rule `TEXTURE_GRIPS["walking_bass"]` already encodes with its
+    `("shell",)` target palette. Derived from `GRIP_PREFERENCE` and the string tables, so
+    a three-string grip added later is admitted here without an edit - and when two are
+    equally wide the winner is the fuller one, which is `shell`.
+    """
+    if not palette:
+        return palette
+    kept = tuple(g for g in palette if grip_pluck_count(g) < RIGHT_HAND_STRINGS)
+    if kept:
+        return kept
+    safe = tuple(g for g in GRIP_PREFERENCE if grip_pluck_count(g) < RIGHT_HAND_STRINGS)
+    widest = max(grip_pluck_count(g) for g in safe)
+    return tuple(g for g in safe if grip_pluck_count(g) == widest)
+
+
 # --- Grip generation -------------------------------------------------------
 #
 # Everything below turns a chord quality and a melody note into semitone offsets

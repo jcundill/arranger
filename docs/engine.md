@@ -877,6 +877,36 @@ Two honest caveats, both measured rather than assumed:
   others through with their existing warning, rather than refusing a texture whose
   loss rate is the same order as the flagship's.
 
+**The other half of the budget: four fingers on the right hand.** A thumb line needs a
+free bass *string*; it also needs a free *finger*, and those are different questions.
+The right hand plucks with thumb, index, middle and ring — `p-i-m-a` — so a step may
+sound four strings and never five. `thumb_capacity` only ever answered the first:
+`targets` has a free thumb string, so `bass_allowed` let the axis through, and then a
+**four-note** target had a bass note merged under it — five plucks at once. Measured over
+the six committed heads before this was fixed, `--texture targets` sounded five strings on
+**151** steps under `--bass walk` and **130** under `--bass anchors`; `walking_bass` and
+`uniform` sounded none, the first because its targets are shells and the second because
+the axis is refused there.
+
+The rule is `grips.thumb_safe_grips`, derived from `GRIP_STRING_SETS`: while a bass note
+is being placed under a slot, a **target** may sound at most three strings, and a palette
+with none is narrowed to the widest statement that leaves a finger free
+(`("drop2", "drop3")` → `("shell",)`). It narrows *this slot's* palette rather than the
+arrangement's, because `anchors` leaves most beats bare and a target with nothing
+underneath it may use all four strings. Measured effect on the same heads:
+
+| row | before | after |
+|---|---|---|
+| `targets --bass walk` | 151 five-string steps | **0**, and byte-identical to `walking_bass --bass walk` |
+| `targets --bass anchors` | 130 | **0**, with 9 drop-2 and 19 drop-3 targets kept where the thumb plays nothing |
+| `walking_bass`, `uniform`, `targets --voices none` | 0 | **0** — unchanged |
+
+`walking_bass` does not move because the texture had already made this decision; its
+target palette is `("shell",)` for exactly this reason, and its comment says so. What the
+rule costs: a target whose quality has no shell — `Bmaj` under a `D5` melody, say — is a
+melody alone over the thumb rather than a four-note shape nobody can play, which is the
+outcome `walking_bass` has always had. See [open-issues.md](open-issues.md) item 11.
+
 ### `voices=` as a third axis: which voices the guitar plays
 
 `bass=` answers *who plays the bottom*. `voices=` answers *which voices this instrument

@@ -1139,7 +1139,13 @@ class VoiceLeadingEngine:
                 ()
                 if melody_only
                 else resolve_texture_grips(
-                    role, texture, texture_grips, grips, diagnostics
+                    role, texture, texture_grips, grips, diagnostics,
+                    # The right hand's budget, and a fact about *this slot* rather than
+                    # about the arrangement: a target may sound three strings only where
+                    # a bass note is actually being placed under it, which is what
+                    # `slot.bass` says. `has_thumb` alone would thin chords the thumb
+                    # never plays under - `--bass anchors` leaves most slots bare.
+                    has_thumb=has_thumb and slot.bass is not None,
                 )
             )
 

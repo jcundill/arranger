@@ -4,7 +4,10 @@ Items 1-4 were written at the end of the 2026-09-29 session, after the
 `GRIP_MAX_SPAN` / `voicing_cost` / `grips`-intersection work; item 5 was added on
 2026-10-03, item 6 was found by fixing it, item 9 came out of a measurement of the
 comping axes, and item 10 came out of asking what a comping grid should do on a bar the
-melody does not enter. **All except items 7 and 10 are now fixed**; each carries the
+melody does not enter. **Item 11 came out of the measurement
+[docs/fingering.md](fingering.md) §4.3 asked for**, and it is the one whose fix needed the
+*right* hand: a merged step could sound five strings, and no finger assignment was ever
+going to find it. **All except items 7 and 10 are now fixed**; each carries the
 measurement that produced it and the stage that closed it, so the work can be read rather
 than re-derived. Items 1-3 were fixed in stages 1-3 the same day; item 4 needed
 a corrected diagnosis first, and items 5 and 6 turned out to be two real defects of
@@ -1399,3 +1402,136 @@ Worth noting for the traps: this is a defect that sat in the tree through a gate
 that reported **OK**, because the tests happened to cover only the one input that did
 not trigger it. A passing suite is evidence about the cases it covers, and nothing
 more.
+
+---
+
+## 11. A merged step could sound five strings, and no right hand can pluck five
+
+**Status:** FIXED. Fourth of its family in this file: item 1 measured the thumb against the
+wrong shape, item 4 let a contradictory flag silence a chord, item 8 dropped the melody and
+kept the thumb - and this one is the **budget** none of them was checking, which is how many
+strings a *step* sounds at once once a bass note has been merged into it.
+
+### The symptom
+
+`--texture targets --bass walk` printed tabs no right hand can play. The plucks are thumb,
+index, middle and ring (`p-i-m-a`), so four strings is the maximum - and bar 1 beat 1 of
+"Tenor Madness" was `7-9-x-8-12-10`: low E 7, A 9, G 8, B 12, high E 10. Five strings, five
+distinct frets, and no barre reduces either.
+
+Measured over the six committed heads, counting what each step actually plucks
+(`tabgp._sounding_frets`, which already models the `repeated` and `bass_only` cases):
+
+| arrangement | steps | pluck five strings | five distinct frets | …counting the held shape |
+|---|---|---|---|---|
+| `--texture targets --bass walk` | 839 | **151** | 10 | 15 |
+| `--texture targets --bass anchors` | 688 | **130** | 9 | 10 |
+| `--texture walking_bass --bass walk` | 839 | 0 | 0 | 0 |
+| `--texture uniform --bass walk` | 643 | 0 | 0 | 0 - the axis is refused |
+| `_place_bass` over the generated corpus, all 12 bass pitch classes | 86,315 placements | - | - | 8 |
+
+**281 steps in six heads**, and the two fret columns are the smaller question
+[docs/fingering.md](fingering.md) §4.3 had asked. 19 of the 281 also need five distinct
+frets outright; 6 more need five once the shape still being *held* is counted, and those
+hold rather than strike - only the thumb plucks, so the right hand is fine and the left one
+fails. The **256** the fret count could not see are steps where a barre covers the frets and
+the right hand still has only four digits.
+
+### Why the obvious check misses it
+
+`tests/test_walking_bass.py::TestTheInvariant` is the amended playability invariant for a
+step carrying a bass, and it states the right thing about the wrong limb: the upper voices
+must be one `supported_string_sets()` entry, "with the thumb required to sit outside them
+and below them". A **four**-string upper shape with a thumb under it satisfies every clause -
+two supported sets' worth of notes in one step - and that amendment was written for
+`walking_bass`, whose targets are shells, so the fourth string was never spent. `targets`
+spends it: its target palette is `("drop2", "drop3")`.
+
+Two structural reasons it survived a green gate:
+
+- **The merge is after selection**, deliberately ("the bass is written into the fret vector
+  only once `_best_voicing` has returned, so it cannot enter the cost tuple by
+  construction") - and every `supported_string_sets()` assertion in the suite is on a
+  *voicing*, pre-merge. Nothing asserted the invariant on a **step**.
+- **`bass_allowed` asks the wrong capacity question.** `thumb_capacity` counts free thumb
+  *strings*, and `targets` has one, so the axis was allowed; "is a finger free" was never
+  asked. `uniform` fails the string question and is refused, which is why the defect could
+  only appear under `targets` - the very texture the refusal message recommends ("Try
+  texture='targets', or drop the bass").
+
+
+### The fix
+
+A **budget**, in the place the string capacity already lives. `grips.thumb_safe_grips`
+derives from `GRIP_STRING_SETS` that a grip able to sound four strings cannot be offered as
+a *target* while a bass note is being placed under it, and that a palette with nothing left
+falls back to the widest statement that leaves a finger free:
+
+```
+("drop2", "drop3")          -> ("shell",)   # the targets texture's targets
+("shell", "interval", "melody") -> same     # its fills: already inside the budget
+()                          -> ()           # walking_bass's fills: "play nothing"
+```
+
+`decisions.resolve_texture_grips` applies it to the **target** role only, and only for a slot
+that `steps.py` has already decided carries a bass note (`slot.bass is not None`). That last
+part is not a detail: `anchors` leaves most beats bare, and a target with nothing underneath
+it may use all four strings.
+
+Rejected alternatives, with their costs:
+
+- **Make `_place_bass` respect a fret budget** - prefer a candidate that keeps the hand
+  inside four frets. It leaves the five *plucks* intact, which is the defect; and in the
+  measured case no playable candidate exists at all (the A string is occupied by the shape,
+  and the only B below the chord's lowest pitch is fret 7 of the low E), so it would delete
+  281 thumb notes rather than fix them.
+- **Refuse the axis, as `uniform` does.** Consistent - it is what `bass_allowed` does when a
+  palette can never host a thumb - but it removes every thumb note under `targets` (529 of
+  839 steps on the walk row), where thinning the target keeps both the harmony and the line.
+- **Gate it at selection time** - drop the four-note target when a thumb will follow. That
+  puts a finger rule inside `voicing_cost` and entangles it with [docs/fingering.md](fingering.md)
+  §5 step 3, which is still undecided.
+
+### Measured after
+
+| row | before | after |
+|---|---|---|
+| `targets --bass walk` | 151 five-string steps | **0**, and byte-identical to `walking_bass --bass walk` |
+| `targets --bass anchors` | 130 | **0**, with 9 drop-2 and 19 drop-3 targets kept where the thumb plays nothing |
+| `targets --voices none` (comping) | 0 | 0 - unchanged |
+| `walking_bass`, `uniform` | 0 | 0 - unchanged, arrangement fingerprints identical |
+
+**No pinned tab moved**: the suite is green at the same count, because no test had pinned a
+`targets` + thumb arrangement. What the rule costs: a target whose quality has no shell -
+`Bmaj` under a `D5` melody, say - is a melody alone over the thumb rather than a four-note
+shape nobody can play, which is the outcome `walking_bass` has always had.
+
+### The tests
+
+- `tests/test_texture.py::TestTheRightHandBudget` - the rule itself: the per-grip pluck
+  counts, the empty palette, the inertness without a thumb, the caller's `grips=` still
+  narrowing *after* the budget, and an arrangement-level sweep.
+- `tests/test_walking_bass.py::TestTheInvariant::test_no_step_plucks_more_strings_than_the_right_hand_has_digits`
+  - the invariant's second half, swept over every committed head with
+  `tabgp._sounding_frets`, which is the renderers' own answer to what a step plays.
+- `tests/test_texture.py::TestTheRightHandBudget::test_the_premise_that_the_targets_texture_names_four_string_grips`
+  - the premise, so the rule cannot pass vacuously if `targets` ever becomes thumb-safe on
+  its own.
+
+Worth noting, for the traps: this is item 8's shape again. A green gate said nothing about a
+class of step that no test built, and the class was one flag combination away from
+combinations that *were* tested. The count that would have caught it - steps plucking more
+strings than a hand has digits - is now asserted rather than reasoned about.
+
+### Reproducing
+
+The counts come from a throwaway script (not committed - `AGENTS.md` trap 8): load each
+`tests/data/` head with `headxml.arrange_xml_head`, ask each step's `tabgp._sounding_frets`
+for its length, and count the ones over four. To see the defect itself, run the same script
+against the pre-fix tree:
+
+```bash
+git worktree add /tmp/pre d288fce
+cd /tmp/pre && PYTHONPATH=/tmp/pre <repo>/.venv/bin/python /tmp/count_plucks.py
+```
+
