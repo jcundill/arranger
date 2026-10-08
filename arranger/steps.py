@@ -263,6 +263,27 @@ def _resolve_grid(grid: str, beats_per_bar: int, diagnostics: Diagnostics) -> st
     return resolve_grid(parse_grid(grid), beats_per_bar, diagnostics)
 
 
+def _sounding_melody(voicing: Voicing, written: str) -> Tuple[str, Optional[str]]:
+    """The pitch a melody-alone step *sounds*, and the written one when they differ.
+
+    `get_melody_only_voicing` retries a note an octave down when no string reaches it
+    inside `HIGH_FRET_LIMIT` (13 - G5 is fret 15 on the high E string), so a shape
+    built for the tune can sound a whole octave away from the pitch the progression
+    asked for. `melody` has to be what **sounds** - the tab is the contract - and
+    `original_melody` is what the renderer shows beside it.
+
+    Extracted because three routes build a melody-alone step and only one of them
+    reported this. Measured on the committed heads, the texture fill printed the
+    written pitch over a shape an octave lower on 4 steps of "The Jitterbug Waltz",
+    and the palette rescue on 2 more. One function, so a fourth route cannot spell it
+    differently.
+    """
+    sounding = max(voicing.midi_notes())
+    if sounding == Note(written).midi_note():
+        return written, None
+    return _note_name(sounding), written
+
+
 class VoiceLeadingEngine:
     """Generates and voice-leads jazz guitar voicings dynamically.
 
@@ -1218,16 +1239,20 @@ class VoiceLeadingEngine:
             if melody_alone == MELODY_ALONE_TEXTURE:
                 # This kind is answered only when the guitar sings, and a singing slot
                 # with no note was refused at the top of this loop - so a note is
-                # pinned here, which is what lets the type say so below.
-                assert melody_note is not None
+                # pinned here, which is what lets the type say so below. The *name*
+                # needs the same statement: `note_str` is only narrowed inside the
+                # branch that built `melody_note`, and this route needs both.
+                assert melody_note is not None and note_str is not None
                 solo_voicing = cls.get_melody_only_voicing(
                     melody_note, prefer=top_strings
                 )
                 if solo_voicing is not None:
+                    sounding, written_original = _sounding_melody(solo_voicing, note_str)
                     fill = ArrangementStep(
                         chord=name,
-                        melody=note_str,
+                        melody=sounding,
                         voicing=solo_voicing,
+                        original_melody=written_original,
                         partial=False,
                         bar=bar,
                         beat=beat,
@@ -1250,7 +1275,7 @@ class VoiceLeadingEngine:
             if melody_alone == MELODY_ALONE_NO_CHORD:
                 # As the texture branch above: this kind means the guitar sings, and
                 # that guard already refused a singing slot with no note.
-                assert melody_note is not None
+                assert melody_note is not None and note_str is not None
                 solo_voicing = cls.get_melody_only_voicing(melody_note, prefer=top_strings)
                 if solo_voicing is None:
                     diagnostics.warn(
@@ -1259,23 +1284,14 @@ class VoiceLeadingEngine:
                     )
                     continue
                 # get_melody_only_voicing may have dropped the note an octave to stay
-                # below HIGH_FRET_LIMIT. Compare the pitch that actually sounds rather
-                # than the fret number: an octave-down note lands at a *lower* fret, so
-                # only the sounding pitch reveals that the transposition happened.
-                sounding_midi = max(solo_voicing.midi_notes())
-                written_midi = melody_note.midi_note()
-                transposed = (
-                    note_str
-                    if sounding_midi == written_midi
-                    else _note_name(written_midi - 12)
-                )
+                # below HIGH_FRET_LIMIT, so the step reports the pitch that sounds and
+                # keeps the written one for the renderer. See `_sounding_melody`.
+                sounding, written_original = _sounding_melody(solo_voicing, note_str)
                 arrangements.append(ArrangementStep(
                     chord=name,
-                    melody=transposed,
+                    melody=sounding,
                     voicing=solo_voicing,
-                    original_melody=(
-                        None if transposed == note_str else note_str
-                    ),
+                    original_melody=written_original,
                     melody_only=True,
                     # `step.grip` is a derived view of `voicing.grip`, so nothing is
                     # passed here: the voicing says "melody" and the step cannot
@@ -1492,7 +1508,8 @@ class VoiceLeadingEngine:
             # Every melody-bearing route below pins a note, and a slot with none has
             # left the loop by now: the guard at the top refuses one the guitar is
             # asked to sing, and the comping block above always steps or continues.
-            assert melody_note is not None
+            # The name is stated with the note for the reason given in the fill branch.
+            assert melody_note is not None and note_str is not None
             # Everything up to choosing a shape is shared with the corpus loader,
             # which needs the same candidates but honours a slash bass first. See
             # prepare_step.
@@ -1508,39 +1525,61 @@ class VoiceLeadingEngine:
                 diagnostics=diagnostics,
             )
             if prepared is None:
-                # A target under walking_bass has one grip and no second option, so a
-                # melody no shell can sound (D over Bbm7 - the major 3rd over a minor
-                # chord, which `NON_CHORD_TONE_EXTENSIONS` has no route for) would be
-                # *dropped*, with a warning as the only sign. The melody-alone route a
-                # fill takes is the right one here too: the note of the tune survives,
-                # the thumb still walks, and the harmony is stated at the next target.
+                # **The note of the tune is never dropped while it can be played at
+                # all.** The melody-alone route a fill takes is the last resort here
+                # too: the tune survives, the thumb still walks, and the harmony is
+                # stated at the next slot that can state it.
                 #
-                # A melody-only selection reaches this branch only when the melody
-                # cannot be played at all, which `get_melody_only_voicing` answers with
-                # None; there is nothing to fall back to and the step is skipped below
-                # with the warning. The branch is kept for it anyway so that a future
-                # spelling of "the tune and nothing else" inherits the rescue rather
-                # than needing this condition widened again.
-                if has_thumb or melody_only:
-                    solo_voicing = cls.get_melody_only_voicing(
-                        melody_note, prefer=top_strings
+                # This used to read `if has_thumb or melody_only`, on the argument
+                # that only those two routes may sound a chord-less step. That was the
+                # wrong question. A palette that cannot voice a chord has already lost
+                # the harmony, and dropping the step took the melody with it - measured
+                # over the committed heads, `--grips shell` alone loses 216 notes that
+                # way, every one of them a note no shape in that palette could carry.
+                # What the old guard was really protecting is the *claim* such a step
+                # makes - that the guitar is playing the tune and not the chord - so
+                # that claim is now recorded on the step (`chord_unvoiced`, which the
+                # renderers report) instead of the step being deleted.
+                #
+                # A melody that cannot be played at all - below the library's G3 floor,
+                # or past the end of the board - still answers None here, and the step
+                # is skipped below with the warning.
+                #
+                # **The string must be one the caller named.** `get_melody_only_voicing`
+                # keeps searching *below* the set it is given, so a note the named set
+                # cannot carry - D4 under `top_strings=(5,)`, below the high E string's
+                # open pitch - comes back on the B string. That is the documented
+                # behaviour of a restricted soprano set and not this rescue's to
+                # override: the rescue answers a palette that cannot voice a chord, not
+                # a caller asking for a string that cannot carry the tune.
+                solo_voicing = cls.get_melody_only_voicing(
+                    melody_note, prefer=top_strings
+                )
+                if solo_voicing is not None and solo_voicing.soprano_string() in top_strings:
+                    # The note may have been dropped an octave to stay inside
+                    # HIGH_FRET_LIMIT, so the step reports what sounds and keeps the
+                    # written pitch - the same seam every melody-alone route uses.
+                    sounding, written_original = _sounding_melody(solo_voicing, note_str)
+                    step = ArrangementStep(
+                        chord=name,
+                        melody=sounding,
+                        voicing=solo_voicing,
+                        original_melody=written_original,
+                        partial=False,
+                        # The harmony is stated nowhere in this step. A fill reaches
+                        # the same shape deliberately and does not carry this; see
+                        # `ArrangementStep.chord_unvoiced`.
+                        chord_unvoiced=True,
+                        bar=bar,
+                        beat=beat,
+                        duration=duration,
+                        role=role,
+                        metric_weight=weight,
+                        bass_only=is_bass_only(slot.bass_only, role),
                     )
-                    if solo_voicing is not None:
-                        step = ArrangementStep(
-                            chord=name,
-                            melody=note_str,
-                            voicing=solo_voicing,
-                            partial=False,
-                            bar=bar,
-                            beat=beat,
-                            duration=duration,
-                            role=role,
-                            metric_weight=weight,
-                            bass_only=is_bass_only(slot.bass_only, role),
-                        )
-                        cls._attach_bass(step, slot.bass, arrangements, diagnostics)
-                        arrangements.append(step)
-                        continue
+                    cls._attach_bass(step, slot.bass, arrangements, diagnostics)
+                    arrangements.append(step)
+                    continue
                 # A fill slot with nothing thin to play must not lose the chord of
                 # the tune - the whole point of the texture is a lighter *texture*,
                 # never a missing harmony. So a fill that cannot be filled is
@@ -1565,9 +1604,21 @@ class VoiceLeadingEngine:
                     if prepared is not None:
                         role = ROLE_TARGET
                 if prepared is None:
+                    # Reached only when the melody **cannot be played at all** - the
+                    # rescue above has already been tried, and answered None because no
+                    # string reaches the note (below the library's G3 floor, or past the
+                    # end of the board).
+                    #
+                    # The palette is named because it is the usual cause and the caller
+                    # is the only one who can change it, and the message says the step is
+                    # *skipped* because that is what happens to the note. The old text
+                    # named "drop-2" whatever family had been asked for - a `--grips
+                    # shell` run was told about a grip it never requested - and read like
+                    # a fallback that had happened.
                     diagnostics.warn(
-                        f"Warning: No valid drop-2 voicing found for {name} "
-                        f"with melody {note_str}"
+                        f"Warning: no voicing for {name} with melody {note_str} in the "
+                        f"palette ({', '.join(slot_grips) or 'none'}) and the melody "
+                        f"cannot be played alone either; skipping the step"
                     )
                     continue
             candidates = prepared.candidates

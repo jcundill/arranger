@@ -302,6 +302,15 @@ class ArrangementStep:
     # unaffected. A melody-only step is deliberately NOT a drop-2 voicing: it has
     # a single active fret and does not obey the four-string playability invariant.
     melody_only: bool = False
+    # True when this step's chord could not be voiced **at all** under its melody: the
+    # palette had no shape to offer, so the tune sounds alone and the harmony of this
+    # slot is not stated. `melody_only` above is the opposite in origin - there the
+    # slot had *no* chord (`NO_CHORD`), here there is one that nothing could voice.
+    # Kept as its own field rather than derived from `grip == "melody"`, because a
+    # texture **fill** is deliberately the melody alone and must not carry this claim:
+    # the two arrive at the same shape by different routes, which is the distinction
+    # `decisions.melody_alone_case` exists to keep. See `render._step_annotation`.
+    chord_unvoiced: bool = False
     # The melody as written, when the step was transposed down an octave to keep the
     # voicing below HIGH_FRET_LIMIT (see VoiceLeadingEngine.get_octave_down_candidates).
     # In that case `melody` holds the transposed note that actually sounds and this

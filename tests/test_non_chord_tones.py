@@ -174,6 +174,57 @@ class TestNonChordToneResolution(unittest.TestCase):
         self.assertIsNone(self.engine.resolve_non_chord_tone(Note("D5"), "maj7", "Cmaj7", "legacy"))
 
 
+class TestThePaletteRescue(unittest.TestCase):
+    """A chord no shape in the palette can carry leaves the tune alone, and says so.
+
+    The alternative - and what the engine did - was to drop the step, which takes the
+    melody note with it. The claim such a step makes is not "this is a chord" but
+    "this is the tune and nothing under it", so it is recorded on the step
+    (`chord_unvoiced`) and reported by the renderers rather than inferred from the
+    shape, which a deliberate melody-alone **fill** shares.
+    """
+
+    def test_the_step_survives_the_chord_it_cannot_voice(self):
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("Bb4", "dim7", "F#dim7")], grips=("shell",)
+        )
+        self.assertEqual(len(steps), 1, "the note went missing with the chord")
+        step = steps[0]
+        self.assertEqual(step.chord, "F#dim7")
+        self.assertEqual(step.melody, "Bb4")
+        self.assertTrue(step.chord_unvoiced)
+        # Not the `NC` case: there *is* a chord here, it just is not sounding.
+        self.assertFalse(step.melody_only)
+        self.assertEqual(len(step.voicing.active_frets()), 1)
+
+    def test_the_renderer_says_the_chord_is_not_sounding(self):
+        """A bare note under a chord symbol is the thing this label exists to prevent."""
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("Bb4", "dim7", "F#dim7")], grips=("shell",)
+        )
+        self.assertEqual(
+            _step_annotation(steps[0]), " (melody alone - no voicing for this chord)"
+        )
+
+    def test_a_step_that_is_also_transposed_reports_both_facts(self):
+        """The rescue drops a high note an octave *and* leaves the chord unstated.
+
+        G5 is fret 15 on the high E string, past `HIGH_FRET_LIMIT`, so the melody-alone
+        shape sounds G4 - and both facts have to reach the reader. Measured on "The
+        Jitterbug Waltz" bars 1 and 9; this is the unit form of it.
+        """
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("G5", "6", "Eb6")], grips=("shell",)
+        )
+        self.assertEqual(len(steps), 1)
+        step = steps[0]
+        self.assertTrue(step.chord_unvoiced)
+        self.assertEqual(step.original_melody, "G5")
+        self.assertEqual(step.melody, "G4")
+        self.assertIn("transposed down an octave from G5", _step_annotation(step))
+        self.assertIn("no voicing for this chord", _step_annotation(step))
+
+
 class TestExtendedExtensionMappings(unittest.TestCase):
     """The widened NON_CHORD_TONE_EXTENSIONS routing: 11ths, #11s, b13s and the
     half-diminished ninth now have somewhere to go instead of the legacy

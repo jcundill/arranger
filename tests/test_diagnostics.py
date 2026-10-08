@@ -150,8 +150,20 @@ class TestTheDefaultPathIsUnchanged(unittest.TestCase):
         self.assertTrue(any("is not a chord tone of" in w for w in printed), printed)
 
     def test_the_no_voicing_warning(self):
+        """The message names the palette, and says the **step is skipped**.
+
+        `NO_VOICING_AT_ALL` is a melody no string reaches, which is now the only way
+        a step is skipped: every other "no voicing" case leaves the tune sounding
+        alone. The old text said "No valid drop-2 voicing found" whatever family had
+        been asked for - so a `--grips shell` run was told about a grip it never
+        requested - and it read like a fallback that had happened.
+        """
         printed = self.assert_same_either_way(NO_VOICING_AT_ALL)
-        self.assertTrue(any("No valid drop-2 voicing found" in w for w in printed), printed)
+        self.assertTrue(
+            any("no voicing for Cmaj7 with melody C2" in w for w in printed), printed
+        )
+        self.assertTrue(any("in the palette (" in w for w in printed), printed)
+        self.assertTrue(any("skipping the step" in w for w in printed), printed)
 
     def test_the_grips_intersection_warning(self):
         """Asking for a grip the texture never uses warns, and keeps playing."""

@@ -2111,6 +2111,34 @@ class TestANarrowPaletteNeverLosesTheTune(unittest.TestCase):
         # The 3rd, the 5th and the 9th: G Bb F, the shape a shell of Ebadd9 is.
         self.assertEqual({m % 12 for m in step.voicing.midi_notes()}, {5, 7, 10})
 
+    def test_no_melody_note_is_dropped_by_a_palette_that_cannot_voice_it(self):
+        """80 steps for 80 notes under `--grips shell`; it was 76.
+
+        The four losses were bars 2, 18 and 22 (F4 over Ebmaj, the table row above)
+        and bar 28 (Bb4 over F#dim7, which no dim7 shell can carry and which now
+        sounds alone). The **count** is the assertion because a lost note is an
+        absence: nothing in an arrangement says one should have been there.
+        """
+        steps, head, _notes = arrange_xml_head(BUT_NOT_FOR_ME, grips=("shell",))
+        self.assertEqual(len(steps), len(head.notes))
+
+    def test_the_rescued_step_says_the_chord_is_not_sounding(self):
+        """One step on this head has a chord and no voicing of it: bar 28.
+
+        Reported rather than silently thin, because a bare note under a chord symbol
+        reads as the chord being played quietly - see `ArrangementStep.chord_unvoiced`.
+        """
+        steps, _head, _notes = arrange_xml_head(BUT_NOT_FOR_ME, grips=("shell",))
+        rescued = [s for s in steps if s.chord_unvoiced]
+        self.assertEqual(len(rescued), 1)
+        step = rescued[0]
+        self.assertEqual((step.bar, step.beat), (28, 2.0))
+        self.assertEqual(step.chord, "F#dim7")
+        self.assertEqual(step.melody, "Bb4")
+        self.assertEqual(step.grip, "melody")
+        self.assertFalse(step.melody_only)
+        self.assertIn("no voicing for this chord", arranger._step_annotation(step))
+
 
 class TestHeadCli(unittest.TestCase):
     """The `head` command, driven as a function over a temporary score."""

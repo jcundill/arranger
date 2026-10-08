@@ -83,6 +83,23 @@ def _step_annotation(step: ArrangementStep) -> str:
     """
     if step.melody_only:
         return _bass_annotation(step, " (no chord - melody alone)")
+    if step.chord_unvoiced:
+        # The chord is in force and nothing here states it: the palette had no shape
+        # under this melody note at all. Without this the step reads as a bare note
+        # beneath a chord symbol, which is the other case `partial` exists to prevent
+        # - and unlike a thin shell or duo there is not even a second voice to count.
+        #
+        # Composed with the transposition note rather than replacing it: the rescue
+        # drops a high note an octave *and* leaves the chord unstated (measured: two
+        # steps of "The Jitterbug Waltz"), and printing one of the two facts would hide
+        # the other.
+        if step.original_melody is not None:
+            return _bass_annotation(
+                step,
+                " (melody alone, transposed down an octave from "
+                f"{step.original_melody} - no voicing for this chord)",
+            )
+        return _bass_annotation(step, " (melody alone - no voicing for this chord)")
     if step.repeated:
         return _bass_annotation(step, " (melody repeated - single note)")
     if step.original_melody is not None:
