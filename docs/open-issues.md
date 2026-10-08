@@ -1845,3 +1845,138 @@ independent count. Then load each `tests/data/` head with `headxml.arrange_xml_h
 rows and, for every refusal, replicate `_place_bass`'s candidate loop to name the cause and run the
 real `_place_bass` over the captured pool to find the hosts.
 
+---
+
+## 14. A palette that cannot voice a chord used to take the melody note with it
+
+**Status:** FIXED, in two commits. Diagnosed and measured on 2026-08-10.
+
+### The symptom
+
+```bash
+python -m arranger head tests/data/but_not_for_me.mxl --grips shell
+```
+
+Bar 2 beat 2 of "But Not For Me" is `F4` over an `Ebmaj` triad, and under `--grips shell` it is
+**not in the output at all** — 76 steps for 80 melody notes. The only sign was stderr:
+
+```text
+Warning: melody F4 is not a chord tone of Ebmaj and the 'extension' strategy found no voicing; keeping the fallback
+Warning: No valid drop-2 voicing found for Ebmaj with melody F4
+```
+
+A message naming a grip family the caller never asked for, and reading like a fallback that had
+happened when the note in fact went missing.
+
+### The chain, each link measured
+
+1. `F` is not a chord tone of an `Ebmaj` triad — it is the 9th.
+2. `NON_CHORD_TONE_EXTENSIONS` had rows for `maj7`, `6`, `m7`, `m7b5`, `7`, `7b9`, `9` and `13`,
+   and **none for the two plain triads**, so the `extension` strategy found no route and kept the
+   fallback.
+3. The fallback is the quality-only candidate set, and three families have none by construction:
+   `shell`, `duo` and `interval` are built from the chord's own degrees, and `_shell_voicing`
+   refuses any shape sounding a note outside the chord. Measured:
+
+   ```text
+   get_all_grip_voicings(F4, 'maj', chord_name='Ebmaj', grips=('shell',))  ->  []
+   ...                                                    grips=('drop2',)  ->  3
+   ...                                                    grips=('drop3',)  ->  2
+   ```
+
+4. With no candidates `prepare_step` returned `None`, and the step loop warned and **dropped the
+   step**. The melody-alone rescue beside it was gated on `has_thumb or melody_only`, and a plain
+   `--grips shell` run is neither.
+
+### It was not one bar
+
+Notes dropped over the seven committed fixtures, against a default palette that loses none on any
+of them:
+
+| fixture | `--grips shell` |
+|---|---|
+| tenor_madness | **157** of 200 |
+| The_Jitterbug_Waltz | 18 of 119 |
+| i_was_doing_all_right | 18 of 110 |
+| heres_that_rainy_day | 14 of 81 |
+| Trouble_in_Mind_Blues | 5 of 53 |
+| but_not_for_me | 4 of 80 |
+
+Cause, over those **216** notes: **2** are chord tones the shell's geometry could not place, and
+**214** are non-chord tones with no route in the table (`maj` 160, `m7` 18, `6` 12, `7` 8, `dim7`
+8, `9` 3, `maj7` 2, `m` 2, `7b9` 1). **Zero** were "the route exists and the shell could not voice
+it" — the wall was the table and the family, not the fingering.
+
+### What was built
+
+- **The two triad rows** (`maj: {2: add9}`, `m: {2: madd9}`) in `chords.py`. A 9th over a plain
+  triad is the one unambiguous reading and `add9` the narrowest quality containing it, and it
+  reaches every family including the shell: bar 2 is now an `Ebadd9` shell `x-10-8-10-x-x` (G, Bb,
+  F — the 3rd, 5th and 9th). Measured cost: 10 of the 216 notes, and **14 steps of the default
+  route change** — including bar 2, whose shape loses the 3rd. See that commit.
+- **The rescue is unconditional.** `steps.arrange_progression` plays the tune alone when no
+  candidate exists at all, on every melody-bearing route rather than only under a thumb texture or
+  a melody-only selection — and records *why* on the step (`ArrangementStep.chord_unvoiced`), which
+  `render._step_annotation` prints as `(melody alone - no voicing for this chord)`. A texture fill
+  reaches the same shape deliberately and does not set it, and neither does the span demotion (a
+  complete shape *did* exist there), so the label never claims something false.
+- **`_sounding_melody`**, extracted: three routes build a melody-alone step and only the `NC` one
+  reported the octave `get_melody_only_voicing` drops. Measured: 4 texture fills and 2 rescued notes
+  on "The Jitterbug Waltz" printed the written pitch over a shape an octave lower; now 0.
+- **An honest message**, naming the palette actually in use and saying the step is skipped.
+
+### Measured after
+
+Drops per route over the seven fixtures, before → after; a route not listed is unchanged:
+
+| route | notes dropped | now `chord_unvoiced` |
+|---|---|---|
+| `--grips shell` | **216 → 0** | 206 |
+| `--grips duo` | 53 → 0 | 53 |
+| `--grips shell --texture targets` | 152 → 0 | 142 |
+| `--texture targets` | 5 → 0 | 5 |
+| `--texture walking_bass`, either palette | 0 → 0 | 68 |
+| `--melody none` | 3 → 3 | — |
+
+**Nothing else moved**: the default palette, `--grips interval` and the two melody-only selections
+are byte-identical, and the walk rows change only by gaining the record. The `--melody none` three
+are a different mechanism — the comping route's own `no guide-tone comping shape ... skipping the
+slot` — and are **not** fixed here.
+
+### What bounds the rescue
+
+- **`top_strings` is still honoured.** `get_melody_only_voicing` searches *below* the set it is
+  given, so D4 under `top_strings=(5,)` comes back on the B string; the rescue refuses that and the
+  step is skipped, which is the documented behaviour of a restricted soprano set
+  (`tests/test_progressions.py`, `tests/test_grips.py`). This was measured before it was believed:
+  without the guard `arrange_progression([("D4","m7","Dm7")], top_strings=(5,))` returned one
+  melody-alone step on the B string where it had returned `[]`.
+- **A melody no string reaches is still skipped** — below the G3 floor, or past the end of the
+  board. `get_melody_only_voicing` answers `None`, which is the documented signal.
+
+### Alternatives, recorded
+
+- **Leave the notes dropped.** Rejected: the loss is silent. Nothing in a tab says a note should
+  have been there, and the warning named the wrong grip family.
+- **Route to the default palette for that step** (treat `grips` as a preference, the way the neck
+  window is). It restores tune *and* harmony — the default palette voices all 216 — but it changes
+  what `--grips shell` means at those steps, so it is a decision about a documented flag rather
+  than a repair.
+- **Fill in the rest of the table.** The 214 no-route notes are mostly degrees whose reading is
+  genuinely ambiguous, which is why the table lists only the unambiguous ones; this is not a
+  table-completing job.
+
+### Tests
+
+- `tests/test_non_chord_tones.py::TestThePaletteRescue` — the step survives the chord it cannot
+  voice, the renderer says so, and a step that is also transposed reports both facts.
+- `tests/test_non_chord_tones.py::TestExtendedExtensionMappings` — the two new rows resolve, and the
+  class's own table invariant covers them (degree outside the source, inside the target, top-able
+  by an inversion).
+- `tests/test_headxml.py::TestANarrowPaletteNeverLosesTheTune` — 80 steps for 80 notes under
+  `--grips shell` on the reported head, the bar-2 note voiced as an `Ebadd9` shell, and the one
+  rescued step named.
+- `tests/test_diagnostics.py::test_the_no_voicing_warning` — **inverted**: the message now names the
+  palette in use and says the step is skipped, and it is reached only by a melody no string reaches
+  at all.
+

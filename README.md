@@ -552,6 +552,7 @@ python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-2 --gr
 
 ```text
 Gmaj9    D4   (shell - 3rd & 7th, partial) x-x-4-4-3-x
+Gmaj9    D4   (melody repeated - single note) ----3-
 Gmaj9/F# D4   (shell - 3rd & 7th, partial) x-x-4-4-3-x
 ```
 
@@ -1012,8 +1013,9 @@ legacy      x-10-10-x-12-10 None
   becomes a `Cmaj9`, so `D` is a chord tone again and the shape sounds only
   `Cmaj7`-family pitches. The mapping lives in
   `VoiceLeadingEngine.NON_CHORD_TONE_EXTENSIONS`: 9ths and 6/9ths, plus the #11
-  (`Cmaj7#11`), the 11th (`G7sus4`), the #11/b13 over dominants, the 13th and the
-  half-diminished 9th (`Am9b5`).
+  (`Cmaj7#11`), the 11th (`G7sus4`), the #11/b13 over dominants, the 13th, the
+  half-diminished 9th (`Am9b5`) and the 9th over a plain triad (`Ebmaj` under `F4`
+  becomes `Ebadd9`).
 - `diminished` — the Barry Harris 6/dim7 substitution: the passing `D5` is voiced
   inside `Bdim7` (the dim7 a semitone below the note the line resolves to), giving
   a smooth chromatic resolution.
@@ -1121,8 +1123,11 @@ renderers.
   are assumed. `closed` is generated but left out of the default grip list, because a
   close-position chord under a melody cannot be fretted inside that budget.
 - Non-chord melody notes are handled only for the mappings in
-  `NON_CHORD_TONE_EXTENSIONS` (9ths, 6/9s, 11ths, #11s, b13s, 13ths and the
-  half-diminished 9th) plus dim7; anything else keeps the quality-only fallback.
+  `NON_CHORD_TONE_EXTENSIONS` (9ths, 6/9s, 11ths, #11s, b13s, 13ths, the
+  half-diminished 9th and the 9th over a plain triad) plus dim7; anything else keeps
+  the quality-only fallback — and a melody-only palette (`shell`, `duo`, `interval`)
+  has no fallback to keep, so the note sounds alone under its chord and the step says
+  `(melody alone - no voicing for this chord)`.
 - A chord tone with no matching inversion in the hand-authored drop-2 tables — a 9th in
   the melody of a 13 chord, for instance — falls through to the quality-only fallback,
   which can sound a note the chord does not contain. The selector rejects such a shape

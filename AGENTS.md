@@ -45,7 +45,7 @@ frozen like the rest — it is not a home for an open plan.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **941 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **948 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
 (`tests/test_docs.py` is 12 of those 939, and it is the one that fails if this

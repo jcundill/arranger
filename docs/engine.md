@@ -215,6 +215,12 @@ you whether a change is an improvement or a different library.
   **single-fret** `Voicing` for an NC step, or `None` if unreachable. It is
   explicitly *not* a harmonised voicing and is exempt from the string-set invariant.
 - `ArrangementStep.melody_only` — defaulted flag set on NC steps.
+- `ArrangementStep.chord_unvoiced` — defaulted flag set when the palette could not
+  voice the step's chord **at all**, so the melody sounds alone. Distinct from
+  `melody_only` (which means the slot had *no* chord) and from the span demotion (where a
+  complete shape existed and was too wide), so `render._step_annotation` can say
+  `(melody alone - no voicing for this chord)` without claiming something false. See
+  [Known limitations](#known-limitations).
 - `main()` — with no arguments, prints the built-in demonstrations; with `head`
   as the first argument, delegates to `headxml.head_cli` through a **lazy** import
   inside the branch, so `import arranger` never depends on the importer or, through
@@ -553,7 +559,10 @@ Five decisions are load-bearing:
   a shell because a shell is only reachable when the role's palette contains one, and
   where it does not — a `targets` target — there is nothing to demote *to*.
   `melody_only` stays **False**: the step does have a harmony, it is simply not spelled
-  out, so the flag would make the annotation claim "no chord".
+  out, so the flag would make the annotation claim "no chord". `chord_unvoiced` stays
+  false for the same reason from the other side: a complete shape **did** exist here and
+  was refused for its reach, so "no voicing for this chord" would be claiming something
+  that is not true.
 - **`grips` is an intersection, not an override.** A caller's `grips` used to be
   discarded outright by any non-uniform texture (`slot_grips = texture_grips[role]`), so
   `--grips shell --texture targets` asked for shell-only and silently got a four-note
@@ -723,10 +732,22 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
   [High melodies move down an octave](#high-melodies-move-down-an-octave).
 - A fixed max fret span of 5 and fret range 0–18 is assumed.
 - Non-chord melody notes are only covered for the mappings in
-  `NON_CHORD_TONE_EXTENSIONS` (9ths, 6/9s, 11ths, #11s, b13s, 13ths and the
-  half-diminished 9th) plus the dim7 substitution. An unmapped non-chord tone prints
-  a warning and keeps the legacy quality-only fallback, which can sound the melody
-  over a different chord's shape.
+  `NON_CHORD_TONE_EXTENSIONS` (9ths, 6/9s, 11ths, #11s, b13s, 13ths, the
+  half-diminished 9th and the 9th over a plain triad) plus the dim7 substitution. An
+  unmapped non-chord tone prints a warning and keeps the legacy quality-only fallback,
+  which can sound the melody over a different chord's shape.
+- **A palette that cannot voice a chord leaves the tune alone** rather than dropping it.
+  `shell`, `duo` and `interval` are built from the chord's own degrees, so they have no
+  quality-only fallback to thin to — where the four-note families always have something.
+  Under `--grips shell` a note with no mapping and no shell therefore had **no** candidate
+  and the step was dropped with the melody in it: measured over the committed heads,
+  **216** notes (157 of them on `tenor_madness`), 214 of them non-chord tones the table
+  cannot route and 2 chord tones the shell's geometry cannot place. Every one now sounds,
+  alone, and the step says so. Two things bound the rescue: `top_strings` is still
+  honoured — a note the named strings cannot carry is skipped, which is what
+  `tests/test_progressions.py` pins — and a melody no string reaches at all is still
+  skipped, with the warning naming the palette. See
+  `docs/open-issues.md` item 14.
 - A handful of low melodies (around `G3`–`C4`) reach no chord-tone-matched inversion
   and therefore use the quality-only fallback. Triad shapes double the root, so their
   second voice can sit up to 10 semitones below the melody — the same span limit, not a
