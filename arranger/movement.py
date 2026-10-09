@@ -22,7 +22,7 @@ imported-head path and the hand-built one still run one loop rather than two.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Container, List, Optional, Sequence, Tuple
+from typing import Callable, Container, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from musthe import Note
 
@@ -458,6 +458,163 @@ def prepare_step(
     )
 
 
+@dataclass(frozen=True)
+class _Knobs:
+    """The call's knobs, after `options=` and the keywords are reconciled.
+
+    `arrange_progression` takes thirteen knobs twice over - once as keywords and
+    once as `ArrangeOptions` fields - and has to decide between them, validate
+    them and derive two more (`texture_grips`, and the defaulted `diagnostics`)
+    before the loop can start. That prologue is this function's job; the loop then
+    unpacks the result straight back into the names it has always used, so the
+    extraction changed nothing downstream of it.
+    """
+
+    top_strings: Tuple[int, ...]
+    non_chord_tone: str
+    fret_min: int
+    fret_max: int
+    grips: Tuple[str, ...]
+    texture: str
+    bass: str
+    melody: str
+    harmony: str
+    grid: str
+    beats_per_bar: int
+    beat_type: int
+    melody_onsets: Optional[Container[int]]
+    timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]]
+    bass_pcs: Optional[Mapping[int, Optional[int]]]
+    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]]
+    texture_grips: Dict[str, Tuple[str, ...]]
+    diagnostics: Diagnostics
+
+
+def _resolve_knobs(
+    options: Optional[ArrangeOptions],
+    *,
+    top_strings: Tuple[int, ...],
+    non_chord_tone: str,
+    fret_min: int,
+    fret_max: int,
+    grips: Tuple[str, ...],
+    texture: str,
+    bass: str,
+    melody: str,
+    harmony: str,
+    grid: str,
+    beats_per_bar: int,
+    beat_type: int,
+    melody_onsets: Optional[Container[int]],
+    timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
+    diagnostics: Optional[Diagnostics],
+) -> _Knobs:
+    """`options=` and the keywords reconciled into one `_Knobs`.
+
+    `options` and the keywords are two spellings of the same knobs. An `options`
+    wins outright rather than being merged field by field: a partial merge would
+    make it impossible to tell which of two conflicting values won, and there is
+    no use case for "the options, but with one keyword overridden". It raises
+    instead of silently preferring one, because a caller who passes both has a
+    bug and would otherwise spend an afternoon finding out why their keyword had
+    no effect.
+
+    Extracted from `arrange_progression` so the conflict rule and the up-front
+    validation - the `non_chord_tone` and `texture` spellings - sit in one place
+    rather than at the top of a thousand-line loop. A typo costs a message rather
+    than a full arrangement followed by a surprise.
+    """
+    if options is not None:
+        given = {
+            name: value
+            for name, value in (
+                ("top_strings", top_strings),
+                ("non_chord_tone", non_chord_tone),
+                ("fret_min", fret_min),
+                ("fret_max", fret_max),
+                ("grips", grips),
+                ("texture", texture),
+                # `bass` is compared here like every other knob, which it was not
+                # for its whole life: `ArrangeOptions.bass` defaulted to the
+                # resolved "none" while the keyword defaults to the `BASS_AUTO`
+                # sentinel, so the two could never be compared - and the field was
+                # never read back out of `options` either, which is what made
+                # `--bass` silently inert on every slot-path caller (`arranger
+                # head` among them) while the walking-bass tests, which pass the
+                # keyword directly, stayed green. The field default is the sentinel
+                # now, so the comparison below holds, and the unpack below reads the
+                # field back.
+                ("bass", bass),
+                ("melody", melody),
+                ("harmony", harmony),
+                ("grid", grid),
+                ("beats_per_bar", beats_per_bar),
+                ("beat_type", beat_type),
+                ("melody_onsets", melody_onsets),
+            )
+            if value != ArrangeOptions.__dataclass_fields__[name].default
+        }
+        if given:
+            raise ValueError(
+                f"arrange_progression got both options= and the keyword(s) "
+                f"{sorted(given)}; pass one or the other, not both"
+            )
+        top_strings = options.top_strings
+        non_chord_tone = options.non_chord_tone
+        fret_min = options.fret_min
+        fret_max = options.fret_max
+        grips = options.grips
+        texture = options.texture
+        bass = options.bass
+        melody = options.melody
+        harmony = options.harmony
+        grid = options.grid
+        beats_per_bar = options.beats_per_bar
+        beat_type = options.beat_type
+        melody_onsets = options.melody_onsets
+        if options.timings is not None:
+            timings = list(options.timings)
+    bass_pcs = options.bass_pcs if options is not None else None
+    slash_bass_cost = options.slash_bass_cost if options is not None else None
+
+    if non_chord_tone not in NON_CHORD_TONE_STRATEGIES:
+        raise ValueError(
+            f"Unknown non_chord_tone strategy {non_chord_tone!r}; "
+            f"expected one of {NON_CHORD_TONE_STRATEGIES}"
+        )
+    texture_grips = TEXTURE_GRIPS.get(texture)
+    if texture_grips is None:
+        raise ValueError(
+            f"Unknown texture {texture!r}; expected one of {TEXTURE_STYLES}"
+        )
+    # Resolved once, here, and passed down: every warning this function reaches
+    # goes to the one collector, so a caller that passed one sees all of them
+    # rather than the first few. Defaults to printing, as this always did.
+    if diagnostics is None:
+        diagnostics = default_diagnostics()
+
+    return _Knobs(
+        top_strings=top_strings,
+        non_chord_tone=non_chord_tone,
+        fret_min=fret_min,
+        fret_max=fret_max,
+        grips=grips,
+        texture=texture,
+        bass=bass,
+        melody=melody,
+        harmony=harmony,
+        grid=grid,
+        beats_per_bar=beats_per_bar,
+        beat_type=beat_type,
+        melody_onsets=melody_onsets,
+        timings=timings,
+        bass_pcs=bass_pcs,
+        slash_bass_cost=slash_bass_cost,
+        texture_grips=texture_grips,
+        diagnostics=diagnostics,
+    )
+
+
 def arrange_progression(
     progression: Sequence[Tuple[Optional[str], str, str]],
     top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
@@ -630,85 +787,44 @@ def arrange_progression(
     silently instead; see the `diagnostics` module for why that is a value
     rather than a logging call.
     """
-    # `options` and the keywords are two spellings of the same knobs. An
-    # `options` wins outright rather than being merged field by field: a partial
-    # merge would make it impossible to tell which of two conflicting values won,
-    # and there is no use case for "the options, but with one keyword overridden".
-    # It raises instead of silently preferring one, because a caller who passes
-    # both has a bug and would otherwise spend an afternoon finding out why their
-    # keyword had no effect.
-    if options is not None:
-        given = {
-            name: value
-            for name, value in (
-                ("top_strings", top_strings),
-                ("non_chord_tone", non_chord_tone),
-                ("fret_min", fret_min),
-                ("fret_max", fret_max),
-                ("grips", grips),
-                ("texture", texture),
-                # `bass` is compared here like every other knob, which it was not
-                # for its whole life: `ArrangeOptions.bass` defaulted to the
-                # resolved "none" while the keyword defaults to the `BASS_AUTO`
-                # sentinel, so the two could never be compared - and the field was
-                # never read back out of `options` either, which is what made
-                # `--bass` silently inert on every slot-path caller (`arranger
-                # head` among them) while the walking-bass tests, which pass the
-                # keyword directly, stayed green. The field default is the sentinel
-                # now, so the comparison below holds, and the unpack below reads the
-                # field back.
-                ("bass", bass),
-                ("melody", melody),
-                ("harmony", harmony),
-                ("grid", grid),
-                ("beats_per_bar", beats_per_bar),
-                ("beat_type", beat_type),
-                ("melody_onsets", melody_onsets),
-            )
-            if value != ArrangeOptions.__dataclass_fields__[name].default
-        }
-        if given:
-            raise ValueError(
-                f"arrange_progression got both options= and the keyword(s) "
-                f"{sorted(given)}; pass one or the other, not both"
-            )
-        top_strings = options.top_strings
-        non_chord_tone = options.non_chord_tone
-        fret_min = options.fret_min
-        fret_max = options.fret_max
-        grips = options.grips
-        texture = options.texture
-        bass = options.bass
-        melody = options.melody
-        harmony = options.harmony
-        grid = options.grid
-        beats_per_bar = options.beats_per_bar
-        beat_type = options.beat_type
-        melody_onsets = options.melody_onsets
-        if options.timings is not None:
-            timings = list(options.timings)
-    bass_pcs = options.bass_pcs if options is not None else None
-    slash_bass_cost_for = (
-        options.slash_bass_cost if options is not None else None
+    _k = _resolve_knobs(
+        options,
+        top_strings=top_strings,
+        non_chord_tone=non_chord_tone,
+        fret_min=fret_min,
+        fret_max=fret_max,
+        grips=grips,
+        texture=texture,
+        bass=bass,
+        melody=melody,
+        harmony=harmony,
+        grid=grid,
+        beats_per_bar=beats_per_bar,
+        beat_type=beat_type,
+        melody_onsets=melody_onsets,
+        timings=timings,
+        diagnostics=diagnostics,
     )
-
-    if non_chord_tone not in NON_CHORD_TONE_STRATEGIES:
-        raise ValueError(
-            f"Unknown non_chord_tone strategy {non_chord_tone!r}; "
-            f"expected one of {NON_CHORD_TONE_STRATEGIES}"
-        )
-    # Checked up front, so a typo costs a message rather than a full arrangement
-    # followed by a surprise.
-    texture_grips = TEXTURE_GRIPS.get(texture)
-    if texture_grips is None:
-        raise ValueError(
-            f"Unknown texture {texture!r}; expected one of {TEXTURE_STYLES}"
-        )
-    # Resolved once, here, and passed down: every warning this function reaches
-    # goes to the one collector, so a caller that passed one sees all of them
-    # rather than the first few. Defaults to printing, as this always did.
-    if diagnostics is None:
-        diagnostics = default_diagnostics()
+    # Unpacked into the names the loop below has always used, so the extraction
+    # above changes nothing downstream of it.
+    top_strings = _k.top_strings
+    non_chord_tone = _k.non_chord_tone
+    fret_min = _k.fret_min
+    fret_max = _k.fret_max
+    grips = _k.grips
+    texture = _k.texture
+    bass = _k.bass
+    melody = _k.melody
+    harmony = _k.harmony
+    grid = _k.grid
+    beats_per_bar = _k.beats_per_bar
+    beat_type = _k.beat_type
+    melody_onsets = _k.melody_onsets
+    timings = _k.timings
+    bass_pcs = _k.bass_pcs
+    slash_bass_cost_for = _k.slash_bass_cost
+    texture_grips = _k.texture_grips
+    diagnostics = _k.diagnostics
 
     arrangements: List[ArrangementStep] = []
 
