@@ -41,6 +41,11 @@ you whether a change is an improvement or a different library.
   `6-4-3`, both `5-3-2`s and `6-4-3-2` are the four non-contiguous sets, each skipping
   one string; `6-4-3-2` and `(5,3,2)` skip one going *up* (the A to reach the B as
   soprano, and the B to reach the high E respectively).
+  The second `(5,3,2)` — the one skipping the B — adds no coverage over 120 transcriptions,
+  because it is never the only shape for a melody, but it relocates **1.3%** of steps onto a
+  better melodic position: F7 with a `Db4` soprano moves from `x-6-7-6-x-x` to `x-6-x-2-2-x`,
+  the same three pitches with the melody at B-string fret 2 instead of G-string fret 6. That
+  is the whole point of letting the melody hold its place by changing strings.
   **No set skips an *inner* string any more except the `(5,3,2)` shell**: the four
   `drop24` sets that did - four of that family's eight, two of them its measured winners -
   were removed because the right hand had to reach over an unplucked string to fret them.

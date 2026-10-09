@@ -170,26 +170,21 @@ GRIP_STRING_SETS: Dict[str, Tuple[Tuple[Tuple[int, ...], int], ...]] = {
     # 5-3-2 (A, G, B, melody on the B string) is the only shell whose A-string note
     # sounds *below* its G-string neighbour without the low E: the A is tuned five
     # semitones above the D it skips, and the G is five above that, so the pitches
-    # descend while the string numbers ascend. Measured across 120 transcriptions it
-    # adds no coverage at all - never the only shape for a melody - but it relocates
-    # 1.3% of steps, always onto a better melodic position: F7 with a Db4 soprano
-    # moves from `x-6-7-6-x-x` to `x-6-x-2-2-x`, the same three pitches with the
-    # melody at B-string fret 2 instead of G-string fret 6. That is the whole point of
-    # allowing the melody to hold its place by changing strings. It needs the search
-    # in _place_shell, not stacking, for the same reason 6-4-3 does.
+    # descend while the string numbers ascend. It adds no coverage - it is never the only
+    # shape for a melody - but it relocates steps onto a better melodic position by letting
+    # the melody hold its place and change strings, which is the whole point of that; the
+    # measurement is in `docs/engine.md` §"Grips, and the position-aware selector". It needs
+    # the search in `_place_shell`, not stacking, for the same reason 6-4-3 does.
     #
     # (5, 3, 2) is the *other* 5-3-2: high E, G and D, skipping the B on the way up
-    # rather than the D on the way down. It was added to close an asymmetry in this
-    # table rather than for any grip-specific reason - counting the shell sets by
-    # soprano, the high E had exactly one shape ((5,4,3)) while the B and the G had
-    # two each, and the high E is the *most* used soprano because
-    # MELODY_STRING_CHOICES_FULL puts it first, so every arrangement tries it before
-    # the others. It is also the three-layer split a walking-bass shell wants (melody
-    # on the high E, guide tones on the G and the D, leaving the 5th and 6th strings to
-    # the thumb), so it earns its place twice over. Like the other non-contiguous sets
-    # it needs _place_shell's search, not stacking: its D-string note can sound above
-    # its G-string note, so the voices are not in descending pitch order down the
-    # strings.
+    # rather than the D on the way down. It balances the shell sets by soprano - the high
+    # E is the *most* used soprano, because `MELODY_STRING_CHOICES_FULL` puts it first, and
+    # this gives it a second shape where the B and the G each have two. It is also the
+    # three-layer split a walking-bass shell wants (melody on the high E, guide tones on the
+    # G and the D, leaving the 5th and 6th strings to the thumb), so it earns its place
+    # twice over. Like the other non-contiguous sets it needs `_place_shell`'s search, not
+    # stacking: its D-string note can sound above its G-string note, so the voices are not
+    # in descending pitch order down the strings.
     "shell": (
         ((5, 4, 3), 5), ((4, 3, 2), 4), ((1, 2, 3), 3),
         ((0, 2, 3), 3), ((1, 3, 4), 4), ((5, 3, 2), 5),
@@ -1739,8 +1734,8 @@ def get_comping_voicings(
     bass, and the default spends it on the guide tones alone. It is a `harmony=` value
     rather than a change of arity, because it is a claim about *which degrees sound* and
     not about how many notes there are - the same reason `HARMONY_STYLES` is a table of
-    degree families and not a count. Measured at 11 of 11 chords on the **existing**
-    `(5,4,3)` shell sets, so no new string set is involved.
+    degree families and not a count. It resolves on the **existing** `(5,4,3)` shell sets,
+    so no new string set is involved - `docs/comping-styles.md` holds the measurement.
 
     Every candidate sounds only chord tones, holds a fret span of at most
     `GRIP_MAX_SPAN["shell"]`, and occupies one string set from `GRIP_STRING_SETS["shell"]`
