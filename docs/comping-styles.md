@@ -84,7 +84,7 @@ The overlap is not theoretical. It produces three observable oddities:
 
 1. **`--voices soprano` was a no-op.** It was byte-identical to `--voices auto`, because
    the soprano's only remaining job was to switch the engine onto the melody-bearing
-   route: `melody_voiced = voices_have_soprano(voices)` in `steps.py`. **Stage 2 closed
+   route: `melody_voiced = voices_have_soprano(voices)` in `movement.py`. **Stage 2 closed
    this**: soprano alone is the melody and nothing else now — see `docs/one-fact.md`.
 2. **The flags could contradict, so one had to be refused.** `melody_allowed` refused
    `--texture melody --voices alto` with a warning, because `melody` *already* meant
@@ -881,7 +881,7 @@ chord, bar, beat and duration:
 | `alto,tenor,bass` | 102 | **identical** |
 
 Not one fret moves, and the same holds on hand-written input. Two independent points
-enforce it: `get_comping_voicings` takes no melody argument at all, and `steps.py` passes
+enforce it: `get_comping_voicings` takes no melody argument at all, and `movement.py` passes
 `melody_pc=None` into `voicing_cost` deliberately — *"there is no melody on the guitar for
 the wrong-note count to excuse."* `melody_pc` is the only melody input to the cost tuple,
 so with it absent no melody can reach selection.

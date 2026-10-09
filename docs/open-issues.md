@@ -914,7 +914,7 @@ is special-cased.
 | file | what changed |
 |---|---|
 | `arranger/bass.py` | `comping_capacity`, `_worst_free_capacity` (the arithmetic both capacity functions share), `bass_allowed(..., notes, bass_voice)`, `_comping_no_room_reason` |
-| `arranger/steps.py` | `_resolve_bass` takes `melody_voiced`/`notes`/`bass_voice`; `_resolve_melody` now resolves **before** it |
+| `arranger/movement.py` | `_resolve_bass` takes `melody_voiced`/`notes`/`bass_voice`; `_resolve_melody` now resolves **before** it |
 | `arranger/__init__.py` | `comping_capacity` re-exported |
 | `tests/test_bass.py` | `TestCompingCapacity` — 5 tests |
 | `tests/test_comping.py` | `TestTheCompingRouteCarriesAThumb` — 4 tests |
@@ -1483,7 +1483,7 @@ falls back to the widest statement that leaves a finger free:
 ```
 
 `decisions.resolve_texture_grips` applies it to the **target** role only, and only for a slot
-that `steps.py` has already decided carries a bass note (`slot.bass is not None`). That last
+that `movement.py` has already decided carries a bass note (`slot.bass is not None`). That last
 part is not a detail: `anchors` leaves most beats bare, and a target with nothing underneath
 it may use all four strings.
 

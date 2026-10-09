@@ -424,7 +424,7 @@ instead of striking it, so only the thumb plucks and it is the left hand that fa
 `GRIP_STRING_SETS` that a four-string grip cannot be offered as a *target* on a slot that
 carries a bass note, and falls back to the widest statement that leaves a finger free —
 `("drop2", "drop3")` becomes `("shell",)`. `decisions.resolve_texture_grips` applies it per
-slot (`steps.py` passes `slot.bass is not None`), so a target on a beat the thumb leaves
+slot (`movement.py` passes `slot.bass is not None`), so a target on a beat the thumb leaves
 bare keeps all four strings. Measured after: **0** five-string steps anywhere; `--texture
 targets --bass walk` is byte-identical to `--texture walking_bass --bass walk`; the other
 rows do not move. `arranger/fingers.py` was not needed for any of it, and that is the result
@@ -691,7 +691,7 @@ third lever were considered once the price was known, and none was taken on the 
 - **Keep the sets and offer them only as a last resort** — a skip-carrying shape allowed
   when nothing else at that position is playable. It would keep **all 41** chords by
   construction, but it needs the span check that currently runs *after* selection
-  (`steps.py`, via `decisions.should_demote_to_melody_alone`) to run *inside* it, which is
+  (`movement.py`, via `decisions.should_demote_to_melody_alone`) to run *inside* it, which is
   a change to where selection ends rather than a table edit. Not built.
 
 **Recorded, and built.** `grips.finger_skip_count` states the rule, `GRIP_STRING_SETS`

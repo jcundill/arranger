@@ -44,7 +44,7 @@ returning `self.voicing.grip`. Every reader's spelling stays — `render.py`'s a
 the test assertions, and the `__getitem__` shim, which sees properties through `hasattr` —
 and the two fields *cannot* disagree any more, which is the point.
 
-The mirror writes in `steps.py` delete (`grip="rest"` on the rest step,
+The mirror writes in `movement.py` delete (`grip="rest"` on the rest step,
 `grip=solo_voicing.grip` on the NC step, `grip="melody"` on the melody-alone branches,
 `grip=best_voicing.grip` on the harmonised step): each voicing already carries the value,
 which is what the Stage-1 NC fix proved for one of them.
@@ -68,7 +68,7 @@ class being deleted.
 
 **Measured blast radius for both commits: zero.** No constructor call site passes `grip=`
 or `bass=` to an `ArrangementStep` — every grep hit is a `Voicing(...)` construction or
-an arrange-function policy kwarg — so nothing outside `steps.py` changes.
+an arrange-function policy kwarg — so nothing outside `movement.py` changes.
 
 ### Commit 3 — the melody-only signal moves from `texture=` to `voices=`
 
@@ -161,7 +161,7 @@ Three sites the plan's survey did not name, each caught by a gate rather than by
 re-read, and each a lesson about which gate:
 
 - **A seventh `grip=` mirror** on the comping route's own step construction
-  (`steps.py`, the `select_step_voicing(...) or candidates[0]` site), which the
+  (`movement.py`, the `select_step_voicing(...) or candidates[0]` site), which the
   plan's grep had mis-classified as a `Voicing` construction. **pyright caught it** —
   "No parameter named `grip`" — which is what a static check is for: the failure is
   about a *name*, not a behaviour, so no test run would have described it faster.

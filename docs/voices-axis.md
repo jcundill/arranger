@@ -245,7 +245,7 @@ was **inverted, not deleted** — it had asserted `assertNotIn`, pinning the gap
 |---|---|
 | `arranger/textures.py` | `VOICE_NAMES`, `VOICES_NONE`/`VOICES_ALL`, `parse_voices`, `resolve_voices`, `melody_allowed`, the soprano predicate |
 | `arranger/grips.py` | `get_comping_voicings` (+ `notes` arity, `bass_voice`), `_shell_voicing`, `_comping_string_sets`, `_frets_in_span`, `SINGLE_NOTE_STRING_SETS`, `BASS_VOICE_STRING_SETS`, `supported_string_sets()` |
-| `arranger/steps.py` | `_resolve_melody`, the comping route, `notes=len(voices)` + `bass_voice=voices == (MELODY_BASS,)` |
+| `arranger/movement.py` | `_resolve_melody`, the comping route, `notes=len(voices)` + `bass_voice=voices == (MELODY_BASS,)` |
 | `arranger/decisions.py` | `melody_alone_case` guard — a texture fill must not sing |
 | `arranger/tuning.py` | `ArrangementStep.melody_voiced` |
 | `arranger/options.py` | `ArrangeOptions.melody` |
