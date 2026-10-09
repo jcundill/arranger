@@ -278,6 +278,31 @@ There is no build step for local development.
 - **Do not add a third-party dependency** without explicit approval. `musthe` is the
   only runtime one; that is load-bearing for the LGPL reasoning above.
 
+### Docstrings describe the present, not the past
+
+A docstring states what a thing **is** and what a caller or an editor must know. It is
+not a changelog, and it is not where the reasoning lives. Three kinds of text compete
+for that space, and only the first belongs in the source:
+
+- **The contract, and any do-not-change constraint** — keep it, in the present tense.
+  "`requested` narrows the palette and must never widen it"; "do not reorder this
+  tuple". The warning is what stops the next editor undoing a deliberate choice, and
+  the traps below are the record of what that costs when it is missing.
+- **The story of how it got here** — delete it. "This was two functions", "it used to
+  be a classmethod", "Phase 5 moved this", "the database is gone", a former module
+  name, a forward-looking "for now". Narrative of this kind is written against a tree
+  that stops existing, and an agent that reads it acts on a fact that is no longer
+  true. The reason it is *always* the wrong place is that it has no test: nothing fails
+  when it goes stale, so it rots silently while the gate stays green.
+- **A measurement, and its number** — move it to the document that already holds it:
+  [docs/open-issues.md](docs/open-issues.md) for a diagnosed bug, the relevant
+  `docs/*.md` for anything else, [docs/history/](docs/history/) for a completed plan. A
+  count in a docstring is the fastest-rotting string in the repository and is stored
+  where it is least likely to be re-measured. Leave a one-line pointer instead.
+
+A module docstring is one to three sentences: what the module owns, and where it sits
+in the dependency order.
+
 ### Playability invariants
 
 Every generated voicing must satisfy all of these. They are asserted per-shape in
