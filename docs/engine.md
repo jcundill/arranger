@@ -317,6 +317,20 @@ filtering, no transposition) and `_best_voicing` does all the deciding. That spl
 what stops the grip families and the octave-down rescue from having to know about each
 other, and it is asserted in `tests/test_grips.py`.
 
+**A shape sounding a foreign note is refused before any preference is consulted.**
+`allowed_tones` is the caller's tone set, and criterion 0 of the cost tuple counts the
+sounding notes outside it, the melody excepted. It is a *count* rather than a flag: as a
+boolean, a shape adding one foreign note scored the same as one adding four, so the tie
+fell through to fret span — and the wronger shape usually won there, since having more
+wrong notes does not oblige a shape to be wider but tends to. The melody is excluded for a
+second measured reason: when the melody itself lies outside the chord **every** candidate
+is impure on it and the criterion cannot tell them apart, so a correct shape could never
+reach zero. G7 under F#5 is the case — drop-2's fallback offers shapes carrying two to four
+foreign notes while drop-2 & 4 derives one carrying none, and both scored `1.0`, so the
+wrong one won on span. Counting instead of flagging, together with excluding the melody,
+takes **134 wrong notes down to 9** over five qualities and every non-chord melody in the
+register.
+
 ### Span outranks neck position
 
 `voicing_cost` ranks **fret span above neck position**. This is the only place one
