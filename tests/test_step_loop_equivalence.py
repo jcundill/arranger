@@ -58,12 +58,15 @@ TRIPLES: List[Tuple[str, str, str]] = [
 
 TEXTURES = ("uniform", "targets", "walking_bass")
 
-# The five decisions Phase 3 gave one implementation each.
+# The decisions the step loop makes: one implementation each, all of them called from
+# `arranger.movement` rather than re-derived there.
 DECISIONS = (
     "resolve_texture_grips",
     "melody_alone_case",
     "should_promote_fill",
     "should_demote_to_melody_alone",
+    "holds_the_shape",
+    "hold_the_melody_string",
     "is_repeated_step",
 )
 

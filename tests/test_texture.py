@@ -14,6 +14,7 @@ dependency and no database.
 from __future__ import annotations
 
 import contextlib
+import glob
 import io
 import unittest
 from typing import List, Optional, Tuple
@@ -45,7 +46,12 @@ from arranger import (
 # `test_walking_bass` gives for the private `bass` helpers: these are the rule's own
 # spelling, and re-exporting them would enlarge the public surface for one test file's
 # benefit.
-from arranger.decisions import resolve_texture_grips
+from arranger.decisions import (
+    hold_the_melody_string,
+    holds_the_shape,
+    is_repeated_step,
+    resolve_texture_grips,
+)
 from arranger.grips import RIGHT_HAND_STRINGS, grip_pluck_count, thumb_safe_grips
 
 # The library's own demonstration cadences. These are the progressions whose tab is
@@ -1401,6 +1407,139 @@ class TestIntervalGrip(unittest.TestCase):
     def test_offsets_are_empty_rather_than_guessed_for_an_unknown_quality(self):
         """A quality with no tone set yields no intervals at all."""
         self.assertEqual(_interval_offsets((), Note("C5").midi_note(), 0), [])
+
+
+class TestARepeatedMelodyHoldsItsString(unittest.TestCase):
+    """A held note stays on the string the hand is already on.
+
+    A `repeated` step is a **hold**: the renderers strike its soprano alone and let the
+    inner voices ring. That is only true if the melody is where the previous step's
+    finger already is - and the selector used to be free to move it. Span outranks neck
+    position in `voicing_cost`, and a fill's thin palette has a compact shape whose top
+    note sits on a different string, so a bar of four identical notes read as a
+    four-fret jump and the chord the step had just voiced was muted by a rule that meant
+    "hold what is already ringing".
+
+    Two halves of one claim, which is why the last test here is a sweep rather than the
+    bar the report came from: `decisions.hold_the_melody_string` narrows the candidates
+    to the held string before the selector sees them, and `decisions.is_repeated_step`
+    marks the step only when the melody really did stay there.
+    """
+
+    def test_a_fill_on_a_repeated_note_keeps_the_melody_string(self):
+        """The reported bar, reduced: four G4s over `Eb7` under `--texture targets`.
+
+        Beats 1 and 3 are targets and beats 2 and 4 are fills. Measured before the fix,
+        the soprano string ran `[4, 3, 4, 3]` - the B string for the targets and the G
+        string for the fills, four frets apart, on a note that never moves.
+        """
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("G4", "7", "Eb7")] * 4,
+            timings=[(0, float(beat), None) for beat in (1, 2, 3, 4)],
+            texture="targets",
+        )
+        self.assertEqual([step.melody for step in steps], ["G4"] * 4)
+        self.assertEqual(
+            [step.voicing.soprano_string() for step in steps],
+            [4, 4, 4, 4],
+            "the melody changed strings on a note that never moved",
+        )
+
+    def test_the_reported_bar_of_the_committed_head_holds_one_string(self):
+        """Bar 3 of "All the Things You Are", read from the file.
+
+        The hand-built case above is this bar with everything else stripped away; the
+        fixture is where the report came from, and asserting it keeps the head under a
+        test rather than only under the loader's.
+        """
+        from headxml import arrange_xml_head
+
+        steps, _head, _notes = arrange_xml_head(
+            "tests/data/All_the_Things_You_Are.musicxml", texture="targets"
+        )
+        bar_three = [step for step in steps if step.bar == 3]
+        self.assertEqual([step.melody for step in bar_three], ["G4"] * 4)
+        self.assertEqual([step.chord for step in bar_three], ["Eb7"] * 4)
+        self.assertEqual(
+            [step.voicing.soprano_string() for step in bar_three], [4, 4, 4, 4]
+        )
+
+    def test_the_rule_never_comes_back_empty_handed(self):
+        """A palette with nothing on the held string is left alone, not emptied.
+
+        The narrowing may not be a filter that can starve a step: a thin palette has no
+        shape on some strings, and a step left with no candidates is a chord the engine
+        had already voiced and then dropped. The caller keeps its own candidates in that
+        case, and `is_repeated_step` then simply does not mark the step.
+        """
+        from tests.support import make_step, make_voicing
+
+        previous = make_step([-1, -1, -1, 10, 12, 10], chord="Cmaj7", melody="A4")
+        elsewhere = [make_voicing([-1, -1, -1, 10, 15, -1])]
+        self.assertIs(hold_the_melody_string(elsewhere, previous), elsewhere)
+
+    def test_a_step_whose_soprano_moved_is_not_a_hold(self):
+        """The flag's second clause, on its own.
+
+        Both shapes below re-state the same top pitch under the same harmony, so
+        `holds_the_shape` is true of each and the string is the only thing separating a
+        hold from a jump.
+        """
+        from arranger.chords import sounding_harmony
+        from tests.support import make_step, make_voicing
+
+        previous = make_step([-1, -1, -1, 10, 12, 10], chord="Cmaj7", melody="A4")
+        harmony = sounding_harmony(previous)
+        top = max(previous.voicing.midi_notes())
+        # D5 on the high E string (index 5), and the same note on the B string (index 4).
+        same = make_voicing([-1, -1, -1, 10, 12, 10])
+        moved = make_voicing([-1, -1, -1, 10, 15, -1])
+        self.assertEqual(max(moved.midi_notes()), top)
+        self.assertTrue(holds_the_shape(previous, top, harmony))
+        self.assertTrue(is_repeated_step(previous, same, harmony))
+        self.assertFalse(is_repeated_step(previous, moved, harmony))
+
+    def test_every_repeated_step_over_the_committed_heads_keeps_its_string(self):
+        """The rule asserted on the whole, where a shape-level check cannot see it.
+
+        Every renderer assumes *a `repeated` step's melody is on the string the previous
+        step's melody is on*, and a rule stated over a generated `Voicing` says nothing
+        about the step the engine assembles afterwards. So it is swept: seven committed
+        heads over five texture/bass combinations. Measured: **199** holds, **0** of which
+        move - against **202** and **22** before the fix, every one of the 22 under
+        `targets`. The two thumb rows carry no holds at all (`targets` with `walk` and
+        with `anchors`: 0), because a fill under a thumb is `bass_only` and nothing there
+        is marked `repeated`; they are swept so that a change which makes one is caught
+        rather than assumed away.
+        """
+        from headxml import arrange_xml_head
+
+        paths = sorted(
+            glob.glob("tests/data/*.mxl") + glob.glob("tests/data/*.musicxml")
+        )
+        self.assertGreaterEqual(len(paths), 6, "the committed heads went missing")
+        configs = (
+            ("uniform", "auto"),
+            ("targets", "auto"),
+            ("targets", "walk"),
+            ("targets", "anchors"),
+            ("walking_bass", "auto"),
+        )
+        checked = 0
+        for path in paths:
+            for texture, bass in configs:
+                steps, _head, _notes = arrange_xml_head(path, texture=texture, bass=bass)
+                for previous, step in zip(steps, steps[1:]):
+                    if not step.repeated:
+                        continue
+                    checked += 1
+                    self.assertEqual(
+                        step.voicing.soprano_string(),
+                        previous.voicing.soprano_string(),
+                        f"{path} bar {step.bar} beat {step.beat}: the hold of "
+                        f"{step.melody} re-struck on another string ({step.tab_line()})",
+                    )
+        self.assertGreater(checked, 100, "the hold is not exercised at all")
 
 
 if __name__ == "__main__":  # pragma: no cover
