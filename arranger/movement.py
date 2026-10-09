@@ -732,6 +732,168 @@ def _resolve_policies(
     )
 
 
+def _rest_step(
+    arrangements: List[ArrangementStep],
+    slot: _Slot,
+    *,
+    name: str,
+    note_str: Optional[str],
+    bar: Optional[int],
+    beat: Optional[float],
+    duration: Optional[float],
+    role: str,
+    weight: int,
+    sings_here: bool,
+    diagnostics: Diagnostics,
+) -> None:
+    """Append the rest-or-hold step for a slot the guitar does not sing.
+
+    The guitar is silent and the horn has the note. **The step is still
+    emitted**, carrying the bar, the beat and the chord name: it is what keeps
+    the melody's position in the tab staff, and a comping part whose bars
+    collapsed to their stabs would no longer line up against the tune it is
+    comping under.
+    """
+    arrangements.append(ArrangementStep(
+        chord=name,
+        melody=note_str,
+        voicing=Voicing(
+            frets=[-1] * len(STANDARD_TUNING),
+            top_fret=0,
+            avg_fret=0.0,
+            grip="rest",
+        ),
+        bar=bar,
+        beat=beat,
+        duration=duration,
+        role=role,
+        metric_weight=weight,
+        # A rest is a slot the guitar does **not** sing - which is `sings_here`,
+        # False here by construction. The route-level `melody_voiced` would
+        # claim the guitar sings a slot it just declined to play.
+        melody_voiced=sings_here,
+    ))
+    # The thumb still walks on a rest. A comping grid thins the **chords**,
+    # not the bass line - that is the whole difference between `grid=` and
+    # `bass=none`, and dropping the attach here would silently delete the
+    # walk from every bar the grid thinned.
+    _attach_bass(
+        arrangements[-1], slot.bass, arrangements, diagnostics
+    )
+
+
+def _texture_fill_step(
+    arrangements: List[ArrangementStep],
+    slot: _Slot,
+    *,
+    name: str,
+    note_str: Optional[str],
+    melody_note: Optional[Note],
+    top_strings: Tuple[int, ...],
+    bar: Optional[int],
+    beat: Optional[float],
+    duration: Optional[float],
+    role: str,
+    weight: int,
+    diagnostics: Diagnostics,
+) -> bool:
+    """Append the thin "fill" step for a slot the texture thins to a melody.
+
+    Returns **True** when the slot is handled, **False** when the melody cannot
+    be played alone at all and the caller should fall through to the harmonised
+    route - an unreachable melody is genuinely unplayable, so inventing a shape
+    for it would be worse than trying the full one.
+    """
+    # This kind is answered only when the guitar sings, and a singing slot
+    # with no note was refused at the top of this loop - so a note is
+    # pinned here, which is what lets the type say so below. The *name*
+    # needs the same statement: `note_str` is only narrowed inside the
+    # branch that built `melody_note`, and this route needs both.
+    assert melody_note is not None and note_str is not None
+    solo_voicing = _grips.get_melody_only_voicing(
+        melody_note, prefer=top_strings
+    )
+    if solo_voicing is not None:
+        sounding, written_original = _sounding_melody(solo_voicing, note_str)
+        fill = ArrangementStep(
+            chord=name,
+            melody=sounding,
+            voicing=solo_voicing,
+            original_melody=written_original,
+            partial=False,
+            bar=bar,
+            beat=beat,
+            duration=duration,
+            role=role,
+            metric_weight=weight,
+            bass_only=is_bass_only(slot.bass_only, role),
+        )
+        _attach_bass(fill, slot.bass, arrangements, diagnostics)
+        arrangements.append(fill)
+        return True
+    return False
+
+
+def _no_chord_step(
+    arrangements: List[ArrangementStep],
+    slot: _Slot,
+    *,
+    name: str,
+    note_str: Optional[str],
+    melody_note: Optional[Note],
+    top_strings: Tuple[int, ...],
+    bar: Optional[int],
+    beat: Optional[float],
+    duration: Optional[float],
+    role: str,
+    weight: int,
+    diagnostics: Diagnostics,
+) -> None:
+    """Append the melody-alone step for an `NC` bar: melody, but no harmony.
+
+    This happens before any chord logic, so there is no non-chord-tone strategy,
+    no substitute chord and no warning about either. The `melody_only` flag is
+    set here and *only* here; the texture case above reaches the same shape
+    deliberately without it.
+    """
+    # As the texture branch above: this kind means the guitar sings, and
+    # that guard already refused a singing slot with no note.
+    assert melody_note is not None and note_str is not None
+    solo_voicing = _grips.get_melody_only_voicing(melody_note, prefer=top_strings)
+    if solo_voicing is None:
+        diagnostics.warn(
+            f"Warning: melody {note_str} is unreachable on any string; "
+            f"skipping the no-chord step"
+        )
+        return
+    # get_melody_only_voicing may have dropped the note an octave to stay
+    # below HIGH_FRET_LIMIT, so the step reports the pitch that sounds and
+    # keeps the written one for the renderer. See `_sounding_melody`.
+    sounding, written_original = _sounding_melody(solo_voicing, note_str)
+    arrangements.append(ArrangementStep(
+        chord=name,
+        melody=sounding,
+        voicing=solo_voicing,
+        original_melody=written_original,
+        melody_only=True,
+        # `step.grip` is a derived view of `voicing.grip`, so nothing is
+        # passed here: the voicing says "melody" and the step cannot
+        # disagree with it. The property is what keeps the two spellings
+        # one fact with one home - see `docs/one-fact.md`, commit 1.
+        bar=bar,
+        beat=beat,
+        duration=duration,
+        role=role,
+        metric_weight=weight,
+    ))
+    # An `NC` bar is still a place the thumb walks: the walk reads the last
+    # known harmony (or skips), and the melody-alone shape leaves every bass
+    # string free. Attaching it here rather than only on harmonised steps is
+    # what keeps a bar of no-chord melody from being a hole in the walk.
+    arrangements[-1].bass_only = is_bass_only(slot.bass_only, role)
+    _attach_bass(arrangements[-1], slot.bass, arrangements, diagnostics)
+
+
 def arrange_progression(
     progression: Sequence[Tuple[Optional[str], str, str]],
     top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
@@ -1138,117 +1300,31 @@ def arrange_progression(
             on_grid=on_grid(beat, grid_pattern, beats_per_bar),
         )
         if melody_alone == MELODY_ALONE_REST:
-            # The guitar is silent and the horn has the note. **The step is still
-            # emitted**, carrying the bar, the beat and the chord name: it is what
-            # keeps the melody's position in the tab staff, and a comping part
-            # whose bars collapsed to their stabs would no longer line up against
-            # the tune it is comping under.
-            #
-            # All six strings muted, so every renderer draws it as silence rather
-            # than as a held shape - `bass_only` would be the opposite claim (the
-            # thumb alone) and `repeated` would claim a melody this part does not
-            # play. `melody_only` stays **False**: the step does have a harmony,
-            # it simply is not being stated here.
-            arrangements.append(ArrangementStep(
-                chord=name,
-                melody=note_str,
-                voicing=Voicing(
-                    frets=[-1] * len(STANDARD_TUNING),
-                    top_fret=0,
-                    avg_fret=0.0,
-                    grip="rest",
-                ),
-                bar=bar,
-                beat=beat,
-                duration=duration,
-                role=role,
-                metric_weight=weight,
-                # A rest is a slot the guitar does **not** sing - which is `sings_here`,
-                # False here by construction. The route-level `melody_voiced` would
-                # claim the guitar sings a slot it just declined to play.
-                melody_voiced=sings_here,
-            ))
-            # The thumb still walks on a rest. A comping grid thins the **chords**,
-            # not the bass line - that is the whole difference between `grid=` and
-            # `bass=none`, and dropping the attach here would silently delete the
-            # walk from every bar the grid thinned.
-            _attach_bass(
-                arrangements[-1], slot.bass, arrangements, diagnostics
+            _rest_step(
+                arrangements, slot,
+                name=name, note_str=note_str, bar=bar, beat=beat,
+                duration=duration, role=role, weight=weight,
+                sings_here=sings_here, diagnostics=diagnostics,
             )
             continue
         if melody_alone == MELODY_ALONE_TEXTURE:
-            # This kind is answered only when the guitar sings, and a singing slot
-            # with no note was refused at the top of this loop - so a note is
-            # pinned here, which is what lets the type say so below. The *name*
-            # needs the same statement: `note_str` is only narrowed inside the
-            # branch that built `melody_note`, and this route needs both.
-            assert melody_note is not None and note_str is not None
-            solo_voicing = _grips.get_melody_only_voicing(
-                melody_note, prefer=top_strings
-            )
-            if solo_voicing is not None:
-                sounding, written_original = _sounding_melody(solo_voicing, note_str)
-                fill = ArrangementStep(
-                    chord=name,
-                    melody=sounding,
-                    voicing=solo_voicing,
-                    original_melody=written_original,
-                    partial=False,
-                    bar=bar,
-                    beat=beat,
-                    duration=duration,
-                    role=role,
-                    metric_weight=weight,
-                    bass_only=is_bass_only(slot.bass_only, role),
-                )
-                _attach_bass(fill, slot.bass, arrangements, diagnostics)
-                arrangements.append(fill)
+            if _texture_fill_step(
+                arrangements, slot,
+                name=name, note_str=note_str, melody_note=melody_note,
+                top_strings=top_strings, bar=bar, beat=beat,
+                duration=duration, role=role, weight=weight,
+                diagnostics=diagnostics,
+            ):
                 continue
-            # An unreachable melody is genuinely unplayable, so fall through to
-            # the harmonised path rather than inventing one.
 
-        # A NO_CHORD step carries melody but no harmony: it is voiced as the
-        # melody alone. This happens before any chord logic, so there is no
-        # non-chord-tone strategy, no substitute chord and no warning. The
-        # `melody_only` flag is set here and *only* here; a texture case above
-        # reaches the same route deliberately without it.
         if melody_alone == MELODY_ALONE_NO_CHORD:
-            # As the texture branch above: this kind means the guitar sings, and
-            # that guard already refused a singing slot with no note.
-            assert melody_note is not None and note_str is not None
-            solo_voicing = _grips.get_melody_only_voicing(melody_note, prefer=top_strings)
-            if solo_voicing is None:
-                diagnostics.warn(
-                    f"Warning: melody {note_str} is unreachable on any string; "
-                    f"skipping the no-chord step"
-                )
-                continue
-            # get_melody_only_voicing may have dropped the note an octave to stay
-            # below HIGH_FRET_LIMIT, so the step reports the pitch that sounds and
-            # keeps the written one for the renderer. See `_sounding_melody`.
-            sounding, written_original = _sounding_melody(solo_voicing, note_str)
-            arrangements.append(ArrangementStep(
-                chord=name,
-                melody=sounding,
-                voicing=solo_voicing,
-                original_melody=written_original,
-                melody_only=True,
-                # `step.grip` is a derived view of `voicing.grip`, so nothing is
-                # passed here: the voicing says "melody" and the step cannot
-                # disagree with it. The property is what keeps the two spellings
-                # one fact with one home - see `docs/one-fact.md`, commit 1.
-                bar=bar,
-                beat=beat,
-                duration=duration,
-                role=role,
-                metric_weight=weight,
-            ))
-            # An `NC` bar is still a place the thumb walks: the walk reads the last
-            # known harmony (or skips), and the melody-alone shape leaves every bass
-            # string free. Attaching it here rather than only on harmonised steps is
-            # what keeps a bar of no-chord melody from being a hole in the walk.
-            arrangements[-1].bass_only = is_bass_only(slot.bass_only, role)
-            _attach_bass(arrangements[-1], slot.bass, arrangements, diagnostics)
+            _no_chord_step(
+                arrangements, slot,
+                name=name, note_str=note_str, melody_note=melody_note,
+                top_strings=top_strings, bar=bar, beat=beat,
+                duration=duration, role=role, weight=weight,
+                diagnostics=diagnostics,
+            )
             continue
 
         # --- The comping route: the guitar harmonises, somebody else sings ---
