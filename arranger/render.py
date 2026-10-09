@@ -180,7 +180,7 @@ def _step_cells(step: ArrangementStep) -> List[str]:
     and every voice above it is held from the previous shape. It only ever describes
     a **fill**, because a target states its harmony instead (`decisions.is_bass_only`)
     - a step marked both rendered here as a blank column, which is how a chord the
-    engine had already voiced went missing; see `docs/open-issues.md` item 4. A step
+    engine had already voiced went missing. A step
     that is *both* `repeated` and `bass_only` is a walking bass under a
     re-articulated melody, and it plays the soprano and the thumb - so the two rules
     compose rather than override one another, which is the case an `elif` chain would

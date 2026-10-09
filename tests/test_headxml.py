@@ -747,7 +747,7 @@ class TestAHeldNoteIsOneNoteAcrossABarline(unittest.TestCase):
 class TestChordTimeline(unittest.TestCase):
     """`Head.chords`: the harmony as a timeline, independent of the melody.
 
-    **Phase 1 of open-issues item 10**, and this class tests only the *recording* — the
+    **Phase 1 of open-issues item 1**, and this class tests only the *recording* — the
     timeline is built and nothing consumes it yet, so every arrangement is
     byte-identical. The arrangement-level tests belong to the phase that fixes the
     defect, and writing them now would be testing a fix that does not exist.
@@ -923,7 +923,7 @@ class TestChordTimeline(unittest.TestCase):
 class TestChordAt(unittest.TestCase):
     """`chord_at`: which chord is in force at a position, by forward fill.
 
-    **Phase 2 of open-issues item 10** — the query, with no consumer. The next phase uses
+    **Phase 2 of open-issues item 1** — the query, with no consumer. The next phase uses
     it for a beat no melody note describes; until then nothing calls it but tests, so
     this is a specification written before its first use, which is the only honest time
     to write one.
@@ -1054,7 +1054,7 @@ class TestChordAt(unittest.TestCase):
 class TestChordSlots(unittest.TestCase):
     """`chord_slots` and the union: the comping route stops losing positions.
 
-    **Phase 3 of open-issues item 10, and the first phase that changes output.** Phases 1
+    **Phase 3 of open-issues item 1, and the first phase that changes output.** Phases 1
     and 2 were additive and left every arrangement byte-identical; this one adds steps.
     The scope is pinned below: **only the comping route with a named grid**, because the
     melody-bearing route's "a chord under each melody note" is the chord-melody idiom and
@@ -1143,7 +1143,7 @@ class TestChordSlots(unittest.TestCase):
 
         Under `every_note` and `freddie` every duration on a 2/2 fixture is 0.5 — one
         notated beat. A stab that inherited the melody's length would be a whole note on a
-        bar the melody holds, which is the confusion item 10 records.
+        bar the melody holds, which is the confusion item 1 records.
 
         `joe_pass` is 0.25 or 0.5 because it names the *ands*, so the distance to the next
         position is half a beat — asserted here because it is the same rule producing a
@@ -1266,7 +1266,7 @@ class TestMelodyState(unittest.TestCase):
 class TestSilentSlotsCarryNoMelody(unittest.TestCase):
     """§9.3 step B at the step level: `ArrangementStep.melody` is `Optional`, honestly.
 
-    The deletion's visible half (open-issues item 10): `Cmaj7  C4  (shell - 3rd & 7th,
+    The deletion's visible half (open-issues item 1): `Cmaj7  C4  (shell - 3rd & 7th,
     partial)` was printed by the default line tab 14 times on `but_not_for_me` under
     `--voices alto,tenor --grid freddie`, reading as a claim that the guitar played C4.
     It did not. What is asserted here is the replacement: a slot the tune does not
@@ -2129,7 +2129,7 @@ class TestTheMetreHasADenominator(unittest.TestCase):
         defect and not this one.** Measured: the written bar 1 is an eighth rest then five
         eighths (1.5 … 3.5), and the exported-then-re-read bar 1 is five eighths from 1.0,
         the rest dropped rather than written. That is wrong under either spelling of the
-        conversion, so it is recorded rather than encoded here - open-issues item 15.
+        conversion, so it is recorded rather than encoded here.
         """
         try:
             import music21  # noqa: F401

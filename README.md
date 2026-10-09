@@ -164,8 +164,7 @@ so a 2/2 head is two beats to the bar rather than four — which is how most sta
 written, and how three of the seven committed heads are. Both numbers in the
 signature are needed: the count says which beats exist and the denominator says how long
 one lasts, so a 3/4 bar's eighths fall on 1.0, 1.5, 2.0, 2.5, 3.0 and 3.5. Reading the
-count as the denominator makes every note of a 3/4 head a quarter of a beat early (see
-[docs/open-issues.md](docs/open-issues.md) item 15).
+count as the denominator makes every note of a 3/4 head a quarter of a beat early.
 
 **The key signature is read, and written back.** `Head` carries the score's `<fifths>`
 and `<mode>`, and the MusicXML and GP5 writers state them — so a tune in three flats
@@ -740,18 +739,16 @@ the shape (`no playable bass note for bass ... - no free string below the melody
 that pitch below the shape, or the hand would need a fifth fret`). The commonest case in
 practice is the middle one: the chord's own lowest note is already so low that the walking note
 has no octave beneath it, and the note is left out for that reason. The counts over the committed
-heads are in [docs/open-issues.md](docs/open-issues.md) item 13.
+heads are in [docs/open-issues.md](docs/open-issues.md) item 2.
 
-`docs/open-issues.md` records this texture's defects, and nearly all of them are fixed. The
-merged step — a bass note written under an upper shape — has had several; the two most recent
-are items 11 and 12, the pair of budgets that ask how many strings a step **plucks** and how
-many frets it **holds**. **One defect is still open**: item 10, where a chord in force is
-stored per melody note, so a bar the melody skips is silent. Item 13 is a measured cost left
-unbuilt rather than a defect: most dropped bass notes are the shape sitting too low for the
-walk's pitch to have an octave under it, and the ordinary candidate pool cannot recover them
-without changing which notes the chord states. Stating a *different pitch* under the chosen
-shape would recover some of them and touch no cost criterion; it changes what a downbeat states,
-so it is recorded rather than built. See [docs/open-issues.md](docs/open-issues.md) item 13.
+`docs/open-issues.md` records the defects still open, and two concern this part of the engine.
+**Item 1**: a chord in force is stored per melody note, so a bar the melody skips is silent —
+the schedule the comping grid is written against does not exist. **Item 2** is a measured cost
+left unbuilt rather than a defect: most dropped bass notes are the shape sitting too low for
+the walk's pitch to have an octave under it, and the ordinary candidate pool cannot recover
+them without changing which notes the chord states. Stating a *different pitch* under the
+chosen shape would recover some of them and touch no cost criterion; it changes what a downbeat
+states, so it is recorded rather than built.
 
 ## Who plays which voice: `bass` and `voices`
 

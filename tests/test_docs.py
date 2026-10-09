@@ -268,8 +268,8 @@ class TestDocsMatchTheCode(unittest.TestCase):
         """A docstring's pointer to a document must name a file that exists.
 
         The same argument as the check above, applied to the source. A docstring that
-        sends a reader to `docs/open-issues.md item 12`, or to a plan document that has
-        since been retired, is a wrong turn - and it is invisible to the linter and to a
+        sends a reader to a retired plan document is a wrong turn - and it is invisible
+        to the linter and to a
         suite that only tests behaviour, which is exactly how the pre-split `AGENTS.md`
         drifted. A link is the one part of a docstring that can be checked mechanically,
         so it is the part that is.

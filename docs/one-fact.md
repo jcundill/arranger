@@ -99,7 +99,7 @@ that fact lives on the texture axis, `MELODY_ONLY_TEXTURES = ("melody", "melody_
   melody-only, and a thumb under a part that already is the bass line would double it
   (§8a preserved). `bass_allowed`'s capacity answer for a melody-only selection: the
   single-fret upper shape leaves every bass string free — the same capacity fix
-  `docs/open-issues.md` item 10 made for the comping route.
+  `docs/open-issues.md` item 1 made for the comping route.
 - Deleted: `"melody"` and `"melody_bass"` from `TEXTURE_STYLES` and `TEXTURE_GRIPS`;
   `MELODY_ONLY_TEXTURES`; `melody_bass` from `THUMB_TEXTURES`; the `melody_allowed`
   no-soprano refusal (it dissolves — with melody-only keyed on the selection, a

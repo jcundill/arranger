@@ -821,8 +821,7 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
   alone, and the step says so. Two things bound the rescue: `top_strings` is still
   honoured — a note the named strings cannot carry is skipped, which is what
   `tests/test_progressions.py` pins — and a melody no string reaches at all is still
-  skipped, with the warning naming the palette. See
-  `docs/open-issues.md` item 14.
+  skipped, with the warning naming the palette.
 - A handful of low melodies (around `G3`–`C4`) reach no chord-tone-matched inversion
   and therefore use the quality-only fallback. Triad shapes double the root, so their
   second voice can sit up to 10 semitones below the melody — the same span limit, not a
@@ -1022,7 +1021,7 @@ underneath it may use all four strings. Measured effect on the same heads:
 target palette is `("shell",)` for exactly this reason, and its comment says so. What the
 rule costs: a target whose quality has no shell — `Bmaj` under a `D5` melody, say — is a
 melody alone over the thumb rather than a four-note shape nobody can play, which is the
-outcome `walking_bass` has always had. See [open-issues.md](open-issues.md) item 11.
+outcome `walking_bass` has always had.
 
 ### `voices=` as a third axis: which voices the guitar plays
 
@@ -1271,5 +1270,5 @@ note's duration and every renderer already honours it, so "a held baseline" as a
 would add a second answer to a question the step model already answers. The real gap is
 the inverse one: a stab *outlasting* its note. See
 [comping-styles.md](comping-styles.md) §8 Stage D, and
-[open-issues.md](open-issues.md) item 10 for the larger thing underneath it — that a grid
+[open-issues.md](open-issues.md) item 1 for the larger thing underneath it — that a grid
 can only filter melody slots, so a quarter of the positions it names produce no chord.

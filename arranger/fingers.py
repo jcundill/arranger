@@ -184,8 +184,7 @@ def can_fret(frets: Iterable[int]) -> bool:
     `bass._place_bass` is the caller, and it is the only one. Under a `bass_only` step the
     thumb is merged into the shape the hand is still **holding**, so its fret joins frets
     that are not this step's own - which is the one way a fifth can appear in an engine
-    whose every generated grip sounds at most four strings. See
-    [docs/open-issues.md](../docs/open-issues.md) item 12.
+    whose every generated grip sounds at most four strings.
     """
     return fingers_needed(frets) <= len(FINGERS)
 

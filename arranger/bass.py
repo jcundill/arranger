@@ -350,8 +350,8 @@ def _place_bass(
     allowed to sound *above* the held shape's bottom note, its proximity is measured
     from a fret the hand is not at, and its fret is counted as though it stood alone
     under the fingers rather than joining four frets already down. The first three are
-    `docs/open-issues.md` item 1; the fourth is item 12, and `fingers.can_fret` is what
-    answers it.
+    answered by measuring against the held shape rather than the thinned voicing; the
+    fourth is a fifth fret for four fingers, and `fingers.can_fret` is what answers it.
 
     The rule is proximity, not string order. The thumb is part of the hand, and
     adjacent strings are five semitones apart, so "play the lowest string" and "stay
@@ -365,7 +365,7 @@ def _place_bass(
     not `top_fret`, because a shell's low voice is the note the thumb is trying to
     join: ranking to the lowest active fret matches more of the readable bass notes than
     the average does, which is dragged up by the melody an octave above the position the
-    hand is in. `docs/open-issues.md` item 1 holds the measurement.
+    hand is in.
 
     Three filters are **not** tie-breaks, because each rejects candidates that would
     be wrong rather than merely further away:
@@ -385,7 +385,7 @@ def _place_bass(
     outside: no free string below the melody, **no octave of the wanted pitch below the
     shape's own lowest note**, or a fifth fret for four fingers. The middle clause is
     the common case, which is what the text failed to mention for as long as the other
-    two existed; the counts are in `docs/open-issues.md` item 13.
+    two existed; the counts are in `docs/open-issues.md` item 2.
 
     Reach (`0..18`) is a fourth, separate test: `note_to_fret` returning a fret says
     the pitch is playable and says nothing at all about where it lands.
@@ -469,7 +469,7 @@ def _place_bass(
             # strike, thumb note and all) with the thumb's own string replaced by the fret
             # chosen here. It is a filter rather than a preference because the alternative is
             # not a worse placement but an unplayable one, and `fingers.can_fret` is what
-            # answers it (`docs/open-issues.md` item 12).
+            # answers it.
             hand = list(hand_base)
             hand[string_index] = fret
             if not can_fret(hand):
@@ -646,7 +646,7 @@ def _melody_timeline(
     is 4/4 and 2/2 and so six of the seven committed heads. In 3/4 the count is 3 while a
     whole note is 4 beats, so `duration * beats_per_bar` would make every span a quarter
     short. It is written as `duration * beat_type` rather than left, because the next
-    metre-sensitive rule would inherit the error - see `docs/open-issues.md` item 15.
+    metre-sensitive rule would inherit the error.
 
     `beats_per_bar` is still here and still the *count*: `_beat_offset` places a
     `(bar, beat)` pair with it, and that is a question about how many beats a bar has
@@ -720,9 +720,8 @@ def _bass_slots(
 
     The distinction between "in force" and "the previous slot" is not a refinement.
     It is the difference between the arrangement matching the score between its note
-    onsets and not: see `docs/open-issues.md` item 5, where the two rules disagree
-    on nine downbeats of "But Not For Me" and the renderers faithfully wrote the
-    wrong melody at every one of them.
+    onsets and not: the two rules disagree on nine downbeats of "But Not For Me",
+    and the renderers faithfully wrote the wrong melody at every one of them.
 
     With no usable timing there is no beat grid to union against, and the gridless
     degradation stands: one thumb note per anchor, one per slot. That is the
@@ -1107,12 +1106,10 @@ def comping_capacity(notes: int, bass_voice: bool = False) -> int:
     `texture=uniform` and `texture=targets`. Asking `thumb_capacity` therefore refuses a
     combination that is perfectly playable, on the strength of a palette the comping
     route never uses - `bass_allowed("uniform", "walk")` refuses
-    `melody="alto,tenor", bass="walk"` under the default texture, which is
-    `docs/open-issues.md` item 9.
+    `melody="alto,tenor", bass="walk"` under the default texture.
 
     Every comping shape on that head sounds on strings `(2, 3, 4, 5)` and never once on
-    the low E or the A, so the refusal was false on the facts too; the per-string counts
-    are in `docs/open-issues.md` item 9.
+    the low E or the A, so the refusal was false on the facts too.
 
     **Derived from the generator rather than listed**, on the rule `harmony_allowed`
     follows and for the same reason: a family that can be voiced is not a list of
@@ -1182,8 +1179,8 @@ def bass_allowed(
     **`notes` and `bass_voice` are the comping route's half of the question, and they
     are why this function takes them.** On the comping route the left hand's shapes are
     not described by `TEXTURE_GRIPS` at all - the texture is inert there, so passing one
-    here and refusing on it refuses a combination that is perfectly playable, which is
-    `docs/open-issues.md` item 9. `comping_capacity`'s own docstring holds the per-arity
+    here and refusing on it refuses a combination that is perfectly playable.
+    `comping_capacity`'s own docstring holds the per-arity
     table. The route is stated by the *caller*
     passing them rather than inferred from the texture, because the texture cannot
     distinguish it: `uniform` is a real palette on one route and a meaningless name on

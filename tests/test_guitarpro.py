@@ -494,7 +494,7 @@ class TestRhythm(GuitarProTestCase):
         **And the limit is computed, not written as 4.** A 2/2 bar is four quarters,
         so `beats_per_bar` on its own is wrong for every metre that is not 4/4 - and
         `The_Jitterbug_Waltz` is 3/4, where it is wrong by a quarter note. This is
-        trap 9 (`docs/open-issues.md`) arriving precisely where that document says it
+        trap 9 (`AGENTS.md`) arriving precisely where that trap says it
         would, and the first version of this test made exactly that error and
         reported 32 of a 2/2 head's measures as over-long.
         """

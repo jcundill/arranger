@@ -6,7 +6,7 @@ table in §4.1 is no longer a proposal in its entirety. Stage D has landed the *
 of the rhythm grid** — `grid=every_note|freddie|charleston|joe_pass|final_and` — so §4.2's
 table is built as a closed set of named rows, with the free-form spelling (§6 Q6) still to
 come. **`hold=` is withdrawn** — see Stage D — and a measured defect stood between the grid
-and the styles it was built for: [open-issues.md](open-issues.md) item 10, where a quarter
+and the styles it was built for: [open-issues.md](open-issues.md) item 1, where a quarter
 of the beat positions a grid names produced no chord at all, because a grid could only
 *filter* melody slots and harmony was stored per melody note. **Its stage 3 landed**: on the
 comping route the grid now *generates* positions rather than filtering them, so the union is
@@ -229,7 +229,7 @@ played in another is not a rhythmic idea, it is a spelling.
 silent on this 2/2 head was **not the metre at all**. This paragraph originally said it was
 "a 4/4 idiom asked of a 2/2 bar… the mismatch is the arranger's, not the library's". That
 was a misdiagnosis, reached from a measurement that was right and an inference that was not,
-and the same two failure modes as [open-issues.md](open-issues.md) item 4 and item 10.
+and the same failure mode as [open-issues.md](open-issues.md) item 1.
 
 The measurement was correct — `charleston` **was** silent — and the cause was that a grid
 could only *filter* melody slots, so a position with no written note was unreachable
@@ -237,7 +237,7 @@ whatever the pattern said. Only 41 of the 80 notes on this head fall on a beat, 
 Charleston names the and of beat 2, which almost none of them does. `joe_pass`, which
 names the *ands*, was silent on all three committed fixtures for the same reason.
 
-Stage 3 of item 10 landed the fix: on the comping route the grid now **generates** its
+Stage 3 of item 1 landed the fix: on the comping route the grid now **generates** its
 positions from the timeline rather than filtering the melody's. Measured on this 2/2 head,
 every named grid now places something — `every_note` 63, `charleston` 63, `joe_pass` 64,
 `final_and` 32 — and a Charleston is playable in 2/2.
@@ -385,7 +385,7 @@ rests in `skipped`, so it contributes no slot and no bar number. A named grid th
 loses **49 of 190 beat positions (25%)** across the three committed fixtures — a quarter
 of the positions it names — and `hold=` cannot be the answer, because the missing thing is
 not a sustain policy but the *chord timeline the grid would be written against*. That is
-[open-issues.md](open-issues.md) item 10, and it is what makes the harmonisation engine
+[open-issues.md](open-issues.md) item 1, and it is what makes the harmonisation engine
 in this document's place rather than a rename of the flags.
 
 #### The metre trap
@@ -489,7 +489,7 @@ rather than pruned because the reasoning behind each answer is the useful part.
 
 | | status now |
 |---|---|
-| Q1 grid vs `--skeleton`'s lattice | **moot.** `--skeleton` is gone (§4.2), and stage 3 of open-issues item 10 settled the substance: the grid *generates* positions rather than selecting from a lattice. |
+| Q1 grid vs `--skeleton`'s lattice | **moot.** `--skeleton` is gone (§4.2), and stage 3 of open-issues item 1 settled the substance: the grid *generates* positions rather than selecting from a lattice. |
 | Q2 `harmony=guide` under `sings=yes` | settled as **(C)** — `harmony=` is scoped to the melody-free comping route. |
 | Q3 rename `--voices` to `harmony=` | still deferred, and **§9.4 argues it should stay deferred longer than planned.** |
 | Q4 does `--texture` survive? | **partly answered by Stage 2**: it lost `melody` and `melody_bass` to the voices axis (`docs/one-fact.md`), and §9.6 still argues against removing the rest. |
@@ -683,7 +683,7 @@ the part that was worth landing first.
 the real one is `MELODY_POLICIES`, keyed `auto` / `none`. **Fixed**: the comment now names
 the table that exists.
 
-### Stage D — The rhythm grid (**partly built**: `grid=`; `hold=` withdrawn; blocked on open-issues item 10)
+### Stage D — The rhythm grid (**partly built**: `grid=`; `hold=` withdrawn; blocked on open-issues item 1)
 
 The largest genuinely new work, and the only stage that adds a concept rather than
 renaming one. `joe_pass` and `charleston` are the payoff.
@@ -754,13 +754,13 @@ missed only because no `Diagnostics` collector was passed.
   The gap is real and it is still in Stage D's scope, but it is not a `hold=` flag: it is
   the grid owning the rhythm, so a stab's duration is the distance to the next grid
   position. That change cannot be made until the grid can *place* a stab at all — see
-  [open-issues.md](open-issues.md) item 10, where a quarter of the positions a grid names
+  [open-issues.md](open-issues.md) item 1, where a quarter of the positions a grid names
   produce nothing. **Withdrawn rather than deferred**, because as worded it is a no-op and
   leaving it in the document invites someone to build it.
 
   §6 Q5's question about where the style table lives survives the withdrawal, and the
   answer is now a row of `{grid, harmony}` — composition rather than fusion — with stab
-  duration falling out of the grid once item 10 is fixed.
+  duration falling out of the grid once item 1 is fixed.
 
 Two things must be settled **inside** this stage, not discovered by it. The first is now
 settled and the second remains a design decision:
@@ -1015,7 +1015,7 @@ that has none, `ArrangementStep.melody` becomes `Optional[str]`, and `_PLACEHOLD
 **deleted rather than hidden**. It exists only because a harmony-only step needed *a* melody
 string to satisfy `melody: str`, and under §9.2 it has no reason to exist.
 
-It is also the visible half of item 10's deferral: `Cmaj7  C4  (shell - 3rd & 7th, partial)`
+It is also the visible half of item 1's deferral: `Cmaj7  C4  (shell - 3rd & 7th, partial)`
 is printed by the default line tab today, 14 times on `but_not_for_me` under
 `--voices alto,tenor --grid freddie`, and reads as a claim that the guitar played C4. It did
 not. The sentinel is indistinguishable from a real note by equality — all 30 `"C4"` slots
@@ -1536,5 +1536,5 @@ computes a `length` from the following position and `head_skeleton` from the mel
 no axis decides which of the two a *comping* step obeys. It was not `hold=`, which is
 withdrawn, and it belongs with §6 Q6 rather than here: a free-form grid spelling would have to
 say it as well, so designing one without settling it would mean designing the grammar twice.
-This is the fifth kind `open-issues.md` item 10 predicts for `melody_alone_case`: an invented
+This is the fifth kind `open-issues.md` item 1 predicts for `melody_alone_case`: an invented
 slot has no melody note to be alone *with*, so it cannot be reached by the existing four.

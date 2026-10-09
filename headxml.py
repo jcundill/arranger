@@ -411,14 +411,14 @@ class HeadChange:
     """One `<harmony>` element: a chord **becoming** in force at a position.
 
     **`HeadNote.chord` and this are the same fact read two ways**, and the difference
-    is the whole of open-issues item 10. A note carries the chord that was in force
+    is the whole of open-issues item 1. A note carries the chord that was in force
     *where the note is*; this carries the chord that *begins* at a position, whether or
     not any note is ever written there.
 
     A `<harmony>` followed by no note is not a synthetic edge case: 6 of the 154
     `<harmony>` elements across the committed scores precede no note, and one of those
     bars carries **no notes at all**. Such a change is in force for the rest of the bar
-    and **no note ever records it**, which is the loss `docs/open-issues.md` item 10
+    and **no note ever records it**, which is the loss `docs/open-issues.md` item 1
     measures and this field exists to make representable.
 
     `beat` is the beat **within the bar**, as everywhere else in this module, and
@@ -487,7 +487,7 @@ class Head:
     # and nothing else yet consumes it.
     #
     # It exists because `notes` cannot say what is in force where no note is written,
-    # and open-issues item 10 measures what that costs: on `heres_that_rainy_day` bars
+    # and open-issues item 1 measures what that costs: on `heres_that_rainy_day` bars
     # 8, 16, 24 and 32 vanish from the arrangement entirely, and on
     # `i_was_doing_all_right` bar 34. See `HeadChange`.
     chords: List[HeadChange] = field(default_factory=list)
@@ -910,7 +910,7 @@ def _flush_group(
     *merged* with *lost*: bar 2's A4 eighth and bar 3's A4 half are one note of 3.5 beats,
     so bar 3 has no downbeat note because its downbeat is still sounding the one written
     in bar 2. `tests/test_headxml.py` states this rule directly, and
-    `docs/open-issues.md` item 10 holds the measurement.
+    `docs/open-issues.md` item 1 holds the measurement.
     """
     if not group:
         return
@@ -1022,7 +1022,7 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
     notes: List[HeadNote] = []
     # The chord timeline, built as the document is walked so `cursor` is the position
     # each `<harmony>` occupies. Separate from `notes` because a `<harmony>` can
-    # precede nothing at all - see `HeadChange` and open-issues item 10.
+    # precede nothing at all - see `HeadChange` and open-issues item 1.
     changes: List[HeadChange] = []
     # The `<chord>` group being assembled at the current cursor: (pitch, length),
     # together with the onset it started at, whether it ends a tie, and the lyrics
@@ -1098,7 +1098,7 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
                 #
                 # 6 of the 154 `<harmony>` elements on the committed scores are followed
                 # by no note at all, so this is a real loss and not an edge case. See
-                # `HeadChange` and `docs/open-issues.md` item 10.
+                # `HeadChange` and `docs/open-issues.md` item 1.
                 changes.append(
                     HeadChange(
                         bar=bar,
@@ -1223,7 +1223,7 @@ def chord_at(
 ) -> Optional[HeadChange]:
     """The change in force at `(bar, beat)`, by forward fill, or `None` if none is.
 
-    **The query open-issues item 10 needs, and the twin of `bass._melody_in_force`.**
+    **The query open-issues item 1 needs, and the twin of `bass._melody_in_force`.**
     That one answers "which melody slot is sounding here" for a beat the thumb invented;
     this answers "which chord is sounding here" for a beat no note describes. Both are
     forward fills over an ordered timeline, and both are *needed* because the step loop
@@ -1238,7 +1238,7 @@ def chord_at(
     - **The last change at a position wins.** Bars 33 and 35 of `i_was_doing_all_right`
       each carry two `<harmony>` elements at beat 1.0, and the note in each bar carries the
       second one — so "the last declared" is the rule the note path already follows, and
-      taking the first would disagree with it. `docs/open-issues.md` item 10 holds the
+      taking the first would disagree with it. `docs/open-issues.md` item 1 holds the
       measurement.
     - **`None` before the first change**, never a guess. A position no chord has reached
       has no harmony, and inventing one is the failure this module refuses everywhere
@@ -1281,7 +1281,7 @@ def melody_at(notes: Sequence[HeadNote], bar: int, beat: float) -> Optional[str]
     runs past the position keeps winning, so a phrase holding one note across a barline
     hands that note to a stab on the far side rather than the one that follows it — the
     same in-force rule `bass._melody_in_force` reads by onset *and* duration, and the
-    distinction open-issues item 5 is entirely about.
+    distinction between an onset and a hold.
 
     **A note that has stopped is not in force.** `duration` is in whole notes, so the end
     is the onset plus that length in quarters; this is why the function returns `None`
@@ -1351,7 +1351,7 @@ def chord_slots(
     position the grid places a chord on. On the melody-bearing route the melody is ours
     and "a chord under each note" is the chord-melody idiom, so the two must *not* be
     merged. On the comping route the guitar is not under the melody, so a position with no
-    note is a position the chord of the tune still occupies — and open-issues item 10
+    note is a position the chord of the tune still occupies — and open-issues item 1
     measures what dropping those costs: **8 to 29 positions per fixture**, which is where
     a quarter of a named grid's positions went.
 
@@ -1370,7 +1370,7 @@ def chord_slots(
 
     **`duration` is the distance to the next grid position, capped at the bar line**,
     because a stab is struck and released rather than tied onward. That is the arithmetic
-    open-issues item 10 says the note path gets wrong, done here deliberately: the grid is
+    open-issues item 1 says the note path gets wrong, done here deliberately: the grid is
     placing the chord, so the grid decides how long it sounds. It is also why a chord is
     not held across a barline when the next bar names nothing.
 
@@ -1546,8 +1546,7 @@ def arrange_xml_head(
     `head.beat_type` goes with it, and it is not a duplicate: the count says which beats
     exist, the denominator says how long one lasts. Only the walking bass reads the
     second, converting each slot's whole-note `duration` into beats, and the one
-    committed 3/4 head is where passing the count in its place shows up (open-issues
-    item 15).
+    committed 3/4 head is where passing the count in its place shows up.
     """
     head = load_musicxml(path, part)
     slots = head_skeleton(head, section)
@@ -1567,7 +1566,7 @@ def arrange_xml_head(
     # soprano — so testing the route on the parsed value alone classifies the *default*
     # arrangement as the comping route and unions grid positions into it, and every
     # unioned slot then carries the placeholder melody. `resolve_voices` is what turns the
-    # sentinel into all four voices. `docs/open-issues.md` item 10 holds the
+    # sentinel into all four voices. `docs/open-issues.md` item 1 holds the
     # measurement.
     #
     # This is trap 12 arriving from a new direction — a *resolution* step skipped, so a
@@ -1630,7 +1629,7 @@ def _merge_chord_slots(
     **Order is `(bar, beat)`, which is what both producers already emit.** Sorting is
     done here rather than trusted from either, because the step loop indexes the melody
     and a `bass_only`-style union that arrived out of order would attribute the wrong
-    note to the wrong beat — open-issues item 5's failure, reached from a new direction.
+    note to the wrong beat, reached from a new direction.
     """
     grid_policy = resolve_grid(parse_grid(grid), head.beats_per_bar,
                                default_diagnostics())

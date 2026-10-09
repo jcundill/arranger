@@ -313,7 +313,7 @@ HARMONY_STYLES: Tuple[str, ...] = (
 #: `voices=bass`. `full` is the exception, and the reason this constant is not simply
 #: `HARMONY_STYLES`: it is the whole-chord chord-melody, which the ordinary grip route
 #: voices when the guitar sings, so the comping generator has no implementation of it -
-#: see `docs/comping-styles.md` §4.1 and `docs/open-issues.md` item 17 for what asking
+#: see `docs/comping-styles.md` §4.1 and `docs/open-issues.md` item 3 for what asking
 #: for it on a comping arrangement does today.
 HARMONY_BUILT: Tuple[str, ...] = (HARMONY_GUIDE, HARMONY_SHELL_ROOT, HARMONY_ROOT)
 

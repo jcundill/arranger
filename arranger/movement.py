@@ -264,7 +264,7 @@ def _sounding_melody(voicing: Voicing, written: str) -> Tuple[str, Optional[str]
 
     One function, so a fourth route cannot spell it differently: three routes build a
     melody-alone step, and the *sounding* melody is what has to be recorded whichever of
-    them built it. `docs/open-issues.md` item 14 holds the measurement.
+    them built it.
     """
     sounding = max(voicing.midi_notes())
     if sounding == Note(written).midi_note():
@@ -651,8 +651,7 @@ def _resolve_policies(
     describes the shapes the melody-bearing route generates and is *inert* on the
     comping one - so asking it about a texture on that route refused a
     combination that is playable and, worse, told the player to change a setting
-    that could not affect the result. See `comping_capacity`, and
-    `docs/open-issues.md` for the measurement.
+    that could not affect the result. See `comping_capacity`.
 
     The two resolutions are independent of each other, so the order between them
     carries no other meaning; what matters is that both finish before `has_thumb`
@@ -1135,8 +1134,7 @@ def _rescue_melody_alone(
     tune is taken - and the *claim* such a step makes, that the guitar is playing the
     tune and not the chord, is recorded on the step (`chord_unvoiced`, which the
     renderers report) rather than the step being deleted. Dropping it here would take
-    the melody with it; for the measured cost of that, under `--grips shell` alone,
-    see `docs/open-issues.md` item 14.
+    the melody with it.
 
     Returns **True** when the step was appended. **False** means no string can
     reach the note at all - below the library's G3 floor, or past the end of the
@@ -1483,8 +1481,7 @@ def _harmonised_step(
         # this beat, but a strong beat the melody moves onto is a **target**,
         # and a target states the harmony rather than holding it. Passing the
         # slot's flag straight through marked such a step both bass-only and a
-        # target, which silenced the chord this line had just voiced - see
-        # `docs/open-issues.md` item 4.
+        # target, which silenced the chord this line had just voiced.
         bass_only=is_bass_only(slot.bass_only, role),
     ))
     # Select first, merge after: the bass is written into the fret vector only
@@ -1832,7 +1829,6 @@ def arrange_progression(
       melody the walk last passed. Those differ whenever the melody moves on a beat
       the walk does not visit - the beat 2.5 of a 2/2 bar, where the walk is on 1.0
       and 2.0 - and getting it wrong states a note the score has not reached yet.
-      See `docs/open-issues.md` item 5.
     - **A fill is the melody alone**, and so is a target no shell can sound. The
       chord name above such a step describes the harmony rather than everything
       sounding, which is the texture rather than a defect - the harmony is stated
@@ -2066,12 +2062,11 @@ def _attach_bass(
       intuitive one: no free string below the melody, **no octave of the wanted
       pitch below the shape's own lowest note**, or a fifth fret for four fingers.
       Measured over the committed heads the split is **0 / 38 / 1** of 39 refusals
-      (`docs/open-issues.md` item 13), so the middle clause is the one that fires
+      (`docs/open-issues.md` item 2), so the middle clause is the one that fires
       almost every time. Same argument as the neck window being a penalty rather than
       a filter: losing a step is worse than losing its bass.
     - a candidate string exists, but every one of them would need a **fifth fret**
-      from a hand already holding the shape - the `bass_only` case of
-      `docs/open-issues.md` item 12. A bass note a player cannot finger is not a
+      from a hand already holding the shape - the `bass_only` case. A bass note a player cannot finger is not a
       bass note, so it is refused rather than written.
     - a step that already carries a bass, which cannot happen while the union is
       one walked note per slot, but is checked rather than assumed.
@@ -2089,7 +2084,7 @@ def _attach_bass(
     # holding is the last **struck** one, not this step's own thinned vector.
     # Measured against the thinned vector the thumb is placed on a string the hand
     # is already fingering and ranked from a fret the hand is not at - the
-    # unplayable bar in `docs/open-issues.md` item 1. For any other step the current
+    # unplayable bar. For any other step the current
     # voicing *is* the shape, so `held` must not narrow it.
     held = (
         _held_shape(arrangements)
@@ -2106,8 +2101,7 @@ def _attach_bass(
         # `if ... is None`, never `or`: `Diagnostics.__bool__` is False until it holds
         # something, so an empty collector handed in by a caller would be replaced by
         # the printing default and its first warnings lost. It is the same
-        # `or`-on-a-falsy-collector trap the other three call sites avoid
-        # (`docs/open-issues.md` item 16).
+        # `or`-on-a-falsy-collector trap the other three call sites avoid.
         if diagnostics is None:
             diagnostics = default_diagnostics()
         diagnostics.warn(
