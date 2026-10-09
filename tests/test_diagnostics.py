@@ -38,6 +38,15 @@ NORMAL = [
     ("B4", "7", "G7"),
     ("C5", "maj7", "Cmaj7"),
 ]
+# Item 13's worked case, and the one fixture here whose warning is a *bass* refusal:
+# `Ab9` over `C4` wants an `Ab` the shape already sounds an octave up, the A string's
+# only `Ab` above it being above the note the thumb has to support. Exactly one warning
+# is raised, and it is the run's *first* - which is the position that caught the
+# `or`-on-a-falsy-collector defect; see
+# `TestTheLibraryIsSilentWhenGivenACollector.test_the_first_warning_of_a_run_is_collected_not_printed`.
+FIRST_WARNING_IS_A_BASS_REFUSAL = [
+    ("C4", "9", "Ab9"),
+]
 
 
 def arrange(progression, **kwargs):
@@ -128,6 +137,36 @@ class TestTheLibraryIsSilentWhenGivenACollector(unittest.TestCase):
         _steps, warnings = arrange(NORMAL)
         self.assertEqual(warnings, [])
         self.assertEqual(warnings, printed_by_default(NORMAL))
+
+    def test_the_first_warning_of_a_run_is_collected_not_printed(self):
+        """A refusal that is the run's *first* warning reached the printer, not the collector.
+
+        `_attach_bass` spelled it `(diagnostics or default_diagnostics())`, and
+        `Diagnostics.__bool__` is False until it holds something - so a caller who handed in
+        an empty collector had it replaced by the printing default. On "But Not For Me"
+        that lost three refusals under each of the four bass rows, and it was the one place
+        the `or` spelling survived: the other three call sites already asked `is None`
+        (`docs/open-issues.md` item 16). This fixture warns **exactly once** and only here,
+        so there is no earlier warning to make the collector truthy - which is why the
+        defect was invisible on any head whose first warning came from somewhere else.
+        """
+        progression = FIRST_WARNING_IS_A_BASS_REFUSAL
+        # Named rather than splatted from a dict: pyright cannot see through `**kwargs`
+        # and reports one error per parameter of `arrange_progression`.
+        self.assertTrue(
+            printed_by_default(progression, texture="targets", bass="walk"),
+            "the fixture does not warn",
+        )
+
+        buffer = io.StringIO()
+        diagnostics = Diagnostics()
+        with contextlib.redirect_stdout(buffer):
+            VoiceLeadingEngine.arrange_progression(
+                progression, texture="targets", bass="walk", diagnostics=diagnostics
+            )
+        self.assertEqual(buffer.getvalue(), "", "the first warning went to the printer")
+        self.assertEqual(len(diagnostics.warnings), 1)
+        self.assertIn("no playable bass note", diagnostics.warnings[0])
 
 
 class TestTheDefaultPathIsUnchanged(unittest.TestCase):

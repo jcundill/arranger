@@ -34,6 +34,7 @@ from musthe import Note
 
 import arranger
 from arranger import (
+    BASS_ROLE_ANCHOR,
     BASS_STRING_INDICES,
     GRIP_MAX_SPAN,
     PITCH_CLASS_NAMES,
@@ -41,7 +42,9 @@ from arranger import (
     ROLE_TARGET,
     STANDARD_TUNING,
     ArrangementStep,
+    BassNote,
     ChordParser,
+    Diagnostics,
     VoiceLeadingEngine,
     Voicing,
     _place_bass,
@@ -65,7 +68,7 @@ from arranger.bass import (
 )
 from tabgp import _sounding_frets
 from tabstaff import _strikes_here
-from tests.support import bass_string, make_voicing, pc, upper_shape
+from tests.support import bass_string, make_step, make_voicing, pc, upper_shape
 
 # A staff string row, as opposed to the chord-name or melody line above it. Anchored
 # on the label and the barline the renderer puts right after it (`e*|`, `B |`, ...),
@@ -1319,6 +1322,73 @@ class TestBassPlacement(unittest.TestCase):
         self.assertIsNone(step.bass)
         voicing.bass_midi = 41
         self.assertEqual(step.bass, 41)
+
+
+class TestTheRefusalMessage(unittest.TestCase):
+    """
+    The three ways a thumb note is refused, and the one message that names them all.
+
+    `_place_bass` answers `None` for three different reasons, and the two *other* than
+    the common one are already pinned beside it: every bass string taken
+    (`test_no_candidate_means_no_bass_rather_than_a_wrong_one`) and a fifth fret for four
+    fingers (`test_a_hand_that_cannot_hold_the_thumb_refuses_the_note`). What was missing
+    is the case that fires almost every time - a free string exists, the note is playable,
+    and there is simply **no octave of it below the shape's own lowest note** - and the
+    warning text itself, which was asserted nowhere and named only the first and third of
+    those causes. Measured over the committed heads: **0 / 38 / 1** of 39 refusals, so the
+    clause that was missing is the one a reader actually meets
+    (`docs/open-issues.md` item 13).
+    """
+
+    # Item 13's worked case: the shape's own `Ab2` (44) is the pitch class the walk wants,
+    # and the only free string is the A, whose `Ab` above it is `Ab3` (56) - above the note
+    # the thumb is meant to support, so the note is refused with a string to spare.
+    NO_OCTAVE = ([4, -1, 4, 5, -1, -1], "Ab")
+
+    def _warning(self, step: ArrangementStep, name: str,
+                 arrangements: Optional[List[ArrangementStep]] = None) -> List[str]:
+        """The warnings `_attach_bass` emits when it tries to place one walked note."""
+        diagnostics = Diagnostics()
+        VoiceLeadingEngine._attach_bass(
+            step,
+            BassNote(bar=1, beat=1.0, pitch_class=pc(name), role=BASS_ROLE_ANCHOR),
+            arrangements if arrangements is not None else [step],
+            diagnostics,
+        )
+        return diagnostics.warnings
+
+    def test_the_commonest_refusal_is_the_pitch_having_no_octave_below_the_shape(self):
+        """A free string, a playable pitch, and no octave of it beneath the shape."""
+        frets, name = self.NO_OCTAVE
+        self.assertIsNone(_place_bass(upper_shape(frets), pc(name)))
+
+    def test_the_message_names_all_three_causes_whichever_one_refused(self):
+        """Every refusal says the same three things, so a reader is not left guessing.
+
+        The text is one string, so it cannot distinguish the causes - and that is the
+        point: all three occur, so a message naming two of them says something false
+        about the third. Each fixture here is refused for a different reason, one per
+        cause, and all three must produce the same three clauses.
+        """
+        held = make_step([-1, 9, -1, 8, 12, 10], chord="Bmaj7", melody="F#4")
+        cases: List[Tuple[ArrangementStep, str, Optional[List[ArrangementStep]]]] = [
+            # no octave of the wanted pitch below the shape
+            (make_step(self.NO_OCTAVE[0], chord="Ab9", melody="C4"), self.NO_OCTAVE[1], None),
+            # no free string: all three bass strings are already speaking
+            (make_step([5, 5, 5, 5, 5, 5], chord="Cmaj7", melody="E5"), "D", None),
+            # a fifth fret for four fingers, which needs the shape being *held*
+            (make_step([-1, -1, -1, -1, -1, 10], chord="Bmaj7", melody="D#5",
+                       bass_only=True), "B", [held]),
+        ]
+        for step, name, arrangements in cases:
+            warnings = self._warning(step, name, arrangements)
+            self.assertEqual(len(warnings), 1, step.tab_line())
+            message = warnings[0]
+            self.assertIn(f"bass {name}", message)
+            self.assertIn("no free string below the melody", message)
+            self.assertIn("no octave of that pitch below the shape", message)
+            self.assertIn("the hand would need a fifth fret", message)
+            self.assertIn("keeps its upper voicing", message)
 
 
 class TestTheInvariant(unittest.TestCase):

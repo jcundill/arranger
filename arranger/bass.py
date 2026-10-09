@@ -386,6 +386,14 @@ def _place_bass(
       can be reachable, can be at the hand, and still belong above the chord it is
       meant to support.
 
+    When **no** candidate survives, one of three things has happened, and the message
+    `steps._attach_bass` emits names all three because none of them is visible from
+    outside: no free string below the melody, **no octave of the wanted pitch below the
+    shape's own lowest note**, or a fifth fret for four fingers. Measured over the
+    committed heads the split is **0 / 38 / 1** of 39 refusals
+    (`docs/open-issues.md` item 13) - so the middle clause is the common case and the
+    one the text did not mention for as long as the other two existed.
+
     Reach (`0..18`) is a fourth, separate test: `note_to_fret` returning a fret says
     the pitch is playable and says nothing at all about where it lands.
 

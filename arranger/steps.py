@@ -1793,8 +1793,15 @@ class VoiceLeadingEngine:
         all handled the same way - **the step survives and the bass is reported**:
 
         - no candidate string survives `_place_bass`'s filters, so there is nowhere to
-          put the thumb. Same argument as the neck window being a penalty rather than
-          a filter: losing a step is worse than losing its bass.
+          put the thumb. The message names **all three** ways that happens, because a
+          reader cannot tell them apart from the outside and the common one is not the
+          intuitive one: no free string below the melody, **no octave of the wanted
+          pitch below the shape's own lowest note**, or a fifth fret for four fingers.
+          Measured over the committed heads the split is **0 / 38 / 1** of 39 refusals
+          (`docs/open-issues.md` item 13), so the middle clause is the one that fires
+          almost every time - and until it was named, the text offered a reader two
+          causes that had not fired at all. Same argument as the neck window being a
+          penalty rather than a filter: losing a step is worse than losing its bass.
         - a candidate string exists, but every one of them would need a **fifth fret**
           from a hand already holding the shape - the `bass_only` case of
           `docs/open-issues.md` item 12. A bass note a player cannot finger is not a
@@ -1829,10 +1836,19 @@ class VoiceLeadingEngine:
             held=held,
         )
         if placed is None:
-            (diagnostics or default_diagnostics()).warn(
+            # `if ... is None`, never `or`: `Diagnostics.__bool__` is False until it holds
+            # something, so an empty collector handed in by a caller would be replaced by
+            # the printing default and its first warnings lost - measured as three of
+            # "But Not For Me"'s refusals under each of the four rows, and it is the same
+            # `or`-on-a-falsy-collector trap the other three call sites avoid
+            # (`docs/open-issues.md` item 16).
+            if diagnostics is None:
+                diagnostics = default_diagnostics()
+            diagnostics.warn(
                 f"Warning: no playable bass note for bass "
                 f"{PITCH_CLASS_NAMES[note.pitch_class % 12]} - no free string "
-                f"below the melody, or the hand would need a fifth fret; "
+                f"below the melody, no octave of that pitch below the shape, "
+                f"or the hand would need a fifth fret; "
                 f"the step keeps its upper voicing"
             )
             return
