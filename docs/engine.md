@@ -26,9 +26,10 @@ you whether a change is an improvement or a different library.
   their tie-break order. `drop2_6432` (6-4-3-2) is listed second because it is the
   *alternative* to the contiguous drop-2, not a third string set for it:
   `grips=("drop2",)` still means the four contiguous strings, which is the idiom that
-  reproduces the original output exactly. `drop3` and `closed` are generated but
-  deliberately **not** listed: neither can be played within `GRIP_MAX_SPAN`
-  (see Known Limitations).
+  reproduces the original output exactly. `drop24` and `drop3` are listed after the
+  contiguous blocks for the same reason — each is an alternative reading rather than a
+  default one. `closed` is generated but deliberately **not** listed: it is the one
+  family that cannot be played within `GRIP_MAX_SPAN` (see Known Limitations).
 - `GRIP_STRING_SETS` — for each grip, its supported `(active string indices, soprano
   index)` pairs: the 4-3-2-1 and 5-4-3-2 four-string blocks, **6-4-3-2**, the six
   shell shapes (1-2-3, 2-3-4, 5-4-3, **6-4-3**, and the two 5-3-2s — `(1,3,4)`
@@ -413,10 +414,19 @@ inclusively would describe a reach the hand does not make, and would make the li
 |---|---|---|
 | `drop2` | 4 | `DROP2_INTERVAL_SETS`, verbatim — the tables are hand-authored |
 | `drop2_6432` | 4 | 6-4-3-2, found by search — the one default set that reaches the low E |
-| `drop3` / `closed` | 4 | derived from a close stack; not offered by default |
-| `drop24` | 4 | **drop-2 & 4** — the second *and* fourth voices lowered an octave; not offered by default |
+| `drop3` | 4 | derived from a close stack; offered through the bass-skipping sets |
+| `drop24` | 4 | **drop-2 & 4** — the second *and* fourth voices lowered an octave; offered through the bass-skipping sets |
+| `closed` | 4 | derived from a close stack; **not** offered by default — no set can fret it in span |
 | `shell` | 3 | `SHELL_DEGREES` plus one more note |
 | `duo` | 2 | the chord's guide tone — the 3rd, or the 4th on a sus chord — under any chord tone |
+
+**`drop3` and `drop24` exist for a second reason, which is the one that matters.** A
+melody that is *not* a chord tone leaves drop-2 with no template and no shell, so its
+quality-only fallback states notes the chord does not contain. Both derive from the close
+stack under the melody, which keeps every *other* voice a chord tone: measured over every
+quality and every melody in the register they carry **no** wrong notes where drop-2's
+fallback carries hundreds, and with the bass permitted to skip a string both are as tight
+as drop-2 — frequently span 0 to 2.
 
 **Every four-note voicing sounds the chord's 3rd and 7th**, and so does every three-note
 one — except a suspended chord, which has no 3rd and whose guide tone is therefore the
@@ -759,14 +769,15 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
 - Melodies are still confined to `G3`–`Bb5`: `G3` is the lowest pitch reachable on the
   G string, `Bb5` the highest on the high E string. The *chord* range reaches further
   down, to `E2` as a bass voice on the low E string in a 6-4-3 shell.
-- **A fixed max fret span of 5 rules out close position and drop-3 entirely.** A
-  close-position four-note chord under a melody spans a seventh or more, and the four
-  strings below the high E are only five semitones apart in tuning, so the frets come
-  out more than five apart (Cmaj7 close under C5 wants frets 8, 12, 12, 14); drop-3
-  spans a twelfth by construction. The generators exist for a caller who widens
-  `GRIP_MAX_SPAN`, but neither is offered by default because the span invariant could
-  never keep the promise. Raising the span to admit them is a real change to the
-  library's playability contract, not a tuning knob.
+- **A fixed max fret span of 5 rules out close position entirely, and drop-3 on the
+  contiguous block.** A close-position four-note chord under a melody spans a seventh or
+  more, and the four strings below the high E are only five semitones apart in tuning, so
+  the frets come out more than five apart (Cmaj7 close under C5 wants frets 8, 12, 12, 14);
+  drop-3 spans a twelfth by construction. `drop3` and `drop24` are offered anyway, because
+  the bass may skip to a lower string and that is enough to bring both inside the span
+  limit — see `GRIP_STRING_SETS`. `closed` has no such set: its generator exists only for a
+  caller who widens `GRIP_MAX_SPAN`, and raising the span to admit it is a real change to
+  the library's playability contract, not a tuning knob.
 - **A chord tone with no matching inversion in the drop-2 tables falls through to the
   quality-only fallback**, which can sound a note the chord does not contain — a 9th in
   the melody of a 13 chord, for example. `voicing_cost`'s first criterion rejects such a
