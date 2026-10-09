@@ -1709,17 +1709,58 @@ counted. The refusals are **53**, not the one note item 12 priced; the dominant 
 that neither the message nor item 12 names; and the pool can recover **10** of them without changing
 which notes the chord states — every one of those ten by giving up the span bucket.
 
+**Every count in this item is a measurement of commit `d9403e5`** — the tree this item was written
+in — and it refuses **39** today, because two commits since have moved it. Nothing above is wrong:
+it is a "before" measurement, which is the trap `AGENTS.md` trap 8 names, and re-running the same
+instrument on the current tree reproduces both figures exactly. The re-measurement, the attribution
+of every difference, the pool lever's current split, and the **walk's own pitch** as a fourth lever
+are in the two sections below; the corrected numbers are the ones to quote.
+
+### The numbers are 39 now, and both moves are attributed
+
+The instrument is the one this item describes, run against five trees rather than one: the seven
+committed heads × the four bass rows, `_place_bass` wrapped with the shape snapshotted *before* the
+call. `git worktree add /tmp/item13 d9403e5` is the reproduction, and no lever was guessed — each
+row is the commit whose change could have moved it, measured.
+
+| tree | change | calls | refusals | causes (string / octave / fret) | waltz | BNFM | IWDAR | TM |
+|---|---|---|---|---|---|---|---|---|
+| `d9403e5` | — (this item's tree) | 1500 | **53** | 0 / 52 / 1 | 30 | 12 | 8 | 3 |
+| `5fcdbe3` | the four `drop24` sets banned | 1500 | 53 | 0 / 52 / 1 | 30 | 12 | 8 | 3 |
+| `b0908ac` | `maj: {2: add9}`, `m: {2: madd9}` rows | 1500 | 51 | 0 / 50 / 1 | 30 | 12 | 8 | **1** |
+| `ea2de78` | the palette rescue | 1500 | 51 | 0 / 50 / 1 | 30 | 12 | 8 | 1 |
+| `f4f1af0` | item 15, the metre fix | 1500 | **39** | 0 / 38 / 1 | **18** | 12 | 8 | 1 |
+
+Two of the five move nothing, and that is worth as much as the moves: **the `drop24` ban is inert for
+the refusal count**, and so is the palette rescue. The two that moved it were neither of them aimed
+at this item — a non-chord-tone table gaining two triads, and a beat being an eighth note too short —
+which is the general form of the trap: an unrelated commit can invalidate a recorded measurement.
+
+The per-head figures above count **every** refusal, and 5 of them are `bass_only` steps (4 of the
+waltz's `Gm7` figures and TM's `Bmaj`), which is why this item's own per-head list — 26 / 12 / 8 / 2
+— reads 4 and 1 lower on those two heads. Its list was the *non-`bass_only`* population, so 26 + 12
++ 8 + 2 = 48 and the 5 make the 53. On the current tree that population is **34**: the waltz 14,
+BNFM 12, IWDAR 8, TM 0.
+
 ### The symptom
 
 The message that already exists,
 
 ```
-Warning: no playable bass note for bass G - no free string below the melody, or the hand
-would need a fifth fret; the step keeps its upper voicing
+Warning: no playable bass note for bass G - no free string below the melody, no octave
+of that pitch below the shape, or the hand would need a fifth fret; the step keeps its
+upper voicing
 ```
 
-fires **53** times over the seven committed heads under the four rows that run a bass line
-(`uniform` has none). Two independent counters agree: the engine's own warning text, and a wrapper
+The middle clause is **not** in the message this item was written about — it named the first and
+the third only, while 52 of the 53 refusals were the second. That is fixed as part of the
+re-measurement below (three clauses, one fixture per cause, `tests/test_walking_bass.py::
+TestTheRefusalMessage`), and pinning it turned up a second defect on the same two lines: the warning
+was routed with `(diagnostics or default_diagnostics())`, so a caller's still-empty collector was
+replaced by the printing default and lost the run's first refusals — `docs/open-issues.md` item 16.
+
+It fires **53** times over the seven committed heads under the four rows that run a bass line
+(`uniform` has none) — **39** on the current tree; the table below is this item's own tree. Two independent counters agree: the engine's own warning text, and a wrapper
 on `bass._place_bass` recording every call and every `None`.
 
 | row | `_place_bass` calls | refusals (= the warnings) |
@@ -1804,9 +1845,74 @@ And the harmony is not always preserved:
 
 All three filters are right, and dropping the note is deliberate policy — "a step is never dropped
 because the thumb could not reach it". What the measurement refutes is the *hope* that the selector
-could cheaply have left room: the shape-level lever exists, but it recovers **10 of 53** notes, it
-always pays the span bucket, and its wider form changes the harmony. That is the same shape of answer
-§4.4 reached for the finger skip, arrived at the same way — which is why nothing was built.
+could cheaply have left room: the shape-level lever exists, but it recovers **10 of 53** notes (and
+**0 of 34** on the current tree — the ban took the same-notes hosts with it), it always pays the span
+bucket, and its wider form changes the harmony. The *walk's* pitch does not pay the bucket and reaches
+12 of 38, which is the fourth lever below. That is the same shape of answer §4.4 reached for the
+finger skip, arrived at the same way — which is why nothing was built.
+
+### The pool lever's strict form is now empty
+
+This item's own lever, re-measured the same way (the pool captured from `select_step_voicing` and
+paired to the step by object identity, the host test asked of the real `_place_bass`):
+
+| | `d9403e5` | current tree |
+|---|---|---|
+| refusals checked (non-`bass_only`, with a pool) | 48 | **34** |
+| a host exists | 48 | 34 |
+| …sounding **identical notes** | **10** | **0** |
+| …the same pitch classes, an inner voice in another octave | 26 | 12 |
+| …asserting other notes | 22 | 22 |
+
+The middle row's 26 and 10 are nested rather than disjoint in this item's prose (10 + 26 + 22 = 58
+against 48), which the exclusive re-measurement settles: the 10 identical-note hosts *are* among the
+26 same-class ones, leaving 16. What the table says that matters is the third row: **the only form of
+this lever that changes nothing musically recovers 0 today**, where it recovered 10 on its own tree.
+The ban is why — the hosts that sounded the chosen shape's own notes were its *other* `drop24` string
+sets, and those are the sets that are gone. So this lever now costs a harmonic change on every
+refusal it could recover, at the span bucket, and §4.4's price is being paid a second time.
+
+### The lever nobody measured: the walk's own pitch
+
+Both levers above change the *upper shape*. There is a fourth one, and it was not measured until the
+current tree made the numbers small enough to read: the refusal is usually a note the **walk chose**,
+so what if the walk had stated a different pitch on that beat? Asked of the real `_place_bass`, on the
+same shape — no re-selection, so **no tuple criterion is touched at all**, unlike the identical-notes
+retry above, which pays the span bucket on every recovery.
+
+Over the 38 "no octave below" refusals of the current tree, by the role of the refused beat:
+
+| role | outcome | count |
+|---|---|---|
+| anchor | **a chord tone was placeable** | **12** |
+| anchor | only non-chord tones placeable | 12 |
+| anchor | nothing placeable at all | 8 |
+| approach | nothing placeable | 4 |
+| enclosure | nothing placeable | 2 |
+
+- **The ceiling is 24 of 38**, not 52: 12 recoverable by stating a chord tone and another 12 only by
+  stating a note outside the chord — and all 12 of those are **anchor** beats, where a foreign pitch
+  is least excusable. **14 of the 38 cannot be helped by any pitch at all**, and the 6
+  approach/enclosure ones are chromatic by construction, so they were never recoverable this way.
+- **24 of the 38 are a doubling**: the walk's pitch class *is* the shape's own bottom pitch class an
+  octave up, so the thumb would restate what the chord already sounds. This item saw the same fact
+  ("30 of the 48") and the re-measurement agrees in kind.
+- **All 12 chord-tone recoveries are one head, one chord, three bars**: "But Not For Me" `Cm7` bar 3,
+  19 and 23 beat 1, where the walk wants the root and the shape already sounds it; the placeable
+  substitutes are `G3` (43) and `Bb3` (46) — the 5th and the 7th — and `Bb` is *continuous* (within
+  the engine's own ≤ 4-semitone term) under both `walk` rows.
+- **No pipeline change is needed, and none would pay.** The substitution happens after placement, so
+  the walk does not have to see the shapes — which is what makes it cheaper than the question implied.
+  Feeding shape knowledge back into `_walking_bass_line` (the pass runs before any voicing exists, so
+  its beats are fixed before the shapes are) could reach no more than these 24, and could not reach
+  the other 14 whatever it knew.
+
+**Not built**, for the reason the other two are not: the recovery is 12 events in one transcription,
+it changes what a downbeat states, and the current behaviour — drop the note, keep the shape, report
+it — is defensible *precisely* because the chord already sounds that pitch class an octave up. If it
+is ever taken up, the protocol is the span bucket's, and the narrow form to measure first is: an
+anchor beat, the wanted class already the shape's bottom class, and the substitute ranked by
+`_place_bass`'s own key.
 
 ### The two counting decisions
 
@@ -1835,9 +1941,12 @@ always pays the span bucket, and its wider form changes the harmony. That is the
 - **A pre-selection palette rule**, the `thumb_capacity`-style demand on the target a walk plays
   under. The same trade at family granularity, and it would thin palettes where a bass note is merely
   *planned* — including the 30 slots where the note is already sounding an octave up.
-- **Name the third cause in the message.** The cheapest honest improvement, and the only one that is
-  not a musical decision: 52 of the 53 refusals are "no octave of that pitch below the shape", and
-  the text offers the reader two causes, neither of which is it.
+- **Name the third cause in the message.** ✅ **BUILT** — the cheapest honest improvement, and the only
+  one that is not a musical decision: 52 of the 53 refusals are "no octave of that pitch below the
+  shape", and the text offered the reader two causes, neither of which was it. The message now names
+  all three (`steps._attach_bass`), `bass._place_bass`'s docstring carries the measured split, and
+  `tests/test_walking_bass.py::TestTheRefusalMessage` pins a fixture per cause. Fixing it surfaced
+  item 16 on the same two lines.
 
 ### Reproducing
 
@@ -2099,3 +2208,44 @@ the family ran on the *exporters*, where the waltz was never in the fixture list
   **extended to the waltz**: 21 of its interior measures were short before the fix, 0 after.
 - **All five were run against the old arithmetic** - `headxml._beat_from_onset` monkeypatched
   back to the 0.75 factor - and every one of them fails without the fix.
+
+---
+
+## 16. A warning that was a run's first went to the printer, not the collector
+
+**Fixed, 2026-10-10**, in `steps._attach_bass`. Found while pinning item 13's message.
+
+### The symptom
+
+A refused thumb note was reported with
+
+```python
+(diagnostics or default_diagnostics()).warn(...)
+```
+
+and `Diagnostics.__bool__` is `bool(self.warnings)` - False until something has been recorded. So a
+caller who handed in a **fresh** collector had it replaced by the printing default: the warning went
+to stdout and the collector never saw it. The engine's other three call sites (`steps` twice,
+`slots`) already asked `is None`; this was the only `or`, and it survived because the engine's own
+default path is the truthy-printer one.
+
+### Why it hid, and what it cost
+
+A run's first warning is usually not a bass refusal - a non-chord-tone remark comes first on most
+heads - and once the collector holds anything it is truthy, so every later warning is recorded
+normally. It shows up only where a **run** of refusals begins the run, because each one in turn finds
+the collector still empty. Measured over the seven committed heads × the four bass rows, comparing a
+handed-in collector with captured stdout: "But Not For Me" printed **3** refusals per row that the
+collector never received, **12** in total, and they are exactly item 13's `Cm7` figures - the ones the
+walk-pitch measurement is about. Every other head lost none.
+
+### The fix, and the two tests
+
+`if diagnostics is None: diagnostics = default_diagnostics()`, the form the other three sites use.
+`tests/test_walking_bass.py::TestTheRefusalMessage` is what found it (a hand-built refusal and a fresh
+collector, asserting one recorded warning), and
+`tests/test_diagnostics.py::TestTheLibraryIsSilentWhenGivenACollector
+::test_the_first_warning_of_a_run_is_collected_not_printed` pins it where the property belongs, on a
+fixture that raises **exactly one** warning - `Ab9` over `C4` under `--texture targets --bass walk` -
+so there is nothing to make the collector truthy first. Measured after: **0** warnings
+printed-but-not-collected on the same sweep, from 12.

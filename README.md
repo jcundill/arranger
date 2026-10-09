@@ -744,13 +744,13 @@ proximity to the upper voicing and takes the nearest, so the 4th string is used 
 the hand is genuinely low.
 
 A step whose bass note cannot be played keeps its upper voicing and says so rather than
-writing a tab nobody can finger: either there is no free string below the melody, or the
-thumb's fret would be a **fifth** one for a hand already holding the shape
-(`no playable bass note for bass ... - no free string below the melody, or the hand would
-need a fifth fret`). The commonest case in practice is neither of those two, though: the
-chord's own lowest note is already so low that the walking note has no octave beneath it, and
-the note is left out for that reason — measured, and recorded with its counts in
-`docs/open-issues.md` item 13.
+writing a tab nobody can finger: there is no free string below the melody, the pitch has no
+octave below the shape, or the thumb's fret would be a **fifth** one for a hand already holding
+the shape (`no playable bass note for bass ... - no free string below the melody, no octave of
+that pitch below the shape, or the hand would need a fifth fret`). The commonest case in
+practice is the middle one: the chord's own lowest note is already so low that the walking note
+has no octave beneath it, and the note is left out for that reason — measured at **38 of the 39**
+refusals over the committed heads, and recorded with its counts in `docs/open-issues.md` item 13.
 
 `docs/open-issues.md` records this texture's defects, and nearly all of them are fixed. The
 merged step — a bass note written under an upper shape — has had several; the two most recent
@@ -759,7 +759,10 @@ many frets it **holds**. **One defect is still open**: item 10, where a chord in
 stored per melody note, so a bar the melody skips is silent. Item 13 is a measured cost left
 unbuilt rather than a defect: most dropped bass notes are the shape sitting too low for the
 walk's pitch to have an octave under it, and the candidate pool can recover only ten of them
-without changing which notes the chord states.
+without changing which notes the chord states — and **none** of them now, because the sets that
+sounded a shape's own notes on other strings were the `drop24` sets that were removed for the
+right-hand reason. Stating a *different pitch* under the chosen shape would recover twelve and
+touch no cost criterion; it changes what a downbeat states, so it is recorded rather than built.
 
 ## Who plays which voice: `bass` and `voices`
 

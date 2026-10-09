@@ -36,8 +36,12 @@ reason the span cap does not already catch.
 **Next step: step 3 of §5, and nothing measured so far argues for it.** Step 2's *§4.3*
 half found a real defect and fixed it (the five-finger check; see §4.3 and §5 step 2), and its
 follow-on — whether the *selector* should have left room for the thumb — came back small: **53**
-dropped bass notes, of which only **ten** could be recovered without changing the chord's notes,
-always at the span bucket (`docs/open-issues.md` item 13). Its
+dropped bass notes when it was first measured, **39** re-measured on the current tree, of which the
+harmless recovery is now **none** rather than ten, always at the span bucket
+(`docs/open-issues.md` item 13). Its **fourth lever — the walk's own pitch — was measured with the
+re-measurement**, and it is the one that does *not* pay the bucket: **24 of 38** "no octave below"
+refusals are recoverable by stating a different pitch, **12** of them by a chord tone, all 12 in one
+head and one figure; **14** cannot be helped by any pitch. Recorded, not built. Its
 *movement* half is measured — where finger-level movement disagrees with `position` and
 `movement`, over every struck transition of the committed heads — and it came back nearly
 empty. Its **right-hand half is measured too** (§4.4: which strings `p-i-m-a` pluck,
@@ -444,19 +448,29 @@ After: **0**. [docs/open-issues.md](open-issues.md) item 12 has the measurement,
 counting decisions below, and the alternatives.
 
 **The follow-on question this section leaves open has since been measured, and the answer is
-small.** Item 12 priced *one* dropped bass note; the question behind it was whether the
-**selector** should have left room for the thumb in the first place — the palette narrowing
-above, but at *candidate* level, where `_place_bass` runs only after `_best_voicing` has
-chosen. Measured over the same heads and rows: the warning fires **53** times, and the
-dominant cause is a third one that neither the message nor item 12 names — **52** of the 53
-are "no octave of the walk's pitch below the shape" (the chord's own bottom note is already
-that low), **1** is item 12's five frets, and **0** are "no free string". Of the 48 that
-another candidate *could* have hosted, only **ten** have a candidate sounding the identical
-notes, and every one of those ten pays the span bucket (0.0 → 2.0); the other 38 would change
-which notes the chord states — the inspected case drops the root and doubles the 3rd, and
-`voicing_cost` ties the two shapes because both are three chord tones. So nothing was built, a
-third time for the same reason. [docs/open-issues.md](open-issues.md) item 13 has the counts,
-the aliasing trap this instrumentation hit, and the four alternatives.
+small — and its numbers have been re-measured once already.** Item 12 priced *one* dropped bass
+note; the question behind it was whether the **selector** should have left room for the thumb in the
+first place — the palette narrowing above, but at *candidate* level, where `_place_bass` runs only
+after `_best_voicing` has chosen. Measured over the same heads and rows, the warning fires **53**
+times on the tree the question was asked on and **39** today (two commits moved it, neither of them
+aimed at this; item 13 carries the five-tree attribution). On the current tree the dominant cause is
+unchanged and is the third one the message used not to name — **38 of the 39** are "no octave of the
+walk's pitch below the shape" (the chord's own bottom note is already that low), **1** is item 12's
+five frets, and **0** are "no free string"; that clause is **now in the message**, which is the one
+part of this section that was built (item 13; pinning it also surfaced item 16, a warning that a
+run's first went to the printer instead of a caller's collector).
+
+What the re-measurement changes about the *levers*: of the 34 refusals a selector could reach, a host
+exists for every one — but **0 of them sounds the chosen shape's own notes** any more, because the
+identical-notes hosts were the `drop24` string sets that §4.4 removed. So this lever now costs a
+harmonic change on every recovery, at the span bucket. The **walk's own pitch** is the fourth lever
+and does not pay the bucket, because it re-states the bass under the shape already chosen:
+**24 of 38** refusals are recoverable by another pitch, **12** of them by a chord tone (all 12 being
+"But Not For Me"'s `Cm7` downbeats, whose root the shape already sounds an octave up), and **14**
+cannot be helped by any pitch at all. It needs no pipeline change — the walk does not have to see the
+shapes — which is the opposite of what the question implied. So nothing was built, a third time for
+the same reason. [docs/open-issues.md](open-issues.md) item 13 has the counts, the attribution, the
+step-3 ceiling table, the aliasing trap this instrumentation hit, and the four alternatives.
 
 **One of those counting decisions moves the number by a factor of ten**, and both are about
 which hand the check is stated over:
@@ -736,12 +750,18 @@ and §4.4), which is why step 1 had to exist before any of the measurements coul
      fifth fret. `fingers.can_fret` refused it (item 12), which is the module's only engine
      caller and the reason it is not inert. Measured before and after: **1** step, then
      **0**, and no pinned tab in the suite moved.
-   - **The follow-on — would the *selector* leaving room for the thumb pay? — came back small.**
-     The warning fires **53** times over the same heads and rows, but **52** of those are a third
-     cause (no octave of the walk's pitch below the shape, because the chord's own bottom note is
-     already that low), not the fret budget; of the 48 that a different candidate could have
-     hosted, only **ten** have one that sounds the identical notes, and every one of those pays the
-     span bucket. Recorded as [open-issues.md](open-issues.md) item 13, not built.
+   - **The follow-on — would the *selector* leaving room for the thumb pay? — came back small, and
+     its numbers have been re-measured since.** The warning fires **53** times on the tree the
+     question was asked on and **39** today. The dominant cause is a third one (no octave of the
+     walk's pitch below the shape, because the chord's own bottom note is already that low), not the
+     fret budget — **38 of the 39** now, and that clause is **in the message** as of this work. Of the
+     34 refusals a selector could reach, a host exists for every one, but **none** sounds the chosen
+     shape's own notes (the ten that did were the removed `drop24` sets), so every recovery now
+     changes the harmony and pays the span bucket. The **walk's own pitch** is the fourth lever and
+     costs the tuple nothing: **24 of 38** refusals are recoverable by another pitch, **12** by a
+     chord tone, **14** by none. Recorded as [open-issues.md](open-issues.md) item 13, not built —
+     and pinning the message surfaced item 16 there, a warning that a run's first went to the printer
+     rather than a caller's collector.
    - **The movement comparison came back nearly empty, and the two numbers that did not
      argue against a tuple slot.** Over 1,330 struck transitions (six heads × `uniform`
      and `walking_bass`):
