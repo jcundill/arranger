@@ -45,10 +45,10 @@ frozen like the rest — it is not a home for an open plan.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **961 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **962 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 13 of those 961, and it is the one that fails if this
+(`tests/test_docs.py` is 14 of those 962, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree. It also fails if a document
 exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
 new file cannot be added without being registered.)
@@ -447,7 +447,7 @@ Each of these cost real time, or nearly shipped a defect.
    returns a **kind** (`none` / `texture` / `nc`) for exactly this reason.
 
 7. **A large mechanical move must copy text, not retype it.** Phase 5 moved 4290
-   lines into eleven modules by slicing the original *by line number*, so a docstring,
+   lines into the package by slicing the original *by line number*, so a docstring,
    a fret number or a comment provably cannot change in the move. Generate into a
    script you keep until the suite is green — a half-applied regeneration over a good
    tree is much harder to unpick than a wrong line is to find.
