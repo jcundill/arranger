@@ -615,6 +615,123 @@ def _resolve_knobs(
     )
 
 
+@dataclass(frozen=True)
+class _Policies:
+    """The axes and the walked-beat union, resolved once per arrangement.
+
+    `voices`/`melody_voiced`/`melody_only` come off the melody axis, `bass` and
+    `has_thumb` off the bass policy, `harmony_family` and `grid_pattern` off the
+    two comping axes, and `slots` is the walked-beat union when a thumb line is
+    running. Resolved up front because the band does not change halfway through a
+    tune, and unpacked straight back into the names the loop has always used.
+    """
+
+    voices: Tuple[str, ...]
+    melody_voiced: bool
+    melody_only: bool
+    bass: str
+    has_thumb: bool
+    harmony_family: str
+    grid_pattern: str
+    slots: Optional[List[_Slot]]
+
+
+def _resolve_policies(
+    progression: Sequence[Tuple[Optional[str], str, str]],
+    *,
+    melody: str,
+    texture: str,
+    bass: str,
+    harmony: str,
+    grid: str,
+    beats_per_bar: int,
+    beat_type: int,
+    timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
+    diagnostics: Diagnostics,
+) -> _Policies:
+    """The axes resolved once per arrangement, plus the walked-beat union.
+
+    Resolved up front rather than per step: the band does not change halfway
+    through a tune, and a spelling nobody recognises has to be reported **once**
+    rather than never at all on an arrangement where the guitar happens to be
+    singing.
+
+    **The melody axis comes before `_resolve_bass` because the bass policy needs
+    to know which route the engine is on**, and only this function knows.
+    `bass_allowed` measures thumb capacity against `TEXTURE_GRIPS`, which
+    describes the shapes the melody-bearing route generates and is *inert* on the
+    comping one - so asking it about a texture on that route refused a
+    combination that is playable and, worse, told the player to change a setting
+    that could not affect the result. See `comping_capacity`, and
+    `docs/open-issues.md` for the measurement.
+
+    The two resolutions are independent of each other, so the order between them
+    carries no other meaning; what matters is that both finish before `has_thumb`
+    is read, because that flag gates whether the walked-beat union is built.
+    """
+    voices = _resolve_melody(melody)
+    melody_voiced = voices_have_soprano(voices)
+    # The melody-only selection, decided once here and read by the bass policy,
+    # the grip resolution and the promotion rule below: `(soprano,)` is the
+    # tune alone and `(soprano, bass)` the tune with a thumb under it,
+    # whatever `texture=` says - the texture is inert on that route, the same
+    # way it is on the comping one.
+    melody_only = melody_only_selection(voices)
+
+    # The bass policy. `auto` means "whatever this texture and this selection
+    # mean", so `walking_bass` keeps walking and a melody-only selection that
+    # names the bass voice walks too; an explicit policy overrides both, which
+    # is what lets a texture that was never written for a thumb line carry one.
+    #
+    # The resolved `voices` are passed rather than the flags derived from them -
+    # the route, the arity and the lone-bass case are decided inside, from the
+    # selection, so the two spellings of one request cannot disagree.
+    bass = _resolve_bass(
+        texture,
+        bass,
+        voices,
+        diagnostics,
+    )
+    has_thumb = bass != BASS_NONE
+
+    # The harmony axis, resolved here for the same reason and read only by the
+    # comping route below. Resolving it unconditionally rather than inside
+    # `if not melody_voiced` is deliberate: a spelling nobody recognises must be
+    # reported **once, up front**, rather than never at all on an arrangement where
+    # the guitar happens to be singing - the same argument as `_resolve_melody`'s.
+    harmony_family = _resolve_harmony(harmony, voices, diagnostics)
+    # The grid axis, resolved here for the same reason and read by **both** routes
+    # below rather than only the comping one - unlike `harmony=`, which the guitar
+    # singing makes unreachable. A grid says where a chord lands, and that is a
+    # question about the part whether the guitar is singing it or comping under a
+    # horn, so scoping it to one route would make `grid=` silently inert on a
+    # melody-bearing arrangement rather than doing nothing there.
+    grid_pattern = _resolve_grid(grid, beats_per_bar, diagnostics)
+
+    slots: Optional[List[_Slot]] = None
+    if has_thumb:
+        # Decision B: the union is built here, before the melody loop, so the
+        # loop's index still indexes the skeleton it was given. `_walking_slots`
+        # is shared with `slots.arrange_slots`, so an imported head and a
+        # hand-built progression cannot walk a different line from this one - see
+        # its docstring for why that duplication has already cost this project one
+        # bug.
+        slots = _walking_slots(
+            progression, timings, beats_per_bar, beat_type, bass
+        )
+
+    return _Policies(
+        voices=voices,
+        melody_voiced=melody_voiced,
+        melody_only=melody_only,
+        bass=bass,
+        has_thumb=has_thumb,
+        harmony_family=harmony_family,
+        grid_pattern=grid_pattern,
+        slots=slots,
+    )
+
+
 def arrange_progression(
     progression: Sequence[Tuple[Optional[str], str, str]],
     top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
@@ -834,73 +951,28 @@ def arrange_progression(
     # voicing exists, and only this function is downstream of one. `_place_bass`
     # resolves both together, after selection.
 
-    # The melody axis, resolved first and for the reason below. `auto` keeps
-    # every voice, which is why nothing below this line changes unless a caller
-    # opts in. Decided once rather than per step: the band does not change halfway
-    # through a tune.
-    #
-    # **This resolution comes before `_resolve_bass` because the bass policy needs
-    # to know which route the engine is on**, and only this line knows. `bass_allowed`
-    # measures thumb capacity against `TEXTURE_GRIPS`, which describes the shapes the
-    # melody-bearing route generates and is *inert* on the comping one - so asking it
-    # about a texture on that route refused a combination that is playable and, worse,
-    # told the player to change a setting that could not affect the result. See
-    # `comping_capacity`, and `docs/open-issues.md` for the measurement.
-    #
-    # The two resolutions are independent of each other, so the order between them
-    # carries no other meaning; what matters is that both finish before
-    # `has_thumb` is read, because that flag gates whether the walked-beat union is
-    # built at all.
-    voices = _resolve_melody(melody)
-    melody_voiced = voices_have_soprano(voices)
-    # The melody-only selection, decided once here and read by the bass policy,
-    # the grip resolution and the promotion rule below: `(soprano,)` is the
-    # tune alone and `(soprano, bass)` the tune with a thumb under it,
-    # whatever `texture=` says - the texture is inert on that route, the same
-    # way it is on the comping one.
-    melody_only = melody_only_selection(voices)
-
-    # The bass policy. `auto` means "whatever this texture and this selection
-    # mean", so `walking_bass` keeps walking and a melody-only selection that
-    # names the bass voice walks too; an explicit policy overrides both, which
-    # is what lets a texture that was never written for a thumb line carry one.
-    #
-    # The resolved `voices` are passed rather than the flags derived from them -
-    # the route, the arity and the lone-bass case are decided inside, from the
-    # selection, so the two spellings of one request cannot disagree.
-    bass = _resolve_bass(
-        texture,
-        bass,
-        voices,
-        diagnostics,
+    _p = _resolve_policies(
+        progression,
+        melody=melody,
+        texture=texture,
+        bass=bass,
+        harmony=harmony,
+        grid=grid,
+        beats_per_bar=beats_per_bar,
+        beat_type=beat_type,
+        timings=timings,
+        diagnostics=diagnostics,
     )
-    has_thumb = bass != BASS_NONE
-
-    # The harmony axis, resolved here for the same reason and read only by the
-    # comping route below. Resolving it unconditionally rather than inside
-    # `if not melody_voiced` is deliberate: a spelling nobody recognises must be
-    # reported **once, up front**, rather than never at all on an arrangement where
-    # the guitar happens to be singing - the same argument as `_resolve_melody`'s.
-    harmony_family = _resolve_harmony(harmony, voices, diagnostics)
-    # The grid axis, resolved here for the same reason and read by **both** routes
-    # below rather than only the comping one - unlike `harmony=`, which the guitar
-    # singing makes unreachable. A grid says where a chord lands, and that is a
-    # question about the part whether the guitar is singing it or comping under a
-    # horn, so scoping it to one route would make `grid=` silently inert on a
-    # melody-bearing arrangement rather than doing nothing there.
-    grid_pattern = _resolve_grid(grid, beats_per_bar, diagnostics)
-
-    slots: Optional[List[_Slot]] = None
-    if has_thumb:
-        # Decision B: the union is built here, before the melody loop, so the
-        # loop's index still indexes the skeleton it was given. `_walking_slots`
-        # is shared with `slots.arrange_slots`, so an imported head and a
-        # hand-built progression cannot walk a different line from this one - see
-        # its docstring for why that duplication has already cost this project one
-        # bug.
-        slots = _walking_slots(
-            progression, timings, beats_per_bar, beat_type, bass
-        )
+    # Unpacked into the names the loop below has always used, so the extraction
+    # above changes nothing downstream of it.
+    voices = _p.voices
+    melody_voiced = _p.melody_voiced
+    melody_only = _p.melody_only
+    bass = _p.bass
+    has_thumb = _p.has_thumb
+    harmony_family = _p.harmony_family
+    grid_pattern = _p.grid_pattern
+    slots = _p.slots
 
     # Harmony and melody state for the walking-bass role rule. Both are read from
     # what actually sounds, not from the written chord, so a substituted chord
