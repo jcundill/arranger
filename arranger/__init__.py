@@ -54,7 +54,7 @@ from typing import TYPE_CHECKING, Any, List
 
 from musthe import Note  # re-exported: `from arranger import Note` is used by tests
 
-from . import cli, cost, decisions, fingers, options, slots
+from . import cli, cost, decisions, fingers, movement, options, slots
 from .bass import (
     BASS_ANCHORS,
     BASS_AUTO,
