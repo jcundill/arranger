@@ -40,6 +40,10 @@ you whether a change is an improvement or a different library.
   `6-4-3`, both `5-3-2`s and `6-4-3-2` are the four non-contiguous sets, each skipping
   one string; `6-4-3-2` and `(5,3,2)` skip one going *up* (the A to reach the B as
   soprano, and the B to reach the high E respectively).
+  **No set skips an *inner* string any more except the `(5,3,2)` shell**: the four
+  `drop24` sets that did - four of that family's eight, two of them its measured winners -
+  were removed because the right hand had to reach over an unplucked string to fret them.
+  [fingering.md](fingering.md) §4.4 holds the measurement and what the removal cost.
   `supported_string_sets()` is the playability invariant stated in
   one place, and adds the drop-2 blocks for all three sopranos (drop-2 is defined
   generically, so a caller passing their own `top_string` still works).
@@ -165,11 +169,12 @@ you whether a change is an improvement or a different library.
     transposes. `get_all_drop2_voicings` is this pinned to `grips=("drop2",)`.
   - `voicing_cost(voicing, previous, fret_min, fret_max, allowed_tones)` — the whole
     selection rule as one comparable tuple: notes outside the chord, then frets
-    outside the window, then missing voices, then **span**, then neck position (the
-    difference of average frets from the previous voicing), then pitch movement, then
-    grip preference. Lexicographic, not a weighted sum, because these priorities must
-    not be traded against each other. `_best_voicing` is its argmin and is stable, so
-    the engine is deterministic.
+    outside the window, then missing voices, then **span** (with spans 0 and 1
+    bucketed to the same value — see §"Span outranks neck position"), then neck
+    position (the difference of average frets from the previous voicing), then pitch
+    movement, then grip preference. Lexicographic, not a weighted sum, because these
+    priorities must not be traded against each other. `_best_voicing` is its argmin
+    and is stable, so the engine is deterministic.
   - `get_octave_down_candidates(melody_note, chord_type, chord_name=None,
     top_strings=MELODY_STRING_CHOICES)` — the same for the melody an octave lower,
     on the strings below the high E. Empty when the transposed melody is unvoiceable,
@@ -191,7 +196,8 @@ you whether a change is an improvement or a different library.
     voicing's inner voices and moves only the soprano; `None` when unplayable.
   - `arrange_progression(progression, top_strings=MELODY_STRING_CHOICES_FULL,
     non_chord_tone="extension", fret_min=NECK_FRET_MIN, fret_max=NECK_FRET_MAX,
-    grips=GRIP_PREFERENCE, timings=None, texture="uniform", beats_per_bar=4)`
+    grips=GRIP_PREFERENCE, timings=None, texture="uniform", beats_per_bar=4,
+    beat_type=4)`
     — voices each step, applying the selected non-chord-tone strategy where needed,
     and chooses each shape with `_best_voicing`. An unknown strategy or texture
     raises `ValueError`, both before any voicing work. `grips=("drop2",)` with
@@ -210,6 +216,12 @@ you whether a change is an improvement or a different library.
   **single-fret** `Voicing` for an NC step, or `None` if unreachable. It is
   explicitly *not* a harmonised voicing and is exempt from the string-set invariant.
 - `ArrangementStep.melody_only` — defaulted flag set on NC steps.
+- `ArrangementStep.chord_unvoiced` — defaulted flag set when the palette could not
+  voice the step's chord **at all**, so the melody sounds alone. Distinct from
+  `melody_only` (which means the slot had *no* chord) and from the span demotion (where a
+  complete shape existed and was too wide), so `render._step_annotation` can say
+  `(melody alone - no voicing for this chord)` without claiming something false. See
+  [Known limitations](#known-limitations).
 - `main()` — with no arguments, prints the built-in demonstrations; with `head`
   as the first argument, delegates to `headxml.head_cli` through a **lazy** import
   inside the branch, so `import arranger` never depends on the importer or, through
@@ -252,11 +264,10 @@ you whether a change is an improvement or a different library.
    a member of `supported_string_sets()`.
    `TestQualityTableInvariants` checks the template and degree lists stay the same
    length, and `tests/test_non_chord_tones.py` covers any new
-   `NON_CHORD_TONE_EXTENSIONS` route. `tests/test_wjazzd.py` asserts every
-   `WEIMAR_QUALITY_ALIASES` entry resolves to a quality the library can voice, so
-   a table entry naming an unvoiceable quality fails the suite.
+   `NON_CHORD_TONE_EXTENSIONS` route.
    `tests/test_headxml.py::TestChordParsing::test_every_kind_the_table_names_is_voiceable`
-   is the same assertion for `MUSICXML_KIND_QUALITIES`.
+   asserts that every quality `MUSICXML_KIND_QUALITIES` names can be voiced, so a
+   table entry naming an unvoiceable quality fails the suite.
 
 ## Grips, and the position-aware selector
 
@@ -303,6 +314,24 @@ promotion is also below the correctness criteria: a shape sounding a foreign not
 a partial harmonisation still loses to a correct one however tight it is, which
 `tests/test_grips.py::TestVoicingCost` asserts directly on the tuple rather than only
 through a result.
+
+**Span 0 and span 1 are bucketed together.** The span index reports `0.0` for both,
+so a zero-span barre and a one-fret reach tie and the decision falls through to neck
+position. One fret of stretch is not a stretch worth moving the hand for, and the
+case that showed it was a player reading the tab rather than a corpus measurement:
+`Bb7` under `F4 → G4 → F4` with `--grips shell` was voiced `x-x-6-7-6-x`,
+`x-x-x-3-3-3`, `x-x-6-7-6-x` — down to a fret-3 barre for one note and straight back,
+because the barre spans zero and the natural shape at frets 7–8 spans one. The
+bucket keeps the hand at 6–8 (`x-x-8-7-8-x`). The bucket is applied to the *value*
+at the span index, not by reordering the tuple, so **every span of two or more still
+outranks position exactly as before**: the `8-x-8-8-13-x` case below is untouched,
+and so is the low-Dm7 trade measured below it. Measured over the suite, the change
+moves exactly one pinned tab — the last fill of the `targets` texture, `x-x-x-5-5-5`
+→ `x-x-10-9-10-x`, which is the same stay-in-place behaviour on a different chord.
+A bucket of `0/1/2` was measured too and **rejected**: it costs 13 tests, including
+the low-Dm7 trade reverting to `5-x-3-5-3-x` and two walking-bass anchor
+diagnostics, because a four-fret reach competing with barres on position is a
+different decision than a one-fret reach doing so.
 
 **The one case it costs, and why it is not tuned away.** A low Dm7 under D4 is now
 `x-3-3-2-3-x` (span 1, lowest voice C3) where it was `5-x-3-5-3-x` on 6-4-3-2 (span 2,
@@ -351,11 +380,21 @@ empty result offers nothing rather than borrowing another degree's template.
 **Drop-2 & 4** lowers the second and fourth voices of a close stack an octave each — the
 widest four-note shape there is, twenty semitones from melody to bass for a Cmaj7. It
 is unplayable on four neighbouring strings and becomes frettable only through the
-skipping rule below, and it needs to skip an *inner* string as well as the bass. Across
-sevenths, ninths and sixths over the working register, two sets win essentially every
-melody: **1-2-4-5** (skip the G) and **2-3-5-6** (skip the B), against one win for
-everything else combined. Not in `GRIP_PREFERENCE`: it is reachable, but it spans
-nearly two octaves and is a colour rather than the default four-note reading.
+skipping rule below: the bass voice takes a lower string. Four of its eight sets instead
+made it frettable by skipping an **inner** string — 1-2-4-5 (the G), 2-3-5-6 (the B),
+1-3-4-6 and 2-4-5-6 — and **those four are now removed**, because the digit that takes a
+string above an unplucked one has to reach over it. That is not a tidy-up: 1-2-4-5 and
+2-3-5-6 were this family's measured winners over sevenths, ninths and sixths, and over
+the committed heads the removal moves 260 of 1,204 selections and takes 57 of the 1,087
+four-note steps down to fewer voices — **41 of them to the melody alone**, 16 to a duo —
+because the best shape left at that melody position then sits at the top of the span
+budget and `should_demote_to_melody_alone` drops it, and two positions in the pinned
+fixtures lose their chord the same way (F5 at fret 13 over an F7, and C#5 over an Am7).
+The full measurement, including which of the lost shapes were span-0 barres that cost
+the hand nothing, the alternative that keeps every chord, and the open question of
+whether the rule should be per *set* or per *shape*, are in
+[fingering.md](fingering.md) §4.4. Not in `GRIP_PREFERENCE`: it is reachable, but it
+spans nearly two octaves and is a colour rather than the default four-note reading.
 
 Note the local names, which cost a wrong answer here: in `_, v1, v2, v3 = stack`, `v1`
 is the **second** voice. So drop-2 & 4 drops `v1` and `v3` and keeps `v2` beside the
@@ -521,7 +560,10 @@ Five decisions are load-bearing:
   a shell because a shell is only reachable when the role's palette contains one, and
   where it does not — a `targets` target — there is nothing to demote *to*.
   `melody_only` stays **False**: the step does have a harmony, it is simply not spelled
-  out, so the flag would make the annotation claim "no chord".
+  out, so the flag would make the annotation claim "no chord". `chord_unvoiced` stays
+  false for the same reason from the other side: a complete shape **did** exist here and
+  was refused for its reach, so "no voicing for this chord" would be claiming something
+  that is not true.
 - **`grips` is an intersection, not an override.** A caller's `grips` used to be
   discarded outright by any non-uniform texture (`slot_grips = texture_grips[role]`), so
   `--grips shell --texture targets` asked for shell-only and silently got a four-note
@@ -691,10 +733,22 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
   [High melodies move down an octave](#high-melodies-move-down-an-octave).
 - A fixed max fret span of 5 and fret range 0–18 is assumed.
 - Non-chord melody notes are only covered for the mappings in
-  `NON_CHORD_TONE_EXTENSIONS` (9ths, 6/9s, 11ths, #11s, b13s, 13ths and the
-  half-diminished 9th) plus the dim7 substitution. An unmapped non-chord tone prints
-  a warning and keeps the legacy quality-only fallback, which can sound the melody
-  over a different chord's shape.
+  `NON_CHORD_TONE_EXTENSIONS` (9ths, 6/9s, 11ths, #11s, b13s, 13ths, the
+  half-diminished 9th and the 9th over a plain triad) plus the dim7 substitution. An
+  unmapped non-chord tone prints a warning and keeps the legacy quality-only fallback,
+  which can sound the melody over a different chord's shape.
+- **A palette that cannot voice a chord leaves the tune alone** rather than dropping it.
+  `shell`, `duo` and `interval` are built from the chord's own degrees, so they have no
+  quality-only fallback to thin to — where the four-note families always have something.
+  Under `--grips shell` a note with no mapping and no shell therefore had **no** candidate
+  and the step was dropped with the melody in it: measured over the committed heads,
+  **216** notes (157 of them on `tenor_madness`), 214 of them non-chord tones the table
+  cannot route and 2 chord tones the shell's geometry cannot place. Every one now sounds,
+  alone, and the step says so. Two things bound the rescue: `top_strings` is still
+  honoured — a note the named strings cannot carry is skipped, which is what
+  `tests/test_progressions.py` pins — and a melody no string reaches at all is still
+  skipped, with the warning naming the palette. See
+  `docs/open-issues.md` item 14.
 - A handful of low melodies (around `G3`–`C4`) reach no chord-tone-matched inversion
   and therefore use the quality-only fallback. Triad shapes double the root, so their
   second voice can sit up to 10 semitones below the melody — the same span limit, not a
@@ -830,33 +884,71 @@ thumb-line route without its capacity being measured too. Measured here:
 ```
 a walking_bass fill                        all three free
 targets, a walking_bass target             one
-uniform                                     zero
+uniform                                     one, and **zero** until the four
+                                           inner-skip `drop24` sets were removed
 ```
 
 A melody-only **selection** is not in the table at all: its upper shapes are single
 frets, so all three thumb strings are free whatever the texture's palette says, and
 `bass_allowed` answers its capacity unbounded when the route is known.
 
-`uniform` is the only one that fails, and it fails for a reason worth naming: its
-palette is four-note grips and `drop24`'s `(4,2,1,0)` set spans all three thumb strings
-at once. So `bass="walk"` under `uniform` is **refused with a warning that names a
-texture that would work**, and the arrangement still sounds — losing a bass costs less
-than losing a note of the tune.
+**Nothing in the tree is refused any more, and that is a consequence of the grip tables
+rather than of this rule.** `uniform` used to be the one that failed: its palette held
+`drop24`'s `(4,2,1,0)`, the one reachable set that spanned all three thumb strings, so
+`bass="walk"` under the default texture was refused with a warning naming a texture that
+would work. Removing the four inner-skip `drop24` sets for the right-hand reason in
+[fingering.md](fingering.md) §4.4 removed that set with them, so the worst case anywhere
+is now one free string — the rule's threshold — and `uniform` carries every policy. The
+refusal and its reason string stay, because the question is still the right one: the
+comping route is answered by `comping_capacity`, and a palette added later that reaches
+the whole thumb range is caught here without this function being taught about it.
 
 Two honest caveats, both measured rather than assumed:
 
 - This is the **worst case across the sets a grip may use**, and in practice the
   selector rarely picks the worst one. On "But Not For Me" every `uniform` step still
-  left a string. The rule is deliberately conservative: it refuses a combination that
-  would usually work rather than shipping a line that is occasionally holed.
+  left a string, even under the old tables that made the refusal fire. The rule is
+  deliberately conservative: it refuses a combination that would usually work rather than
+  shipping a line that is occasionally holed.
 - **A thumb line is lossy under any four-note or shell texture, and always was.**
   Measured on "But Not For Me" bars 1-2: `walking_bass` loses 9 of 151 thumb notes (6.0%)
   — that is pre-existing behaviour, not something this change introduced — and `targets`
   loses 11 of 151 (7.3%) under `walk`, 7 of 88 (8.0%) under `anchors`. The two melody
   textures lose **none**, because a single left-hand note leaves every thumb string
-  free. So the rule refuses the one combination that can *never* work and lets the
-  others through with their existing warning, rather than refusing a texture whose
-  loss rate is the same order as the flagship's.
+  free. So the rule was aimed at the one combination that can *never* work and let the
+  others through with their existing warning, rather than refusing a texture whose loss
+  rate is the same order as the flagship's — and the one it did refuse lost the set that
+  made it fail, so the rule now has nothing to fire on.
+
+**The other half of the budget: four fingers on the right hand.** A thumb line needs a
+free bass *string*; it also needs a free *finger*, and those are different questions.
+The right hand plucks with thumb, index, middle and ring — `p-i-m-a` — so a step may
+sound four strings and never five. `thumb_capacity` only ever answered the first:
+`targets` has a free thumb string, so `bass_allowed` let the axis through, and then a
+**four-note** target had a bass note merged under it — five plucks at once. Measured over
+the six committed heads before this was fixed, `--texture targets` sounded five strings on
+**151** steps under `--bass walk` and **130** under `--bass anchors`; `walking_bass` and
+`uniform` sounded none, the first because its targets are shells and the second because
+the axis is refused there.
+
+The rule is `grips.thumb_safe_grips`, derived from `GRIP_STRING_SETS`: while a bass note
+is being placed under a slot, a **target** may sound at most three strings, and a palette
+with none is narrowed to the widest statement that leaves a finger free
+(`("drop2", "drop3")` → `("shell",)`). It narrows *this slot's* palette rather than the
+arrangement's, because `anchors` leaves most beats bare and a target with nothing
+underneath it may use all four strings. Measured effect on the same heads:
+
+| row | before | after |
+|---|---|---|
+| `targets --bass walk` | 151 five-string steps | **0**, and byte-identical to `walking_bass --bass walk` |
+| `targets --bass anchors` | 130 | **0**, with 9 drop-2 and 19 drop-3 targets kept where the thumb plays nothing |
+| `walking_bass`, `uniform`, `targets --voices none` | 0 | **0** — unchanged |
+
+`walking_bass` does not move because the texture had already made this decision; its
+target palette is `("shell",)` for exactly this reason, and its comment says so. What the
+rule costs: a target whose quality has no shell — `Bmaj` under a `D5` melody, say — is a
+melody alone over the thumb rather than a four-note shape nobody can play, which is the
+outcome `walking_bass` has always had. See [open-issues.md](open-issues.md) item 11.
 
 ### `voices=` as a third axis: which voices the guitar plays
 

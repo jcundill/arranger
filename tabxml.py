@@ -131,7 +131,7 @@ def _music21() -> Any:
     is not installed with the base package. Importing it lazily is what keeps
     `import arranger` (and therefore `import tabstaff` and `from arranger import *`)
     working on a machine that has never heard of it - the same lazy-import
-    discipline `arranger.main()` uses for `wjazzd`, for the same reason.
+    discipline `arranger.main()` uses for the head importer, for the same reason.
     """
     try:
         import music21  # noqa: F401  (imported for the side effect of availability)

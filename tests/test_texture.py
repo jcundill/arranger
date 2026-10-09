@@ -24,6 +24,7 @@ import arranger
 from arranger import (
     BASS_STRING_INDICES,
     GRIP_MAX_SPAN,
+    GRIP_PREFERENCE,
     GRIP_STRING_SETS,
     ROLE_FILL,
     ROLE_TARGET,
@@ -32,12 +33,20 @@ from arranger import (
     TEXTURE_STYLES,
     THUMB_TEXTURES,
     ChordParser,
+    Diagnostics,
     VoiceLeadingEngine,
     _interval_offsets,
     _metric_weight,
     _roles_for_slot,
     supported_string_sets,
 )
+
+# Imported from where they live rather than through the package facade, for the reason
+# `test_walking_bass` gives for the private `bass` helpers: these are the rule's own
+# spelling, and re-exporting them would enlarge the public surface for one test file's
+# benefit.
+from arranger.decisions import resolve_texture_grips
+from arranger.grips import RIGHT_HAND_STRINGS, grip_pluck_count, thumb_safe_grips
 
 # The library's own demonstration cadences. These are the progressions whose tab is
 # already asserted elsewhere in the suite, so they double as the fixture here: if the
@@ -67,9 +76,22 @@ def minor_cadence_tabs():
 
 
 def major_cadence_tabs():
-    """The published fingerings for MAJOR_CADENCE. See `minor_cadence_tabs`."""
+    """
+    The published fingerings for MAJOR_CADENCE. See `minor_cadence_tabs`.
+
+    The A-7 is `x-x-x-x-x-9` - the melody alone, its chord dropped - where it was a
+    complete four-note drop-2 & 4 at `x-10-10-x-10-9`. That shape came from one of the
+    four inner-skip `drop24` sets, removed because a finger had to reach over the
+    unplucked G to fret it (`docs/fingering.md` §4.4), and C#5 over an Am7 is a non-chord
+    tone, so the set that could harmonise it was doing the *fallback* work as well: the
+    only candidate left needs five frets (`x-10-x-5-10-9`), the four-fret budget refuses
+    it, and the step keeps the tune and loses the chord, with a diagnostic naming the
+    cause. It is the ban's one audible cost in the demos, and it is pinned rather than
+    re-pinned away - if that chord is judged worth more than the ban, the alternative is
+    to keep the sets and let the *selector* rank them last (measured in §4.4).
+    """
     return [
-        "x-x-10-10-10-10", "x-10-x-9-10-9", "x-10-10-x-10-9", "x-x-11-10-10-10",
+        "x-x-10-10-10-10", "x-10-x-9-10-9", "x-x-x-x-x-9", "x-x-11-10-10-10",
     ]
 
 
@@ -506,6 +528,209 @@ class TestGripsIntersectTheTexture(unittest.TestCase):
         )
 
 
+class TestTheRightHandBudget(unittest.TestCase):
+    """The four digits on the right hand, and what a thumb line costs a target.
+
+    The right hand plucks with thumb, index, middle and ring - `p-i-m-a`, four digits -
+    so four strings is the most that can sound at once. That is the same four
+    `supported_string_sets()` states, and it states it for a **voicing**: a step is the
+    thing the renderers print, and the thumb note is merged into the step *after*
+    selection (`VoiceLeadingEngine._attach_bass`), so no check ever saw the two together.
+    `--texture targets` voiced a four-note target on its strong beats and then placed a
+    bass note under it, which is five simultaneous plucks - one more hand than a player
+    has. Measured over the six committed heads before this rule existed, **151** steps
+    under `--bass walk` and **130** under `--bass anchors` sounded five strings;
+    `walking_bass` and `uniform` sounded none, the first because its targets are shells
+    and the second because `bass_allowed` refuses the whole axis.
+
+    The rule is a **budget** rather than a preference, so it narrows the *target* palette
+    only, and only while a thumb line is running. See `docs/open-issues.md` item 11.
+    """
+
+    def test_every_grip_is_measured_from_its_widest_string_set(self) -> None:
+        """One number per grip, pinned as literals because these are what the rule compares.
+
+        A grip that gains a wider string set - or a new four-string grip - has to move one
+        of these values before the budget can admit it, which is the signal rather than a
+        silent widening.
+        """
+        counts = {grip: grip_pluck_count(grip) for grip in GRIP_STRING_SETS}
+        self.assertEqual(
+            {grip for grip, n in counts.items() if n == RIGHT_HAND_STRINGS},
+            {"drop2", "drop3", "drop24", "drop2_6432", "closed"},
+            "the four-string grips are the four-note families",
+        )
+        self.assertEqual(counts["shell"], 3)
+        self.assertEqual({grip for grip, n in counts.items() if n == 2}, {"duo", "interval"})
+
+    def test_a_palette_entry_that_is_not_a_grip_counts_as_one_string(self) -> None:
+        """`melody` is a palette entry a texture names, and the shape it builds is one note."""
+        self.assertEqual(grip_pluck_count("melody"), 1)
+        self.assertEqual(grip_pluck_count("a-name-no-table-knows"), 1)
+
+    def test_a_target_palette_of_four_note_grips_becomes_the_widest_thumb_safe_one(self) -> None:
+        """`("drop2", "drop3")` plus a thumb is five plucks.
+
+        So a target resolves to the widest statement that leaves a finger free - the
+        `("shell",)` palette `walking_bass` already names for its own targets.
+        """
+        self.assertEqual(thumb_safe_grips(("drop2", "drop3")), ("shell",))
+
+    def test_the_premise_that_the_targets_texture_names_four_string_grips(self) -> None:
+        """Without this the narrowing above is load-bearing for nothing.
+
+        The whole defect is a four-note target voiced on a beat the thumb is also playing.
+        If that palette ever becomes thumb-safe on its own, this fails so the rule can be
+        re-argued rather than quietly kept.
+        """
+        self.assertTrue(
+            any(
+                grip_pluck_count(grip) == RIGHT_HAND_STRINGS
+                for grip in TEXTURE_GRIPS["targets"][ROLE_TARGET]
+            ),
+            "targets no longer offers a four-string target, so nothing needs narrowing",
+        )
+
+
+    def test_an_empty_palette_comes_back_unchanged(self) -> None:
+        """`()` is the table saying "the left hand plays nothing", not a palette to fix.
+
+        Narrowing it would hand the thumb a chord it was never offered, on every fill of
+        the one texture that exists for a thumb.
+        """
+        self.assertEqual(TEXTURE_GRIPS["walking_bass"][ROLE_FILL], ())
+        self.assertEqual(thumb_safe_grips(()), ())
+
+    def test_the_shipped_palettes_that_are_already_thumb_safe_do_not_move(self) -> None:
+        """`walking_bass`'s targets and `targets`' fills are inside the budget as they stand."""
+        self.assertEqual(
+            thumb_safe_grips(TEXTURE_GRIPS["walking_bass"][ROLE_TARGET]), ("shell",)
+        )
+        self.assertEqual(
+            thumb_safe_grips(TEXTURE_GRIPS["targets"][ROLE_FILL]),
+            ("shell", "interval", "melody"),
+        )
+
+    def test_the_rule_is_inert_without_a_thumb(self) -> None:
+        """`has_thumb=False` is the shipped path for every arrangement with no bass line."""
+        for role in (ROLE_TARGET, ROLE_FILL):
+            self.assertEqual(
+                resolve_texture_grips(
+                    role, "targets", TEXTURE_GRIPS["targets"], GRIP_PREFERENCE, Diagnostics()
+                ),
+                TEXTURE_GRIPS["targets"][role],
+            )
+
+    def test_a_thumb_narrows_a_target_and_leaves_a_fill_alone(self) -> None:
+        """The budget is one palette's, not the slot's: a fill falls between thumb notes."""
+        target = resolve_texture_grips(
+            ROLE_TARGET, "targets", TEXTURE_GRIPS["targets"], GRIP_PREFERENCE,
+            Diagnostics(), has_thumb=True,
+        )
+        fill = resolve_texture_grips(
+            ROLE_FILL, "targets", TEXTURE_GRIPS["targets"], GRIP_PREFERENCE,
+            Diagnostics(), has_thumb=True,
+        )
+        self.assertEqual(target, ("shell",))
+        self.assertEqual(fill, TEXTURE_GRIPS["targets"][ROLE_FILL])
+
+    def test_a_requested_grip_that_spends_all_four_fingers_is_reported_not_restored(self) -> None:
+        """`--grips drop2` under a thumb reads as "that grip is not available here".
+
+        The budget is applied *before* the caller's narrowing, so the intersection with
+        `("shell",)` is empty and takes the existing reported fallback - rather than
+        resurrecting the five-pluck step the caller asked for by name.
+        """
+        diagnostics = Diagnostics()
+        resolved = resolve_texture_grips(
+            ROLE_TARGET, "targets", TEXTURE_GRIPS["targets"], ("drop2",), diagnostics,
+            has_thumb=True,
+        )
+        self.assertEqual(resolved, ("shell",))
+        self.assertTrue(
+            any("none of which is in the requested" in w for w in diagnostics.warnings),
+            "the fallback must be reported rather than silent",
+        )
+
+    def test_a_thumb_carrying_targets_arrangement_never_sounds_five_strings(self) -> None:
+        """The engine-level sweep, and the assertion whose absence let this ship."""
+        progression = [
+            ("F5", "maj7", "Fmaj7"), ("D5", "m7", "Dm7"),
+            ("C5", "7", "G7"), ("B4", "maj7", "Cmaj7"),
+        ]
+        timings = [(bar, 1.0 + 0.5 * n, None) for bar in range(4) for n in range(4)]
+        with contextlib.redirect_stdout(io.StringIO()):
+            steps = VoiceLeadingEngine.arrange_progression(
+                progression, timings=timings, texture="targets", bass="walk"
+            )
+        checked = 0
+        for step in steps:
+            sounding = [fret for fret in step.voicing.frets if fret >= 0]
+            self.assertLessEqual(len(sounding), RIGHT_HAND_STRINGS, step.tab_line())
+            if step.role == ROLE_TARGET and step.voicing.bass_string is not None:
+                self.assertLessEqual(
+                    grip_pluck_count(step.voicing.grip),
+                    RIGHT_HAND_STRINGS - 1,
+                    f"{step.tab_line()} spends every finger on the chord",
+                )
+                checked += 1
+        self.assertGreater(checked, 0, "no target carried a bass, so nothing was tested")
+
+
+class TestTheThumbReach(unittest.TestCase):
+    """§2.5's second half: the thumb sweeps the low four strings and no higher.
+
+    The right hand assigns **strings**, not roles - the thumb takes the bottom note of a two-
+    or three-note shape whenever that note sits on the E, A, D or G string, with or without a
+    bass line under the shape. `bass=` is an arrangement-level fact and never reaches it: the
+    merged bass note is written into the fret vector *after* selection. Above the G the thumb
+    is out of reach and the fingers take the bottom, which `duo`'s 1-2 pair and the two
+    one-note comping shapes are the only reachable sets to ask for. How often it happens is
+    measured in `docs/fingering.md` §4.4.
+
+    Asserted because of what it *buys*: a string set with nothing below the G can only contain
+    the B, the high E, or both - adjacent strings - so the thumb-to-index gap §2.5 exempts
+    cannot occur on a shape the thumb cannot reach, and narrowing the exemption to the thumb's
+    real reach moves §4.4's finger-skip count by **0**, measured on all five rows.
+    """
+
+    # Low E, A, D and G - what a right-hand thumb sweeps. Index 0 is the low E.
+    THUMB_STRINGS = frozenset((0, 1, 2, 3))
+
+    def test_only_three_reachable_sets_put_the_bottom_note_above_the_g(self) -> None:
+        """Named rather than counted, so a fourth one has to be considered."""
+        above_the_g = {
+            frozenset(strings)
+            for strings in supported_string_sets()
+            if min(strings) > max(self.THUMB_STRINGS)
+        }
+        self.assertEqual(
+            above_the_g,
+            {frozenset((4,)), frozenset((5,)), frozenset((4, 5))},
+            "the B alone, the high E alone, and the 1-2 pair - nothing else is up there",
+        )
+
+    def test_the_sets_the_thumb_cannot_reach_are_contiguous(self) -> None:
+        """Why the exemption can be narrowed without moving §4.4's count.
+
+        A gap needs a string *between* two sounding ones, and above the G there is no string
+        between the B and the high E - so all three sets are already gap-free and the exemption
+        was never doing any work for them.
+        """
+        above = [
+            sorted(strings)
+            for strings in supported_string_sets()
+            if min(strings) > max(self.THUMB_STRINGS)
+        ]
+        self.assertEqual(len(above), 3, "the sweep below is only as good as its denominator")
+        for strings in above:
+            self.assertEqual(
+                strings,
+                list(range(strings[0], strings[0] + len(strings))),
+                f"{strings} has a gap above the G string",
+            )
+
+
 class TestBackwardCompatibility(unittest.TestCase):
     """
     The guarantee: without timing, nothing about an arrangement changes.
@@ -547,6 +772,9 @@ class TestBackwardCompatibility(unittest.TestCase):
         # that spelling does not parse, so it has no tone set, and counting wrong notes
         # against an empty set made a two-note duo look *better* than a four-note chord.
         # An unreadable chord now leaves the criterion unasked - see cost.voicing_cost.
+        # The A-7 of the other cadence is the exception, and it went the other way: the
+        # four-note shape it had was an inner-skip set, and no playable replacement exists
+        # at C#5 in that position, so `major_cadence_tabs` records the melody alone there.
 
     def test_the_targets_texture_pins_its_exact_tab(self):
         """
@@ -561,11 +789,19 @@ class TestBackwardCompatibility(unittest.TestCase):
         pin moved here rather than the set being withdrawn.
 
         The last two fills moved back onto the contiguous 5-4-3 (`x-x-x-9-10-8` and
-        `x-x-x-5-5-5`) from the non-contiguous 6-4-2 shapes that preceded them. Span
+        then `x-x-10-9-10-x`) from the non-contiguous 6-4-2 shapes that preceded them. Span
         is now ranked above neck position, and the 6-4-2 versions needed frets 12 and
         13 against 9 and 10 - a five-fret spread for a fill. The 5-4-3 shapes put the
         same notes within two frets, and keep the B string carrying the melody, so the
         three-layer split the walking bass needs still holds.
+
+        The very last fill is `x-x-10-9-10-x` rather than `x-x-x-5-5-5`: span 0 and
+        span 1 are bucketed together at the span index of `voicing_cost`, so a
+        zero-span barre no longer beats a one-fret shape sitting where the hand
+        already is. Both are legal and both are tight - the previous fill is at
+        frets 9-10 - so the selector holds the position instead of jumping to fret 5
+        for the last chord of the phrase. Span 2 and above still outrank position
+        untouched, which is the trade `docs/engine.md` measures.
         """
         steps = VoiceLeadingEngine.arrange_progression(
             BUT_NOT_FOR_ME, timings=BUT_NOT_FOR_ME_TIMINGS, texture="targets"
@@ -580,7 +816,7 @@ class TestBackwardCompatibility(unittest.TestCase):
                 "x-x-10-12-10-10",
                 "x-x-x-12-11-13",
                 "x-x-x-9-10-8",
-                "x-x-x-5-5-5",
+                "x-x-10-9-10-x",
             ],
         )
 
@@ -588,15 +824,21 @@ class TestBackwardCompatibility(unittest.TestCase):
         """
         The same fixture under `uniform`, pinned alongside the `targets` one.
 
-        A change to the grip tables can reach the default path too, so the two textures
-        are pinned on the same bar rather than the default being trusted to an older
-        fixture that carries no timing at all.
+        A change to the grip tables can reach the default path too - and this time it did -
+        so the two textures are pinned on the same bar rather than the default being
+        trusted to an older fixture that carries no timing at all.
 
-        Seven of the eight moved to `drop24` on the skipped-bass set. `x-x-7-9-6-8`
-        (F-A-C-F over Fmaj7) became `x-7-7-x-6-8` on strings 5-4-2-1 - the same four
-        pitches, span 1 against span 2, because a four-note shape may now put its bass
-        on a lower string than the contiguous block. `targets` is unchanged: its fills
-        are shells and its targets are drop-2, neither of which takes the new set.
+        Seven of the eight had moved to `drop24` on the skipped-bass set, and the ban has
+        put them back: `x-7-7-x-6-8` is `x-x-7-9-6-8` again, the contiguous drop-2. The
+        four pitches are still the four Fmaj7 tones (A3 E4 F4 C5 against E3 A3 F4 C5), but
+        the bass is the 5th where it was the root, and the span is 2 where it was 1 - so
+        this pin records a *trade*, not an improvement, and it is the same trade the
+        removed sets were kept for (see `docs/fingering.md` §4.4).
+
+        The last step moved the other way, and that one is an improvement: `x-5-5-x-5-5`
+        (D3 G3 E4 A4 under A4) became `8-x-8-9-10-x` (C3 Bb3 E4 A4), so C7 now sounds its
+        root and its b7 instead of a D and a G. `targets` is untouched: its fills are
+        shells and its targets are drop-2, and neither takes a set that was removed.
         """
         steps = VoiceLeadingEngine.arrange_progression(
             BUT_NOT_FOR_ME, timings=BUT_NOT_FOR_ME_TIMINGS, texture="uniform"
@@ -604,14 +846,14 @@ class TestBackwardCompatibility(unittest.TestCase):
         self.assertEqual(
             [s.tab_line() for s in steps],
             [
-                "x-7-7-x-6-8",
-                "x-7-7-x-6-8",
-                "x-7-7-x-6-7",
-                "x-7-7-x-6-8",
-                "x-10-10-x-10-10",
+                "x-x-7-9-6-8",
+                "x-x-7-9-6-8",
+                "x-x-7-9-6-7",
+                "x-x-7-9-6-8",
+                "x-x-10-12-10-10",
                 "x-x-12-12-11-13",
-                "x-7-7-x-6-8",
-                "x-5-5-x-5-5",
+                "x-x-7-9-6-8",
+                "8-x-8-9-10-x",
             ],
         )
 
@@ -665,7 +907,7 @@ class TestTimingsDefensive(unittest.TestCase):
 
         The trailing steps were never located, so they are targets - the same
         "we know nothing" rule that governs a progression with no timings at all.
-        This is the guard `wjazzd.arrange_slots` already applies to its own timings,
+        This is the guard `slots.arrange_slots` already applies to its own timings,
         for the same reason: a hand-built list must not silently shift the rhythm.
         """
         steps = VoiceLeadingEngine.arrange_progression(

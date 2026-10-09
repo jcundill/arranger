@@ -1,6 +1,6 @@
 """Tests for the MusicXML renderer in `tabxml`.
-Guarded on music21 being installed, exactly as the database-backed tests are guarded
-on `wjazzd.db`: it is an optional extra, and a fresh clone runs a reduced suite.
+Guarded on music21 being installed: it is an optional extra, and a fresh clone without
+it runs a reduced suite.
 Every test here checks the *document* - the XML a notation program receives - rather
 than the music21 objects that produced it, because the document is the contract.
 """

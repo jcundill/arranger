@@ -15,11 +15,12 @@ Three passes, in this order, and the order is the design:
 `BASS_ROLE_*` constants below and is called by `_walking_bass_line`; in `cost` it
 would need this module and this module would need `cost`.
 
-**One slot union, built once.** Both step loops reach `_walking_slots` -
-`VoiceLeadingEngine.arrange_progression` and `wjazzd.arrange_slots` - because a
-second copy is exactly the failure this library documents having had once already:
-the corpus path was built separately, drifted, and voiced an `Am7` under a
-written `Bbm7` for twenty-five transcriptions before anyone noticed. Walking bass
+**One slot union, built once.** The step loop reaches `_walking_slots` -
+`VoiceLeadingEngine.arrange_progression`, and through it the imported-head path -
+because a second copy is exactly the failure this library documents having had once
+already: the corpus path was built separately, drifted, and voiced an `Am7` under a
+written `Bbm7` for twenty-five transcriptions before anyone noticed. That path has
+since been removed, and the lesson outlived it. Walking bass
 is the same trap with the same stakes, since a path that arranged the shells but
 not the walk would look plausible and be wrong.
 """
@@ -32,6 +33,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 from musthe import Note
 
 from .chords import NON_CHORD_TONE_EXTENSIONS, ChordParser, normalised_harmony
+from .fingers import can_fret
 from .textures import (
     _BEAT_EPSILON,
     ROLE_FILL,
@@ -342,15 +344,18 @@ def _place_bass(
     string.
 
     `held` is the shape still ringing under a `bass_only` step - see `_held_shape`.
-    It matters for **three** of the questions below at once, and passing it is the
+    It matters for **four** of the questions below at once, and passing it is the
     fix for the unplayable walking bass in `docs/open-issues.md` item 1. A `bass_only`
     step's own vector holds only the melody, so measuring against it alone gets all
-    three wrong: the thumb is placed on a string the hand is already fingering, it is
-    allowed to sound *above* the held shape's bottom note, and its proximity is
-    measured from a fret the hand is not at. On "But Not For Me" bar 5 that put the
-    thumb on the D string at fret 1 while the hand held frets 6-8 - a seven-fret
-    stretch that no per-step span check can see, because every individual step is
-    tidy.
+    four wrong: the thumb is placed on a string the hand is already fingering, it is
+    allowed to sound *above* the held shape's bottom note, its proximity is measured
+    from a fret the hand is not at, and its fret is counted as though it stood alone
+    under the fingers rather than joining four frets already down. On "But Not For Me"
+    bar 5 the first three put the thumb on the D string at fret 1 while the hand held
+    frets 6-8 - a seven-fret stretch that no per-step span check can see, because
+    every individual step is tidy. The fourth is what a `targets` arrangement got
+    wrong instead, on "Tenor Madness" bar 40, and `fingers.can_fret` is what answers
+    it (`docs/open-issues.md` item 12).
 
     The rule is proximity, not string order. The thumb is part of the hand, and
     adjacent strings are five semitones apart, so "play the lowest string" and "stay
@@ -381,6 +386,14 @@ def _place_bass(
       can be reachable, can be at the hand, and still belong above the chord it is
       meant to support.
 
+    When **no** candidate survives, one of three things has happened, and the message
+    `steps._attach_bass` emits names all three because none of them is visible from
+    outside: no free string below the melody, **no octave of the wanted pitch below the
+    shape's own lowest note**, or a fifth fret for four fingers. Measured over the
+    committed heads the split is **0 / 38 / 1** of 39 refusals
+    (`docs/open-issues.md` item 13) - so the middle clause is the common case and the
+    one the text did not mention for as long as the other two existed.
+
     Reach (`0..18`) is a fourth, separate test: `note_to_fret` returning a fret says
     the pitch is playable and says nothing at all about where it lands.
 
@@ -409,6 +422,10 @@ def _place_bass(
     # which is unambiguous, and the hand position still counts it: the thumb is part
     # of the hand whatever it last played.
     sounding_frets = list(upper.frets)
+    # What the fingers must actually cover, which is **not** `sounding_frets`: see the
+    # fret-budget filter in the loop below. Without a held shape the current voicing is
+    # the shape, so the two start the same.
+    hand_base = list(upper.frets)
     if held is not None:
         held_frets, held_thumb = held
         structure = [
@@ -431,6 +448,12 @@ def _place_bass(
             )
             for index in range(len(upper.frets))
         ]
+        # The hand covers the **whole** held vector, including the note the thumb last
+        # played: that string is still ringing, so it is still fretted. `structure` is the
+        # base the three questions above need, because it excludes that note - right for
+        # harmony, wrong for fingers. Measured on the committed heads the two readings give
+        # the same answer, so this one is chosen on the physics rather than on a count.
+        hand_base = list(held_frets)
 
     best: Optional[Tuple[Tuple[float, int, int], Tuple[int, int, int]]] = None
     for string_index in BASS_STRING_INDICES:
@@ -444,6 +467,20 @@ def _place_bass(
             midi = open_midi + fret
             if midi >= lowest_upper:
                 continue  # the thumb must sound below the structure it supports
+            # Four fingers, four frets - and this loop is the one place a fifth can appear.
+            # The hand is the shape still **ringing**, not this step's own vector and not
+            # `sounding_frets`: under a `bass_only` step nothing above the thumb strikes at
+            # all, so a melody carried on a string the held shape does not use is a note the
+            # hand is not holding - it is already sounding elsewhere, which is the item-4
+            # mistake made backwards. What the fingers cover is `hand_base` (the previous
+            # strike, thumb note and all) with the thumb's own string replaced by the fret
+            # chosen here. It is a filter rather than a preference because the alternative is
+            # not a worse placement but an unplayable one, and `fingers.can_fret` is what
+            # answers it (`docs/open-issues.md` item 12).
+            hand = list(hand_base)
+            hand[string_index] = fret
+            if not can_fret(hand):
+                continue
             # Nearest the hand first; then continuity with the previous thumb note,
             # so a line does not leap octaves for no reason; then the lower pitch.
             key = (
@@ -502,6 +539,11 @@ def _walking_slots(
     # `BUT_NOT_FOR_ME_TIMINGS` in test_texture.py and `arrange_slots` itself.
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
     beats_per_bar: int = 4,
+    # The metre's denominator. It reaches `_bass_slots` and stops there: the *grid* the
+    # walk invents beats on is counted in beats (`bass_line_for` needs only the count),
+    # while the melody *timeline* those beats are attributed through converts each slot's
+    # whole-note `duration` to beats, which needs this. See `_melody_timeline`.
+    beat_type: int = 4,
     bass: str = BASS_WALK,
 ) -> List[_Slot]:
     """
@@ -513,8 +555,8 @@ def _walking_slots(
     works under textures `walk` is refused for. The union is built the same way either
     way - the grid is the grid - so a sparser line is sparser and nothing else.
 
-    **The one place the union is built.** Both step loops reach it -
-    `VoiceLeadingEngine.arrange_progression` and `wjazzd.arrange_slots` - because a
+    **The one place the union is built.** The step loop reaches it -
+    `VoiceLeadingEngine.arrange_progression` - because a
     second copy is exactly the failure this module documents having had once already:
     the corpus path was built separately, drifted from the library, and shipped a
     voiced `Am7` under a written `Bbm7` for twenty-five transcriptions before anyone
@@ -546,7 +588,7 @@ def _walking_slots(
         )
 
     bass_line = bass_line_for(bass, chords, onsets, beats_per_bar)
-    return _bass_slots(progression, timings, bass_line, beats_per_bar)
+    return _bass_slots(progression, timings, bass_line, beats_per_bar, beat_type)
 
 
 def _beat_offset(bar: int, beat: float, beats_per_bar: int) -> float:
@@ -597,16 +639,27 @@ def _melody_in_force(
 
 
 def _melody_timeline(
-    located: Sequence[Tuple[int, int, float, Optional[float]]], beats_per_bar: int
+    located: Sequence[Tuple[int, int, float, Optional[float]]],
+    beats_per_bar: int,
+    beat_type: int = 4,
 ) -> List[Tuple[float, float, int]]:
     """`located` as `(onset, end, index)` spans on one absolute beat line.
 
-    A slot's `duration` is in **whole notes** and a bar is `beats_per_bar` beats of
-    them - the importer's own arithmetic, since a bar of `beats_per_bar` notated
-    beats is `beats_per_bar / 4` whole notes long - so a duration becomes
-    `duration * beats_per_bar` beats. Getting that scale wrong would make every
-    span the wrong length, which is why it is written out here rather than left to a
-    reader to infer.
+    A slot's `duration` is in **whole notes**, and the number of beats in one is
+    `beat_type`: a beat is `4 / beat_type` quarters - the same `beat_in_quarters` the
+    renderers convert with - so four quarters of whole note is `beat_type` beats and a
+    duration becomes `duration * beat_type` beats. It is **not** `duration *
+    beats_per_bar`: the two agree only where the numerator equals the denominator, which
+    is 4/4 and 2/2 and so six of the seven committed heads. In 3/4 the count is 3 and a
+    whole note is 4 beats, so every span came out a quarter short - a wrongness with no
+    effect on the committed heads, because the walk's chord timeline is onset-driven,
+    and measured at 0 of 186 steps on the waltz. It is fixed rather than left, because
+    the next metre-sensitive rule would inherit it.
+
+    `beats_per_bar` is still here and still the *count*: `_beat_offset` places a
+    `(bar, beat)` pair with it, and that is a question about how many beats a bar has
+    and not about how long one lasts. Both numbers are needed, and they are not
+    interchangeable.
 
     An unknown duration is `inf`, not zero: "we were not told" is not "it ended
     here", and a note given no length is the one case where holding it is the safe
@@ -622,7 +675,7 @@ def _melody_timeline(
                     float("inf")
                     if duration is None
                     else _beat_offset(bar, beat, beats_per_bar)
-                    + duration * beats_per_bar
+                    + duration * beat_type
                 ),
                 index,
             )
@@ -637,6 +690,7 @@ def _bass_slots(
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
     bass_line: List[BassNote],
     beats_per_bar: int = 4,
+    beat_type: int = 4,
 ) -> List[_Slot]:
     """
     The union of the melody grid and the walked beats, as one ordered slot list.
@@ -735,7 +789,7 @@ def _bass_slots(
     # `melody_at` stays for what it is good for - the exact onset test below and the
     # duration each slot reports - but precedence over time is now `_melody_in_force`'s
     # job, and it is a different question with a different answer.
-    timeline = _melody_timeline(located, beats_per_bar)
+    timeline = _melody_timeline(located, beats_per_bar, beat_type)
     for note in bass_line:
         if note.bar is None or note.beat is None:
             continue
@@ -1007,11 +1061,13 @@ def thumb_capacity(texture: str, role: str) -> Optional[int]:
 
         a walking_bass fill                        all three free
         targets, a walking_bass target             one
-        uniform                                     **zero** - `drop24`'s (4,2,1,0)
-                                                    set spans the whole thumb range
+        uniform                                     one - it was **zero** while
+                                                    `drop24`'s (4,2,1,0) set, which
+                                                    spanned the whole thumb range, existed
 
-    which is why `walk` is refused under `uniform` and `anchors` is not: an anchors
-    line needs one string and survives on the single one `uniform` leaves. A
+    Nothing in the tree is refused any more, and that follows from the grip tables rather
+    than from this rule: the worst case anywhere is now one free string, which is the
+    threshold. A
     melody-only **selection** is not in this table at all: its upper shapes are
     single frets, and its capacity is answered in `bass_allowed`, where the route
     is known.
@@ -1125,17 +1181,24 @@ def bass_allowed(
     the same threshold covers both, and a future policy is refused or allowed on the
     same terms without this function being taught about it.
 
-    Measured across this tree, `uniform` is the only texture that fails: its palette is
-    four-note grips, and `drop24`'s `(4,2,1,0)` set spans all three thumb strings at
-    once. Note this is the **worst case across the sets a grip may use**, and in practice
-    the selector rarely picks that one - measured on "But Not For Me" every step still
-    left a string. So the rule is deliberately conservative: it refuses a combination
-    that would *usually* work rather than shipping a line that is occasionally holed,
-    because a bass line with gaps in it is worse than no bass line, and the caller is
-    told what to use instead.
+    **No shipped texture fails it any more**, and that follows from the grip tables rather
+    than from this rule. `uniform` used to be the one that did: its palette held
+    `drop24`'s `(4,2,1,0)` set, which spanned all three thumb strings at once. That set was
+    removed for a right-hand reason of its own (`docs/fingering.md` §4.4), so the worst case
+    anywhere in the tree is now one free string - the rule's threshold - and every texture
+    carries every policy. The refusal and its reason string stay, because the question is
+    still the right one to ask: a *comping* arity that filled the neck is caught through
+    `comping_capacity`, and a texture added later whose palette reaches the whole thumb
+    range is caught here without this function being taught about it.
 
-    The alternative is named in the reason string, so the refusal is a sentence a player
-    can act on rather than a policy they have to reverse-engineer.
+    Note this is the **worst case across the sets a grip may use**, and in practice the
+    selector rarely picks the worst one - measured on "But Not For Me", every step under
+    the old tables still left a string. So the rule is deliberately conservative: it refuses
+    a combination that would *usually* work rather than shipping a line that is occasionally
+    holed, because a bass line with gaps in it is worse than no bass line.
+
+    The alternative is named in the reason string, so a refusal is a sentence a player can
+    act on rather than a policy they have to reverse-engineer.
 
     **`notes` and `bass_voice` are the comping route's half of the question, and they
     are why this function takes them.** On the comping route the left hand's shapes are

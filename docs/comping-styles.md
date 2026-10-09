@@ -16,9 +16,10 @@ never the metre, as §4.2 below originally supposed. §6 still holds open questi
 is still `--voices`. This
 records a design and the measurements that forced it, so the decision can be reviewed
 rather than re-derived. It follows
-[reharmonisation-proposals.md](reharmonisation-proposals.md), which is the precedent: a
-proposal that says what was measured, what is proposed and what is deliberately
-not built.
+[the retired reharmonisation proposals](history/reharmonisation-proposals.md), which is the
+precedent: a proposal that says what was measured, what is proposed and what is deliberately
+not built. That document now lives in `docs/history/` because its corpus went away - read it
+for the genre, not for numbers that can be re-run.
 
 **§9 is the next stage of the same work**, and it is the one that turns "comping" from a
 voice selection into a route with its own behaviour: what was measured about the melody's
@@ -622,7 +623,8 @@ test_every_document_on_disk_is_in_the_list
 
 so a document that exists and is not registered fails the suite rather than quietly
 escaping every check that reads `DOCUMENTS`. **That test paid for itself immediately**:
-adding it surfaced a third unregistered file, `docs/reharmonisation-proposals.md`, which
+adding it surfaced a third unregistered file, `docs/reharmonisation-proposals.md` (since
+retired to `docs/history/`), which
 was linked from `AGENTS.md` but whose links no check had ever resolved. Three documents
 were unverified, not two.
 

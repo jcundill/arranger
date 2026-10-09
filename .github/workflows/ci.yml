@@ -10,7 +10,7 @@ name: CI
 # the 42 MB Weimar Jazz Database. It existed because the database could not be
 # committed, so on a clean clone most of the suite's tests were SKIPPED and a green
 # run did not mean the corpus path had been exercised - a caveat that had to be
-# restated in the header, in `AGENTS.md` and in `docs/corpus.md`.
+# restated in the header and in `AGENTS.md`.
 #
 # The database and its loader are gone, so the caveat is gone with them: there is
 # nothing here that a clean clone cannot run, and a green check here means the

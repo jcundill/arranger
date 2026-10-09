@@ -25,6 +25,7 @@ dependency and no database.
 
 from __future__ import annotations
 
+import glob
 import re
 import unittest
 from typing import List, Optional, Tuple
@@ -33,6 +34,7 @@ from musthe import Note
 
 import arranger
 from arranger import (
+    BASS_ROLE_ANCHOR,
     BASS_STRING_INDICES,
     GRIP_MAX_SPAN,
     PITCH_CLASS_NAMES,
@@ -40,7 +42,9 @@ from arranger import (
     ROLE_TARGET,
     STANDARD_TUNING,
     ArrangementStep,
+    BassNote,
     ChordParser,
+    Diagnostics,
     VoiceLeadingEngine,
     Voicing,
     _place_bass,
@@ -64,7 +68,7 @@ from arranger.bass import (
 )
 from tabgp import _sounding_frets
 from tabstaff import _strikes_here
-from tests.support import bass_string, make_voicing, pc, upper_shape
+from tests.support import bass_string, make_step, make_voicing, pc, upper_shape
 
 # A staff string row, as opposed to the chord-name or melody line above it. Anchored
 # on the label and the barline the renderer puts right after it (`e*|`, `B |`, ...),
@@ -473,6 +477,72 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
         timeline = _melody_timeline([(0, 2, 1.0, 1.0)], beats_per_bar=4)
         self.assertEqual(_melody_in_force(timeline, _beat_offset(1, 1.0, 4)), -1)
 
+    def test_a_durations_span_is_measured_in_beats_not_in_bars(self):
+        """A slot's `duration` becomes `duration * beat_type` beats, not `* beats_per_bar`.
+
+        A beat is `4 / beat_type` quarters, so one whole note is `beat_type` beats: four
+        in 3/4, **eight** in 6/8. Asserted on both because they disagree in both
+        directions - the count overstates in 6/8 and understates in 3/4 - which is the
+        pair that tells the two spellings apart. Correcting the arithmetic moves no step
+        of any committed head, because the walk's chord timeline is onset-driven and only
+        a melody-in-force span reads a duration; it is pinned because the next
+        metre-sensitive rule will read one.
+        """
+        # A half note in 3/4: 0.5 whole notes, two beats, in a bar three beats wide.
+        self.assertEqual(
+            _melody_timeline([(0, 1, 1.0, 0.5)], beats_per_bar=3, beat_type=4),
+            [(0.0, 2.0, 0)],
+        )
+        # A quarter in 6/8: 0.25 whole notes, two beats, because a beat is an eighth.
+        self.assertEqual(
+            _melody_timeline([(0, 1, 1.0, 0.25)], beats_per_bar=6, beat_type=8),
+            [(0.0, 2.0, 0)],
+        )
+
+    def test_the_engine_reads_the_denominator_it_is_given(self):
+        """`beat_type` reaches the walk's melody timeline, and its default is 4.
+
+        The plumbing is what makes the fix real rather than local, and one invented beat
+        shows it: a whole note is four beats in 3/4 and eight in 6/8, so the same pair of
+        timings has a *different note still sounding* when the walk reaches beat 3 -
+        `Cmaj7` over E5 at the 3/4 reading, `Dm7` over F5 at the 6/8 one. Nothing in the
+        committed material moves either way, which is why the seam is asserted here
+        rather than inferred from an arrangement.
+        """
+        from arranger.options import ArrangeOptions
+
+        progression = [("E5", "maj7", "Cmaj7"), ("F5", "m7", "Dm7")]
+        timings = [(1, 1.0, 1.0), (1, 2.0, 0.25)]
+
+        def invented(beat_type: int) -> List[Tuple[str, Optional[str]]]:
+            steps = VoiceLeadingEngine.arrange_progression(
+                progression,
+                timings=timings,
+                texture="walking_bass",
+                bass="walk",
+                beats_per_bar=3,
+                beat_type=beat_type,
+            )
+            return [(step.chord, step.melody) for step in steps]
+
+        # Three beats of a 3/4 bar: the melody notes, then the invented third beat.
+        self.assertEqual(invented(4)[-1], ("Cmaj7", "E5"))
+        self.assertEqual(invented(8)[-1], ("Dm7", "F5"))
+        # Saying nothing is the 4 the field defaults to, so a hand-built progression -
+        # which has no notated metre to state - keeps the arithmetic it always had.
+        self.assertEqual(ArrangeOptions().beat_type, 4)
+        by_default = [
+            (step.chord, step.melody)
+            for step in VoiceLeadingEngine.arrange_progression(
+                progression,
+                timings=timings,
+                texture="walking_bass",
+                bass="walk",
+                beats_per_bar=3,
+            )
+        ]
+        self.assertEqual(by_default, invented(4))
+
     def test_the_fallback_is_reachable_only_that_way(self):
         """
         The premise of the test above: no arrangement can produce that state.
@@ -613,13 +683,15 @@ class TestEveryHeadCarriesTheMelodyInForce(unittest.TestCase):
                 skeleton = head_skeleton(head)
                 triples = [slot[0] for slot in skeleton]
                 timings = [(slot[1], slot[2], slot[3]) for slot in skeleton]
-                slots = _walking_slots(triples, timings, head.beats_per_bar)
+                slots = _walking_slots(
+                    triples, timings, head.beats_per_bar, head.beat_type
+                )
                 located = [
                     (index, bar, beat, duration)
                     for index, (bar, beat, duration) in enumerate(timings)
                     if bar is not None and beat is not None
                 ]
-                timeline = _melody_timeline(located, head.beats_per_bar)
+                timeline = _melody_timeline(located, head.beats_per_bar, head.beat_type)
                 invented = [slot for slot in slots if slot.bass_only]
                 self.assertTrue(
                     invented, f"{name}: no walk-invented beats, so nothing is checked"
@@ -1171,6 +1243,52 @@ class TestBassPlacement(unittest.TestCase):
         upper = upper_shape([5, 5, 5, 5, 5, 5])
         self.assertIsNone(_place_bass(upper, pc("D")))
 
+    def test_a_hand_that_cannot_hold_the_thumb_refuses_the_note(self):
+        """
+        The other reason a note is refused, and it is the one `sounding_frets` cannot see.
+
+        "Tenor Madness" bar 40 under `--texture targets --bass anchors`: the hand is holding
+        `x-9-x-8-12-10`, and the walk's `B` has exactly one candidate - the low E at fret 7,
+        because the A string is spoken for by the held shape and a `B` on the D at fret 9
+        would sound above the shape's F#3. Fret 7 is a fret the hand is not on, so the shape
+        would need five frets from four fingers. Before the budget this returned
+        `(47, 0, 7)` and every renderer wrote it; see `docs/open-issues.md` item 12.
+        """
+        upper = upper_shape([-1, -1, -1, -1, -1, 10])
+        self.assertIsNone(
+            _place_bass(upper, pc("B"), held=([-1, 9, -1, 8, 12, 10], None))
+        )
+
+    def test_one_fret_less_in_the_held_shape_and_the_same_thumb_is_placed(self):
+        """
+        The same note, the same string, the same fret - and a held shape one fret smaller.
+
+        This is the pair that shows the *budget* is what decided the refusal and not the
+        string: dropping the held shape's fret 12 leaves the hand on four frets, the low E at
+        fret 7 is placed, and nothing else about the call changed.
+        """
+        upper = upper_shape([-1, -1, -1, -1, -1, 10])
+        self.assertEqual(
+            _place_bass(upper, pc("B"), held=([-1, 9, -1, 8, -1, 10], None)),
+            (47, 0, 7),
+        )
+
+    def test_the_fret_budget_outranks_proximity(self):
+        """
+        Playability beats comfort, which is the order `voicing_cost` already applies.
+
+        The hand is on fret 5. `F#` is available on the A at fret 6 and the D at fret 4 -
+        one fret of travel each - and on the low E at fret 2, three frets away. Both near
+        candidates would put the hand on five frets, so both are refused and the far one is
+        taken. The alternative would be the nearest *unplayable* placement, which is the
+        defect rather than the fix.
+        """
+        upper = upper_shape([-1, -1, -1, -1, -1, 4])
+        self.assertEqual(
+            _place_bass(upper, pc("F#"), held=([5, -1, -1, 7, 9, 11], 0)),
+            (42, 0, 2),
+        )
+
     def test_step_bass_is_one_fact_with_one_home(self):
         """
         `step.bass` is a derived view of `voicing.bass_midi`, not a second field.
@@ -1206,6 +1324,73 @@ class TestBassPlacement(unittest.TestCase):
         self.assertEqual(step.bass, 41)
 
 
+class TestTheRefusalMessage(unittest.TestCase):
+    """
+    The three ways a thumb note is refused, and the one message that names them all.
+
+    `_place_bass` answers `None` for three different reasons, and the two *other* than
+    the common one are already pinned beside it: every bass string taken
+    (`test_no_candidate_means_no_bass_rather_than_a_wrong_one`) and a fifth fret for four
+    fingers (`test_a_hand_that_cannot_hold_the_thumb_refuses_the_note`). What was missing
+    is the case that fires almost every time - a free string exists, the note is playable,
+    and there is simply **no octave of it below the shape's own lowest note** - and the
+    warning text itself, which was asserted nowhere and named only the first and third of
+    those causes. Measured over the committed heads: **0 / 38 / 1** of 39 refusals, so the
+    clause that was missing is the one a reader actually meets
+    (`docs/open-issues.md` item 13).
+    """
+
+    # Item 13's worked case: the shape's own `Ab2` (44) is the pitch class the walk wants,
+    # and the only free string is the A, whose `Ab` above it is `Ab3` (56) - above the note
+    # the thumb is meant to support, so the note is refused with a string to spare.
+    NO_OCTAVE = ([4, -1, 4, 5, -1, -1], "Ab")
+
+    def _warning(self, step: ArrangementStep, name: str,
+                 arrangements: Optional[List[ArrangementStep]] = None) -> List[str]:
+        """The warnings `_attach_bass` emits when it tries to place one walked note."""
+        diagnostics = Diagnostics()
+        VoiceLeadingEngine._attach_bass(
+            step,
+            BassNote(bar=1, beat=1.0, pitch_class=pc(name), role=BASS_ROLE_ANCHOR),
+            arrangements if arrangements is not None else [step],
+            diagnostics,
+        )
+        return diagnostics.warnings
+
+    def test_the_commonest_refusal_is_the_pitch_having_no_octave_below_the_shape(self):
+        """A free string, a playable pitch, and no octave of it beneath the shape."""
+        frets, name = self.NO_OCTAVE
+        self.assertIsNone(_place_bass(upper_shape(frets), pc(name)))
+
+    def test_the_message_names_all_three_causes_whichever_one_refused(self):
+        """Every refusal says the same three things, so a reader is not left guessing.
+
+        The text is one string, so it cannot distinguish the causes - and that is the
+        point: all three occur, so a message naming two of them says something false
+        about the third. Each fixture here is refused for a different reason, one per
+        cause, and all three must produce the same three clauses.
+        """
+        held = make_step([-1, 9, -1, 8, 12, 10], chord="Bmaj7", melody="F#4")
+        cases: List[Tuple[ArrangementStep, str, Optional[List[ArrangementStep]]]] = [
+            # no octave of the wanted pitch below the shape
+            (make_step(self.NO_OCTAVE[0], chord="Ab9", melody="C4"), self.NO_OCTAVE[1], None),
+            # no free string: all three bass strings are already speaking
+            (make_step([5, 5, 5, 5, 5, 5], chord="Cmaj7", melody="E5"), "D", None),
+            # a fifth fret for four fingers, which needs the shape being *held*
+            (make_step([-1, -1, -1, -1, -1, 10], chord="Bmaj7", melody="D#5",
+                       bass_only=True), "B", [held]),
+        ]
+        for step, name, arrangements in cases:
+            warnings = self._warning(step, name, arrangements)
+            self.assertEqual(len(warnings), 1, step.tab_line())
+            message = warnings[0]
+            self.assertIn(f"bass {name}", message)
+            self.assertIn("no free string below the melody", message)
+            self.assertIn("no octave of that pitch below the shape", message)
+            self.assertIn("the hand would need a fifth fret", message)
+            self.assertIn("keeps its upper voicing", message)
+
+
 class TestTheInvariant(unittest.TestCase):
     """
     The amended playability invariant for a step carrying a bass.
@@ -1215,6 +1400,16 @@ class TestTheInvariant(unittest.TestCase):
     `{0,1,2,3}`, which is not a supported set. The rule is therefore stated over the
     **upper voices**, with the thumb required to sit outside them and below them -
     the same spirit as the melody-only `NC` exemption that already exists.
+
+    **And the amendment has a second half, whose absence shipped a five-pluck tab.** The
+    upper-voices rule above is satisfied by a *four*-string upper shape plus a thumb: two
+    supported sets' worth of notes in one step, and one more string than the right hand
+    has digits. Stating the rule over the upper voices was correct for the texture it was
+    written for - a `walking_bass` target is a shell - and silently wrong for `targets`,
+    whose targets were four-note drop-2s. Measured before the fix, over the six committed
+    heads: `--texture targets --bass walk` sounded five strings on **151** steps,
+    `--bass anchors` on **130**, while `walking_bass` and `uniform` sounded none. The
+    budget is now `grips.thumb_safe_grips`; see `docs/open-issues.md` item 11.
     """
 
     def test_the_upper_voices_are_one_supported_set_and_the_thumb_is_outside_it(self):
@@ -1256,6 +1451,122 @@ class TestTheInvariant(unittest.TestCase):
             # budget, which is the whole point of placing it by proximity.
             self.assertLessEqual(step.voicing.fret_span(), GRIP_MAX_SPAN["shell"] + 5)
         self.assertGreater(checked, 0)
+
+    def test_no_step_plucks_more_strings_than_the_right_hand_has_digits(self) -> None:
+        """The budget half of the invariant, swept over every committed head.
+
+        Four digits - thumb, index, middle and ring - so four strings, and a four-note
+        target with a bass note merged under it is five. `_sounding_frets` is the
+        renderers' own answer to "what does this step play at this instant", which is the
+        right hand's question: a `bass_only` step plucks its thumb alone even though the
+        shape above it is still ringing, and a `repeated` one plucks the soprano and the
+        thumb. A check on the fret vector cannot tell those apart, which is how 281
+        five-pluck steps shipped (see `docs/open-issues.md` item 11).
+
+        `targets` is in the sweep because it *was* the defect. `uniform` is not, because
+        its `walk` is refused outright (`bass_allowed`) and so has no thumb to budget.
+        """
+        from headxml import arrange_xml_head
+
+        paths = sorted(
+            glob.glob("tests/data/*.mxl") + glob.glob("tests/data/*.musicxml")
+        )
+        self.assertGreaterEqual(len(paths), 6, "the committed heads went missing")
+        checked = 0
+        for path in paths:
+            for texture, bass in (
+                ("targets", "walk"),
+                ("targets", "anchors"),
+                ("walking_bass", "walk"),
+                ("walking_bass", "anchors"),
+            ):
+                with self.subTest(head=path, texture=texture, bass=bass):
+                    steps, _head, _notes = arrange_xml_head(
+                        path, texture=texture, bass=bass
+                    )
+                    for step in steps:
+                        plucks = len(_sounding_frets(step))
+                        self.assertLessEqual(
+                            plucks,
+                            4,
+                            f"{texture}/{bass}: {step.tab_line()} plucks {plucks} strings",
+                        )
+                        if step.voicing.bass_string is not None:
+                            checked += 1
+        self.assertGreater(checked, 0, "no step carried a bass, so nothing was tested")
+
+    def test_the_left_hand_never_needs_more_than_four_frets(self) -> None:
+        """The **left-hand** half of the budget, swept over every committed head.
+
+        The string budget above is the right hand's question; these are the other four digits.
+        One finger holds one fret, so a step whose frets span five distinct positions is not a
+        hard shape but an impossible one - and the only way a fifth appears in this engine is a
+        `bass_only` step, where the thumb's fret joins a shape the hand is still holding. A
+        generated grip cannot do it: every family sounds at most four strings, and
+        `grips.thumb_safe_grips` already budgets the *strings* a target may add a thumb to.
+
+        Two decisions about how the hand is counted, each of which moves the count by a lot:
+
+        - it is the shape **still ringing**, not the step's own vector and not
+          `_sounding_frets`. Under `bass_only` nothing above the thumb strikes at all, so a
+          melody carried on a string the held shape does not use is a note the hand is not
+          holding - it is already sounding elsewhere. Charging for its string counts **10**
+          steps instead of 1, which is the item-4 mistake made backwards;
+        - the previous thumb note **is** included: that string is still ringing, so it is
+          still fretted. `bass._held_shape` drops it from `structure` for harmonic reasons,
+          which is right for the three questions it answers - and on the committed heads the
+          two readings give the same answer, so this one is chosen on the physics rather than
+          on a count.
+
+        Measured both ways, because a sweep that has only ever seen a clean tree proves
+        nothing: **1** step violates this on the commit before the fix - "Tenor Madness"
+        bar 40 under `targets`/`anchors`, pinned also in
+        `test_fingers.TestTheFourFretBudget` - and **0** after it.
+        """
+        from headxml import arrange_xml_head
+
+        paths = sorted(
+            glob.glob("tests/data/*.mxl") + glob.glob("tests/data/*.musicxml")
+        )
+        self.assertGreaterEqual(len(paths), 6, "the committed heads went missing")
+        checked = 0
+        for path in paths:
+            for texture, bass in (
+                ("targets", "walk"),
+                ("targets", "anchors"),
+                ("walking_bass", "walk"),
+                ("walking_bass", "anchors"),
+            ):
+                with self.subTest(head=path, texture=texture, bass=bass):
+                    steps, _head, _notes = arrange_xml_head(
+                        path, texture=texture, bass=bass
+                    )
+                    held = None
+                    for step in steps:
+                        voicing = step.voicing
+                        if step.bass_only and not step.melody_only and held is not None:
+                            # The held shape with the thumb's own string replaced by the fret
+                            # the walk placed there. One string sounds one fret, so the thumb
+                            # overwrites rather than adding.
+                            hand = list(held)
+                            if voicing.bass_string is not None:
+                                hand[voicing.bass_string] = voicing.frets[
+                                    voicing.bass_string
+                                ]
+                            checked += 1
+                        else:
+                            hand = list(voicing.frets)
+                        frets = {fret for fret in hand if fret >= 1}
+                        self.assertLessEqual(
+                            len(frets),
+                            4,
+                            f"{texture}/{bass}: bar {step.bar} beat {step.beat} "
+                            f"{step.tab_line()} asks the left hand for {len(frets)} "
+                            f"frets {sorted(frets)}",
+                        )
+                        if not (step.bass_only or step.repeated or step.melody_only):
+                            held = list(voicing.frets)
+        self.assertGreater(checked, 0, "no step held a shape, so nothing was tested")
 
     def test_the_bass_is_outside_the_cost_tuple_by_construction(self):
         """
@@ -1907,17 +2218,33 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
         self.assertEqual([s.bass for s in plain], [None] * len(plain))
         self.assertTrue(any(s.bass is not None for s in walked))
 
-    def test_uniform_refuses_the_line_and_says_so_rather_than_dropping_quietly(self):
-        """The one combination the left hand cannot accommodate is reported, not guessed."""
+    def test_uniform_no_longer_refuses_the_line_because_a_string_is_free(self):
+        """
+        This was the tree's one refusal, and the set behind it is gone.
+
+        `uniform`'s palette held `drop24`'s `(4,2,1,0)`, the one reachable shape spanning
+        all three thumb strings, so `bass_allowed` refused every policy and the caller was
+        told which texture would work instead. The four inner-skip `drop24` sets were
+        removed for a *finger* reason (`docs/fingering.md` §4.4) and that set was among
+        them, so the worst case `uniform` can reach now leaves one string free - the rule's
+        threshold - and the line is written.
+
+        **Inverted rather than deleted.** It used to demand the refusal message and no bass
+        notes; it now demands the opposite, and keeps the half that made the refusal safe -
+        the arrangement still sounds, one step per melody note - so a silently dropped
+        chord cannot pass for a working bass line.
+        """
         messages = []
         diagnostics = arranger.Diagnostics(emit=messages.append)
         steps = self.arrange(texture="uniform", bass="walk", diagnostics=diagnostics)
-        self.assertTrue(messages, "the refusal was silent")
-        self.assertTrue(
-            any("no bass string free" in m for m in messages), messages
+        self.assertEqual(
+            [m for m in messages if "no bass string free" in m], [],
+            "the refusal outlived the set that caused it",
         )
-        self.assertEqual([s.bass for s in steps], [None] * len(steps))
-        # And the arrangement still sounds: losing a bass beats losing the tune.
+        self.assertTrue(
+            any(s.bass is not None for s in steps), "the walk wrote no note at all"
+        )
+        # And the arrangement still sounds.
         self.assertEqual(len(steps), len(self.PROGRESSION))
         self.assertTrue(all(s.voicing.active_frets() for s in steps))
 

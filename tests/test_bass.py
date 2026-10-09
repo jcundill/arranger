@@ -501,8 +501,15 @@ class TestThumbCapacityAndRefusal(unittest.TestCase):
     """A thumb line needs a string, and the capacity is derived not listed."""
 
     def test_capacity_is_read_from_the_grip_tables(self):
-        """`uniform` is the one texture that can occupy every thumb string at once."""
-        self.assertEqual(thumb_capacity("uniform", "target"), 0)
+        """No texture can fill every thumb string any more: the set that could is gone.
+
+        `uniform` used to answer **0** here, because `drop24`'s `(4,2,1,0)` set spanned the
+        low E, the A and the D at once. That was one of the four inner-skip `drop24` sets
+        removed for a *finger* reason (`docs/fingering.md` §4.4), and this capacity is
+        derived from the tables rather than listed, so it followed on its own: one string is
+        the worst case now - which is the rule's threshold, not a special case.
+        """
+        self.assertEqual(thumb_capacity("uniform", "target"), 1)
         targets_capacity = thumb_capacity("targets", "target")
         assert targets_capacity is not None, "a grip palette cannot be unbounded"
         self.assertGreaterEqual(targets_capacity, 1)
@@ -516,17 +523,30 @@ class TestThumbCapacityAndRefusal(unittest.TestCase):
         allowed, _why = bass_allowed("uniform", "walk", melody_only=True)
         self.assertTrue(allowed, "a single-fret upper shape leaves every string free")
 
-    def test_uniform_is_refused_for_every_policy_and_the_reason_names_a_texture(self):
-        for policy in (p for p in BASS_STYLES if p != "none"):
-            allowed, reason = bass_allowed("uniform", policy)
-            self.assertFalse(allowed, policy)
-            self.assertIn("no bass string free", reason)
-            self.assertIn("texture=", reason, "the refusal must say what to use instead")
+    def test_no_texture_refuses_a_policy_now_that_uniform_leaves_a_string(self):
+        """
+        The tree's only refusal dissolved with the set that caused it.
+
+        `uniform` failed every policy because its palette held `drop24`'s `(4,2,1,0)` - the
+        one reachable set that spanned all three thumb strings - so `bass_allowed` refused
+        and the caller was told which texture to use instead. Removing the four inner-skip
+        `drop24` sets (`docs/fingering.md` §4.4) left one string free in the worst case,
+        which is the rule's threshold, so every texture now carries every policy.
+
+        **This test was inverted rather than deleted.** It used to assert that `uniform` was
+        refused for every policy *and* that the reason named a usable texture. The rule
+        still exists and still derives its answer from the tables - `TestCompingCapacity`
+        below holds the other route's half - so what is asserted here is the outcome: no
+        shipped texture refuses, and the reason machinery is simply not reached.
+        """
+        for texture in TEXTURE_STYLES:
+            for policy in (p for p in BASS_STYLES if p != "none"):
+                allowed, reason = bass_allowed(texture, policy)
+                self.assertTrue(allowed, f"{texture} + {policy}: {reason}")
+                self.assertEqual(reason, "", f"{texture} + {policy} carries a reason")
 
     def test_the_textures_that_leave_a_string_are_allowed(self):
         for texture in TEXTURE_STYLES:
-            if texture == "uniform":
-                continue
             for policy in BASS_STYLES:
                 allowed, _why = bass_allowed(texture, policy)
                 self.assertTrue(allowed, f"{texture} + {policy}")

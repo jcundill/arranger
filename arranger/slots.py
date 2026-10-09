@@ -256,6 +256,7 @@ def arrange_slots(
     harmony: str = "auto",
     grid: str = "every_note",
     beats_per_bar: int = 4,
+    beat_type: int = 4,
     diagnostics: Optional[Diagnostics] = None,
     onsets: Optional[Container[int]] = None,
 ) -> Tuple[List[ArrangementStep], List[int], List[str]]:
@@ -304,6 +305,12 @@ def arrange_slots(
     `beats_per_bar` is the metre that rule reads, and a head in cut time must pass
     its own - a count without a denominator is not a metre.
 
+    `beat_type` is the other half of that metre, and the two are not interchangeable:
+    `beats_per_bar` says **which** beats exist, `beat_type` says how long one lasts
+    (`4 / beat_type` quarters). One rule in the engine reads the second - the walking
+    bass, whose melody timeline converts a slot's whole-note `duration` to beats - so a
+    3/4 head passing only the count has every span a quarter short.
+
     Returns the steps, the indexes of the steps the diminished retry actually
     substituted, and any diagnostic notes worth printing. The `notes` are *not* the
     `diagnostics` warnings: they are arrangement-level remarks the caller is
@@ -329,8 +336,10 @@ def arrange_slots(
     #
     # It used to be applied *after* the slot's role had been computed from the
     # written chord. Under `targets` the role does not read the harmony, so nothing
-    # moved; under `walking_bass` it does. That ordering change is measured rather
-    # than assumed - `tests/test_wjazzd.py::TestTheRetryReordersNothingVisible`.
+    # moved; under `walking_bass` it does. That ordering change was measured, when the
+    # corpus existed, by `test_wjazzd.py::TestTheRetryReordersNothingVisible` - a file
+    # that went with the database. `tests/test_step_loop_equivalence.py` is the
+    # standing check that the two entry points still agree.
     unresolved = unresolved_steps(list(triples), non_chord_tone, onsets)
     retry = set(unresolved) if fallback == "diminished" else set()
     rescued: List[int] = []
@@ -372,6 +381,7 @@ def arrange_slots(
         harmony=harmony,
         grid=grid,
         beats_per_bar=beats_per_bar,
+        beat_type=beat_type,
         melody_onsets=onsets,
     )
 
@@ -387,6 +397,7 @@ def _slot_options(
     grips: Tuple[str, ...],
     texture: str,
     beats_per_bar: int,
+    beat_type: int = 4,
     bass: str = "auto",
     melody: str = "auto",
     harmony: str = "auto",
@@ -456,6 +467,7 @@ def _slot_options(
         harmony=harmony,
         grid=grid,
         beats_per_bar=beats_per_bar,
+        beat_type=beat_type,
         timings=typed_timings,
         bass_pcs=bass_pcs or None,
         bass_cost=bass_cost,

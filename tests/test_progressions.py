@@ -39,13 +39,18 @@ class TestProgressions(unittest.TestCase):
         # Verify tabs match expected smooth shapes
         self.assertEqual(result[0].voicing.tab_string(), "x-x-12-13-13-13")
         self.assertEqual(result[1].voicing.tab_string(), "x-x-12-13-12-13")
-        self.assertEqual(result[2].voicing.tab_string(), "x-10-10-x-11-11")
-        # The Cm7 is a drop-2 & 4 where it used to be a drop-2 on a lower block. Both
-        # sound Cm7 - Eb3 Ab3 Bb4 Eb5 is b3 and b7 plus the root and 5th, the same four
-        # notes - but this one keeps the hand where the previous two left it. `drop24` is
-        # in GRIP_PREFERENCE and criterion 0 now counts wrong notes rather than flagging
-        # them, so a clean shape that used to tie with a wrong one on span wins outright.
-        self.assertEqual(result[2].voicing.grip, "drop24")
+        self.assertEqual(result[2].voicing.tab_string(), "x-13-x-12-13-11")
+        # The Cm7 is a **drop-3** where it was a drop-2 & 4 at `x-10-10-x-11-11`. The four
+        # notes are the same four chord tones - Bb3 G4 C5 Eb5 is b7, 5, root and b3, the
+        # same notes the drop-2 & 4 carried - but the drop-2 & 4 that fitted here was one of
+        # the four inner-skip `drop24` sets, and those are gone because a finger had to
+        # reach over an unplucked string to fret them (`docs/fingering.md` §4.4; the table's
+        # own comment holds the measured price). The replacement spans 2 where the old
+        # shape spanned 1: that is the cost this end of the ban pays.
+        self.assertEqual(result[2].voicing.grip, "drop3")
+        self.assertEqual(
+            sorted(result[2].voicing.pitch_classes()), [0, 3, 7, 10], "still a Cm7"
+        )
 
     def test_autumn_leaves_minor_cadence(self):
         """
@@ -66,14 +71,19 @@ class TestProgressions(unittest.TestCase):
         # where no full shape fits. Every note still belongs to its own chord.
         self.assertEqual(
             [step.voicing.tab_string() for step in result],
-            ["x-x-7-8-8-8", "x-x-7-8-7-8", "x-5-5-x-5-6"],
+            ["x-x-7-8-8-8", "x-x-7-8-7-8", "12-x-12-12-11-x"],
         )
-        # The Gm6 is a drop-2 & 4 where it used to be a drop-2 at `x-x-5-7-5-6`. Same
-        # four notes of Gm6 in both, and the drop-2 & 4 keeps the hand where the first
-        # two chords left it rather than dropping three frets to follow the melody onto
-        # a lower string.
+        # The Gm6 is a **drop-3** where it was a drop-2 & 4 at `x-5-5-x-5-6`, and the notes
+        # are the same four Gm6 tones (E3 D4 G4 Bb4 - 6, 5, root, b3) with the melody still
+        # on top. It moved because that drop-2 & 4 was one of the four inner-skip `drop24`
+        # sets, removed for the finger reason in `docs/fingering.md` §4.4; the replacement
+        # sits at frets 11-12 against the old 5-6, so the hand arrives from the previous
+        # chord rather than dropping six frets to follow the melody.
         self.assertEqual(
-            [step.grip for step in result], ["drop2", "drop2", "drop24"]
+            [step.grip for step in result], ["drop2", "drop2", "drop3"]
+        )
+        self.assertEqual(
+            sorted(result[2].voicing.pitch_classes()), [2, 4, 7, 10], "still a Gm6"
         )
         self.assertTrue(not any(step.partial for step in result))
 

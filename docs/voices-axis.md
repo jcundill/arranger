@@ -251,15 +251,16 @@ was **inverted, not deleted** — it had asserted `assertNotIn`, pinning the gap
 | `arranger/options.py` | `ArrangeOptions.melody` |
 | `arranger/render.py`, `tabstaff.py` | the repeated-step hold, in both, deliberately |
 | `arranger/cli.py` | `--voices` |
-| `wjazzd.py`, `headxml.py` | threaded through both entry points |
+| `headxml.py` | threaded through the `head` entry point |
 | `tests/test_comping.py` | **new**, 43 tests in 7 classes |
 | `tests/test_cli.py` | shared-flag count 17 → 18, `voices` named as identically-worded |
 
-**One trap worth knowing about**, because it cost a real bug: in `wjazzd.arrange_slots` a
-loop variable named `melody` shadowed the new `melody` **policy** parameter, so the
-diminished-retry path passed a note name where a policy belonged — `Unknown melody policy
-'D4'`, raised only when a retry had something to rescue, so it looked like a corpus bug.
-Renamed to `note`. Same trap `_corpus_options` already dodges for `bass`.
+**One trap worth knowing about**, because it cost a real bug: in the since-removed
+`wjazzd.arrange_slots`, a loop variable named `melody` shadowed the new `melody` **policy**
+parameter, so the diminished-retry path passed a note name where a policy belonged —
+`Unknown melody policy 'D4'`, raised only when a retry had something to rescue, so it looked
+like a corpus bug. Renamed to `note`. `AGENTS.md` still records the trap, in its "Five axes"
+section, where it applies to any new axis rather than to that one entry point.
 
 ## 10. For the record: what did **not** change
 

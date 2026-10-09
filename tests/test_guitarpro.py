@@ -1,8 +1,8 @@
 """Tests for the Guitar Pro renderer in `tabgp`.
 
 Guarded on PyGuitarPro being installed, exactly as the MusicXML tests are guarded on
-music21 and the database tests on `wjazzd.db`: it is an optional extra, and a fresh
-clone runs a reduced suite.
+music21: it is an optional extra, and a fresh clone without the extras runs a reduced
+suite.
 
 The core of these tests is a **round trip**: the file is written, parsed back with
 `guitarpro.parse`, and the notes compared against the frets the arrangement was built
@@ -959,31 +959,39 @@ class TestRhythm(GuitarProTestCase):
                     )
 
     def test_every_measure_of_a_written_head_fills_its_bar(self):
-        """A real 2/2 head comes out as full bars, not a quarter note of music each.
+        """A real head comes out as full bars, not a quarter note of music each.
 
-        The round trip over a committed score, and the check that actually matters
-        on a file no hand-written fixture imitates: read every measure back and sum
-        it. A measure may be *short* (a pickup, or the trailing one), but a bar in
-        the middle cannot be, and a systematic shortfall of exactly 4x is the
-        signature of the beat length being read as a fraction rather than a divisor.
+        The round trip over committed scores, and the check that actually matters on a
+        file no hand-written fixture imitates: read every measure back and sum it. A
+        measure may be *short* (a pickup, or the trailing one), but a bar in the middle
+        cannot be, and a systematic shortfall is the signature of the beat length being
+        read as a fraction rather than a divisor.
+
+        **The second head is the 3/4 one, and it is here because it is the only metre
+        that can see the importer's conversion being written as `beats_per_bar / 4`.**
+        Measured before that fix: 21 of the waltz's 35 interior measures held 2.25, 2.5 or
+        2.75 quarters of music in a bar the signature calls three wide, and after it all
+        37 are exactly full. A count of measures cannot see either state - 37 is 37 - so
+        this is the sum, which is what `docs/renderers.md` promises catches this family.
         """
         from headxml import arrange_xml_head
 
-        steps, head, _notes = arrange_xml_head(
-            os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                         "data", "but_not_for_me.mxl"),
-        )
-        song = self.song(
-            steps=steps,
-            beats_per_bar=head.beats_per_bar,
-            beat_type=head.beat_type,
-        )
-        measures = song.tracks[0].measures
-        self.assertEqual(len(measures), 32)
-        bar = head.beats_per_bar * 4.0 / head.beat_type
-        # Every interior measure is full; a leading pickup or a padded tail may not be.
-        for measure in measures[1:-1]:
-            self.assertAlmostEqual(self.bar_quarters(measure), bar, places=6)
+        data = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+        for name, expected in (("but_not_for_me.mxl", 32),
+                               ("The_Jitterbug_Waltz.musicxml", 37)):
+            with self.subTest(score=name):
+                steps, head, _notes = arrange_xml_head(os.path.join(data, name))
+                song = self.song(
+                    steps=steps,
+                    beats_per_bar=head.beats_per_bar,
+                    beat_type=head.beat_type,
+                )
+                measures = song.tracks[0].measures
+                self.assertEqual(len(measures), expected)
+                bar = head.beats_per_bar * 4.0 / head.beat_type
+                # Every interior measure is full; a leading pickup or a padded tail may not be.
+                for measure in measures[1:-1]:
+                    self.assertAlmostEqual(self.bar_quarters(measure), bar, places=6)
 
 
 @requires_guitarpro

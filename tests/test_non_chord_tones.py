@@ -174,10 +174,61 @@ class TestNonChordToneResolution(unittest.TestCase):
         self.assertIsNone(self.engine.resolve_non_chord_tone(Note("D5"), "maj7", "Cmaj7", "legacy"))
 
 
+class TestThePaletteRescue(unittest.TestCase):
+    """A chord no shape in the palette can carry leaves the tune alone, and says so.
+
+    The alternative - and what the engine did - was to drop the step, which takes the
+    melody note with it. The claim such a step makes is not "this is a chord" but
+    "this is the tune and nothing under it", so it is recorded on the step
+    (`chord_unvoiced`) and reported by the renderers rather than inferred from the
+    shape, which a deliberate melody-alone **fill** shares.
+    """
+
+    def test_the_step_survives_the_chord_it_cannot_voice(self):
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("Bb4", "dim7", "F#dim7")], grips=("shell",)
+        )
+        self.assertEqual(len(steps), 1, "the note went missing with the chord")
+        step = steps[0]
+        self.assertEqual(step.chord, "F#dim7")
+        self.assertEqual(step.melody, "Bb4")
+        self.assertTrue(step.chord_unvoiced)
+        # Not the `NC` case: there *is* a chord here, it just is not sounding.
+        self.assertFalse(step.melody_only)
+        self.assertEqual(len(step.voicing.active_frets()), 1)
+
+    def test_the_renderer_says_the_chord_is_not_sounding(self):
+        """A bare note under a chord symbol is the thing this label exists to prevent."""
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("Bb4", "dim7", "F#dim7")], grips=("shell",)
+        )
+        self.assertEqual(
+            _step_annotation(steps[0]), " (melody alone - no voicing for this chord)"
+        )
+
+    def test_a_step_that_is_also_transposed_reports_both_facts(self):
+        """The rescue drops a high note an octave *and* leaves the chord unstated.
+
+        G5 is fret 15 on the high E string, past `HIGH_FRET_LIMIT`, so the melody-alone
+        shape sounds G4 - and both facts have to reach the reader. Measured on "The
+        Jitterbug Waltz" bars 1 and 9; this is the unit form of it.
+        """
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("G5", "6", "Eb6")], grips=("shell",)
+        )
+        self.assertEqual(len(steps), 1)
+        step = steps[0]
+        self.assertTrue(step.chord_unvoiced)
+        self.assertEqual(step.original_melody, "G5")
+        self.assertEqual(step.melody, "G4")
+        self.assertIn("transposed down an octave from G5", _step_annotation(step))
+        self.assertIn("no voicing for this chord", _step_annotation(step))
+
+
 class TestExtendedExtensionMappings(unittest.TestCase):
     """The widened NON_CHORD_TONE_EXTENSIONS routing: 11ths, #11s, b13s and the
     half-diminished ninth now have somewhere to go instead of the legacy
-    quality-only fallback."""
+    quality-only fallback, and the 9th over a plain triad has a row at all."""
 
     def setUp(self):
         self.engine = VoiceLeadingEngine()
@@ -208,6 +259,12 @@ class TestExtendedExtensionMappings(unittest.TestCase):
             (Note("Eb5"), "7b9", "G7b9", ("7b13", "G7b13")),
             (Note("C#5"), "9", "G9", ("7#11", "G7#11")),
             (Note("C#5"), "13", "G13", ("7#11", "G7#11")),
+            # The plain triads. This is the case that reached no family at all
+            # under `--grips shell`: a 9th is not a chord tone of a triad, the
+            # table had no row to absorb it, and a shell may not sound a note
+            # outside the chord, so the step was dropped rather than thinned.
+            (Note("F4"), "maj", "Ebmaj", ("add9", "Ebadd9")),      # 9th over a major triad
+            (Note("D5"), "m", "Cm", ("madd9", "Cmadd9")),          # 9th over a minor triad
         ]
         for melody, quality, name, expected in cases:
             self.assertEqual(
@@ -222,8 +279,35 @@ class TestExtendedExtensionMappings(unittest.TestCase):
             (Note("C5"), "7", "G7"),
             (Note("F#5"), "maj7", "Cmaj7"),
             (Note("B4"), "m7b5", "Am7b5"),
+            (Note("F4"), "maj", "Ebmaj"),
         ):
             self.assertFalse(self.engine.is_chord_tone(melody, quality, name))
+
+    def test_the_shell_family_can_voice_a_ninth_over_a_triad_now(self):
+        """The row is worth nothing if the family the failure came from cannot use it.
+
+        A shell states the chord's 3rd and 7th and may sound **nothing** outside
+        the chord, so `Ebmaj` under `F4` had no shell at all - and unlike the
+        four-note families it has no quality-only fallback to thin, which is why
+        the step was dropped rather than played. `Ebadd9` has four shells, every
+        one of them the 3rd, the 5th and the 9th.
+        """
+        self.assertEqual(
+            self.engine.get_all_grip_voicings(
+                Note("F4"), "maj", chord_name="Ebmaj", grips=("shell",)
+            ),
+            [],
+        )
+        voicings = self.engine.get_all_grip_voicings(
+            Note("F4"), "add9", chord_name="Ebadd9", grips=("shell",)
+        )
+        self.assertEqual(len(voicings), 4)
+        allowed = {pc % 12 for pc in ChordParser.get_chord_tones("add9", "Ebadd9")}
+        for voicing in voicings:
+            self.assertEqual(voicing.grip, "shell")
+            sounding = {midi % 12 for midi in voicing.midi_notes()}
+            self.assertEqual(sounding, {5, 7, 10}, voicing.frets)
+            self.assertTrue(sounding <= allowed, voicing.frets)
 
     def test_a_dominant_b9_reaches_the_altered_dominant(self):
         """The b9 over a plain dominant is the one route with nowhere else to go.
@@ -231,7 +315,7 @@ class TestExtendedExtensionMappings(unittest.TestCase):
         It is also the note a tritone substitution exists to absorb: the b9 of G7
         is the 3rd of Db7, so both routes make the melody a chord tone. The
         table route keeps the written root, which is the narrower claim - see
-        docs/reharmonisation-proposals.md.
+        docs/history/reharmonisation-proposals.md.
         """
         self.assertEqual(
             self.engine.resolve_non_chord_tone(Note("Ab5"), "7", "G7", "extension"),
@@ -405,12 +489,13 @@ class TestNonChordToneStrategiesEndToEnd(unittest.TestCase):
         result = self.engine.arrange_progression(self.all_of_me, non_chord_tone="legacy")
         step = result[1]
         # The exact inversion is not asserted, and the docstring above says why: with
-        # `drop24` in the palette the fallback now lands on `x-10-10-x-12-10`
-        # (G-C-B-D) rather than `x-x-11-11-10-10` (Db-F#-A-D). Both are complete
-        # four-note shapes under a written Cmaj7, both put D5 on top, and both are
-        # wrong chords - which is the whole point of the `legacy` strategy. What is
-        # asserted below is that the strategy still declines to fix the melody.
-        self.assertEqual(step.voicing.grip, "drop24")
+        # `drop24` in the palette the fallback landed on `x-10-10-x-12-10` (G-C-B-D), and
+        # removing the four inner-skip `drop24` sets (`docs/fingering.md` §4.4) moved it to
+        # `x-x-9-12-13-10` (B-G-C-D) - a drop-3 on the contiguous block. That is the third
+        # inversion this line has carried, which is why only the strategy's own promise is
+        # asserted below: a complete four-note shape under a written Cmaj7, with D5 on top,
+        # that declines to fix the melody.
+        self.assertEqual(step.voicing.grip, "drop3")
         self.assertEqual(max(step.voicing.midi_notes()), Note("D5").midi_note())
         # A Cmaj7 is C E G B; nothing the fallback sounds belongs to it.
         self.assertFalse(set(step.voicing.pitch_classes()) <= {0, 4, 7, 11})

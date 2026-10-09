@@ -37,6 +37,7 @@ PACKAGE = Path(arranger.__file__).parent
 # in this list, and nothing else. This is the whole rule, in one place.
 ORDER = [
     "tuning",       # the instrument, and the Voicing / ArrangementStep value types
+    "fingers",      # which finger holds which fret; `bass` reads it for the four-fret budget
     "diagnostics",  # where the warnings go - a value, and nothing depends on it
     "chords",       # chord symbols and the non-chord-tone routing
     "grips",        # the grip tables, builders and candidate generators

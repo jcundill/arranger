@@ -1,7 +1,8 @@
 """The decisions both step loops make, in one implementation each.
 
-`VoiceLeadingEngine.arrange_progression` and `wjazzd.arrange_slots` are two loops
-over the same slots, and between them they used to hold **two copies** of six
+`VoiceLeadingEngine.arrange_progression` and the corpus path's `arrange_slots` (now
+`arranger.slots`, and a delegate rather than a loop) were two loops over the same
+slots, and between them they used to hold **two copies** of six
 decisions. The code said so itself, in comments that are the most honest thing in
 the repository:
 
@@ -26,10 +27,10 @@ the few values it needs and returning the answer.
 **The one place the two loops genuinely differ is not here.** The corpus honours a
 slash bass by partitioning candidates before selection, and the library does not.
 That difference is a filter over a list rather than a control-flow fork, and it is
-folded into one `select_step_voicing` when Phase 4 rewrites `arrange_slots` to
-delegate. It is not extracted in this phase because it is not a *duplicated*
-decision - only the corpus has it - and extracting it here would mean reaching
-back into `wjazzd` for `bass_cost`, which would close an import cycle.
+what `select_step_voicing` folds in - it is not a *duplicated* decision, which is
+why it was never extracted as one. The ranking itself lives in `arranger.slots`,
+which reaches this module through `steps`, so injecting it is what keeps the
+dependency acyclic and the preference visible at the call site.
 
 **Why this module imports the engine's vocabulary and the engine imports this
 module.** The dependency runs one way: `decisions` needs the engine's own
@@ -48,7 +49,7 @@ from typing import Any, Callable, Container, List, Optional, Sequence, Tuple
 from .chords import sounding_harmony
 from .cost import _best_voicing
 from .diagnostics import Diagnostics
-from .grips import GRIP_MAX_SPAN, GRIP_PREFERENCE
+from .grips import GRIP_MAX_SPAN, GRIP_PREFERENCE, thumb_safe_grips
 from .tuning import NO_CHORD, ROLE_FILL, ROLE_TARGET, ArrangementStep, Voicing
 
 # The three answers to "how is this slot played". Named rather than a bool because
@@ -65,6 +66,7 @@ def resolve_texture_grips(
     texture_grips: Any,
     requested: Tuple[str, ...],
     diagnostics: Diagnostics,
+    has_thumb: bool = False,
 ) -> Tuple[str, ...]:
     """Which grips this slot may use: the role's palette, narrowed by the caller.
 
@@ -72,6 +74,26 @@ def resolve_texture_grips(
     silently deletes from it. It used to be discarded outright
     (`slot_grips = texture_grips[role]`), so `--grips shell --texture targets` asked
     for shell-only and got a four-note drop-2 on every strong beat with nothing said.
+
+    `has_thumb` narrows it too, and it is a budget rather than a preference: the right
+    hand plucks with thumb, index, middle and ring, so a **target** may sound at most
+    three strings while a bass note is being placed under it - four fingers, and the
+    thumb is one of them. `thumb_safe_grips` is the rule, derived from the string
+    tables; a target palette of four-note grips (`targets`' `drop2`/`drop3`) resolves to
+    the widest statement that leaves a finger free, which is the `("shell",)` palette
+    `walking_bass` already names. Applied *before* `requested` narrows, so
+    `--grips drop2 --texture targets --bass walk` still reads as "that grip is not
+    available here" and takes the existing reported fallback rather than resurrecting a
+    five-pluck step.
+
+    **`has_thumb` is a fact about *this slot*, not about the arrangement**, and the
+    caller passes it that way: a bass policy places a note on some beats and not others
+    (`anchors` only where the harmony changes), and a target with nothing underneath it
+    may use all four strings. Narrowing every target in the arrangement would thin
+    chords the thumb never plays under.
+
+    A **fill** is not touched. A fill is heard *between* the thumb's notes rather than
+    under one, and the texture's fill palettes already hold inside the budget.
 
     The default is the case that matters, and it is why this is **not** a plain set
     intersection. `GRIP_PREFERENCE` is the order a *caller* ranks grips in, and it
@@ -97,6 +119,11 @@ def resolve_texture_grips(
     nothing: only the former is worth interrupting the output to mention.
     """
     role_grips: Tuple[str, ...] = texture_grips[role]
+    # The right hand's budget first, because it is a fact about the hand rather than a
+    # preference: a target that sounds four strings has no finger left for the thumb.
+    # A fill is left alone - it is heard between the thumb's notes, not under one.
+    if has_thumb and role == ROLE_TARGET:
+        role_grips = thumb_safe_grips(role_grips)
     if requested == GRIP_PREFERENCE:
         return role_grips
     narrowed = tuple(g for g in requested if g in role_grips)
@@ -407,8 +434,9 @@ def select_step_voicing(
 ) -> Optional[Voicing]:
     """The candidate the engine's own rule prefers, honouring a slash bass first.
 
-    This is the Weimar corpus's rule C, and it is what lets `wjazzd.arrange_slots`
-    delegate to `arrange_progression` instead of running a second step loop. The
+    This is the rule the Weimar corpus brought (rule C), and it is what let
+    `wjazzd.arrange_slots` - now `arranger.slots` - delegate to `arrange_progression`
+    instead of running a second step loop. The
     library passes no `bass_pc` and gets exactly the behaviour it always had.
 
     The two rules that select a candidate - the slash bass and voice leading - are
@@ -422,10 +450,11 @@ def select_step_voicing(
     unachievable slash chord behaves exactly as if it had not been written - which
     is the same "never guess" rule the rest of this module follows.
 
-    `bass_cost` is passed in rather than imported because it lives in `wjazzd` and
-    `wjazzd` imports this module; a module-level import either way would be a cycle.
-    Passing it also makes the dependency visible at the call site, which is the
-    point: the corpus is the only caller that supplies one.
+    `bass_cost` is passed in rather than imported because it lives in
+    `arranger.slots`, which reaches this module through `steps`; a module-level
+    import either way would be a cycle. Passing it also makes the dependency visible
+    at the call site, which is the point: wanting a slash-bass preference is the only
+    reason to supply one.
     """
     if bass_pc is not None and bass_cost is not None and candidates:
         costs = [bass_cost(v.midi_notes(), bass_pc) for v in candidates]

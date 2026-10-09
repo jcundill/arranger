@@ -124,6 +124,15 @@ class ArrangeOptions:
     # already produced, so the axis is inert by default.
     grid: str = GRID_EVERY_NOTE
     beats_per_bar: int = 4
+    # The metre's **denominator**, and it is not decoration: a beat is `4 / beat_type`
+    # quarters, so `beats_per_bar` alone says which beats exist but not how long one
+    # lasts - a 2/2 and a 2/4 bar are both two beats wide and neither is the other's
+    # length. Exactly one rule in the engine reads it: the walking bass's melody
+    # timeline, where a slot's `duration` is in whole notes and one whole note is
+    # `beat_type` beats. Passing the count in its place is right only when the numerator
+    # and the denominator are equal (4/4, 2/2), and made every span a quarter short in a
+    # 3/4 head. See `_melody_timeline`.
+    beat_type: int = 4
     # `Sequence`, not `List`, and that is load-bearing rather than stylistic: the
     # library and the corpus hold *different* timing types - `Tuple[int, float, ...]`
     # against `Tuple[Optional[int], ...]` placeholders for slots it could not place.
@@ -132,18 +141,18 @@ class ArrangeOptions:
     # This is the third time list invariance in a signature has cost this library
     # something, and the fourth would not have been a surprise.
     timings: Optional[Sequence[Timing]] = None
-    # Per-progression-index bass pitch class, for the Weimar slash-chord preference
-    # (rule C). This is the field that lets `wjazzd.arrange_slots` delegate instead of
-    # running a second step loop: the corpus's only selection difference from the
-    # library is *which candidates are considered*, and that is data, not control
-    # flow. Absent or None for an index means no restriction, which is exactly the
-    # library's own behaviour.
+    # Per-progression-index bass pitch class, for the slash-chord preference (rule C,
+    # inherited from the removed corpus path). This is the field that lets a caller
+    # delegate instead of running a second step loop: the corpus's only selection
+    # difference from the library was *which candidates are considered*, and that is
+    # data, not control flow. Absent or None for an index means no restriction, which
+    # is exactly the library's own behaviour.
     bass_pcs: Optional[Mapping[int, Optional[int]]] = None
     # The ranking used to honour `bass_pcs`, passed in rather than imported:
-    # `bass_cost` lives in `wjazzd` and `wjazzd` imports `decisions`, so a
-    # module-level import either way would be a cycle. It is a field rather than a
-    # module global because the *only* caller that supplies one is the corpus, and
-    # making that visible at the call site is the point.
+    # `bass_cost` lives in `arranger.slots`, which reaches `decisions` through
+    # `steps`, so a module-level import either way would be a cycle. It is a field
+    # rather than a module global because a slash-bass preference is the only reason
+    # to supply one, and making that visible at the call site is the point.
     #
     # Both halves are needed: `bass_pcs` says which pitch the caller wants, and this
     # says how near a candidate is to it. Neither alone narrows anything.

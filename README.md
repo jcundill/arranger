@@ -165,7 +165,11 @@ follows it would drop the harmony from every bar that does not change.
 
 **The metre is the notated one.** `beat` is the beat *within* the bar in notated beats,
 so a 2/2 head is two beats to the bar rather than four — which is how most standards are
-written, and how three of the four scores in this repository are.
+written, and how three of the four scores in this repository are. Both numbers in the
+signature are needed: the count says which beats exist and the denominator says how long
+one lasts, so a 3/4 bar's eighths fall on 1.0, 1.5, 2.0, 2.5, 3.0 and 3.5. Reading the
+count as the denominator put every note of a 3/4 head a quarter of a beat early (see
+[docs/open-issues.md](docs/open-issues.md) item 15).
 
 **The key signature is read, and written back.** `Head` carries the score's `<fifths>`
 and `<mode>`, and the MusicXML and GP5 writers state them — so a tune in three flats
@@ -552,6 +556,7 @@ python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-2 --gr
 
 ```text
 Gmaj9    D4   (shell - 3rd & 7th, partial) x-x-4-4-3-x
+Gmaj9    D4   (melody repeated - single note) ----3-
 Gmaj9/F# D4   (shell - 3rd & 7th, partial) x-x-4-4-3-x
 ```
 
@@ -632,8 +637,10 @@ just outside it, because losing a chord of the tune is worse than being a fret o
 position.
 
 The cost function weighs **fret span above position**, so it prefers a shape the hand can
-hold over one nearer the middle of the neck. That was measured, not assumed — the
-reasoning and what the reordering cost are in [docs/engine.md](docs/engine.md).
+hold over one nearer the middle of the neck. Spans of 0 and 1 frets are treated as
+equal — one fret of stretch is not worth moving the hand for — so between two tight
+shapes the one that keeps the hand where it is wins. That was measured, not assumed —
+the reasoning and what the reordering cost are in [docs/engine.md](docs/engine.md).
 
 A melody whose only position sits above `HIGH_FRET_LIMIT` is voiced an octave down, so
 `step.melody` may be an octave below the written note; the written pitch stays in
@@ -692,7 +699,8 @@ the output is byte-identical to what it has always been.
 
 **The metre is read, not assumed.** A 3/4 head states its harmony on 1 and 3, while a 2/2
 (cut-time) head has only two beats, so only the downbeat is a target. Three of the four
-committed test scores are in cut time.
+committed test scores are in cut time. (On a 3/4 head that third beat was unreachable
+until item 15, because no note's beat ever landed on 3.0.)
 
 **A fill never costs the tune a chord.** If a fill slot has nothing thin to play, the step
 is re-prepared as a principal note rather than skipped — a texture is lighter, never
@@ -735,13 +743,26 @@ where the hand already is" are in permanent opposition; the placement step order
 proximity to the upper voicing and takes the nearest, so the 4th string is used only when
 the hand is genuinely low.
 
-A step with no free bass string below the melody keeps its upper voicing and says so
-(`no bass string free below the melody for bass ...`) rather than dropping the note.
+A step whose bass note cannot be played keeps its upper voicing and says so rather than
+writing a tab nobody can finger: there is no free string below the melody, the pitch has no
+octave below the shape, or the thumb's fret would be a **fifth** one for a hand already holding
+the shape (`no playable bass note for bass ... - no free string below the melody, no octave of
+that pitch below the shape, or the hand would need a fifth fret`). The commonest case in
+practice is the middle one: the chord's own lowest note is already so low that the walking note
+has no octave beneath it, and the note is left out for that reason — measured at **38 of the 39**
+refusals over the committed heads, and recorded with its counts in `docs/open-issues.md` item 13.
 
-`docs/open-issues.md` records the three defects this texture has had — two fixed, and
-**one open**: a walk-invented beat takes the wrong melody where a note is held across a
-barline, which costs the tune that note in cut time. It carries the measurements and
-the candidate fixes.
+`docs/open-issues.md` records this texture's defects, and nearly all of them are fixed. The
+merged step — a bass note written under an upper shape — has had several; the two most recent
+are items 11 and 12, the pair of budgets that ask how many strings a step **plucks** and how
+many frets it **holds**. **One defect is still open**: item 10, where a chord in force is
+stored per melody note, so a bar the melody skips is silent. Item 13 is a measured cost left
+unbuilt rather than a defect: most dropped bass notes are the shape sitting too low for the
+walk's pitch to have an octave under it, and the candidate pool can recover only ten of them
+without changing which notes the chord states — and **none** of them now, because the sets that
+sounded a shape's own notes on other strings were the `drop24` sets that were removed for the
+right-hand reason. Stating a *different pitch* under the chosen shape would recover twelve and
+touch no cost criterion; it changes what a downbeat states, so it is recorded rather than built.
 
 ## Who plays which voice: `bass` and `voices`
 
@@ -1000,8 +1021,9 @@ legacy      x-10-10-x-12-10 None
   becomes a `Cmaj9`, so `D` is a chord tone again and the shape sounds only
   `Cmaj7`-family pitches. The mapping lives in
   `VoiceLeadingEngine.NON_CHORD_TONE_EXTENSIONS`: 9ths and 6/9ths, plus the #11
-  (`Cmaj7#11`), the 11th (`G7sus4`), the #11/b13 over dominants, the 13th and the
-  half-diminished 9th (`Am9b5`).
+  (`Cmaj7#11`), the 11th (`G7sus4`), the #11/b13 over dominants, the 13th, the
+  half-diminished 9th (`Am9b5`) and the 9th over a plain triad (`Ebmaj` under `F4`
+  becomes `Ebadd9`).
 - `diminished` — the Barry Harris 6/dim7 substitution: the passing `D5` is voiced
   inside `Bdim7` (the dim7 a semitone below the note the line resolves to), giving
   a smooth chromatic resolution.
@@ -1093,7 +1115,7 @@ used to be a second, manual-dispatch job for the 42 MB Weimar Jazz Database, and
 check here did *not* mean the corpus path had been exercised. The database is gone, and
 so is that caveat.)
 
-The engine lives in the `arranger` package, thirteen modules in a strict dependency order
+The engine lives in the `arranger` package, fourteen modules in a strict dependency order
 that `tests/test_package_dag.py` asserts from the AST. See `AGENTS.md` for the module map
 and the conventions, and [docs/](docs/) for the reasoning behind the engine and the
 renderers.
@@ -1109,8 +1131,11 @@ renderers.
   are assumed. `closed` is generated but left out of the default grip list, because a
   close-position chord under a melody cannot be fretted inside that budget.
 - Non-chord melody notes are handled only for the mappings in
-  `NON_CHORD_TONE_EXTENSIONS` (9ths, 6/9s, 11ths, #11s, b13s, 13ths and the
-  half-diminished 9th) plus dim7; anything else keeps the quality-only fallback.
+  `NON_CHORD_TONE_EXTENSIONS` (9ths, 6/9s, 11ths, #11s, b13s, 13ths, the
+  half-diminished 9th and the 9th over a plain triad) plus dim7; anything else keeps
+  the quality-only fallback — and a melody-only palette (`shell`, `duo`, `interval`)
+  has no fallback to keep, so the note sounds alone under its chord and the step says
+  `(melody alone - no voicing for this chord)`.
 - A chord tone with no matching inversion in the hand-authored drop-2 tables — a 9th in
   the melody of a 13 chord, for instance — falls through to the quality-only fallback,
   which can sound a note the chord does not contain. The selector rejects such a shape

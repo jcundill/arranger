@@ -54,9 +54,13 @@ from tabxml import _events, _substitute_steps
 #                                 is the case `TestAHeldNoteIsOneNoteAcrossABarline` pins
 #   lead_sheet_chords_only.musicxml  written by hand: four bars, six <harmony> symbols and
 #                                 **no pitched notes** - the chords-only case (step A')
+#   The_Jitterbug_Waltz.musicxml  MuseScore 3, the **only** head in the repository whose
+#                                 numerator and denominator differ (3/4), and so the only one
+#                                 that can see a conversion written as `beats_per_bar / 4`
 DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 RAINY_DAY = os.path.join(DATA, "heres_that_rainy_day.musicxml")
 TROUBLE_IN_MIND = os.path.join(DATA, "Trouble_in_Mind_Blues.musicxml")
+WALTZ = os.path.join(DATA, "The_Jitterbug_Waltz.musicxml")
 
 
 def chord_or_fail(changes, bar: int, beat: float) -> HeadChange:
@@ -1996,6 +2000,169 @@ class TestReductionAndArranging(unittest.TestCase):
 
 
 
+class TestTheMetreHasADenominator(unittest.TestCase):
+    """`beat` is a notated beat, and `beats_per_bar` is not the factor that produces one.
+
+    `onset / divisions` is a count of **quarters** and a beat is `4 / beat_type` of them,
+    so a note's beat is `1 + onset/divisions * beat_type/4`. Written as
+    `beats_per_bar / 4` the factor agrees exactly when the numerator equals the
+    denominator - 4/4 and 2/2, which is **six of the seven** committed heads - so the
+    whole suite passed while every note of the 3/4 waltz was placed a quarter of a beat
+    early: its six written eighths read 1.0 … 2.875 in a bar three beats wide, and
+    `--musicxml` scaled them by another 0.75 on every round trip.
+
+    These are the tests that fail without that fix: one bar each of 3/4, 2/4 and 6/8 -
+    2/4 and 6/8 being the metres where the *old* factor went the other way - and the
+    fixture itself, which is the head that made it visible.
+    """
+
+    def load(self, measures: str, **kwargs) -> Head:
+        path = write_score(score(measures, **kwargs))
+        self.addCleanup(os.unlink, path)
+        return load_musicxml(path)
+
+    @staticmethod
+    def eighths(count: int) -> str:
+        """`count` written eighths, in divisions of six (the waltz's own)."""
+        steps = ("C", "D", "E", "F", "G", "A")
+        return "".join(note(step, duration=3) for step in steps[:count])
+
+    def test_a_three_four_bar_of_eighths_is_three_beats_wide(self):
+        """Six eighths are beats 1.0 … 3.5, not 1.0 … 2.875 - and they reach the barline.
+
+        `beats_per_bar / 4` is 0.75 here, so the old reading made the bar 2.25 beats of
+        music wide while its barlines were still drawn three apart: a hole of music at
+        the end of every bar, which is what the tab staff showed. The arrival of the last
+        note's *end* on 4.0 asserts that in one number.
+        """
+        head = self.load(
+            harmony("C", "major") + self.eighths(6),
+            divisions=6, beats=3, beat_type=4,
+        )
+        self.assertEqual((head.beats_per_bar, head.beat_type), (3, 4))
+        self.assertEqual([n.beat for n in head.notes], [1.0, 1.5, 2.0, 2.5, 3.0, 3.5])
+        last = head.notes[-1]
+        self.assertAlmostEqual(
+            last.beat - 1.0 + last.duration * head.beat_type,
+            head.beats_per_bar,
+            places=6,
+        )
+
+    def test_a_pickup_of_eighths_starts_where_the_rest_leaves_off(self):
+        """An eighth rest then five eighths: 1.5 … 3.5 - bar 1 of the waltz, which read 1.375."""
+        head = self.load(
+            harmony("C", "major") + rest(duration=3) + self.eighths(5),
+            divisions=6, beats=3, beat_type=4,
+        )
+        self.assertEqual([n.beat for n in head.notes], [1.5, 2.0, 2.5, 3.0, 3.5])
+
+
+    def test_a_two_four_bar_keeps_one_beat_to_the_quarter(self):
+        """2/4: a quarter note is one beat, not half of one.
+
+        The old factor read the bar as two *quarters* long (`beats_per_bar / 4` = 0.5 of a
+        beat per quarter), so a bar of two quarter notes came out as beats 1.0 and 1.5 -
+        music in the first half of a bar whose signature says two whole beats.
+        """
+        head = self.load(
+            harmony("C", "major") + note("E", duration=4) + note("F", duration=4),
+            divisions=4, beats=2, beat_type=4,
+        )
+        self.assertEqual([n.beat for n in head.notes], [1.0, 2.0])
+
+    def test_a_six_eight_bar_counts_its_beats_in_eighths(self):
+        """6/8: six eighths are beats 1 … 6, and the bar is six beats wide.
+
+        The metre where the count is *larger* than the denominator, so the old factor
+        overshoots instead of undershooting: 6/4 = 1.5 beats per quarter put six eighths
+        on 1.0, 1.75, 2.5, 3.25, 4.0, 4.75 - inside a bar the file calls six wide, so
+        nothing looked wrong until the notes and the barlines were read together.
+        """
+        head = self.load(
+            harmony("C", "major") + self.eighths(6),
+            divisions=6, beats=6, beat_type=8,
+        )
+        self.assertEqual((head.beats_per_bar, head.beat_type), (6, 8))
+        self.assertEqual([n.beat for n in head.notes], [1.0, 2.0, 3.0, 4.0, 5.0, 6.0])
+
+    def test_the_committed_waltz_puts_its_eighths_on_the_eighth(self):
+        """The fixture itself: bars 1 to 3, an eighth rest then eighths.
+
+        Pinned on the committed score rather than a hand-built one because this is the
+        head that made the defect visible, and because it is the only one of the seven
+        whose metre can see it at all.
+        """
+        head = load_musicxml(WALTZ)
+        self.assertEqual((head.beats_per_bar, head.beat_type), (3, 4))
+        onsets = {bar: [n.beat for n in head.notes if n.bar == bar] for bar in (1, 2, 3)}
+        self.assertEqual(onsets[1], [1.5, 2.0, 2.5, 3.0, 3.5])
+        self.assertEqual(onsets[2], [1.0, 1.5, 2.0, 2.5, 3.0, 3.5])
+        self.assertEqual(onsets[3], [1.0, 1.5, 2.0, 2.5, 3.0, 3.5])
+
+    def test_no_onset_of_any_committed_head_is_pushed_past_its_bar_line(self):
+        """The other direction, on all six scored fixtures.
+
+        A factor read the wrong way up *stretches* the bar instead of squeezing it - the
+        mistake `docs/renderers.md` records twice, four quarters to the bar written as
+        one - so the notes leave the bar they were written in. Every onset is inside its
+        own bar, whatever the metre: `1 <= beat < beats_per_bar + 1`.
+        """
+        for path in (BUT_NOT_FOR_ME, I_WAS_DOING_ALL_RIGHT, RAINY_DAY, TENOR_MADNESS,
+                     TROUBLE_IN_MIND, WALTZ):
+            with self.subTest(head=os.path.basename(path)):
+                head = load_musicxml(path)
+                limit = head.beats_per_bar + 1.0
+                self.assertTrue(
+                    all(1.0 <= n.beat < limit for n in head.notes),
+                    [n.beat for n in head.notes if not 1.0 <= n.beat < limit],
+                )
+
+    def test_the_waltz_keeps_its_onsets_through_a_round_trip(self):
+        """Export → read back leaves the beats where they are, bar 1 excepted.
+
+        The compounded symptom, and the one a user meets: before the fix each cycle
+        scaled every onset by another 0.75, so the file's eighths came back at 1.0,
+        1.281, 1.562 … - a head that shrinks by a quarter every time it is written out
+        and read in.
+
+        **Bar 1's pickup is excluded because the exporter loses it, which is a separate
+        defect and not this one.** Measured: the written bar 1 is an eighth rest then five
+        eighths (1.5 … 3.5), and the exported-then-re-read bar 1 is five eighths from 1.0,
+        the rest dropped rather than written. That is wrong under either spelling of the
+        conversion, so it is recorded rather than encoded here - open-issues item 15.
+        """
+        try:
+            import music21  # noqa: F401
+        except ImportError:  # pragma: no cover - depends on the environment
+            self.skipTest("music21 is not installed")
+        from tabxml import format_musicxml
+
+        head = load_musicxml(WALTZ)
+        steps, _head, _notes = arrange_xml_head(WALTZ)
+        document = format_musicxml(
+            steps,
+            title=head.title,
+            beats_per_bar=head.beats_per_bar,
+            beat_type=head.beat_type,
+            fifths=head.key_fifths,
+            mode=head.key_mode,
+        )
+        handle, out = tempfile.mkstemp(suffix=".musicxml")
+        os.close(handle)
+        self.addCleanup(os.unlink, out)
+        with open(out, "w", encoding="utf-8") as fh:
+            fh.write(document)
+
+        again = load_musicxml(out)
+        self.assertEqual((again.beats_per_bar, again.beat_type), (3, 4))
+        self.assertEqual(len(again.notes), len(head.notes))
+        written = [n for n in head.notes if n.bar >= 2]
+        reread = [n for n in again.notes if n.bar >= 2]
+        self.assertEqual(len(reread), len(written))
+        for original, copy in zip(written, reread):
+            self.assertAlmostEqual(original.beat, copy.beat, places=6, msg=str(copy))
+
+
 class TestHeadTexture(unittest.TestCase):
     """
     The target-note texture over a real written head.
@@ -2078,6 +2245,66 @@ class TestHeadTexture(unittest.TestCase):
         steps, _head, _notes = arrange_xml_head(BUT_NOT_FOR_ME)
         for step in steps:
             self.assertEqual(step.role, "target")
+
+
+class TestANarrowPaletteNeverLosesTheTune(unittest.TestCase):
+    """A grip a chord cannot be voiced with must not take the melody note with it.
+
+    `--grips shell` is the caller naming one family for the whole arrangement, and
+    the family that has the least room to give: a shell states the chord's 3rd and
+    7th and may sound **nothing** outside the chord, so a melody the non-chord-tone
+    table cannot reharmonise has no candidate at all - where the four-note families
+    keep a quality-only fallback to thin. "But Not For Me" bar 2 beat 2 is the
+    smallest case: F4 over Ebmaj, the 9th over a plain triad.
+    """
+
+    def test_the_ninth_over_a_triad_is_voiced_rather_than_dropped(self):
+        """The `maj` row reaches the shell family, so the step exists again.
+
+        Before the row, this step had no candidate and `arrange_progression`
+        dropped it with a warning - 76 steps out of 80 notes. The other three
+        losses on this head are bars 18 and 22 (the same chord and note) and bar
+        28, which is a different degree over a different quality.
+        """
+        steps, _head, _notes = arrange_xml_head(BUT_NOT_FOR_ME, grips=("shell",))
+        bar2 = [s for s in steps if s.bar == 2 and abs((s.beat or 0) - 2.0) < 1e-6]
+        self.assertEqual(len(bar2), 1, "bar 2 beat 2 is missing again")
+        step = bar2[0]
+        self.assertEqual(step.melody, "F4")
+        self.assertEqual(step.chord, "Ebmaj")
+        self.assertEqual(step.harmonized_as, "Ebadd9")
+        self.assertEqual(step.strategy, "extension")
+        self.assertEqual(step.grip, "shell")
+        # The 3rd, the 5th and the 9th: G Bb F, the shape a shell of Ebadd9 is.
+        self.assertEqual({m % 12 for m in step.voicing.midi_notes()}, {5, 7, 10})
+
+    def test_no_melody_note_is_dropped_by_a_palette_that_cannot_voice_it(self):
+        """80 steps for 80 notes under `--grips shell`; it was 76.
+
+        The four losses were bars 2, 18 and 22 (F4 over Ebmaj, the table row above)
+        and bar 28 (Bb4 over F#dim7, which no dim7 shell can carry and which now
+        sounds alone). The **count** is the assertion because a lost note is an
+        absence: nothing in an arrangement says one should have been there.
+        """
+        steps, head, _notes = arrange_xml_head(BUT_NOT_FOR_ME, grips=("shell",))
+        self.assertEqual(len(steps), len(head.notes))
+
+    def test_the_rescued_step_says_the_chord_is_not_sounding(self):
+        """One step on this head has a chord and no voicing of it: bar 28.
+
+        Reported rather than silently thin, because a bare note under a chord symbol
+        reads as the chord being played quietly - see `ArrangementStep.chord_unvoiced`.
+        """
+        steps, _head, _notes = arrange_xml_head(BUT_NOT_FOR_ME, grips=("shell",))
+        rescued = [s for s in steps if s.chord_unvoiced]
+        self.assertEqual(len(rescued), 1)
+        step = rescued[0]
+        self.assertEqual((step.bar, step.beat), (28, 2.0))
+        self.assertEqual(step.chord, "F#dim7")
+        self.assertEqual(step.melody, "Bb4")
+        self.assertEqual(step.grip, "melody")
+        self.assertFalse(step.melody_only)
+        self.assertIn("no voicing for this chord", arranger._step_annotation(step))
 
 
 class TestHeadCli(unittest.TestCase):

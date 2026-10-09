@@ -24,16 +24,20 @@ gate and the conventions — not the explanation.
 | tab staff, HTML, MusicXML, GP5, or the MusicXML importer | [docs/renderers.md](docs/renderers.md) | `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py` |
 | the slot layer: triples to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
 | a known bug, with its measurement | [docs/open-issues.md](docs/open-issues.md) | — |
+| which finger frets which string, or a per-finger cost criterion; which strings the right hand's `p-i-m-a` pluck, the gaps between them, and how far the thumb reaches | [docs/fingering.md](docs/fingering.md) | `arranger/fingers.py` (not inert any more: `bass` reads `can_fret` for the four-fret budget — `tests/test_fingers.py` holds the caller set to exactly `{bass}`; no per-finger cost yet). Its §4.3 measurement landed a *right-hand* rule first (`grips.thumb_safe_grips`, read by `decisions.resolve_texture_grips`) and then a *left-hand* one (`fingers.can_fret`, read by `bass._place_bass`); its **§4.4 finger-skip half is now built**, not recorded: the four `drop24` sets that carried the skip were removed from `GRIP_STRING_SETS` (`grips.finger_skip_count` is the rule and `tests/test_grips.py` holds the tables to it), which takes the default row's skip-carrying steps **223 → 1** and costs 57 of that row's 1,087 four-note steps a voice, **41 of them their chord** - the price, and the three rejected forms of the same lever, are in §4.4 and [docs/engine.md](docs/engine.md). Its thumb's-reach half still changes no count (`tests/test_texture.py::TestTheThumbReach` pins the reach), and §4.3's follow-on (should the *selector* leave room for the thumb?) is measured and unbuilt, on a **re-measured** count: 53 dropped bass notes when it was asked, **39** on the current tree, and the harmless recovery is now **none** rather than ten (those hosts were the removed `drop24` sets), so every recovery pays the span bucket. Its **fourth lever — the walk's own pitch — was measured with the re-measurement** and pays the tuple nothing: 24 of 38 refusals are recoverable by another pitch, 12 by a chord tone and 14 by none. Item 13 carries the counts, attributed across five trees, and the stale-53 warning; item 16 there is the warning-routing defect pinning its message surfaced (`docs/open-issues.md` item 13) |
 | `voices=`, which voices the guitar plays | [docs/voices-axis.md](docs/voices-axis.md) | `arranger/textures.py` |
 | the comping axes (`harmony=`, `grid=`, the rhythm grid) | [docs/comping-styles.md](docs/comping-styles.md) | `arranger/textures.py` |
 | the step/voicing mirrored fields (`step.grip`, `step.bass`), or which voice selection is melody-only | [docs/one-fact.md](docs/one-fact.md) | `arranger/tuning.py`, `arranger/steps.py` |
 | how something was decided, historically | [docs/history/](docs/history/) | — |
 | user-facing behaviour and examples | [README.md](README.md) | — |
 
-**`docs/history/` is deliberately not extended.** It is where a completed plan goes:
-it records why a decision was made and is never revised. If the code has moved on, the
-history is still true *about the past* — so read the current documents above first and
-treat a contradiction between them as a bug in one of them.
+**`docs/history/` is not extended, and the one exception is recorded here.** It is where a
+completed plan goes: it records why a decision was made and is never revised. If the code
+has moved on, the history is still true *about the past* — so read the current documents
+above first and treat a contradiction between them as a bug in one of them. The exception
+is a **retired** document: `reharmonisation-proposals.md` was moved here when the Weimar
+corpus its measurements depended on was removed. A retired document is added once and then
+frozen like the rest — it is not a home for an open plan.
 
 ## The gate
 
@@ -41,10 +45,10 @@ treat a contradiction between them as a bug in one of them.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **889 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **960 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 12 of those 889, and it is the one that fails if this
+(`tests/test_docs.py` is 12 of those 960, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree. It also fails if a document
 exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
 new file cannot be added without being registered.)
@@ -58,8 +62,8 @@ bassist on the root, a horn on the melody and the guitar comping guide tones bet
 Adding an axis means a new `*_STYLES` / `*_POLICIES` pair and a `*_AUTO` sentinel that
 is deliberately **not** in the styles list, plus a `*_allowed` refusal function derived from
 a table rather than listed — never another branch at the call sites. The trap: a loop
-variable shadowing a policy parameter (`melody` in `wjazzd.arrange_slots` did exactly this,
-and it only raised when a diminished retry had something to rescue).
+variable shadowing a policy parameter (`melody`, in the since-removed `wjazzd.arrange_slots`,
+did exactly this, and it only raised when a diminished retry had something to rescue).
 
 **`harmony=` was added by following that rule, and the three traps below are what it cost.**
 `HARMONY_STYLES` + `HARMONY_POLICIES` + `HARMONY_AUTO` + `harmony_allowed` in
@@ -95,8 +99,9 @@ a fifth:
 skipped). **There is no second job and nothing a clean clone cannot run** — that used
 to need stating here and in the workflow header, because the 42 MB Weimar Jazz
 Database was gitignored and 85 of the suite's tests skipped on every fresh checkout.
-The database is gone, so a green check means the whole suite ran, and the only guards
-left are the optional-extra ones this job installs against.
+The database **and its loader** are gone, so a green check means the whole suite ran, and
+the only guards left are the optional-extra ones this job installs against. (The 42 MB
+`wjazzd.db` file is gitignored, so a working copy may still have it; nothing reads it.)
 
 **`make check` runs one interpreter, and the matrix runs four.** It is the 3.14 dev
 one. A construct that is version-dependent passes here and fails on the 3.11 job —
@@ -114,6 +119,7 @@ arranger/
 │   ├── __init__.py      #   facade: re-exports, __version__, main()
 │   ├── __main__.py      #   `python -m arranger`
 │   ├── tuning.py        #   STANDARD_TUNING, Voicing, ArrangementStep
+│   ├── fingers.py       #   which finger holds which fret; read by bass for the fret budget
 │   ├── diagnostics.py   #   Diagnostics - warnings are a value, not a print
 │   ├── chords.py        #   ChordParser, non-chord-tone routing
 │   ├── grips.py         #   grip tables and the candidate generators
@@ -151,7 +157,7 @@ dynamically from `arranger.__version__` — that is the single source of truth, 
 ### The engine is a package, and the order is enforced
 
 The engine was one 4290-line module until Phase 5 of the package refactor. It is
-now thirteen modules in a strict dependency order:
+now fourteen modules in a strict dependency order:
 
 ```
 tuning -> diagnostics -> chords -> grips -> cost -> textures
@@ -161,6 +167,16 @@ tuning -> diagnostics -> chords -> grips -> cost -> textures
                                                  steps -> slots -> render -> cli
                                                             |              |
                                                           (facade) <-------+
+```
+
+`fingers` — which finger holds which fret — hangs off `tuning` alone, so it is drawn
+separately rather than as a branch of that chain. It is **not inert**: `bass` reads
+`fingers.can_fret` for the four-fret budget of the playability invariants below, which is
+an *upward* import and so legal. `docs/fingering.md` §5 step 3 — a per-finger cost
+criterion — is still open.
+
+```
+tuning -> fingers   (step 1 of docs/fingering.md; `bass` reads can_fret for §4.3)
 ```
 
 A module may import only what is *below* it, and
@@ -268,11 +284,25 @@ Every generated voicing must satisfy all of these. They are asserted per-shape i
 correct:
 
 - the sounding strings are exactly one `supported_string_sets()` entry — two to four
-  strings, every other muted (`-1`);
+  strings, every other muted (`-1`). **Four is the right hand**: the plucks are thumb,
+  index, middle and ring (`p-i-m-a`), so a step must never sound five, which is why the
+  bass note a thumb line merges into a step goes *outside* the upper shape's set rather
+  than onto it, and why a target under a thumb may sound at most three strings
+  (`grips.thumb_safe_grips`);
 - the melody is on that entry's soprano string, and is the highest sounding note;
 - `0 <= fret <= 18` and `fret_span() <= GRIP_MAX_SPAN[grip]` (5, or 4 for a duo).
   The span is checked on the frets actually placed, **not** as "within N of the
   soprano": those differ, and the second admits a span of ten;
+- **four fingers, four frets** — and unlike the four above, this one is stated over a
+  *step* rather than a shape, because that is the only level at which it can fail. A
+  generated grip sounds at most four strings and so spans at most four frets; a
+  `bass_only` step, though, merges the thumb into a shape the hand is still **holding**,
+  where its fret can be a fifth. `fingers.can_fret` is the check and `bass._place_bass`
+  is its one caller: a candidate needing five frets is refused, so the step keeps its
+  upper voicing and the omission is reported, exactly as when no string is free.
+  Measured over the committed heads: **1** such step before the fix, **0** after — see
+  `docs/open-issues.md` item 12. It is the smaller twin of the bullet above: the same
+  trap, the rule asserted on the part of the whole that happened to be checked;
 - every sounding pitch is a chord tone — except where the drop-2 tables have no
   inversion for the melody's degree and the quality-only fallback takes over. The
   selector's first cost criterion rejects such a shape whenever a correct one exists.
@@ -290,7 +320,10 @@ melody whose only position sits above `HIGH_FRET_LIMIT` is voiced an octave down
 positionally in `tests/test_grips.py::TestVoicingCost`. Moving the code is safe;
 **reordering it is a musical decision, not a refactor.** Span is the one criterion
 promoted above position, and that was measured rather than guessed — the reasoning
-and the table of what it cost are in [docs/engine.md](docs/engine.md).
+and the table of what it cost are in [docs/engine.md](docs/engine.md). Changing what
+a criterion *reports* is the same decision: spans 0 and 1 are bucketed to one value
+at the span index (a one-fret reach does not outrank keeping the hand in place),
+measured at one moved pin, and the `0/1/2` bucket was measured at 13 and rejected.
 
 Likewise the 54 hardcoded tab strings in the tests stay: they are the acceptance
 gate, and a snapshot mechanism would let a regression pass by regenerating itself.
@@ -378,7 +411,7 @@ Each of these cost real time, or nearly shipped a defect.
    a test fails because the structure it describes is gone, **invert the assertion —
    do not delete the test.** `test_both_loops_call_the_shared_decisions` asserted both
    step loops call each decision; Phase 4 made that false by design, and it now
-   asserts the opposite (the engine calls them, and `wjazzd` must contain none of it).
+   asserts the opposite (the engine calls them, and `slots` must contain none of it).
 
 6. **When consolidating two branches, check whether their *outputs* differ before
    unifying their predicates.** `melody_alone_case` nearly shipped as a `bool`, and
@@ -395,17 +428,27 @@ Each of these cost real time, or nearly shipped a defect.
 8. **A stale "before" measurement will invent differences that are not there.** When
    proving a refactor changed nothing, capture the fingerprint from the commit you
    think it is, not from a file that has been sitting in the tree since
-   (`git worktree add /tmp/pre HEAD`). The 42 MB database is gitignored, so copy
-   `wjazzd.db` across or the corpus half of such a capture comes back empty. The
-   capture itself is a throwaway script under `/tmp`, kept out of the repository:
-   `tests/test_step_loop_equivalence.py` is the standing check, and a measurement
-   that only matters during one refactor has no business outliving it.
+   (`git worktree add /tmp/pre HEAD`). The capture itself is a throwaway script under
+   `/tmp`, kept out of the repository: `tests/test_step_loop_equivalence.py` is the
+   standing check, and a measurement that only matters during one refactor has no
+   business outliving it. (This trap used to have a corpus half — the gitignored
+   database had to be copied across or the capture came back empty — and that half
+   retired with the loader.)
 
 9. **A count without a denominator is not a metre.** 2/2 and 2/4 are both two beats
    to the bar, and both readings of `4 / beat_type` agree in 4/4 — so the whole suite
    passed while the file was unusable for every other metre. That is why `Head`
    carries `beat_type` and it is plumbed to the file headers, and why the check that
-   catches it sums each measure's durations rather than counting measures.
+   catches it sums each measure's durations rather than counting measures. **The
+   importer then shipped the bug that fix was about**: `beat_type` was read and
+   plumbed to the four *renderers*, while the importer's own onset conversion still
+   used the count — so every note of the one committed 3/4 head was placed 25% early,
+   its exported bars came out short, and `--musicxml` scaled every onset by another
+   0.75 per round trip. Six of the seven heads are 4/4 or 2/2, where the two spellings
+   are the same number, and the only test that read the odd one out derived its
+   expectation from those same beats. Measured and fixed in
+   [docs/open-issues.md](docs/open-issues.md) item 15; the denominator now reaches the
+   engine's arithmetic too (`headxml._beat_from_onset`, `bass._melody_timeline`).
 
 10. **An omitted attribute is not an identity — and a default that is wrong is
     silent.** The exporter wrote no `<key>`, so every score left the library was in C
@@ -462,6 +505,21 @@ Each of these cost real time, or nearly shipped a defect.
     An `NC` bar is also what proves "off the grid" is not universal: it has *no chord
     to place*, so "silent here" and "no chord here" are different claims, and only the
     first is a rest.
+13. **An invariant asserted on a voicing says nothing about a step the engine builds
+    *after* the check.** The merge is deliberately after selection — "the bass is written
+    into the fret vector only once `_best_voicing` has returned, so it cannot enter the
+    cost tuple by construction" — and every `supported_string_sets()` assertion in the
+    suite is on a generated *voicing*. So a four-note target plus a thumb note was five
+    strings, four fingers be damned, on **281 steps** of the committed heads under
+    `--texture targets --bass walk|anchors`, and no test could see it.
+    `tests/test_walking_bass.py::TestTheInvariant` *had* amended the rule for a
+    bass-carrying step, and amended it correctly for the texture it was written for (a
+    `walking_bass` target is a shell, so three strings plus a thumb is four) — the
+    amendment was right and the palette was wrong. **The general form: when a rule is
+    stated over a part of a whole, ask which producer can make the other part larger than
+    the rule assumed, and assert the rule on the whole.** A count is the way to do it: the
+    step count that catches this is "strings plucked at once", not "strings in the shape".
+    See [docs/open-issues.md](docs/open-issues.md) item 11.
 
 ## Where things are documented
 
@@ -471,7 +529,8 @@ Each of these cost real time, or nearly shipped a defect.
 | [docs/engine.md](docs/engine.md) | grips, the selector, texture, the cost tuple, non-chord tones |
 | [docs/renderers.md](docs/renderers.md) | tab staff, MusicXML import/export, GP5, and their traps |
 | [docs/open-issues.md](docs/open-issues.md) | diagnosed bugs with their measurements; fixed items stay, with what the fix was |
-| [docs/reharmonisation-proposals.md](docs/reharmonisation-proposals.md) | tritone substitution (shipped) and chromatic approach chords (measured, not built), with the corpus numbers behind each |
+| [docs/history/reharmonisation-proposals.md](docs/history/reharmonisation-proposals.md) | **retired** - tritone substitution (shipped) and chromatic approach chords (measured, not built), with the corpus numbers behind each. Its reproduction path went with the Weimar corpus |
+| [docs/fingering.md](docs/fingering.md) | fingering: which finger frets which string, and which strings the right hand's `p-i-m-a` pluck. Step 1 of its §5 landed (`arranger/fingers.py` + `tests/test_fingers.py`: assignment, barres, movement, feasibility), and §5 step 2 is now **measured on all of its halves**. Its §4.3 half found two real defects, one per hand: a merged step could sound five *strings* (fixed by `grips.thumb_safe_grips` + `decisions.resolve_texture_grips`) and a `bass_only` step could need five *frets* (fixed by `fingers.can_fret` + `bass._place_bass`, the module's only engine caller - so the module is no longer inert). Its movement half came back nearly empty, and its **§4.4 right-hand half** found the only finger-skip string sets to be four `drop24` sets and one `shell` - then **shipped the ban**: the four are gone from the tables, so the default row's skip-carrying steps fall **223 → 1**, at a price counted in chords (57 of that row's 1,087 four-note steps lose a voice, **41 of them their chord**, ten of the 41 from span-0/1 shapes whose left hand was trivial - the convention is the *right* hand's fan, so a barre still pays), and the removal dissolved `uniform`'s bass refusal on the way, because `(4,2,1,0)` was the set that spanned all three thumb strings. The three rejected forms of the same lever - the tuple criterion after `span` (17 probe picks, 94 pools), the per-shape rule (skip *and* a real reach), and the keep-them-as-a-last-resort palette - are recorded there with their numbers. §4.4 also measures the thumb's *reach* - it sweeps the low four strings (E A D G), which is why a two- or three-note shape whose bottom note is above the G has no thumb in it at all, bass voice or not. Only three of the 24 reachable sets put the bottom note up there and all three are contiguous, so narrowing §2.5's exemption to that reach moves no count - the same "recorded, not built" outcome. §4.3's follow-on - should the *selector* leave room for the thumb? - is measured the same way, and **re-measured once since**: 53 dropped bass notes over the committed heads when it was asked and **39** on the current tree, the dominant cause being a third one (no octave of the walk's pitch below the shape) rather than the fret budget, and the harmless recovery - a candidate sounding the chosen shape's own notes - is now **none** rather than ten, because those hosts were the removed `drop24` sets, so every recovery pays the span bucket. The **walk's own pitch** is the fourth lever and costs the tuple nothing: 24 of 38 "no octave below" refusals are recoverable by another pitch, 12 of them by a chord tone and 14 by none, all 12 in one head and one figure. `open-issues.md` item 13 carries the counts, attributed across the five trees that moved them, and the stale-53 warning; item 16 there is the warning-routing defect found while pinning item 13's message. §5 step 3 (the cost-tuple decision) is still open |
 | [docs/history/](docs/history/) | completed plans: corpus, walking bass, texture, arranging guide - a record of the past, not of what exists |
 | [docs/voices-axis.md](docs/voices-axis.md) | **in progress** - the `voices=` axis, awaiting QA |
 | [docs/comping-styles.md](docs/comping-styles.md) | the comping axes (`harmony=`, the rhythm grid): **partly built** - Stage C shipped `harmony=`, Stage D shipped the named `grid=` rows, and §9 steps 0, B, A, A', C, D and E have landed (E, `--voices soprano` = the melody and nothing else, landed earlier as Stage 2 — `docs/one-fact.md`; A' makes a **chords-only lead sheet** loadable, `Head.bars` a fact about the file; C makes `--non-chord-tone` reach the comping route at harmony level, onset-guarded by `melody_onsets`; D makes the soprano **per slot**, so a soprano-named selection comps the grid positions its tune does not articulate at); §9.4's four-note comping chord, and §6's open questions, are still proposal |

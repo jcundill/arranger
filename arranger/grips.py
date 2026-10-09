@@ -141,27 +141,35 @@ GRIP_STRING_SETS: Dict[str, Tuple[Tuple[Tuple[int, ...], int], ...]] = {
     # The widest four-note shape there is - twenty semitones from the melody to the bass
     # for a Cmaj7 - and it is *unplayable on four neighbouring strings*: the low voice
     # lands more than an octave below where a contiguous block can put it. What makes it
-    # playable is the same bass-skipping rule as everywhere else, and here it has to skip
-    # an **inner** string as well, because the shape is not just deeper but differently
-    # spaced. Measured across sevenths, ninths and sixths over the whole working register,
-    # two sets win essentially every melody:
+    # playable is the same bass-skipping rule as everywhere else: the bass voice takes a
+    # lower string. The plain block is listed first, as for drop-2, so the idiomatic
+    # reading of the name wins a tie.
     #
-    #   (1, 2, 4, 5)  strings 1-2-4-5   skip the G; 49 wins at span 2, 47 at span 1
-    #   (2, 3, 5, 6)  strings 2-3-5-6   skip the B; 24 wins at span 1, 11 at span 2
-    #
-    # against 1 win for everything else combined. Both keep the melody on a long string
-    # and put the two dropped voices on strings whose tuning suits their spacing. The
-    # contiguous blocks are offered too, so a shape that does fit one is still reachable
-    # and the selector can prefer the familiar layout on a tie.
+    # **Four sets that fretted the shape by skipping an *inner* string were removed**, and
+    # the reason is a finger rather than a fret: `docs/fingering.md` §4.4. They were
+    # `(5,4,2,1)` and `(4,3,1,0)` - this family's two measured winners, with the middle and
+    # ring fingers crossing the G and the B - plus `(5,3,2,0)` and `(4,2,1,0)`. Removing
+    # them is not a tidy-up, and the price is measured rather than assumed: over the
+    # committed heads, **260 of 1,204 selections change shape** - the replacement giving up
+    # span in 184 and position in 59, with 199 of the 260 keeping theirs (192 of those
+    # keeping the pitch classes, the same chord on another set) - and at *step* level
+    # **57 of the 1,087 four-note steps lose a voice, 41 of them to the melody alone**,
+    # because the best shape left at that melody position then sits at the top of the span
+    # budget and `should_demote_to_melody_alone` drops it. Nineteen of the lost shapes
+    # spanned 0 or 1 - barres, whose left hand is trivial, and which pay anyway because
+    # §2.5's cost is the *right* hand's fan; §4.4 records the per-shape variant of this
+    # rule (`skip > 0` **and** `span >= 2`) as the one that would keep those ten chord
+    # losses, not built. What it buys is 260 shapes a hand can reach across; the
+    # `(5,3,2)` shell is the one shape left in the engine that still crosses a string, and
+    # it is kept for reasons of its own - see the shells below. `finger_skip_count` states
+    # the rule, and `tests/test_grips.py` holds every reachable set to it.
     #
     # Stored as **string indices**, high to low, like every other entry - so the
-    # conventional numbers above read 1-2-4-5 as (5, 4, 2, 1). Written the other way
-    # round these produced a set containing string index 6, which does not exist, and
-    # `_place_template` indexed off the end of the fret list.
+    # conventional numbers read 1-2-4-5 as (5, 4, 2, 1). Written the other way round these
+    # produced a set containing string index 6, which does not exist, and `_place_template`
+    # indexed off the end of the fret list.
     "drop24": (
-        ((5, 4, 2, 1), 5), ((5, 3, 2, 0), 5),
         ((5, 4, 3, 2), 5), ((5, 4, 3, 1), 5),
-        ((4, 3, 1, 0), 4), ((4, 2, 1, 0), 4),
         ((4, 3, 2, 1), 4), ((4, 3, 2, 0), 4),
     ),
     # 6-4-3-2: low E, D, G and B with the melody on the B string, skipping the A
@@ -389,6 +397,109 @@ def supported_string_sets() -> List[frozenset]:
         sets.update(frozenset(strings) for strings, _ in shapes)
     sets.update(frozenset(strings) for strings in SINGLE_NOTE_STRING_SETS)
     return sorted(sets, key=lambda s: sorted(s))
+
+
+# The right hand plucks with thumb, index, middle and ring - `p-i-m-a`, four digits - so
+# four strings is the most that can sound at once. `supported_string_sets()` states the
+# same four from the shape's side ("two to four strings, every other muted"); this is the
+# same limit stated from the hand's, because a *step* is what has to be measured against
+# it once a thumb note is merged underneath the shape.
+RIGHT_HAND_STRINGS = 4
+
+
+def grip_pluck_count(grip: str) -> int:
+    """How many strings `grip` can sound at once: its widest string set.
+
+    The right hand's budget question, asked of one grip. `melody` is a palette entry
+    rather than a grip - a texture names it to mean "the left hand plays the tune alone" -
+    so it answers one, which is the shape that entry builds. A name the table does not
+    know answers one as well rather than raising, on the same reasoning: this measures a
+    palette the texture owns, and an entry that sounds one note cannot spend a finger the
+    thumb needs.
+    """
+    if grip == "melody":
+        return 1
+    sets = GRIP_STRING_SETS.get(grip, ())
+    return max((len(strings) for strings, _ in sets), default=1)
+
+
+def thumb_safe_grips(palette: Tuple[str, ...]) -> Tuple[str, ...]:
+    """The grips in `palette` a hand with a thumb on the bottom string can still play.
+
+    Four digits, one of them the thumb, so a target may sound at most **three** strings
+    while a thumb line is running: the fourth string is the bass note. A four-note grip
+    plus a thumb is five simultaneous plucks, which no right hand has at any fret - the
+    left hand can barre a four-fret shape, and that is exactly why the two budgets are
+    separate questions (see `docs/fingering.md` §4.3).
+
+    An **empty** palette comes back unchanged, because it is not a palette that fails the
+    budget - it is the table saying "the left hand plays nothing here" (`walking_bass`'s
+    fills), and "narrowing" it would hand the thumb a chord it was never offered.
+
+    When every grip the palette names spends all four fingers, the answer is the **widest
+    statement that leaves one free** rather than nothing: a target still has to state the
+    harmony, which is the rule `TEXTURE_GRIPS["walking_bass"]` already encodes with its
+    `("shell",)` target palette. Derived from `GRIP_PREFERENCE` and the string tables, so
+    a three-string grip added later is admitted here without an edit - and when two are
+    equally wide the winner is the fuller one, which is `shell`.
+    """
+    if not palette:
+        return palette
+    kept = tuple(g for g in palette if grip_pluck_count(g) < RIGHT_HAND_STRINGS)
+    if kept:
+        return kept
+    safe = tuple(g for g in GRIP_PREFERENCE if grip_pluck_count(g) < RIGHT_HAND_STRINGS)
+    widest = max(grip_pluck_count(g) for g in safe)
+    return tuple(g for g in safe if grip_pluck_count(g) == widest)
+
+
+# The strings the right hand's **thumb** can reach: the four lowest, E A D G. A gap between
+# two sounding strings is normally the thumb's - the thumb is on the bottom note and the
+# index on the next string up - so the gap only stops being the thumb's where the note under
+# it is above this reach. Measured in `docs/fingering.md` §4.4, where narrowing §2.5's
+# exemption to this reach moved no count at all: it is the reach the tables already respect.
+THUMB_REACH_STRINGS = frozenset((0, 1, 2, 3))
+
+
+def finger_skip_count(voicing: Voicing) -> int:
+    """How many strings a finger has to cross to fret `voicing`: 0, 1, 2 or 3.
+
+    The right hand's second question, after how many strings are plucked. Four adjacent
+    strings are no trouble whatever the shape: the thumb takes the bottom note and each
+    finger the next string up. The trouble is a **gap** - a string sounding with a silent
+    one between it and the string below - because the digit that would take it has to
+    reach over a string it is not using, and that is the middle or the ring finger's cost
+    (`docs/fingering.md` §2.5).
+
+    The bottom gap is the exception, and it is checked on the **lowest sounding string**:
+    while that string is inside the thumb's reach the thumb is the digit on the bottom
+    note, so the gap above it is the index's and costs nothing - which is exactly the
+    bass-skipping rule this table's four-note sets were built on. Any *other* gap is
+    counted, so `(5,4,2,1)` answers 1 - the middle crosses the G - while `(5,4,3,1)`
+    answers 0, its gap being the bottom one.
+
+    Note the direction of the asymmetry: the exemption is for the **first** gap only, so a
+    set whose bottom note is inside the reach and whose *second* gap is not still counts
+    that second gap. Where the bottom note sits above the reach, every gap counts.
+
+    This is a **shape**-level rule, which is the limit of its reach: a `bass_only` step
+    merges a thumb note in *after* selection, so that gap is invisible here and §4.4
+    measures the merged case at step level instead. And no selector reads this at all -
+    the engine enforces the rule by **not offering** the shapes that fail it, which is why
+    the four inner-skip `drop24` sets are gone from the table above. Only the `(5,3,2)`
+    shell can still answer nonzero, kept on purpose for the walking bass's three-layer
+    split; `tests/test_grips.py` is what holds the tables to it.
+    """
+    sounded = sorted(index for index, fret in enumerate(voicing.frets) if fret >= 0)
+    total = 0
+    for position in range(1, len(sounded)):
+        gap = sounded[position] - sounded[position - 1] - 1
+        if gap <= 0:
+            continue
+        if position == 1 and sounded[0] in THUMB_REACH_STRINGS:
+            continue           # the thumb has the bottom note: the index's gap, not a skip
+        total += gap
+    return total
 
 
 # --- Grip generation -------------------------------------------------------

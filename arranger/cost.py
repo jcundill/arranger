@@ -132,6 +132,17 @@ def voicing_cost(
        position, which is the one priority it is promoted across, and that is a
        deliberate trade rather than an oversight.
 
+       **Span 0 and span 1 are bucketed to the same value.** One fret of stretch is
+       not a stretch worth moving the hand for: a barre at fret 3 spanning zero
+       beats a one-fret shape three frets away only because of this index, and a
+       guitarist would rather hold the position and reach one extra fret. The
+       bucket is applied to the *value* at this index rather than by reordering the
+       tuple, so every span of two or more still outranks position exactly as
+       before - the `8-x-8-8-13-x` case below is untouched, and the measured trade
+       in `docs/engine.md` (the low Dm7 taking `x-3-3-2-3-x` over the span-2
+       6-4-3-2) still holds. Measured over the suite, the bucket moves exactly one
+       pinned tab.
+
        The reason is that the two criteria disagree about the same thing. Neck
        position measures how far the *hand* moves; span measures how far the hand
        has to *stretch* once it is there. A five-fret shape sitting one fret from
@@ -223,7 +234,9 @@ def voicing_cost(
         foreign,
         float(outside),
         float(missing),
-        float(voicing.fret_span()),
+        # Span 0 and 1 bucketed together - see criterion 3 above. A one-fret
+        # reach does not outrank keeping the hand where it is; two or more does.
+        0.0 if voicing.fret_span() <= 1 else float(voicing.fret_span()),
         position,
         movement,
         bass_root_or_fifth,
