@@ -45,10 +45,10 @@ frozen like the rest — it is not a home for an open plan.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **960 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **961 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 12 of those 960, and it is the one that fails if this
+(`tests/test_docs.py` is 13 of those 961, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree. It also fails if a document
 exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
 new file cannot be added without being registered.)
@@ -301,7 +301,8 @@ for that space, and only the first belongs in the source:
   where it is least likely to be re-measured. Leave a one-line pointer instead.
 
 A module docstring is one to three sentences: what the module owns, and where it sits
-in the dependency order.
+in the dependency order. `tests/test_docs.py` resolves a relative link written inside a
+docstring, so a pointer to a file that is not on disk fails the gate.
 
 ### Playability invariants
 

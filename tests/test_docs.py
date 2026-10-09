@@ -25,6 +25,7 @@ always runs.
 
 from __future__ import annotations
 
+import ast
 import re
 import unittest
 from pathlib import Path
@@ -78,6 +79,24 @@ CI_WORKFLOW = ".github/workflows/ci.yml"
 def _read(name: str) -> str:
     """Read a document relative to the repository root."""
     return (ROOT / name).read_text(encoding="utf-8")
+
+
+def _source_docstrings(path: Path) -> List[str]:
+    """Every docstring in the module at `path`, in no particular order.
+
+    Read from the AST rather than by scanning for triple quotes, so a link inside a
+    string literal that is not a docstring is not mistaken for one.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    found: List[str] = []
+    for node in ast.walk(tree):
+        if isinstance(
+            node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+        ):
+            doc = ast.get_docstring(node)
+            if doc is not None:
+                found.append(doc)
+    return found
 
 
 def _layout_block() -> str:
@@ -181,6 +200,28 @@ class TestDocsMatchTheCode(unittest.TestCase):
                 if not path.exists():
                     broken.append(f"{name} -> {target}")
         self.assertEqual(broken, [], "a document links to a file that does not exist")
+
+    def test_the_relative_links_in_docstrings_resolve(self):
+        """A docstring's pointer to a document must name a file that exists.
+
+        The same argument as the check above, applied to the source. A docstring that
+        sends a reader to `docs/open-issues.md item 12`, or to a plan document that has
+        since been retired, is a wrong turn - and it is invisible to the linter and to a
+        suite that only tests behaviour, which is exactly how the pre-split `AGENTS.md`
+        drifted. A link is the one part of a docstring that can be checked mechanically,
+        so it is the part that is.
+        """
+        broken: List[str] = []
+        sources = sorted(ROOT.glob("*.py")) + sorted((ROOT / "arranger").glob("*.py"))
+        for path in sources:
+            for doc in _source_docstrings(path):
+                for target in _LINK.findall(doc):
+                    resolved = path.parent / target.split("#", 1)[0]
+                    if not resolved.exists():
+                        broken.append(f"{path.relative_to(ROOT)} -> {target}")
+        self.assertEqual(
+            broken, [], "a docstring links to a file that does not exist"
+        )
 
     def test_every_document_on_disk_is_in_the_list(self):
         """A document created without being registered fails the suite.

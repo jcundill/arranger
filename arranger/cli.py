@@ -1,54 +1,19 @@
-"""The MusicXML front end's shared argparse block and output dispatch.
+"""The MusicXML front end's argparse block and its output dispatch.
 
-**This was two front ends, and is one now.** `headxml.head_cli` (a written
-MusicXML head) and `wjazzd.corpus_cli` (a Weimar transcription) were separate
-commands over separate sources, and their *output* legitimately differed: the
-corpus printed a performer and key, `head` the notated metre. What was not
-legitimate was that they hand-copied the same argparse block, because then a flag
-added to one CLI was silently missing from the other - defect #4 in
-`implementation_plan.md`, and the last of the six open.
-
-The block below is what that fix produced, and the history is kept because it
-explains a shape that would otherwise look over-built. **The flag semantics were
-already identical; the help text was not.** Measured on the tree before this
-module existed: 17 flags in both parsers, and all 17 agreed exactly on `type`,
-`choices`, `default`, `nargs` and `metavar`. Eleven of the 17 disagreed on their
-`--help` string - `--fret-min` and `--fret-max` had help text in `corpus` and none
-at all in `head`. So a bare `add_common_arguments(parser)` would have quietly
-changed one command's `--help`, which nothing asserted. Hence the split: **the
-flags whose help is identical are written once here**, and the ones that differ
-were `CommonHelp` values named for their command.
-
-Three reductions followed, and each is a measured removal rather than a preference:
-
-- `--vertical` is gone. It was one of the six whose help was identical, and the
-  six-line block per chord it selected is `format_progression`'s former second
-  branch; a whole-progression staff is what a player reads, so `tabstaff` covers
-  it. Five flags are now written once here.
-- `--fret-min`/`--fret-max` were help text in `corpus` and `None` in `head`, and
-  `tests/test_cli.py` pinned that as a *deliberate* difference so a future agent
-  would have to look before tidying it. They did, and it was still worth closing:
-  a flag the reader can pass but not understand is worse than either state.
-  `HEAD_HELP` now states it, worded differently so the pair stays in the differing
-  set, and `Optional[str]` remains the type because the asymmetry the test guards
-  is now one of *wording*, not presence.
-- `--skeleton` and `--pick` are gone with the database. See
-  `add_common_arguments`.
-
-What survives the collapse is the one idea the pair taught: **the duplication
-worth removing is the *argument*, not the *prose*.** Prose that genuinely differs
-is kept and lives in one table - `head`'s `--texture` says "of the notated bar"
-because a score has a notated metre, and that sentence is now the only copy of it.
-`CommonHelp` is one dataclass with one field per flag, so a flag added here has
-nowhere else to be forgotten.
+`add_common_arguments` writes the flags once rather than making each caller copy them, so
+a flag cannot be added in one place and silently missed in another. The idea behind the
+split is that **the duplication worth removing is the *argument*, not the *prose***: the
+flags whose help is identical are written once here, and prose that genuinely differs is
+kept and lives in one table. `head`'s `--texture` says "of the notated bar" because a
+score has a notated metre, and `HEAD_HELP` holds the rest. `CommonHelp` is one dataclass
+with one field per flag, so a flag added here has nowhere else to be forgotten, and
+`tests/test_cli.py` asserts every declared field reaches `add_argument` with its text.
 
 **Laziness is deliberate and load-bearing.** `argparse` is imported only under
-`TYPE_CHECKING` (the annotations are strings, so nothing at runtime needs it) and
-the renderers are imported *inside* `render_and_write`. Importing `tabstaff` at
-module scope would execute the package `__init__` through `arranger.tuning`, which
-is the cycle Phase 6 measured; keeping it in the function body is also what leaves
-`headxml`'s `load_musicxml` as cheap as it was, which is the reason those imports
-are function-local today.
+`TYPE_CHECKING` (the annotations are strings, so nothing at runtime needs it) and the
+renderers are imported *inside* `render_and_write`. Importing `tabstaff` at module scope
+would execute the package `__init__` through `arranger.tuning`, so the import stays in the
+function body - which is also what leaves `headxml`'s `load_musicxml` cheap.
 
 This module sits **last** in `tests/test_package_dag.py`'s `ORDER`: it reads
 `NECK_FRET_MIN`/`MAX` from `tuning`, `GRIP_PREFERENCE` from `grips`,
@@ -96,11 +61,10 @@ class CommonHelp:
     the text is the same wherever it is read - `fallback`, `grips`, `non_chord_tone`
     and `bass` are those four.
 
-    **This is one table where there used to be two, and it is still a table rather
-    than inline strings for the reason the pair of commands gave it.** A flag's
+    **A table rather than inline strings.** A flag's
     help text is the one place a flag's *meaning* is stated in prose, and it needs
     to be findable by reading one block rather than by grepping a function body.
-    `arranger head --help` is the only consumer now, and the separation is kept
+    `arranger head --help` is the consumer, and the separation is kept
     because the alternative - help text interpolated into `add_argument` calls -
     scatters the explanation of a flag across the call that registers it.
 
@@ -164,17 +128,10 @@ def add_common_arguments(
 
     **One caller now.** This was written for two commands that shared a block of
     flags, and its prose spoke throughout of "both" and "the other" - which is how
-    `--skeleton` and `--pick` came to be *parameters* rather than flags: their
-    vocabularies belonged to `wjazzd`, and importing them would have made
-    `import arranger.cli` depend on the database module. So they were passed in,
-    gated on being non-None, and the MusicXML path never passed them because it
-    does not reduce - every written note of a score gets its own slot now.
-
-    With the database gone those parameters have no caller and no vocabulary, so
-    the two flags are removed rather than left as a gate nothing opens. The
-    asymmetry the gate documented is real but it no longer has two sides: there is
-    one front end and it does not reduce. Where chords fall is the `grid=` axis,
-    and which notes the guitar plays is the `voices=` axis.
+    `--skeleton` and `--pick` are **not** offered, and the reason is a policy
+    rather than an omission: the MusicXML path does not reduce - every written note of a
+    score gets its own slot. Where chords fall is the `grid=` axis, and which notes the
+    guitar plays is the `voices=` axis.
 
     The order the flags are added in is the order they appear in `--help`.
     """
@@ -312,10 +269,8 @@ def render_and_write(
     `beats_per_bar` and `beat_type` are the notated metre, and both fall back to
     this writer's own default of 4 when `None`. `head` passes the score's own, and
     passing the default and omitting the argument are indistinguishable at every
-    writer - which was checked against `format_tab_html`, `format_musicxml` and
-    `format_gp5` rather than assumed. The fallback is now the only way anything
-    reaches this function without a metre, since the corpus command that justified
-    it is gone; it stays because every writer has that default anyway and a caller
+    writer. The fallback is the only way anything reaches this function without a
+    metre, and it stays because every writer has that default anyway and a caller
     that has no metre should land on it.
 
     `fifths` / `mode` are the key signature, and follow the same convention: `None`

@@ -1,19 +1,9 @@
 """Diagnostics: where the engine's warnings go.
 
-The engine used to `print()` them. That is the wrong default for a library, for
-three reasons that all showed up in practice:
-
-* **A test could not read one.** Ten call sites across the suite wrapped an
-  assertion in `contextlib.redirect_stdout`, which tests that a *string* appeared
-  on stdout rather than that a *condition* was reported - and would pass just as
-  happily if the warning were printed by the wrong function.
-* **A caller could not silence one.** Embedding the engine in a service meant the
-  library's prose appearing in the service's log, with no way to route it.
-* **A caller could not collect one.** "What did this arrangement have to say?"
-  was unanswerable, because the answer had already gone to stdout.
-
-`Diagnostics` makes the warnings a value. A caller passes one in and reads
-`.warnings`; the default keeps printing, so nothing a user sees changes.
+The engine never prints. A warning is a *value*: a caller passes a `Diagnostics` in
+and reads `.warnings` afterwards. That keeps the library's prose out of an embedding
+service's log, and lets a test assert that a *condition* was reported rather than that
+a *string* appeared on stdout.
 
     from arranger import Diagnostics, VoiceLeadingEngine
 
@@ -22,21 +12,16 @@ three reasons that all showed up in practice:
     for message in diagnostics.warnings:
         ...
 
-The `emit` hook is what preserves today's behaviour exactly. A `Diagnostics` with
-no `emit` collects silently; `default_diagnostics()` returns one that prints each
-message as it happens, which is what a caller who passes nothing gets. Keeping
-that on by default rather than silently switching to collection is deliberate: a
-warning that stops being shown is a regression a user notices, and a warning that
-starts being collected is not.
+The `emit` hook is what keeps a caller who passes nothing seeing the same output. A
+`Diagnostics` with no `emit` collects silently; `default_diagnostics()` returns one
+that prints each message as it happens, and that is what the engine uses when given no
+collector. Printing stays the default deliberately: a warning that stops being shown is
+a regression a user notices, and a warning that starts being collected is not.
 
-The messages themselves are unchanged from the `print()` calls this replaces -
-they are user-facing prose already tuned for a terminal reader, which is why this
-is a collector rather than a switch to the `logging` module. The library has one
-consumer and no other logging, and reformatting text that the demo and the tests
-both rely on would buy nothing.
-
-A flat module for now. It moves to `arranger/diagnostics.py` when the engine is
-split into a package, so that split is a `git mv` rather than a second rewrite.
+The messages are user-facing prose tuned for a terminal reader, which is why this is a
+collector rather than a switch to the `logging` module - reformatting text the demo and
+the tests both rely on would buy nothing, and the library has one consumer and no other
+logging.
 """
 
 from __future__ import annotations
