@@ -807,7 +807,7 @@ def _roles_for_slot(
             f"Unknown texture {texture!r}; expected one of {TEXTURE_STYLES}"
         )
     if (texture == "uniform" and not (has_thumb and melody_only)) or weight < 0:
-        # Historical behaviour, and "we were never told where this note falls".
+        # The default texture's rule, and the "no timing supplied" case.
         # The one case that must not land here is a melody-only selection with a
         # thumb - `voices=soprano,bass` under this, the default, texture: the walk
         # invents beats the melody never articulated, and whether those hold the

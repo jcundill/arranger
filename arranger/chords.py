@@ -131,9 +131,8 @@ class ChordParser:
         Normalises a chord quality to its canonical spelling.
 
         Aliases are resolved case-sensitively (so 'M7' -> 'maj7' but 'm7' stays
-        'm7'), which also fixes the historical case bug where 'mMaj7'.lower()
-        produced 'mmaj7' and silently missed every table lookup. Unknown
-        qualities are returned unchanged so callers can report them.
+        'm7'): lower-casing first turns 'mMaj7' into 'mmaj7', which is no key in any
+        table. Unknown qualities are returned unchanged so callers can report them.
         """
         if not chord_type:
             return ""

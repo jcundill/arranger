@@ -163,14 +163,12 @@ def _duration_split(
     # signature outright ("voice 1 is too long") - exactly the error this function
     # exists to avoid.
     #
-    # An earlier version closed the sliver by appending the shortest legal note,
-    # reasoning that a short bar "silently loses music". That is backwards: the
-    # music is not lost, the bar is merely a hair long. It was reached by the
-    # gap-as-rest work in `tabxml._events` - a `1/6`-quarter rest, which is a
-    # triplet-eighth divided by the onset, leaves a remainder no single note covers,
-    # and the appended sixteenth made bar 2 of the Weimar head 4.92 quarters of 4.
-    # `test_a_length_the_format_cannot_exact_is_written_short_never_long` is the
-    # regression.
+    # Padding the sliver with the shortest legal note is the tempting alternative, and
+    # it is backwards: the music is not lost, the bar is merely a hair long. A
+    # `1/6`-quarter rest is what produces such a remainder - a triplet-eighth divided by
+    # the onset, which no single note covers - and padding it can push a bar past its
+    # signature, which is the error this function exists to avoid.
+    # `test_a_length_the_format_cannot_exact_is_written_short_never_long` is the guard.
     return parts
 
 

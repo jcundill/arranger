@@ -196,11 +196,12 @@ def _step_cells(step: ArrangementStep) -> List[str]:
     **hold the whole shape**, which is what a guitarist comping behind a horn actually
     does while the horn repeats the note.
 
-    This is not a corner case: measured over 2,243 corpus steps, 152 carry `repeated`,
-    and a filter that kept the old rule rendered every one of them as a single moving
-    note - the part would have played a melody line the arrangement had explicitly given
-    away. `tabstaff._strikes_here` reads the same predicate, so the ASCII staff, the HTML
-    and this one cannot disagree about what attacks.
+    This is not a corner case: a filter that assumed a soprano carries the tune renders
+    every such step as a single moving note, and the part would then play a melody line the
+    arrangement had explicitly given away. `tabstaff._strikes_here` reads the same
+    predicate, so the ASCII staff, the HTML and this one cannot disagree about what
+    attacks.
+    `docs/engine.md` holds the measurement.
     """
     frets = step.voicing.frets
     partial = (step.repeated or step.bass_only) and not step.melody_only

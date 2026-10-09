@@ -198,11 +198,10 @@ _SLASH_BASS_RE = re.compile(r"^[^/]*/([A-Ga-g][#b]?)\s*$")
 def _slash_bass(symbol: str) -> Optional[str]:
     """The bass note a chord symbol asks for, or None when it asks for none.
 
-    **This is the general reading, and the Weimar spelling it replaces was only
-    ever used for this field.** `parse_weimar_chord` returned a three-tuple and
-    this call site read the third element; the first two, including the 108-entry
-    quality table that had to be present for the function to exist, were dead at
-    this call site. So the replacement drops the table rather than porting it.
+    **This reads the one part of the symbol this call site needs.** The symbol is parsed
+    for its slash bass and nothing else: the quality and the root come from the
+    progression's own triples, so a quality table here would be dead weight - which is
+    why there is none.
     """
     symbol = (symbol or "").strip()
     if not symbol or symbol == NO_CHORD:

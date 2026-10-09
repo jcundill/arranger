@@ -351,8 +351,8 @@ class ArrangementStep:
     # How metrically strong the slot was: 2 on beat 1, 1 on beat 3, 0 on any other
     # beat, and **-1 when the step carries no timing at all**. The -1 matters: it
     # separates "we know this note is weak" from "we were never told where it falls",
-    # and it is what makes a progression with no rhythm behave exactly as it did
-    # before this feature existed. See _metric_weight.
+    # and it is what keeps a progression with no rhythm on the default path.
+    # See `_metric_weight`.
     metric_weight: int = 0
     # --- Walking bass (texture="walking_bass") ---
     #

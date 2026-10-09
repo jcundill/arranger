@@ -695,11 +695,9 @@ def _bass_slots(
 
     **"A beat on every beat" is not "four beats".** The grid is `beats_per_bar` beats
     wide, so a bar yields four thumb notes in 4/4, three in 3/4 and **two in 2/2** -
-    and three of the four committed scores are notated in cut time. The old wording
-    here and in `arrange_progression` said "four beats to walk" and "a four-quarter
-    walk", which was true only in the metre it was written in. That claim was not
-    harmless: it is why the beat 2.5 melody slot was assumed to be one the walk
-    visited, when in 2/2 the walk never goes there. The grid is the grid; the
+    and three of the four committed scores are notated in cut time. "A four-quarter
+    walk" is the same claim written as a literal, and it holds only in the metre it is
+    written in: in 2/2 the walk never reaches beat 2.5. The grid is the grid; the
     precedence question below is separate and is answered over the melody timeline.
 
     `timings` is `(bar, beat, duration)` per slot and a slot the caller never located
