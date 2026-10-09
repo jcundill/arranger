@@ -33,10 +33,9 @@ from arranger.tuning import _MUTED_CELL, STRING_NAMES, ArrangementStep
 #
 # Nor is the laziness buying anything. `tabxml` needs music21 and `tabgp` needs
 # PyGuitarPro, but each imports its extra *inside* the functions that use it, so
-# importing either module is free on a machine that has neither. That was
-# measured - both import cleanly with `sys.modules['music21'] = None` - rather than
-# assumed, because the lazy import was originally added to make the extras
-# optional and it is worth knowing whether that is still the reason it exists.
+# importing either module is free on a machine that has neither - asserted with
+# `sys.modules['music21'] = None` rather than assumed, so the two extras stay
+# optional by test rather than by promise.
 #
 # Re-exporting here is what keeps one spelling for the whole rendering surface:
 # `from arranger import format_musicxml` resolves through this module, and
@@ -230,10 +229,9 @@ def _beat_in_quarters(beat_type: int) -> float:
     quarters - so the tempting `beat_type / 4` is right in 4/4 and four times too
     small in 2/2, which is the one metre that cannot catch it.
 
-    The staff renderers worked in *beats* throughout and never converted to a
-    length, which is why they took no `beat_type` at all. Printing note values is
-    what ended that: naming a length means measuring it, and a length is measured
-    in quarters.
+    Printing a note value is what requires it: a *beat* is a counting position and a
+    *length* is measured in quarters, so a renderer that only counts beats needs no
+    `beat_type` and one that prints a duration does.
     """
     return 4.0 / float(beat_type)
 
@@ -258,11 +256,10 @@ _REST_LABEL = "r"
 
 #: The rhythmic grid a whole note is divided into when drawing a staff.
 #:
-#: **Eight slots to the whole note - an eighth-note grid - is the floor**, and it is
-#: measured, not guessed: in `jon6.tab`, a bar of a quarter rest and three quarter
-#: notes is seventeen characters, which is one lead-in dash plus eight slots of two
-#: characters. That is four notes on an eighth-note grid, and no finer grid would
-#: make that bar any longer.
+#: **Eight slots to the whole note - an eighth-note grid - is the floor**, and a bar
+#: of a quarter rest and three quarter notes is what sets it: four notes on an
+#: eighth-note grid, so no finer grid would make that bar any longer.
+#: `docs/renderers.md` holds the measurement against `jon6.tab`.
 #:
 #: The floor only rises for music finer than an eighth - `_slots_per_whole` scales it
 #: up so the shortest note in the progression still occupies at least one slot. A
@@ -739,11 +736,11 @@ def format_tab_staff(
         calculation: a `4/4` or a `0.67q` fallback is wider than a fret, and
         truncating either would print a note value that is not the one being played.
 
-        **Only labels that are actually drawn count.** The chord name is measured
-        under `show_chords` and the melody note under `show_melody`, because a label
-        that is not printed cannot knock the grid out of alignment - and counting it
-        anyway meant that turning the rows off left the tab *wider* than leaving them
-        on, which is the opposite of what the flag says.
+        **Only labels that are actually drawn count.** The chord name counts under
+        `show_chords` and the melody note under `show_melody`, because a label that is
+        not printed cannot knock the grid out of alignment - and counting one anyway
+        makes turning that row off print a tab *wider* than leaving it on, which is
+        the opposite of what the flag says.
 
         **Per system, not per progression.** Computing it once over every column would
         let a single two-digit fret anywhere in the piece set the width for the whole
@@ -830,12 +827,11 @@ def format_tab_staff(
         previous = in_force
         # **One separator after every barline, including this row's own opening one.**
         # TuxGuitar writes a dash between the barline and the first fret of the bar and
-        # never a fret hard against the `|` - measured over `jon6.tab`, the shortest
-        # lead-in in the file is one dash, and all 26 of its bars have one. It is a
-        # small thing that stops a beat-1 fret reading as glued to the barline it
-        # follows. Here it is a space, because these rows are text and unruled; the
-        # string rows put a `-` in the same column, and both being exactly one
-        # character wide is what keeps the two kinds of row aligned.
+        # never a fret hard against the `|`, so no beat-1 fret reads as glued to the
+        # barline it follows. Here it is a space, because these rows are text and
+        # unruled; the string rows put a `-` in the same column, and both being exactly
+        # one character wide is what keeps the two kinds of row aligned.
+        # `docs/renderers.md` records the check against `jon6.tab`.
         #
         # It is written unconditionally because the row's own opening barline needs it
         # as much as any other, and the loop below already suppresses the *barline*

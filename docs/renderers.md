@@ -282,7 +282,9 @@ note never rounds away to nothing.
 
 With that, our bar 1 and bar 11 come out **byte-identical** to TuxGuitar's — which is the
 check that the lead-in, the cell width and the slot count are all landing where they
-should, independently of each other.
+should, independently of each other. TuxGuitar never puts a fret hard against a `|`:
+every one of `jon6.tab`'s 26 bars carries exactly one lead-in dash, which is why the row
+written for a barline puts one separator there too.
 
 ### Sub-beat rests, and the column grid that dropped them
 
