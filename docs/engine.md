@@ -194,17 +194,20 @@ you whether a change is an improvement or a different library.
     the strategy cannot help (the caller then keeps its fallback).
   - `sustain_inner_voices(previous_voicing, melody_note)` — holds the previous
     voicing's inner voices and moves only the soprano; `None` when unplayable.
-  - `arrange_progression(progression, top_strings=MELODY_STRING_CHOICES_FULL,
-    non_chord_tone="extension", fret_min=NECK_FRET_MIN, fret_max=NECK_FRET_MAX,
-    grips=GRIP_PREFERENCE, timings=None, texture="uniform", beats_per_bar=4,
-    beat_type=4)`
-    — voices each step, applying the selected non-chord-tone strategy where needed,
-    and chooses each shape with `_best_voicing`. An unknown strategy or texture
-    raises `ValueError`, both before any voicing work. `grips=("drop2",)` with
-    `top_strings=MELODY_STRING_CHOICES` reproduces the library's original output
-    exactly, which is what the renderer tests pin their fixture to. `timings` and
-    `texture` are the metric layer; see
+  - `arrange_progression(progression, **knobs)` — the step loop, and the point every
+    other entry point funnels through: it voices each step, applies the selected
+    non-chord-tone strategy where needed, and chooses each shape with
+    `select_step_voicing`. The knobs are **not** transcribed here - they are the
+    signature, every one of them defaulted, and `ArrangeOptions` carries the same set
+    as one value. (A copy used to live here and had already drifted: it still showed
+    the nine knobs `arrange_progression` had before the five axes existed, and
+    named `_best_voicing`, which the loop no longer calls.) Two promises it does make:
+    an unknown strategy or axis spelling raises `ValueError` before any voicing work,
+    and `grips=("drop2",)` with `top_strings=MELODY_STRING_CHOICES` reproduces the
+    library's original output exactly, which is what the renderer tests pin their
+    fixture to. `timings` and `texture` are the metric layer; see
     [Texture: chords on the beats, fills between](#texture-chords-on-the-beats-fills-between).
+    The loop's own shape is [below](#the-step-loop-and-the-five-routes).
   - `VoiceLeadingEngine.get_interval_voicings(melody_note, chord_type,
     chord_name=None, top_string=5)` — the two-note `interval` grip, a public entry
     point like `get_drop2_voicings` so every family is reachable on its own.
@@ -228,6 +231,42 @@ you whether a change is an improvement or a different library.
   it, on the renderers.
 - `main()` — prints the built-in demonstration arrangements; exposed as the
   `jazz-arranger` console script via `[project.scripts]`.
+
+### The step loop, and the five routes
+
+`arrange_progression` lives in **`movement.py`**, not in `steps.py`: `steps.py` is the
+published facade and delegates to it. The loop has two halves, and the seam between them
+is where most of this document's rules are decided.
+
+**Once per arrangement**, `_resolve_knobs` reconciles `options=` with the keywords and
+validates the spellings, and `_resolve_policies` resolves the five axes and builds the
+walked-beat union when a thumb line is running. Both run before any slot is looked at,
+because the band does not change halfway through a tune and a spelling nobody recognises
+has to be reported **once** rather than never.
+
+**Once per slot**, `_slot_state` returns a `_SlotPlan` - the note, whether the guitar
+*sings* this slot, the metric weight, the role, the permitted grips and the melody-alone
+kind - or `None` when the slot is refused outright (a melody-only selection at a position
+with no note). The plan then goes to **one** of five routes:
+
+| route | when |
+|---|---|
+| `_rest_step` | the guitar is **silent**: off the grid, and not an `NC` bar |
+| `_texture_fill_step` | the guitar sings the note and the texture thins the slot to it - a fill, a target no shell can sound, or an off-grid note |
+| `_no_chord_step` | an `NC` bar the guitar *is* singing: the melody, and no harmony to state |
+| `_comping_step` | the guitar does **not** sing this slot, so it comps under the horn |
+| `_harmonised_step` | the guitar sings: pin the tune, and voice the chord beneath it |
+
+**The order is load-bearing**, and `AGENTS.md`'s trap 12 is what reordering it costs: the
+same slot can reach three of the five depending on its plan, and every ordering is right
+for one route and wrong for the other, because both build different steps from one plan.
+That is why `decisions.melody_alone_case` returns a *kind* rather than a flag - and why
+`MELODY_ALONE_REST` exists at all: "nothing here to play" and "nothing to say here" are
+different claims, and only the first is a rest.
+
+Each route takes what it needs as named arguments rather than reaching into one shared
+context. The exceptions are `arrangements`, which they append to, and the two values one
+step tells the next, which live on a small `_Carried`.
 
 ### Adding a new chord quality
 
