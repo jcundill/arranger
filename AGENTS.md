@@ -45,10 +45,10 @@ frozen like the rest — it is not a home for an open plan.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **948 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **957 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 12 of those 939, and it is the one that fails if this
+(`tests/test_docs.py` is 12 of those 957, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree. It also fails if a document
 exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
 new file cannot be added without being registered.)
@@ -439,7 +439,16 @@ Each of these cost real time, or nearly shipped a defect.
    to the bar, and both readings of `4 / beat_type` agree in 4/4 — so the whole suite
    passed while the file was unusable for every other metre. That is why `Head`
    carries `beat_type` and it is plumbed to the file headers, and why the check that
-   catches it sums each measure's durations rather than counting measures.
+   catches it sums each measure's durations rather than counting measures. **The
+   importer then shipped the bug that fix was about**: `beat_type` was read and
+   plumbed to the four *renderers*, while the importer's own onset conversion still
+   used the count — so every note of the one committed 3/4 head was placed 25% early,
+   its exported bars came out short, and `--musicxml` scaled every onset by another
+   0.75 per round trip. Six of the seven heads are 4/4 or 2/2, where the two spellings
+   are the same number, and the only test that read the odd one out derived its
+   expectation from those same beats. Measured and fixed in
+   [docs/open-issues.md](docs/open-issues.md) item 15; the denominator now reaches the
+   engine's arithmetic too (`headxml._beat_from_onset`, `bass._melody_timeline`).
 
 10. **An omitted attribute is not an identity — and a default that is wrong is
     silent.** The exporter wrote no `<key>`, so every score left the library was in C

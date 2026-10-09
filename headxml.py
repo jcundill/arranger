@@ -357,9 +357,11 @@ class HeadNote:
     """One melody note read from a score, with the chord in force under it.
 
     `bar` is the measure number as written and `beat` the beat *within* it, in the
-    notated beats - so a 2/2 bar is two beats wide rather than four, and the two
-    halves of a cut-time bar are not mistaken for two bars. `duration` is in whole
-    notes, the unit every renderer in this library takes.
+    notated beats - so a 2/2 bar is two beats wide rather than four, its quarter note
+    on beat 1.5 and its fourth on 2.5, and the two halves of a cut-time bar are not
+    mistaken for two bars. A beat is `4 / beat_type` quarters, which is the one factor
+    `_beat_from_onset` converts an onset with. `duration` is in whole notes, the unit
+    every renderer in this library takes.
 
     `chord` is the symbol in force, `quality` the library spelling of it (None when
     the symbol was untranslatable, which is counted in `Head.unmapped`) and `bass`
@@ -863,13 +865,33 @@ def _stops_a_tie(note: ElementTree.Element) -> bool:
     return any(tie.get("type") == "stop" for tie in note.findall("tie"))
 
 
+def _beat_from_onset(onset: float, divisions: int, beat_type: int) -> float:
+    """The **notated beat** within the bar that a note `onset` divisions into falls on.
+
+    `onset / divisions` counts *quarters* - MusicXML defines `<divisions>` as the number
+    of duration units in a quarter note - and a beat is `4 / beat_type` quarters, so the
+    conversion is `onset/divisions * beat_type/4`. It is spelled out once because a
+    `<harmony>` and the note it governs must not be able to disagree about which beat
+    they are on: both callers go through here.
+
+    **`beats_per_bar` is not that factor, and using it was a real defect.** The two agree
+    only when the numerator equals the denominator - 4/4 and 2/2, which is six of the
+    seven committed heads - so bar 1 of the 3/4 `The_Jitterbug_Waltz` read 1.375, 1.75,
+    2.125, 2.5, 2.875 for six written eighths, i.e. a whole bar of music in 2.25 of its
+    3 beats, and every `--musicxml` round trip squeezed it by another 0.75. `beat_type`
+    is the denominator, and a count without one is not a metre - `AGENTS.md` trap 9, the
+    same family `docs/renderers.md` lists four renderer bugs from.
+    """
+    return 1.0 + (onset / divisions) * (beat_type / 4.0)
+
+
 def _flush_group(
     group: List[Tuple[int, int]],
     notes: List[HeadNote],
     bar: int,
     onset: int,
     divisions: int,
-    beats_per_bar: float,
+    beat_type: int,
     chord: str,
     quality: Optional[str],
     bass: Optional[str],
@@ -927,12 +949,13 @@ def _flush_group(
     notes.append(
         HeadNote(
             bar=bar,
-            # Beat *within* the bar, in notated beats. A bar of `beats_per_bar`
-            # beats is `beats_per_bar` quarters long, so a note `onset` divisions in
-            # is on beat 1 + onset/divisions * beats_per_bar / 4. The division by
-            # four is what makes a 2/2 bar two beats wide: a quarter note in it is
-            # on beat 1.5, not beat 3.
-            beat=1.0 + (onset / divisions) * (beats_per_bar / 4.0),
+            # Beat *within* the bar, in notated beats, through the one conversion that
+            # is right for every metre: `onset/divisions` is quarters and a beat is
+            # `4 / beat_type` of them. That single factor is what makes a 2/2 bar two
+            # beats wide - its quarter note is on beat 1.5, not beat 3 - *and* what puts
+            # a 3/4 bar's six eighths on 1.0 … 3.5 instead of squeezing them into 2.25
+            # beats. See `_beat_from_onset`.
+            beat=_beat_from_onset(onset, divisions, beat_type),
             pitch=pitch,
             duration=length / divisions / 4.0,
             tuplet=tuplet,
@@ -1017,7 +1040,7 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
     discarded: the measure is read at its running index and reported, because
     losing a bar of a head over a label is a poor trade.
     """
-    beats_per_bar = float(head.beats_per_bar)
+    beat_type = int(head.beat_type)
     # The chord in force: a `<harmony>` holds until the next one replaces it.
     chord = NO_CHORD
     quality: Optional[str] = NO_CHORD
@@ -1090,14 +1113,13 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
                 # is the whole of phase 1: the timeline exists, and nothing consumes it
                 # yet.
                 #
-                # **The beat conversion is `_flush_group`'s, not `cursor / divisions`.**
-                # A 2/2 bar is `beats_per_bar` quarters long, so a note is on
-                # `1 + onset/divisions * beats_per_bar/4` — the same expression, spelled
-                # out rather than shared, so a `<harmony>` and the note it precedes can
-                # never disagree about which beat they are on. That is trap 9's
-                # denominator problem: a bar of two beats and a bar of four are both
-                # four quarters, and reading the raw division count gets the beat number
-                # wrong in exactly one of them.
+                # **The beat conversion is `_beat_from_onset`'s, not `cursor / divisions`.**
+                # `cursor/divisions` is quarters and a beat is `4 / beat_type` of them,
+                # and the one function is called from both places so a `<harmony>` and the
+                # note it precedes can never disagree about which beat they are on. This
+                # used to be the expression spelled out by hand, with `beats_per_bar` in
+                # place of `beat_type` - the denominator trap, which is invisible while
+                # the numerator and the denominator happen to be equal.
                 #
                 # `cursor` rather than `group_onset`, because the element sits *before*
                 # whatever follows it: a `<harmony>` after the bar's last note is recorded
@@ -1110,7 +1132,7 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
                 changes.append(
                     HeadChange(
                         bar=bar,
-                        beat=1.0 + (cursor / divisions) * (beats_per_bar / 4.0),
+                        beat=_beat_from_onset(cursor, divisions, beat_type),
                         chord=chord,
                         quality=quality,
                         bass=bass,
@@ -1175,7 +1197,7 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
             # note sounds is the one in force where the note is, not the one in
             # force where the reader happened to finish reading it.
             if group:
-                _flush_group(group, notes, bar, group_onset, divisions, beats_per_bar,
+                _flush_group(group, notes, bar, group_onset, divisions, beat_type,
                              group_chord, group_quality, group_bass,
                              tie_stop=group_tie, lyrics=group_lyrics,
                              tuplet=group_tuplet)
@@ -1193,7 +1215,7 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
         # A group still open at the end of a bar is closed by the bar line. The
         # MusicXML it came from is malformed, but reading the notes is better than
         # losing the last chord of the bar.
-        _flush_group(group, notes, bar, group_onset, divisions, beats_per_bar,
+        _flush_group(group, notes, bar, group_onset, divisions, beat_type,
                      group_chord, group_quality, group_bass,
                      tie_stop=group_tie, lyrics=group_lyrics, tuplet=group_tuplet)
         group.clear()
@@ -1387,6 +1409,13 @@ def chord_slots(
     """
     lo, hi = section if section is not None else head.bars
     beats_per_bar = head.beats_per_bar
+    # The other half of the same conversion, used the other way round: a *length* in
+    # beats becomes whole notes by dividing by `beat_type`, because one whole note is
+    # `beat_type` beats (four quarters at `4 / beat_type` quarters to the beat). Dividing
+    # by `beats_per_bar` instead is right only where the numerator and the denominator
+    # are equal - 4/4 and 2/2, six of the seven committed heads - and in 3/4 it made
+    # every synthetic comping slot a third too long.
+    beat_type = int(head.beat_type)
     if beats_per_bar <= 0:
         return []
 
@@ -1425,9 +1454,9 @@ def chord_slots(
             continue
         following = positions[index + 1] if index + 1 < len(positions) else None
         if following is not None and following[0] == bar:
-            length = (following[1] - beat) / beats_per_bar
+            length = (following[1] - beat) / beat_type
         else:
-            length = (beats_per_bar - beat + 1.0) / beats_per_bar
+            length = (beats_per_bar - beat + 1.0) / beat_type
         # Rule B, the promotion `head_skeleton` applies, from the same two facts.
         root_name, _ = ChordParser.parse_chord_name(change.chord)
         promoted = promote_slash_chord(root_name or "", change.quality, change.bass)
@@ -1550,6 +1579,12 @@ def arrange_xml_head(
     a half note, so a rule that assumed four beats to the bar would put a full chord
     on a beat that does not exist in a 2/2 head. A count without a denominator is
     not a metre.
+
+    `head.beat_type` goes with it, and it is not a duplicate: the count says which beats
+    exist, the denominator says how long one lasts. Only the walking bass reads the
+    second, converting each slot's whole-note `duration` into beats, and the one
+    committed 3/4 head is where passing the count in its place shows up (open-issues
+    item 15).
     """
     head = load_musicxml(path, part)
     slots = head_skeleton(head, section)
@@ -1597,6 +1632,12 @@ def arrange_xml_head(
         grips=grips, texture=texture, bass=bass, melody=melody,
         harmony=harmony, grid=grid,
         beats_per_bar=head.beats_per_bar,
+        # Both halves of the metre, because they answer different questions: the count
+        # says which beats exist, the denominator says how long one lasts. The walking
+        # bass is the only engine rule that needs the second - a slot's `duration` is in
+        # whole notes and a whole note is `beat_type` beats - and passing the count in
+        # its place made every span a quarter short in a 3/4 head.
+        beat_type=head.beat_type,
         onsets=onsets,
     )
     return steps, head, list(head.report) + notes

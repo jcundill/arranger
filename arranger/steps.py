@@ -744,6 +744,12 @@ class VoiceLeadingEngine:
         harmony: str = HARMONY_AUTO,
         grid: str = GRID_EVERY_NOTE,
         beats_per_bar: int = 4,
+        # The metre's denominator, read by the walking bass's melody timeline alone: a
+        # slot's `duration` is in whole notes and one whole note is `beat_type` beats
+        # (`4 / beat_type` quarters to the beat). Defaulted rather than required, so a
+        # hand-built progression - which has no notated metre to state - keeps the
+        # arithmetic it had.
+        beat_type: int = 4,
         # The progression indexes whose melody note articulates, for the §9.2
         # reharmonise rule on the comping route (§9.3 step C). `None` means every slot
         # is an onset - the correct answer for a hand-built progression with no
@@ -833,6 +839,11 @@ class VoiceLeadingEngine:
         the cost tuple, so the selection order and the engine's determinism are
         untouched.
 
+        `beat_type` is the metre's other half: `beats_per_bar` says which beats exist,
+        `beat_type` how long one lasts. The walking bass is the one rule that reads it -
+        a slot's `duration` is in whole notes, and a whole note is `beat_type` beats -
+        so a head passes both. Every other caller may leave it at 4.
+
         A `timings` list shorter than `progression` is not an error: the unlocated
         trailing steps are simply treated as principal notes, which is the same
         "we know nothing" rule that governs `timings=None`. The guard is the one
@@ -916,6 +927,7 @@ class VoiceLeadingEngine:
                     ("harmony", harmony),
                     ("grid", grid),
                     ("beats_per_bar", beats_per_bar),
+                    ("beat_type", beat_type),
                     ("melody_onsets", melody_onsets),
                 )
                 if value != ArrangeOptions.__dataclass_fields__[name].default
@@ -936,6 +948,7 @@ class VoiceLeadingEngine:
             harmony = options.harmony
             grid = options.grid
             beats_per_bar = options.beats_per_bar
+            beat_type = options.beat_type
             melody_onsets = options.melody_onsets
             if options.timings is not None:
                 timings = list(options.timings)
@@ -1032,7 +1045,9 @@ class VoiceLeadingEngine:
             # hand-built progression cannot walk a different line from this one - see
             # its docstring for why that duplication has already cost this project one
             # bug.
-            slots = _walking_slots(progression, timings, beats_per_bar, bass)
+            slots = _walking_slots(
+                progression, timings, beats_per_bar, beat_type, bass
+            )
 
         # Harmony and melody state for the walking-bass role rule. Both are read from
         # what actually sounds, not from the written chord, so a substituted chord

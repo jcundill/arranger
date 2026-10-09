@@ -165,7 +165,11 @@ follows it would drop the harmony from every bar that does not change.
 
 **The metre is the notated one.** `beat` is the beat *within* the bar in notated beats,
 so a 2/2 head is two beats to the bar rather than four — which is how most standards are
-written, and how three of the four scores in this repository are.
+written, and how three of the four scores in this repository are. Both numbers in the
+signature are needed: the count says which beats exist and the denominator says how long
+one lasts, so a 3/4 bar's eighths fall on 1.0, 1.5, 2.0, 2.5, 3.0 and 3.5. Reading the
+count as the denominator put every note of a 3/4 head a quarter of a beat early (see
+[docs/open-issues.md](docs/open-issues.md) item 15).
 
 **The key signature is read, and written back.** `Head` carries the score's `<fifths>`
 and `<mode>`, and the MusicXML and GP5 writers state them — so a tune in three flats
@@ -695,7 +699,8 @@ the output is byte-identical to what it has always been.
 
 **The metre is read, not assumed.** A 3/4 head states its harmony on 1 and 3, while a 2/2
 (cut-time) head has only two beats, so only the downbeat is a target. Three of the four
-committed test scores are in cut time.
+committed test scores are in cut time. (On a 3/4 head that third beat was unreachable
+until item 15, because no note's beat ever landed on 3.0.)
 
 **A fill never costs the tune a chord.** If a fill slot has nothing thin to play, the step
 is re-prepared as a principal note rather than skipped — a texture is lighter, never

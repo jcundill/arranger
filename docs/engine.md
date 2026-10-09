@@ -196,7 +196,8 @@ you whether a change is an improvement or a different library.
     voicing's inner voices and moves only the soprano; `None` when unplayable.
   - `arrange_progression(progression, top_strings=MELODY_STRING_CHOICES_FULL,
     non_chord_tone="extension", fret_min=NECK_FRET_MIN, fret_max=NECK_FRET_MAX,
-    grips=GRIP_PREFERENCE, timings=None, texture="uniform", beats_per_bar=4)`
+    grips=GRIP_PREFERENCE, timings=None, texture="uniform", beats_per_bar=4,
+    beat_type=4)`
     — voices each step, applying the selected non-chord-tone strategy where needed,
     and chooses each shape with `_best_voicing`. An unknown strategy or texture
     raises `ValueError`, both before any voicing work. `grips=("drop2",)` with

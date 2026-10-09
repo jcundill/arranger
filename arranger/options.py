@@ -124,6 +124,15 @@ class ArrangeOptions:
     # already produced, so the axis is inert by default.
     grid: str = GRID_EVERY_NOTE
     beats_per_bar: int = 4
+    # The metre's **denominator**, and it is not decoration: a beat is `4 / beat_type`
+    # quarters, so `beats_per_bar` alone says which beats exist but not how long one
+    # lasts - a 2/2 and a 2/4 bar are both two beats wide and neither is the other's
+    # length. Exactly one rule in the engine reads it: the walking bass's melody
+    # timeline, where a slot's `duration` is in whole notes and one whole note is
+    # `beat_type` beats. Passing the count in its place is right only when the numerator
+    # and the denominator are equal (4/4, 2/2), and made every span a quarter short in a
+    # 3/4 head. See `_melody_timeline`.
+    beat_type: int = 4
     # `Sequence`, not `List`, and that is load-bearing rather than stylistic: the
     # library and the corpus hold *different* timing types - `Tuple[int, float, ...]`
     # against `Tuple[Optional[int], ...]` placeholders for slots it could not place.

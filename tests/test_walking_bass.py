@@ -474,6 +474,72 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
         timeline = _melody_timeline([(0, 2, 1.0, 1.0)], beats_per_bar=4)
         self.assertEqual(_melody_in_force(timeline, _beat_offset(1, 1.0, 4)), -1)
 
+    def test_a_durations_span_is_measured_in_beats_not_in_bars(self):
+        """A slot's `duration` becomes `duration * beat_type` beats, not `* beats_per_bar`.
+
+        A beat is `4 / beat_type` quarters, so one whole note is `beat_type` beats: four
+        in 3/4, **eight** in 6/8. Asserted on both because they disagree in both
+        directions - the count overstates in 6/8 and understates in 3/4 - which is the
+        pair that tells the two spellings apart. Correcting the arithmetic moves no step
+        of any committed head, because the walk's chord timeline is onset-driven and only
+        a melody-in-force span reads a duration; it is pinned because the next
+        metre-sensitive rule will read one.
+        """
+        # A half note in 3/4: 0.5 whole notes, two beats, in a bar three beats wide.
+        self.assertEqual(
+            _melody_timeline([(0, 1, 1.0, 0.5)], beats_per_bar=3, beat_type=4),
+            [(0.0, 2.0, 0)],
+        )
+        # A quarter in 6/8: 0.25 whole notes, two beats, because a beat is an eighth.
+        self.assertEqual(
+            _melody_timeline([(0, 1, 1.0, 0.25)], beats_per_bar=6, beat_type=8),
+            [(0.0, 2.0, 0)],
+        )
+
+    def test_the_engine_reads_the_denominator_it_is_given(self):
+        """`beat_type` reaches the walk's melody timeline, and its default is 4.
+
+        The plumbing is what makes the fix real rather than local, and one invented beat
+        shows it: a whole note is four beats in 3/4 and eight in 6/8, so the same pair of
+        timings has a *different note still sounding* when the walk reaches beat 3 -
+        `Cmaj7` over E5 at the 3/4 reading, `Dm7` over F5 at the 6/8 one. Nothing in the
+        committed material moves either way, which is why the seam is asserted here
+        rather than inferred from an arrangement.
+        """
+        from arranger.options import ArrangeOptions
+
+        progression = [("E5", "maj7", "Cmaj7"), ("F5", "m7", "Dm7")]
+        timings = [(1, 1.0, 1.0), (1, 2.0, 0.25)]
+
+        def invented(beat_type: int) -> List[Tuple[str, Optional[str]]]:
+            steps = VoiceLeadingEngine.arrange_progression(
+                progression,
+                timings=timings,
+                texture="walking_bass",
+                bass="walk",
+                beats_per_bar=3,
+                beat_type=beat_type,
+            )
+            return [(step.chord, step.melody) for step in steps]
+
+        # Three beats of a 3/4 bar: the melody notes, then the invented third beat.
+        self.assertEqual(invented(4)[-1], ("Cmaj7", "E5"))
+        self.assertEqual(invented(8)[-1], ("Dm7", "F5"))
+        # Saying nothing is the 4 the field defaults to, so a hand-built progression -
+        # which has no notated metre to state - keeps the arithmetic it always had.
+        self.assertEqual(ArrangeOptions().beat_type, 4)
+        by_default = [
+            (step.chord, step.melody)
+            for step in VoiceLeadingEngine.arrange_progression(
+                progression,
+                timings=timings,
+                texture="walking_bass",
+                bass="walk",
+                beats_per_bar=3,
+            )
+        ]
+        self.assertEqual(by_default, invented(4))
+
     def test_the_fallback_is_reachable_only_that_way(self):
         """
         The premise of the test above: no arrangement can produce that state.
@@ -614,13 +680,15 @@ class TestEveryHeadCarriesTheMelodyInForce(unittest.TestCase):
                 skeleton = head_skeleton(head)
                 triples = [slot[0] for slot in skeleton]
                 timings = [(slot[1], slot[2], slot[3]) for slot in skeleton]
-                slots = _walking_slots(triples, timings, head.beats_per_bar)
+                slots = _walking_slots(
+                    triples, timings, head.beats_per_bar, head.beat_type
+                )
                 located = [
                     (index, bar, beat, duration)
                     for index, (bar, beat, duration) in enumerate(timings)
                     if bar is not None and beat is not None
                 ]
-                timeline = _melody_timeline(located, head.beats_per_bar)
+                timeline = _melody_timeline(located, head.beats_per_bar, head.beat_type)
                 invented = [slot for slot in slots if slot.bass_only]
                 self.assertTrue(
                     invented, f"{name}: no walk-invented beats, so nothing is checked"

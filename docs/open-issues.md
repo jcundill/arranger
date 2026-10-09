@@ -24,7 +24,10 @@ behaviour while the code did the opposite, and it survived a green gate because 
 fixture happened to use the one input that did not trigger it. **Item 9 is the newest
 fixed one and is the one to read before adding a policy function**: it is a check
 reading a table that describes a different generator, and it survived a green gate
-because its one test happened to name the input that worked. **Item 10 is the largest
+because its one test happened to name the input that worked. **Item 15 is that same
+shape in the arithmetic**: a beat conversion written as `beats_per_bar / 4`, which is
+right in 4/4 and 2/2 - six of the seven committed heads - so it survived a green gate
+and every renderer for as long as it existed. **Item 10 is the largest
 open one** - a quarter of the beat positions a named grid names produce no chord at all,
 and the case cannot even be represented by the importer - and it is the reason the
 harmonisation engine is worth building.
@@ -1980,3 +1983,119 @@ slot` — and are **not** fixed here.
   palette in use and says the step is skipped, and it is reached only by a melody no string reaches
   at all.
 
+
+## 15. Every note of a 3/4 head was placed a quarter of a beat early
+
+**Fixed, 2026-10-10**, in `headxml._beat_from_onset` and the two other places that spelled
+the same factor by hand (`headxml.chord_slots`, `arranger/bass._melody_timeline`). Reported
+by reading the staff `arranger head` prints for `tests/data/The_Jitterbug_Waltz.musicxml`
+against the score: the bars were ragged and the notes sat early in every one of them.
+
+### The symptom
+
+The file is 3/4 with `<divisions>6`: bar 1 is an eighth rest then five eighths and bars 2+ are
+six eighths, so every measure sums to exactly 18 divisions - a full bar. The head read them a
+quarter of a beat early, in every bar:
+
+| | written | read |
+|---|---|---|
+| bar 1 | 1.5, 2.0, 2.5, 3.0, 3.5 | 1.375, 1.75, 2.125, 2.5, 2.875 |
+| bar 2 | 1.0, 1.5, 2.0, 2.5, 3.0, 3.5 | 1.0, 1.375, 1.75, 2.125, 2.5, 2.875 |
+
+Three consequences, each measured:
+
+- **the staff was ragged.** A bar's content is 2.25 beats of music while the barline is drawn
+  at `beats_per_bar` - three - so a hole of music appeared before every barline:
+  `|-----11--1013--------|` where the same bar is `|-----11--1013--|` afterwards.
+- **the GP5 export wrote short bars.** 21 of the waltz's 35 interior measures held 2.25, 2.5 or
+  2.75 quarters of music under a signature that calls the bar three wide. All 37 are exactly
+  full after the fix - the check `docs/renderers.md` promises catches this family, and the one
+  a measure *count* cannot make, because 37 is 37 either way.
+- **every `--musicxml` round trip squeezed the head by a further 25%.** Exported and read back,
+  the file's own eighths came out at 1.0, 1.281, 1.562 … - the same error applied again on the
+  way out, since the positions written are the positions read.
+
+### The chain
+
+`onset / divisions` is a count of **quarters** - MusicXML defines `<divisions>` as the number
+of duration units in a quarter note - and a beat is `4 / beat_type` quarters, so the
+conversion is `onset/divisions * beat_type/4`. The code said:
+
+    beat=1.0 + (onset / divisions) * (beats_per_bar / 4.0)
+
+**The two agree exactly when the numerator equals the denominator.** 4/4 gives 1.0 either way
+and 2/2 gives 0.5 either way, and six of the seven committed heads are one of those two. 3/4
+gives 0.75 where it should give 1.0, which is the whole defect. The same quantity appears, as
+its reciprocal, in two more places:
+
+| where | expression | in 3/4 |
+|---|---|---|
+| `headxml._flush_group`, and the `<harmony>` timeline beside it | `beats_per_bar / 4` per onset | 0.75 of a beat per quarter |
+| `headxml.chord_slots` - a grid slot's own length | `... / beats_per_bar` | a third too long |
+| `arranger.bass._melody_timeline` - a slot's span | `duration * beats_per_bar` | a quarter too short |
+
+The third was **latent**: correcting it moves **0 of the 186** steps of the waltz under
+`--texture walking_bass`, because the walk's chord timeline is onset-driven and only a
+melody-in-force span reads a duration. It is fixed rather than left, because the next
+metre-sensitive rule would have inherited it.
+
+**Why the gate could not see it.** `beats_per_bar` and `beat_type` are the same number in every
+head but this one; the only test that read the waltz's beats - `test_walking_bass.py`'s
+invented-beat test - derives its expectation from those same beats, so it agreed with itself;
+`tests/test_headxml.py`'s "no beat is past the bar line" assertion fails the *other* way (a
+stretched bar, not a squeezed one); and the measure-summing check that is supposed to catch
+the family ran on the *exporters*, where the waltz was never in the fixture list.
+
+### What was built
+
+- **One conversion, one name.** `headxml._beat_from_onset(onset, divisions, beat_type)`, called
+  by `_flush_group` and by the `<harmony>` timeline, so a chord and the note it governs cannot
+  disagree about which beat they are on. The two used to spell the expression out separately.
+- **`beat_type` reaches the engine.** It is a field on `ArrangeOptions`, a keyword on
+  `arrange_progression` and `arrange_slots` (defaulting to 4, so a hand-built progression is
+  untouched), and a parameter of `bass._walking_slots` / `_bass_slots` / `_melody_timeline`;
+  `arrange_xml_head` passes `head.beat_type`. Before this the engine's only metre was a count.
+- **The reciprocal direction.** `chord_slots` divides a length in beats by `beat_type` to get
+  whole notes, and `_melody_timeline` multiplies a whole-note duration by `beat_type`.
+- **`textures._metric_weight`'s docstring example was corrected.** It read "a 3/4 bar's second
+  beat is 1.666...", which is the second beat of no metre in this library or out of it - it is
+  a triplet onset mistaken for a beat number, and it survived because no fixture's timing
+  depended on it.
+
+### Measured after
+
+- The waltz's onsets are the written ones: bar 1 at 1.5, 2.0, 2.5, 3.0, 3.5 and bar 2 at
+  1.0 … 3.5.
+- All 37 of its exported GP5 measures are exactly a 3/4 bar, and the staff's bars are uniform.
+- A MusicXML round trip leaves every onset from bar 2 on unchanged, to six decimal places.
+- **No other fixture moves at all.** The other six are 4/4 and 2/2, where the two spellings of
+  the factor are the same number - which is why the whole existing suite passed unchanged
+  before and after, and why every new assertion below was checked against the old arithmetic
+  rather than trusted.
+
+### Recorded, not fixed
+
+- **The exporter loses bar 1's pickup.** Read back, the written eighth rest then five eighths
+  (1.5 … 3.5) becomes five eighths from 1.0: the rest is dropped rather than written as an
+  anacrusis. That is wrong under either spelling of the conversion, so it is a separate defect;
+  the round-trip test excludes bar 1 and says why.
+- **A waltz's beat 3 is still a target.** `textures._metric_weight` names beats 1 and 3 for any
+  bar with three or more beats, deliberately ("in 3/4 beats 1 and 3 are targets exactly as they
+  are in 4/4"). Before this fix that was unreachable in a 3/4 head - no note's beat landed on
+  3.0 - and it is live now, so the waltz is comped on its third beat. Whether a waltz wants
+  that is a musical question, not an arithmetic one, and it belongs to its own item.
+
+### Tests
+
+- `tests/test_headxml.py::TestTheMetreHasADenominator` - a bar each of 3/4 (six eighths, and a
+  pickup behind an eighth rest), 2/4 and 6/8 - the two metres whose old factor erred the other
+  way - plus the committed waltz's own onsets, every onset of every committed head inside its
+  own bar, and the round trip with bar 1 excepted.
+- `tests/test_walking_bass.py::TestAWalkInventedBeatTakesTheMelodyInForce` - the span unit
+  (`duration * beat_type`) on 3/4 and 6/8, and that `beat_type` reaches the timeline the walk
+  attributes invented beats through: one invented beat carries `Cmaj7`/E5 at the 3/4 reading and
+  `Dm7`/F5 at the 6/8 one.
+- `tests/test_guitarpro.py::TestRhythm::test_every_measure_of_a_written_head_fills_its_bar` -
+  **extended to the waltz**: 21 of its interior measures were short before the fix, 0 after.
+- **All five were run against the old arithmetic** - `headxml._beat_from_onset` monkeypatched
+  back to the 0.75 factor - and every one of them fails without the fix.

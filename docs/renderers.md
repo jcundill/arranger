@@ -139,10 +139,16 @@ Six decisions are load-bearing, and each was forced by a real file:
   wrong one is a *silent* failure. The largest XML member is the fallback when the
   container is missing; a non-zip is read as a bare document.
 - **The metre is the notated one.** `beat` is the beat within the bar in notated
-  beats, so `1 + onset/divisions * beats_per_bar / 4`. Dividing by four is what
-  makes a 2/2 bar two beats wide — a quarter note in cut time is on beat 1.5, not
-  beat 3 — and three of the four scores in the repository are in cut time. The
-  `<time>` read is the **last** one stated, since a score may change metre.
+  beats, so `1 + onset/divisions * beat_type / 4`: an onset is counted in **quarters**
+  (`<divisions>` is defined per quarter note) and a beat is `4 / beat_type` of them.
+  The *count* is not the factor — `beats_per_bar / 4` equals `beat_type / 4` only where
+  the numerator and the denominator are equal, which is 4/4 and 2/2 and so six of the
+  seven committed heads, and in 3/4 it put every note of the waltz a quarter of a beat
+  early (item 15). Dividing by four is what makes a 2/2 bar two beats wide — a quarter
+  note in cut time is on beat 1.5, not beat 3 — and three of the four scores in the
+  repository are in cut time. `headxml._beat_from_onset` is that one expression, and
+  both callers (a note's `<chord>` group and a `<harmony>`) go through it. The `<time>`
+  read is the **last** one stated, since a score may change metre.
 
 ### A beat is not a quarter note
 
@@ -165,6 +171,8 @@ beat count as a quarter count is what each of the four bugs below was:
 | `head_cli` → the file writers | passed no metre at all | both writers used their own `beats_per_bar=4`, so a 2/2 head was written as 4/4 on the wrong grid |
 | `tabxml._events`, `tabgp._measures` | `4.0 / beats_per_bar`, `bar_length = beats_per_bar` | a cut-time beat measured as half a quarter, so every bar came out half length — 32 measures written as 64 |
 | the same two, *after* the fix above | `beat_type / 4` instead of `4 / beat_type` | **every bar a quarter note long.** The measure *count* stayed right, because onsets are placed in beats and that part was correct — so 32 short bars under a 2/2 signature, each holding a quarter of the music it claimed |
+| `headxml._beat_from_onset` (both callers) and `chord_slots` | `beats_per_bar / 4` per onset, `/ beats_per_bar` for a length | **a 3/4 bar of music in 2.25 of its 3 beats.** The waltz's six written eighths read 1.0 … 2.875, so the staff drew a hole of music before every barline, 21 of its 35 interior measures exported short of a full 3/4 bar, and `--musicxml` scaled every onset by a further 0.75 on each round trip — item 15 |
+| `arranger.bass._melody_timeline` | `duration * beats_per_bar` | a quarter short in 3/4 (`duration * beat_type` is the span). **Measured at 0 of 186 steps** on the waltz: the walk's chord timeline is onset-driven, so only a melody-in-force span reads a duration. Fixed with the rest rather than inherited by the next metre-sensitive rule |
 
 That last one is the instructive one, and it is worth stating as a rule of thumb:
 **4/4 cannot catch it.** Both readings of the fraction give 1 quarter to the beat
@@ -173,7 +181,18 @@ A test that asserts the measure *count* cannot catch it either, for the same
 reason - the count was right. The check that catches it is summing each
 measure's durations back to a bar length, which is what
 `GuitarProTestCase.bar_quarters` and
-`test_every_measure_of_a_written_head_fills_its_bar` do.
+`test_every_measure_of_a_written_head_fills_its_bar` do - and the waltz is **in**
+that test's fixture list for exactly this reason, because it is the one committed
+head whose numerator and denominator differ.
+
+**The rule of thumb has a corollary the importer learned the hard way: a
+`<time>` read is not a metre until the *denominator* reaches the arithmetic that
+uses it.** `headxml` read `beats_per_bar` and `beat_type` and then converted
+onsets with the first of the two - right in 4/4 and 2/2, six of the seven
+committed heads, and 25% early in the 3/4 one (item 15). Every assertion in
+`tests/test_headxml.py::TestTheMetreHasADenominator` was run against the old
+factor before it was kept: a test for a metre bug that cannot fail on the old
+arithmetic is not a test, and all five of them do.
 
 So `beat_type` is now a parameter of `format_musicxml` and `format_gp5` (and of
 `_events`, `_measures`, `_build_part`, `_build_song`), it is what makes a 2/2 head

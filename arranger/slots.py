@@ -256,6 +256,7 @@ def arrange_slots(
     harmony: str = "auto",
     grid: str = "every_note",
     beats_per_bar: int = 4,
+    beat_type: int = 4,
     diagnostics: Optional[Diagnostics] = None,
     onsets: Optional[Container[int]] = None,
 ) -> Tuple[List[ArrangementStep], List[int], List[str]]:
@@ -303,6 +304,12 @@ def arrange_slots(
     interval or the melody alone; "uniform" (the default) voices every slot in full.
     `beats_per_bar` is the metre that rule reads, and a head in cut time must pass
     its own - a count without a denominator is not a metre.
+
+    `beat_type` is the other half of that metre, and the two are not interchangeable:
+    `beats_per_bar` says **which** beats exist, `beat_type` says how long one lasts
+    (`4 / beat_type` quarters). One rule in the engine reads the second - the walking
+    bass, whose melody timeline converts a slot's whole-note `duration` to beats - so a
+    3/4 head passing only the count has every span a quarter short.
 
     Returns the steps, the indexes of the steps the diminished retry actually
     substituted, and any diagnostic notes worth printing. The `notes` are *not* the
@@ -374,6 +381,7 @@ def arrange_slots(
         harmony=harmony,
         grid=grid,
         beats_per_bar=beats_per_bar,
+        beat_type=beat_type,
         melody_onsets=onsets,
     )
 
@@ -389,6 +397,7 @@ def _slot_options(
     grips: Tuple[str, ...],
     texture: str,
     beats_per_bar: int,
+    beat_type: int = 4,
     bass: str = "auto",
     melody: str = "auto",
     harmony: str = "auto",
@@ -458,6 +467,7 @@ def _slot_options(
         harmony=harmony,
         grid=grid,
         beats_per_bar=beats_per_bar,
+        beat_type=beat_type,
         timings=typed_timings,
         bass_pcs=bass_pcs or None,
         bass_cost=bass_cost,

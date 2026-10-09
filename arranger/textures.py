@@ -747,9 +747,13 @@ def _metric_weight(
     and 3 are targets exactly as they are in 4/4. This is the same reasoning the
     MusicXML importer needed when it discovered 2/2 is not 2/4.
 
-    A beat is compared with `_BEAT_EPSILON` because a notated beat is a float: a
-    3/4 bar's second beat is 1.666..., and an exact comparison would call almost no
-    real note a downbeat.
+    A beat is compared with `_BEAT_EPSILON` because a notated beat is a float and a
+    tune rarely lands only on the integers: the middle note of a triplet inside beat 1
+    of a 3/4 bar is at 1.333..., and a note a third of a beat away from a target is not
+    the target. An exact comparison would call almost no real note a downbeat. (The
+    example used to read "a 3/4 bar's second beat is 1.666...", which is not the second
+    beat of any metre, in this library or out of it - it was a triplet onset mistaken
+    for a beat number, and it survived because no fixture's *timing* depended on it.)
     """
     if bar is None or beat is None:
         return -1

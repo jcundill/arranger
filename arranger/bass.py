@@ -531,6 +531,11 @@ def _walking_slots(
     # `BUT_NOT_FOR_ME_TIMINGS` in test_texture.py and `arrange_slots` itself.
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
     beats_per_bar: int = 4,
+    # The metre's denominator. It reaches `_bass_slots` and stops there: the *grid* the
+    # walk invents beats on is counted in beats (`bass_line_for` needs only the count),
+    # while the melody *timeline* those beats are attributed through converts each slot's
+    # whole-note `duration` to beats, which needs this. See `_melody_timeline`.
+    beat_type: int = 4,
     bass: str = BASS_WALK,
 ) -> List[_Slot]:
     """
@@ -575,7 +580,7 @@ def _walking_slots(
         )
 
     bass_line = bass_line_for(bass, chords, onsets, beats_per_bar)
-    return _bass_slots(progression, timings, bass_line, beats_per_bar)
+    return _bass_slots(progression, timings, bass_line, beats_per_bar, beat_type)
 
 
 def _beat_offset(bar: int, beat: float, beats_per_bar: int) -> float:
@@ -626,16 +631,27 @@ def _melody_in_force(
 
 
 def _melody_timeline(
-    located: Sequence[Tuple[int, int, float, Optional[float]]], beats_per_bar: int
+    located: Sequence[Tuple[int, int, float, Optional[float]]],
+    beats_per_bar: int,
+    beat_type: int = 4,
 ) -> List[Tuple[float, float, int]]:
     """`located` as `(onset, end, index)` spans on one absolute beat line.
 
-    A slot's `duration` is in **whole notes** and a bar is `beats_per_bar` beats of
-    them - the importer's own arithmetic, since a bar of `beats_per_bar` notated
-    beats is `beats_per_bar / 4` whole notes long - so a duration becomes
-    `duration * beats_per_bar` beats. Getting that scale wrong would make every
-    span the wrong length, which is why it is written out here rather than left to a
-    reader to infer.
+    A slot's `duration` is in **whole notes**, and the number of beats in one is
+    `beat_type`: a beat is `4 / beat_type` quarters - the same `beat_in_quarters` the
+    renderers convert with - so four quarters of whole note is `beat_type` beats and a
+    duration becomes `duration * beat_type` beats. It is **not** `duration *
+    beats_per_bar`: the two agree only where the numerator equals the denominator, which
+    is 4/4 and 2/2 and so six of the seven committed heads. In 3/4 the count is 3 and a
+    whole note is 4 beats, so every span came out a quarter short - a wrongness with no
+    effect on the committed heads, because the walk's chord timeline is onset-driven,
+    and measured at 0 of 186 steps on the waltz. It is fixed rather than left, because
+    the next metre-sensitive rule would inherit it.
+
+    `beats_per_bar` is still here and still the *count*: `_beat_offset` places a
+    `(bar, beat)` pair with it, and that is a question about how many beats a bar has
+    and not about how long one lasts. Both numbers are needed, and they are not
+    interchangeable.
 
     An unknown duration is `inf`, not zero: "we were not told" is not "it ended
     here", and a note given no length is the one case where holding it is the safe
@@ -651,7 +667,7 @@ def _melody_timeline(
                     float("inf")
                     if duration is None
                     else _beat_offset(bar, beat, beats_per_bar)
-                    + duration * beats_per_bar
+                    + duration * beat_type
                 ),
                 index,
             )
@@ -666,6 +682,7 @@ def _bass_slots(
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
     bass_line: List[BassNote],
     beats_per_bar: int = 4,
+    beat_type: int = 4,
 ) -> List[_Slot]:
     """
     The union of the melody grid and the walked beats, as one ordered slot list.
@@ -764,7 +781,7 @@ def _bass_slots(
     # `melody_at` stays for what it is good for - the exact onset test below and the
     # duration each slot reports - but precedence over time is now `_melody_in_force`'s
     # job, and it is a different question with a different answer.
-    timeline = _melody_timeline(located, beats_per_bar)
+    timeline = _melody_timeline(located, beats_per_bar, beat_type)
     for note in bass_line:
         if note.bar is None or note.beat is None:
             continue
