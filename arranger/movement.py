@@ -1802,25 +1802,14 @@ def arrange_progression(
     property of the texture, because the pattern is the composer's choice and the set
     of patterns is open - a new one is a row in `BASS_POLICY_ROLES`.
 
-    `BASS_AUTO`, the default here, resolves from the texture and the voice
-    selection: `texture="walking_bass"` walks, and so does a melody-only selection
-    that names the bass voice (`melody="soprano,bass"` - the tune with a thumb under
-    it); everything else does not. So `texture="walking_bass"` and
+    `BASS_AUTO`, the default here, resolves from the texture and the selection, and a
+    combination the left hand cannot accommodate is refused with a warning rather
+    than degraded. **Both rules, and the measurement behind the second, are stated
+    once** - in `_resolve_bass` and `bass.bass_allowed` - rather than repeated here.
+    Two consequences a caller is most likely to meet: `texture="walking_bass"` and
     `texture="walking_bass", bass="walk"` are the same arrangement, and
     `bass="none"` on a walking bass gives the same strong-beat shells with the thumb
-    dropped - a coherent texture in its own right. A lone `melody="bass"` selection
-    keeps no thumb: that part already is the bass line, and a thumb under it
-    would double it.
-
-    A combination the left hand cannot accommodate is **refused rather than
-    degraded**. No shipped texture is refused any more - the four inner-skip `drop24`
-    sets were removed for a right-hand reason (`docs/fingering.md` §4.4) and one of them
-    was the only reachable shape spanning all three thumb strings, so the worst case
-    anywhere is now one free string, which is the threshold - but the rule stands and is
-    derived from `TEXTURE_GRIPS` rather than listed, so a palette that reaches the whole
-    thumb range is caught the same way. When it fires, the refusal names a texture that
-    would work and the arrangement still sounds, because losing a bass costs less than
-    shipping a line with holes in it. `bass.bass_allowed` is the check.
+    dropped - a coherent texture in its own right.
 
     `texture="targets"` uses the timing to arrange the way the guide describes:
     a full four-note chord on beats 1 and 3 of the bar, and a shell, a 3rd/6th
@@ -1871,7 +1860,7 @@ def arrange_progression(
       beat grid to place the walk on, and that is the path every existing
       hand-written caller takes, so it is documented rather than silent.
 
-    The bass is merged into `Voicing.frets` *after* `_best_voicing` has chosen the
+    The bass is merged into `Voicing.frets` *after* `select_step_voicing` has chosen the
     upper shape, so it cannot enter `voicing_cost`'s tuple by construction. That
     also means the combined string set is deliberately **not** a member of
     `supported_string_sets()`: the playability invariant applies to the upper
