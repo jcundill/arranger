@@ -262,11 +262,9 @@ def _sounding_melody(voicing: Voicing, written: str) -> Tuple[str, Optional[str]
     asked for. `melody` has to be what **sounds** - the tab is the contract - and
     `original_melody` is what the renderer shows beside it.
 
-    Extracted because three routes build a melody-alone step and only one of them
-    reported this. Measured on the committed heads, the texture fill printed the
-    written pitch over a shape an octave lower on 4 steps of "The Jitterbug Waltz",
-    and the palette rescue on 2 more. One function, so a fourth route cannot spell it
-    differently.
+    One function, so a fourth route cannot spell it differently: three routes build a
+    melody-alone step, and the *sounding* melody is what has to be recorded whichever of
+    them built it. `docs/open-issues.md` item 14 holds the measurement.
     """
     sounding = max(voicing.midi_notes())
     if sounding == Note(written).midi_note():
@@ -528,16 +526,13 @@ def _resolve_knobs(
                 ("fret_max", fret_max),
                 ("grips", grips),
                 ("texture", texture),
-                # `bass` is compared here like every other knob, which it was not
-                # for its whole life: `ArrangeOptions.bass` defaulted to the
-                # resolved "none" while the keyword defaults to the `BASS_AUTO`
-                # sentinel, so the two could never be compared - and the field was
-                # never read back out of `options` either, which is what made
-                # `--bass` silently inert on every slot-path caller (`arranger
-                # head` among them) while the walking-bass tests, which pass the
-                # keyword directly, stayed green. The field default is the sentinel
-                # now, so the comparison below holds, and the unpack below reads the
-                # field back.
+                # `bass` is compared here like every other knob, and for the comparison
+                # to mean anything the two spellings must be equal when a caller names
+                # neither: `ArrangeOptions.bass` and the keyword both default to the
+                # `BASS_AUTO` sentinel. A field defaulting to the resolved "none" would
+                # compare unequal to the sentinel on every call, and reading that resolved
+                # field back out of `options` would make the keyword look like a caller
+                # who had passed both.
                 ("bass", bass),
                 ("melody", melody),
                 ("harmony", harmony),
@@ -1363,10 +1358,9 @@ def _harmonised_step(
             #
             # The palette is named because it is the usual cause and the caller
             # is the only one who can change it, and the message says the step is
-            # *skipped* because that is what happens to the note. The old text
-            # named "drop-2" whatever family had been asked for - a `--grips
-            # shell` run was told about a grip it never requested - and read like
-            # a fallback that had happened.
+            # *skipped* because that is what happens to the note. Naming a family
+            # the caller never asked for, or wording it like a fallback that had
+            # happened, would both misdescribe the step.
             diagnostics.warn(
                 f"Warning: no voicing for {name} with melody {note_str} in the "
                 f"palette ({', '.join(slot_grips) or 'none'}) and the melody "
@@ -2073,9 +2067,8 @@ def _attach_bass(
       pitch below the shape's own lowest note**, or a fifth fret for four fingers.
       Measured over the committed heads the split is **0 / 38 / 1** of 39 refusals
       (`docs/open-issues.md` item 13), so the middle clause is the one that fires
-      almost every time - and until it was named, the text offered a reader two
-      causes that had not fired at all. Same argument as the neck window being a
-      penalty rather than a filter: losing a step is worse than losing its bass.
+      almost every time. Same argument as the neck window being a penalty rather than
+      a filter: losing a step is worse than losing its bass.
     - a candidate string exists, but every one of them would need a **fifth fret**
       from a hand already holding the shape - the `bass_only` case of
       `docs/open-issues.md` item 12. A bass note a player cannot finger is not a
@@ -2112,8 +2105,7 @@ def _attach_bass(
     if placed is None:
         # `if ... is None`, never `or`: `Diagnostics.__bool__` is False until it holds
         # something, so an empty collector handed in by a caller would be replaced by
-        # the printing default and its first warnings lost - measured as three of
-        # "But Not For Me"'s refusals under each of the four rows, and it is the same
+        # the printing default and its first warnings lost. It is the same
         # `or`-on-a-falsy-collector trap the other three call sites avoid
         # (`docs/open-issues.md` item 16).
         if diagnostics is None:
