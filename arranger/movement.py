@@ -1121,6 +1121,181 @@ def _comping_step(
     return False
 
 
+def _rescue_melody_alone(
+    arrangements: List[ArrangementStep],
+    slot: _Slot,
+    *,
+    name: str,
+    note_str: str,
+    melody_note: Note,
+    top_strings: Tuple[int, ...],
+    bar: Optional[int],
+    beat: Optional[float],
+    duration: Optional[float],
+    role: str,
+    weight: int,
+    diagnostics: Diagnostics,
+) -> bool:
+    """Play the tune alone when no shape in the palette can carry the chord.
+
+    **The note of the tune is never dropped while it can be played at all.** The
+    melody-alone route a fill takes is the last resort here too: the tune
+    survives, the thumb still walks, and the harmony is stated at the next slot
+    that can state it.
+
+    This used to read `if has_thumb or melody_only`, on the argument that only
+    those two routes may sound a chord-less step. That was the wrong question. A
+    palette that cannot voice a chord has already lost the harmony, and dropping
+    the step took the melody with it - measured over the committed heads,
+    `--grips shell` alone loses 216 notes that way, every one of them a note no
+    shape in that palette could carry. What the old guard was really protecting
+    is the *claim* such a step makes - that the guitar is playing the tune and
+    not the chord - so that claim is recorded on the step (`chord_unvoiced`,
+    which the renderers report) instead of the step being deleted.
+
+    Returns **True** when the step was appended. **False** means no string can
+    reach the note at all - below the library's G3 floor, or past the end of the
+    board - and the caller reports the step as skipped.
+    """
+    # **The string must be one the caller named.** `get_melody_only_voicing`
+    # keeps searching *below* the set it is given, so a note the named set
+    # cannot carry - D4 under `top_strings=(5,)`, below the high E string's
+    # open pitch - comes back on the B string. That is the documented
+    # behaviour of a restricted soprano set and not this rescue's to
+    # override: the rescue answers a palette that cannot voice a chord, not
+    # a caller asking for a string that cannot carry the tune.
+    solo_voicing = _grips.get_melody_only_voicing(
+        melody_note, prefer=top_strings
+    )
+    if solo_voicing is not None and solo_voicing.soprano_string() in top_strings:
+        # The note may have been dropped an octave to stay inside
+        # HIGH_FRET_LIMIT, so the step reports what sounds and keeps the
+        # written pitch - the same seam every melody-alone route uses.
+        sounding, written_original = _sounding_melody(solo_voicing, note_str)
+        step = ArrangementStep(
+            chord=name,
+            melody=sounding,
+            voicing=solo_voicing,
+            original_melody=written_original,
+            partial=False,
+            # The harmony is stated nowhere in this step. A fill reaches
+            # the same shape deliberately and does not carry this; see
+            # `ArrangementStep.chord_unvoiced`.
+            chord_unvoiced=True,
+            bar=bar,
+            beat=beat,
+            duration=duration,
+            role=role,
+            metric_weight=weight,
+            bass_only=is_bass_only(slot.bass_only, role),
+        )
+        _attach_bass(step, slot.bass, arrangements, diagnostics)
+        arrangements.append(step)
+        return True
+    return False
+
+
+def _promoted_fill(
+    *,
+    progression: Sequence[Tuple[Optional[str], str, str]],
+    index: int,
+    arrangements: List[ArrangementStep],
+    top_strings: Tuple[int, ...],
+    non_chord_tone: str,
+    fret_min: int,
+    fret_max: int,
+    grips: Tuple[str, ...],
+    slot_grips: Tuple[str, ...],
+    texture: str,
+    role: str,
+    has_thumb: bool,
+    melody_only: bool,
+    diagnostics: Diagnostics,
+) -> Optional[StepPreparation]:
+    """Re-prepare a fill that produced nothing as a principal note.
+
+    A fill slot with nothing thin to play must not lose the chord of the tune -
+    the whole point of the texture is a lighter *texture*, never a missing
+    harmony. Same argument as `NECK_FRET_MIN` being a penalty and not a filter.
+    `decisions.should_promote_fill` decides whether this step gets the retry.
+
+    The retry is prepared against `grips`, the **whole** palette, not the
+    narrowed `slot_grips` the fill was given: the narrow palette is what failed.
+
+    Returns the promoted preparation, or **None** when the texture does not ask
+    for the retry or the retry found nothing either - the two cases the caller
+    answers the same way, by reporting the step as skipped.
+    """
+    if not should_promote_fill(
+        texture, role, True, slot_grips, grips,
+        has_thumb=has_thumb,
+        melody_only=melody_only,
+    ):
+        return None
+    return prepare_step(
+        progression, index,
+        previous=arrangements[-1].voicing if arrangements else None,
+        previous_chord=arrangements[-1].chord if arrangements else None,
+        top_strings=top_strings,
+        non_chord_tone=non_chord_tone,
+        fret_min=fret_min,
+        fret_max=fret_max,
+        grips=grips,
+        diagnostics=diagnostics,
+    )
+
+def _demoted_to_melody_alone(
+    arrangements: List[ArrangementStep],
+    slot: _Slot,
+    *,
+    name: str,
+    note_str: str,
+    melody_note: Note,
+    top_strings: Tuple[int, ...],
+    best_voicing: Voicing,
+    bar: Optional[int],
+    beat: Optional[float],
+    duration: Optional[float],
+    role: str,
+    weight: int,
+    diagnostics: Diagnostics,
+) -> bool:
+    """Play the tune alone when the only shape that fitted needs a stretch.
+
+    Reached only under `decisions.should_demote_to_melody_alone`, which is where
+    the *why* of the fallback is documented: a complete chord at the very top of
+    the span budget is a fallback, not a re-ranking.
+
+    Returns **True** when the melody-alone step replaced the shape, so the caller
+    stops. **False** when the melody alone would be the wider reach of the two,
+    which leaves the chosen shape in place for the caller to play.
+    """
+    solo = _grips.get_melody_only_voicing(
+        melody_note, prefer=top_strings
+    )
+    if solo is not None and solo.fret_span() < best_voicing.fret_span():
+        diagnostics.warn(
+            f"Warning: {name} with melody {note_str} needs a "
+            f"{best_voicing.fret_span()}-fret stretch "
+            f"({best_voicing.tab_string()}); playing the melody alone"
+        )
+        arrangements.append(ArrangementStep(
+            chord=name,
+            melody=note_str,
+            voicing=solo,
+            partial=False,
+            bar=bar,
+            beat=beat,
+            duration=duration,
+            role=role,
+            metric_weight=weight,
+            bass_only=is_bass_only(slot.bass_only, role),
+        ))
+        _attach_bass(arrangements[-1], slot.bass, arrangements, diagnostics)
+        return True
+    return False
+
+
 def _harmonised_step(
     arrangements: List[ArrangementStep],
     slot: _Slot,
@@ -1171,84 +1346,25 @@ def _harmonised_step(
         diagnostics=diagnostics,
     )
     if prepared is None:
-        # **The note of the tune is never dropped while it can be played at
-        # all.** The melody-alone route a fill takes is the last resort here
-        # too: the tune survives, the thumb still walks, and the harmony is
-        # stated at the next slot that can state it.
-        #
-        # This used to read `if has_thumb or melody_only`, on the argument
-        # that only those two routes may sound a chord-less step. That was the
-        # wrong question. A palette that cannot voice a chord has already lost
-        # the harmony, and dropping the step took the melody with it - measured
-        # over the committed heads, `--grips shell` alone loses 216 notes that
-        # way, every one of them a note no shape in that palette could carry.
-        # What the old guard was really protecting is the *claim* such a step
-        # makes - that the guitar is playing the tune and not the chord - so
-        # that claim is now recorded on the step (`chord_unvoiced`, which the
-        # renderers report) instead of the step being deleted.
-        #
-        # A melody that cannot be played at all - below the library's G3 floor,
-        # or past the end of the board - still answers None here, and the step
-        # is skipped below with the warning.
-        #
-        # **The string must be one the caller named.** `get_melody_only_voicing`
-        # keeps searching *below* the set it is given, so a note the named set
-        # cannot carry - D4 under `top_strings=(5,)`, below the high E string's
-        # open pitch - comes back on the B string. That is the documented
-        # behaviour of a restricted soprano set and not this rescue's to
-        # override: the rescue answers a palette that cannot voice a chord, not
-        # a caller asking for a string that cannot carry the tune.
-        solo_voicing = _grips.get_melody_only_voicing(
-            melody_note, prefer=top_strings
-        )
-        if solo_voicing is not None and solo_voicing.soprano_string() in top_strings:
-            # The note may have been dropped an octave to stay inside
-            # HIGH_FRET_LIMIT, so the step reports what sounds and keeps the
-            # written pitch - the same seam every melody-alone route uses.
-            sounding, written_original = _sounding_melody(solo_voicing, note_str)
-            step = ArrangementStep(
-                chord=name,
-                melody=sounding,
-                voicing=solo_voicing,
-                original_melody=written_original,
-                partial=False,
-                # The harmony is stated nowhere in this step. A fill reaches
-                # the same shape deliberately and does not carry this; see
-                # `ArrangementStep.chord_unvoiced`.
-                chord_unvoiced=True,
-                bar=bar,
-                beat=beat,
-                duration=duration,
-                role=role,
-                metric_weight=weight,
-                bass_only=is_bass_only(slot.bass_only, role),
-            )
-            _attach_bass(step, slot.bass, arrangements, diagnostics)
-            arrangements.append(step)
-            return
-        # A fill slot with nothing thin to play must not lose the chord of
-        # the tune - the whole point of the texture is a lighter *texture*,
-        # never a missing harmony. So a fill that cannot be filled is
-        # re-prepared as a principal note before it is reported as missing.
-        # Same argument as NECK_FRET_MIN being a penalty and not a filter.
-        if should_promote_fill(
-            texture, role, True, slot_grips, grips,
-            has_thumb=has_thumb,
-            melody_only=melody_only,
+        # The tune is never dropped while it can be played at all: play it
+        # alone first, then promote the fill, and only then report the step
+        # missing. See `_rescue_melody_alone` and `_promoted_fill`.
+        if _rescue_melody_alone(
+            arrangements, slot,
+            name=name, note_str=note_str, melody_note=melody_note,
+            top_strings=top_strings, bar=bar, beat=beat, duration=duration,
+            role=role, weight=weight, diagnostics=diagnostics,
         ):
-            prepared = prepare_step(
-                progression, index,
-                previous=arrangements[-1].voicing if arrangements else None,
-                previous_chord=arrangements[-1].chord if arrangements else None,
-                top_strings=top_strings,
-                non_chord_tone=non_chord_tone,
-                fret_min=fret_min,
-                fret_max=fret_max,
-                grips=grips,
-                diagnostics=diagnostics,
-            )
-            if prepared is not None:
-                role = ROLE_TARGET
+            return
+        prepared = _promoted_fill(
+            progression=progression, index=index,
+            arrangements=arrangements, top_strings=top_strings,
+            non_chord_tone=non_chord_tone,
+            fret_min=fret_min, fret_max=fret_max,
+            grips=grips, slot_grips=slot_grips, texture=texture,
+            role=role, has_thumb=has_thumb, melody_only=melody_only,
+            diagnostics=diagnostics,
+        )
         if prepared is None:
             # Reached only when the melody **cannot be played at all** - the
             # rescue above has already been tried, and answered None because no
@@ -1267,6 +1383,7 @@ def _harmonised_step(
                 f"cannot be played alone either; skipping the step"
             )
             return
+        role = ROLE_TARGET
     candidates = prepared.candidates
     chord_type = prepared.chord_type
     name = prepared.chord_name
@@ -1332,28 +1449,13 @@ def _harmonised_step(
     # the melody alone. Why that is a fallback rather than a re-ranking is
     # documented once in decisions.should_demote_to_melody_alone.
     if should_demote_to_melody_alone(best_voicing, role):
-        solo = _grips.get_melody_only_voicing(
-            melody_note, prefer=top_strings
-        )
-        if solo is not None and solo.fret_span() < best_voicing.fret_span():
-            diagnostics.warn(
-                f"Warning: {name} with melody {note_str} needs a "
-                f"{best_voicing.fret_span()}-fret stretch "
-                f"({best_voicing.tab_string()}); playing the melody alone"
-            )
-            arrangements.append(ArrangementStep(
-                chord=name,
-                melody=note_str,
-                voicing=solo,
-                partial=False,
-                bar=bar,
-                beat=beat,
-                duration=duration,
-                role=role,
-                metric_weight=weight,
-                bass_only=is_bass_only(slot.bass_only, role),
-            ))
-            _attach_bass(arrangements[-1], slot.bass, arrangements, diagnostics)
+        if _demoted_to_melody_alone(
+            arrangements, slot,
+            name=name, note_str=note_str, melody_note=melody_note,
+            top_strings=top_strings, best_voicing=best_voicing,
+            bar=bar, beat=beat, duration=duration,
+            role=role, weight=weight, diagnostics=diagnostics,
+        ):
             return
     # A repeated melody is a soprano-only re-strike, so the renderers hold
     # the inner voices. The rule - and the harmony-change case that is not
