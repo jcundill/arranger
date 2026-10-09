@@ -527,6 +527,7 @@ __all__ = [
     "main",
     "normalised_harmony",
     "melody_only_selection",
+    "movement",
     "options",
     "render",
     "slots",

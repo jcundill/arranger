@@ -20,7 +20,7 @@ gate and the conventions — not the explanation.
 | the drop-2 tables, a grip, `GRIP_MAX_SPAN`, `voicing_cost` | [docs/engine.md](docs/engine.md) | `arranger/grips.py`, `arranger/cost.py` |
 | `texture=`, target/fill roles, the walking bass | [docs/engine.md](docs/engine.md) | `arranger/textures.py`, `arranger/bass.py` |
 | non-chord melody notes, a new chord quality | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` |
-| the step loop, `arrange_progression`, `Diagnostics` | [docs/engine.md](docs/engine.md) | `arranger/steps.py` |
+| the step loop, `arrange_progression`, `Diagnostics` | [docs/engine.md](docs/engine.md) | `arranger/movement.py` |
 | tab staff, HTML, MusicXML, GP5, or the MusicXML importer | [docs/renderers.md](docs/renderers.md) | `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py` |
 | the slot layer: triples to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
 | a known bug, with its measurement | [docs/open-issues.md](docs/open-issues.md) | — |
@@ -128,7 +128,8 @@ arranger/
 │   ├── bass.py          #   the walking-bass thumb line
 │   ├── options.py       #   ArrangeOptions - the knobs as one value
 │   ├── decisions.py     #   decisions both step loops share
-│   ├── steps.py         #   VoiceLeadingEngine and the one step loop
+│   ├── movement.py      #   the step loop: arrange_progression, prepare_step
+│   ├── steps.py         #   VoiceLeadingEngine - the published facade
 │   ├── slots.py         #   the slot layer: triples to steps, the one pre-pass
 │   ├── render.py        #   format_progression and per-step rendering
 │   └── cli.py           #   the head CLI's flags and output dispatch
@@ -157,16 +158,16 @@ dynamically from `arranger.__version__` — that is the single source of truth, 
 ### The engine is a package, and the order is enforced
 
 The engine was one 4290-line module until Phase 5 of the package refactor. It is
-now fourteen modules in a strict dependency order:
+now fifteen modules in a strict dependency order:
 
 ```
 tuning -> diagnostics -> chords -> grips -> cost -> textures
                                                    |
                             bass <- options -----+----> decisions
                                                    |
-                                                 steps -> slots -> render -> cli
-                                                            |              |
-                                                          (facade) <-------+
+                                          movement -> steps -> slots -> render -> cli
+                                                        |              |
+                                                      (facade) <-------+
 ```
 
 `fingers` — which finger holds which fret — hangs off `tuning` alone, so it is drawn
