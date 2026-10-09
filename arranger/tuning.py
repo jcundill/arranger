@@ -131,7 +131,7 @@ class Voicing:
     # Defaulted, so existing construction and the __getitem__ shim are unaffected.
     grip: str = "drop2"
     # The pitch class of the lowest sounding voice, or None for an all-muted shape.
-    # Cached so the slash-bass rule (`slots.bass_cost`) does not have to
+    # Cached so the slash-bass rule (`slots.slash_bass_cost`) does not have to
     # re-derive it, and so a caller can ask "what is the bass of this grip" directly.
     bass_pc: Optional[int] = None
     # Which metric role produced this shape, mirroring ArrangementStep.role: ROLE_TARGET
@@ -204,13 +204,11 @@ class Voicing:
         if self.bass_midi is None or self.bass_string is None:
             return self.midi_notes()
         bass_string = self.bass_string
-        # Filtered by string index, never by position in a filtered list: the two are
-        # different things. This used to `enumerate(...)` the *pitches* and compare the
-        # resulting counter against `bass_string`, which is a position, not a string -
-        # so it kept the thumb and dropped the melody whenever the thumb was not the
-        # lowest-indexed active string. It read correctly only when the thumb was on the
-        # low E, where the two happen to coincide, which is the one case the existing
-        # walking-bass fixtures all cover.
+        # Filtered by string index, never by a position in a filtered list: the two are
+        # different things. Enumerating the *pitches* and comparing that counter against
+        # `bass_string` would keep the thumb and drop the melody whenever the thumb is
+        # not the lowest-indexed active string - correct only when the thumb is on the
+        # low E, where the two happen to coincide.
         return [
             GuitarFretboard.fret_to_midi(index, fret)
             for index, fret in enumerate(self.frets)
@@ -353,8 +351,8 @@ class ArrangementStep:
     # How metrically strong the slot was: 2 on beat 1, 1 on beat 3, 0 on any other
     # beat, and **-1 when the step carries no timing at all**. The -1 matters: it
     # separates "we know this note is weak" from "we were never told where it falls",
-    # and it is what makes a progression with no rhythm behave exactly as it did
-    # before this feature existed. See _metric_weight.
+    # and it is what keeps a progression with no rhythm on the default path.
+    # See `_metric_weight`.
     metric_weight: int = 0
     # --- Walking bass (texture="walking_bass") ---
     #
@@ -378,9 +376,8 @@ class ArrangementStep:
     # It is a statement about the **left hand**, so it never coexists with
     # `role == ROLE_TARGET`: a target states the harmony, and a step that re-states a
     # chord cannot also be one that holds the previous shape. `decisions.is_bass_only`
-    # is what keeps the two apart - see `docs/open-issues.md` item 4, where a
-    # walk-invented downbeat the melody moved onto arrived carrying both and every
-    # renderer obeyed the flag and dropped the chord.
+    # is what keeps the two apart: a walk-invented downbeat the melody moves onto can
+    # arrive carrying both, and a renderer that obeyed the flag would drop the chord.
     bass_only: bool = False
     # The guitar does **not** sound the melody on this step: the melodic voice belongs
     # to another instrument, and this one is a guide-tone comping shape underneath it.
@@ -394,8 +391,8 @@ class ArrangementStep:
     # guitar playing it, which is what this says.
     #
     # It changes what a renderer draws in one specific way: there is no soprano string
-    # carrying the tune, so a `repeated` melody can no longer be a soprano-only
-    # re-strike. See `render._step_cells`, which holds the whole shape instead.
+    # carrying the tune, so a `repeated` melody cannot be a soprano-only re-strike.
+    # See `render._step_cells`, which holds the whole shape instead.
     melody_voiced: bool = True
 
     @property

@@ -1,42 +1,22 @@
-"""The two front ends take the same flags, and the tests say so.
+"""The `head` front end's flags, held to their declared shape.
 
-Phase 7 removed the last of the six defects in `implementation_plan.md`: the two
-CLIs hand-copied one argparse block, so a flag added to one was silently missing
-from the other. Those blocks now live once in `arranger.cli`.
+`add_common_arguments` writes the flags once, so a flag cannot be added in one place and
+silently missed in another - but a copy can be pasted, and so can a function edited in one
+place and left alone in another. So these tests assert the property directly rather than
+trusting the structure:
 
-**That is a structural fix with no test behind it**, which is the failure mode the
-whole refactor is about: a copy can be pasted, but so can a function that has been
-edited in one place and left alone in another. So these tests assert the property
-directly rather than trusting the refactor:
+- **the flag count** (20, counted rather than derived), a tripwire for a flag appearing or
+  vanishing unnoticed;
+- **every flag reaches the parser** - the twenty are named, so a flag registered without a
+  decision behind it fails;
+- **the help text is not one shared string**: eleven flags take their prose from
+  `CommonHelp` and nine are written inline, and every declared field reaches its flag with
+  that text, which catches a field added to the dataclass and never passed to
+  `add_argument`.
 
-- the two parsers offer an **identical set** of shared flags, and every one of them
-  agrees on `type`, `choices`, `default`, `nargs` and `metavar`;
-- each command keeps exactly the flags that are genuinely its own;
-- the `--help` text is not a single shared string. It was measured to differ on 11
-  of the 17 flags before this module existed, and nothing asserted any of it, so
-  a "simplification" that unified the prose would have silently changed what both
-  commands print. `CommonHelp` exists to keep the difference visible.
-
-`--vertical` was removed after that measurement, taking the shared count to 16; it
-was one of the six whose help both commands agreed on, so the eleven are
-unchanged. The counts are asserted in both directions below.
-
-**The corpus half is gone, and what replaced it is stated where it was removed.**
-This file existed to hold two parsers to each other: `corpus` and `head` shared an
-argparse block, and the assertions were that they agreed on every flag they shared
-and differed only where they had to. With the database removed there is one parser,
-so those assertions had nothing to compare - and rather than delete the class, it
-now asserts the two properties that survived and are still capable of breaking:
-
-- **the flag count**, which was a tripwire for "a flag was added to one command and
-  not the other" and is now a tripwire for "a flag appeared or vanished";
-- **`CommonHelp` is wired to the parser**, which was "the table and the measurement
-  agree" and is now "every declared field reaches a flag, and reaches it with that
-  text". That is the check that catches a field added to the dataclass and never
-  passed to `add_argument`.
-
-The `corpus` command's own vocabulary assertions - that `--skeleton`'s choices were
-`SKELETON_STRATEGIES` - were the other half, and they went with the flags.
+`TestTheSharedDispatch` reads `render_and_write` through the function rather than through
+the CLI, because the end-to-end command needs a file on disk and is exercised in
+`tests/test_headxml.py`. What it asserts is that the defaults are the writers' own.
 """
 
 from __future__ import annotations
@@ -173,7 +153,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         )
 
     def test_the_help_text_is_not_one_shared_string(self):
-        """Eleven flags carry written prose, and eight carry none from the table.
+        """Eleven flags take their prose from `CommonHelp`, and nine are written inline.
 
         Measured before `arranger/cli.py` existed: of the seventeen shared flags,
         all seventeen agreed on every field of *meaning*, and eleven disagreed on
@@ -188,7 +168,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         wherever it is read is written once at the `add_argument` call, and one
         whose wording carries an arrangement of its own lives in the table.
 
-        The eight: `bass`, `fallback`, `grid`, `grips`, `harmony`, `non_chord_tone`
+        The nine: `bass`, `fallback`, `grid`, `grips`, `harmony`, `non_chord_tone`
         and `voices` are arranging choices that mean the same thing against a
         transcription and against a score, so they print one help string rather
         than two - that was the original reason each is *not* in `CommonHelp`, and

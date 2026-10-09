@@ -1,45 +1,25 @@
 """The decisions both step loops make, in one implementation each.
 
-`VoiceLeadingEngine.arrange_progression` and the corpus path's `arrange_slots` (now
-`arranger.slots`, and a delegate rather than a loop) were two loops over the same
-slots, and between them they used to hold **two copies** of six
-decisions. The code said so itself, in comments that are the most honest thing in
-the repository:
+Nothing in this module knows about slots, textures or arrangements: it is one function
+per decision, each taking the few values it needs and returning the answer.
+`VoiceLeadingEngine.arrange_progression`, through `movement`, and `slots.arrange_slots`
+both call them, so a flag cannot behave two ways depending on the entry point. That is the
+failure a duplicated decision invites, and a single implementation is the mechanism rather
+than a comment asking two copies to stay in step.
 
-    "Both copies must agree. A head read from a MusicXML file comes here and a
-     hand-built progression goes through `arrange_progression`, so fixing only one
-     leaves the same flag behaving two different ways depending on the entry
-     point."
+**The one place the two loops genuinely differ is not here.** A slash bass is honoured by
+partitioning candidates before selection, and that is a filter over a list rather than a
+control-flow fork, so `select_step_voicing` folds it in - it is not a *duplicated*
+decision. The ranking itself lives in `arranger.slots`, which reaches this module through
+`steps`, so injecting it keeps the dependency acyclic and the preference visible at the
+call site.
 
-    "This is a *fallback*, tried last, and it mirrors the one in
-     `arrange_progression`."
-
-A comment asking two copies to stay in step is not a mechanism. It works until
-someone edits one of them on a Tuesday. The project has already paid for that once:
-the corpus path was built separately from the library, drifted, and voiced an
-`Am7` under a written `Bbm7` for twenty-five transcriptions before anyone noticed -
-which is why `prepare_step` was extracted in the first place.
-
-So the decisions live here, and each loop calls them. Nothing in this module knows
-about slots, textures or arrangements; it is one function per decision, each taking
-the few values it needs and returning the answer.
-
-**The one place the two loops genuinely differ is not here.** The corpus honours a
-slash bass by partitioning candidates before selection, and the library does not.
-That difference is a filter over a list rather than a control-flow fork, and it is
-what `select_step_voicing` folds in - it is not a *duplicated* decision, which is
-why it was never extracted as one. The ranking itself lives in `arranger.slots`,
-which reaches this module through `steps`, so injecting it is what keeps the
-dependency acyclic and the preference visible at the call site.
-
-**Why this module imports the engine's vocabulary and the engine imports this
-module.** The dependency runs one way: `decisions` needs the engine's own
-constants (`GRIP_PREFERENCE`, `ROLE_FILL`, `GRIP_MAX_SPAN`, `sounding_harmony`)
-and the engine needs the decisions. So `steps` imports this module, and this
-module imports `grips`, `chords`, `cost` and `tuning` - all of which sit *below*
-`steps` in the package's DAG. When the engine was one module, that meant a
-function-local `from arranger import ...` to dodge a cycle; inside the package the
-imports are ordinary top-level ones, and there is no cycle left to dodge.
+**Why this module imports the engine's vocabulary and the engine imports this module.**
+The dependency runs one way: `decisions` needs the engine's own constants
+(`GRIP_PREFERENCE`, `ROLE_FILL`, `GRIP_MAX_SPAN`, `sounding_harmony`) and the engine needs
+the decisions. So `steps` imports this module, and this module imports `grips`, `chords`,
+`cost` and `tuning` - all of which sit *below* `steps` in the package's DAG, so the
+imports are ordinary top-level ones and there is no cycle to dodge.
 """
 
 from __future__ import annotations
@@ -70,10 +50,9 @@ def resolve_texture_grips(
 ) -> Tuple[str, ...]:
     """Which grips this slot may use: the role's palette, narrowed by the caller.
 
-    `requested` **narrows** the texture's palette; it never widens it and never
-    silently deletes from it. It used to be discarded outright
-    (`slot_grips = texture_grips[role]`), so `--grips shell --texture targets` asked
-    for shell-only and got a four-note drop-2 on every strong beat with nothing said.
+    `requested` **narrows** the texture's palette; it must never widen it and must never
+    be discarded. Ignoring it makes `--grips shell --texture targets` ask for shell-only
+    and get a four-note drop-2 on every strong beat with nothing said.
 
     `has_thumb` narrows it too, and it is a budget rather than a preference: the right
     hand plucks with thumb, index, middle and ring, so a **target** may sound at most
@@ -177,7 +156,7 @@ def melody_alone_case(
         narrowed-to-nothing palette all arrive.
       - `has_thumb and role == ROLE_FILL` covers the one case the
         declaration misses: `--grips shell --texture walking_bass`, where the caller
-        narrows a fill to `("shell",)` and the palette is no longer empty. Without
+        narrows a fill to `("shell",)` and the palette is not empty. Without
         this clause that fill would try to voice a shell, which is the opposite of
         what the texture means.
 
@@ -192,9 +171,10 @@ def melody_alone_case(
     `get_melody_only_voicing`, which is the melody on its own - so this function cannot
     be allowed to answer `MELODY_ALONE_TEXTURE` for a slot the guitar is not singing, or
     a fill would put the tune straight back on the guitar and the axis would be honoured
-    only on targets. Measured: under `--texture targets --bass walk` every fill came
-    back `x-7-x-x-x-8`, a bare melody note, which is exactly the part that was supposed
-    to be somebody else's. The per-slot reading is what keeps that true for a note-less
+    only on targets: under `--texture targets --bass walk` a fill that answers the
+    texture case comes back a bare melody note, which is exactly the part that belongs
+    to somebody else - see the `--texture targets --bass walk` example in
+    `docs/engine.md`. The per-slot reading is what keeps that true for a note-less
     grid position a *singing* selection receives: the guitar has no note there, so it
     must not answer the texture case.
 
@@ -218,9 +198,9 @@ def melody_alone_case(
     # got wrong in a way its test caught.**
     #
     # The grid is asked *inside* the voice guard rather than after it. Answering the
-    # voice guard first made `grid=` silently inert on the comping route: measured, all
-    # four patterns returned 80 of 80 comps on `but_not_for_me` under
-    # `melody=alto,tenor`, byte-identical to the default. That is safe because a grid
+    # voice guard first makes `grid=` silently inert on the comping route - all
+    # four patterns come back byte-identical to the default, which
+    # `docs/comping-styles.md` records. Asking it inside is safe because a grid
     # only ever *removes* chords, so it cannot reintroduce a soprano the voice
     # selection removed.
     if not melody_voiced:
@@ -413,7 +393,7 @@ def is_repeated_step(
     if len([fret for fret in previous_step.voicing.frets if fret >= 0]) < 2:
         # A melody-alone step: the melody is held by the hand, not by ringing inner
         # voices, so the next step has to state whatever it voices rather than
-        # suppress it. See the docstring for the bar this was measured on.
+        # suppress it.
         return False
     if max(previous_step.voicing.midi_notes()) != max(voicing.midi_notes()):
         return False
@@ -430,7 +410,7 @@ def select_step_voicing(
     root_pc: Optional[int],
     melody_pc: Optional[int] = None,
     bass_pc: Optional[int] = None,
-    bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]] = None,
+    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]] = None,
 ) -> Optional[Voicing]:
     """The candidate the engine's own rule prefers, honouring a slash bass first.
 
@@ -450,14 +430,14 @@ def select_step_voicing(
     unachievable slash chord behaves exactly as if it had not been written - which
     is the same "never guess" rule the rest of this module follows.
 
-    `bass_cost` is passed in rather than imported because it lives in
+    `slash_bass_cost` is passed in rather than imported because it lives in
     `arranger.slots`, which reaches this module through `steps`; a module-level
     import either way would be a cycle. Passing it also makes the dependency visible
     at the call site, which is the point: wanting a slash-bass preference is the only
     reason to supply one.
     """
-    if bass_pc is not None and bass_cost is not None and candidates:
-        costs = [bass_cost(v.midi_notes(), bass_pc) for v in candidates]
+    if bass_pc is not None and slash_bass_cost is not None and candidates:
+        costs = [slash_bass_cost(v.midi_notes(), bass_pc) for v in candidates]
         best = min(costs)
         if best <= 2:
             candidates = [v for v, c in zip(candidates, costs) if c == best]

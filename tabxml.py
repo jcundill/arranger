@@ -16,14 +16,12 @@ What it writes is a real score rather than a note list:
 - the **key signature**, once, in the first measure: without it a three-flat tune is
   written as a C-major score, which means an accidental on every note of its own scale.
 
-**There is no TAB staff here, deliberately.** This module used to write a six-line TAB
-staff beside the notation one, and it is worth recording why it no longer does.
-music21 cannot produce a TAB staff that a real reader renders correctly: it writes
-neither the `<staff-lines>6</staff-lines>` a tab staff needs nor a fret and string for
-each note *inside* a chord - music21 issue 1534 puts them all on the chord's first
-note - so both had to be patched into the finished XML afterwards. The patched
-document still did not display correctly in MuseScore 3, and a workaround that does
-not work costs more than not shipping it.
+**There is no TAB staff here, deliberately.** music21 cannot produce a TAB staff that a
+real reader renders correctly: it writes neither the `<staff-lines>6</staff-lines>` a
+tab staff needs nor a fret and string for each note *inside* a chord - music21 issue
+1534 puts them all on the chord's first note - so both would have to be patched into
+the finished XML afterwards, and the patched document still does not display correctly
+in MuseScore 3. A workaround that does not work costs more than not shipping it.
 
 Fretting belongs to the renderer whose format stores it natively. `tabgp` writes a
 Guitar Pro 5 file, which is a *tab* format: a fret and a string per note survive the

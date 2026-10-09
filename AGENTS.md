@@ -20,14 +20,14 @@ gate and the conventions — not the explanation.
 | the drop-2 tables, a grip, `GRIP_MAX_SPAN`, `voicing_cost` | [docs/engine.md](docs/engine.md) | `arranger/grips.py`, `arranger/cost.py` |
 | `texture=`, target/fill roles, the walking bass | [docs/engine.md](docs/engine.md) | `arranger/textures.py`, `arranger/bass.py` |
 | non-chord melody notes, a new chord quality | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` |
-| the step loop, `arrange_progression`, `Diagnostics` | [docs/engine.md](docs/engine.md) | `arranger/steps.py` |
+| the step loop, `arrange_progression`, `Diagnostics` | [docs/engine.md](docs/engine.md) | `arranger/movement.py` |
 | tab staff, HTML, MusicXML, GP5, or the MusicXML importer | [docs/renderers.md](docs/renderers.md) | `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py` |
 | the slot layer: triples to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
-| a known bug, with its measurement | [docs/open-issues.md](docs/open-issues.md) | — |
-| which finger frets which string, or a per-finger cost criterion; which strings the right hand's `p-i-m-a` pluck, the gaps between them, and how far the thumb reaches | [docs/fingering.md](docs/fingering.md) | `arranger/fingers.py` (not inert any more: `bass` reads `can_fret` for the four-fret budget — `tests/test_fingers.py` holds the caller set to exactly `{bass}`; no per-finger cost yet). Its §4.3 measurement landed a *right-hand* rule first (`grips.thumb_safe_grips`, read by `decisions.resolve_texture_grips`) and then a *left-hand* one (`fingers.can_fret`, read by `bass._place_bass`); its **§4.4 finger-skip half is now built**, not recorded: the four `drop24` sets that carried the skip were removed from `GRIP_STRING_SETS` (`grips.finger_skip_count` is the rule and `tests/test_grips.py` holds the tables to it), which takes the default row's skip-carrying steps **223 → 1** and costs 57 of that row's 1,087 four-note steps a voice, **41 of them their chord** - the price, and the three rejected forms of the same lever, are in §4.4 and [docs/engine.md](docs/engine.md). Its thumb's-reach half still changes no count (`tests/test_texture.py::TestTheThumbReach` pins the reach), and §4.3's follow-on (should the *selector* leave room for the thumb?) is measured and unbuilt, on a **re-measured** count: 53 dropped bass notes when it was asked, **39** on the current tree, and the harmless recovery is now **none** rather than ten (those hosts were the removed `drop24` sets), so every recovery pays the span bucket. Its **fourth lever — the walk's own pitch — was measured with the re-measurement** and pays the tuple nothing: 24 of 38 refusals are recoverable by another pitch, 12 by a chord tone and 14 by none. Item 13 carries the counts, attributed across five trees, and the stale-53 warning; item 16 there is the warning-routing defect pinning its message surfaced (`docs/open-issues.md` item 13) |
+| an open bug, with its measurement | [docs/open-issues.md](docs/open-issues.md) | — |
+| which finger frets which string, or a per-finger cost criterion; which strings the right hand's `p-i-m-a` pluck, the gaps between them, and how far the thumb reaches | [docs/fingering.md](docs/fingering.md) | `arranger/fingers.py` (not inert any more: `bass` reads `can_fret` for the four-fret budget — `tests/test_fingers.py` holds the caller set to exactly `{bass}`; no per-finger cost yet). Its §4.3 measurement landed a *right-hand* rule first (`grips.thumb_safe_grips`, read by `decisions.resolve_texture_grips`) and then a *left-hand* one (`fingers.can_fret`, read by `bass._place_bass`); its **§4.4 finger-skip half is now built**, not recorded: the four `drop24` sets that carried the skip were removed from `GRIP_STRING_SETS` (`grips.finger_skip_count` is the rule and `tests/test_grips.py` holds the tables to it), which takes the default row's skip-carrying steps **223 → 1** and costs 57 of that row's 1,087 four-note steps a voice, **41 of them their chord** - the price, and the three rejected forms of the same lever, are in §4.4 and [docs/engine.md](docs/engine.md). Its thumb's-reach half still changes no count (`tests/test_texture.py::TestTheThumbReach` pins the reach), and §4.3's follow-on (should the *selector* leave room for the thumb?) is measured and unbuilt, on a **re-measured** count: 53 dropped bass notes when it was asked, **39** on the current tree, and the harmless recovery is now **none** rather than ten (those hosts were the removed `drop24` sets), so every recovery pays the span bucket. Its **fourth lever — the walk's own pitch — was measured with the re-measurement** and pays the tuple nothing: 24 of 38 refusals are recoverable by another pitch, 12 by a chord tone and 14 by none. [docs/open-issues.md](docs/open-issues.md) item 2 carries the counts, attributed across five trees, and the stale-53 warning |
 | `voices=`, which voices the guitar plays | [docs/voices-axis.md](docs/voices-axis.md) | `arranger/textures.py` |
 | the comping axes (`harmony=`, `grid=`, the rhythm grid) | [docs/comping-styles.md](docs/comping-styles.md) | `arranger/textures.py` |
-| the step/voicing mirrored fields (`step.grip`, `step.bass`), or which voice selection is melody-only | [docs/one-fact.md](docs/one-fact.md) | `arranger/tuning.py`, `arranger/steps.py` |
+| the step/voicing mirrored fields (`step.grip`, `step.bass`), or which voice selection is melody-only | [docs/one-fact.md](docs/one-fact.md) | `arranger/tuning.py`, `arranger/movement.py` |
 | how something was decided, historically | [docs/history/](docs/history/) | — |
 | user-facing behaviour and examples | [README.md](README.md) | — |
 
@@ -45,10 +45,10 @@ frozen like the rest — it is not a home for an open plan.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **960 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **962 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 12 of those 960, and it is the one that fails if this
+(`tests/test_docs.py` is 14 of those 962, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree. It also fails if a document
 exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
 new file cannot be added without being registered.)
@@ -128,7 +128,8 @@ arranger/
 │   ├── bass.py          #   the walking-bass thumb line
 │   ├── options.py       #   ArrangeOptions - the knobs as one value
 │   ├── decisions.py     #   decisions both step loops share
-│   ├── steps.py         #   VoiceLeadingEngine and the one step loop
+│   ├── movement.py      #   the step loop: arrange_progression, prepare_step
+│   ├── steps.py         #   VoiceLeadingEngine - the published facade
 │   ├── slots.py         #   the slot layer: triples to steps, the one pre-pass
 │   ├── render.py        #   format_progression and per-step rendering
 │   └── cli.py           #   the head CLI's flags and output dispatch
@@ -157,16 +158,16 @@ dynamically from `arranger.__version__` — that is the single source of truth, 
 ### The engine is a package, and the order is enforced
 
 The engine was one 4290-line module until Phase 5 of the package refactor. It is
-now fourteen modules in a strict dependency order:
+now fifteen modules in a strict dependency order:
 
 ```
 tuning -> diagnostics -> chords -> grips -> cost -> textures
                                                    |
                             bass <- options -----+----> decisions
                                                    |
-                                                 steps -> slots -> render -> cli
-                                                            |              |
-                                                          (facade) <-------+
+                                          movement -> steps -> slots -> render -> cli
+                                                        |              |
+                                                      (facade) <-------+
 ```
 
 `fingers` — which finger holds which fret — hangs off `tuning` alone, so it is drawn
@@ -277,6 +278,32 @@ There is no build step for local development.
 - **Do not add a third-party dependency** without explicit approval. `musthe` is the
   only runtime one; that is load-bearing for the LGPL reasoning above.
 
+### Docstrings describe the present, not the past
+
+A docstring states what a thing **is** and what a caller or an editor must know. It is
+not a changelog, and it is not where the reasoning lives. Three kinds of text compete
+for that space, and only the first belongs in the source:
+
+- **The contract, and any do-not-change constraint** — keep it, in the present tense.
+  "`requested` narrows the palette and must never widen it"; "do not reorder this
+  tuple". The warning is what stops the next editor undoing a deliberate choice, and
+  the traps below are the record of what that costs when it is missing.
+- **The story of how it got here** — delete it. "This was two functions", "it used to
+  be a classmethod", "Phase 5 moved this", "the database is gone", a former module
+  name, a forward-looking "for now". Narrative of this kind is written against a tree
+  that stops existing, and an agent that reads it acts on a fact that is no longer
+  true. The reason it is *always* the wrong place is that it has no test: nothing fails
+  when it goes stale, so it rots silently while the gate stays green.
+- **A measurement, and its number** — move it to the document that already holds it:
+  [docs/open-issues.md](docs/open-issues.md) for a diagnosed bug, the relevant
+  `docs/*.md` for anything else, [docs/history/](docs/history/) for a completed plan. A
+  count in a docstring is the fastest-rotting string in the repository and is stored
+  where it is least likely to be re-measured. Leave a one-line pointer instead.
+
+A module docstring is one to three sentences: what the module owns, and where it sits
+in the dependency order. `tests/test_docs.py` resolves a relative link written inside a
+docstring, so a pointer to a file that is not on disk fails the gate.
+
 ### Playability invariants
 
 Every generated voicing must satisfy all of these. They are asserted per-shape in
@@ -300,8 +327,8 @@ correct:
   where its fret can be a fifth. `fingers.can_fret` is the check and `bass._place_bass`
   is its one caller: a candidate needing five frets is refused, so the step keeps its
   upper voicing and the omission is reported, exactly as when no string is free.
-  Measured over the committed heads: **1** such step before the fix, **0** after — see
-  `docs/open-issues.md` item 12. It is the smaller twin of the bullet above: the same
+  Measured over the committed heads: **1** such step before the fix, **0** after.
+  It is the smaller twin of the bullet above: the same
   trap, the rule asserted on the part of the whole that happened to be checked;
 - every sounding pitch is a chord tone — except where the drop-2 tables have no
   inversion for the melody's degree and the quality-only fallback takes over. The
@@ -420,7 +447,7 @@ Each of these cost real time, or nearly shipped a defect.
    returns a **kind** (`none` / `texture` / `nc`) for exactly this reason.
 
 7. **A large mechanical move must copy text, not retype it.** Phase 5 moved 4290
-   lines into eleven modules by slicing the original *by line number*, so a docstring,
+   lines into the package by slicing the original *by line number*, so a docstring,
    a fret number or a comment provably cannot change in the move. Generate into a
    script you keep until the suite is green — a half-applied regeneration over a good
    tree is much harder to unpick than a wrong line is to find.
@@ -446,9 +473,8 @@ Each of these cost real time, or nearly shipped a defect.
    its exported bars came out short, and `--musicxml` scaled every onset by another
    0.75 per round trip. Six of the seven heads are 4/4 or 2/2, where the two spellings
    are the same number, and the only test that read the odd one out derived its
-   expectation from those same beats. Measured and fixed in
-   [docs/open-issues.md](docs/open-issues.md) item 15; the denominator now reaches the
-   engine's arithmetic too (`headxml._beat_from_onset`, `bass._melody_timeline`).
+   expectation from those same beats. Measured and fixed; the denominator now reaches
+   the engine's arithmetic too (`headxml._beat_from_onset`, `bass._melody_timeline`).
 
 10. **An omitted attribute is not an identity — and a default that is wrong is
     silent.** The exporter wrote no `<key>`, so every score left the library was in C
@@ -519,7 +545,6 @@ Each of these cost real time, or nearly shipped a defect.
     stated over a part of a whole, ask which producer can make the other part larger than
     the rule assumed, and assert the rule on the whole.** A count is the way to do it: the
     step count that catches this is "strings plucked at once", not "strings in the shape".
-    See [docs/open-issues.md](docs/open-issues.md) item 11.
 
 ## Where things are documented
 
@@ -528,9 +553,9 @@ Each of these cost real time, or nearly shipped a defect.
 | [README.md](README.md) | user-facing overview, worked examples, limitations |
 | [docs/engine.md](docs/engine.md) | grips, the selector, texture, the cost tuple, non-chord tones |
 | [docs/renderers.md](docs/renderers.md) | tab staff, MusicXML import/export, GP5, and their traps |
-| [docs/open-issues.md](docs/open-issues.md) | diagnosed bugs with their measurements; fixed items stay, with what the fix was |
+| [docs/open-issues.md](docs/open-issues.md) | the open bugs, each stated as **issue / problem / why it exists** with its measurement; a fixed one is removed, and its record lives in git |
 | [docs/history/reharmonisation-proposals.md](docs/history/reharmonisation-proposals.md) | **retired** - tritone substitution (shipped) and chromatic approach chords (measured, not built), with the corpus numbers behind each. Its reproduction path went with the Weimar corpus |
-| [docs/fingering.md](docs/fingering.md) | fingering: which finger frets which string, and which strings the right hand's `p-i-m-a` pluck. Step 1 of its §5 landed (`arranger/fingers.py` + `tests/test_fingers.py`: assignment, barres, movement, feasibility), and §5 step 2 is now **measured on all of its halves**. Its §4.3 half found two real defects, one per hand: a merged step could sound five *strings* (fixed by `grips.thumb_safe_grips` + `decisions.resolve_texture_grips`) and a `bass_only` step could need five *frets* (fixed by `fingers.can_fret` + `bass._place_bass`, the module's only engine caller - so the module is no longer inert). Its movement half came back nearly empty, and its **§4.4 right-hand half** found the only finger-skip string sets to be four `drop24` sets and one `shell` - then **shipped the ban**: the four are gone from the tables, so the default row's skip-carrying steps fall **223 → 1**, at a price counted in chords (57 of that row's 1,087 four-note steps lose a voice, **41 of them their chord**, ten of the 41 from span-0/1 shapes whose left hand was trivial - the convention is the *right* hand's fan, so a barre still pays), and the removal dissolved `uniform`'s bass refusal on the way, because `(4,2,1,0)` was the set that spanned all three thumb strings. The three rejected forms of the same lever - the tuple criterion after `span` (17 probe picks, 94 pools), the per-shape rule (skip *and* a real reach), and the keep-them-as-a-last-resort palette - are recorded there with their numbers. §4.4 also measures the thumb's *reach* - it sweeps the low four strings (E A D G), which is why a two- or three-note shape whose bottom note is above the G has no thumb in it at all, bass voice or not. Only three of the 24 reachable sets put the bottom note up there and all three are contiguous, so narrowing §2.5's exemption to that reach moves no count - the same "recorded, not built" outcome. §4.3's follow-on - should the *selector* leave room for the thumb? - is measured the same way, and **re-measured once since**: 53 dropped bass notes over the committed heads when it was asked and **39** on the current tree, the dominant cause being a third one (no octave of the walk's pitch below the shape) rather than the fret budget, and the harmless recovery - a candidate sounding the chosen shape's own notes - is now **none** rather than ten, because those hosts were the removed `drop24` sets, so every recovery pays the span bucket. The **walk's own pitch** is the fourth lever and costs the tuple nothing: 24 of 38 "no octave below" refusals are recoverable by another pitch, 12 of them by a chord tone and 14 by none, all 12 in one head and one figure. `open-issues.md` item 13 carries the counts, attributed across the five trees that moved them, and the stale-53 warning; item 16 there is the warning-routing defect found while pinning item 13's message. §5 step 3 (the cost-tuple decision) is still open |
+| [docs/fingering.md](docs/fingering.md) | fingering: which finger frets which string, and which strings the right hand's `p-i-m-a` pluck. Step 1 of its §5 landed (`arranger/fingers.py` + `tests/test_fingers.py`: assignment, barres, movement, feasibility), and §5 step 2 is now **measured on all of its halves**. Its §4.3 half found two real defects, one per hand: a merged step could sound five *strings* (fixed by `grips.thumb_safe_grips` + `decisions.resolve_texture_grips`) and a `bass_only` step could need five *frets* (fixed by `fingers.can_fret` + `bass._place_bass`, the module's only engine caller - so the module is no longer inert). Its movement half came back nearly empty, and its **§4.4 right-hand half** found the only finger-skip string sets to be four `drop24` sets and one `shell` - then **shipped the ban**: the four are gone from the tables, so the default row's skip-carrying steps fall **223 → 1**, at a price counted in chords (57 of that row's 1,087 four-note steps lose a voice, **41 of them their chord**, ten of the 41 from span-0/1 shapes whose left hand was trivial - the convention is the *right* hand's fan, so a barre still pays), and the removal dissolved `uniform`'s bass refusal on the way, because `(4,2,1,0)` was the set that spanned all three thumb strings. The three rejected forms of the same lever - the tuple criterion after `span` (17 probe picks, 94 pools), the per-shape rule (skip *and* a real reach), and the keep-them-as-a-last-resort palette - are recorded there with their numbers. §4.4 also measures the thumb's *reach* - it sweeps the low four strings (E A D G), which is why a two- or three-note shape whose bottom note is above the G has no thumb in it at all, bass voice or not. Only three of the 24 reachable sets put the bottom note up there and all three are contiguous, so narrowing §2.5's exemption to that reach moves no count - the same "recorded, not built" outcome. §4.3's follow-on - should the *selector* leave room for the thumb? - is measured the same way, and **re-measured once since**: 53 dropped bass notes over the committed heads when it was asked and **39** on the current tree, the dominant cause being a third one (no octave of the walk's pitch below the shape) rather than the fret budget, and the harmless recovery - a candidate sounding the chosen shape's own notes - is now **none** rather than ten, because those hosts were the removed `drop24` sets, so every recovery pays the span bucket. The **walk's own pitch** is the fourth lever and costs the tuple nothing: 24 of 38 "no octave below" refusals are recoverable by another pitch, 12 of them by a chord tone and 14 by none, all 12 in one head and one figure. [docs/open-issues.md](docs/open-issues.md) item 2 carries the counts, attributed across the five trees that moved them, and the stale-53 warning. §5 step 3 (the cost-tuple decision) is still open |
 | [docs/history/](docs/history/) | completed plans: corpus, walking bass, texture, arranging guide - a record of the past, not of what exists |
 | [docs/voices-axis.md](docs/voices-axis.md) | **in progress** - the `voices=` axis, awaiting QA |
 | [docs/comping-styles.md](docs/comping-styles.md) | the comping axes (`harmony=`, the rhythm grid): **partly built** - Stage C shipped `harmony=`, Stage D shipped the named `grid=` rows, and §9 steps 0, B, A, A', C, D and E have landed (E, `--voices soprano` = the melody and nothing else, landed earlier as Stage 2 — `docs/one-fact.md`; A' makes a **chords-only lead sheet** loadable, `Head.bars` a fact about the file; C makes `--non-chord-tone` reach the comping route at harmony level, onset-guarded by `melody_onsets`; D makes the soprano **per slot**, so a soprano-named selection comps the grid positions its tune does not articulate at); §9.4's four-note comping chord, and §6's open questions, are still proposal |

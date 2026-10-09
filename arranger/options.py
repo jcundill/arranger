@@ -10,8 +10,9 @@ Frozen, because an options object that can be mutated halfway through arranging 
 worse than the keyword list it replaces - the failure would depend on *when* it was
 written. Build a second one instead.
 
-Every field's default is the value that call has always used, so
-`ArrangeOptions()` is the historical arrangement. `arrange_progression` still
+Every field's default is the same value `arrange_progression`'s keyword defaults to, so
+`ArrangeOptions()` asks for exactly what `arrange_progression(progression)` builds. That
+call still
 accepts the same keywords directly; see its docstring for how the two interact.
 """
 
@@ -52,15 +53,13 @@ class ArrangeOptions:
     # `arrange_progression`'s keyword default, so the two spellings can be compared
     # field-by-field, and a default that disagreed with the keyword's would make every
     # slot-path call look like a caller who had passed both. The sentinel resolves from
-    # the texture, so a bare options value leaves the thumb line exactly where the
-    # keyword always left it. The field said "none" for its whole life and nothing
-    # measured it, because the engine never read the field back out of the options -
-    # which is what made `--bass` silently inert on `arranger head`; see the unpack in
-    # `steps.py`.
+    # the texture, so a bare options value leaves the thumb line where the keyword
+    # default leaves it. `steps.py` reads the field back, which is what keeps `--bass`
+    # live on the `arranger head` path.
     bass: str = BASS_AUTO
     # Which voices the guitar plays, from `MELODY_POLICIES` in `textures.py` (which
     # resolves the `auto` sentinel). `soprano` keeps the melody pinned to the soprano
-    # string - the default, and the historical arrangement - and dropping it gives the
+    # string - the default - and dropping it gives the
     # tune to another instrument, leaving the guitar a guide-tone comping part.
     #
     # **Named `melody` and carrying a voice list, which reads as a mistake** and is
@@ -81,10 +80,9 @@ class ArrangeOptions:
     # can be compared field-by-field. That comparison is load-bearing: `arrange_slots`
     # builds an `ArrangeOptions` and passes it, so a default that disagreed with the
     # keyword's would make every corpus call look like a caller who had passed both.
-    # `bass` follows the same rule now, having spent its life as the counterexample:
-    # its field default was the resolved "none" while the keyword's was the sentinel,
-    # so the comparison could never be made and the field was never read back at all.
-    # See the note beside its own field above.
+    # `bass` follows the same rule: its field default is the sentinel too, so the
+    # comparison can be made and the field read back. See the note beside its own
+    # field above.
     melody: str = MELODY_AUTO
     # Which **degrees** this part states when it is not singing, from `HARMONY_STYLES`
     # in `textures.py`: "guide" is the shipped comping shape (the 3rd and the 7th).
@@ -148,15 +146,15 @@ class ArrangeOptions:
     # data, not control flow. Absent or None for an index means no restriction, which
     # is exactly the library's own behaviour.
     bass_pcs: Optional[Mapping[int, Optional[int]]] = None
-    # The ranking used to honour `bass_pcs`, passed in rather than imported:
-    # `bass_cost` lives in `arranger.slots`, which reaches `decisions` through
+    # The ranking that honours `bass_pcs` is passed in rather than imported:
+    # `slash_bass_cost` lives in `arranger.slots`, which reaches `decisions` through
     # `steps`, so a module-level import either way would be a cycle. It is a field
     # rather than a module global because a slash-bass preference is the only reason
     # to supply one, and making that visible at the call site is the point.
     #
     # Both halves are needed: `bass_pcs` says which pitch the caller wants, and this
     # says how near a candidate is to it. Neither alone narrows anything.
-    bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]] = None
+    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]] = None
     # The progression indexes whose melody note **articulates** (an onset), for the
     # §9.2 reharmonise rule on the comping route: a non-chord melody note is
     # substituted where it begins, not under a held note and not where the tune is

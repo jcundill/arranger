@@ -131,9 +131,8 @@ class ChordParser:
         Normalises a chord quality to its canonical spelling.
 
         Aliases are resolved case-sensitively (so 'M7' -> 'maj7' but 'm7' stays
-        'm7'), which also fixes the historical case bug where 'mMaj7'.lower()
-        produced 'mmaj7' and silently missed every table lookup. Unknown
-        qualities are returned unchanged so callers can report them.
+        'm7'): lower-casing first turns 'mMaj7' into 'mmaj7', which is no key in any
+        table. Unknown qualities are returned unchanged so callers can report them.
         """
         if not chord_type:
             return ""
@@ -191,7 +190,7 @@ def normalised_harmony(
 def sounding_harmony(step: ArrangementStep) -> Tuple[Optional[str], Optional[str]]:
     """The harmony a step actually sounds, normalised so two spellings compare equal.
 
-    Used to decide whether a repeated melody is still a hold: a note repeating
+    Decides whether a repeated melody is still a hold: a note repeating
     across a *chord change* is not a held shape, it is a new harmony that the
     held soprano has to be heard against.
     """

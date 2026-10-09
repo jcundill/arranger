@@ -203,7 +203,7 @@ class TestTheDecisionsAreActuallyShared(unittest.TestCase):
             'fret_span() >= GRIP_MAX_SPAN["drop2"]',
             "sounding_harmony(previous_step)",
         )
-        for module_name in ("arranger", "arranger.steps", "arranger.slots"):
+        for module_name in ("arranger", "arranger.steps", "arranger.movement", "arranger.slots"):
             source = source_of(module_name)
             for snippet in snippets:
                 with self.subTest(module=module_name, snippet=snippet):
@@ -222,11 +222,13 @@ class TestTheDecisionsAreActuallyShared(unittest.TestCase):
         `slots` must not have grown a loop of its own. A test that keeps asserting
         the old shape would be a test resisting the refactor it exists to protect.
 
-        The engine is `arranger.steps` rather than `arranger`: Phase 5 made
+        The loop is `arranger.movement` rather than `arranger`: Phase 5 made
         `__init__.py` a facade, so reading *its* source would pass on a package
-        whose step loop had been deleted outright.
+        whose step loop had been deleted outright. `arranger.steps` was the loop's
+        home until the loop moved to `movement`; `steps` is a facade now too, so
+        this is re-pointed a second time rather than dropped.
         """
-        engine = source_of("arranger.steps")
+        engine = source_of("arranger.movement")
         for name in DECISIONS:
             with self.subTest(decision=name):
                 self.assertIn(f"{name}(", engine, f"the engine does not call {name}")

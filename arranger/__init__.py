@@ -1,6 +1,6 @@
 """`jazz-arranger`: playable jazz guitar chord-melody from a chord progression.
 
-This module is a **facade**. The engine is a package of fourteen modules with a
+This module is a **facade**. The engine is a package of fifteen modules with a
 strict dependency order, and nothing above imports anything below it by accident:
 
     tuning -> chords -> grips -> cost
@@ -11,18 +11,19 @@ strict dependency order, and nothing above imports anything below it by accident
                  |                    |
               steps -> render -> (this module)
 
-`fingers` is a second edge off `tuning`, and it is **inert**: it is the left-hand fingering
-module of `docs/fingering.md`, `tests/test_fingers.py` is its only caller, and no engine
-module imports it - which is why the facade binds it while the diagram above omits it. Its
-placement is still in `test_package_dag.ORDER`, because a module missing from that list is
-unconstrained by the layering.
+`fingers` is a second edge off `tuning`, and the diagram above omits it: it is the
+left-hand fingering module of `docs/fingering.md`, and `bass` is the one engine reader
+that reaches it - it calls `fingers.can_fret` for the four-fret budget of a merged
+`bass_only` step, which is why the facade binds the module. `tests/test_fingers.py` holds
+that caller set. It is in `test_package_dag.ORDER`, because a module missing from that
+list is unconstrained by the layering.
 
 `import arranger` gives the same names it always did - `VoiceLeadingEngine`,
 `Voicing`, `ArrangementStep`, `ChordParser`, the constants, and the renderers -
 because everything public is re-exported here. The *code* moved; the spelling did
 not, so the README, the tests and `headxml` are unaffected.
 
-Two things are deliberately still lazy, and Phase 6 removes both:
+Two things are deliberately lazy, and both are load-bearing:
 
 - the three whole-progression staff renderers, resolved through a module-level
   `__getattr__` (PEP 562) because `tabstaff` imports *this* package;
@@ -41,8 +42,8 @@ the engine's output ("the walk's pitch-class set is exactly the chord's tones pl
 its extensions", "a fill is chosen by the role rule", "this refusal must not tell
 the player to change a texture, because on this route a texture changes nothing").
 Moving the code would
-otherwise have forced those tests to reimplement the rule they are checking, which
-is the copy-paste failure Phase 1 removed. They are listed here so the cost of
+otherwise force those tests to reimplement the rule they are checking, which is a
+copy-paste failure. They are listed here so the cost of
 moving a function - "also re-export it" - is visible rather than discovered.
 """
 
@@ -54,7 +55,7 @@ from typing import TYPE_CHECKING, Any, List
 
 from musthe import Note  # re-exported: `from arranger import Note` is used by tests
 
-from . import cli, cost, decisions, fingers, options, slots
+from . import cli, cost, decisions, fingers, movement, options, slots
 from .bass import (
     BASS_ANCHORS,
     BASS_AUTO,
@@ -186,7 +187,7 @@ from .tuning import (
 # `melody_bass` textures are removed (a breaking change to the public surface,
 # same rule as 0.10.0). Measured byte-identical against the old spellings on
 # both committed heads and the engine's own fixture - see `docs/one-fact.md`.
-__version__ = "0.11.0"
+__version__ = "0.12.0"
 
 
 # The whole-progression staff renderers live in `tabstaff`, which imports this
@@ -235,11 +236,8 @@ def main() -> None:
     it uses - for somebody who only wants the library.
 
     **Anything else that looks like a subcommand is a usage error, not the demo.**
-    Until the `corpus` subcommand was removed this fell through silently, so
-    `arranger corpus --melid 218` printed three arrangements and exited 0 - to a
-    user who asked for a head and was given nothing resembling one. A removed
-    command that quietly becomes the demo is worse than one that is gone: the exit
-    code says it worked.
+    Falling through to the demo for an unrecognised command would answer a request for
+    a head with three arrangements and exit 0 - the exit code would say it worked.
 
     The test is `argv[1]` being a bare word, so an option (`--grips shell`) still
     reaches the demo rather than being rejected, and `--help` is handled by the
@@ -405,21 +403,18 @@ if TYPE_CHECKING:
     )
 
 
-# used to export every public name; the lazy __getattr__ above hides the tabstaff
-# renderers from that, so they are listed here explicitly. Keep it in step when
-# adding a public name - test_dunder_all_matches_the_public_surface checks that.
-# Star-import support. This module never had an __all__, so `from arranger import *`
-# used to export every public name; the lazy __getattr__ above hides the tabstaff
-# renderers from that, so they are listed here explicitly.
+# Star-import support. The lazy `__getattr__` above hides the tabstaff renderers from
+# `from arranger import *`, so they are listed here explicitly. Keep this in step when
+# adding a public name - test_dunder_all_matches_the_public_surface checks it.
 #
-# The engine submodules are listed too, and deliberately. Phase 5 made this a
-# package, and `arranger.steps`, `arranger.grips` and `arranger.cost` are *public
-# paths* - the places a change to the cost tuple or the grip tables belongs. Python
-# binds a submodule as an attribute of its parent on import whether or not it is
-# listed, so omitting them would not hide them; it would only make this list wrong,
-# which is what `test_dunder_all_matches_the_public_surface` checks. The private
-# names re-exported above are the deliberate exception: they are reachable and
-# absent from this list on purpose.
+# The engine submodules are listed too, and deliberately: `arranger.steps`,
+# `arranger.grips` and `arranger.cost` are *public paths* - the places a change to the
+# cost tuple or the grip tables belongs. Python binds a submodule as an attribute of its
+# parent on import whether or not it is listed, so omitting them would not hide them; it
+# would only make this list wrong, which is what
+# `test_dunder_all_matches_the_public_surface` checks. The private names re-exported
+# above are the deliberate exception: they are reachable and absent from this list on
+# purpose.
 __all__ = [
     "BASS_DEGREES_6432",
     "BASS_ROLE_ANCHOR",
@@ -527,6 +522,7 @@ __all__ = [
     "main",
     "normalised_harmony",
     "melody_only_selection",
+    "movement",
     "options",
     "render",
     "slots",

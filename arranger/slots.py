@@ -1,16 +1,5 @@
 """The slot layer: turn `(melody, quality, name)` triples into arrangement steps.
 
-This module was `wjazzd.arrange_slots` and arrived here by a route worth stating,
-because the name was misleading for its whole life. It lived beside the Weimar
-Jazz Database loader, so it read as *the corpus path's* step loop - and the
-docstrings said so, which is how a function two thirds of whose callers were
-MusicXML came to describe itself as the database's own. It was never coupled to
-the database: it took triples and timings and handed them to
-`VoiceLeadingEngine.arrange_progression`. The Weimar loader was simply its first
-caller, and `headxml` the second.
-
-The database is gone, and this is what remains of that dependency.
-
 **It is a thin pre-pass, and that is the point.** The engine must see whatever
 triples it is handed, so everything here is a *decision about what to ask for* -
 the diminished retry, the timings, the slash bass - and the voicing itself
@@ -19,12 +8,10 @@ be useful to any caller, and one (`_slot_options`) is a named seam rather than a
 public API: the request this module makes of the engine, in one value, so a test
 can read it.
 
-What survives here is corpus-independent, and what went with the database is the
-**Weimar quality table** (108 suffixes) and the chord-symbol spelling built on it.
-The slash-bass rule kept below is the general part of it - "prefer a candidate
-whose lowest note is the one the chord asks for" - and it reads the bass off a
-symbol with a general pattern rather than a Weimar one, so `A-/G` means the same
-thing wherever it came from.
+The slash-bass rule is the general one - "prefer a candidate whose lowest note is
+the one the chord asks for" - and it reads the bass off a symbol with a general
+pattern rather than a Weimar one, so `A-/G` means the same thing wherever it came
+from.
 
 Ordering note for `tests/test_package_dag.py`: this module sits after `steps`
 (it constructs `VoiceLeadingEngine`) and imports nothing from `render` or `cli`,
@@ -47,7 +34,7 @@ from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES, ArrangementStep
 
 __all__ = [
     "arrange_slots",
-    "bass_cost",
+    "slash_bass_cost",
     "bass_pitch_class",
     "midi_to_note_name",
     "parse_bar_range",
@@ -211,11 +198,10 @@ _SLASH_BASS_RE = re.compile(r"^[^/]*/([A-Ga-g][#b]?)\s*$")
 def _slash_bass(symbol: str) -> Optional[str]:
     """The bass note a chord symbol asks for, or None when it asks for none.
 
-    **This is the general reading, and the Weimar spelling it replaces was only
-    ever used for this field.** `parse_weimar_chord` returned a three-tuple and
-    this call site read the third element; the first two, including the 108-entry
-    quality table that had to be present for the function to exist, were dead at
-    this call site. So the replacement drops the table rather than porting it.
+    **This reads the one part of the symbol this call site needs.** The symbol is parsed
+    for its slash bass and nothing else: the quality and the root come from the
+    progression's own triples, so a quality table here would be dead weight - which is
+    why there is none.
     """
     symbol = (symbol or "").strip()
     if not symbol or symbol == NO_CHORD:
@@ -224,13 +210,17 @@ def _slash_bass(symbol: str) -> Optional[str]:
     return match.group(1) if match else None
 
 
-def bass_cost(voicing_midis: Sequence[int], bass_pc: Optional[int]) -> int:
+def slash_bass_cost(voicing_midis: Sequence[int], bass_pc: Optional[int]) -> int:
     """How far a voicing's lowest sounding pitch is from the requested bass.
 
     In semitones, as the smallest interval from the bass pitch class to the
     lowest note actually played. Zero means the bass is in the voicing; 6 means
     it is a tritone away. Used only to *prefer* one candidate over another, so a
     voicing that cannot honour the bass is still usable.
+
+    Named `slash_bass_cost`, not `bass_cost`, because the walking line already
+    owns that name (`arranger.bass.bass_cost`) - the two rank different things and
+    the shared spelling was a trap. This is the slash-chord half.
     """
     if bass_pc is None or not voicing_midis:
         return 0
@@ -262,14 +252,11 @@ def arrange_slots(
 ) -> Tuple[List[ArrangementStep], List[int], List[str]]:
     """Voices a list of (note, quality, name) triples, one step per slot.
 
-    **This no longer contains a step loop.** It is a pre-pass over the triples
-    followed by a call to `VoiceLeadingEngine.arrange_progression`. It used to be
-    a second, near-verbatim copy of that loop - 366 lines, carrying its own copies
-    of six decisions under a comment reading *"Both copies must agree"*. Both
-    callers reached the voicings through here, so a head imported from a score was
-    voiced by exactly the same code as the same head read out of the database.
-    That was the intention before; now it is a property of the structure rather
-    than a promise in a comment.
+    **This is a pre-pass, not a step loop.** It prepares the triples and then calls
+    `VoiceLeadingEngine.arrange_progression`, so a head imported from a score and a
+    hand-built progression are voiced by exactly the same code - a property of the
+    structure rather than a promise in a comment. The decisions it needs are in
+    `decisions.py`, one implementation each.
 
     What a caller needs that the engine does not take, and how each is passed:
 
@@ -330,16 +317,15 @@ def arrange_slots(
 
     # --- the diminished retry, as a pre-pass -------------------------------------
     #
-    # A pre-pass rather than something inside a loop, because there is no loop here
-    # any more. The engine must see the substituted chord, and it sees whatever
-    # triples it is handed.
+    # A pre-pass rather than something inside a loop, because there is no loop here:
+    # the engine must see the substituted chord, and it sees whatever triples it is
+    # handed.
     #
-    # It used to be applied *after* the slot's role had been computed from the
-    # written chord. Under `targets` the role does not read the harmony, so nothing
-    # moved; under `walking_bass` it does. That ordering change was measured, when the
-    # corpus existed, by `test_wjazzd.py::TestTheRetryReordersNothingVisible` - a file
-    # that went with the database. `tests/test_step_loop_equivalence.py` is the
-    # standing check that the two entry points still agree.
+    # **The substitution must be applied before the slot's role is computed.** Under
+    # `targets` the role does not read the harmony, so the order would not show; under
+    # `walking_bass` it does, so reordering this would move the walk's roles.
+    # `tests/test_step_loop_equivalence.py` is the standing check that the two entry
+    # points still agree.
     unresolved = unresolved_steps(list(triples), non_chord_tone, onsets)
     retry = set(unresolved) if fallback == "diminished" else set()
     rescued: List[int] = []
@@ -411,7 +397,7 @@ def _slot_options(
     test can read. It is a seam, not a public API: the function is private and the
     arrangement it produces is tested through `arrange_slots`.
 
-    Two things happen here that used to be scattered through the loop.
+    Two things happen here.
 
     **The timings are normalised to one entry per triple.** Written out rather than
     reusing `timings` because that sequence is a `Sequence` and may be shorter than
@@ -423,15 +409,13 @@ def _slot_options(
     slash, which is every triple of a score-imported head unless the score writes
     one. The bass note normally rides along in the chord name, so the triple carries
     it and the name does not have to; a caller that has already promoted the bass
-    into the quality writes the promoted name. `bass_cost` is supplied alongside
+    into the quality writes the promoted name. `slash_bass_cost` is supplied alongside
     because the pitch class says *what* is wanted and the cost says *how near* a
     candidate is to it; neither alone narrows anything.
 
-    **The slash is read with a general pattern, not the Weimar one.** This used to
-    call `wjazzd.parse_weimar_chord(name)[2]`, which needed the 108-suffix Weimar
-    quality table to reach - and returned the *bass field*, so the table bought
-    nothing here. What survives is only the ordinary reading of `A-/G`, so it is
-    spelled out below and the dependency on a database's spelling goes with it.
+    **The slash is read with a general pattern, not a Weimar one.** The bass field of
+    the symbol is the ordinary reading of `A-/G`, spelled out below rather than taken
+    via a quality table, so the spelling does not depend on a database's vocabulary.
     """
     # --- the timings, normalised to one entry per triple -------------------------
     #
@@ -470,6 +454,6 @@ def _slot_options(
         beat_type=beat_type,
         timings=typed_timings,
         bass_pcs=bass_pcs or None,
-        bass_cost=bass_cost,
+        slash_bass_cost=slash_bass_cost,
         melody_onsets=melody_onsets,
     )

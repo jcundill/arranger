@@ -2,7 +2,7 @@
 
 Phase 8 exists because of one measured fact: `AGENTS.md` had grown to 1710 lines and
 had gone stale in ways an agent would act on. It described a single 4290-line
-`arranger.py` (it is a package of eleven modules), gave `pyright arranger.py` as the
+`arranger.py` (the engine is a package, not a file), gave `pyright arranger.py` as the
 typecheck command, and stated the version as both `0.8.0` and `0.7.0` while
 `__version__` was `0.9.0`. It had **zero** mention of the walking bass, which ships in
 0.9.0.
@@ -16,6 +16,9 @@ is a fact that was *observed* to be wrong, not a rule invented in the abstract:
   cannot be created without being documented;
 - no document claims the engine is a single file, because that was the specific lie
   Phase 5 made true;
+- any stated module count equals the number of modules on disk, in the documents and
+  in the source docstrings, because `README.md` and `arranger/__init__.py` both called
+  the package "fourteen modules" while `arranger/` held fifteen;
 - every relative link between the documents resolves, because a routing table that
   points at a file that moved is worse than no table at all.
 
@@ -25,10 +28,11 @@ always runs.
 
 from __future__ import annotations
 
+import ast
 import re
 import unittest
 from pathlib import Path
-from typing import List, Set
+from typing import List, Set, Tuple
 
 import arranger
 
@@ -70,6 +74,37 @@ _LAYOUT_BLOCK = re.compile(r"## Repository layout\s*\n+```\n(.*?)```", re.DOTALL
 #: A relative markdown link - one that is not a URL and not a bare `#anchor`.
 _LINK = re.compile(r"\]\((?!https?://|#)([^)\s]+)\)")
 
+#: A stated module count, as prose: "fifteen modules", "a package of 15 modules". The
+#: word before the noun is captured and read as a number, so a bare mention of modules
+#: - "separate modules", "the modules that turn an arrangement into a file" - states no
+#: count and yields nothing. `\s` spans a newline, so a wrapped count is read too.
+_MODULE_COUNT = re.compile(r"\b(\w+)\s+modules\b", re.IGNORECASE)
+
+#: The counts a document may spell out in words. The engine is nowhere near twenty
+#: modules, so the map stops there rather than carrying a number-word library.
+_NUMBER_WORDS = {
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "seven": 7,
+    "eight": 8,
+    "nine": 9,
+    "ten": 10,
+    "eleven": 11,
+    "twelve": 12,
+    "thirteen": 13,
+    "fourteen": 14,
+    "fifteen": 15,
+    "sixteen": 16,
+    "seventeen": 17,
+    "eighteen": 18,
+    "nineteen": 19,
+    "twenty": 20,
+}
+
 #: The CI workflow. Named here rather than inline so the tests below can say
 #: which file they are about.
 CI_WORKFLOW = ".github/workflows/ci.yml"
@@ -78,6 +113,53 @@ CI_WORKFLOW = ".github/workflows/ci.yml"
 def _read(name: str) -> str:
     """Read a document relative to the repository root."""
     return (ROOT / name).read_text(encoding="utf-8")
+
+
+def _stated_module_counts(text: str) -> List[Tuple[int, str]]:
+    """Every module count `text` states, as `(value, line)` pairs.
+
+    A numeral and a number word are both read. A word that is neither - `separate`,
+    `engine`, `test` - is not a count, so `separate modules` states nothing. A phrase
+    that scopes the number to a subset, `these two modules`, does read as a count of two:
+    that is the price of reading a numeral wherever it stands, and the fix is to reword
+    the mention rather than to narrow the check.
+
+    The phrase is matched against the whole text rather than line by line, so a count
+    wrapped across a line break - which is what a hand-wrapped paragraph produces - is
+    still read. The line reported is the one the number sits on.
+    """
+    lines = text.splitlines()
+    found: List[Tuple[int, str]] = []
+    for match in _MODULE_COUNT.finditer(text):
+        token = match.group(1).lower()
+        if token.isdigit():
+            value = int(token)
+        elif token in _NUMBER_WORDS:
+            value = _NUMBER_WORDS[token]
+        else:
+            continue
+        number = text.count("\n", 0, match.start())
+        snippet = lines[number].strip() if number < len(lines) else ""
+        found.append((value, f"line {number + 1}: {snippet}"))
+    return found
+
+
+def _source_docstrings(path: Path) -> List[str]:
+    """Every docstring in the module at `path`, in no particular order.
+
+    Read from the AST rather than by scanning for triple quotes, so a link inside a
+    string literal that is not a docstring is not mistaken for one.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    found: List[str] = []
+    for node in ast.walk(tree):
+        if isinstance(
+            node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)
+        ):
+            doc = ast.get_docstring(node)
+            if doc is not None:
+                found.append(doc)
+    return found
 
 
 def _layout_block() -> str:
@@ -181,6 +263,64 @@ class TestDocsMatchTheCode(unittest.TestCase):
                 if not path.exists():
                     broken.append(f"{name} -> {target}")
         self.assertEqual(broken, [], "a document links to a file that does not exist")
+
+    def test_the_relative_links_in_docstrings_resolve(self):
+        """A docstring's pointer to a document must name a file that exists.
+
+        The same argument as the check above, applied to the source. A docstring that
+        sends a reader to a retired plan document is a wrong turn - and it is invisible
+        to the linter and to a
+        suite that only tests behaviour, which is exactly how the pre-split `AGENTS.md`
+        drifted. A link is the one part of a docstring that can be checked mechanically,
+        so it is the part that is.
+        """
+        broken: List[str] = []
+        sources = sorted(ROOT.glob("*.py")) + sorted((ROOT / "arranger").glob("*.py"))
+        for path in sources:
+            for doc in _source_docstrings(path):
+                for target in _LINK.findall(doc):
+                    resolved = path.parent / target.split("#", 1)[0]
+                    if not resolved.exists():
+                        broken.append(f"{path.relative_to(ROOT)} -> {target}")
+        self.assertEqual(
+            broken, [], "a docstring links to a file that does not exist"
+        )
+
+    def test_a_stated_module_count_is_the_count_on_disk(self):
+        """A document that says how many modules the engine has must be right.
+
+        `README.md` and `arranger/__init__.py` both called the package "fourteen
+        modules" while `arranger/` held fifteen - one fact, stated twice, wrong in both,
+        and read by an agent as the map of the tree. The count here is **derived from
+        the filesystem** rather than listed, so adding or removing a module moves the
+        answer and every claim with it.
+
+        The scan covers the documents an agent is routed to and the source docstrings,
+        and **not** `tests/`: a test docstring states what was wrong *then* on purpose -
+        that is how an inversion records itself - so a past count there is a fact about
+        the past rather than a claim about this tree.
+        """
+        on_disk = len(
+            [
+                path
+                for path in (ROOT / "arranger").glob("*.py")
+                if not path.name.startswith("__")
+            ]
+        )
+        wrong: List[str] = []
+        for name in DOCUMENTS:
+            for value, line in _stated_module_counts(_read(name)):
+                if value != on_disk:
+                    wrong.append(f"{name}: says {value} ({line})")
+        sources = sorted((ROOT / "arranger").glob("*.py")) + sorted(ROOT.glob("*.py"))
+        for path in sources:
+            for doc in _source_docstrings(path):
+                for value, line in _stated_module_counts(doc):
+                    if value != on_disk:
+                        wrong.append(f"{path.relative_to(ROOT)}: says {value} ({line})")
+        self.assertEqual(
+            wrong, [], f"a stated module count disagrees with arranger/ ({on_disk})"
+        )
 
     def test_every_document_on_disk_is_in_the_list(self):
         """A document created without being registered fails the suite.

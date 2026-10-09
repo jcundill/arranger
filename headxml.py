@@ -411,24 +411,15 @@ class HeadChange:
     """One `<harmony>` element: a chord **becoming** in force at a position.
 
     **`HeadNote.chord` and this are the same fact read two ways**, and the difference
-    is the whole of open-issues item 10. A note carries the chord that was in force
+    is the whole of open-issues item 1. A note carries the chord that was in force
     *where the note is*; this carries the chord that *begins* at a position, whether or
     not any note is ever written there.
 
-    Measured on the committed fixtures, a `<harmony>` followed by no note is not a
-    synthetic edge case — it is 6 of the 154 `<harmony>` elements across the three:
-
-        i_was_doing_all_right   bars 2, 10, 26, 34, 36
-        heres_that_rainy_day    bar 32
-
-    and bar 2 of `i_was_doing_all_right` is exactly the case the issue describes — an
-    `m7` under a written D5, then a `7` governing a rest:
-
-        bar 2: HARMONY(m7), NOTE(D5), HARMONY(7), rest
-
-    The `7` is in force for the rest of the bar and **no note ever records it**, so
-    before this field existed the bar simply ended. `heres_that_rainy_day` loses bars
-    8, 16, 24 and 32 the same way.
+    A `<harmony>` followed by no note is not a synthetic edge case: 6 of the 154
+    `<harmony>` elements across the committed scores precede no note, and one of those
+    bars carries **no notes at all**. Such a change is in force for the rest of the bar
+    and **no note ever records it**, which is the loss `docs/open-issues.md` item 1
+    measures and this field exists to make representable.
 
     `beat` is the beat **within the bar**, as everywhere else in this module, and
     `quality is None` is never recorded — an untranslatable chord is counted in
@@ -496,7 +487,7 @@ class Head:
     # and nothing else yet consumes it.
     #
     # It exists because `notes` cannot say what is in force where no note is written,
-    # and open-issues item 10 measures what that costs: on `heres_that_rainy_day` bars
+    # and open-issues item 1 measures what that costs: on `heres_that_rainy_day` bars
     # 8, 16, 24 and 32 vanish from the arrangement entirely, and on
     # `i_was_doing_all_right` bar 34. See `HeadChange`.
     chords: List[HeadChange] = field(default_factory=list)
@@ -523,8 +514,7 @@ class Head:
         **A fact about the file, not about the melody** (§9.3 step A'). The loader
         records the measures it walked, so this is right for a head whose last chord
         outlasts its last note and for one with no notes at all - a chords-only lead
-        sheet, which the loader used to refuse outright. Nothing to guess: an empty
-        file still has its measure count.
+        sheet. Nothing to guess: an empty file still has its measure count.
 
         A `Head` built by hand carries no such range, so it falls back to the melody's
         span, which is what every fixture in the tests is.
@@ -753,9 +743,8 @@ def _duration_in_divisions(note: ElementTree.Element, divisions: int = 0) -> int
 
     MusicXML's specification says a tuplet's `<duration>` is *unreduced*: three
     eighth-note triplets are written as six divisions each, so a reader must divide
-    them by three or the bar runs a third long. **Real writers do not agree**, and this
-    one did not - which is a bug this function used to have, in the direction that
-    mattered.
+    them by three or the bar runs a third long. **Real writers do not agree**, so the
+    reader must decide which convention a file used.
 
     The two conventions are not distinguishable by arithmetic on the value alone: the
     fixture's triplet quarter is written `6720` in the divisions of 10080, and 6720
@@ -778,11 +767,11 @@ def _duration_in_divisions(note: ElementTree.Element, divisions: int = 0) -> int
     6720 produced **4/9**, a whole third of the true length. Three such notes spanned
     4/3 of a quarter where the figure must fill two.
 
-    **The consequence was invisible until the exporter noticed.** Onsets stayed correct
-    - the cursor is re-based per bar from `bar_index`, so no bar drifted - and tablature
-    ignores `duration` entirely. Only the MusicXML writer reads it, and music21 refused
-    the result with "Cannot convert inexpressible durations to MusicXML", which is what
-    finally surfaced a number that had been wrong the whole time.
+    A wrong `duration` is invisible to everything but the MusicXML writer: onsets stay
+    correct because the cursor is re-based per bar from `bar_index`, and tablature
+    ignores `duration` entirely. music21 refuses an inexpressible one outright
+    ("Cannot convert inexpressible durations to MusicXML"). `docs/renderers.md` §"A rest
+    is not a note, but it is time" holds the measurement.
     """
     duration = _number(note.findtext("duration"))
     modification = note.find("time-modification")
@@ -912,33 +901,16 @@ def _flush_group(
     append per `<note>`: a tie crosses a bar line, so the two halves are read in
     different measures and cannot be joined at read time.
 
-    **The merge must NOT be restricted to this bar, and that is measured.** Adding
-    `and notes[-1].bar == bar` looks like a fix - `notes[-1]` is the last note *read*,
-    not the last note in this measure - and it was tried, on the belief that merging
-    across a barline "ate the new bar's downbeat". It does the opposite, because a
-    `tie type="stop"` in a new bar is precisely the continuation the merge exists to
-    absorb: restricting the merge turns every cross-barline tie into a *second* note at
-    the same pitch. Measured over the fixtures, the guard **added** notes rather than
-    removing any, and on two of them invented a bar:
-
-        fixture                     without the guard   with it
-        but_not_for_me.mxl                    80           84
-        heres_that_rainy_day.musicxml         81           88
-        i_was_doing_all_right.mxl             110          112
-        tenor_madness.musicxml                200          212
-        The_Jitterbug_Waltz.musicxml         119          125
-        Trouble_in_Mind_Blues.musicxml        53           63
-
-    `heres_that_rainy_day` also grew from 34 bars to 37, because a spurious note
-    re-entered bars the tie had legitimately emptied. The claim that started this - that
-    bar 3 of a blues head loses its first note, and that music21 then writes two notes
-    with no `<pitch>` - was checked against the exported file and **does not reproduce**:
-    zero such notes, with or without the guard, on the head that prompted it.
-
-    The premise confused *merged* with *lost*. Bar 2's A4 eighth and bar 3's A4 half are
-    one note of 3.5 beats, not two notes and not one shorter note: bar 3 has no downbeat
-    note because its downbeat is still sounding the one written in bar 2. Ten tests
-    failed against the guard, including the two that state this rule directly.
+    **The merge must NOT be restricted to this bar.** Adding `and notes[-1].bar == bar`
+    looks like a fix - `notes[-1]` is the last note *read*, not the last note in this
+    measure - but it does the opposite, because a `tie type="stop"` in a new bar is
+    precisely the continuation the merge exists to absorb: restricting the merge turns
+    every cross-barline tie into a *second* note at the same pitch. The premise that
+    prompted it, that merging across a barline ate a new bar's downbeat, confused
+    *merged* with *lost*: bar 2's A4 eighth and bar 3's A4 half are one note of 3.5 beats,
+    so bar 3 has no downbeat note because its downbeat is still sounding the one written
+    in bar 2. `tests/test_headxml.py` states this rule directly, and
+    `docs/open-issues.md` item 1 holds the measurement.
     """
     if not group:
         return
@@ -1050,7 +1022,7 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
     notes: List[HeadNote] = []
     # The chord timeline, built as the document is walked so `cursor` is the position
     # each `<harmony>` occupies. Separate from `notes` because a `<harmony>` can
-    # precede nothing at all - see `HeadChange` and open-issues item 10.
+    # precede nothing at all - see `HeadChange` and open-issues item 1.
     changes: List[HeadChange] = []
     # The `<chord>` group being assembled at the current cursor: (pitch, length),
     # together with the onset it started at, whether it ends a tie, and the lyrics
@@ -1116,19 +1088,17 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
                 # **The beat conversion is `_beat_from_onset`'s, not `cursor / divisions`.**
                 # `cursor/divisions` is quarters and a beat is `4 / beat_type` of them,
                 # and the one function is called from both places so a `<harmony>` and the
-                # note it precedes can never disagree about which beat they are on. This
-                # used to be the expression spelled out by hand, with `beats_per_bar` in
-                # place of `beat_type` - the denominator trap, which is invisible while
-                # the numerator and the denominator happen to be equal.
+                # note it precedes can never disagree about which beat they are on. It must
+                # use `beat_type`, not `beats_per_bar` - the denominator trap, which is
+                # invisible while the numerator and the denominator happen to be equal.
                 #
                 # `cursor` rather than `group_onset`, because the element sits *before*
                 # whatever follows it: a `<harmony>` after the bar's last note is recorded
                 # on the beat it occupies and in force into the next bar.
                 #
-                # Measured on the committed fixtures, 6 of 154 `<harmony>` elements are
-                # followed by no note at all - `i_was_doing_all_right` bars 2, 10, 26, 34
-                # and 36, `heres_that_rainy_day` bar 32 - so this is a real loss and not
-                # an edge case. See `HeadChange` and open-issues item 10.
+                # 6 of the 154 `<harmony>` elements on the committed scores are followed
+                # by no note at all, so this is a real loss and not an edge case. See
+                # `HeadChange` and `docs/open-issues.md` item 1.
                 changes.append(
                     HeadChange(
                         bar=bar,
@@ -1153,14 +1123,13 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
                     cursor += _duration_in_divisions(child, divisions)
                 continue
             # A rest is not a melody note, but it is still *time*: the cursor has to
-            # move past it or every note after it is read too early. Bar 1 of "But
-            # Not For Me" is a quarter rest followed by three quarter notes, and
-            # dropping the rest's length put the F4 on beat 1.0 instead of 1.5 -
-            # which moved the whole head up a beat, invented a pickup that was not
-            # there, and wrote bar 1 as three chords filling a bar it should have
-            # shared with a rest. Every skip below is therefore `continue`-with-no-
-            # cursor-move only where the element really occupies no time; a rest,
-            # a grace note and a cue note all do.
+            # move past it or every note after it is read too early - bar 1 of "But
+            # Not For Me" is a quarter rest followed by three quarter notes, so dropping
+            # the rest's length moves the whole head a beat early and fills a bar a rest
+            # should have shared. Every skip below is `continue`-with-no-cursor-move only
+            # where the element really occupies no time; a rest, a grace note and a cue
+            # note all do. `docs/renderers.md` §"A rest is not a note, but it is time"
+            # holds the worked example.
             pitch_element = child.find("pitch")
             if pitch_element is None:
                 skip("rests and unpitched notes")
@@ -1254,7 +1223,7 @@ def chord_at(
 ) -> Optional[HeadChange]:
     """The change in force at `(bar, beat)`, by forward fill, or `None` if none is.
 
-    **The query open-issues item 10 needs, and the twin of `bass._melody_in_force`.**
+    **The query open-issues item 1 needs, and the twin of `bass._melody_in_force`.**
     That one answers "which melody slot is sounding here" for a beat the thumb invented;
     this answers "which chord is sounding here" for a beat no note describes. Both are
     forward fills over an ordered timeline, and both are *needed* because the step loop
@@ -1266,10 +1235,11 @@ def chord_at(
     - **A chord holds until the next one replaces it** (`<=`, not `<`). A change *on*
       beat 2 is in force *at* beat 2, which is what the note path already does: a note
       carries the chord captured before it, so a change on the same position applies.
-    - **The last change at a position wins.** Measured on `i_was_doing_all_right`, bars
-      33 and 35 each carry **two** `<harmony>` elements at beat 1.0 (`Gmaj` then `Eb7`),
-      and the note in each bar carries `Eb7` — so "the last one declared" is the rule the
-      shipped output already follows, and taking the first would disagree with it.
+    - **The last change at a position wins.** Bars 33 and 35 of `i_was_doing_all_right`
+      each carry two `<harmony>` elements at beat 1.0, and the note in each bar carries the
+      second one — so "the last declared" is the rule the note path already follows, and
+      taking the first would disagree with it. `docs/open-issues.md` item 1 holds the
+      measurement.
     - **`None` before the first change**, never a guess. A position no chord has reached
       has no harmony, and inventing one is the failure this module refuses everywhere
       else. The caller decides what to do — drop the bar, or warn — because only it knows
@@ -1311,7 +1281,7 @@ def melody_at(notes: Sequence[HeadNote], bar: int, beat: float) -> Optional[str]
     runs past the position keeps winning, so a phrase holding one note across a barline
     hands that note to a stab on the far side rather than the one that follows it — the
     same in-force rule `bass._melody_in_force` reads by onset *and* duration, and the
-    distinction open-issues item 5 is entirely about.
+    distinction between an onset and a hold.
 
     **A note that has stopped is not in force.** `duration` is in whole notes, so the end
     is the onset plus that length in quarters; this is why the function returns `None`
@@ -1381,7 +1351,7 @@ def chord_slots(
     position the grid places a chord on. On the melody-bearing route the melody is ours
     and "a chord under each note" is the chord-melody idiom, so the two must *not* be
     merged. On the comping route the guitar is not under the melody, so a position with no
-    note is a position the chord of the tune still occupies — and open-issues item 10
+    note is a position the chord of the tune still occupies — and open-issues item 1
     measures what dropping those costs: **8 to 29 positions per fixture**, which is where
     a quarter of a named grid's positions went.
 
@@ -1400,7 +1370,7 @@ def chord_slots(
 
     **`duration` is the distance to the next grid position, capped at the bar line**,
     because a stab is struck and released rather than tied onward. That is the arithmetic
-    open-issues item 10 says the note path gets wrong, done here deliberately: the grid is
+    open-issues item 1 says the note path gets wrong, done here deliberately: the grid is
     placing the chord, so the grid decides how long it sounds. It is also why a chord is
     not held across a barline when the next bar names nothing.
 
@@ -1476,22 +1446,15 @@ def head_skeleton(
     emits is written: its slots are unioned with `chord_slots`', whose positions
     include ones no note occupies, and one list has one type (§9.3 step B).
 
-    There is no reduction here any more, and that is the point. `strategy` used to
-    name a grid - a chord change, a beat, an eighth, a sixteenth, or a note - and every
-    note was quantised onto it, so two notes closer together than the grid shared a slot
-    and one of them was silently dropped from the arrangement. Measured on the committed
-    triplet head, `eighths` kept 86 of 110 notes: 11 lost in the tuplet bars and **13 in
-    the straight ones**, because any pair closer than the grid collided. **A note of the
-    tune went missing and nothing said so.**
-
-    So the soprano plays the tune: every note the file wrote gets a slot, on the beat it
-    was written, down to the floor (a 16th in practice; 32nds do not occur in real
-    material). Where the *chords* fall is a separate question with its own axis, and
-    answering it here is what cost the notes.
+    **There is no reduction here.** The soprano plays the tune: every note the file wrote
+    gets a slot, on the beat it was written, down to the floor (a 16th in practice; 32nds
+    do not occur in real material). Where the *chords* fall is a separate question with
+    its own axis, and answering it here would quantise notes onto a grid and drop any pair
+    closer together than the grid - a note of the tune going missing with nothing said.
 
     `section` is a half-open (start, end) bar range, defaulting to the whole head.
-    `pick` is gone with the reduction: it chose which of several notes sharing a slot
-    represented it, and no two notes share a slot now.
+    `pick` is not needed: it chose which of several notes sharing a slot represented it,
+    and no two notes share a slot.
 
     A note under no harmony becomes a melody-only `NO_CHORD` step, which
     `arrange_progression` short-circuits rather than inventing a chord for. A note
@@ -1583,8 +1546,7 @@ def arrange_xml_head(
     `head.beat_type` goes with it, and it is not a duplicate: the count says which beats
     exist, the denominator says how long one lasts. Only the walking bass reads the
     second, converting each slot's whole-note `duration` into beats, and the one
-    committed 3/4 head is where passing the count in its place shows up (open-issues
-    item 15).
+    committed 3/4 head is where passing the count in its place shows up.
     """
     head = load_musicxml(path, part)
     slots = head_skeleton(head, section)
@@ -1602,10 +1564,10 @@ def arrange_xml_head(
     # **Both `parse_voices` and `resolve_voices`, and the second one is not optional.**
     # `parse_voices("auto")` returns the **sentinel** `("auto",)`, which contains no
     # soprano — so testing the route on the parsed value alone classifies the *default*
-    # arrangement as the comping route and unions grid positions into it. That was
-    # measured, not assumed: 14 steps of a singing `grid=freddie` arrangement carried the
-    # placeholder melody before this was fixed. `resolve_voices` is what turns the
-    # sentinel into all four voices.
+    # arrangement as the comping route and unions grid positions into it, and every
+    # unioned slot then carries the placeholder melody. `resolve_voices` is what turns the
+    # sentinel into all four voices. `docs/open-issues.md` item 1 holds the
+    # measurement.
     #
     # This is trap 12 arriving from a new direction — a *resolution* step skipped, so a
     # policy reads as something it is not. The predicate itself is the engine's own
@@ -1667,7 +1629,7 @@ def _merge_chord_slots(
     **Order is `(bar, beat)`, which is what both producers already emit.** Sorting is
     done here rather than trusted from either, because the step loop indexes the melody
     and a `bass_only`-style union that arrived out of order would attribute the wrong
-    note to the wrong beat — open-issues item 5's failure, reached from a new direction.
+    note to the wrong beat, reached from a new direction.
     """
     grid_policy = resolve_grid(parse_grid(grid), head.beats_per_bar,
                                default_diagnostics())

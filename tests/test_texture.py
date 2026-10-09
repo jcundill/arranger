@@ -544,7 +544,7 @@ class TestTheRightHandBudget(unittest.TestCase):
     and the second because `bass_allowed` refuses the whole axis.
 
     The rule is a **budget** rather than a preference, so it narrows the *target* palette
-    only, and only while a thumb line is running. See `docs/open-issues.md` item 11.
+    only, and only while a thumb line is running.
     """
 
     def test_every_grip_is_measured_from_its_widest_string_set(self) -> None:

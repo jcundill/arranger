@@ -46,7 +46,8 @@ ORDER = [
     "bass",         # the walking-bass thumb line
     "options",      # the knobs, as one value
     "decisions",    # the decisions both step loops share
-    "steps",        # the engine and the one step loop
+    "movement",     # the step loop: one progression in, one arrangement out
+    "steps",        # the engine's published facade - delegates, incl. to `movement`
     "slots",        # the slot layer: triples to steps, the one pre-pass over them
     "render",       # per-step rendering
     "cli",          # the two front ends' shared argparse block and output dispatch

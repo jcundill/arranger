@@ -38,7 +38,7 @@ NORMAL = [
     ("B4", "7", "G7"),
     ("C5", "maj7", "Cmaj7"),
 ]
-# Item 13's worked case, and the one fixture here whose warning is a *bass* refusal:
+# Item 2's worked case, and the one fixture here whose warning is a *bass* refusal:
 # `Ab9` over `C4` wants an `Ab` the shape already sounds an octave up, the A string's
 # only `Ab` above it being above the note the thumb has to support. Exactly one warning
 # is raised, and it is the run's *first* - which is the position that caught the
@@ -145,8 +145,8 @@ class TestTheLibraryIsSilentWhenGivenACollector(unittest.TestCase):
         `Diagnostics.__bool__` is False until it holds something - so a caller who handed in
         an empty collector had it replaced by the printing default. On "But Not For Me"
         that lost three refusals under each of the four bass rows, and it was the one place
-        the `or` spelling survived: the other three call sites already asked `is None`
-        (`docs/open-issues.md` item 16). This fixture warns **exactly once** and only here,
+        the `or` spelling survived: the other three call sites already asked `is None`.
+        This fixture warns **exactly once** and only here,
         so there is no earlier warning to make the collector truthy - which is why the
         defect was invisible on any head whose first warning came from somewhere else.
         """

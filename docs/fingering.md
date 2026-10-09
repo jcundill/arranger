@@ -25,8 +25,7 @@ that fix is a budget on the *palette* (`grips.thumb_safe_grips`, read by
 `decisions.resolve_texture_grips`) and needs nothing from `fingers`. A `bass_only` step could
 also need five *frets* from four fingers, and that one is `fingers.can_fret`, read by
 `bass._place_bass` — the module's only engine caller. `voicing_cost` is untouched by both. The
-measurements and the fixes are in §4.3 below, and in [docs/open-issues.md](open-issues.md)
-items 11 and 12.
+measurements and the fixes are in §4.3 below.
 
 Nothing in the routing table sends you here to change behaviour. Read it before
 writing `arranger/fingers.py`, before adding any criterion to `voicing_cost`
@@ -38,7 +37,7 @@ half found a real defect and fixed it (the five-finger check; see §4.3 and §5 
 follow-on — whether the *selector* should have left room for the thumb — came back small: **53**
 dropped bass notes when it was first measured, **39** re-measured on the current tree, of which the
 harmless recovery is now **none** rather than ten, always at the span bucket
-(`docs/open-issues.md` item 13). Its **fourth lever — the walk's own pitch — was measured with the
+(`docs/open-issues.md` item 2). Its **fourth lever — the walk's own pitch — was measured with the
 re-measurement**, and it is the one that does *not* pay the bucket: **24 of 38** "no octave below"
 refusals are recoverable by stating a different pitch, **12** of them by a chord tone, all 12 in one
 head and one figure; **14** cannot be helped by any pitch. Recorded, not built. Its
@@ -254,7 +253,7 @@ magnitude**. Counting *any* gap made 275 of the 307 gap-carrying `--bass walk` s
 like defects the post-selection bass merge had *created*; counting only the fingers' gaps
 makes the true figure **2**. A bass note merged under a shape lands directly beneath it,
 so the gap it opens is precisely the exempt one — the same "assert the rule on the whole"
-warning as [open-issues.md](open-issues.md) item 11, arriving from the other side. A
+warning as §4.3, arriving from the other side. A
 metric that models the *fretboard* is not a metric that models the *hand*.
 
 **Confidence: a convention, adopted on the same footing as §2.2.** It is not measured
@@ -424,13 +423,12 @@ instead of striking it, so only the thumb plucks and it is the left hand that fa
 `GRIP_STRING_SETS` that a four-string grip cannot be offered as a *target* on a slot that
 carries a bass note, and falls back to the widest statement that leaves a finger free —
 `("drop2", "drop3")` becomes `("shell",)`. `decisions.resolve_texture_grips` applies it per
-slot (`steps.py` passes `slot.bass is not None`), so a target on a beat the thumb leaves
+slot (`movement.py` passes `slot.bass is not None`), so a target on a beat the thumb leaves
 bare keeps all four strings. Measured after: **0** five-string steps anywhere; `--texture
 targets --bass walk` is byte-identical to `--texture walking_bass --bass walk`; the other
 rows do not move. `arranger/fingers.py` was not needed for any of it, and that is the result
 this document records: the first real playability defect in this area was a *string* budget,
-not a finger assignment. Full measurement, the cost, and the rejected alternatives are in
-[docs/open-issues.md](open-issues.md) item 11.
+not a finger assignment. Full measurement, the cost, and the rejected alternatives are in §4.3.
 
 **The left-hand half closed too, one release later, and the answer was the one this section
 rejected as a fix for the other half.** Measured on the tree the string fix left behind — the
@@ -444,21 +442,17 @@ the note is defensible here precisely because it is not defensible as a general 
 note no player can finger is not a bass note, and the step keeps its upper voicing exactly as
 it does when no string is free, with the omission reported. `fingers.can_fret` is the check
 and `bass._place_bass` is its only caller, so `arranger/fingers.py` is no longer inert.
-After: **0**. [docs/open-issues.md](open-issues.md) item 12 has the measurement, the two
-counting decisions below, and the alternatives.
+After: **0**. The two counting decisions below are the rest of the record.
 
 **The follow-on question this section leaves open has since been measured, and the answer is
-small — and its numbers have been re-measured once already.** Item 12 priced *one* dropped bass
-note; the question behind it was whether the **selector** should have left room for the thumb in the
+small — and its numbers have been re-measured once already.** The question behind it was whether the **selector** should have left room for the thumb in the
 first place — the palette narrowing above, but at *candidate* level, where `_place_bass` runs only
 after `_best_voicing` has chosen. Measured over the same heads and rows, the warning fires **53**
 times on the tree the question was asked on and **39** today (two commits moved it, neither of them
-aimed at this; item 13 carries the five-tree attribution). On the current tree the dominant cause is
+aimed at this). On the current tree the dominant cause is
 unchanged and is the third one the message used not to name — **38 of the 39** are "no octave of the
-walk's pitch below the shape" (the chord's own bottom note is already that low), **1** is item 12's
-five frets, and **0** are "no free string"; that clause is **now in the message**, which is the one
-part of this section that was built (item 13; pinning it also surfaced item 16, a warning that a
-run's first went to the printer instead of a caller's collector).
+walk's pitch below the shape" (the chord's own bottom note is already that low), **1** is the
+five-frets case, and **0** are "no free string"; that clause is **now in the message**.
 
 What the re-measurement changes about the *levers*: of the 34 refusals a selector could reach, a host
 exists for every one — but **0 of them sounds the chosen shape's own notes** any more, because the
@@ -469,7 +463,7 @@ and does not pay the bucket, because it re-states the bass under the shape alrea
 "But Not For Me"'s `Cm7` downbeats, whose root the shape already sounds an octave up), and **14**
 cannot be helped by any pitch at all. It needs no pipeline change — the walk does not have to see the
 shapes — which is the opposite of what the question implied. So nothing was built, a third time for
-the same reason. [docs/open-issues.md](open-issues.md) item 13 has the counts, the attribution, the
+the same reason. [docs/open-issues.md](open-issues.md) item 2 has the counts, the attribution, the
 step-3 ceiling table, the aliasing trap this instrumentation hit, and the four alternatives.
 
 **One of those counting decisions moves the number by a factor of ten**, and both are about
@@ -478,7 +472,7 @@ which hand the check is stated over:
 - counting `sounding_frets` — the vector `_place_bass` already maintains — **over-counts**.
   Under a `bass_only` step nothing above the thumb strikes, so a melody carried on a string
   the held shape does not use is a note the hand is not holding; it is already sounding
-  elsewhere. That is item 4's mistake made backwards, and it reads **10** where the answer is
+  elsewhere. That is the same mistake made backwards, and it reads **10** where the answer is
   **1**.
 - dropping the previous thumb note from the hand, the way `bass._held_shape`'s `structure`
   does for harmonic reasons, **makes no difference on the committed heads** — measured, both
@@ -615,7 +609,7 @@ than lucky:
 - **The generated corpus: 359 of 8,789 shapes (4.1%)**, every one a `duo` (27.4% of the 1,310
   duos), every one a two-string shape, and **0** of them carrying a gap at all.
 - **The committed heads**, counting every step `arrange_xml_head` returns — the denominator
-  `open-issues.md` item 11 uses. §4.4's table above reads 837 on the two `walk` rows because it
+  §4.3 uses. §4.4's table above reads 837 on the two `walk` rows because it
   counts only the steps that pluck at least one string, and two of those 839 steps pluck nothing:
 
 | row | steps | …bottom note above the G | …carrying a gap at all | skips, exemption as documented | …narrowed to the thumb's reach |
@@ -691,7 +685,7 @@ third lever were considered once the price was known, and none was taken on the 
 - **Keep the sets and offer them only as a last resort** — a skip-carrying shape allowed
   when nothing else at that position is playable. It would keep **all 41** chords by
   construction, but it needs the span check that currently runs *after* selection
-  (`steps.py`, via `decisions.should_demote_to_melody_alone`) to run *inside* it, which is
+  (`movement.py`, via `decisions.should_demote_to_melody_alone`) to run *inside* it, which is
   a change to where selection ends rather than a table edit. Not built.
 
 **Recorded, and built.** `grips.finger_skip_count` states the rule, `GRIP_STRING_SETS`
@@ -725,7 +719,7 @@ table's number — not the probe's.
 ## 5. The sequence we agreed
 
 **Status: step 1 is done; step 2 is measured on all of its halves, and one half was acted
-on — §4.3 fixed on both hands, with its thumb-room follow-on measured and recorded (item 13),
+on — §4.3 fixed on both hands, with its thumb-room follow-on measured and recorded (item 2),
 movement nearly empty, the right-hand skip **enforced** by removing four string sets (§4.4),
 and the thumb's reach recorded; step 3 has not been started.**
 Research is done, and the remaining unknowns are empirical (see the note at the top, §4.3
@@ -742,12 +736,11 @@ and §4.4), which is why step 1 had to exist before any of the measurements coul
    trap 8), on what is left of the corpus now that `wjazzd.py` is gone: the seven
    committed heads and the 8,789-shape generated corpus.
    - **The §4.3 check found a defect, and it is fixed** — 281 steps plucked five strings,
-     of which 19 also needed five distinct frets (see §4.3 and
-     [open-issues.md](open-issues.md) item 11). Note what the fix was *not*: no finger
+     of which 19 also needed five distinct frets (see §4.3). Note what the fix was *not*: no finger
      assignment was needed, and `voicing_cost` was not touched.
    - **The same check's other hand was done later and it did need the assignment** — one
      `bass_only` step held a four-fret shape and the walk's thumb had nowhere to land but a
-     fifth fret. `fingers.can_fret` refused it (item 12), which is the module's only engine
+     fifth fret. `fingers.can_fret` refused it, which is the module's only engine
      caller and the reason it is not inert. Measured before and after: **1** step, then
      **0**, and no pinned tab in the suite moved.
    - **The follow-on — would the *selector* leaving room for the thumb pay? — came back small, and
@@ -759,9 +752,7 @@ and §4.4), which is why step 1 had to exist before any of the measurements coul
      shape's own notes (the ten that did were the removed `drop24` sets), so every recovery now
      changes the harmony and pays the span bucket. The **walk's own pitch** is the fourth lever and
      costs the tuple nothing: **24 of 38** refusals are recoverable by another pitch, **12** by a
-     chord tone, **14** by none. Recorded as [open-issues.md](open-issues.md) item 13, not built —
-     and pinning the message surfaced item 16 there, a warning that a run's first went to the printer
-     rather than a caller's collector.
+     chord tone, **14** by none. Recorded as [open-issues.md](open-issues.md) item 2, not built.
    - **The movement comparison came back nearly empty, and the two numbers that did not
      argue against a tuple slot.** Over 1,330 struck transitions (six heads × `uniform`
      and `walking_bass`):

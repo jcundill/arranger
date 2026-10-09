@@ -55,7 +55,7 @@ from arranger import (
     supported_string_sets,
 )
 
-# The precedence rule `docs/open-issues.md` item 5 is about. Imported from where it
+# The precedence rule `bass._melody_in_force` implements. Imported from where it
 # lives rather than through the package facade, because these are private to
 # `arranger.bass` and re-exporting them would put four internals into the public
 # surface for the benefit of one test file. `test_bass.py` covers them directly for
@@ -376,7 +376,7 @@ class TestDecisionFTheSecondBarOfAHeldChord(unittest.TestCase):
 
 class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
     """
-    `docs/open-issues.md` item 5: a beat invented for the thumb takes the melody
+    A beat invented for the thumb takes the melody
     **sounding** at that instant, not the melody the walk last happened to pass.
 
     The defect was in `_bass_slots`, which tracked `previous_melody` while iterating
@@ -642,7 +642,7 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
 
 class TestEveryHeadCarriesTheMelodyInForce(unittest.TestCase):
     """
-    The population `docs/open-issues.md` item 5 measured, re-measured after the fix.
+    The population this rule covers, re-measured after the fix.
 
     The issue's own table is the "before" column of this test:
 
@@ -741,7 +741,7 @@ class TestEveryHeadCarriesTheMelodyInForce(unittest.TestCase):
 
 class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
     """
-    The between-step invariant `fret_span()` cannot see, from item 1.
+    The between-step invariant `fret_span()` cannot see.
 
     Every per-step span in "But Not For Me" is at most 3, and the arrangement is still
     unplayable: one bar puts the hand at frets 6-8 and the next needs the D string at
@@ -769,7 +769,7 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
         """
         One string cannot sound two frets at once.
 
-        This is the collision behind both item 1 and the item 2 GP5 corruption: the
+        This is the collision behind the GP5 corruption: the
         engine picked the thumb's string from the current step's thinned voicing rather
         than from the shape still ringing, so it could place the thumb where a finger
         already was.
@@ -870,14 +870,14 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
         one, and a new entry here means this change cost a note.
 
         The anchors are selected by `bass_role` alone, and deliberately **not** by
-        `bass_only` as well. They used to be filtered by both, and `docs/open-issues.md`
-        item 4 is what made that wrong: a walk-invented downbeat the melody moves onto
+        `bass_only` as well. They used to be filtered by both, and that was wrong: a
+        walk-invented downbeat the melody moves onto
         is a **target**, so it stopped being `bass_only` while remaining an anchor -
         and the filter quietly dropped it from this assertion, turning the test into
         one that could not fail. An anchor is an anchor whether or not the left hand
         holds across it, which is what makes `bass_role` the honest population.
 
-        **Item 5 changed this set, and the change is not free.** It went from one gap to
+        **The melody-in-force rule changed this set, and the change is not free.** It went from one gap to
         three, and it fixed one as well as costing two:
 
         | anchor | before | after | why |
@@ -957,7 +957,7 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
 
 class TestABassOnlyStepIsNeverATarget(unittest.TestCase):
     """
-    The invariant item 4 was really about, from `docs/open-issues.md`.
+    The invariant that a `bass_only` step is never a target.
 
     `bass_only` and `role == ROLE_TARGET` are not two descriptions of one state, they
     are contradictory ones: the first means "nothing above the thumb strikes, the
@@ -1005,8 +1005,8 @@ class TestABassOnlyStepIsNeverATarget(unittest.TestCase):
         one. Under decision C a fill is the melody alone and the melody it carries is
         the one already sounding, so holding it is correct and must survive.
 
-        **Fourteen, not thirteen**, and the extra one is the point of
-        `docs/open-issues.md` item 5. Bar 7 beat 1.0 used to be a *target* stating
+        **Fourteen, not thirteen**, and the extra one is the point.
+        Bar 7 beat 1.0 used to be a *target* stating
         `F4` - a note the score does not reach until beat 1.5, so the arrangement
         stated it a quarter early. With the melody in force read off the melody
         timeline it carries `Eb4`, which really is still ringing from bar 6 beat 2.5,
@@ -1252,7 +1252,7 @@ class TestBassPlacement(unittest.TestCase):
         because the A string is spoken for by the held shape and a `B` on the D at fret 9
         would sound above the shape's F#3. Fret 7 is a fret the hand is not on, so the shape
         would need five frets from four fingers. Before the budget this returned
-        `(47, 0, 7)` and every renderer wrote it; see `docs/open-issues.md` item 12.
+        `(47, 0, 7)` and every renderer wrote it.
         """
         upper = upper_shape([-1, -1, -1, -1, -1, 10])
         self.assertIsNone(
@@ -1337,10 +1337,10 @@ class TestTheRefusalMessage(unittest.TestCase):
     warning text itself, which was asserted nowhere and named only the first and third of
     those causes. Measured over the committed heads: **0 / 38 / 1** of 39 refusals, so the
     clause that was missing is the one a reader actually meets
-    (`docs/open-issues.md` item 13).
+    (`docs/open-issues.md` item 2).
     """
 
-    # Item 13's worked case: the shape's own `Ab2` (44) is the pitch class the walk wants,
+    # Item 2's worked case: the shape's own `Ab2` (44) is the pitch class the walk wants,
     # and the only free string is the A, whose `Ab` above it is `Ab3` (56) - above the note
     # the thumb is meant to support, so the note is refused with a string to spare.
     NO_OCTAVE = ([4, -1, 4, 5, -1, -1], "Ab")
@@ -1409,7 +1409,7 @@ class TestTheInvariant(unittest.TestCase):
     whose targets were four-note drop-2s. Measured before the fix, over the six committed
     heads: `--texture targets --bass walk` sounded five strings on **151** steps,
     `--bass anchors` on **130**, while `walking_bass` and `uniform` sounded none. The
-    budget is now `grips.thumb_safe_grips`; see `docs/open-issues.md` item 11.
+    budget is now `grips.thumb_safe_grips`.
     """
 
     def test_the_upper_voices_are_one_supported_set_and_the_thumb_is_outside_it(self):
@@ -1461,7 +1461,7 @@ class TestTheInvariant(unittest.TestCase):
         right hand's question: a `bass_only` step plucks its thumb alone even though the
         shape above it is still ringing, and a `repeated` one plucks the soprano and the
         thumb. A check on the fret vector cannot tell those apart, which is how 281
-        five-pluck steps shipped (see `docs/open-issues.md` item 11).
+        five-pluck steps shipped.
 
         `targets` is in the sweep because it *was* the defect. `uniform` is not, because
         its `walk` is refused outright (`bass_allowed`) and so has no thumb to budget.
@@ -1599,7 +1599,7 @@ class TestASingleNoteStepHasNothingToHold(unittest.TestCase):
     `is_repeated_step` must not suppress a new shape's inner voices when the previous
     step played a single note.
 
-    Found while fixing `docs/open-issues.md` item 5, and **pre-existing** - verified by
+    Found while fixing the melody-in-force rule, and **pre-existing** - verified by
     reproducing it on the commit before that fix. Bar 3 of "But Not For Me" under
     `walking_bass` put a melody-alone fill (bar 2 beat 2.5, `Eb4` alone) immediately
     before a `Cm7` target whose melody is the same still-sounding `Eb4`. The rule
