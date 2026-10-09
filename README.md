@@ -126,7 +126,7 @@ python -m arranger head tests/data/i_was_doing_all_right.mxl --bars 1-3 --html h
 | `--part` | the melody part | a `<score-part>` id, when a score has several |
 | `--bars` | the whole head | half-open `LO-HI`; **bounds may be negative** for pickups |
 | `--non-chord-tone` | `extension` | how to harmonise a melody note outside the chord |
-| `--fallback` | off | `diminished` — see [the trade-off](#the-fallback-trade-off) |
+| `--fallback` | off | `diminished` — see [the trade-off](#non-chord-melody-notes) |
 | `--texture` | `uniform` | `uniform`, `targets`, `walking_bass` — see [texture](#texture) |
 | `--bass` | follows `--texture` | `none`, `anchors`, `walk` — see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
 | `--voices` | `auto` (all four) | any subset of `soprano,alto,tenor,bass` — see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
@@ -140,13 +140,9 @@ python -m arranger head tests/data/i_was_doing_all_right.mxl --bars 1-3 --html h
 | `--html` / `--musicxml` / `--gp5` | off | also write the head to a file — see [rendering](#rendering) |
 
 **Every written note sounds.** There is no reduction: `arranger head` plays the tune as
-written, one step per note, each on the beat it was written on. That was not always true.
-`--skeleton` used to name a grid — one step per chord change, beat, eighth, sixteenth or
-note — and every note was quantised onto it, so two notes closer together than the grid
-shared a step and one was **silently dropped**. On a 32-bar head with triplets it lost
-24 of 110 notes, and only 11 were in the triplet bars: 13 were in the straight ones. A
-note of the tune going missing without a word is worse than a busy tab, so the flag and
-its companion `--pick` are gone from `head`.
+written, one step per note, each on the beat it was written on. Where the *chords* fall
+is a separate question — the `grid=` axis — so a note is never quantised onto a grid and
+dropped for sharing a slot with another.
 
 **`--grips` is ordered.** It is a preference list, not a set: putting `shell` first
 will displace a four-note drop-2 whenever the two cost the same. Leave it alone unless
@@ -156,7 +152,7 @@ you want a thinner arrangement.
 is still played, outside it, and the run header echoes your window whether or not it was
 met — losing a chord of the tune is worse than being a fret out of position.
 
-### Five things a score does that a database does not
+### Five things reading a score requires
 
 **The harmony is a timeline.** A `<harmony>` precedes the note it governs, several can
 share a bar, and a bar can carry none at all — so a chord is *held* from the note it is
@@ -165,10 +161,10 @@ follows it would drop the harmony from every bar that does not change.
 
 **The metre is the notated one.** `beat` is the beat *within* the bar in notated beats,
 so a 2/2 head is two beats to the bar rather than four — which is how most standards are
-written, and how three of the four scores in this repository are. Both numbers in the
+written, and how three of the seven committed heads are. Both numbers in the
 signature are needed: the count says which beats exist and the denominator says how long
 one lasts, so a 3/4 bar's eighths fall on 1.0, 1.5, 2.0, 2.5, 3.0 and 3.5. Reading the
-count as the denominator put every note of a 3/4 head a quarter of a beat early (see
+count as the denominator makes every note of a 3/4 head a quarter of a beat early (see
 [docs/open-issues.md](docs/open-issues.md) item 15).
 
 **The key signature is read, and written back.** `Head` carries the score's `<fifths>`
@@ -227,10 +223,8 @@ Cmaj7    C5   x-x-9-9-8-8
 ```
 
 This is the compact one-line form, and it is the only shape `format_progression` has.
-It also used to take `vertical=True` for a six-line block per chord; that and the
-`--vertical` flag that reached it are gone, because `format_tab_staff` below renders a
-whole progression as real six-line tab — with the chords on their real beats, which the
-block never could.
+For a whole progression as real six-line tab — with the chords on their real beats — use
+`format_tab_staff` below.
 
 Steps whose melody is a non-chord tone are annotated with the substitution that was
 applied, so a reharmonised passing tone is never silent about itself.
@@ -581,9 +575,8 @@ stated, for a solo voice or for leaving room over a band.*
 
 **5b. The tune on its own** — `--voices soprano` plays the melody and nothing else, so
 a lead sheet in gives you the line out. The chord names are still printed above it as
-context; nothing under them is being voiced. (This used to be `--texture melody`;
-"which voices the guitar plays" is the question `voices=` answers, and it took the
-fact over from the texture axis.)
+context; nothing under them is being voiced. "Which voices the guitar plays" is the
+question `voices=` answers, and it belongs there rather than on the texture axis.
 
 ```bash
 python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-2 --voices soprano
@@ -698,16 +691,13 @@ told where these notes fall* — not *these notes are weak*. Every slot is then 
 the output is byte-identical to what it has always been.
 
 **The metre is read, not assumed.** A 3/4 head states its harmony on 1 and 3, while a 2/2
-(cut-time) head has only two beats, so only the downbeat is a target. Three of the four
-committed test scores are in cut time. (On a 3/4 head that third beat was unreachable
-until item 15, because no note's beat ever landed on 3.0.)
+(cut-time) head has only two beats, so only the downbeat is a target. Three of the seven
+committed heads are in cut time.
 
 **A fill never costs the tune a chord.** If a fill slot has nothing thin to play, the step
 is re-prepared as a principal note rather than skipped — a texture is lighter, never
-missing. Measured over six Weimar transcriptions this takes the mean sounding notes per
-melody note from **3.86 to 3.39** and four-voice steps from **87% to 51%**, with no head
-losing a step. (That measurement was taken before the database path was removed; the
-finding stands and the corpus that produced it no longer ships.)
+missing. The measured effect on the sounding notes per melody note is in
+[docs/engine.md](docs/engine.md).
 
 ### `walking_bass` — a thumb line under the melody
 
@@ -749,8 +739,8 @@ octave below the shape, or the thumb's fret would be a **fifth** one for a hand 
 the shape (`no playable bass note for bass ... - no free string below the melody, no octave of
 that pitch below the shape, or the hand would need a fifth fret`). The commonest case in
 practice is the middle one: the chord's own lowest note is already so low that the walking note
-has no octave beneath it, and the note is left out for that reason — measured at **38 of the 39**
-refusals over the committed heads, and recorded with its counts in `docs/open-issues.md` item 13.
+has no octave beneath it, and the note is left out for that reason. The counts over the committed
+heads are in [docs/open-issues.md](docs/open-issues.md) item 13.
 
 `docs/open-issues.md` records this texture's defects, and nearly all of them are fixed. The
 merged step — a bass note written under an upper shape — has had several; the two most recent
@@ -758,11 +748,10 @@ are items 11 and 12, the pair of budgets that ask how many strings a step **pluc
 many frets it **holds**. **One defect is still open**: item 10, where a chord in force is
 stored per melody note, so a bar the melody skips is silent. Item 13 is a measured cost left
 unbuilt rather than a defect: most dropped bass notes are the shape sitting too low for the
-walk's pitch to have an octave under it, and the candidate pool can recover only ten of them
-without changing which notes the chord states — and **none** of them now, because the sets that
-sounded a shape's own notes on other strings were the `drop24` sets that were removed for the
-right-hand reason. Stating a *different pitch* under the chosen shape would recover twelve and
-touch no cost criterion; it changes what a downbeat states, so it is recorded rather than built.
+walk's pitch to have an octave under it, and the ordinary candidate pool cannot recover them
+without changing which notes the chord states. Stating a *different pitch* under the chosen
+shape would recover some of them and touch no cost criterion; it changes what a downbeat states,
+so it is recorded rather than built. See [docs/open-issues.md](docs/open-issues.md) item 13.
 
 ## Who plays which voice: `bass` and `voices`
 
@@ -878,9 +867,9 @@ it.*
 **The shape is chosen from the chord alone.** `get_comping_voicings` takes no melody
 argument, and asking it for `D5` and `G3` under the same chord returns the *identical*
 candidate set — a generator that read the melody could not do that. What it does mean is
-that a chord tone in the shell may land on the same pitch class as the melody: measured over
-three Weimar transcriptions, **409 of 2,069 steps contain the melody's exact pitch**. That is
+that a chord tone in the shell may land on the same pitch class as the melody. That is
 unremarkable — it is the guide tone the ear needs anyway — and it is not the guitar singing.
+The corpus count is in [docs/voices-axis.md](docs/voices-axis.md).
 
 Every quality the engine can voice has a comping shape in some playable position — checked
 over `CHORD_TONES_FROM_ROOT` rather than a hand-picked list, so a quality added later cannot
@@ -894,9 +883,9 @@ shell between, with the horn's line untouched throughout.
 
 **A repeated melody holds the whole shape.** Normally a repeat is a soprano-only
 re-strike with the inner voices held — but there is no soprano to re-strike when the guitar
-isn't singing, so the shape is held instead. Measured over 2,243 Weimar steps, 152 carry
-`repeated`; without this the guitar part would have played a moving melody line on exactly
-the beats where the arrangement handed the tune away.
+isn't singing, so the shape is held instead. Otherwise the guitar part would play a moving
+melody line on exactly the beats where the arrangement handed the tune away. The corpus
+count is in [docs/voices-axis.md](docs/voices-axis.md).
 
 **The tune, on its own or with a thumb.** `voices=soprano` is the melodic voice and
 nothing else — every slot is the melody alone, and `soprano,bass` is the same line
@@ -1033,7 +1022,7 @@ legacy      x-10-10-x-12-10 None
   it. It sounds the melody over a shape built from the chord's *quality* rather than
   its degree, so for `D5` over `Cmaj7` it gives `x-10-10-x-12-10` — `C D G B`, notes
   `Cmaj7` does not contain — and `harmonized_as` stays `None` because nothing was
-  reharmonised. That is why it is no longer the default; note also that `sustain` falls
+  reharmonised. That is why it is not the default; note also that `sustain` falls
   back to it here, which is why the two rows agree.
 
 Every `ArrangementStep` records what happened: `non_chord_tone`, `strategy` and
@@ -1110,12 +1099,9 @@ dependencies (`make install-dev`).
 
 **CI runs `make check` on Python 3.11 through 3.14**, with both optional extras installed
 so the guarded tests are not silently skipped. That is the whole gate in one job: there
-is nothing a clean clone cannot run, so a green check means the entire suite ran. (There
-used to be a second, manual-dispatch job for the 42 MB Weimar Jazz Database, and a green
-check here did *not* mean the corpus path had been exercised. The database is gone, and
-so is that caveat.)
+is nothing a clean clone cannot run, so a green check means the entire suite ran.
 
-The engine lives in the `arranger` package, fourteen modules in a strict dependency order
+The engine lives in the `arranger` package, fifteen modules in a strict dependency order
 that `tests/test_package_dag.py` asserts from the AST. See `AGENTS.md` for the module map
 and the conventions, and [docs/](docs/) for the reasoning behind the engine and the
 renderers.
