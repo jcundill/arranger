@@ -1407,6 +1407,211 @@ def _harmonised_step(
     _attach_bass(arrangements[-1], slot.bass, arrangements, diagnostics)
 
 
+@dataclass
+class _Carried:
+    """What one iteration of the step loop leaves behind for the next.
+
+    The only state the loop carries: the last harmony a *target* stated, and the
+    last melody pitch that sounded. Both are read from what actually sounds, not
+    from the written chord, so a substituted chord compares as itself (the same
+    `normalised_harmony` the `repeated` hold uses).
+    """
+
+    last_target_harmony: Optional[Tuple[Optional[str], Optional[str]]] = None
+    previous_melody_midi: Optional[int] = None
+
+
+@dataclass(frozen=True)
+class _SlotPlan:
+    """One slot's decisions, made before any route is chosen.
+
+    Built by `_slot_state`, which refuses a slot outright by returning None. The
+    routes read this rather than recomputing anything, so the metric weight, the
+    role, the texture grips and the melody-alone kind are each decided once.
+    """
+
+    index: int
+    note_str: Optional[str]
+    chord_type: str
+    name: str
+    melody_note: Optional[Note]
+    sings_here: bool
+    bar: Optional[int]
+    beat: Optional[float]
+    duration: Optional[float]
+    weight: int
+    role: str
+    slot_grips: Tuple[str, ...]
+    melody_alone: str
+
+
+def _slot_state(
+    car: _Carried,
+    slot: _Slot,
+    *,
+    progression: Sequence[Tuple[Optional[str], str, str]],
+    texture: str,
+    texture_grips: Dict[str, Tuple[str, ...]],
+    grips: Tuple[str, ...],
+    has_thumb: bool,
+    melody_only: bool,
+    melody_voiced: bool,
+    melody_onsets: Optional[Container[int]],
+    grid_pattern: str,
+    beats_per_bar: int,
+    diagnostics: Diagnostics,
+) -> Optional[_SlotPlan]:
+    """One slot's decisions, and the one refusal that ends a slot here.
+
+    Returns **None** for a position a melody-only selection has nothing to play,
+    which is reported and skipped. Otherwise the plan carries everything the
+    routes need, and the two values on `car` are updated in place.
+    """
+    index = slot.index
+    note_str, chord_type, name = progression[index]
+    if note_str is None:
+        if melody_only:
+            # A melody-only selection plays the tune and nothing else, so a
+            # position with no note has nothing for the guitar to play. It is
+            # kept as the *only* refusal here because §9.3 step D made the other
+            # case a real one: a *singing* selection (soprano named) now receives
+            # note-less slots from the grid union - positions the tune is silent
+            # at - and the guitar **comps** them rather than being refused, which
+            # is why they fall through to the comping branch below.
+            diagnostics.warn(
+                f"Warning: slot {index} has no melody note and this voice "
+                f"selection plays the tune alone; skipping the slot"
+            )
+            return None
+        melody_note = None
+    else:
+        melody_note = Note(note_str)
+
+    # **Does the guitar sing *this* slot?** (§9.3 step D: the soprano is per
+    # slot, not per route.) The guitar sings a slot only where its voice
+    # selection has a soprano *and* the slot is a melody **onset** - a written
+    # note articulating here. Every other slot it comps, except on a melody-only
+    # selection, whose note-less slots were skipped above.
+    #
+    # §9.2's onset signal is reused rather than re-derived: `melody_onsets` is
+    # the same set the comping route's reharmonise guard reads, and a grid
+    # position the tune merely *sustains* through is not an onset, so the guitar
+    # states the chord there rather than re-articulating a note it did not begin
+    # - which is why a note-bearing merged position still comps. `None` means
+    # every slot is an onset, the honest default for a hand-built progression
+    # with no timeline, which keeps a bare `arrange_progression` unchanged.
+    sings_here = (
+        melody_voiced
+        and melody_note is not None
+        and (melody_onsets is None or index in melody_onsets)
+    )
+
+    # Where this slot falls in the bar, and therefore what it is for. Read
+    # defensively, exactly as slots.arrange_slots guards its own timings: a
+    # short list leaves the trailing steps unlocated, and an unlocated step is
+    # a principal note rather than a fill. The bar and beat are also stamped
+    # onto the step, because a caller that supplied the rhythm wants to read it
+    # back off the result rather than have to correlate two lists.
+    bar, beat, duration = slot.bar, slot.beat, slot.duration
+    weight = _metric_weight(bar, beat, beats_per_bar)
+    # _roles_for_slot re-validates the texture, which is harmless: the table was
+    # already checked before the loop, so this cannot raise here.
+    #
+    # Under walking_bass a strong beat is only a target when something new
+    # happens on it: a different harmony from the last target's (the off-beat
+    # change rule), or the melody actually moving onto it (decision F, which is
+    # what lets the second bar of a two-bar chord restate its shell when the
+    # player re-articulates the line there and stay thin when they do not).
+    harmony_key = normalised_harmony(name)
+    # A silent slot moves nothing onto the beat: `melody_moves` is False, and
+    # the tracked pitch clears to None so the next onset reads as the melody
+    # arriving there - a fresh attack after silence counts as movement, which
+    # is what the placeholder's C4 accidentally produced for the slot *after*
+    # a rest, minus its false claim about the silent slot itself.
+    melody_moves = (
+        melody_note is not None
+        and (car.previous_melody_midi is None
+             or melody_note.midi_note() != car.previous_melody_midi)
+    )
+    role = _roles_for_slot(
+        weight,
+        texture,
+        harmony_changed=(car.last_target_harmony is None
+                         or harmony_key != car.last_target_harmony),
+        melody_moves=melody_moves,
+        has_thumb=has_thumb,
+        melody_only=melody_only,
+    )[0]
+    if role == ROLE_TARGET:
+        car.last_target_harmony = harmony_key
+    car.previous_melody_midi = (
+        melody_note.midi_note() if melody_note is not None else None
+    )
+    # The texture decides which grips are *available* on this step. It is not a
+    # term in the cost, so a fill cannot be outbid for being in position - the
+    # point is that fewer notes are played here, not that this shape is better.
+    # The narrowing rule itself, and why the default is not an intersection,
+    # are documented once in decisions.resolve_texture_grips.
+    #
+    # A melody-only selection never asks: the left hand plays nothing on
+    # every slot, whatever the texture's palettes say, so the loop hands the
+    # empty palette straight through - the same declaration `TEXTURE_GRIPS`
+    # makes with an empty tuple, and the one channel `melody_alone_case`
+    # reads. Skipping the resolution also skips its warnings, which is what
+    # makes `texture=` and `grips=` silently inert here rather than noisily so.
+    slot_grips = (
+        ()
+        if melody_only
+        else resolve_texture_grips(
+            role, texture, texture_grips, grips, diagnostics,
+            # The right hand's budget, and a fact about *this slot* rather than
+            # about the arrangement: a target may sound three strings only where
+            # a bass note is actually being placed under it, which is what
+            # `slot.bass` says. `has_thumb` alone would thin chords the thumb
+            # never plays under - `--bass anchors` leaves most slots bare.
+            has_thumb=has_thumb and slot.bass is not None,
+        )
+    )
+
+    # A slot that is played as a single note rather than looked up. Which
+    # slots those are, and why each is a branch rather than a missing case,
+    # is decisions.melody_alone_case. It returns a *kind*, because the three
+    # non-default routes build different steps: an NC bar sets
+    # `melody_only=True`, a texture case must not, and an off-grid slot on the
+    # comping route is a rest with no notes in it at all.
+    #
+    # `on_grid` is read from the **slot's own beat**, not from the bar it sits
+    # in: the grid is bar-relative, so the same beat number means different
+    # positions in different bars of different metres, and `textures.on_grid`
+    # is the one place that knows the metre.
+    #
+    # `melody_voiced` here is the **per-slot** `sings_here`, not the route: a
+    # slot the guitar does not sing (no soprano, or no note at this position)
+    # takes the comping-route branches inside `melody_alone_case`, so an
+    # off-grid note-less slot rests rather than asserting a melody it has not
+    # got. §9.3 step D.
+    melody_alone = melody_alone_case(
+        texture, role, slot_grips, chord_type, name, has_thumb,
+        melody_voiced=sings_here,
+        on_grid=on_grid(beat, grid_pattern, beats_per_bar),
+    )
+    return _SlotPlan(
+        index=index,
+        note_str=note_str,
+        chord_type=chord_type,
+        name=name,
+        melody_note=melody_note,
+        sings_here=sings_here,
+        bar=bar,
+        beat=beat,
+        duration=duration,
+        weight=weight,
+        role=role,
+        slot_grips=slot_grips,
+        melody_alone=melody_alone,
+    )
+
+
 def arrange_progression(
     progression: Sequence[Tuple[Optional[str], str, str]],
     top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
@@ -1651,9 +1856,8 @@ def arrange_progression(
 
     # Harmony and melody state for the walking-bass role rule. Both are read from
     # what actually sounds, not from the written chord, so a substituted chord
-    # compares as itself (the same `normalised_harmony` the `repeated` hold uses).
-    last_target_harmony: Optional[Tuple[Optional[str], Optional[str]]] = None
-    previous_melody_midi: Optional[int] = None
+    # What one step tells the next; see `_Carried`.
+    carried = _Carried()
 
     # One slot per triple, carrying that triple's own `(bar, beat, duration)` or
     # None for a slot nobody located. Read defensively - a short `timings` leaves
@@ -1684,158 +1888,50 @@ def arrange_progression(
     )
 
     for slot in loop:
-        index = slot.index
-        note_str, chord_type, name = progression[index]
-        if note_str is None:
-            if melody_only:
-                # A melody-only selection plays the tune and nothing else, so a
-                # position with no note has nothing for the guitar to play. It is
-                # kept as the *only* refusal here because §9.3 step D made the other
-                # case a real one: a *singing* selection (soprano named) now receives
-                # note-less slots from the grid union - positions the tune is silent
-                # at - and the guitar **comps** them rather than being refused, which
-                # is why they fall through to the comping branch below.
-                diagnostics.warn(
-                    f"Warning: slot {index} has no melody note and this voice "
-                    f"selection plays the tune alone; skipping the slot"
-                )
-                continue
-            melody_note = None
-        else:
-            melody_note = Note(note_str)
-
-        # **Does the guitar sing *this* slot?** (§9.3 step D: the soprano is per
-        # slot, not per route.) The guitar sings a slot only where its voice
-        # selection has a soprano *and* the slot is a melody **onset** - a written
-        # note articulating here. Every other slot it comps, except on a melody-only
-        # selection, whose note-less slots were skipped above.
-        #
-        # §9.2's onset signal is reused rather than re-derived: `melody_onsets` is
-        # the same set the comping route's reharmonise guard reads, and a grid
-        # position the tune merely *sustains* through is not an onset, so the guitar
-        # states the chord there rather than re-articulating a note it did not begin
-        # - which is why a note-bearing merged position still comps. `None` means
-        # every slot is an onset, the honest default for a hand-built progression
-        # with no timeline, which keeps a bare `arrange_progression` unchanged.
-        sings_here = (
-            melody_voiced
-            and melody_note is not None
-            and (melody_onsets is None or index in melody_onsets)
-        )
-
-        # Where this slot falls in the bar, and therefore what it is for. Read
-        # defensively, exactly as slots.arrange_slots guards its own timings: a
-        # short list leaves the trailing steps unlocated, and an unlocated step is
-        # a principal note rather than a fill. The bar and beat are also stamped
-        # onto the step, because a caller that supplied the rhythm wants to read it
-        # back off the result rather than have to correlate two lists.
-        bar, beat, duration = slot.bar, slot.beat, slot.duration
-        weight = _metric_weight(bar, beat, beats_per_bar)
-        # _roles_for_slot re-validates the texture, which is harmless: the table was
-        # already checked before the loop, so this cannot raise here.
-        #
-        # Under walking_bass a strong beat is only a target when something new
-        # happens on it: a different harmony from the last target's (the off-beat
-        # change rule), or the melody actually moving onto it (decision F, which is
-        # what lets the second bar of a two-bar chord restate its shell when the
-        # player re-articulates the line there and stay thin when they do not).
-        harmony_key = normalised_harmony(name)
-        # A silent slot moves nothing onto the beat: `melody_moves` is False, and
-        # the tracked pitch clears to None so the next onset reads as the melody
-        # arriving there - a fresh attack after silence counts as movement, which
-        # is what the placeholder's C4 accidentally produced for the slot *after*
-        # a rest, minus its false claim about the silent slot itself.
-        melody_moves = (
-            melody_note is not None
-            and (previous_melody_midi is None
-                 or melody_note.midi_note() != previous_melody_midi)
-        )
-        role = _roles_for_slot(
-            weight,
-            texture,
-            harmony_changed=(last_target_harmony is None
-                             or harmony_key != last_target_harmony),
-            melody_moves=melody_moves,
+        plan = _slot_state(
+            carried, slot,
+            progression=progression,
+            texture=texture,
+            texture_grips=texture_grips,
+            grips=grips,
             has_thumb=has_thumb,
             melody_only=melody_only,
-        )[0]
-        if role == ROLE_TARGET:
-            last_target_harmony = harmony_key
-        previous_melody_midi = (
-            melody_note.midi_note() if melody_note is not None else None
+            melody_voiced=melody_voiced,
+            melody_onsets=melody_onsets,
+            grid_pattern=grid_pattern,
+            beats_per_bar=beats_per_bar,
+            diagnostics=diagnostics,
         )
-        # The texture decides which grips are *available* on this step. It is not a
-        # term in the cost, so a fill cannot be outbid for being in position - the
-        # point is that fewer notes are played here, not that this shape is better.
-        # The narrowing rule itself, and why the default is not an intersection,
-        # are documented once in decisions.resolve_texture_grips.
-        #
-        # A melody-only selection never asks: the left hand plays nothing on
-        # every slot, whatever the texture's palettes say, so the loop hands the
-        # empty palette straight through - the same declaration `TEXTURE_GRIPS`
-        # makes with an empty tuple, and the one channel `melody_alone_case`
-        # reads. Skipping the resolution also skips its warnings, which is what
-        # makes `texture=` and `grips=` silently inert here rather than noisily so.
-        slot_grips = (
-            ()
-            if melody_only
-            else resolve_texture_grips(
-                role, texture, texture_grips, grips, diagnostics,
-                # The right hand's budget, and a fact about *this slot* rather than
-                # about the arrangement: a target may sound three strings only where
-                # a bass note is actually being placed under it, which is what
-                # `slot.bass` says. `has_thumb` alone would thin chords the thumb
-                # never plays under - `--bass anchors` leaves most slots bare.
-                has_thumb=has_thumb and slot.bass is not None,
-            )
-        )
+        if plan is None:
+            continue
 
-        # A slot that is played as a single note rather than looked up. Which
-        # slots those are, and why each is a branch rather than a missing case,
-        # is decisions.melody_alone_case. It returns a *kind*, because the three
-        # non-default routes build different steps: an NC bar sets
-        # `melody_only=True`, a texture case must not, and an off-grid slot on the
-        # comping route is a rest with no notes in it at all.
-        #
-        # `on_grid` is read from the **slot's own beat**, not from the bar it sits
-        # in: the grid is bar-relative, so the same beat number means different
-        # positions in different bars of different metres, and `textures.on_grid`
-        # is the one place that knows the metre.
-        #
-        # `melody_voiced` here is the **per-slot** `sings_here`, not the route: a
-        # slot the guitar does not sing (no soprano, or no note at this position)
-        # takes the comping-route branches inside `melody_alone_case`, so an
-        # off-grid note-less slot rests rather than asserting a melody it has not
-        # got. §9.3 step D.
-        melody_alone = melody_alone_case(
-            texture, role, slot_grips, chord_type, name, has_thumb,
-            melody_voiced=sings_here,
-            on_grid=on_grid(beat, grid_pattern, beats_per_bar),
-        )
-        if melody_alone == MELODY_ALONE_REST:
+        if plan.melody_alone == MELODY_ALONE_REST:
             _rest_step(
                 arrangements, slot,
-                name=name, note_str=note_str, bar=bar, beat=beat,
-                duration=duration, role=role, weight=weight,
-                sings_here=sings_here, diagnostics=diagnostics,
+                name=plan.name, note_str=plan.note_str,
+                bar=plan.bar, beat=plan.beat, duration=plan.duration,
+                role=plan.role, weight=plan.weight,
+                sings_here=plan.sings_here, diagnostics=diagnostics,
             )
             continue
-        if melody_alone == MELODY_ALONE_TEXTURE:
+        if plan.melody_alone == MELODY_ALONE_TEXTURE:
             if _texture_fill_step(
                 arrangements, slot,
-                name=name, note_str=note_str, melody_note=melody_note,
-                top_strings=top_strings, bar=bar, beat=beat,
-                duration=duration, role=role, weight=weight,
+                name=plan.name, note_str=plan.note_str,
+                melody_note=plan.melody_note, top_strings=top_strings,
+                bar=plan.bar, beat=plan.beat, duration=plan.duration,
+                role=plan.role, weight=plan.weight,
                 diagnostics=diagnostics,
             ):
                 continue
 
-        if melody_alone == MELODY_ALONE_NO_CHORD:
+        if plan.melody_alone == MELODY_ALONE_NO_CHORD:
             _no_chord_step(
                 arrangements, slot,
-                name=name, note_str=note_str, melody_note=melody_note,
-                top_strings=top_strings, bar=bar, beat=beat,
-                duration=duration, role=role, weight=weight,
+                name=plan.name, note_str=plan.note_str,
+                melody_note=plan.melody_note, top_strings=top_strings,
+                bar=plan.bar, beat=plan.beat, duration=plan.duration,
+                role=plan.role, weight=plan.weight,
                 diagnostics=diagnostics,
             )
             continue
@@ -1844,18 +1940,19 @@ def arrange_progression(
         # See `_comping_step`: taken before `prepare_step` because there is no
         # melody for the guitar here, and only after the NC and melody-alone
         # branches, which are the cases with no harmony to state.
-        if not sings_here and not melody_only:
+        if not plan.sings_here and not melody_only:
             if _comping_step(
                 arrangements, slot,
-                progression=progression, index=index,
-                chord_type=chord_type, name=name, note_str=note_str,
-                melody_note=melody_note, melody_onsets=melody_onsets,
+                progression=progression, index=plan.index,
+                chord_type=plan.chord_type, name=plan.name,
+                note_str=plan.note_str, melody_note=plan.melody_note,
+                melody_onsets=melody_onsets,
                 voices=voices, harmony_family=harmony_family,
                 non_chord_tone=non_chord_tone,
                 fret_min=fret_min, fret_max=fret_max,
                 bass_pcs=bass_pcs, slash_bass_cost_for=slash_bass_cost_for,
-                bar=bar, beat=beat, duration=duration,
-                role=role, weight=weight, diagnostics=diagnostics,
+                bar=plan.bar, beat=plan.beat, duration=plan.duration,
+                role=plan.role, weight=plan.weight, diagnostics=diagnostics,
             ):
                 continue
 
@@ -1864,15 +1961,16 @@ def arrange_progression(
         # asked to sing, and the comping block above always steps or continues.
         _harmonised_step(
             arrangements, slot,
-            progression=progression, index=index,
+            progression=progression, index=plan.index,
             top_strings=top_strings, non_chord_tone=non_chord_tone,
             fret_min=fret_min, fret_max=fret_max,
-            grips=grips, slot_grips=slot_grips, texture=texture,
+            grips=grips, slot_grips=plan.slot_grips, texture=texture,
             has_thumb=has_thumb, melody_only=melody_only,
-            name=name, note_str=note_str, melody_note=melody_note,
+            name=plan.name, note_str=plan.note_str,
+            melody_note=plan.melody_note,
             bass_pcs=bass_pcs, slash_bass_cost_for=slash_bass_cost_for,
-            bar=bar, beat=beat, duration=duration,
-            role=role, weight=weight, diagnostics=diagnostics,
+            bar=plan.bar, beat=plan.beat, duration=plan.duration,
+            role=plan.role, weight=plan.weight, diagnostics=diagnostics,
         )
 
     return arrangements
