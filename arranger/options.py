@@ -149,14 +149,14 @@ class ArrangeOptions:
     # is exactly the library's own behaviour.
     bass_pcs: Optional[Mapping[int, Optional[int]]] = None
     # The ranking used to honour `bass_pcs`, passed in rather than imported:
-    # `bass_cost` lives in `arranger.slots`, which reaches `decisions` through
+    # `slash_bass_cost` lives in `arranger.slots`, which reaches `decisions` through
     # `steps`, so a module-level import either way would be a cycle. It is a field
     # rather than a module global because a slash-bass preference is the only reason
     # to supply one, and making that visible at the call site is the point.
     #
     # Both halves are needed: `bass_pcs` says which pitch the caller wants, and this
     # says how near a candidate is to it. Neither alone narrows anything.
-    bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]] = None
+    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]] = None
     # The progression indexes whose melody note **articulates** (an onset), for the
     # §9.2 reharmonise rule on the comping route: a non-chord melody note is
     # substituted where it begins, not under a held note and not where the tune is

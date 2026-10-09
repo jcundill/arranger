@@ -186,7 +186,7 @@ from .tuning import (
 # `melody_bass` textures are removed (a breaking change to the public surface,
 # same rule as 0.10.0). Measured byte-identical against the old spellings on
 # both committed heads and the engine's own fixture - see `docs/one-fact.md`.
-__version__ = "0.11.0"
+__version__ = "0.12.0"
 
 
 # The whole-progression staff renderers live in `tabstaff`, which imports this

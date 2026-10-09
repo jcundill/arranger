@@ -47,7 +47,7 @@ from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES, ArrangementStep
 
 __all__ = [
     "arrange_slots",
-    "bass_cost",
+    "slash_bass_cost",
     "bass_pitch_class",
     "midi_to_note_name",
     "parse_bar_range",
@@ -224,13 +224,17 @@ def _slash_bass(symbol: str) -> Optional[str]:
     return match.group(1) if match else None
 
 
-def bass_cost(voicing_midis: Sequence[int], bass_pc: Optional[int]) -> int:
+def slash_bass_cost(voicing_midis: Sequence[int], bass_pc: Optional[int]) -> int:
     """How far a voicing's lowest sounding pitch is from the requested bass.
 
     In semitones, as the smallest interval from the bass pitch class to the
     lowest note actually played. Zero means the bass is in the voicing; 6 means
     it is a tritone away. Used only to *prefer* one candidate over another, so a
     voicing that cannot honour the bass is still usable.
+
+    Named `slash_bass_cost`, not `bass_cost`, because the walking line already
+    owns that name (`arranger.bass.bass_cost`) - the two rank different things and
+    the shared spelling was a trap. This is the slash-chord half.
     """
     if bass_pc is None or not voicing_midis:
         return 0
@@ -423,7 +427,7 @@ def _slot_options(
     slash, which is every triple of a score-imported head unless the score writes
     one. The bass note normally rides along in the chord name, so the triple carries
     it and the name does not have to; a caller that has already promoted the bass
-    into the quality writes the promoted name. `bass_cost` is supplied alongside
+    into the quality writes the promoted name. `slash_bass_cost` is supplied alongside
     because the pitch class says *what* is wanted and the cost says *how near* a
     candidate is to it; neither alone narrows anything.
 
@@ -470,6 +474,6 @@ def _slot_options(
         beat_type=beat_type,
         timings=typed_timings,
         bass_pcs=bass_pcs or None,
-        bass_cost=bass_cost,
+        slash_bass_cost=slash_bass_cost,
         melody_onsets=melody_onsets,
     )

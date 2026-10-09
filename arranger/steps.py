@@ -953,7 +953,9 @@ class VoiceLeadingEngine:
             if options.timings is not None:
                 timings = list(options.timings)
         bass_pcs = options.bass_pcs if options is not None else None
-        bass_cost_for = options.bass_cost if options is not None else None
+        slash_bass_cost_for = (
+            options.slash_bass_cost if options is not None else None
+        )
 
         if non_chord_tone not in cls.NON_CHORD_TONE_STRATEGIES:
             raise ValueError(
@@ -1495,7 +1497,7 @@ class VoiceLeadingEngine:
                             # The corpus's slash bass, honoured before selection rather
                             # than after, exactly as on the ordinary route.
                             bass_pcs.get(index) if bass_pcs else None,
-                            bass_cost_for,
+                            slash_bass_cost_for,
                         ) or candidates[0],
                         # A comping shape is three voices by construction, so `partial`
                         # is always true and is not worth re-deriving per step.
@@ -1690,7 +1692,7 @@ class VoiceLeadingEngine:
                 # difference between one wrong note and four.
                 melody_pc=melody_note.midi_note() % 12,
                 bass_pc=None if bass_pcs is None else bass_pcs.get(index),
-                bass_cost=bass_cost_for,
+                slash_bass_cost=slash_bass_cost_for,
             )
             # `candidates` is non-empty here (the step is skipped otherwise), so this
             # cannot fire. Written as an assertion rather than left to Optional

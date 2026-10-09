@@ -430,7 +430,7 @@ def select_step_voicing(
     root_pc: Optional[int],
     melody_pc: Optional[int] = None,
     bass_pc: Optional[int] = None,
-    bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]] = None,
+    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]] = None,
 ) -> Optional[Voicing]:
     """The candidate the engine's own rule prefers, honouring a slash bass first.
 
@@ -450,14 +450,14 @@ def select_step_voicing(
     unachievable slash chord behaves exactly as if it had not been written - which
     is the same "never guess" rule the rest of this module follows.
 
-    `bass_cost` is passed in rather than imported because it lives in
+    `slash_bass_cost` is passed in rather than imported because it lives in
     `arranger.slots`, which reaches this module through `steps`; a module-level
     import either way would be a cycle. Passing it also makes the dependency visible
     at the call site, which is the point: wanting a slash-bass preference is the only
     reason to supply one.
     """
-    if bass_pc is not None and bass_cost is not None and candidates:
-        costs = [bass_cost(v.midi_notes(), bass_pc) for v in candidates]
+    if bass_pc is not None and slash_bass_cost is not None and candidates:
+        costs = [slash_bass_cost(v.midi_notes(), bass_pc) for v in candidates]
         best = min(costs)
         if best <= 2:
             candidates = [v for v, c in zip(candidates, costs) if c == best]
