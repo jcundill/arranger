@@ -86,12 +86,11 @@ __all__ = [
 
 
 
-# Texture styles, in the order that breaks a tie. `uniform` is the historical
-# behaviour - every slot is a target and the cost tuple's completeness criterion
-# decides, which is why it is the default and why existing output is unchanged.
-# `melody` and `melody_bass` are gone from this list: "the guitar plays the tune
-# and nothing else" is a fact about *which voices sound*, and it is keyed on the
-# voices selection now - `melody_only_selection` below, and `docs/one-fact.md`.
+# Texture styles, in the order that breaks a tie. `uniform` is the default: every slot
+# is a target and the cost tuple's completeness criterion decides. There is no `melody`
+# or `melody_bass` here: "the guitar plays the tune and nothing else" is a fact about
+# *which voices sound*, keyed on the voices selection - `melody_only_selection` below,
+# and `docs/one-fact.md`.
 TEXTURE_STYLES: Tuple[str, ...] = (
     "uniform", "targets", "walking_bass",
 )
@@ -228,11 +227,10 @@ def melody_only_selection(voices: Tuple[str, ...]) -> bool:
 
     Soprano present, alto and tenor absent: `(soprano,)` is the tune with no
     left hand under it, and `(soprano, bass)` is the same line with a thumb
-    under it. This is the fact the `melody` and `melody_bass` textures used to
-    state on the texture axis, and a selection is where it belongs - "which
-    voices the guitar plays" is the question `voices=` answers, and a texture
-    that could also answer it was a second spelling of one fact that could
-    disagree with it (see `docs/one-fact.md`, commit 3).
+    under it. This fact belongs on the selection, not the texture axis - "which
+    voices the guitar plays" is the question `voices=` answers, and a texture that
+    also answered it would be a second spelling of one fact that could disagree with
+    it (see `docs/one-fact.md`).
 
     Derived rather than listed, like `voices_have_soprano` beside it: the
     rule is about the quartet's middle voices rather than an enumeration of
@@ -256,11 +254,9 @@ def resolve_voices(voices: Tuple[str, ...]) -> Tuple[str, ...]:
     `walking_bass` *means* a thumb line, whereas **no texture means "somebody
     else sings"** - a fact about the band rather than about the texture.
 
-    No selection is refused here any more. The one refusal `melody_allowed`
-    used to make - no soprano, on a texture that played the melody and nothing
-    else - dissolved when the melody-only claim moved onto the selection
-    (`melody_only_selection` above): a soprano-less selection simply comps,
-    on every texture, and nothing is self-contradictory anywhere.
+    No selection is refused here. A soprano-less selection simply comps, on every
+    texture: with the melody-only claim on the selection (`melody_only_selection`
+    above) rather than on the texture, nothing is self-contradictory anywhere.
     """
     if voices == (MELODY_AUTO,):
         return VOICES_ALL
@@ -447,14 +443,12 @@ TEXTURE_GRIPS: Dict[str, Dict[str, Tuple[str, ...]]] = {
         "target": ("shell",),
         "fill": (),
     },
-    # The two melody-only palettes that used to live here - `"melody"` and
-    # `"melody_bass"`, both empty on both roles - are gone, and the fact they
-    # stated is keyed on the voices selection instead: `arrange_progression`
-    # hands the loop an empty palette for a melody-only selection
-    # (`textures.melody_only_selection`), so the declaration "the left hand
-    # plays nothing" still arrives at `decisions.melody_alone_case` through
-    # this one channel - the empty palette - whatever spelling asked for it.
-    # See `docs/one-fact.md`, commit 3.
+    # There are no melody-only palettes: the fact "the left hand plays nothing" is
+    # keyed on the voices selection. `arrange_progression` hands the loop an empty
+    # palette for a melody-only selection (`textures.melody_only_selection`), so the
+    # declaration still arrives at `decisions.melody_alone_case` through this one
+    # channel - the empty palette - whatever spelling asked for it.
+    # See `docs/one-fact.md`.
 }
 
 # --- The grid axis: where a chord FALLS inside the bar -------------------------
@@ -750,10 +744,7 @@ def _metric_weight(
     A beat is compared with `_BEAT_EPSILON` because a notated beat is a float and a
     tune rarely lands only on the integers: the middle note of a triplet inside beat 1
     of a 3/4 bar is at 1.333..., and a note a third of a beat away from a target is not
-    the target. An exact comparison would call almost no real note a downbeat. (The
-    example used to read "a 3/4 bar's second beat is 1.666...", which is not the second
-    beat of any metre, in this library or out of it - it was a triplet onset mistaken
-    for a beat number, and it survived because no fixture's *timing* depended on it.)
+    the target. An exact comparison would call almost no real note a downbeat.
     """
     if bar is None or beat is None:
         return -1

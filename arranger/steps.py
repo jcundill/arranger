@@ -5,10 +5,10 @@ and forty test call sites depend on. Every method is a one-line forwarder to the
 module that owns the body - `grips`, `cost`, `chords`, and, for the two entry
 points, `movement`.
 
-**The step loop is no longer here.** `prepare_step` and `arrange_progression`
-moved to `movement`, which imports this module's collaborators directly and does
-not import this module; the two methods below forward to it, so the published
-spelling is unchanged and there is still one loop rather than two.
+**The step loop is not here** - it is in `movement`, which imports this module's
+collaborators directly and does not import this module. The two methods below
+forward to it, so the published spelling is unchanged and there is one loop rather
+than two.
 
 `StepPreparation` is re-exported for the same reason: it is the value
 `prepare_step` returns, and callers reach it as `arranger.steps.StepPreparation`.
@@ -359,12 +359,8 @@ class VoiceLeadingEngine:
         fret_max: int = NECK_FRET_MAX,
         grips: Tuple[str, ...] = GRIP_PREFERENCE,
         # `Sequence` and Optional *bar* and *beat*, not `List[Tuple[int, float, ...]]`:
-        # the corpus supplies `(None, None, None)` for a slot it could not place, so
-        # the two entry points genuinely hold different types. This is the fourth
-        # time that has cost this library something, and previously it showed up as a
-        # signature that would not typecheck rather than as a crash at runtime - the
-        # `float(beat)` below had assumed a non-None beat until the corpus was first
-        # allowed to delegate here.
+        # a slot a caller could not place is `(None, None, None)`, so an entry point may
+        # hold either shape. See `movement.arrange_progression` for the same note.
         timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]] = None,
         texture: str = "uniform",
         bass: str = BASS_AUTO,

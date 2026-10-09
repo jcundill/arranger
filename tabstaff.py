@@ -27,11 +27,9 @@ from arranger.tuning import _MUTED_CELL, STRING_NAMES, ArrangementStep
 # from `arranger` so that `from arranger import format_musicxml` - the spelling in
 # the README and the tests - keeps working.
 #
-# They used to be resolved through a module-level `__getattr__`, on the stated
-# grounds that `tabxml` and `tabgp` "import this module" and would therefore
-# re-enter a half-initialised one. **That stopped being true in Phase 5**: both now
-# import `arranger.tuning` - a leaf module with no dependencies of its own - and
-# `tabgp` imports `tabxml`, not the reverse. Nothing here imports `tabstaff`.
+# They are resolved as ordinary top-level imports because neither re-enters this
+# module: both import `arranger.tuning` - a leaf with no dependencies of its own -
+# and `tabgp` imports `tabxml`, not the reverse. Nothing here imports `tabstaff`.
 #
 # Nor is the laziness buying anything. `tabxml` needs music21 and `tabgp` needs
 # PyGuitarPro, but each imports its extra *inside* the functions that use it, so
@@ -146,12 +144,11 @@ def _staff_columns(
         float(int(columns[0][0] // beats_per_bar) * beats_per_bar)
         if columns else 0.0
     )
-    # **Fill at the music's own grain, and advance by what each step is worth.** This
-    # used to step one whole beat at a time and always advance `onset + 1.0`, on the
-    # assumption that a step is a beat long. It is not: `duration` is in whole notes and
-    # the default `eighths` skeleton puts steps half a beat apart, so every gap shorter
-    # than a beat was skipped outright. Bar 11 of But Not For Me lost its downbeat
-    # column entirely that way, and with it the tie into the bar's early beat.
+    # **Fill at the music's own grain, and advance by what each step is worth.** A step
+    # is not one beat long: `duration` is in whole notes and the default `eighths`
+    # skeleton puts steps half a beat apart, so stepping a whole beat at a time (and
+    # always advancing `onset + 1.0`) would skip every gap shorter than a beat and drop
+    # the column at a bar's downbeat, and with it the tie into the bar's early beat.
     #
     # The grain is the shortest thing the progression actually writes, so a rest is
     # emitted at a resolution the music has a word for. `max(1.0, ...)` bounds it from
@@ -300,17 +297,18 @@ def _slot_counts(
     """
     How many grid slots each column occupies - the whole of the duration fix.
 
-    **A column used to be one beat wide whatever the note was worth**, so a quarter and
-    a half note were drawn identically and the tab said nothing about how long anything
-    sounded. The ASCII tab conveys duration by *width*: a note two beats long is drawn
+    **A column's width is what the note is worth.** A quarter and a half note must be
+    drawn differently, or the tab says nothing about how long anything sounded. The
+    ASCII tab conveys duration by *width*: a note two beats long is drawn
     across two slots, and the dashes between are the sound continuing.
 
-    Three things this has to get right, and each was measured against `jon6.tab`:
+    Three things this has to get right:
 
     - **The units are whole notes.** `ArrangementStep.duration` is in whole notes
-      (`tuning.py`), and this used to multiply it by a slot count as though it were in
-      beats - so a quarter note, `duration=0.25`, came out one slot wide instead of
-      four and every bar in the piece drew at the same width.
+      (`tuning.py`), so a quarter note (`duration=0.25`) is four grid slots wide.
+      Multiplying it by a slot count as though it were in
+      beats would make it one slot wide and draw every bar in the piece at the same
+      width.
     - **A beat is not a slot-count either.** The grid is per *whole note*, so a bar in
       4/4 and a bar in 2/2 are both sixteen sixteenths and both sixteen slots at a
       finer grid; `beat_type` reaches this as the conversion from beats to whole notes
@@ -584,12 +582,11 @@ def _staff_breaks(
     """
     The column indexes that begin a new *system* - a fresh line of music.
 
-    This is now a different question from `_staff_barlines`, where it used to be the
-    same one: a barline says where the metre falls and lands on every bar, while a
-    system break says where the printed line ends and is the only thing
-    `measures_per_line` still governs. Splitting them is what lets the staff both
-    rule every bar and wrap at a readable width, which is what TuxGuitar's export
-    does and what the flag's name has always claimed.
+    A distinct question from `_staff_barlines`: a barline says where the metre falls and
+    lands on every bar, while a system break says where the printed line ends and is the
+    only thing `measures_per_line` governs. Keeping them separate lets the staff both
+    rule every bar and wrap at a readable width, which is what TuxGuitar's export does
+    and what the flag's name claims.
 
     A system begins on the first column of a bar, so a column qualifies only when
     its bar differs from the previous column's. Testing the bar number alone would
@@ -748,15 +745,14 @@ def format_tab_staff(
         anyway meant that turning the rows off left the tab *wider* than leaving them
         on, which is the opposite of what the flag says.
 
-        **Per system, not per progression.** It used to be computed once over every
-        column, which meant a single two-digit fret anywhere in the piece set the
-        width for the whole arrangement: a bar of nothing but single-digit frets was
-        drawn two characters per cell because some other bar held a `13`. TuxGuitar's
-        export does not do that - its bars are sized independently (measured across
-        `jon6.tab`: 7, 14, 17 and 19 characters). Per system is the finest granularity
-        that keeps the invariant the alignment tests exist to protect, since two bars
-        drawn on one system have to share a grid or a fret stops lining up across the
-        six strings. Per *bar* would match the export more closely and would break it.
+        **Per system, not per progression.** Computing it once over every column would
+        let a single two-digit fret anywhere in the piece set the width for the whole
+        arrangement, so a bar of nothing but single-digit frets would be drawn two
+        characters per cell because some other bar held a `13`. TuxGuitar's export sizes
+        its bars independently. Per system is the finest granularity that keeps the
+        invariant the alignment tests exist to protect, since two bars drawn on one
+        system have to share a grid or a fret stops lining up across the six strings.
+        Per *bar* would match the export more closely and would break it.
         """
         width = _STAFF_CELL_WIDTH
         for index in system:
@@ -1292,10 +1288,10 @@ def format_tab_html(
     its own stylesheet (including a dark-mode one), so it needs no network access
     and no sibling files.
 
-    `show_timing` adds the two rows the score renderers both carry and this page
-    used to omit: the **metre** over the first measure, and a **note value** per
-    column. They are the same rows `format_tab_staff` draws and come from the same
-    `_staff_rhythm`, so the page and the terminal cannot disagree about the rhythm.
+    `show_timing` adds the two rows the score renderers both carry: the **metre** over
+    the first measure, and a **note value** per column. They are the same rows
+    `format_tab_staff` draws and come from the same `_staff_rhythm`, so the page and the
+    terminal cannot disagree about the rhythm.
 
     Args:
         steps: arranged steps, typically from arrange_progression().

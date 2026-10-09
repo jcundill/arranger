@@ -204,13 +204,11 @@ class Voicing:
         if self.bass_midi is None or self.bass_string is None:
             return self.midi_notes()
         bass_string = self.bass_string
-        # Filtered by string index, never by position in a filtered list: the two are
-        # different things. This used to `enumerate(...)` the *pitches* and compare the
-        # resulting counter against `bass_string`, which is a position, not a string -
-        # so it kept the thumb and dropped the melody whenever the thumb was not the
-        # lowest-indexed active string. It read correctly only when the thumb was on the
-        # low E, where the two happen to coincide, which is the one case the existing
-        # walking-bass fixtures all cover.
+        # Filtered by string index, never by a position in a filtered list: the two are
+        # different things. Enumerating the *pitches* and comparing that counter against
+        # `bass_string` would keep the thumb and drop the melody whenever the thumb is
+        # not the lowest-indexed active string - correct only when the thumb is on the
+        # low E, where the two happen to coincide.
         return [
             GuitarFretboard.fret_to_midi(index, fret)
             for index, fret in enumerate(self.frets)
@@ -394,8 +392,8 @@ class ArrangementStep:
     # guitar playing it, which is what this says.
     #
     # It changes what a renderer draws in one specific way: there is no soprano string
-    # carrying the tune, so a `repeated` melody can no longer be a soprano-only
-    # re-strike. See `render._step_cells`, which holds the whole shape instead.
+    # carrying the tune, so a `repeated` melody cannot be a soprano-only re-strike.
+    # See `render._step_cells`, which holds the whole shape instead.
     melody_voiced: bool = True
 
     @property

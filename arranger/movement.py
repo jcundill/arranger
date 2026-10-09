@@ -6,17 +6,11 @@ counterpart. Between them they turn `(melody, quality, name)` triples into
 texture fill, a no-chord melody-alone step, a comping shape, or a harmonised
 melody step - and merging the walking bass in afterwards.
 
-**The loop used to live in `steps`, and `steps` is now only its facade.** The
-move is a cut, not a rewrite: every body here is byte-for-byte what `steps`
-held, with the `@classmethod` decorators dropped and the `cls.X` calls that used
-to go through the class re-pointed at the module that owns each body
-(`_grips.get_all_grip_voicings`, `_cost._window_penalty`). That is possible
-because there was no state to move: `VoiceLeadingEngine` was already a facade
-of one-line delegates, so this module imports `grips`, `cost`, `chords` and the
-rest directly and does not import `steps` at all.
-
-`slots.arrange_slots` delegates to these functions through the class, so the
-imported-head path and the hand-built one still run one loop rather than two.
+Every step body lives here; `VoiceLeadingEngine` is a facade of one-line delegates
+onto them. There is no state to move, so this module imports `grips`, `cost`,
+`chords` and the rest directly and does not import `steps` at all.
+`slots.arrange_slots` delegates through the class, so the imported-head path and the
+hand-built one still run one loop rather than two.
 """
 
 from __future__ import annotations
@@ -115,12 +109,12 @@ class StepPreparation:
     slot's timing - can choose from these candidates using the engine's own rule
     rather than re-deriving the voicing itself.
 
-    That distinction is load-bearing. The loader used to build its own
-    candidates and call `_best_voicing` directly, which silently skipped the
-    non-chord-tone strategies, the selector's tone-purity criterion (because
-    `allowed_tones` defaults to None) and the octave-down rescue. `chord_type`
+    That distinction is load-bearing: a caller that builds its own candidates and
+    calls `_best_voicing` directly silently skips the non-chord-tone strategies,
+    the selector's tone-purity criterion (because `allowed_tones` defaults to None)
+    and the octave-down rescue. `chord_type`
     and `chord_name` stay the *written* chord even when `harmonized_as` names a
-    substitute, because `allowed_tones` has always been built from the written
+    substitute, because `allowed_tones` is built from the written
     chord and changing that would move the library's published output.
     """
 
@@ -148,7 +142,7 @@ def _resolve_bass(
     - `auto` resolves from the texture and the selection. `texture="walking_bass"`
       walks; so does a melody-only selection that names the bass voice -
       `melody="soprano,bass"` is the tune with a thumb under it, the part the
-      `melody_bass` texture used to spell. A lone `bass` selection is **not**
+      `melody_bass` texture spells. A lone `bass` selection is **not**
       melody-only (it has no soprano) and keeps no thumb: that part already is the
       bass line, and a thumb under it would double it.
     - an unknown spelling raises. The same rule as everywhere else in the library: a
@@ -751,7 +745,7 @@ def _rest_step(
     The guitar is silent and the horn has the note. **The step is still
     emitted**, carrying the bar, the beat and the chord name: it is what keeps
     the melody's position in the tab staff, and a comping part whose bars
-    collapsed to their stabs would no longer line up against the tune it is
+    collapsed to their stabs would not line up against the tune it is
     comping under.
     """
     arrangements.append(ArrangementStep(
@@ -1022,10 +1016,8 @@ def _comping_step(
         notes=comp_notes,
         # **Whether this selection is the bass voice and nothing else**,
         # which arity cannot say: `alto`, `tenor` and `bass` all ask for one
-        # note. Measured before this was passed, all three produced
-        # byte-identical arrangements on strings 1-3 - the middle of the
-        # neck - and the bass voice is the one selection whose register is
-        # part of what it *is*. Derived from the resolved voices rather than
+        # note, and only the bass voice has a register that is part of what it
+        # *is*. Derived from the resolved voices rather than
         # an extra CLI flag, so the two spellings of one request cannot
         # disagree.
         bass_voice=voices == (MELODY_BASS,),
@@ -1143,15 +1135,13 @@ def _rescue_melody_alone(
     survives, the thumb still walks, and the harmony is stated at the next slot
     that can state it.
 
-    This used to read `if has_thumb or melody_only`, on the argument that only
-    those two routes may sound a chord-less step. That was the wrong question. A
-    palette that cannot voice a chord has already lost the harmony, and dropping
-    the step took the melody with it - measured over the committed heads,
-    `--grips shell` alone loses 216 notes that way, every one of them a note no
-    shape in that palette could carry. What the old guard was really protecting
-    is the *claim* such a step makes - that the guitar is playing the tune and
-    not the chord - so that claim is recorded on the step (`chord_unvoiced`,
-    which the renderers report) instead of the step being deleted.
+    This route is **not** gated on `has_thumb or melody_only`. A palette that cannot
+    voice a chord has not thereby lost the melody, so any candidate able to carry the
+    tune is taken - and the *claim* such a step makes, that the guitar is playing the
+    tune and not the chord, is recorded on the step (`chord_unvoiced`, which the
+    renderers report) rather than the step being deleted. Dropping it here would take
+    the melody with it; for the measured cost of that, under `--grips shell` alone,
+    see `docs/open-issues.md` item 14.
 
     Returns **True** when the step was appended. **False** means no string can
     reach the note at all - below the library's G3 floor, or past the end of the
@@ -1722,12 +1712,9 @@ def arrange_progression(
     fret_max: int = NECK_FRET_MAX,
     grips: Tuple[str, ...] = GRIP_PREFERENCE,
     # `Sequence` and Optional *bar* and *beat*, not `List[Tuple[int, float, ...]]`:
-    # the corpus supplies `(None, None, None)` for a slot it could not place, so
-    # the two entry points genuinely hold different types. This is the fourth
-    # time that has cost this library something, and previously it showed up as a
-    # signature that would not typecheck rather than as a crash at runtime - the
-    # `float(beat)` below had assumed a non-None beat until the corpus was first
-    # allowed to delegate here.
+    # a slot a caller could not place is `(None, None, None)`, so an entry point may
+    # hold either shape. `float(beat)` below must therefore not assume a non-None
+    # beat.
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]] = None,
     texture: str = "uniform",
     bass: str = BASS_AUTO,
@@ -1840,8 +1827,8 @@ def arrange_progression(
       for each of its `beats_per_bar` beats - one carrying the melody and the rest
       marked `bass_only`, whose upper voices are held rather than re-struck. That
       is **four** steps in 4/4, **three** in 3/4 and **two** in 2/2, because the
-      grid is `beats_per_bar` beats wide; the wording here used to say "four", and
-      three of the four committed scores are in cut time. Callers that zip their
+      grid is `beats_per_bar` beats wide - and three of the committed scores are in
+      cut time. Callers that zip their
       progression against the result, or derive a bar count from `len(steps)`, are
       wrong under this texture only; `uniform` and `targets` are untouched. A step
       the walk invented can be promoted to a **target** when the melody moves onto
@@ -2156,7 +2143,7 @@ def _next_resolution_melody(
     """
     The pitch the melody line resolves into: the first following step whose
     melody is a chord tone of its own chord (None when the phrase never
-    resolves). Used to spell the dim7 substitution's root.
+    resolves). Spells the dim7 substitution's root.
 
     A slot with no melody note is stepped over: silence resolves into nothing.
 

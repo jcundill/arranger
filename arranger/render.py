@@ -3,13 +3,8 @@
 `format_progression` is the compact renderer, and it is **pure** - it returns a
 string and prints nothing, so the caller stays in control of the output. The
 whole-progression staff renderers are a different shape of output and live in
-`tabstaff`.
-
-It used to render a six-line vertical block per step too, behind a `vertical`
-argument that the `--vertical` CLI flag existed only to reach. Both were removed:
-the staff in `tabstaff` is what a player reads, and this is now the one-line
-summary alone. The vertical form survives on a single voicing -
-`Voicing.tab_block()` - which is not the same surface.
+`tabstaff`; a six-line vertical block for a *single* voicing is
+`Voicing.tab_block()`, which is not the same surface.
 
 `_step_annotation` is shared by `format_progression` and the demonstration, so the
 two renderings cannot drift apart. A step can be several things at once - a
@@ -18,11 +13,9 @@ precedence between them is the whole content of that function.
 
 The tab-cell primitives (`_MUTED_CELL`, `_cells_from_frets`) are **not** defined
 here: `Voicing.tab_block` calls them and `Voicing` sits below this module, so they
-live in `tuning` and are imported from there. `_STAFF_CELL_WIDTH` was the second of
-two identical definitions of one constant - `tabstaff` had the other - and is
-imported for the same reason. `_tab_block_from_cells` is still in `tuning` for
-`Voicing.tab_block`, but this module no longer renders a block, so it no longer
-imports it.
+live in `tuning` and are imported from there. `_STAFF_CELL_WIDTH` and
+`_tab_block_from_cells` live in `tuning` for the same reason and are imported from
+there too.
 """
 
 from __future__ import annotations
@@ -126,12 +119,10 @@ def _step_annotation(step: ArrangementStep) -> str:
             )
         if step.grip == "duo":
             # Name the pair from the notes that actually sound, as the interval branch
-            # above does. This used to be the fixed string "root & 5th duo", which
-            # described **none** of the four pitch-class pairs a duo can produce:
-            # `(3,7)`, `(4,7)`, `(0,4)` and `(0,3)` - a b3 with a 5th, a 3rd with a 5th, a
-            # root with a 3rd, a root with a b3. It named the degrees the *melody* was
-            # once allowed to take, which stopped being true when the melody gate was
-            # lifted, and a reader checking the tab against the label found neither.
+            # above does. A duo can produce `(3,7)`, `(4,7)`, `(0,4)` and `(0,3)` - a b3
+            # with a 5th, a 3rd with a 5th, a root with a 3rd, a root with a b3 - so a
+            # single fixed label would be wrong for all but one of them, and would name
+            # degrees the melody is not limited to.
             #
             # The **upper** voices, for the reason given above: the thumb is a walking
             # line underneath and is not part of the pair.
@@ -156,7 +147,7 @@ def _step_annotation(step: ArrangementStep) -> str:
 def _bass_annotation(step: ArrangementStep, existing: str = "") -> str:
     """Appends the walking-bass role and motion to another step's annotation.
 
-    The role is worth printing because the thumb line is no longer uniformly chord
+    The role is worth printing because the thumb line is not uniformly chord
     tones - two thirds of the notes in a textbook walk are extensions or chromatic
     approaches - so a reader counting strings would otherwise wonder why the bass is
     not playing the chord the name above it says.
@@ -249,15 +240,12 @@ def format_progression(steps: List[ArrangementStep]) -> str:
         G7       B4  x-x-5-7-6-7
         Cmaj7    C5  x-x-9-9-8-8
 
-    This used to take `vertical=True` to render each step as a six-line vertical
-    block, and the `--vertical` CLI flag existed only to reach it. Both are gone:
-    a whole-progression staff is what a player reads, and `format_tab_staff` in
-    `tabstaff` renders one, with the chords on their real beats. **This renderer is
-    now the compact one-line summary and nothing else**, which is the shape the
-    demo and `make demo` print.
+    The six-line vertical form is not this renderer's: a whole-progression staff is what
+    a player reads, and `format_tab_staff` in `tabstaff` renders one, with the chords on
+    their real beats. **This renderer is the compact one-line summary and nothing else**,
+    which is the shape the demo and `make demo` print.
 
-    The six-line form is not gone from the library, only from here: a single
-    voicing still renders vertically through `Voicing.tab_block()` / `.tab()` and
+    A single voicing still renders vertically through `Voicing.tab_block()` / `.tab()` and
     `ArrangementStep.tab_block()`, which is where `_tab_block_from_cells` lives.
 
     Args:

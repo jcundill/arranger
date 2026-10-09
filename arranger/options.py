@@ -148,7 +148,7 @@ class ArrangeOptions:
     # data, not control flow. Absent or None for an index means no restriction, which
     # is exactly the library's own behaviour.
     bass_pcs: Optional[Mapping[int, Optional[int]]] = None
-    # The ranking used to honour `bass_pcs`, passed in rather than imported:
+    # The ranking that honours `bass_pcs` is passed in rather than imported:
     # `slash_bass_cost` lives in `arranger.slots`, which reaches `decisions` through
     # `steps`, so a module-level import either way would be a cycle. It is a field
     # rather than a module global because a slash-bass preference is the only reason

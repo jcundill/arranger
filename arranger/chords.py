@@ -191,7 +191,7 @@ def normalised_harmony(
 def sounding_harmony(step: ArrangementStep) -> Tuple[Optional[str], Optional[str]]:
     """The harmony a step actually sounds, normalised so two spellings compare equal.
 
-    Used to decide whether a repeated melody is still a hold: a note repeating
+    Decides whether a repeated melody is still a hold: a note repeating
     across a *chord change* is not a held shape, it is a new harmony that the
     held soprano has to be heard against.
     """

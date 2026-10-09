@@ -344,18 +344,15 @@ def _place_bass(
     string.
 
     `held` is the shape still ringing under a `bass_only` step - see `_held_shape`.
-    It matters for **four** of the questions below at once, and passing it is the
-    fix for the unplayable walking bass in `docs/open-issues.md` item 1. A `bass_only`
-    step's own vector holds only the melody, so measuring against it alone gets all
-    four wrong: the thumb is placed on a string the hand is already fingering, it is
+    It matters for **four** of the questions below at once, and passing it is what keeps
+    a `bass_only` step playable: that step's own vector holds only the
+    melody, so measuring against it alone gets all
+    four wrong - the thumb is placed on a string the hand is already fingering, it is
     allowed to sound *above* the held shape's bottom note, its proximity is measured
     from a fret the hand is not at, and its fret is counted as though it stood alone
-    under the fingers rather than joining four frets already down. On "But Not For Me"
-    bar 5 the first three put the thumb on the D string at fret 1 while the hand held
-    frets 6-8 - a seven-fret stretch that no per-step span check can see, because
-    every individual step is tidy. The fourth is what a `targets` arrangement got
-    wrong instead, on "Tenor Madness" bar 40, and `fingers.can_fret` is what answers
-    it (`docs/open-issues.md` item 12).
+    under the fingers rather than joining four frets already down. The first three are
+    `docs/open-issues.md` item 1; the fourth is item 12, and `fingers.can_fret` is what
+    answers it.
 
     The rule is proximity, not string order. The thumb is part of the hand, and
     adjacent strings are five semitones apart, so "play the lowest string" and "stay
@@ -389,10 +386,9 @@ def _place_bass(
     When **no** candidate survives, one of three things has happened, and the message
     `steps._attach_bass` emits names all three because none of them is visible from
     outside: no free string below the melody, **no octave of the wanted pitch below the
-    shape's own lowest note**, or a fifth fret for four fingers. Measured over the
-    committed heads the split is **0 / 38 / 1** of 39 refusals
-    (`docs/open-issues.md` item 13) - so the middle clause is the common case and the
-    one the text did not mention for as long as the other two existed.
+    shape's own lowest note**, or a fifth fret for four fingers. The middle clause is
+    the common case, which is what the text failed to mention for as long as the other
+    two existed; the counts are in `docs/open-issues.md` item 13.
 
     Reach (`0..18`) is a fourth, separate test: `note_to_fret` returning a fret says
     the pitch is playable and says nothing at all about where it lands.
@@ -650,11 +646,10 @@ def _melody_timeline(
     renderers convert with - so four quarters of whole note is `beat_type` beats and a
     duration becomes `duration * beat_type` beats. It is **not** `duration *
     beats_per_bar`: the two agree only where the numerator equals the denominator, which
-    is 4/4 and 2/2 and so six of the seven committed heads. In 3/4 the count is 3 and a
-    whole note is 4 beats, so every span came out a quarter short - a wrongness with no
-    effect on the committed heads, because the walk's chord timeline is onset-driven,
-    and measured at 0 of 186 steps on the waltz. It is fixed rather than left, because
-    the next metre-sensitive rule would inherit it.
+    is 4/4 and 2/2 and so six of the seven committed heads. In 3/4 the count is 3 while a
+    whole note is 4 beats, so `duration * beats_per_bar` would make every span a quarter
+    short. It is written as `duration * beat_type` rather than left, because the next
+    metre-sensitive rule would inherit the error - see `docs/open-issues.md` item 15.
 
     `beats_per_bar` is still here and still the *count*: `_beat_offset` places a
     `(bar, beat)` pair with it, and that is a question about how many beats a bar has
@@ -1056,17 +1051,15 @@ def thumb_capacity(texture: str, role: str) -> Optional[int]:
     unbounded rather than as zero.
 
     Derived from the tables rather than listed, so a texture added to `TEXTURE_STYLES`
-    cannot join the thumb-line route without its capacity being measured too. Measured
-    across this tree:
+    cannot join the thumb-line route without its capacity being measured too. Across
+    this tree:
 
         a walking_bass fill                        all three free
         targets, a walking_bass target             one
-        uniform                                     one - it was **zero** while
-                                                    `drop24`'s (4,2,1,0) set, which
-                                                    spanned the whole thumb range, existed
+        uniform                                     one
 
-    Nothing in the tree is refused any more, and that follows from the grip tables rather
-    than from this rule: the worst case anywhere is now one free string, which is the
+    Nothing in the tree is refused, and that follows from the grip tables rather
+    than from this rule: the worst case anywhere is one free string, which is the
     threshold. A
     melody-only **selection** is not in this table at all: its upper shapes are
     single frets, and its capacity is answered in `bass_allowed`, where the route
@@ -1112,30 +1105,24 @@ def _worst_free_capacity(string_sets: Sequence[Tuple[int, ...]]) -> int:
 def comping_capacity(notes: int, bass_voice: bool = False) -> int:
     """How many thumb strings a **melody-free comping shape** leaves free, worst case.
 
-    **`thumb_capacity` cannot answer this, and asking it to was a bug.** That function
+    **`thumb_capacity` cannot answer this.** That function
     derives its answer from `TEXTURE_GRIPS`, which describes the shapes the
     melody-bearing route generates. On the comping route the shapes come from
-    `get_comping_voicings` instead, and the texture is *inert*: measured on
-    `tests/data/but_not_for_me.mxl`, all 80 comping shapes are byte-identical under
-    `texture=uniform` and `texture=targets`. So `bass_allowed("uniform", "walk")` was
-    refusing a combination that is perfectly playable, on the strength of a palette
-    the comping route never uses - and `melody="alto,tenor", bass="walk"` under the
-    default texture produced **no thumb line at all** with the warning "uniform leaves
-    no bass string free for a target".
+    `get_comping_voicings` instead, and the texture is *inert* there: all 80 comping
+    shapes on `tests/data/but_not_for_me.mxl` are byte-identical under
+    `texture=uniform` and `texture=targets`. Asking `thumb_capacity` therefore refuses a
+    combination that is perfectly playable, on the strength of a palette the comping
+    route never uses - `bass_allowed("uniform", "walk")` refuses
+    `melody="alto,tenor", bass="walk"` under the default texture, which is
+    `docs/open-issues.md` item 9.
 
-    The warning was false on the facts, too. Every comping shape on that head sounds on
-    strings `(2, 3, 4, 5)` and never once on the low E or the A:
-
-        string 0 (low E)   0 steps
-        string 1 (A)       0 steps
-        string 2 (D)       1 step
-        string 3 (G)      19 steps
-        string 4 (B)      79 steps
-        string 5 (high E) 61 steps
+    Every comping shape on that head sounds on strings `(2, 3, 4, 5)` and never once on
+    the low E or the A, so the refusal was false on the facts too; the per-string counts
+    are in `docs/open-issues.md` item 9.
 
     **Derived from the generator rather than listed**, on the rule `harmony_allowed`
     follows and for the same reason: a family that can be voiced is not a list of
-    combinations somebody has to remember to extend. Measured here, worst case over the
+    combinations somebody has to remember to extend. The worst case over the
     sets `_comping_string_sets` may pick at each arity:
 
         1 note (an inner voice)   3 free
@@ -1181,15 +1168,13 @@ def bass_allowed(
     the same threshold covers both, and a future policy is refused or allowed on the
     same terms without this function being taught about it.
 
-    **No shipped texture fails it any more**, and that follows from the grip tables rather
-    than from this rule. `uniform` used to be the one that did: its palette held
-    `drop24`'s `(4,2,1,0)` set, which spanned all three thumb strings at once. That set was
-    removed for a right-hand reason of its own (`docs/fingering.md` §4.4), so the worst case
-    anywhere in the tree is now one free string - the rule's threshold - and every texture
-    carries every policy. The refusal and its reason string stay, because the question is
-    still the right one to ask: a *comping* arity that filled the neck is caught through
-    `comping_capacity`, and a texture added later whose palette reaches the whole thumb
-    range is caught here without this function being taught about it.
+    **No shipped texture fails it**, and that follows from the grip tables rather than
+    from this rule: the worst case anywhere in the tree is one free string - the rule's
+    threshold - so every texture carries every policy. The refusal and its reason string
+    stay, because the question is still the right one to ask: a *comping* arity that
+    filled the neck is caught through `comping_capacity`, and a texture added later whose
+    palette reaches the whole thumb range is caught here without this function being
+    taught about it.
 
     Note this is the **worst case across the sets a grip may use**, and in practice the
     selector rarely picks the worst one - measured on "But Not For Me", every step under

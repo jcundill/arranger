@@ -7,11 +7,9 @@ below knows what came before it, what the neck window is, or what the answer
 turned out to be.
 
 **The generators are free functions, and `VoiceLeadingEngine` keeps one-line
-`@classmethod` delegates.** They used to be classmethods, and roughly forty call
-sites in the tests and the front ends spell them
-`VoiceLeadingEngine.get_drop2_voicings(...)`; a refactor is not the moment to
-break those spellings. A delegate leaves one implementation, so there is nothing
-to keep in step.
+`@classmethod` delegates.** Roughly forty call sites in the tests and the front ends
+spell them `VoiceLeadingEngine.get_drop2_voicings(...)`, and the delegate keeps those
+spellings working. It leaves one implementation, so there is nothing to keep in step.
 
 The four non-contiguous string sets - 6-4-3, both 5-3-2s and 6-4-3-2 - are
 *searched* rather than stacked, because their voices are not in descending pitch
@@ -302,15 +300,13 @@ _BOTTOM_FOUR = frozenset((0, 1, 2, 3))
 
 # The degrees a duo's **second voice** may take: the root, or the 5th.
 #
-# This used to be the *melody's* degree list too, and it gated the whole family: a duo
-# was generated only under a root or a 5th in the melody, on the reasoning that a 3rd or
-# a 7th there "is the entire definition of the chord's function" and a bare pair under it
-# sounds like a mistake. That reasoning does not survive contact with the guide-tone
-# rule the duo is actually built from. A 3rd or a 7th in the melody is exactly the note
-# a guide tone is there to support - the guide tone *beneath* it states the function -
-# and it is the one case where the pair is unmistakably the chord rather than two passing
-# notes. So the melody gate is gone; see `_duo_offsets`, which takes its second voice
-# from SHELL_DEGREES and skips a unison so the fallback is never the melody itself.
+# It gates the *second voice*, not the melody. A duo under a 3rd or a 7th in the melody
+# is still a duo: that melody note is exactly the note a guide tone is there to support -
+# the guide tone *beneath* it states the function - and it is the one case where the pair
+# is unmistakably the chord rather than two passing notes. A melody gate on this list
+# would suppress exactly those cases, so there is none; see `_duo_offsets`, which takes
+# its second voice from SHELL_DEGREES and skips a unison so the fallback is never the
+# melody itself.
 #
 # A melody that is not a chord tone never reaches the duo at all: the non-chord-tone
 # strategies rewrite the chord before generation, which is why a b6 arrives here as the
@@ -485,9 +481,9 @@ def finger_skip_count(voicing: Voicing) -> int:
     This is a **shape**-level rule, which is the limit of its reach: a `bass_only` step
     merges a thumb note in *after* selection, so that gap is invisible here and §4.4
     measures the merged case at step level instead. And no selector reads this at all -
-    the engine enforces the rule by **not offering** the shapes that fail it, which is why
-    the four inner-skip `drop24` sets are gone from the table above. Only the `(5,3,2)`
-    shell can still answer nonzero, kept on purpose for the walking bass's three-layer
+    the engine enforces the rule by **not offering** the shapes that fail it, so no
+    inner-skip `drop24` set is in the table above. Only the `(5,3,2)`
+    shell can answer nonzero, kept on purpose for the walking bass's three-layer
     split; `tests/test_grips.py` is what holds the tables to it.
     """
     sounded = sorted(index for index, fret in enumerate(voicing.frets) if fret >= 0)
@@ -922,13 +918,10 @@ def _duo_offsets(
     The second voice is **the chord's own guide tone**, read from `SHELL_DEGREES`
     rather than from a list written out here. That is the same table a shell is built
     from, and it already encodes the arranging guide's rule: the 3rd, or the **4th** on
-    a suspended chord, with the 7th as the alternative. Re-encoding it here as a
-    `(4, 3, 0)` scan is what this used to do, and it had two faults. It listed no sus
-    degree at all, so `sus4`, `sus2` and `7sus4` - whose guide tone is the 4th, the 9th
-    and the 4th - admitted **no duo anywhere**, and its `0` (root) fallback was
-    unreachable in any case, filtered out by its own `d not in DUO_DEGREES` guard.
-    Reading the shared table agrees with the old behaviour for 25 of the 28 qualities,
-    supplies precisely the three that were dead, and cannot drift from the shell.
+    a suspended chord, with the 7th as the alternative. A hand-written `(4, 3, 0)` scan
+    here would list no sus degree, so `sus4`, `sus2` and `7sus4` - whose guide tone is
+    the 4th, the 9th and the 4th - would admit **no duo anywhere**; reading the shared
+    table gives them one and cannot drift from the shell.
 
     Preference within the table is `[0]`, then `[1]`. The fallback is **load-bearing,
     not decorative**: when the melody *is* the 3rd, `[0]` would place a unison under it,
@@ -1153,8 +1146,8 @@ def _place_drop2_6432(
 
     Ties are broken by fret spread then by position, matching _place_shell, so the shape
     a player would pick wins over the first one the search reaches. Ranking the survivors
-    is not cosmetic: an unranked search returns whatever comes first, which is how an
-    earlier measurement concluded this grip "would never be selected".
+    is not cosmetic: an unranked search returns whatever comes first, so the grip can look
+    as though it is never selected when it is merely ranked last.
     """
     allowed = {(root_pc + t) % 12 for t in tones}
     limit = GRIP_MAX_SPAN["drop2_6432"]
@@ -1222,9 +1215,9 @@ def _place_template(
 
     The span is checked on the frets actually placed, not as "within N of the soprano".
     Those are not the same condition: bounding each finger to five frets either side of
-    the soprano permits a span of ten, which is exactly what the 6-4-3 shell produced
-    before this was caught - the low E and D strings are five semitones apart in tuning,
-    so a shell that sounds correctly on them can sit at frets 8 and 0.
+    the soprano permits a span of ten. That is reachable in practice - the low E and D
+    strings are five semitones apart in tuning, so a 6-4-3 shell that sounds correctly
+    on them can sit at frets 8 and 0.
 
     Strings in the set the template does not use are left muted, which is how a
     three-note shell sits inside a four-string set and how 6-4-3 leaves the A string
@@ -1487,7 +1480,7 @@ DROP2_INTERVAL_SETS["mmaj7"] = DROP2_INTERVAL_SETS["mMaj7"]
 DROP2_INTERVAL_SETS["dom7"] = DROP2_INTERVAL_SETS["7"]
 DROP2_INTERVAL_SETS["M7"] = DROP2_INTERVAL_SETS["maj7"]
 
-# Degree pitch classes relative to chord root (used to match soprano note to inversion).
+# Degree pitch classes relative to chord root (matches the soprano note to an inversion).
 # Each entry lines up one-to-one with DROP2_INTERVAL_SETS[quality]: entry i is the
 # chord tone sitting in the top voice of template i.
 DEGREE_OFFSETS_FROM_ROOT = {
@@ -1555,13 +1548,12 @@ def _string_sets_for(grip: str, top_string: int) -> List[Tuple[int, ...]]:
     low-to-high tuple from the soprano (`strings[pivot:] + strings[:pivot]`) looks
     equivalent and is not: for the four-string block stored (2, 3, 4, 5) with the
     soprano on 5 it yields (5, 2, 3, 4), which walks *up* the neck for the next
-    three voices. That handed `drop3` and `closed` the G-string note on the G
-    string, the D-string note on the D string and the B-string note on the B
-    string while claiming to descend - the pitches were right and the strings were
-    not, and the span check then measured frets on strings the voice was never
-    meant for. Nothing noticed because neither grip generates anything at the
-    default span limit. A rotation is only order-preserving if the tuple is already
-    in the order being rotated *into*, and this one is stored the other way up.
+    three voices. That hands a voice the G-string note on the G string, the D-string
+    note on the D string and the B-string note on the B string while claiming to
+    descend - the pitches are right and the strings are not, and the span check then
+    measures frets on strings the voice was never meant for. A rotation is only
+    order-preserving if the tuple is already in the order being rotated *into*, and
+    this one is stored the other way up.
     """
     if grip == "drop2":
         # A caller may pass any `top_string`, and the historical behaviour is that the
@@ -1733,9 +1725,9 @@ def _shell_voicing(
         # the **first** guide tone (the 3rd, or the 4th on a sus chord) and drops the second,
         # which is the same preference order `_duo_offsets` already applies.
         #
-        # Refusing here instead would have made `--voices alto` fall through to the ordinary
-        # melody-bearing route - measured, it warned on every step and handed the horn's line
-        # back to the guitarist, which is the opposite of what naming one voice asked for.
+        # Refusing here would instead make `--voices alto` fall through to the ordinary
+        # melody-bearing route, which warns on every step and hands the horn's line back
+        # to the guitarist - the opposite of what naming one voice asked for.
         keep = 2 if notes >= 2 else 1
         needed = {(root_pc + degree) % 12 for degree in guide[:keep]}
         allowed = {(root_pc + tone) % 12 for tone in tones}

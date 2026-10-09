@@ -523,8 +523,7 @@ class Head:
         **A fact about the file, not about the melody** (§9.3 step A'). The loader
         records the measures it walked, so this is right for a head whose last chord
         outlasts its last note and for one with no notes at all - a chords-only lead
-        sheet, which the loader used to refuse outright. Nothing to guess: an empty
-        file still has its measure count.
+        sheet. Nothing to guess: an empty file still has its measure count.
 
         A `Head` built by hand carries no such range, so it falls back to the melody's
         span, which is what every fixture in the tests is.
@@ -753,9 +752,8 @@ def _duration_in_divisions(note: ElementTree.Element, divisions: int = 0) -> int
 
     MusicXML's specification says a tuplet's `<duration>` is *unreduced*: three
     eighth-note triplets are written as six divisions each, so a reader must divide
-    them by three or the bar runs a third long. **Real writers do not agree**, and this
-    one did not - which is a bug this function used to have, in the direction that
-    mattered.
+    them by three or the bar runs a third long. **Real writers do not agree**, so the
+    reader must decide which convention a file used.
 
     The two conventions are not distinguishable by arithmetic on the value alone: the
     fixture's triplet quarter is written `6720` in the divisions of 10080, and 6720
@@ -1116,10 +1114,9 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
                 # **The beat conversion is `_beat_from_onset`'s, not `cursor / divisions`.**
                 # `cursor/divisions` is quarters and a beat is `4 / beat_type` of them,
                 # and the one function is called from both places so a `<harmony>` and the
-                # note it precedes can never disagree about which beat they are on. This
-                # used to be the expression spelled out by hand, with `beats_per_bar` in
-                # place of `beat_type` - the denominator trap, which is invisible while
-                # the numerator and the denominator happen to be equal.
+                # note it precedes can never disagree about which beat they are on. It must
+                # use `beat_type`, not `beats_per_bar` - the denominator trap, which is
+                # invisible while the numerator and the denominator happen to be equal.
                 #
                 # `cursor` rather than `group_onset`, because the element sits *before*
                 # whatever follows it: a `<harmony>` after the bar's last note is recorded
@@ -1476,22 +1473,15 @@ def head_skeleton(
     emits is written: its slots are unioned with `chord_slots`', whose positions
     include ones no note occupies, and one list has one type (§9.3 step B).
 
-    There is no reduction here any more, and that is the point. `strategy` used to
-    name a grid - a chord change, a beat, an eighth, a sixteenth, or a note - and every
-    note was quantised onto it, so two notes closer together than the grid shared a slot
-    and one of them was silently dropped from the arrangement. Measured on the committed
-    triplet head, `eighths` kept 86 of 110 notes: 11 lost in the tuplet bars and **13 in
-    the straight ones**, because any pair closer than the grid collided. **A note of the
-    tune went missing and nothing said so.**
-
-    So the soprano plays the tune: every note the file wrote gets a slot, on the beat it
-    was written, down to the floor (a 16th in practice; 32nds do not occur in real
-    material). Where the *chords* fall is a separate question with its own axis, and
-    answering it here is what cost the notes.
+    **There is no reduction here.** The soprano plays the tune: every note the file wrote
+    gets a slot, on the beat it was written, down to the floor (a 16th in practice; 32nds
+    do not occur in real material). Where the *chords* fall is a separate question with
+    its own axis, and answering it here would quantise notes onto a grid and drop any pair
+    closer together than the grid - a note of the tune going missing with nothing said.
 
     `section` is a half-open (start, end) bar range, defaulting to the whole head.
-    `pick` is gone with the reduction: it chose which of several notes sharing a slot
-    represented it, and no two notes share a slot now.
+    `pick` is not needed: it chose which of several notes sharing a slot represented it,
+    and no two notes share a slot.
 
     A note under no harmony becomes a melody-only `NO_CHORD` step, which
     `arrange_progression` short-circuits rather than inventing a chord for. A note

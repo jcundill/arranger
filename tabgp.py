@@ -1,15 +1,13 @@
 """Guitar Pro 5 export for a whole arranged progression.
 
 This is a **third renderer family**, beside the ASCII/HTML staff in `tabstaff` and
-the MusicXML score in `tabxml`. It is also where the **fingering** now lives, because
+the MusicXML score in `tabxml`. It is also where the **fingering** lives, because
 GP5 is a *tab* format: it stores a fret number and a string for every note natively,
-so a chord shape survives the round trip exactly. `tabxml` used to write a TAB staff
-alongside its notation one, but `music21` cannot write a TAB staff a notation program
-renders correctly - it emits neither the six `<staff-lines>` nor a fret and string per
-note, and the patched-up document still displayed incorrectly in MuseScore 3. So the
-two renderers divide the work by what each format can do: **notation in MusicXML,
-tab here**, with `_events` and `_substitute_steps` shared so a head lands on the same
-beats in both files.
+so a chord shape survives the round trip exactly. `tabxml` writes no TAB staff, because
+`music21` cannot write one a notation program renders correctly - it emits neither the
+six `<staff-lines>` nor a fret and string per note. So the two renderers divide the work
+by what each format can do: **notation in MusicXML, tab here**, with `_events` and
+`_substitute_steps` shared so a head lands on the same beats in both files.
 
 What it writes is one guitar track of shapes, each carrying the chord name it is
 sounding, on the written rhythm, with a held shape written as one longer note
@@ -481,12 +479,9 @@ def _build_song(
                 # Only ever a real member. `PyGuitarPro`'s GP5 writer dereferences
                 # this field unconditionally, so a `None` here - the "no key GP5 can
                 # name" answer from `_key_signature` - raises `AttributeError` on the
-                # *second* bar and the file is never written. Bar 1 already survives
-                # that case because its key is set through the guarded assignment
-                # below, so the omission used to hide it: the first bar was written
-                # without a signature and the rest were not reached. `CMajor` is the
-                # format's own default and is what an absent signature means to every
-                # reader anyway.
+                # *second* bar and the file is never written. `CMajor` is the format's
+                # own default and is what an absent signature means to every reader
+                # anyway.
                 keySignature=key_signature or gp.KeySignature.CMajor,
             )
             song.measureHeaders.append(header)
