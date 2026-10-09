@@ -94,10 +94,12 @@ you whether a change is an improvement or a different library.
   Supports legacy dict-style access (`step["chord"]`).
   The optional `bar` / `beat` / `duration` (all default `None`) carry the timing the
   staff renderer needs; `has_timing` reports whether a step can be placed on a grid.
-  `repeated` (default `False`) marks a step whose melody repeats the previous step's
-  pitch **under an unchanged harmony**: the voicing is still generated in full, but the
-  renderers show only the soprano and hold the inner voices. A repeat across a chord
-  change is not a hold and is not marked. See
+  `repeated` (default `False`) marks a step whose melody holds the previous step's
+  pitch **on the same string, under an unchanged harmony**: the voicing is still
+  generated in full, but the renderers show only the soprano and hold the inner voices.
+  A repeat across a chord change is not a hold, and neither is one the selector voiced
+  on another string; the candidates for a hold are narrowed to the held string before
+  selection. See
   [Repeated melodies hold the shape](#repeated-melodies-hold-the-shape).
 - `format_progression(steps)` — module-level renderer for a whole
   arrangement: one line per step. Non-chord-tone steps are annotated via the shared
@@ -687,16 +689,41 @@ The Weimar transcription of "All the Things You Are" is the motivating case: at 
 61–63 it holds C4 across three chord changes (F-7, Bb-7, Eb7). The repeated Eb7 is a
 genuine hold — one strike, then the note alone. The two *changes* underneath it are not.
 
-The decision is deliberately **presentational, not a voicing change**:
+The decision has two halves, and only one of them is presentational.
 
-- `arrange_progression` still generates a full `Voicing` for every step. The
-  engine voice-leads from it, `midi_notes()` reports it, and a caller wanting the
-  literal shape still has it via `step.tab_line()`. What changes is that
-  `ArrangementStep.repeated` is set, and the renderers honour it.
+**Which shape is played is narrowed when the melody did not move.** A hold means the
+finger already sounding the note stays where it is and only the chord under it changes,
+so the candidates are filtered to the string the melody is on *before* the selector sees
+them — `decisions.hold_the_melody_string`. That is a filter over a list rather than a new
+cost criterion, for the reason the walking bass's finger budget is: ranking a hold above
+a jump cannot stop the jump, because both are legal shapes, and `span` deliberately
+outranks neck position in the tuple. Measured over the seven committed heads and the
+three textures: **21** of 2,399 steps change, every one of them under `targets` — 18 are a
+different shape and 3 are only the flag — while `uniform` and `walking_bass` are
+untouched. The narrowing **cannot starve a step**: a thin palette with nothing on the
+held string keeps its candidates unchanged, and such a step is then simply not marked
+`repeated`.
+
+**The flag itself is presentational.** `arrange_progression` still generates a full
+`Voicing` for every step. The engine voice-leads from it, `midi_notes()` reports it, and
+a caller wanting the literal shape still has it via `step.tab_line()`. What changes is
+that `ArrangementStep.repeated` is set, and the renderers honour it.
+
 - The flag is set by comparing **sounding pitches** (`max(midi_notes())`), not written
   note names, because either step may itself have been transposed down an octave by
   the `HIGH_FRET_LIMIT` rule. A run of four identical notes under one chord yields
   `[False, True, True, True]`.
+- **The melody must still be on that string.** `decisions.is_repeated_step` requires the
+  step's soprano string to equal the previous step's, because the renderers act on the
+  flag by striking the soprano alone and holding everything else: on another string no
+  finger is holding the note, so a marked step would mute the chord it had just voiced
+  and sound a note the hand is not on. `decisions.holds_the_shape` is the half that the
+  narrowing and the flag share. Measured: **22 of 202** marked steps re-struck the melody
+  on another string before the fix — every one of them under `targets`, where a fill's
+  compact 6-4-3 shell beats a same-string alternative on `span` — and **0 of 199** now.
+  The report that found it was bar 3 of the committed "All the Things You Are", four G4s
+  over `Eb7`: the two targets held the note on the B string and the two fills moved it to
+  the G string, four frets away, while the steps still claimed to be holds.
 - **The harmony must also be unchanged.** A note repeating across a *chord change* is
   not a hold: the ringing inner voices belong to the chord the hold began on, so
   printing the new chord's name over a single struck note claims a harmony that is not
@@ -714,6 +741,17 @@ The decision is deliberately **presentational, not a voicing change**:
 - `_step_annotation()` adds `(melody repeated - single note)`, because the
   chord name printed above a single note would otherwise imply a full voicing. The
   annotation is shared with `format_progression`, so the two cannot disagree.
+
+**The hole that is left, named rather than assumed away.** The narrowing happens on the
+melody-bearing route. The four melody-alone helpers (`_rescue_melody_alone`,
+`_demoted_to_melody_alone`, `_texture_fill_step`, `_no_chord_step`) still choose their
+string from the caller's `top_strings`, so a repeat reaching one of them keeps the old
+behaviour — re-stated rather than held, and never marked `repeated`, because
+`is_repeated_step` refuses a step whose predecessor sounds a single note. Counted over the
+committed heads: **67** steps that sound one note re-state the previous step's pitch under
+an unchanged harmony, and **one** of them records a different string — a `walking_bass`
+fill, whose one-note upper shape is bookkeeping rather than a strike, since a fill under a
+walk is `bass_only` and the previous shape is what is still ringing.
 
 The other strings are **left blank**, not marked `x`. The player is not being asked
 to mute anything — the strings are simply not part of this step, and five `x` say more

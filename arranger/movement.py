@@ -45,6 +45,8 @@ from .decisions import (
     MELODY_ALONE_NO_CHORD,
     MELODY_ALONE_REST,
     MELODY_ALONE_TEXTURE,
+    hold_the_melody_string,
+    holds_the_shape,
     is_bass_only,
     is_repeated_step,
     melody_alone_case,
@@ -1374,12 +1376,30 @@ def _harmonised_step(
     harmonized_as = prepared.harmonized_as
     is_non_chord_tone = prepared.is_non_chord_tone
 
+    # A melody that did not move is a **hold**: the previous shape is still ringing,
+    # so only the harmony under it changes. The candidates are therefore narrowed to
+    # the string the melody is already on *before* the selector sees them, which is a
+    # filter over a list rather than a new cost criterion - ranking a hold above a
+    # jump cannot stop the jump, because both are legal shapes, and `span` outranks
+    # position in the tuple precisely so the hand stays put. The rule, and the reason
+    # it comes back empty-handed rather than starving a thin palette, is
+    # decisions.hold_the_melody_string.
+    #
+    # `harmony` is computed once here and used for the `repeated` flag below, so "the
+    # note did not move" cannot mean two different things in one step.
+    harmony = normalised_harmony(name, harmonized_as)
+    prev_step = arrangements[-1] if arrangements else None
+    if prev_step is not None and holds_the_shape(
+        prev_step, Note(prepared.melody).midi_note(), harmony
+    ):
+        candidates = hold_the_melody_string(candidates, prev_step)
+
     # The whole selection rule lives in voicing_cost. The first chord has no
     # previous shape to lead from, so it falls back to "somewhere comfortable on
     # the neck"; every later chord is scored against the one before it, which is
     # what keeps the hand from jumping and lets a melody hold its place by
     # changing strings.
-    prev_voicing = arrangements[-1].voicing if arrangements else None
+    prev_voicing = prev_step.voicing if prev_step is not None else None
     # The tones the *written* chord allows, so the selector can prefer a
     # shape that is merely out of position over one that sounds a wrong note.
     # The root enables the bass-function tie-break in voicing_cost; it is None
@@ -1439,14 +1459,11 @@ def _harmonised_step(
             role=role, weight=weight, diagnostics=diagnostics,
         ):
             return
-    # A repeated melody is a soprano-only re-strike, so the renderers hold
-    # the inner voices. The rule - and the harmony-change case that is not
-    # a hold - is decisions.is_repeated_step.
-    repeated = is_repeated_step(
-        arrangements[-1] if arrangements else None,
-        best_voicing,
-        normalised_harmony(name, harmonized_as),
-    )
+    # A repeated melody is a hold, so the renderers strike the soprano alone and
+    # keep the inner voices ringing - and the shape was chosen on the string that
+    # makes that true. The rule - the harmony-change case that is not a hold, and
+    # the string clause - is decisions.is_repeated_step.
+    repeated = is_repeated_step(prev_step, best_voicing, harmony)
 
     arrangements.append(ArrangementStep(
         chord=name,

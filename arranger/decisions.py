@@ -347,12 +347,12 @@ def should_demote_to_melody_alone(voicing: Voicing, role: str) -> bool:
     return voicing.fret_span() >= GRIP_MAX_SPAN["drop2"] and role == ROLE_TARGET
 
 
-def is_repeated_step(
+def holds_the_shape(
     previous_step: Optional[ArrangementStep],
-    voicing: Voicing,
+    melody_midi: int,
     harmony: Tuple[Optional[str], Optional[str]],
 ) -> bool:
-    """Whether this step is a soprano-only re-strike of the step before it.
+    """Whether a step sounding `melody_midi` under `harmony` re-states the one before it.
 
     The melody sounds the same pitch, under an unchanged harmony. Compared on the
     **sounding** pitch rather than the written name, because a step either side of
@@ -387,6 +387,10 @@ def is_repeated_step(
     fret means there is nothing to hold. `melody_only` is then a special case of it
     and is kept as a named check because it reads as the intent rather than the
     arithmetic.
+
+    This is the half the two callers share: `is_repeated_step` asks it of the shape it
+    is about to write, and `movement._harmonised_step` asks it of the candidates while
+    there is still a choice left to narrow.
     """
     if previous_step is None or previous_step.melody_only:
         return False
@@ -395,10 +399,56 @@ def is_repeated_step(
         # voices, so the next step has to state whatever it voices rather than
         # suppress it.
         return False
-    if max(previous_step.voicing.midi_notes()) != max(voicing.midi_notes()):
+    if max(previous_step.voicing.midi_notes()) != melody_midi:
         return False
     return sounding_harmony(previous_step) == harmony
 
+
+def hold_the_melody_string(
+    candidates: List[Voicing],
+    previous_step: ArrangementStep,
+) -> List[Voicing]:
+    """The candidates that re-strike the melody where the hand already is.
+
+    Used by `movement._harmonised_step` when `holds_the_shape` says the note did not
+    move, so the selector may only choose a shape that keeps it. Changing the chord
+    under a held note is a change of *voicing*; moving the finger that is sounding the
+    tune is not part of it.
+
+    **Never narrows to nothing.** A palette with no shape on that string - the thin
+    `shell`/`interval` palette a `targets` fill uses, under a note the previous step
+    sang on a string those grips do not reach - comes back unchanged, so the widest
+    case is still decided by `voicing_cost` and a step is never left without a chord.
+    Such a step is then simply not marked `repeated`: `is_repeated_step` asks the same
+    question of the shape that won and answers no.
+    """
+    soprano = previous_step.voicing.soprano_string()
+    held = [voicing for voicing in candidates if voicing.soprano_string() == soprano]
+    return held or candidates
+
+
+def is_repeated_step(
+    previous_step: Optional[ArrangementStep],
+    voicing: Voicing,
+    harmony: Tuple[Optional[str], Optional[str]],
+) -> bool:
+    """Whether this step **holds** the step before it rather than re-striking it.
+
+    `holds_the_shape`, and one thing more: **the melody stays on the string it is
+    already on**. A hold is the previous chord still ringing with nothing re-attacked,
+    so the note that sounds has to be the hand's own finger in the place it already
+    is. When the shape that won has moved the melody to another string there is
+    nothing to hold - the renderers would mute the inner voices this step voices and
+    strike a soprano where the previous step has no finger, which is a jump rather
+    than a hold, and the chord just voiced would be thrown away. So the flag has to
+    mean exactly what the renderers do with it, and steering the melody onto the held
+    string in the first place is `hold_the_melody_string`.
+    """
+    if previous_step is None:
+        return False
+    if not holds_the_shape(previous_step, max(voicing.midi_notes()), harmony):
+        return False
+    return voicing.soprano_string() == previous_step.voicing.soprano_string()
 
 
 def select_step_voicing(

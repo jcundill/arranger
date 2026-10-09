@@ -325,13 +325,20 @@ class ArrangementStep:
     bar: Optional[int] = None
     beat: Optional[float] = None
     duration: Optional[float] = None
-    # True when this step's melody sounds the same pitch as the step before it. The
-    # step is then played as a *single note*: only the soprano string is struck and
-    # the rest are muted, the way a player reads a held melody rather than re-fingering
-    # the chord. The voicing is still generated in full - the engine needs a real shape
-    # to voice lead from, and `tab_line()` returns it for a caller who wants it.
-    # Defaulted to False, so an ordinary step and every existing construction are
-    # unaffected. See VoiceLeadingEngine.arrange_progression, which sets it.
+    # True when this step's melody holds the note the step before it already sounds:
+    # the same pitch, the same harmony under it, and the melody on the string it is
+    # already on. The step is then played as a *single note*: only the soprano string
+    # is struck and the rest are muted, the way a player reads a held melody rather
+    # than re-fingering the chord. The voicing is still generated in full - the engine
+    # needs a real shape to voice lead from, and `tab_line()` returns it for a caller
+    # who wants it. Defaulted to False, so an ordinary step and every existing
+    # construction are unaffected. See VoiceLeadingEngine.arrange_progression, which
+    # sets it.
+    #
+    # The string is part of the claim rather than a detail: on another string there is
+    # no finger to hold, so the renderers would strike a note the hand is not on and
+    # mute the chord this step voices. decisions.is_repeated_step holds the rule, and
+    # decisions.hold_the_melody_string is what keeps the melody where it is.
     #
     # Note the consequence across a chord change (ATTYA bars 61-63 hold C4 over
     # F-7, Bb-7, Eb7): the inner voices sounding under the held note belong to the
