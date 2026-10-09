@@ -231,10 +231,9 @@ def bass_cost(
 
     Note what is **not** in any of these: anything about the hand, the octave or the
     string. All three are physical, all three are decided in the placement step, and
-    none of them is knowable here. An earlier draft of the design carried a
-    "distance from the ideal octave of the previous note" term in exactly this tuple,
-    which quietly re-decided the octave in the wrong place - a descending line would
-    have committed to C4 before anything knew the hand was at fret 5.
+    none of them is knowable here. An "ideal octave" term in this tuple would re-decide
+    the octave in the wrong place: a descending line would commit to C4 before anything
+    knew the hand was at fret 5.
     """
     motion = 0 if previous_pc is None else _bass_distance(pitch_class, previous_pc)
     out_of_chord = 0 if pitch_class in permitted_pcs else 1
@@ -363,12 +362,10 @@ def _place_bass(
 
     `hand_fret` is the **lowest active fret of the shape the hand is holding** - the
     held one where there is one, otherwise the upper voicing's. Not `avg_fret` and
-    not `top_fret`. That is the measured choice: over the plan's own worked example,
-    measuring to the lowest active fret matches 26 of the 28 readable bass notes
-    against 24 for the average, because a shell's low voice is the note the thumb is
-    trying to join. `avg_fret` and `top_fret` agree with each other on every one of
-    those notes, so neither is contradicted by the evidence - the average is simply
-    dragged up by the melody, which is up an octave from the position the hand is in.
+    not `top_fret`, because a shell's low voice is the note the thumb is trying to
+    join: ranking to the lowest active fret matches more of the readable bass notes than
+    the average does, which is dragged up by the melody an octave above the position the
+    hand is in. `docs/open-issues.md` item 1 holds the measurement.
 
     Three filters are **not** tie-breaks, because each rejects candidates that would
     be wrong rather than merely further away:
@@ -851,8 +848,7 @@ def _walking_bass_line(
 
     A chord lasting two bars is re-anchored on the second downbeat, because the
     anchor is a **metric** event, not a harmonic one: re-striking the root is what
-    marks the bar, and suppressing it would leave that bar unmarked. An earlier draft
-    of the design held the opposite, and was wrong.
+    marks the bar, and suppressing it would leave that bar unmarked.
 
     `onsets=None` - `timings=None`, or a `chords` skeleton - means there is no beat
     grid, so there is nothing to walk four quarters across. It degrades to one note
@@ -1177,19 +1173,20 @@ def bass_allowed(
     taught about it.
 
     Note this is the **worst case across the sets a grip may use**, and in practice the
-    selector rarely picks the worst one - measured on "But Not For Me", every step under
-    the old tables still left a string. So the rule is deliberately conservative: it refuses
+    selector rarely picks the worst one, so the rule is deliberately conservative: it refuses
     a combination that would *usually* work rather than shipping a line that is occasionally
     holed, because a bass line with gaps in it is worse than no bass line.
+    `docs/engine.md` holds the measurement.
 
     The alternative is named in the reason string, so a refusal is a sentence a player can
     act on rather than a policy they have to reverse-engineer.
 
     **`notes` and `bass_voice` are the comping route's half of the question, and they
     are why this function takes them.** On the comping route the left hand's shapes are
-    not described by `TEXTURE_GRIPS` at all - it is inert there, measured 80/80 shapes
-    byte-identical across `uniform` and `targets` - so passing a texture here and
-    refusing on it was the `comping_capacity` bug. The route is stated by the *caller*
+    not described by `TEXTURE_GRIPS` at all - the texture is inert there, so passing one
+    here and refusing on it refuses a combination that is perfectly playable, which is
+    `docs/open-issues.md` item 9. `comping_capacity`'s own docstring holds the per-arity
+    table. The route is stated by the *caller*
     passing them rather than inferred from the texture, because the texture cannot
     distinguish it: `uniform` is a real palette on one route and a meaningless name on
     the other, and only the engine's own route decision knows which.
@@ -1207,9 +1204,10 @@ def bass_allowed(
     if melody_only and notes is None:
         return True, ""
     if notes is not None:
-        # The comping route: measured 1..3 free thumb strings at every arity, so this
-        # cannot refuse. Checked rather than assumed, so a future arity that really did
-        # fill the neck is caught here rather than arriving as an unplaceable line.
+        # The comping route: `comping_capacity` leaves at least one thumb string free at
+        # every arity, so this cannot refuse. Checked rather than assumed, so a future
+        # arity that really did fill the neck is caught here rather than arriving as an
+        # unplaceable line.
         if comping_capacity(notes, bass_voice) < 1:
             return False, _comping_no_room_reason(notes, bass_voice)
         return True, ""

@@ -173,6 +173,14 @@ the melody-only vector got wrong:
 - **`hand_fret`** — the proximity ranking now measures from where the fingers
   actually are, which is the original complaint.
 
+The **lowest active fret** rather than the shape's average or its top fret, and that was
+measured rather than preferred: over the plan's own worked example, ranking to the lowest
+active fret matches **26** of the 28 readable bass notes where the average matches **24**,
+because a shell's low voice is the note the thumb is trying to join. `avg_fret` and
+`top_fret` agree with each other on every one of those notes, so neither is contradicted by
+the evidence - the average is simply dragged up by the melody, which sits an octave above
+the position the hand is in.
+
 One subtlety cost a correction mid-implementation. The held vector contains the
 thumb's *own* previous note, because a target folds the thumb into its fret
 vector. Treating that as structure to stay beneath forbids every repeated and
