@@ -894,6 +894,233 @@ def _no_chord_step(
     _attach_bass(arrangements[-1], slot.bass, arrangements, diagnostics)
 
 
+def _comping_step(
+    arrangements: List[ArrangementStep],
+    slot: _Slot,
+    *,
+    progression: Sequence[Tuple[Optional[str], str, str]],
+    index: int,
+    chord_type: str,
+    name: str,
+    note_str: Optional[str],
+    melody_note: Optional[Note],
+    melody_onsets: Optional[Container[int]],
+    voices: Tuple[str, ...],
+    harmony_family: str,
+    non_chord_tone: str,
+    fret_min: int,
+    fret_max: int,
+    bass_pcs: Optional[Mapping[int, Optional[int]]],
+    slash_bass_cost_for: Optional[Callable[[Sequence[int], Optional[int]], int]],
+    bar: Optional[int],
+    beat: Optional[float],
+    duration: Optional[float],
+    role: str,
+    weight: int,
+    diagnostics: Diagnostics,
+) -> bool:
+    """The comping route: the guitar harmonises, somebody else sings.
+
+    Taken before `prepare_step`, because `prepare_step` is built around a melody
+    to pin: it asks `get_all_grip_voicings` for shapes carrying this note on their
+    topmost string, and every one of them would put the tune back on the guitar.
+    There is nothing to subtract afterwards - the guitar's part was never
+    generated - so the candidates have to come from the melody-free generator in
+    the first place.
+
+    Deliberately *after* the NC branch and the melody-alone branch, because both
+    are cases where there is no harmony to state: an NC bar has no chord at all,
+    and a melody-only selection's fill has already committed to playing one note.
+    Under 9.3 step D the caller reaches this function whenever the guitar does not
+    **sing** the slot - a selection without a soprano, or a position the tune is
+    silent at - and never on a melody-only selection, whose note-less slots were
+    skipped at the top.
+
+    Returns **True** when the slot is handled. **False** means no guide-tone shape
+    was found in a playable position while the slot still has a melody to voice,
+    so the caller should fall through to the melody-bearing route: the chord of
+    the tune is still owed to the band, and the guitar playing the tune is a worse
+    answer than a thin shape and a better one than silence.
+    """
+    # An `NC` bar has no chord, so there is no guide tone to state and
+    # nothing at all for the guitar to play under the horn's line. That is
+    # a real hole in the part and it is reported as one, in one sentence -
+    # rather than reaching `get_comping_voicings`, which correctly refuses a
+    # chord with no root, and then falling through to a melody-bearing route
+    # that would either warn twice or hand the horn's line back to the
+    # guitarist. Skipping is the honest answer: the guitar is silent on this
+    # bar, and the horn is not.
+    if chord_type == NO_CHORD or name == NO_CHORD:
+        diagnostics.warn(
+            f"Warning: {name} has no chord and this voice selection "
+            f"({', '.join(voices)}) leaves the guitar nothing to comp; "
+            f"skipping the bar"
+        )
+        return True
+    # --- the non-chord-tone strategy, at harmony level (§9.3 step C) ---
+    #
+    # The melody is *not* on the guitar here - the horn has it - so a
+    # substitution changes what the guitar **states**, not what it sings.
+    # `melody_pc` stays None below, so a comping shape is still held to the
+    # substitute's full tone set; only the chord the shape is drawn from
+    # moves. `D5` over `Cmaj7` therefore gives `Cmaj9` (extension) or
+    # `Bdim7` (diminished) under the guide-tone voices, exactly as the
+    # melody route re-voices it.
+    comp_chord_type, comp_name = chord_type, name
+    comp_strategy: Optional[str] = None
+    comp_harmonized_as: Optional[str] = None
+    comp_is_non_chord_tone = False
+    # §9.2: reharmonise **at an onset**. A held position was decided where
+    # the note began, and a silent one has nothing to resolve. `melody_onsets`
+    # is the caller's onset set; None means every slot is an onset, the right
+    # answer for a hand-built progression that carries no timeline.
+    if (
+        melody_note is not None
+        and (melody_onsets is None or index in melody_onsets)
+    ):
+        substitute = _resolve_substitute_harmony(
+            melody_note,
+            chord_type,
+            name,
+            non_chord_tone,
+            next_melody=_next_resolution_melody(
+                progression, index, melody_onsets
+            ),
+        )
+        if substitute is not None:
+            comp_chord_type, comp_name, comp_strategy = substitute
+            comp_harmonized_as = comp_name
+            comp_is_non_chord_tone = True
+            # A guitarist handed `Cmaj7 -> Bdim7` with no melody on their own
+            # part cannot see why the chord moved; the note that forced it is
+            # the horn's, so it has to be named here or the part reads wrong.
+            diagnostics.warn(
+                f"Warning: comping {name} as {comp_name} "
+                f"({comp_strategy}) to accommodate the melody note "
+                f"{note_str}"
+            )
+    # How many chord voices the guitar states here. **A voice is a *role*
+    # in the stack, not a count of parts played twice** - `--voices
+    # alto,tenor` is two notes, and padding it to three would put a voice
+    # in the part that belongs to the bassist.
+    #
+    # **A named soprano that is not singing is not one of the sounding
+    # voices** (§9.3 step D). On the comping route the selection has no
+    # soprano and this is `len(voices)`, exactly as before. On a *singing*
+    # selection reaching this branch - a grid position the tune is silent
+    # at - the soprano has no note to sing, so the shape is built from the
+    # voices that do sound: `soprano,alto,tenor,bass` states a three-voice
+    # shell on the offbeats, not a four-voice shape with a redundant root.
+    # (That four-note comping shape is `docs/comping-styles.md` §9.4, and it
+    # needs new string sets - deliberately not this step.)
+    comp_notes = len([voice for voice in voices if voice != MELODY_SOPRANO])
+    candidates = _grips.get_comping_voicings(
+        comp_chord_type,
+        chord_name=comp_name,
+        fret_min=fret_min,
+        fret_max=fret_max,
+        notes=comp_notes,
+        # **Whether this selection is the bass voice and nothing else**,
+        # which arity cannot say: `alto`, `tenor` and `bass` all ask for one
+        # note. Measured before this was passed, all three produced
+        # byte-identical arrangements on strings 1-3 - the middle of the
+        # neck - and the bass voice is the one selection whose register is
+        # part of what it *is*. Derived from the resolved voices rather than
+        # an extra CLI flag, so the two spellings of one request cannot
+        # disagree.
+        bass_voice=voices == (MELODY_BASS,),
+        # Whether this part states both guide tones **and** a root or 5th
+        # under them. The one degree family neither `notes` nor
+        # `bass_voice` can express, and derived from the resolved family
+        # rather than passed as another flag, so the two spellings of one
+        # request cannot disagree.
+        shell_root=harmony_family == HARMONY_SHELL_ROOT,
+    )
+    if not candidates:
+        if melody_note is None:
+            # The ordinary fallback below voices *the melody*, and this
+            # slot has none to voice - there is no thin shape to fall back
+            # to either, so the chord of the tune cannot be stated here at
+            # all. Reported as the hole it is and skipped; the next grid
+            # position still gets its chance.
+            diagnostics.warn(
+                f"Warning: no guide-tone comping shape found for {name} "
+                f"and no melody note at this position to fall back to; "
+                f"skipping the slot"
+            )
+            return True
+        # No guide-tone shape in a playable position. The chord of the tune
+        # is still owed to the band, so fall through to the ordinary
+        # melody-bearing route rather than dropping the bar - the same
+        # trade `prepare_step` makes when a strategy finds nothing. The
+        # guitar plays the tune here, which is a worse answer than a thin
+        # one and a better one than silence.
+        diagnostics.warn(
+            f"Warning: no guide-tone comping shape found for {name}; "
+            f"falling back to voicing the melody on the guitar"
+        )
+    else:
+        # The root, read once for the selector's bass-function tie-break.
+        # `get_comping_voicings` has already refused to generate anything
+        # without a root, so by this point it is never None - the check is
+        # read from the same place the generator read it rather than
+        # re-derived, so the two cannot disagree.
+        _canonical, root_pc, _tones = _grips._chord_context(comp_chord_type, comp_name)
+        arrangements.append(ArrangementStep(
+            chord=name,
+            # The written note, which is the horn's line. The guitar does not
+            # sound it - `melody_voiced=False` is what says so.
+            melody=note_str,
+            voicing=select_step_voicing(
+                candidates,
+                arrangements[-1].voicing if arrangements else None,
+                fret_min,
+                fret_max,
+                # The tones the written chord allows. Passed even though the
+                # generator already filters on them: `voicing_cost` counts
+                # wrong notes itself, and a generator that could be wrong
+                # should not be the only thing standing between a chord symbol
+                # and a note that is not in it.
+                ChordParser.get_chord_tones(comp_chord_type, comp_name),
+                # The root, which enables the bass-function tie-break. None
+                # for a chord whose name will not parse, which leaves that
+                # criterion unasked rather than guessing a bass - the same
+                # rule the ordinary route follows.
+                root_pc,
+                # No `melody_pc`: there is no melody on the guitar for the
+                # wrong-note count to excuse, which is what lets a comping
+                # shape be held to the chord's full tone set.
+                None,
+                # The corpus's slash bass, honoured before selection rather
+                # than after, exactly as on the ordinary route.
+                bass_pcs.get(index) if bass_pcs else None,
+                slash_bass_cost_for,
+            ) or candidates[0],
+            # A comping shape is three voices by construction, so `partial`
+            # is always true and is not worth re-deriving per step.
+            partial=True,
+            bar=bar,
+            beat=beat,
+            duration=duration,
+            role=role,
+            metric_weight=weight,
+            bass_only=is_bass_only(slot.bass_only, role),
+            melody_voiced=False,
+            # What the substitution changed about the *harmony*, reported the
+            # way the melody route reports it: `chord` stays the written
+            # symbol, and these three say what was actually stated under the
+            # horn's line (§9.3 step C).
+            non_chord_tone=comp_is_non_chord_tone,
+            strategy=comp_strategy,
+            harmonized_as=comp_harmonized_as,
+        ))
+        _attach_bass(
+            arrangements[-1], slot.bass, arrangements, diagnostics
+        )
+        return True
+    return False
+
+
 def arrange_progression(
     progression: Sequence[Tuple[Optional[str], str, str]],
     top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
@@ -1328,197 +1555,22 @@ def arrange_progression(
             continue
 
         # --- The comping route: the guitar harmonises, somebody else sings ---
-        #
-        # Taken before `prepare_step`, because `prepare_step` is built around a
-        # melody to pin: it asks `get_all_grip_voicings` for shapes carrying this
-        # note on their topmost string, and every one of them would put the tune
-        # back on the guitar. There is nothing to subtract afterwards - the guitar's
-        # part was never generated - so the candidates have to come from the
-        # melody-free generator in the first place.
-        #
-        # Deliberately *after* the NC branch above and the melody-alone branch
-        # before it, because both are cases where there is no harmony to state:
-        # an NC bar has no chord at all, and a melody-only selection's fill has
-        # already committed to playing one note. Under §9.3 step D this branch is
-        # reached whenever the guitar does not **sing** this slot - a selection
-        # without a soprano, or a position the tune is silent at - and never on a
-        # melody-only selection, whose note-less slots were skipped at the top.
+        # See `_comping_step`: taken before `prepare_step` because there is no
+        # melody for the guitar here, and only after the NC and melody-alone
+        # branches, which are the cases with no harmony to state.
         if not sings_here and not melody_only:
-            # An `NC` bar has no chord, so there is no guide tone to state and
-            # nothing at all for the guitar to play under the horn's line. That is
-            # a real hole in the part and it is reported as one, in one sentence -
-            # rather than reaching `get_comping_voicings`, which correctly refuses a
-            # chord with no root, and then falling through to a melody-bearing route
-            # that would either warn twice or hand the horn's line back to the
-            # guitarist. Skipping is the honest answer: the guitar is silent on this
-            # bar, and the horn is not.
-            if chord_type == NO_CHORD or name == NO_CHORD:
-                diagnostics.warn(
-                    f"Warning: {name} has no chord and this voice selection "
-                    f"({', '.join(voices)}) leaves the guitar nothing to comp; "
-                    f"skipping the bar"
-                )
-                continue
-            # --- the non-chord-tone strategy, at harmony level (§9.3 step C) ---
-            #
-            # The melody is *not* on the guitar here - the horn has it - so a
-            # substitution changes what the guitar **states**, not what it sings.
-            # `melody_pc` stays None below, so a comping shape is still held to the
-            # substitute's full tone set; only the chord the shape is drawn from
-            # moves. `D5` over `Cmaj7` therefore gives `Cmaj9` (extension) or
-            # `Bdim7` (diminished) under the guide-tone voices, exactly as the
-            # melody route re-voices it.
-            comp_chord_type, comp_name = chord_type, name
-            comp_strategy: Optional[str] = None
-            comp_harmonized_as: Optional[str] = None
-            comp_is_non_chord_tone = False
-            # §9.2: reharmonise **at an onset**. A held position was decided where
-            # the note began, and a silent one has nothing to resolve. `melody_onsets`
-            # is the caller's onset set; None means every slot is an onset, the right
-            # answer for a hand-built progression that carries no timeline.
-            if (
-                melody_note is not None
-                and (melody_onsets is None or index in melody_onsets)
+            if _comping_step(
+                arrangements, slot,
+                progression=progression, index=index,
+                chord_type=chord_type, name=name, note_str=note_str,
+                melody_note=melody_note, melody_onsets=melody_onsets,
+                voices=voices, harmony_family=harmony_family,
+                non_chord_tone=non_chord_tone,
+                fret_min=fret_min, fret_max=fret_max,
+                bass_pcs=bass_pcs, slash_bass_cost_for=slash_bass_cost_for,
+                bar=bar, beat=beat, duration=duration,
+                role=role, weight=weight, diagnostics=diagnostics,
             ):
-                substitute = _resolve_substitute_harmony(
-                    melody_note,
-                    chord_type,
-                    name,
-                    non_chord_tone,
-                    next_melody=_next_resolution_melody(
-                        progression, index, melody_onsets
-                    ),
-                )
-                if substitute is not None:
-                    comp_chord_type, comp_name, comp_strategy = substitute
-                    comp_harmonized_as = comp_name
-                    comp_is_non_chord_tone = True
-                    # A guitarist handed `Cmaj7 -> Bdim7` with no melody on their own
-                    # part cannot see why the chord moved; the note that forced it is
-                    # the horn's, so it has to be named here or the part reads wrong.
-                    diagnostics.warn(
-                        f"Warning: comping {name} as {comp_name} "
-                        f"({comp_strategy}) to accommodate the melody note "
-                        f"{note_str}"
-                    )
-            # How many chord voices the guitar states here. **A voice is a *role*
-            # in the stack, not a count of parts played twice** - `--voices
-            # alto,tenor` is two notes, and padding it to three would put a voice
-            # in the part that belongs to the bassist.
-            #
-            # **A named soprano that is not singing is not one of the sounding
-            # voices** (§9.3 step D). On the comping route the selection has no
-            # soprano and this is `len(voices)`, exactly as before. On a *singing*
-            # selection reaching this branch - a grid position the tune is silent
-            # at - the soprano has no note to sing, so the shape is built from the
-            # voices that do sound: `soprano,alto,tenor,bass` states a three-voice
-            # shell on the offbeats, not a four-voice shape with a redundant root.
-            # (That four-note comping shape is `docs/comping-styles.md` §9.4, and it
-            # needs new string sets - deliberately not this step.)
-            comp_notes = len([voice for voice in voices if voice != MELODY_SOPRANO])
-            candidates = _grips.get_comping_voicings(
-                comp_chord_type,
-                chord_name=comp_name,
-                fret_min=fret_min,
-                fret_max=fret_max,
-                notes=comp_notes,
-                # **Whether this selection is the bass voice and nothing else**,
-                # which arity cannot say: `alto`, `tenor` and `bass` all ask for one
-                # note. Measured before this was passed, all three produced
-                # byte-identical arrangements on strings 1-3 - the middle of the
-                # neck - and the bass voice is the one selection whose register is
-                # part of what it *is*. Derived from the resolved voices rather than
-                # an extra CLI flag, so the two spellings of one request cannot
-                # disagree.
-                bass_voice=voices == (MELODY_BASS,),
-                # Whether this part states both guide tones **and** a root or 5th
-                # under them. The one degree family neither `notes` nor
-                # `bass_voice` can express, and derived from the resolved family
-                # rather than passed as another flag, so the two spellings of one
-                # request cannot disagree.
-                shell_root=harmony_family == HARMONY_SHELL_ROOT,
-            )
-            if not candidates:
-                if melody_note is None:
-                    # The ordinary fallback below voices *the melody*, and this
-                    # slot has none to voice - there is no thin shape to fall back
-                    # to either, so the chord of the tune cannot be stated here at
-                    # all. Reported as the hole it is and skipped; the next grid
-                    # position still gets its chance.
-                    diagnostics.warn(
-                        f"Warning: no guide-tone comping shape found for {name} "
-                        f"and no melody note at this position to fall back to; "
-                        f"skipping the slot"
-                    )
-                    continue
-                # No guide-tone shape in a playable position. The chord of the tune
-                # is still owed to the band, so fall through to the ordinary
-                # melody-bearing route rather than dropping the bar - the same
-                # trade `prepare_step` makes when a strategy finds nothing. The
-                # guitar plays the tune here, which is a worse answer than a thin
-                # one and a better one than silence.
-                diagnostics.warn(
-                    f"Warning: no guide-tone comping shape found for {name}; "
-                    f"falling back to voicing the melody on the guitar"
-                )
-            else:
-                # The root, read once for the selector's bass-function tie-break.
-                # `get_comping_voicings` has already refused to generate anything
-                # without a root, so by this point it is never None - the check is
-                # read from the same place the generator read it rather than
-                # re-derived, so the two cannot disagree.
-                _canonical, root_pc, _tones = _grips._chord_context(comp_chord_type, comp_name)
-                arrangements.append(ArrangementStep(
-                    chord=name,
-                    # The written note, which is the horn's line. The guitar does not
-                    # sound it - `melody_voiced=False` is what says so.
-                    melody=note_str,
-                    voicing=select_step_voicing(
-                        candidates,
-                        arrangements[-1].voicing if arrangements else None,
-                        fret_min,
-                        fret_max,
-                        # The tones the written chord allows. Passed even though the
-                        # generator already filters on them: `voicing_cost` counts
-                        # wrong notes itself, and a generator that could be wrong
-                        # should not be the only thing standing between a chord symbol
-                        # and a note that is not in it.
-                        ChordParser.get_chord_tones(comp_chord_type, comp_name),
-                        # The root, which enables the bass-function tie-break. None
-                        # for a chord whose name will not parse, which leaves that
-                        # criterion unasked rather than guessing a bass - the same
-                        # rule the ordinary route follows.
-                        root_pc,
-                        # No `melody_pc`: there is no melody on the guitar for the
-                        # wrong-note count to excuse, which is what lets a comping
-                        # shape be held to the chord's full tone set.
-                        None,
-                        # The corpus's slash bass, honoured before selection rather
-                        # than after, exactly as on the ordinary route.
-                        bass_pcs.get(index) if bass_pcs else None,
-                        slash_bass_cost_for,
-                    ) or candidates[0],
-                    # A comping shape is three voices by construction, so `partial`
-                    # is always true and is not worth re-deriving per step.
-                    partial=True,
-                    bar=bar,
-                    beat=beat,
-                    duration=duration,
-                    role=role,
-                    metric_weight=weight,
-                    bass_only=is_bass_only(slot.bass_only, role),
-                    melody_voiced=False,
-                    # What the substitution changed about the *harmony*, reported the
-                    # way the melody route reports it: `chord` stays the written
-                    # symbol, and these three say what was actually stated under the
-                    # horn's line (§9.3 step C).
-                    non_chord_tone=comp_is_non_chord_tone,
-                    strategy=comp_strategy,
-                    harmonized_as=comp_harmonized_as,
-                ))
-                _attach_bass(
-                    arrangements[-1], slot.bass, arrangements, diagnostics
-                )
                 continue
 
         # Every melody-bearing route below pins a note, and a slot with none has
