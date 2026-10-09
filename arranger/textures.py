@@ -21,8 +21,8 @@ The load-bearing line in this module is `_metric_weight` returning **-1** when
 there is no timing at all. A caller that does not know where its notes fall has
 not told us the note is weak; it has told us nothing, and treating the two the same
 would thin out every hand-written progression. That one value is what makes the
-feature opt-in: with no `timings` every slot is a target, and the output is
-byte-identical to what it always was.
+feature opt-in: with no `timings` every slot is a target, so the output is the one a
+caller who names no texture gets.
 """
 
 from __future__ import annotations
@@ -140,8 +140,7 @@ VOICE_NAMES: Tuple[str, ...] = (
 # middle voices" is one musical decision and not four strings.
 VOICES_NONE: Tuple[str, ...] = (MELODY_ALTO, MELODY_TENOR)
 
-# Every voice: the historical behaviour, the guitar playing the whole chord with the
-# melody on top.
+# Every voice: the guitar plays the whole chord with the melody on top.
 VOICES_ALL: Tuple[str, ...] = VOICE_NAMES
 
 MELODY_AUTO = "auto"
@@ -291,11 +290,11 @@ MELODY_POLICIES: Dict[str, Tuple[str, ...]] = {
 #   HARMONY_SHELL_ROOT both guide tones AND a root or 5th underneath them
 #   HARMONY_ROOT       the lowest note only: a root, else a 5th
 #
-# **`shell_root` is the one that is new**, and it is the case the guide-tone table cannot
-# express: `SHELL_DEGREES` says what must sound, `BASS_DEGREES_6432` says what may be the
-# bottom, and a shape needing both is a claim neither table makes alone. Measured at 11 of
-# 11 chords on the head in `tests/data/`, on the **existing** `(5,4,3)` shell sets, so it
-# needs no new string sets and no new grip family.
+# **`shell_root` is the case the guide-tone table cannot express**: `SHELL_DEGREES` says
+# what must sound, `BASS_DEGREES_6432` says what may be the bottom, and a shape needing
+# both is a claim neither table makes alone. It is reachable on the **existing** `(5,4,3)`
+# shell sets, so it needs no new string sets and no new grip family - the measurement is
+# in `docs/comping-styles.md` §4.1.
 HARMONY_FULL = "full"
 HARMONY_GUIDE = "guide"
 HARMONY_SHELL_ROOT = "shell_root"
@@ -308,12 +307,15 @@ HARMONY_STYLES: Tuple[str, ...] = (
     HARMONY_ROOT,
 )
 
-#: The one harmony family this engine can already voice. The other three are named here
-#: so the vocabulary exists and `harmony=` has something to validate against, but nothing
-#: is built on them yet - see `docs/comping-styles.md` §4.1 and §8 Stage C. `full` is the
-#: historical chord-melody, which the ordinary grip route voices rather than the comping
-#: generator, so it is **not** the comping route's default either.
-HARMONY_BUILT: Tuple[str, ...] = (HARMONY_GUIDE,)
+#: The families the comping generator voices. `shell_root` is a shape of its own - both
+#: guide tones with a root or 5th underneath, so three notes - and `root` is the
+#: lone-bass route under a `harmony=` name, which `harmony_allowed` gates to
+#: `voices=bass`. `full` is the exception, and the reason this constant is not simply
+#: `HARMONY_STYLES`: it is the whole-chord chord-melody, which the ordinary grip route
+#: voices when the guitar sings, so the comping generator has no implementation of it -
+#: see `docs/comping-styles.md` §4.1 and `docs/open-issues.md` item 17 for what asking
+#: for it on a comping arrangement does today.
+HARMONY_BUILT: Tuple[str, ...] = (HARMONY_GUIDE, HARMONY_SHELL_ROOT, HARMONY_ROOT)
 
 HARMONY_AUTO = "auto"
 
@@ -362,8 +364,8 @@ def resolve_harmony(
     the rule `bass_allowed` follows: an arrangement that says something other than what
     was asked for is worse than one that says nothing, and the caller is told which
     selection would work. Returning `guide` here is deliberate and is the *inert*
-    answer rather than a silent substitution - it is what the part said before this
-    axis existed.
+    answer rather than a silent substitution - it is what a part that names no
+    harmony gets.
     """
     resolved = HARMONY_POLICIES.get(harmony, harmony)
     allowed, reason = harmony_allowed(resolved, voices)
@@ -416,10 +418,10 @@ TARGET_BEATS: Tuple[int, ...] = (1, 3)
 # The grip families each role may use, by texture. This is the whole texture policy
 # in one table, and it is read by `_roles_for_slot` and its caller.
 #
-# `drop3` is listed among a target's grips but generates nothing at
-# GRIP_MAX_SPAN["drop3"] == 5, because drop-3 spans a twelfth by construction. That is
-# where the library already stands, so listing it costs nothing and means a future
-# span change takes effect without touching this code.
+# `drop3` is listed among a target's grips and does generate, on the bass-skipping sets
+# `GRIP_STRING_SETS["drop3"]` gives it - but never on the contiguous block, because drop-3
+# spans a twelfth by construction. Listing it also means a future span change takes effect
+# without touching this code.
 TEXTURE_GRIPS: Dict[str, Dict[str, Tuple[str, ...]]] = {
     "uniform": {"target": GRIP_PREFERENCE, "fill": GRIP_PREFERENCE},
     "targets": {
@@ -515,8 +517,8 @@ GRID_STYLES: Tuple[str, ...] = (
 )
 
 #: The named grids. `every_note` is the **shipped** behaviour - one chord per written
-#: melody note - and is what keeps the axis inert: an arrangement naming no grid is
-#: byte-identical to one from before this axis existed.
+#: melody note - and is what keeps the axis inert: an arrangement naming no grid takes
+#: `every_note`, so it is the arrangement the default builds.
 #:
 #: `joe_pass` is not invented here. It is
 #: [history/Arranging_Guide.md](history/Arranging_Guide.md) §"Joe Pass", which
@@ -568,7 +570,7 @@ def _melody_anchored_grid() -> str:
     """The grid every refusal falls back to: the one that names no positions.
 
     `every_note` today. Resolved from `GRID_DEFERS_TO_MELODY` rather than named here,
-    so the fallback cannot point at a grid that has stopped being melody-anchored.
+    so the fallback cannot point at a grid that is not melody-anchored.
     """
     for name, defers in GRID_DEFERS_TO_MELODY.items():
         if defers:
@@ -582,8 +584,8 @@ def parse_grid(argument: str) -> str:
     The same rule as `parse_harmony`: a single name out of a closed set, and
     `ValueError` on anything else. A pattern name is a musical claim about where a
     chord lands, so guessing one would return a part that comps somewhere the caller
-    did not ask for - worse than refusing, and worse than silence. `grid=auto` is no
-    longer vocabulary and is refused like any other unknown name.
+    did not ask for - worse than refusing, and worse than silence. `grid=auto` is not
+    vocabulary and is refused like any other unknown name.
     """
     text = argument.strip().lower()
     if text not in GRID_STYLES:
@@ -708,12 +710,12 @@ def resolve_grid(grid: str, beats_per_bar: int, diagnostics: Any) -> str:
 
     Unlike `resolve_harmony` there is no sentinel to resolve - `grid=auto` is
     withdrawn and the default is `every_note` outright - so an arrangement naming no
-    grid is byte-identical to one from before this axis existed.
+    grid takes `every_note`.
 
     A grid this metre cannot express is **refused rather than degraded**, on the rule
     every axis in this module follows. The fallback is the melody-anchored grid -
-    `every_note`, one chord per written note - which is the *inert* answer and what
-    the part said before this axis existed, rather than a silent substitution of some
+    `every_note`, one chord per written note - which is the *inert* answer and what a
+    part that names no grid gets, rather than a silent substitution of some
     other figure that does fit.
     """
     allowed, reason = grid_allowed(grid, beats_per_bar)
@@ -738,8 +740,8 @@ def _metric_weight(
     `beats_per_bar` is honoured rather than assumed, because a count without a
     denominator is not a metre. TARGET_BEATS names *beats*, so in 2/2 (two notated
     beats) beat 3 does not exist and only the downbeat is a target; in 3/4 beats 1
-    and 3 are targets exactly as they are in 4/4. This is the same reasoning the
-    MusicXML importer needed when it discovered 2/2 is not 2/4.
+    and 3 are targets exactly as they are in 4/4. `headxml`'s onset conversion and
+    `bass._melody_timeline` honour the same denominator.
 
     A beat is compared with `_BEAT_EPSILON` because a notated beat is a float and a
     tune rarely lands only on the integers: the middle note of a triplet inside beat 1
@@ -775,8 +777,8 @@ def _roles_for_slot(
 
       - an unknown texture is a programming error and raises, rather than silently
         arranging as `uniform`;
-      - `uniform` makes every slot a target, which is the historical behaviour and
-        the reason `arrange_progression` is unchanged unless a caller opts in;
+      - `uniform` makes every slot a target, which is the default and the reason
+        `arrange_progression` is unchanged unless a caller opts in;
       - a weight below zero means no timing was supplied, so the slot is a target;
       - a strong beat is a target and any other beat is a fill.
 

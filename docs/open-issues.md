@@ -7,7 +7,7 @@ comping axes, and item 10 came out of asking what a comping grid should do on a 
 melody does not enter. **Item 11 came out of the measurement
 [docs/fingering.md](fingering.md) §4.3 asked for**, and it is the one whose fix needed the
 *right* hand: a merged step could sound five strings, and no finger assignment was ever
-going to find it. **All except items 7 and 10 are now fixed**; each carries the
+going to find it. **All except items 7, 10, 13 and 17 are now fixed**; each carries the
 measurement that produced it and the stage that closed it, so the work can be read rather
 than re-derived. Items 1-3 were fixed in stages 1-3 the same day; item 4 needed
 a corrected diagnosis first, and items 5 and 6 turned out to be two real defects of
@@ -18,7 +18,10 @@ two share the notion of a held shape, though they turn out to be different bugs 
 1 was the *thumb* measured against the wrong shape, item 5 the *melody* measured over
 the wrong timeline.
 
-**Items 7 and 10 are open.** **Item 8 is fixed and is the one to read first if you are
+**Items 7, 10, 13 and 17 are open** — 7 and 10 are the large ones, 13 is a measured question
+with its fix left open on purpose, and 17 is the newest and the smallest: a `harmony=` value
+the comping route accepts and then answers with something else. **Item 8 is fixed and is the
+one to read first if you are
 here to learn from a defect**: it is a method whose comment described the correct
 behaviour while the code did the opposite, and it survived a green gate because every
 fixture happened to use the one input that did not trigger it. **Item 9 is the newest
@@ -2249,3 +2252,58 @@ collector, asserting one recorded warning), and
 fixture that raises **exactly one** warning - `Ab9` over `C4` under `--texture targets --bass walk` -
 so there is nothing to make the collector truthy first. Measured after: **0** warnings
 printed-but-not-collected on the same sweep, from 12.
+
+---
+
+## 17. A `harmony=` family the comping route accepts and answers with something else
+
+**Status:** OPEN, DIAGNOSED. Found while sweeping `textures.py` for the present tense: the
+comment on `HARMONY_BUILT` claimed all three of the other families were names "nothing is built
+on yet", and measuring which of them the comping generator actually voices turned up one that
+is accepted and then silently dropped.
+
+### The symptom
+
+`harmony=` is read only by the comping route, and `grips.get_comping_voicings` implements the
+degree families it is handed through *arity*: the guide tones, or a lone bass note. It has no
+implementation of `full` — "state every tone the quality defines" — because the whole-chord
+chord-melody is the **grip** route's job, reached when the guitar sings. But
+`harmony_allowed("full", ...)` returns True for every voice selection, so `resolve_harmony`
+passes the value through and the comping generator voices guide tones anyway.
+
+Measured on `[("D5","m7","Dm7"), ("C5","maj7","Cmaj7"), ("A4","7","A7"), ("G4","maj7","Gmaj7")]`,
+comparing `harmony=full` against the same arrangement with no `harmony` at all:
+
+| arrangement | `harmony=full` gives | equals the default? | warns? |
+|---|---|---|---|
+| `melody=alto,tenor` (comping) | guide tones | yes | **no** |
+| default voices (singing) | the whole chord | yes | no |
+
+The singing row is correct and not an accident of this bug: the axis is inert there, and a
+melody-bearing arrangement states the whole chord because that is the grip route's job. So the
+same flag is *honoured* on the route that does not read it and *dropped* on the route that
+does, with no warning on either.
+
+### Why it matters, and what is not decided
+
+Every other refusal in `textures` is derived and **loud**: `harmony_allowed` refuses a family
+the selection has no room for, `bass_allowed` refuses a palette, `grid_allowed` refuses a metre,
+and each names what would work. `full` is the one value refused by nothing that resolves to
+something other than itself — which is the failure `resolve_harmony`'s own docstring names,
+"an arrangement that says something other than what was asked for is worse than one that says
+nothing", while doing it.
+
+The fix is not decided, and both directions are live:
+
+- **Refuse it**, as the module refuses everything else it cannot voice — a branch in
+  `harmony_allowed`. That would be the first entry there not derived from arity, so it weakens
+  the property `harmony_allowed`'s docstring asserts of itself.
+- **Build it**, which is `docs/comping-styles.md` §9.4's four-note comping chord. It needs new
+  string sets and is deliberately not done, so this is the larger of the two.
+
+Recorded rather than fixed because it is a behaviour change on an axis whose document still
+lists four-note comping as a proposal. What is fixed is the *record*: `HARMONY_BUILT` names the
+families of `HARMONY_STYLES` the comping generator voices — `guide`, `shell_root` and `root` —
+and `full` is not among them. It previously named `guide` alone, which was wrong in the other
+direction, since `shell_root` reaches `get_comping_voicings(shell_root=True)` from
+`movement._comping_step` and `root` is the lone-bass route.
