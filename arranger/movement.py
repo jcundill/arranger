@@ -298,7 +298,7 @@ def _resolve_substitute_harmony(
     which is a melody-route move with no meaning where the generator builds a fresh
     comping shape on every slot.
     """
-    if strategy in ("legacy", "sustain") or not name:
+    if strategy == "sustain" or not name:
         return None
     canonical = ChordParser.canonical_quality(chord_type)
     if canonical not in ChordParser.CHORD_TONES_FROM_ROOT:
@@ -392,7 +392,7 @@ def prepare_step(
         and not _chords.is_chord_tone(melody_note, chord_type, name)
     )
 
-    if is_non_chord_tone and non_chord_tone != "legacy":
+    if is_non_chord_tone:
         # Strategy 3 first: holding the shape moves less than any re-voicing.
         if non_chord_tone == "sustain" and previous is not None:
             sustained = _grips.sustain_inner_voices(previous, sounding_melody)
@@ -1772,8 +1772,7 @@ def arrange_progression(
                      becomes Cmaj9), the default;
       'diminished' - Barry Harris 6/dim7 substitution (D over Cmaj7 -> Bdim7);
       'sustain'    - keep the previous chord's inner voices and move only the
-                     melody, for brief passing tones;
-      'legacy'     - keep the original quality-only fallback behaviour.
+                     melody, for brief passing tones.
     Steps whose melody is already a chord tone are unaffected by this choice.
 
     A step whose chord_type or name is NO_CHORD ("NC") is voiced as the melody

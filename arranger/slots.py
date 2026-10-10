@@ -102,8 +102,6 @@ def unresolved_steps(
         melody = Note(note)
         if VoiceLeadingEngine.is_chord_tone(melody, quality, name):
             continue
-        if non_chord_tone == "legacy":
-            continue
         resolved = VoiceLeadingEngine.resolve_non_chord_tone(melody, quality, name, non_chord_tone)
         if resolved is None:
             unresolved.append(index)

@@ -847,7 +847,7 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
 - Non-chord melody notes are only covered for the mappings in
   `NON_CHORD_TONE_EXTENSIONS` (9ths, 6/9s, 11ths, #11s, b13s, 13ths, the
   half-diminished 9th and the 9th over a plain triad) plus the dim7 substitution. An
-  unmapped non-chord tone prints a warning and keeps the legacy quality-only fallback,
+  unmapped non-chord tone prints a warning and keeps the quality-only fallback,
   which can sound the melody over a different chord's shape.
 - **A palette that cannot voice a chord leaves the tune alone** rather than dropping it.
   `shell`, `duo` and `interval` are built from the chord's own degrees, so they have no

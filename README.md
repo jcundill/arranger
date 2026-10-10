@@ -1006,7 +1006,7 @@ directly) to choose how such notes are harmonised:
 ```python
 bar_2 = [("C5", "maj7", "Cmaj7"), ("D5", "maj7", "Cmaj7"), ("C5", "maj7", "Cmaj7")]
 
-for strategy in ("extension", "diminished", "sustain", "legacy"):
+for strategy in ("extension", "diminished", "sustain"):
     steps = engine.arrange_progression(bar_2, non_chord_tone=strategy)
     print(f"{strategy:<11}", steps[1].voicing.tab_string(), steps[1].harmonized_as)
 ```
@@ -1014,8 +1014,7 @@ for strategy in ("extension", "diminished", "sustain", "legacy"):
 ```text
 extension   x-x-9-9-8-10  Cmaj9
 diminished  x-x-9-10-9-10 Bdim7
-sustain     x-x-9-9-8-10  None
-legacy      x-10-10-x-12-10 None
+sustain     x-x-9-9-8-10  Cmaj7
 ```
 
 - `extension` (default) — absorb the note as an extension: `D5` over `Cmaj7`
@@ -1029,13 +1028,8 @@ legacy      x-10-10-x-12-10 None
   inside `Bdim7` (the dim7 a semitone below the note the line resolves to), giving
   a smooth chromatic resolution.
 - `sustain` — hold the previous chord's three inner voices and move only the
-  melody, the way a shape is held under a passing tone.
-- `legacy` — the historical quality-only fallback, kept for callers who depend on
-  it. It sounds the melody over a shape built from the chord's *quality* rather than
-  its degree, so for `D5` over `Cmaj7` it gives `x-10-10-x-12-10` — `C D G B`, notes
-  `Cmaj7` does not contain — and `harmonized_as` stays `None` because nothing was
-  reharmonised. That is why it is not the default; note also that `sustain` falls
-  back to it here, which is why the two rows agree.
+  melody, the way a shape is held under a passing tone, with `harmonized_as`
+  reporting the chord still sounding under it.
 
 Every `ArrangementStep` records what happened: `non_chord_tone`, `strategy` and
 `harmonized_as` (e.g. `"Cmaj9"`). Melodies that are already chord tones are
@@ -1047,7 +1041,7 @@ never anything it sings. A non-chord note at an **onset** reharmonises the guita
 chord, so `D5` over `Cmaj7` under `voices="alto,tenor"` gives `Cmaj9` (`extension`)
 or `Bdim7` (`diminished`) in the guide-tone voices, with `harmonized_as` reporting
 it and a diagnostic naming the note that forced it. A held note and a silent grid
-position state the written chord unchanged, and `legacy` (or `sustain`) leaves the
+position state the written chord unchanged, and `sustain` leaves the
 comping part's harmony exactly as the chord symbol writes it.
 
 ## Supported chord qualities

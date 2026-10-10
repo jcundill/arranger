@@ -1222,14 +1222,15 @@ is an onset — the honest default for a hand-built progression, which is why a 
 and the slot layer's `unresolved_steps` / `_next_chord_tone_melody` take the same set, so
 `--fallback diminished` fires at onsets only.
 
-Measured on the committed fixtures: on the comping route `--non-chord-tone legacy` is
+Measured on the committed fixtures: on the comping route no-substitution is
 byte-identical to the pre-step tree, while every fixture changes under the default
 `extension`; every **default (no-flags) arrangement is byte-identical**, which is §7's
 acceptance criterion. `TestCompingMelodyIndependence` (step 0) is **re-scoped rather than
-deleted** (AGENTS.md trap 5): its placement invariant survives under `legacy`, and the
-melody's new reach into the *harmony* is asserted separately. The strategy is on by default
-because `--non-chord-tone` already defaults to `extension`; a user who wants the written
-chord stated as-is passes `legacy`.
+deleted** (AGENTS.md trap 5): its placement invariant survives under the strategy that
+substitutes nothing, and the melody's new reach into the *harmony* is asserted separately.
+The strategy is on by default because `--non-chord-tone` already defaults to `extension`;
+a user who wants the written chord stated as-is passes `sustain` — the `legacy` value this
+text once named was **removed**, because it named an era rather than a behaviour.
 
 **`--fallback diminished` is the same concern, and comes with it.** It is a *harmony-only*
 change: the retry replaces the written chord in the triple (`working[index] = (note,

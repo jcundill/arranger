@@ -336,8 +336,7 @@ def main() -> None:
     # Example 5: Non-chord melody tones. Bar 2 of "All of Me" moves C5 -> D5 -> C5
     # over Cmaj7; D5 is the 9th, not a chord tone, so each strategy harmonises it
     # differently: as an extension (Cmaj9), as a Barry Harris dim7 substitution
-    # (Bdim7), by holding the inner voices under the passing tone, or not at all
-    # (the historical quality-only fallback).
+    # (Bdim7), or by holding the inner voices under the passing tone.
     all_of_me = [
         ("C5", "maj7", "Cmaj7"),
         ("D5", "maj7", "Cmaj7"),

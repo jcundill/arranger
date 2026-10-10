@@ -513,9 +513,10 @@ class TestCompingMelodyIndependence(unittest.TestCase):
         )
 
     def test_scrambling_the_melody_moves_no_fret_without_a_strategy(self):
-        """Under `legacy` the melody cannot move a fret - the original step 0 claim.
+        """Under `sustain` the melody cannot move a fret - the original step 0 claim.
 
-        `legacy` substitutes nothing, so this is the placement invariant alone: every
+        `sustain` substitutes nothing on the comping route (its hold-the-previous-voices
+        move is a melody-route one), so this is the placement invariant alone: every
         pitch replaced by a wild high non-chord tone and nothing moves. `HeadNote.note_name`
         derives from `pitch`, so assigning `pitch` alone is enough - assigning
         `note_name` raises.
@@ -531,10 +532,10 @@ class TestCompingMelodyIndependence(unittest.TestCase):
         ):
             with self.subTest(voices=voices):
                 head = load_musicxml(self._path())
-                before = self._arrange(head, voices, non_chord_tone="legacy")
+                before = self._arrange(head, voices, non_chord_tone="sustain")
                 self.assertTrue(before, "an arrangement with no steps at all is a defect")
                 self.assertEqual(
-                    self._arrange(self._scrambled(head), voices, non_chord_tone="legacy"),
+                    self._arrange(self._scrambled(head), voices, non_chord_tone="sustain"),
                     before,
                     f"{voices}: a melody pitch reached the comping part with no strategy",
                 )
@@ -552,15 +553,15 @@ class TestCompingMelodyIndependence(unittest.TestCase):
         head = load_musicxml(self._path())
         scrambled = self._scrambled(head)
         substituted = self._arrange(scrambled, "alto,tenor")  # default extension
-        legacy = self._arrange(scrambled, "alto,tenor", non_chord_tone="legacy")
+        unsubstituted = self._arrange(scrambled, "alto,tenor", non_chord_tone="sustain")
         self.assertEqual(
             [(step[0], step[1]) for step in substituted],
-            [(step[0], step[1]) for step in legacy],
+            [(step[0], step[1]) for step in unsubstituted],
             "a melody pitch moved a slot's position",
         )
         self.assertNotEqual(
             substituted,
-            legacy,
+            unsubstituted,
             "the non-chord-tone strategy did not reach the comping harmony",
         )
 
@@ -697,14 +698,16 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
         sounding = {pitch % 12 for pitch in steps[0].voicing.midi_notes()}
         self.assertTrue(sounding <= chord_pcs("Bdim7"), steps[0].tab_line())
 
-    def test_legacy_and_sustain_substitute_nothing(self):
-        """The two strategies with no comping meaning leave the written chord alone."""
-        for strategy in ("legacy", "sustain"):
-            with self.subTest(strategy=strategy):
-                steps = self._comp([("D5", "maj7", "Cmaj7")], strategy)
-                self.assertIsNone(steps[0].harmonized_as, strategy)
-                self.assertIsNone(steps[0].strategy, strategy)
-                self.assertFalse(steps[0].non_chord_tone, strategy)
+    def test_sustain_substitutes_nothing(self):
+        """The one strategy with no comping meaning leaves the written chord alone.
+
+        A comping shape is built fresh on every slot, so `sustain`'s hold-the-previous
+        move has nothing to act on and it must fall through to no substitution.
+        """
+        steps = self._comp([("D5", "maj7", "Cmaj7")], "sustain")
+        self.assertIsNone(steps[0].harmonized_as)
+        self.assertIsNone(steps[0].strategy)
+        self.assertFalse(steps[0].non_chord_tone)
 
     def test_a_chord_tone_melody_is_untouched(self):
         """A melody the chord already contains is not reharmonised under any strategy."""

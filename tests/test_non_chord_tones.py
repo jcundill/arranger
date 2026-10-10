@@ -169,9 +169,19 @@ class TestNonChordToneResolution(unittest.TestCase):
             ("dim7", "Bdim7"),
         )
 
-    def test_legacy_strategy_never_substitutes(self):
-        """The legacy strategy keeps the historical behaviour untouched."""
-        self.assertIsNone(self.engine.resolve_non_chord_tone(Note("D5"), "maj7", "Cmaj7", "legacy"))
+    def test_legacy_strategy_is_gone_from_the_vocabulary(self):
+        """`legacy` named an era, not a behaviour, and is removed rather than aliased.
+
+        Its one real instruction - substitute nothing - survives where it has a
+        comping meaning (`sustain`) and as the quality-only fallback the extension
+        table's own gaps leave in place. A deprecated alias kept working would be
+        the same fact stated twice; see AGENTS.md trap 5.
+        """
+        self.assertNotIn("legacy", VoiceLeadingEngine.NON_CHORD_TONE_STRATEGIES)
+        with self.assertRaises(ValueError):
+            self.engine.arrange_progression(
+                [("D5", "maj7", "Cmaj7")], non_chord_tone="legacy"
+            )
 
 
 class TestThePaletteRescue(unittest.TestCase):
@@ -227,7 +237,7 @@ class TestThePaletteRescue(unittest.TestCase):
 
 class TestExtendedExtensionMappings(unittest.TestCase):
     """The widened NON_CHORD_TONE_EXTENSIONS routing: 11ths, #11s, b13s and the
-    half-diminished ninth now have somewhere to go instead of the legacy
+    half-diminished ninth now have somewhere to go instead of the
     quality-only fallback, and the 9th over a plain triad has a row at all."""
 
     def setUp(self):
@@ -474,36 +484,6 @@ class TestNonChordToneStrategiesEndToEnd(unittest.TestCase):
         self.assertEqual(result[1].harmonized_as, "Cmaj7")
         self.assertEqual(result[1].voicing.frets[2:5], result[0].voicing.frets[2:5])
         self.assertNotEqual(result[1].voicing.frets[5], result[0].voicing.frets[5])
-
-    def test_legacy_strategy_preserves_the_historical_fallback(self):
-        """The legacy strategy reproduces the old wrong-chord shape, which is why it
-        is opt-in rather than the default.
-
-        Both the position and the inversion moved when span was ranked above neck
-        position: `x-x-8-8-8-10` (Bb-Eb-G-D, an Ebmaj7 shape) became `x-x-11-11-10-10`
-        (Db-F#-A-D, a Dbmaj7 shape). Both are wrong-chord fallbacks - the point of the
-        test is that the *strategy* still declines to fix the melody note, not which
-        wrong chord it lands on - so the assertion is that the sounding notes are still
-        outside Cmaj7 and no strategy was recorded, rather than one fixed inversion.
-        """
-        result = self.engine.arrange_progression(self.all_of_me, non_chord_tone="legacy")
-        step = result[1]
-        # The exact inversion is not asserted, and the docstring above says why: with
-        # `drop24` in the palette the fallback landed on `x-10-10-x-12-10` (G-C-B-D), and
-        # removing the four inner-skip `drop24` sets (`docs/fingering.md` §4.4) moved it to
-        # `x-x-9-12-13-10` (B-G-C-D) - a drop-3 on the contiguous block. That is the third
-        # inversion this line has carried, which is why only the strategy's own promise is
-        # asserted below: a complete four-note shape under a written Cmaj7, with D5 on top,
-        # that declines to fix the melody.
-        self.assertEqual(step.voicing.grip, "drop3")
-        self.assertEqual(max(step.voicing.midi_notes()), Note("D5").midi_note())
-        # A Cmaj7 is C E G B; nothing the fallback sounds belongs to it.
-        self.assertFalse(set(step.voicing.pitch_classes()) <= {0, 4, 7, 11})
-        # It is a *complete* four-note shape, still the wrong chord, and the melody D5
-        # is on top of it - which is what makes it a plausible-sounding mistake.
-        self.assertEqual(len(step.voicing.active_frets()), 4)
-        self.assertEqual(max(step.voicing.midi_notes()), Note("D5").midi_note())
-        self.assertIsNone(step.strategy)
 
     def test_chord_tone_steps_are_identical_under_every_strategy(self):
         """The strategy only ever affects non-chord melodies."""

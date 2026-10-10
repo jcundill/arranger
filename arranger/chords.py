@@ -203,7 +203,7 @@ def sounding_harmony(step: ArrangementStep) -> Tuple[Optional[str], Optional[str
 # leaves the melody to the existing quality-only fallback.
 NON_CHORD_TONE_EXTENSIONS = {
     # A 9th over a plain triad - the two rows this table was missing. A quality
-    # with no row keeps the legacy quality-only fallback, and the three families
+    # with no row keeps the quality-only fallback, and the three families
     # that have no fallback at all (`shell`, `duo`, `interval`, whose shapes are
     # defined by the chord's own degrees) then had nothing to fall back to, so
     # the step went missing instead: `Ebmaj` under `F4` in "But Not For Me" bar 2
@@ -236,7 +236,7 @@ NON_CHORD_TONE_EXTENSIONS = {
 }
 
 # Accepted values for arrange_progression(non_chord_tone=...).
-NON_CHORD_TONE_STRATEGIES = ("extension", "diminished", "sustain", "legacy")
+NON_CHORD_TONE_STRATEGIES = ("extension", "diminished", "sustain")
 
 
 # ------------------------------------------------------------------
@@ -283,9 +283,8 @@ def resolve_non_chord_tone(
       'diminished' - Barry Harris 6/dim7: voice the note inside a dim7 built a
                      semitone below the pitch the line resolves to, e.g. the
                      passing D over Cmaj7 -> Bdim7.
-      'legacy'     - no substitution.
     """
-    if strategy == "legacy" or not chord_name:
+    if not chord_name:
         return None
 
     canonical = ChordParser.canonical_quality(chord_type)
