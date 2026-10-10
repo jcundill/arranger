@@ -36,9 +36,18 @@ from .tuning import (
     _note_name,
 )
 
-# Grip families, in the order that breaks an exact tie. A four-note drop-2 shape is
-# listed first so it is never displaced by a shell when the two cost the same, and the
-# shells come last so a complete chord is preferred to a partial harmonisation.
+# Grip families, in the order they are generated in - which is *also* the order an exact
+# tie is broken in: `cost._best_voicing` is a stable `min` and no criterion in
+# `cost.voicing_cost` names a family, so of two candidates at the winning cost the one
+# generated first wins. This tuple is the default `grips=`, and a caller's own order
+# replaces it, which is what makes `--grips`' "most preferred first" a promise rather than
+# a description. One tuple, one job, and a family's position here is load-bearing.
+#
+# It is **not** what decides how many notes a step sounds. That is criterion 2,
+# `missing = 4 - len(active)`, so a shell never beats a four-note shape by sitting early
+# here; a family's place only orders shapes of the same arity against each other.
+#
+# `drop2` is first so the idiomatic reading of the name is the default one.
 #
 # `drop2_6432` is the 6-4-3-2 block (low E, D, G, B), listed after the contiguous blocks
 # because it is the *alternative* rather than the default reading of "drop-2":
@@ -46,18 +55,53 @@ from .tuning import (
 # reproduces the library's original output exactly. It is a separate family, not a third
 # string set for `drop2`, precisely so that idiom survives.
 #
-# `drop3` and `drop24` are offered; `closed` is not, because it is the one of the three
-# that cannot be fretted inside the finger budget.
+# `closed` (close position) is **second**, and it holds that place on the tie-break
+# rather than on reachability: it is the tightest four-note shape there is, so where a
+# melody *can* fret it at all it is usually the shape the hand wants most - and it beats
+# every other four-note family it ties with. It is widely unreachable, because a close
+# stack under a melody is a seventh or more of pitch laid on four strings only four or
+# five semitones apart in tuning, but an unreachable family is simply never generated,
+# and criterion 2 covers any note-count gap between two that are. `docs/engine.md`
+# §"Known limitations" holds the reachability measurement.
 #
-# Drop-3 and drop-2 & 4 are here because a melody that is *not* a chord tone leaves drop-2
+# `drop3` and `drop24` are here because a melody that is *not* a chord tone leaves drop-2
 # with no template and no shell, so its quality-only fallback offers shapes carrying notes
 # the chord does not contain. Both derive from the close stack under the melody, which
 # keeps every *other* voice a chord tone, so offering them is what puts a correct voicing
 # in the candidate set for the selector to find - see `cost.voicing_cost`, whose first
 # criterion counts wrong notes rather than flagging them.
 GRIP_PREFERENCE: Tuple[str, ...] = (
-    "drop2", "drop3", "drop24", "drop2_6432", "shell", "duo",
+    "drop2", "closed", "drop3", "drop24", "drop2_6432", "shell", "duo",
 )
+
+
+def parse_grips(argument: str) -> Tuple[str, ...]:
+    """The grip families named in `argument`, in the order they are named.
+
+    The spelling: comma-separated family names, matched case-insensitively, with
+    whitespace around the commas ignored, so `"closed,shell"` and `" Closed , SHELL "`
+    are one request. **The order is part of the request**, not formatting: this is a
+    preference list and an exact tie is broken by generation order, so
+    `"shell,drop2"` and `"drop2,shell"` are two arrangements. A repeat is dropped
+    keeping its first occurrence, and nothing is re-sorted - deliberately *not* what
+    `textures.parse_voices` does to `VOICE_NAMES`, whose order is not a preference.
+
+    Raises `ValueError` on an empty request, or on a name outside `GRIP_PREFERENCE`,
+    naming the palette. The rule is the library's: a spelling nobody recognises is a
+    question, and answering it by dropping a family would hand back an arrangement
+    missing something nobody asked it to drop.
+    """
+    text = argument.strip().lower()
+    if not text:
+        raise ValueError(f"grips is empty; expected any of {GRIP_PREFERENCE}")
+    chosen: List[str] = []
+    for part in text.split(","):
+        name = part.strip().lower()
+        if name not in GRIP_PREFERENCE:
+            raise ValueError(f"Unknown grip {name!r}; expected any of {GRIP_PREFERENCE}")
+        if name not in chosen:
+            chosen.append(name)
+    return tuple(chosen)
 
 # The maximum distance, in frets, from the lowest to the highest active fret. Five for
 # every four-note shape and every three-note shell; a duo and an interval are only ever
@@ -149,11 +193,10 @@ GRIP_STRING_SETS: Dict[str, Tuple[Tuple[Tuple[int, ...], int], ...]] = {
     # the bottom-four block excluded by `_BOTTOM_FOUR`: it swaps the A string out for
     # the B, and its soprano is the B rather than the G.
     "drop2_6432": (((0, 2, 3, 4), 4),),
-    # Drop-3 and close position span more than a hand can hold on four neighbouring
-    # strings, which is why neither is in GRIP_PREFERENCE. They are given the same
-    # bass-skipping sets as drop-2 because the rule is about the *shape*, not the
-    # family: a bass that reaches below the block can still be fretted on a longer
-    # string, and where that rescues a shape the span limit would otherwise refuse it.
+    # Drop-3 and close position are given the same bass-skipping sets as drop-2, because
+    # the rule is about the *shape*, not the family: a bass that reaches below the block
+    # can still be fretted on a longer string, and where that rescues a shape the span
+    # limit would otherwise refuse it.
     "drop3": (
         ((2, 3, 4, 5), 5), ((1, 3, 4, 5), 5),
         ((1, 2, 3, 4), 4), ((0, 2, 3, 4), 4),

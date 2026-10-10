@@ -22,16 +22,22 @@ you whether a change is an improvement or a different library.
   by *changing strings* rather than by moving the hand. The A string and the low E are
   inner voices only; no grip puts the soprano on either, so the melody floor is `G3`
   while the chord range extends down to `E2` as a bass voice.
-- `GRIP_PREFERENCE = ("drop2", "drop3", "drop24", "drop2_6432", "shell", "duo")` — the grip
-  families and their tie-break order. A four-note `drop2` shape is listed first so a shell
-  never displaces it when the two cost the same, and the shells come last so a complete chord
-  is preferred to a partial harmonisation. `drop2_6432` (6-4-3-2) is listed after them because
-  it is the *alternative* to the contiguous drop-2, not a third string set for it:
+- `GRIP_PREFERENCE = ("drop2", "closed", "drop3", "drop24", "drop2_6432", "shell", "duo")`
+  — the grip families, in the order they are generated in. **One order with one job**: no
+  criterion in `voicing_cost` names a family, so a candidate tie that runs off the end of
+  the cost tuple is broken by this order alone (see `_best_voicing` below). It is *not*
+  what decides how many notes a step sounds — that is criterion 2,
+  `missing = 4 - len(active)` — so a shell never beats a four-note shape by sitting early
+  here, and a family's place only orders shapes of the same arity against each other.
+  `drop2` is first so the idiomatic reading of the name is the default one. `closed`
+  (close position) is **second**, and it holds that place on the tie-break rather than on
+  reachability: it is the tightest four-note shape there is, so where a melody *can* fret it
+  it beats every other four-note family it ties with, while most melodies cannot fret it at
+  all (see Known Limitations). `drop2_6432` (6-4-3-2) is listed after the contiguous blocks
+  because it is the *alternative* to the contiguous drop-2, not a third string set for it:
   `grips=("drop2",)` still means the four contiguous strings, which is the idiom that
   reproduces the original output exactly. `drop3` and `drop24` sit between the two, each a
-  derived reading of the close stack rather than a block. `closed` is generated but
-  deliberately **not** listed: it is the family
-  most melodies cannot play within `GRIP_MAX_SPAN` (see Known Limitations).
+  derived reading of the close stack rather than a block.
 - `GRIP_STRING_SETS` — for each grip, its supported `(active string indices, soprano
   index)` pairs: the 4-3-2-1 and 5-4-3-2 four-string blocks, **6-4-3-2**, the six
   shell shapes (1-2-3, 2-3-4, 5-4-3, **6-4-3**, and the two 5-3-2s — `(1,3,4)`
@@ -178,13 +184,19 @@ you whether a change is an improvement or a different library.
     then the quality-only fallback. **Pure**: it neither filters by fret nor
     transposes. `get_all_drop2_voicings` is this pinned to `grips=("drop2",)`.
   - `voicing_cost(voicing, previous, fret_min, fret_max, allowed_tones)` — the whole
-    selection rule as one comparable tuple: notes outside the chord, then frets
-    outside the window, then missing voices, then **span** (with spans 0 and 1
+    selection rule as one comparable **7-element** tuple: notes outside the chord, then
+    frets outside the window, then missing voices, then **span** (with spans 0 and 1
     bucketed to the same value — see §"Span outranks neck position"), then neck
     position (the difference of average frets from the previous voicing), then pitch
-    movement, then grip preference. Lexicographic, not a weighted sum, because these
-    priorities must not be traded against each other. `_best_voicing` is its argmin
-    and is stable, so the engine is deterministic.
+    movement, then bass function. Lexicographic, not a weighted sum, because these
+    priorities must not be traded against each other. **No element names a grip family**,
+    so a tie that runs off the end of the tuple is broken by generation order:
+    `top_strings` first, then `GRIP_PREFERENCE` within one string. That makes a caller's
+    own `grips=` order part of the rule rather than an accident of the loop.
+    `parse_grips` is that order as one spelling the front end can take -
+    comma-separated, and deliberately not re-sorted, so `--grips shell,duo` and
+    `grips=("shell", "duo")` are one request and `--grips duo,shell` is another.
+    `_best_voicing` is its argmin and is stable, so the engine is deterministic.
   - `get_octave_down_candidates(melody_note, chord_type, chord_name=None,
     top_strings=MELODY_STRING_CHOICES)` — the same for the melody an octave lower,
     on the strings below the high E. Empty when the transposed melody is unvoiceable,
@@ -425,7 +437,7 @@ inclusively would describe a reach the hand does not make, and would make the li
 | `drop2_6432` | 4 | 6-4-3-2, found by search — the one default set that reaches the low E |
 | `drop3` | 4 | derived from a close stack; offered through the bass-skipping sets |
 | `drop24` | 4 | **drop-2 & 4** — the second *and* fourth voices lowered an octave; offered through the bass-skipping sets |
-| `closed` | 4 | derived from a close stack; **not** offered by default — most melodies cannot fret it in span |
+| `closed` | 4 | derived from a close stack; offered **second** — it beats every four-note family but drop-2 on a tie |
 | `shell` | 3 | `SHELL_DEGREES` plus one more note |
 | `duo` | 2 | the chord's guide tone — the 3rd, or the 4th on a sus chord — under any chord tone |
 
@@ -465,8 +477,7 @@ fixtures lose their chord the same way (F5 at fret 13 over an F7, and C#5 over a
 The full measurement, including which of the lost shapes were span-0 barres that cost
 the hand nothing, the alternative that keeps every chord, and the open question of
 whether the rule should be per *set* or per *shape*, are in
-[fingering.md](fingering.md) §4.4. Not in `GRIP_PREFERENCE`: it is reachable, but it
-spans nearly two octaves and is a colour rather than the default four-note reading.
+[fingering.md](fingering.md) §4.4.
 
 Note the local names, which cost a wrong answer here: in `_, v1, v2, v3 = stack`, `v1`
 is the **second** voice. So drop-2 & 4 drops `v1` and `v3` and keeps `v2` beside the
@@ -820,12 +831,19 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
   so the frets come out more than five apart (Cmaj7 close under C5 wants frets 8, 12, 12,
   14); drop-3 spans a twelfth by construction. `drop3` and `drop24` are offered anyway,
   because the bass may skip to a lower string and that is enough to bring both inside the
-  span limit — see `GRIP_STRING_SETS`. `closed` shares those same bass-skipping sets, but it
-  is in no palette: measured at `GRIP_MAX_SPAN["closed"] == 5` it returns **27** shapes over
+  span limit — see `GRIP_STRING_SETS`. `closed` shares those same bass-skipping sets and is
+  offered **second** in `GRIP_PREFERENCE`, so it takes a tie against every four-note family
+  but drop-2: measured at `GRIP_MAX_SPAN["closed"] == 5` it returns **27** shapes over
   ten melody notes × five qualities (spans 2 and 5) — 1 under a C5 melody for `Cm7`, 0 for
-  `Cmaj7` — so it is unreachable per melody rather than never, and offering it by default
-  would hand the selector a family most melodies cannot fret. Raising the span to admit it
-  is a real change to the library's playability contract, not a tuning knob.
+  `Cmaj7` — so it is reachable per melody rather than never, and generating it lets those
+  steps use it without handing the selector a family most melodies cannot fret. Over the
+  committed heads the family moves **66 of 799** steps (1, 0, 5, 11, 0 and 49 across the
+  six). The **tie-break itself** decides **2 of 120** single-step cases, both `Cmaj` on the
+  B string (melody `C4` or `G4`), where the two shapes differ only in whether the root or
+  the 5th is in the bass — which criterion 6 deliberately scores the same, so the order is
+  what decides: `x-3-2-0-1-x` and `x-10-10-9-8-x` against the drop-2 & 4 readings
+  `3-x-2-0-1-x` and `8-x-10-9-8-x`. Raising the span to admit the rest is a real change to
+  the library's playability contract, not a tuning knob.
 - **A chord tone with no matching inversion in the drop-2 tables falls through to the
   quality-only fallback**, which can sound a note the chord does not contain — a 9th in
   the melody of a 13 chord, for example. `voicing_cost`'s first criterion rejects such a

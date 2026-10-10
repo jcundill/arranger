@@ -2,16 +2,18 @@
 
 `voicing_cost` is the library's central invariant - a tuple compared lexicographically,
 not a weighted sum, with its order asserted positionally by
-`tests/test_grips.py::TestVoicingCost` - and `_best_voicing` is its argmin. `bass_cost`
-deliberately lives in `bass` instead, next to the `BASS_ROLE_*` vocabulary it ranks over,
-because importing it here would make `cost` import `bass` and `bass` import `cost`.
+`tests/test_grips.py::TestVoicingCost` - and `_best_voicing` is its argmin. **No
+criterion names a grip family**: a tie that runs off the end of the tuple is broken by
+generation order, which is `grips.GRIP_PREFERENCE`. `bass_cost` deliberately lives in
+`bass` instead, next to the `BASS_ROLE_*` vocabulary it ranks over, because importing it
+here would make `cost` import `bass` and `bass` import `cost`.
 """
 
 from __future__ import annotations
 
 from typing import Container, List, Optional, Tuple
 
-from .grips import BASS_DEGREES_6432, GRIP_PREFERENCE
+from .grips import BASS_DEGREES_6432
 from .tuning import NECK_FRET_MAX, NECK_FRET_MIN, GuitarFretboard, Voicing
 
 
@@ -84,8 +86,9 @@ def voicing_cost(
        every note is wrong, so the criterion is not asked at all.
     1. frets outside the window. A *penalty*, not a filter: a melody that cannot be
        voiced between the two frets is still played, one fret-pair at a time out of
-       position, because a chord of the tune is worth more than a fretboard preference.
-       See `tuning.NECK_FRET_MIN`.
+       position, rather than dropped. It is a comfort criterion, but it sits *above*
+       completeness, so where nothing complete fits the window the engine plays a
+       partial shape that does. See `tuning.NECK_FRET_MIN`.
     2. missing voices. A partial harmonisation is a *fallback*, not a style: where a
        complete chord can be played, it is used, and it outranks staying in exactly
        the same spot, because the window and position are about comfort while this is
@@ -126,7 +129,13 @@ def voicing_cost(
        the hand where it is". The same rule as `BASS_DEGREES_6432`, applied to whatever
        shape won rather than to one family, so a contiguous shape with a root bass is
        not penalised either.
-    7. grip preference, so a four-note drop-2 wins an exact tie against a shell.
+
+    **No criterion names a grip family**, and that is deliberate. Two families can
+    generate the very same tab, so at this depth the tuple would be choosing a *name*
+    rather than a sound - and a four-note drop-2 never reaches a tie with a shell to
+    begin with, because criterion 2 separates them on note count. The order families are
+    offered in is `grips.GRIP_PREFERENCE`, and that is where an exact tie is broken: see
+    `_best_voicing`.
     """
     active = voicing.active_frets()
     outside = sum(1 for fret in active if not fret_min <= fret <= fret_max)
@@ -151,11 +160,6 @@ def voicing_cost(
         position = abs(voicing.avg_fret - previous.avg_fret)
         movement = calculate_pitch_leading_distance(previous, voicing)
 
-    grip_rank = (
-        GRIP_PREFERENCE.index(voicing.grip)
-        if voicing.grip in GRIP_PREFERENCE
-        else len(GRIP_PREFERENCE)
-    )
     missing = 4 - len(active)
     bass_root_or_fifth = (
         0.0
@@ -174,7 +178,6 @@ def voicing_cost(
         position,
         movement,
         bass_root_or_fifth,
-        float(grip_rank),
     )
 
 
@@ -190,11 +193,19 @@ def _best_voicing(
     """
     The candidate voicing_cost likes best, or None when there are no candidates.
 
-    Python's min is stable, so two candidates that cost exactly the same are
-    decided by generation order, which is high-E strings first and GRIP_PREFERENCE
-    within a string. That keeps the whole engine deterministic: the same progression
-    always arranges to the same tab, which is what makes its output worth asserting
-    on in tests.
+    **An exact tie is broken by generation order**, because that is what Python's stable
+    `min` does with candidates whose cost tuples are equal - and there is deliberately no
+    grip criterion to fall back on (`voicing_cost` says why). The order is `top_strings`
+    first, then `grips` within one string, so a tie *across* strings goes to the earlier
+    string. That makes the caller's own ordering part of the rule rather than an accident
+    of the loop: where two families tie - `Cmaj` under a `C4` melody is the pinned case,
+    and `tests/test_grips.py::TestClosePosition` holds it - `grips=("closed",
+    "drop2_6432")` takes the first tab and the reversed pair takes the second. That is
+    what `--grips`' "most preferred first" promises, and it is why the position of a
+    family in `GRIP_PREFERENCE` is load-bearing.
+
+    Determinism follows from the inputs being sequences: the same progression always
+    arranges to the same tab, which is what makes its output worth asserting on in tests.
 
     `root_pc` is passed straight through to voicing_cost and is what enables the
     bass-function tie-break. A caller that has no root omits it and gets no bass term.

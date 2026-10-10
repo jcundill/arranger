@@ -264,7 +264,7 @@ section, where it applies to any new axis rather than to that one entry point.
 
 ## 10. For the record: what did **not** change
 
-- `voicing_cost`'s 8-element tuple, and its order. `melody_pc` was already `Optional`.
+- `voicing_cost`'s tuple, and its order. `melody_pc` was already `Optional`.
   The register fix is in the **generator's string sets and degree rule**, deliberately: a
   register preference belongs in the cost function only if it is a general preference, and
   "the bass voice goes low" is a fact about one voice rather than about every shape.

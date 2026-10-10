@@ -75,11 +75,10 @@ def resolve_texture_grips(
     under one, and the texture's fill palettes already hold inside the budget.
 
     The default is the case that matters, and it is why this is **not** a plain set
-    intersection. `GRIP_PREFERENCE` is the order a *caller* ranks grips in, and it
-    deliberately does not list `interval`, `melody` or `drop3` - a `targets` fill is
-    `("shell", "interval", "melody")` and a target is `("drop2", "drop3")`, so
-    intersecting with it would delete `interval` and `drop3` from the texture and
-    change every default arrangement. The texture table is the authority on what a
+    intersection. `GRIP_PREFERENCE` is a caller's ranking of the *harmony* grips, and it
+    deliberately omits `interval` and `melody` - a `targets` fill is
+    `("shell", "interval", "melody")`, so intersecting a fill with it would delete both
+    and change every default arrangement. The texture table is the authority on what a
     role may play; `GRIP_PREFERENCE` only says what order a caller ranks them in.
 
     So the rule is: an explicit restriction intersects, and the default - which is

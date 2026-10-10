@@ -47,10 +47,10 @@ frozen like the rest — it is not a home for an open plan.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **996 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **1015 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 14 of those 996, and it is the one that fails if this
+(`tests/test_docs.py` is 14 of those 1015, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree. It also fails if a document
 exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
 new file cannot be added without being registered.)
@@ -345,7 +345,7 @@ melody whose only position sits above `HIGH_FRET_LIMIT` is voiced an octave down
 
 ### The cost tuple is not being refactored
 
-`voicing_cost`'s 8-element tuple is the library's central invariant, asserted
+`voicing_cost`'s 7-element tuple is the library's central invariant, asserted
 positionally in `tests/test_grips.py::TestVoicingCost`. Moving the code is safe;
 **reordering it is a musical decision, not a refactor.** Span is the one criterion
 promoted above position, and that was measured rather than guessed — the reasoning
@@ -353,6 +353,22 @@ and the table of what it cost are in [docs/engine.md](docs/engine.md). Changing 
 a criterion *reports* is the same decision: spans 0 and 1 are bucketed to one value
 at the span index (a one-fret reach does not outrank keeping the hand in place),
 measured at one moved pin, and the `0/1/2` bucket was measured at 13 and rejected.
+
+**Deleting one is that decision too.** The tuple used to carry an eighth element, a rank
+over grip families. It went because it was the *same rule* as the order candidates are
+generated in, written twice: they agreed, so neither was individually necessary. With the
+families generated in the same order, deleting the criterion changed **0 of 799**
+committed-head steps — tabs *and* grip labels — and **0 of 120** single-step sweeps; and
+reversing `GRIP_PREFERENCE` with the rank left in changed nothing either, at 0/799 and
+0/120. What the number does not say is the reason it is the right shape: no criterion
+names a grip family because a family is not a property of a shape. Two families can
+generate the very same tab, so at that depth the tuple would be choosing a *name* rather
+than a sound; and a four-note drop-2 never reaches a tie with a shell to lose, because
+criterion 2 separates them on note count. A tie now falls to generation order —
+`top_strings` first, then `GRIP_PREFERENCE` within one string — which makes the caller's
+own `grips=` order decide, exactly what `--grips`' "most preferred first" always claimed.
+The two live cases that order decides are in [docs/engine.md](docs/engine.md)
+§"Known limitations".
 
 Likewise the 54 hardcoded tab strings in the tests stay: they are the acceptance
 gate, and a snapshot mechanism would let a regression pass by regenerating itself.
@@ -547,6 +563,25 @@ Each of these cost real time, or nearly shipped a defect.
     stated over a part of a whole, ask which producer can make the other part larger than
     the rule assumed, and assert the rule on the whole.** A count is the way to do it: the
     step count that catches this is "strings plucked at once", not "strings in the shape".
+
+14. **An option that takes a *list* spells it the way the flags around it do — and
+    `nargs` is not that spelling.** `--grips` carried `nargs="+"` with
+    `choices=GRIP_PREFERENCE` while `--voices`, in the same parser, took a
+    comma-separated string — so `--grips closed,shell` was refused
+    (`invalid choice: 'closed,shell'`) *by a flag whose own run header prints the request
+    back as `grips: closed, shell`*: the line a reader copies was the one spelling that
+    did not work. The second half is silent until it is tried. `nargs="+"` consumes the
+    positional written after it, so `head --grips shell FILE` fed the **filename** to
+    `--grips` and reported `invalid choice: 'tests/data/...'` — the flag worked only
+    after the file. It is one comma-separated string now, parsed by `grips.parse_grips`
+    on the same route as `--voices`, `--harmony` and `--grid`, so
+    `head --grips shell,duo FILE` and `head FILE --grips shell,duo` are one run.
+    **Two things to carry forward: a list-valued option is one string the module that
+    owns the vocabulary parses, never `nargs`; and a parser's own output is
+    documentation — if the run header prints a spelling, that spelling has to be
+    accepted** (the round trip is asserted). Note the order is *not* canonicalised
+    (`parse_voices` re-sorts into `VOICE_NAMES` order, `parse_grips` must not), because
+    a caller's grip order is the tie-break the tuple no longer names.
 
 ## Where things are documented
 
