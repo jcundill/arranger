@@ -389,7 +389,8 @@ python -m arranger head but_not_for_me.mxl --gp5 head.gp5
 
 GP5 is a *tab* format, so every note carries its own fret and string and a shape
 survives the round trip exactly — no re-deriving the fingering from the pitch. Each
-step is written on its real beat with the chord name it is sounding above it, a held
+step is written on its real beat, with the chord name above the beat where the
+chord changes (the same places the MusicXML export writes them), a held
 shape is one longer note rather than a re-strike, and a repeated melody is a single
 struck note, all as in the other two renderers. `tempo`, `beats_per_bar`,
 `collapse` and `show_chords` work as they do for MusicXML.
@@ -403,8 +404,9 @@ cover what a two-staff score would have: the fingering here, the notation there.
 One difference worth knowing: GP5 has no way to write a short first bar, so a head
 starting on an upbeat gets a full first measure with the leading beats empty rather
 than an anacrusis. A shape that runs across a bar line is written out in two
-measures instead of being tied, because a GP tie across a bar is a slur the player
-has to interpret. Neither changes the notes.
+measures and tied across the join, so it reads as one held note rather than a
+re-struck shape — and a dotted length, which the format has no note for, is written
+as tied halves for the same reason. Neither changes the notes.
 
 ## Low-register melodies
 

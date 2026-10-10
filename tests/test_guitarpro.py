@@ -316,7 +316,12 @@ class TestRoundTrip(GuitarProTestCase):
             )
 
     def test_the_chord_name_is_the_chord_that_is_sounding(self):
-        """Each beat is labelled with the chord it is sounding.
+        """Each beat here is labelled with the chord it is sounding.
+
+        Every one of these three steps changes chord, so all three carry a label; a
+        chord that does *not* change is named once rather than on every beat, which
+        `test_a_chord_is_named_where_it_changes_in_a_written_head` states over a
+        real head.
 
         Not always the written one: a step harmonised under a substitution carries
         the substitute in `harmonized_as`, and printing the written chord would
@@ -705,11 +710,13 @@ class TestRhythm(GuitarProTestCase):
         self.assertEqual(len(measures), 3)
         for measure in measures:
             self.assertAlmostEqual(self.bar_quarters(measure), 4.0, places=6)
-        # The Dm7 is written as two half-bar notes, in the two bars it spans, and
-        # the G7 follows on its own downbeat - split, not stretched or substituted.
+        # The Dm7 is written as two tied parts, in the two bars it spans, and the
+        # G7 follows on its own downbeat - split, not stretched or substituted.
+        # The chord is named where it changes, so the continuation part carries no
+        # name of its own; `tabxml.write_symbol` writes its symbols the same way.
         self.assertEqual(
             [b.text for m in measures for b in m.voices[0].beats],
-            ["Dm7", "Dm7", "G7"],
+            ["Dm7", None, "G7"],
         )
 
     def test_a_held_shape_is_tied_across_a_bar_line_not_re_struck(self):
@@ -738,7 +745,9 @@ class TestRhythm(GuitarProTestCase):
                           bar=3, beat=1, duration=1.0)
         song = self.song(steps=[crossing, final])
         beats = [b for m in song.tracks[0].measures for b in m.voices[0].beats]
-        self.assertEqual([b.text for b in beats], ["Dm7", "Dm7", "G7"])
+        # The label follows the chord change, so the continuation - now a tie
+        # rather than a second attack - is not labelled a second time either.
+        self.assertEqual([b.text for b in beats], ["Dm7", None, "G7"])
         # The attack is an ordinary note; only the continuation is a tie.
         self.assertEqual(
             [n.type for b in beats for n in b.notes],
@@ -792,6 +801,160 @@ class TestRhythm(GuitarProTestCase):
         self.assertEqual(
             restruck, [],
             f"bars {restruck} re-strike the previous bar's shape untied",
+        )
+
+    def test_a_dotted_length_is_tied_within_a_bar_not_re_struck(self):
+        """A length the format has to split is one held note, not two attacks.
+
+        The intra-bar twin of
+        `test_a_held_shape_is_tied_across_a_bar_line_not_re_struck`. GP5 has no
+        dotted values, so a dotted half goes out as a half plus a quarter; the
+        note type used to be decided by `tie` alone, which `_measures` sets only
+        for a note continuing an earlier bar - so every part after the first was
+        an ordinary note and the shape was struck again in the middle of its own
+        hold. Read back from the bytes, because the note type exists nowhere else.
+        """
+        import guitarpro
+
+        dotted = make_step([-1, -1, 10, 10, 10, 10], "Dm7", "A4",
+                           bar=1, beat=1, duration=0.75)
+        following = make_step([-1, -1, 12, 12, 12, 12], "G7", "B4",
+                              bar=1, beat=4, duration=0.25)
+        song = self.song(steps=[dotted, following])
+        beats = song.tracks[0].measures[0].voices[0].beats
+        # A half plus a quarter where the dotted half went, then the G7: four
+        # quarters of bar, as the signature demands.
+        self.assertEqual([4.0 / b.duration.value for b in beats], [2.0, 1.0, 1.0])
+        self.assertAlmostEqual(self.bar_quarters(song.tracks[0].measures[0]),
+                               4.0, places=6)
+        # The attack is an ordinary note and its continuation a tie, on the same
+        # strings at the same frets - which is what makes it one held shape.
+        self.assertEqual([n.type for n in beats[0].notes],
+                         [guitarpro.NoteType.normal] * 4)
+        self.assertEqual([n.type for n in beats[1].notes],
+                         [guitarpro.NoteType.tie] * 4)
+        self.assertEqual(
+            sorted((n.string, n.value) for n in beats[0].notes),
+            sorted((n.string, n.value) for n in beats[1].notes),
+        )
+        # One name for the one chord: a continuation part is not a second chord,
+        # and the G7 is.
+        self.assertEqual([b.text for b in beats], ["Dm7", None, "G7"])
+
+    def test_no_split_continuation_in_a_written_head_is_re_struck(self):
+        """No beat of "All the Things You Are" re-strikes a note it still holds.
+
+        The intra-bar twin of `test_every_split_step_in_a_written_head_is_tied`,
+        measured over a real export rather than a fixture: six beats of this head
+        are the continuation parts of a length split - bar 2's dotted half among
+        them - and every one of them used to go out as an ordinary note, so a
+        dotted half played as a half and then a re-struck quarter. The writer's
+        own model, `_measures` and `_duration_split`, says which parts continue
+        an earlier one; the assertion is on the parsed bytes, which is the only
+        place the note type survives.
+        """
+        import guitarpro
+
+        from headxml import arrange_xml_head
+        from tabgp import _duration_split, _measures
+
+        path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "data", "All_the_Things_You_Are.musicxml",
+        )
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            steps, head, _notes = arrange_xml_head(path)
+        events, pickup = _events(
+            _substitute_steps(steps), head.beats_per_bar, True, head.beat_type
+        )
+        model = _measures(events, pickup, head.beats_per_bar, head.beat_type)
+        written = self.beats(
+            steps=steps, beats_per_bar=head.beats_per_bar,
+            beat_type=head.beat_type,
+        )
+        expected = [
+            (step, part, tie)
+            for bar in model
+            for step, length, tie in bar
+            for part, _chunk in enumerate(_duration_split(length))
+        ]
+        self.assertEqual(len(written), len(expected),
+                         "a split wrote a different number of beats")
+        continuations = 0
+        for index, (beat, (step, part, tie)) in enumerate(zip(written, expected)):
+            if step is None:
+                self.assertEqual(beat.notes, [],
+                                 f"beat {index + 1} is a rest but carries notes")
+                continue
+            continued = tie or part > 0
+            if continued:
+                continuations += 1
+            if step.bass_only:
+                continue  # a held upper voice may be struck where a tie would lie
+            wanted = (guitarpro.NoteType.tie if continued
+                      else guitarpro.NoteType.normal)
+            self.assertTrue(
+                all(n.type == wanted for n in beat.notes),
+                f"beat {index + 1} should be "
+                f"{'tied' if continued else 'struck'} but was written "
+                f"{sorted({str(n.type) for n in beat.notes})}",
+            )
+        self.assertGreater(continuations, 0,
+                           "the head exercised no split continuation")
+
+    def test_a_chord_is_named_where_it_changes_in_a_written_head(self):
+        """The GP5 file names each chord once, at the beat that changes it.
+
+        The rule `tabxml.write_symbol` writes its `<harmony>` symbols by, applied
+        to the same events both renderers read - so the two exports of a head
+        name chords in the same places, and a continuation part (the rest of a
+        split, a hold crossing a bar line) never carries a label of its own. The
+        reported case is bar 2 of this head: a dotted half over a quarter, written
+        as three beats, which used to show `Bbm7` three times where the score has
+        two notes.
+        """
+        from arranger.tuning import NO_CHORD
+        from headxml import arrange_xml_head
+
+        path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)),
+            "data", "All_the_Things_You_Are.musicxml",
+        )
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            steps, head, _notes = arrange_xml_head(path)
+        measures = self.measures(
+            steps=steps, beats_per_bar=head.beats_per_bar,
+            beat_type=head.beat_type,
+        )
+        labels = [
+            beat.text
+            for measure in measures
+            for beat in measure.voices[0].beats
+        ]
+
+        # The changes, walked over the events - written out here rather than
+        # derived from `_build_song`, so a label on a continuation part would show
+        # up as an extra name below.
+        events, _pickup = _events(
+            _substitute_steps(steps), head.beats_per_bar, True, head.beat_type
+        )
+        changes = []
+        in_force = None
+        for step, _strikes, _length in events:
+            if step is not None and step.chord != in_force:
+                in_force = step.chord
+                if in_force and in_force != NO_CHORD:
+                    changes.append(in_force)
+        self.assertEqual([label for label in labels if label], changes)
+
+        # The reported bar: one `Bbm7` on the dotted half's attack, nothing on its
+        # tied continuation, and nothing on the quarter that follows under the
+        # same chord.
+        self.assertEqual(
+            [beat.text for beat in measures[1].voices[0].beats],
+            ["Bbm7", None, None],
         )
 
     def test_a_pickup_is_written_as_a_rest_not_dropped(self):

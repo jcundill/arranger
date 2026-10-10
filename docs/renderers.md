@@ -657,7 +657,12 @@ on `corpus_cli` (`--musicxml`, `--gp5`).
 **What is shared, deliberately.** `tabgp` calls `tabxml._events` and
 `tabxml._substitute_steps` rather than reimplementing either, so a head lands on the
 same beats in both files and a substituted chord is named the same way in both.
-That is the *semantics*; the bar grid is separate, for the reason below.
+The **chord names** are shared too, by rule: `_build_song` keeps an `in_force` and
+writes a name only where the chord changes, which is the same walk
+`tabxml._build_part` does for its `<harmony>` symbols — so a chord is named once, at
+the attack that changes it, in both files, and a continuation part (the rest of a
+length split, a hold crossing a bar line) never carries a label of its own. That is
+the *semantics*; the bar grid is separate, for the reason below.
 
 ### Where GP5 genuinely differs from MusicXML
 `tabxml._build_part` writes a **short first measure** for a head with an anacrusis,
@@ -715,6 +720,22 @@ notation program was run against the output.
   quarters) rounded to the nearest legal value is a **whole note** — a quarter too
   long, and a bar summing to more than its 4/4 signature. It is now written as a
   half plus a quarter.
+  **And the parts are tied, which is what makes them one note rather than two.**
+  The note type used to be decided by `tie` from `_measures` alone, which marks a
+  note continuing an *earlier bar* — so every part of an intra-bar split went out
+  as an ordinary note, and a dotted half played as a half and then a **re-struck**
+  quarter in the middle of its own hold. Measured over the seven heads
+  `arrange_xml_head` arranges (the eighth fixture has no melody to arrange):
+  **46** re-struck continuation beats — All the Things You Are 6, The Jitterbug
+  Waltz 12, I Was Doing All Right 12, Tenor Madness 10, Trouble in Mind 4, Here's
+  That Rainy Day 2, But Not For Me 0. The chord name was duplicated with the note:
+  it is now written only where the chord changes (see "What is shared" above), so
+  bar 2 of "All the Things You Are" — a dotted half over a quarter, three written
+  beats — shows **one** `Bbm7` where it showed three, and plays two attacks rather
+  than three. `test_a_dotted_length_is_tied_within_a_bar_not_re_struck` is the
+  mechanism, `test_no_split_continuation_in_a_written_head_is_re_struck` walks the
+  writer's own model against the parsed bytes over the real export, and
+  `test_a_chord_is_named_where_it_changes_in_a_written_head` is the label rule.
 - **A triplet is a `Tuplet`, not a `Duration` of 12.** `12.bit_length() - 3` is 1,
   so a bare `Duration(12)` is written as an **eighth** and reads back as one. Every
   triplet in a head silently became an eighth, and the bar went a quarter long. A
