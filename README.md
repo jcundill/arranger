@@ -96,14 +96,14 @@ python -m arranger head tests/data/but_not_for_me.mxl --bars 1-5
 ```text
 But Not For Me - George Gershwin
   part: Voice
-  2/2, Eb major, 80 melody note(s), bars 1-32; neck window: frets 2-13; grips: drop2, shell, duo
+  2/2, Eb major, 80 melody note(s), bars 1-32; neck window: frets 2-13; grips: drop2, closed, drop3, drop24, drop2_6432, shell, duo
   note: 15 rests and unpitched notes
 
-Bb7      F4   x-5-6-3-6-x
-Bb7      G4   (non-chord tone -> Bb13 via extension) x-8-6-7-8-x
-Bb7      F4   x-5-6-3-6-x
-Ebmaj    G4   x-6-5-3-8-x
-Ebmaj    F4   (non-chord tone) x-5-3-3-6-x
+Bb7      F4  5    6-x-6-7-6-x        (harmony under 5 - 4 voices)
+Bb7      G4  13   6-x-6-7-8-x        (non-chord tone -> Bb13 via extension - 4 voices)
+Bb7      F4  5    6-x-6-7-6-x        (harmony under 5 - 4 voices)
+Ebmaj    G4  3    6-x-8-8-8-x        (harmony under 3 - 4 voices)
+Ebmaj    F4  9    6-x-8-8-6-x        (non-chord tone -> Ebadd9 via extension - 4 voices)
 ```
 
 Both forms of the format are read: a bare `.musicxml` document and a zipped `.mxl`
@@ -226,17 +226,26 @@ print(format_progression(steps))
 ```
 
 ```text
-Dm7      D5   x-x-10-10-10-10
-G7       B4   13-x-12-12-12-x
-Cmaj7    C5   x-x-9-9-8-8
+Dm7      D5  Root x-x-10-10-10-10    (harmony under Root - 4 voices)
+G7       B4  3    13-x-12-12-12-x    (harmony under 3 - 4 voices)
+Cmaj7    C5  Root x-x-9-9-8-8        (harmony under Root - 4 voices)
 ```
 
 This is the compact one-line form, and it is the only shape `format_progression` has.
 For a whole progression as real six-line tab — with the chords on their real beats — use
 `format_tab_staff` below.
 
-Steps whose melody is a non-chord tone are annotated with the substitution that was
-applied, so a reharmonised passing tone is never silent about itself.
+Every step is annotated. A melody note that is a chord tone names the degree it is
+(`(harmony under b7)`), a non-chord tone names the substitution that was applied, so a
+reharmonised passing tone is never silent about itself, and the **shape** says how many
+voices it states and why not more — `(shell - 3rd & 7th, partial - 3 voices: the 4-voice
+voicing 2-x-1-2-0-x lies outside the neck window)` is the answer to "where did the rest of
+the chord go?". A shape the engine did *not* choose carries no such clause: a comping part
+and a texture fill are thin by request, not by limit. Two more facts get said out loud where
+the tab cannot show them: a slash chord whose written bass no shape reaches
+(`the written bass F# is not sounded - the lowest voice (D4) is 4 semitones from it`), and a
+step the guitar is *silent* at, which the grid sometimes asks for
+(`the guitar rests here - the grid places no chord`).
 
 ### A whole progression on one staff
 
@@ -516,9 +525,9 @@ python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-2
 ```
 
 ```text
-Gmaj9    D4   3-x-4-4-3-x
-Gmaj9    D4   (melody repeated - single note) ----3-
-Gmaj9/F# D4   (shell - 3rd & 7th, partial) x-x-4-4-3-x
+Gmaj9    D4  5    3-x-4-4-3-x        (harmony under 5 - 4 voices)
+Gmaj9    D4  5    x-x-x-x-3-x        (melody repeated - single note)
+Gmaj9/F# D4  5    x-x-4-4-3-x        (shell - 3rd & 7th, partial - 3 voices: the 4-voice voicing 3-x-4-4-3-x does not sound the written bass)
 ```
 
 *Expect a full chord under every melody note, the melody in the top voice, and the hand
@@ -535,9 +544,9 @@ python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-2 --te
 ```text
   texture: targets - a full chord on beats 1 and 3 of 2/2, a shell, a 3rd/6th or the melody alone elsewhere
 
-Gmaj9    D4   5-x-5-4-3-x
-Gmaj9    D4   (melody repeated - single note) ----3-
-Gmaj9/F# D4   (shell - 3rd & 7th, partial) x-x-4-4-3-x
+Gmaj9    D4  5    5-x-5-4-3-x        (harmony under 5 - 4 voices)
+Gmaj9    D4  5    x-x-x-x-3-x        (melody repeated - single note)
+Gmaj9/F# D4  5    x-x-4-4-3-x        (shell - 3rd & 7th, partial - 3 voices, the most this palette offers)
 ```
 
 *Expect a lighter arrangement that states the harmony on the beats and lets it ring in
@@ -552,14 +561,14 @@ python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-2 --te
 ```
 
 ```text
-Gmaj9    D4   (shell - 3rd & 7th, partial) (bass: G2, anchor) 3-x-4-4-3-x
-Gmaj9    D4   x-x-x-x-3-x
-Gmaj9    D4   (bass: F#2, connect) 2-----
-Gmaj9/F# D4   x-x-x-x-3-x
+Gmaj9    D4  5    3-x-4-4-3-x        (shell - 3rd & 7th, partial - 3 voices, the most this palette offers) (bass: G2, anchor)
+Gmaj9    D4  5    x-x-x-x-3-x        (harmony under 5 - melody alone, the most a fill's palette offers)
+Gmaj9    D4  5    2-x-x-x-x-x        (harmony under 5 - melody alone, the most a fill's palette offers - the shape above is held) (bass: F#2, connect)
+Gmaj9/F# D4  5    x-x-x-x-3-x        (harmony under 5 - melody alone, the most a fill's palette offers - the written bass F# is not sounded - the lowest voice (D4) is 4 semitones from it)
 ```
 
 *Expect four steps where the melody had three: the bass grid is finer than the melody
-grid, so a step can exist for the thumb alone, marked `bass_only`. A bare `2-----` is the
+grid, so a step can exist for the thumb alone, marked `bass_only`. A bare `2-x-x-x-x-x` is the
 low E and nothing else. The thumb is placed against **the shape the hand is holding**, not
 against the melody, so it stays under the position rather than chasing it.*
 
@@ -570,9 +579,9 @@ python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-2 --gr
 ```
 
 ```text
-Gmaj9    D4   (shell - 3rd & 7th, partial) x-x-4-4-3-x
-Gmaj9    D4   (melody repeated - single note) ----3-
-Gmaj9/F# D4   (shell - 3rd & 7th, partial) x-x-4-4-3-x
+Gmaj9    D4  5    x-x-4-4-3-x        (shell - 3rd & 7th, partial - 3 voices, the most this palette offers)
+Gmaj9    D4  5    x-x-x-x-3-x        (melody repeated - single note)
+Gmaj9/F# D4  5    x-x-4-4-3-x        (shell - 3rd & 7th, partial - 3 voices, the most this palette offers)
 ```
 
 *Expect an open, unlabelled sound: the 3rd and 7th are what make the chord major or
@@ -586,9 +595,9 @@ python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-2 --gr
 ```
 
 ```text
-Gmaj9    D4   (duo - melody + b3, partial) x-x-x-4-3-x
-Gmaj9    D4   (melody repeated - single note) ----3-
-Gmaj9/F# D4   (duo - melody + b3, partial) x-x-x-4-3-x
+Gmaj9    D4  5    x-x-x-4-3-x        (duo - melody + b3, partial - 2 voices, the most this palette offers)
+Gmaj9    D4  5    x-x-x-x-3-x        (melody repeated - single note)
+Gmaj9/F# D4  5    x-x-x-4-3-x        (duo - melody + b3, partial - 2 voices, the most this palette offers - the written bass F# is not sounded - the lowest voice (B3) is 5 semitones from it)
 ```
 
 *Expect the sparsest thing this library will play — the harmony implied rather than
@@ -604,19 +613,19 @@ python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-2 --vo
 ```
 
 ```text
-Gmaj9    D4   x-x-x-x-3-x
-Gmaj9    D4   x-x-x-x-3-x
-Gmaj9/F# D4   x-x-x-x-3-x
+Gmaj9    D4  5    x-x-x-x-3-x        (harmony under 5 - melody alone, the most this palette offers)
+Gmaj9    D4  5    x-x-x-x-3-x        (harmony under 5 - melody alone, the most this palette offers)
+Gmaj9/F# D4  5    x-x-x-x-3-x        (harmony under 5 - melody alone, the most this palette offers - the written bass F# is not sounded - the lowest voice (D4) is 4 semitones from it)
 ```
 
 `--voices soprano,bass` is the same line with a walking thumb under it, and still
 nothing harmonising it — a bass voice and the tune, with no chords anywhere:
 
 ```text
-Gmaj9    D4   (bass: G2, anchor) 3-x-x-x-3-x
-Gmaj9    D4   x-x-x-x-3-x
-Gmaj9    D4   (bass: F#2, connect) 2-----
-Gmaj9/F# D4   x-x-x-x-3-x
+Gmaj9    D4  5    3-x-x-x-3-x        (harmony under 5 - melody alone, the most this palette offers) (bass: G2, anchor)
+Gmaj9    D4  5    x-x-x-x-3-x        (harmony under 5 - melody alone, the most a fill's palette offers)
+Gmaj9    D4  5    2-x-x-x-x-x        (harmony under 5 - melody alone, the most a fill's palette offers - the shape above is held) (bass: F#2, connect)
+Gmaj9/F# D4  5    x-x-x-x-3-x        (harmony under 5 - melody alone, the most a fill's palette offers - the written bass F# is not sounded - the lowest voice (D4) is 4 semitones from it)
 ```
 
 *Expect a single melodic line, played where the hand can play it. `--texture
@@ -633,9 +642,9 @@ python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-4 --fa
 ```text
   note: diminished fallback replaced the written chord on 1 step(s)
 
-Ebmaj7   D5   x-x-8-8-8-10
-Ebmaj7   C5   (non-chord tone -> Eb6/9 via extension) x-8-8-x-8-8
-Adim7    B4   (non-chord tone) x-6-7-x-7-7
+Ebmaj7   D5  7    x-x-8-8-8-10       (harmony under 7 - 4 voices)
+Ebmaj7   C5  13   x-x-8-10-8-8       (non-chord tone -> Eb6/9 via extension - 4 voices)
+Adim7    B4  9    x-9-x-8-10-7       (non-chord tone - the extension strategy found no voicing; the written chord stands - 4 voices)
 ```
 
 *Expect the tune to change. The written chord is genuinely replaced, which is why the run
@@ -731,12 +740,12 @@ python -m arranger head tests/data/but_not_for_me.mxl --bars 1-3 --texture walki
 ```
 
 ```text
-Bb7      F4   x-x-x-x-x-1
-Bb7      G4   (bass: D3, approach) x-5-x-x-x-3
-Bb7      F4   x-x-x-x-x-1
-Ebmaj    G4   (shell - 3rd & 7th, partial) (bass: Eb3, anchor) x-6-8-8-8-x
-Ebmaj    F4   (bass: G2, connect) 3-x-x-x-x-1
-Cm7      Eb4  x-x-x-x-4-x
+Bb7      F4  5    x-x-x-x-x-1        (harmony under 5 - melody alone, the most a fill's palette offers - reaches outside the preferred frets 2-13 - nothing in this palette sits inside the window)
+Bb7      G4  13   x-5-x-x-x-3        (harmony under 13 - melody alone, the most a fill's palette offers) (bass: D3, approach)
+Bb7      F4  5    x-x-x-x-x-1        (harmony under 5 - melody alone, the most a fill's palette offers - reaches outside the preferred frets 2-13 - nothing in this palette sits inside the window)
+Ebmaj    G4  3    x-x-1-3-4-3        (shell - 3rd & 7th, partial - 3 voices, the most this palette offers - reaches outside the preferred frets 2-13 - the shapes inside the window sound a note outside the chord) (bass: Eb3, anchor)
+Ebmaj    F4  9    1-x-x-x-x-1        (harmony under 9 - melody alone, the most a fill's palette offers - reaches outside the preferred frets 2-13 - nothing in this palette sits inside the window) (bass: F2, connect)
+Cm7      Eb4 b3   x-x-x-x-4-x        (harmony under b3 - melody alone, the most a fill's palette offers)
 ```
 
 Each bass note says what it is *for* in `step.bass_role`, one of `anchor` (the tonic),
@@ -842,17 +851,18 @@ python -m arranger head tests/data/but_not_for_me.mxl --voices bass
 ```
 
 ```text
-Bb7      F4   (shell - 3rd & 7th, partial) x-x-3-x-x-x
-Bb7      G4   (shell - 3rd & 7th, partial) x-x-3-x-x-x
-Ebmaj    G4   (shell - 3rd & 7th, partial) 6-x-x-x-x-x
+Bb7      F4  5    x-x-3-x-x-x        (comping - 5; the guitar does not play the tune)
+Bb7      G4  13   x-x-3-x-x-x        (comping - 5; the guitar does not play the tune - non-chord tone -> Bb13 via extension)
+Ebmaj    G4  3    6-x-x-x-x-x        (comping - 5; the guitar does not play the tune)
 ```
 
-One note per step, on the low E, A or D, sounding the chord's root — `Bb7` gives `Bb`, not
-the `D` a guide-tone shape would. The third column is the *written* melody, which this
-guitar is not playing (`melody_voiced` is `False`); it is still on the step so the band can
-line up against it. The `(shell - 3rd & 7th, partial)` annotation is stale wording for this
-selection — the shape is a single bass note, not a shell — and is left as-is rather than
-special-cased, because the grip label is shared with the shapes that genuinely are shells.
+One note per step, on the low E, A or D: the **lowest voice of the shape**, taken from
+whatever reaches it — the root where that is convenient (`Bb7` gives `Bb`, not the `D` a
+guide-tone shape would), and the 5th where it is not (every `Ebmaj` above). The annotation
+names the degrees actually sounding (`(comping - 5; the guitar does not play the tune)`), so
+the line reads for itself. The melody column is the *written* melody, which this guitar is
+not playing (`melody_voiced` is `False`); it is still on the step so the band can line up
+against it, and the annotation says that out loud too.
 
 `bass` is only treated this way when named **alone**. `--voices tenor,bass` and
 `--voices alto,tenor,bass` are a duo and a shell, and their lowest note belongs to the
@@ -872,9 +882,9 @@ python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-2 \
 ```
 
 ```text
-Gmaj9    D4   (shell - 3rd & 7th, partial) x-x-x-x-7-7
-Gmaj9    D4   (shell - 3rd & 7th, partial) x-x-x-x-7-7
-Gmaj9/F# D4   (shell - 3rd & 7th, partial) x-x-x-x-7-7
+Gmaj9    D4  5    x-x-x-x-7-7        (comping - 3 & 7; the guitar does not play the tune)
+Gmaj9    D4  5    x-x-x-x-7-7        (comping - 3 & 7; the guitar does not play the tune)
+Gmaj9/F# D4  5    x-x-x-x-7-7        (comping - 3 & 7; the guitar does not play the tune)
 ```
 
 *Expect **two** notes per step — one per voice you named. `--voices alto` gives one and
@@ -903,7 +913,7 @@ between them: `--texture targets --voices none` gives a shell on beats 1 and 3 a
 shell between, with the horn's line untouched throughout.
 
 **A repeated melody holds the whole shape.** Normally a repeat is a soprano-only
-re-strike with the inner voices held — but there is no soprano to re-strike when the guitar
+re-strike with the rest muted — but there is no soprano to re-strike when the guitar
 isn't singing, so the shape is held instead. Otherwise the guitar part would play a moving
 melody line on exactly the beats where the arrangement handed the tune away. The corpus
 count is in [docs/voices-axis.md](docs/voices-axis.md).
@@ -987,7 +997,7 @@ The step's `melody` is the pitch that actually sounds; `original_melody` keeps t
 written one, and `format_progression` annotates the step with it:
 
 ```text
-Dm7      A4   (transposed down an octave from A5) 10-x-10-10-10-x
+Dm7      A4  5    10-x-10-10-10-x    (harmony under 5 - transposed down an octave from A5 - 4 voices)
 ```
 
 Two deliberate limits:

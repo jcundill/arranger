@@ -45,6 +45,7 @@ from .decisions import (
     MELODY_ALONE_NO_CHORD,
     MELODY_ALONE_REST,
     MELODY_ALONE_TEXTURE,
+    SLASH_BASS_SATISFIED,
     hold_the_melody_string,
     holds_the_shape,
     is_bass_only,
@@ -91,6 +92,7 @@ from .tuning import (
     ROLE_TARGET,
     STANDARD_TUNING,
     ArrangementStep,
+    Palette,
     Voicing,
     _note_name,
 )
@@ -429,6 +431,11 @@ def prepare_step(
                 f"Warning: melody {note_str} is not a chord tone of {name} and the "
                 f"'{non_chord_tone}' strategy found no voicing; keeping the fallback"
             )
+            # The strategy is recorded even though it settled nothing, because the line has
+            # to name it: "non-chord tone" alone cannot tell a substitution that failed from
+            # one that was never attempted. What distinguishes the two is `harmonized_as`,
+            # which stays None here - not this field.
+            strategy_used = non_chord_tone
 
     if not candidates:
         return None
@@ -809,6 +816,11 @@ def _texture_fill_step(
             chord=name,
             melody=sounding,
             voicing=solo_voicing,
+            # The tune alone *is* this slot's palette - the texture thinned the slot, or the
+            # selection asked for the soprano on its own - so the count it states is the
+            # palette's own limit rather than a choice between shapes. Recording it is what
+            # lets the line answer "one note, why?" instead of leaving it open.
+            palette=Palette(available=1),
             original_melody=written_original,
             partial=False,
             bar=bar,
@@ -1229,6 +1241,91 @@ def _promoted_fill(
         diagnostics=diagnostics,
     )
 
+def _lost_to_the_bass_partition(
+    chosen: Voicing,
+    alternative: Voicing,
+    bass_pc: Optional[int],
+    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]],
+) -> bool:
+    """Whether the slash-bass partition would have dropped `alternative` before the tuple.
+
+    The partition is `decisions.select_step_voicing`'s, applied only when some candidate
+    can honour the written bass at all (`SLASH_BASS_SATISFIED`) - so this is False for a
+    chord whose bass is unachievable, where the tuple decides alone and the criterion it
+    reports is the whole story.
+    """
+    if bass_pc is None or slash_bass_cost is None:
+        return False
+    here = slash_bass_cost(chosen.midi_notes(), bass_pc)
+    there = slash_bass_cost(alternative.midi_notes(), bass_pc)
+    return here <= SLASH_BASS_SATISFIED and there > here
+
+
+def _palette_facts(
+    candidates: Sequence[Voicing],
+    chosen: Voicing,
+    *,
+    previous: Optional[Voicing],
+    fret_min: int,
+    fret_max: int,
+    allowed_tones: Optional[Container[int]],
+    root_pc: Optional[int],
+    melody_pc: Optional[int],
+    bass_pc: Optional[int] = None,
+    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]] = None,
+) -> Palette:
+    """What the palette offered besides the shape it chose, recorded for the renderer.
+
+    `available` is the most voices any candidate in the palette states, which is the
+    number that separates a palette's limit from a decision. The alternative is the best
+    candidate stating **more** voices than the chosen shape - the chord that is not being
+    played, which is the question a reader actually asks - and `decided_by` is the element
+    of `cost.voicing_cost` that separated the two.
+
+    That element is never the voice-count one: a fuller shape cannot lose on how many
+    voices it has. So the answer is always a wrong note, the neck window or the hand's
+    travel, which is exactly what a reader counting strings cannot see for themselves -
+    unless the shape never reached the tuple at all, which is the slash-bass partition.
+
+    The costs are the ones the selection used, from the same arguments, so the criterion
+    reported here is the criterion that decided there rather than a second opinion.
+    """
+
+    def cost(voicing: Voicing) -> Tuple[float, ...]:
+        return _cost.voicing_cost(
+            voicing,
+            previous,
+            fret_min,
+            fret_max,
+            allowed_tones=allowed_tones,
+            root_pc=root_pc,
+            melody_pc=melody_pc,
+        )
+
+    available = max(len(candidate.active_frets()) for candidate in candidates)
+    inside_window = any(
+        all(fret_min <= fret <= fret_max for fret in candidate.active_frets())
+        for candidate in candidates
+    )
+    chosen_voices = len(chosen.active_frets())
+    fuller = [c for c in candidates if len(c.active_frets()) > chosen_voices]
+    if not fuller:
+        return Palette(available=available, inside_window=inside_window)
+    alternative = min(fuller, key=cost)
+    decided_by = _cost.decisive_criterion(cost(chosen), cost(alternative))
+    if _lost_to_the_bass_partition(chosen, alternative, bass_pc, slash_bass_cost):
+        # The partition runs *before* the tuple, so the two cost tuples need not differ at
+        # all: what removed this shape is the bass note it does not sound.
+        decided_by = _cost.PARTITION_CRITERION
+    return Palette(
+        available=available,
+        alternative=alternative,
+        decided_by=decided_by,
+        inside_window=inside_window,
+    )
+
+
+
 def _demoted_to_melody_alone(
     arrangements: List[ArrangementStep],
     slot: _Slot,
@@ -1238,6 +1335,7 @@ def _demoted_to_melody_alone(
     melody_note: Note,
     top_strings: Tuple[int, ...],
     best_voicing: Voicing,
+    palette: Palette,
     bar: Optional[int],
     beat: Optional[float],
     duration: Optional[float],
@@ -1269,6 +1367,15 @@ def _demoted_to_melody_alone(
             melody=note_str,
             voicing=solo,
             partial=False,
+            # The shape the demotion turned away, and the criterion it did it for: the
+            # span is the whole reason, which is what
+            # `decisions.should_demote_to_melody_alone` asks about.
+            palette=Palette(
+                available=palette.available,
+                alternative=best_voicing,
+                decided_by=_cost.SPAN_CRITERION,
+                inside_window=palette.inside_window,
+            ),
             bar=bar,
             beat=beat,
             duration=duration,
@@ -1426,26 +1533,44 @@ def _harmonised_step(
     if sub_quality is None:
         sub_quality = ChordParser.canonical_quality(chord_type)
         substitute = name
+    allowed_tones = ChordParser.get_chord_tones(sub_quality, substitute)
+    root_pc = _grips._chord_context(chord_type, name)[1]
+    # The melody is the caller's note and is never rewritten, so when it
+    # lies outside the chord every candidate is impure on it. Excluding it
+    # lets a shape that adds no *other* wrong note reach zero - see
+    # cost.voicing_cost, where counting rather than flagging makes the
+    # difference between one wrong note and four.
+    melody_pc = melody_note.midi_note() % 12
+    bass_pc = None if bass_pcs is None else bass_pcs.get(index)
     best_voicing = select_step_voicing(
         candidates,
         prev_voicing,
         fret_min,
         fret_max,
-        allowed_tones=ChordParser.get_chord_tones(sub_quality, substitute),
-        root_pc=_grips._chord_context(chord_type, name)[1],
-        # The melody is the caller's note and is never rewritten, so when it
-        # lies outside the chord every candidate is impure on it. Excluding it
-        # lets a shape that adds no *other* wrong note reach zero - see
-        # cost.voicing_cost, where counting rather than flagging makes the
-        # difference between one wrong note and four.
-        melody_pc=melody_note.midi_note() % 12,
-        bass_pc=None if bass_pcs is None else bass_pcs.get(index),
+        allowed_tones=allowed_tones,
+        root_pc=root_pc,
+        melody_pc=melody_pc,
+        bass_pc=bass_pc,
         slash_bass_cost=slash_bass_cost_for,
     )
     # `candidates` is non-empty here (the step is skipped otherwise), so this
     # cannot fire. Written as an assertion rather than left to Optional
     # narrowing at every use below.
     assert best_voicing is not None
+    # What the palette had besides the shape it chose, recorded on the step so a
+    # renderer can answer "why is this a shell?" without re-deriving anything.
+    palette = _palette_facts(
+        candidates,
+        best_voicing,
+        previous=prev_voicing,
+        fret_min=fret_min,
+        fret_max=fret_max,
+        allowed_tones=allowed_tones,
+        root_pc=root_pc,
+        melody_pc=melody_pc,
+        bass_pc=bass_pc,
+        slash_bass_cost=slash_bass_cost_for,
+    )
 
     # A complete chord at the very top of the span budget is demoted to
     # the melody alone. Why that is a fallback rather than a re-ranking is
@@ -1455,6 +1580,7 @@ def _harmonised_step(
             arrangements, slot,
             name=name, note_str=note_str, melody_note=melody_note,
             top_strings=top_strings, best_voicing=best_voicing,
+            palette=palette,
             bar=bar, beat=beat, duration=duration,
             role=role, weight=weight, diagnostics=diagnostics,
         ):
@@ -1471,6 +1597,7 @@ def _harmonised_step(
         # step reports what actually sounds; original_melody keeps the written one.
         melody=prepared.melody,
         voicing=best_voicing,
+        palette=palette,
         non_chord_tone=is_non_chord_tone,
         strategy=strategy_used,
         harmonized_as=harmonized_as,

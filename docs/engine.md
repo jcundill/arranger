@@ -108,9 +108,64 @@ you whether a change is an improvement or a different library.
   selection. See
   [Repeated melodies hold the shape](#repeated-melodies-hold-the-shape).
 - `format_progression(steps)` — module-level renderer for a whole
-  arrangement: one line per step. Non-chord-tone steps are annotated via the shared
-  `_step_annotation()` helper, which `_print_step()` also uses so the two
-  renderings cannot drift. It used to take `vertical=True` for a six-line block per
+  arrangement: one line per step, in four fixed columns — chord, melody, the melody's
+  **degree above that chord** (`chords.melody_degree_name`, blank when there is no melody
+  or no readable chord), and the tab — so every shape starts in the same column. Any
+  annotation is **appended after the tab** rather than printed inline, which is what keeps
+  the tab column fixed however long the text is. Every step is annotated through the
+  shared `_step_annotation()` helper, which `_print_step()` also uses so the two
+  renderings cannot drift: a chord tone names the degree it is (`(harmony under b7)`), a
+  non-chord tone names its substitution, and a partial shape names what it leaves out.
+  Where the melody-bearing route *chose* the shape, the annotation carries a **shape
+  clause** as well: how many voices the step states and, where a fuller shape existed,
+  which criterion turned it away — `(shell - 3rd & 7th, partial - 3 voices: the 4-voice
+  voicing 2-x-1-2-0-x lies outside the neck window)`. It is written from
+  `ArrangementStep.palette`, the fact the selector records — the most voices the palette
+  offered, the best candidate with more of them, and the element of `cost.voicing_cost`
+  that ranked it lower — so the answer is the decision's own rather than a second opinion
+  at render time. The criterion is named from `cost.VOICING_COST_CRITERIA`, the tuple's
+  order spelled as words; its last entry is not a cost at all but a shape the caller's
+  slash-bass partition removed before the tuple ran, which is what a slash chord reading
+  `does not sound the written bass` means.
+
+  Four more clauses answer the routes that choose no shape from a palette, each of which
+  used to read as something it was not: a **silent** step (`the guitar rests here - the grid
+  places no chord`, where the line previously claimed a harmony under a degree), a **comping**
+  step (`comping - 3 & 7; the guitar does not play the tune` — the degrees read off the shape,
+  because the old grip label called a single bass note "shell - 3rd & 7th"), a step that exists
+  for the thumb (`the shape above is held`), and a shape that had to leave the preferred frets
+  (`reaches outside the preferred frets 2-13`, with what was inside them from
+  `Palette.inside_window`). A palette that is thin because the *texture* asked reads
+  `the most a fill's palette offers` rather than `the most this palette offers`, and a chord
+  symbol nothing can parse says so instead of printing a bare count.
+
+  A fifth names a loss the tab cannot show: the slash bass the partition could not reach
+  (`the written bass D is not sounded - the lowest voice (G3) is 5 semitones from it`). The
+  symbol asks for that note and no part of the tab answers, so the line does — read from the
+  chord symbol and the shape, through `slots._slash_bass` and `slots.slash_bass_cost`.
+
+  Two outcomes that used to print the same words are told apart. A non-chord tone whose
+  strategy found nothing reads `non-chord tone - the extension strategy found no voicing; the
+  written chord stands`, where before it read only `non-chord tone` — the words a route that
+  never attempted a substitution would also print (`step.harmonized_as` is what separates the
+  two, and `step.strategy` now carries the strategy *in force* rather than only the one that
+  succeeded). And a comping step reads `the tune is silent here` where the grid stabs at a
+  position the tune has no note under, rather than claiming the guitar is declining a note
+  that is not sounding.
+
+  **The rule that decides where a fact goes.** A clause is either a *correction* or an
+  *explanation*, and the two behave differently. A correction fixes a **column** — the melody
+  column shows the pitch that sounds, the chord column shows the written symbol — so it is
+  restated on **every** line that suffers it, holds included. An explanation accounts for a
+  **choice** (why fewer voices, why that fret, why the thumb moves), and it belongs on the line
+  where the choice was made: a hold does not repeat its shape's count. Both are *derived
+  clauses* in `render._annotate`, never branches at a return site, because a fact written as a
+  branch is a fact some route will not print — which is precisely how 22 transposed steps lost
+  their substitute chord and 2 holds lost their octave. `tests/test_explanations.py` holds the
+  whole invariant as a table of (decision, when this step is one of those, what the line must
+  say), swept over every committed head from the step's **fields** rather than from the
+  wording; `AGENTS.md` states the rule an editor must follow when adding a choice.
+  It used to take `vertical=True` for a six-line block per
   chord, and the `--vertical` flag existed only to reach it; both are removed, so
   this is the compact one-line form alone and `format_tab_staff` is the six-line
   rendering. `Voicing.tab_block()` still renders a single voicing vertically.
@@ -726,9 +781,9 @@ that `ArrangementStep.repeated` is set, and the renderers honour it.
   `[False, True, True, True]`.
 - **The melody must still be on that string.** `decisions.is_repeated_step` requires the
   step's soprano string to equal the previous step's, because the renderers act on the
-  flag by striking the soprano alone and holding everything else: on another string no
-  finger is holding the note, so a marked step would mute the chord it had just voiced
-  and sound a note the hand is not on. `decisions.holds_the_shape` is the half that the
+  flag by striking the soprano alone and collapsing the chord to that note: on another
+  string no finger is holding the note, so a marked step would mute the chord it had just
+  voiced and sound a note the hand is not on. `decisions.holds_the_shape` is the half that the
   narrowing and the flag share. Measured: **22 of 202** marked steps re-struck the melody
   on another string before the fix — every one of them under `targets`, where a fill's
   compact 6-4-3 shell beats a same-string alternative on `span` — and **0 of 199** now.
@@ -764,11 +819,12 @@ an unchanged harmony, and **one** of them records a different string — a `walk
 fill, whose one-note upper shape is bookkeeping rather than a strike, since a fill under a
 walk is `bass_only` and the previous shape is what is still ringing.
 
-The other strings are **left blank**, not marked `x`. The player is not being asked
-to mute anything — the strings are simply not part of this step, and five `x` say more
-than the gesture does. This reuses the blank the staff and HTML already use for a voice
-that is not struck. Two earlier drafts were both wrong: `~` ("let ring") across a chord
-change, and then `x`, which overstates the instruction.
+Every string the step does not play is marked muted (**`x`**), so the line states
+exactly which strings are plucked and nothing else - including a `bass_only` slot,
+whose upper voices are held rather than restruck: a string the player must not attack
+reads the same as a mute here. Leaving them blank made the line look truncated, and a
+blank is indistinguishable from a voice that went missing. (`~`, "let ring", was an
+earlier draft and is still wrong: it says the opposite of what a collapse does.)
 
 The HTML marks the whole column with `_CLASS_REPEAT` (`td.repeat`) and tints it. The
 cells are otherwise empty, so without the tint a repeated note reads as a gap in the
@@ -884,10 +940,13 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
   new failure mode.
 - **A partial harmonisation means the printed chord name is not every note sounding.**
   Where a shell or a duo is used, the chord describes the harmony rather than the full
-  voicing, and `_step_annotation` says so (`(shell - 3rd & 7th, partial)`). The full
-  shape is still in `step.voicing`. This is a consequence of the user's own brief —
-  "just harmonising with the 3rd and 7th is fine" — not a defect, but it is a real
-  thing to know before reading a tab.
+  voicing, and `_step_annotation` says so and says why (`(shell - 3rd & 7th, partial -
+  3 voices: the 4-voice voicing 2-x-1-2-0-x lies outside the neck window)`). The reason
+  comes from the recorded `ArrangementStep.palette` rather than a re-derivation, so a thin
+  shape is explicable rather than mysterious: a palette that never held four voices reads
+  differently from one that did. The full shape is still in `step.voicing`. This is a
+  consequence of the user's own brief — "just harmonising with the 3rd and 7th is fine" —
+  not a defect, but it is a real thing to know before reading a tab.
 - The `sustain` strategy is structural, not rhythmic: `arrange_progression` takes
   only `(note, quality, name)` triples, so it cannot tell a brief passing note from
   an accented tension. Holding the inner voices is applied whenever the shape can

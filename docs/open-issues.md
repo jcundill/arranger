@@ -2,7 +2,7 @@
 
 Each item states the **issue**, the **problem it produces**, and **why it exists**, with the
 measurement behind it. A fixed issue is **removed** from this file rather than kept as history —
-its record lives in the commit that fixed it and in the document it belongs to. Three are open,
+its record lives in the commit that fixed it and in the document it belongs to. Four are open,
 one of them partly fixed:
 
 1. **A chord in force is stored per melody note, so a bar the melody skips is silent** — the
@@ -12,6 +12,8 @@ one of them partly fixed:
    twelve events in one head.
 3. **`harmony=full` is accepted on the comping route and answered with a different family** — the
    one axis value refused by nothing that resolves to something other than itself.
+4. **A position the guitar cannot play is dropped from the tab, not printed empty** — four paths
+   emit no line at all, and twelve positions over the corpus go with them.
 
 Reproduce the measurements with the commands in [Reproducing](#reproducing).
 
@@ -148,6 +150,54 @@ not among them.
 
 ---
 
+## 4. A position the guitar cannot play is dropped from the tab, not printed empty
+
+**Status: open, with the design decision owed.** Four paths emit nothing where the guitar
+plays nothing: **twelve** positions over the committed corpus, all of them one case.
+
+**The issue.** Where a step cannot be built at all, the loop `return`s and no step is
+appended, so the position vanishes from `format_progression`'s output. Every one of those
+paths *warns*, so the fact is reported somewhere — but the warnings go to a `Diagnostics`
+sink, while the tab, which is what a user reads or pipes into a file, has neither a line for
+the position nor a marker where it went.
+
+**The problem.** The tab's line-up is the whole reason the rest step exists: a step the guitar
+*declines* is still emitted, carrying the bar, the beat and the chord name, "so a comping part
+whose bars collapsed to their stabs would not line up against the tune it is comping under".
+A dropped position breaks exactly that. The tab comes back silently shorter, and nothing in it
+separates a bar the guitar left out from a bar the tune has nothing in.
+
+**Measured** over 7 committed heads × 25 configs = **29,352 steps**, by warning text and by
+step count:
+
+| path | dropped | measured |
+|---|---|---|
+| `movement._comping_step`, an **NC bar** under a comping selection | every position in the bar | **12** — all `Trouble_in_Mind_Blues`, under `--voices bass`, `alto,tenor` and `alto,tenor,bass`. Under `--voices alto,tenor` a whole bar is absent from the tab while the horn is playing in it |
+| `movement._harmonised_step`, no shape in the palette *and* the tune cannot stand alone | the position | **0** on the corpus; `tests`' `NO_VOICING_AT_ALL` fixture is the case |
+| `movement._slot_state`, a melody-only selection at a note-less position | the position | **0** |
+| `movement._no_chord_step`, an NC note no string reaches | the position | **0** |
+
+**Why it exists.** Each path was added as the honest answer to "nothing can be played here",
+and in each case the warning was taken to be the reporting. Nobody has asked the further
+question the rest step exists to answer — *and where in the tab?* — which is why the four
+behave differently from the one route that answers it.
+
+**What fixing it would take.** `ArrangementStep.silence: Optional[str]`, a five-value
+vocabulary — `grid` for today's rest, `nc_comping`, `no_shape`, `out_of_reach`, `tune_silent` —
+with the four sites calling `_rest_step` and the renderer phrasing each reason from that field
+rather than inferring silence from an all-muted voicing. That is one field, five constants,
+four call sites, one render branch, two tests inverted
+(`test_unreachable_nc_note_is_skipped_not_raised` asserts `[]` today, and
+`test_the_no_voicing_warning` pins a warning that would stop saying "skipping the step"), and
+the three statements that describe the skip: §"A palette that cannot voice a chord" and
+§"An `NC` bar is reported, not quietly dropped" in [engine.md](engine.md), and the README's
+"It only repositions a voicing that exists". It changes the step list
+`arrange_progression` returns for unplayable input, which is why it is a decision rather than
+a patch. The cheaper alternative — a coverage count in the CLI's run header, "positions: 206 of
+218, 12 could not be played" — leaves the holes unlocatable, which is most of the defect.
+
+---
+
 ## Reproducing
 
 ```bash
@@ -204,6 +254,20 @@ print('bars walked:', sorted({n.bar for n in line}))
 "
 # bars walked: [1, 3]   <- on the head path the union supplies bar 2, so this is the
 #                            library function called directly with hand-built timings.
+
+# 4. the dropped position: a bar the guitar cannot comp has no line in the tab at all
+# Bar 1 of this head is `NC` and the tune has notes in it, so a reader lining the part up
+# against the tune is one bar short with nothing in the tab to say which bar went.
+.venv/bin/python -c "
+from headxml import arrange_xml_head
+steps, head, _notes = arrange_xml_head('tests/data/Trouble_in_Mind_Blues.musicxml',
+                                       melody='alto,tenor')
+print('steps:', len(steps), ' bars in the tab:', sorted({s.bar for s in steps}))
+print('bars the tune has:', sorted({n.bar for n in head.notes}))
+"
+# steps: 62  bars in the tab: [2, 3, ..., 17]  bars the tune has: [1, 2, ..., 14]
+# - and the warning, once per position in that bar: "NC has no chord and this voice
+# selection (alto, tenor) leaves the guitar nothing to comp; skipping the bar".
 ```
 
 Item 2's counts come from a throwaway script (not committed — `AGENTS.md` trap 8): wrap

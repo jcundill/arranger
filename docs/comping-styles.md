@@ -1019,10 +1019,13 @@ that has none, `ArrangementStep.melody` becomes `Optional[str]`, and `_PLACEHOLD
 **deleted rather than hidden**. It exists only because a harmony-only step needed *a* melody
 string to satisfy `melody: str`, and under §9.2 it has no reason to exist.
 
-It is also the visible half of item 1's deferral: `Cmaj7  C4  (shell - 3rd & 7th, partial)`
-is printed by the default line tab today, 14 times on `but_not_for_me` under
+It is also the visible half of item 1's deferral: the default line tab prints a comping
+step with the melody column still carrying the horn's note and the shape's degrees trailing
+it (`Cmaj7  C4  Root  ...  (comping - 3 & 7; the guitar does not play the tune)`), 14 times
+on `but_not_for_me` under
 `--voices alto,tenor --grid freddie`, and reads as a claim that the guitar played C4. It did
-not. The sentinel is indistinguishable from a real note by equality — all 30 `"C4"` slots
+not, and the clause now says so rather than leaving the melody column to imply otherwise.
+The sentinel is indistinguishable from a real note by equality — all 30 `"C4"` slots
 across the fixtures sit on genuinely written C4s — so any test asserting
 `melody == _PLACEHOLDER_MELODY` can pass for the wrong reason, including the one that
 currently documents the deferral.

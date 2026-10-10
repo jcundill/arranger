@@ -450,6 +450,16 @@ def is_repeated_step(
     return voicing.soprano_string() == previous_step.voicing.soprano_string()
 
 
+#: The slash-bass score at or below which the written bass counts as honourable, and so
+#: the partition by it is worth applying. A **best** score above this skips the partition
+#: entirely, because an unachievable slash chord must not swallow the whole palette.
+#:
+#: It is a named constant because the reason a shape lost is reportable: "nothing could
+#: sound this bass" and "this shape does not sound it" are different answers, and only the
+#: second one is a criterion a shape can be said to have failed.
+SLASH_BASS_SATISFIED = 2
+
+
 def select_step_voicing(
     candidates: List[Voicing],
     previous: Optional[Voicing],
@@ -488,7 +498,7 @@ def select_step_voicing(
     if bass_pc is not None and slash_bass_cost is not None and candidates:
         costs = [slash_bass_cost(v.midi_notes(), bass_pc) for v in candidates]
         best = min(costs)
-        if best <= 2:
+        if best <= SLASH_BASS_SATISFIED:
             candidates = [v for v, c in zip(candidates, costs) if c == best]
 
     return _best_voicing(

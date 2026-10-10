@@ -20,6 +20,18 @@ from arranger import (
 from tabstaff import _NOTE_VALUES, _staff_columns, _staff_rhythm
 from tests.support import make_voicing
 
+# The compact line's fixed layout, in columns: chord(8) + space + melody(3) + space =
+# 13, then degree(4) + space = 18, then six two-character cells joined by '-' = 17 more.
+# Named here so a test asserts the field the renderer builds, rather than re-deriving it
+# from a `split()` that the padded cells make ambiguous.
+_DEGREE_FIELD = slice(13, 17)
+_TAB_FIELD = slice(18, 35)
+
+
+def _tab_cells(line: str) -> List[str]:
+    """The six tab cells of a `format_progression` line, trimmed of their padding."""
+    return [cell.strip() for cell in line[_TAB_FIELD].split("-")]
+
 
 class TestVoicingTabBlock(unittest.TestCase):
     """Tests the six-line vertical tab renderer on a Voicing."""
@@ -151,12 +163,15 @@ class TestFormatProgression(unittest.TestCase):
         rendered = format_progression(self.all_of_me)
         self.assertIn("non-chord tone", rendered)
         self.assertIn("Cmaj9", rendered)
-        # The two chord-tone steps carry no annotation.
+        # The two chord-tone steps name their degree instead of coming back blank.
         self.assertEqual(rendered.count("non-chord tone"), 1)
+        self.assertEqual(rendered.count("(harmony under "), 2)
 
-    def test_chord_tone_progression_has_no_annotation(self):
-        """A progression of plain chord tones renders without any annotation."""
-        self.assertNotIn("non-chord", format_progression(self.major))
+    def test_chord_tone_steps_name_their_degree(self):
+        """A plain chord-tone progression says which degree each melody note is."""
+        rendered = format_progression(self.major)
+        self.assertNotIn("non-chord", rendered)
+        self.assertEqual(rendered.count("(harmony under "), 3)
 
     def test_empty_progression_renders_empty_string(self):
         """No steps means an empty string, not a stray newline."""
@@ -1650,18 +1665,17 @@ class TestRepeatedMelody(unittest.TestCase):
             self.assertNotIn("melody repeated", line, chord)
         # Only the last is a hold: the Eb7 repeating under the Eb7.
         self.assertIn("melody repeated", lines[-1])
-        self.assertEqual(
-            lines[-1].split()[-1].split("-"), ["", "", "", "", "1", ""]
-        )
+        # The shape has collapsed to the soprano, so the strings it does not strike are x.
+        self.assertEqual(_tab_cells(lines[-1]), ["x", "x", "x", "x", "1", "x"])
 
     def test_voicing_is_unchanged_so_the_shape_is_still_available(self):
         """The flag is presentational: the step keeps its full drop-2 voicing."""
         self.assertEqual(self.steps[1].tab_line(), "x-1-1-0-1-x")
 
     def test_one_line_tab_plays_a_single_note(self):
-        """Only the melody string carries a fret; the rest are blank, not 'x'."""
+        """Only the melody string carries a fret; every other string is muted."""
         line = format_progression(self.steps).split("\n")[1]
-        self.assertEqual(line.split()[-1].split("-"), ["", "", "", "", "1", ""])
+        self.assertEqual(_tab_cells(line), ["x", "x", "x", "x", "1", "x"])
 
     def test_annotation_says_the_note_repeats(self):
         """The chord label alone would imply a full shape, so the line is annotated."""
@@ -1952,3 +1966,75 @@ class TestStaffBarlineAlignment(unittest.TestCase):
             positions = [[i for i, c in enumerate(line) if c == "|"] for line in system]
             for row in positions[1:]:
                 self.assertEqual(row, positions[2])
+
+
+class TestOneLineColumns(unittest.TestCase):
+    """The compact line's four columns: chord, melody, degree, tab - then annotation.
+
+    Two guarantees. The **tab column is fixed**, so shapes line up down the page: the
+    annotation, whose length varies, trails the line instead of sitting between the
+    melody and the tab, where it used to push every annotated shape out of line. And
+    the **degree column** names the melody's chord tone - or, for a note outside the
+    chord, the tension it spells - immediately after the melody note.
+    """
+
+    def build(self, progression):
+        return format_progression(VoiceLeadingEngine.arrange_progression(progression))
+
+    def test_every_tab_starts_in_the_same_column(self):
+        """An annotation, however long, cannot move the shape.
+
+        The cells stay hyphen-joined and ragged - `x-11-x` is wider than `x-x-x` - so
+        it is the *field* that is fixed: the tab begins at column 18 on every line,
+        whatever width the shape itself is.
+        """
+        rendered = self.build(
+            [("D4", "7", "D7"), ("Eb4", "7", "D7"), ("D4", "7", "D7")]
+        )
+        for line in rendered.splitlines():
+            self.assertRegex(line[_TAB_FIELD].strip(), r"^[x0-9]+(-[x0-9]+){5}$")
+
+    def test_every_annotation_starts_in_the_same_column(self):
+        """The explanation trails a padded field, so it begins in one column.
+
+        Two shapes of different widths - `x-x-x-9-10-8` against `x-x-11-9-11-11` -
+        would otherwise start their explanations wherever each shape happened to end.
+        """
+        from arranger.render import _format_step
+
+        lines = [
+            _format_step(
+                ArrangementStep(
+                    chord="Dm7", melody="A4", original_melody="A5",
+                    voicing=make_voicing(frets),
+                )
+            )
+            for frets in ([-1, -1, -1, 9, 10, 8], [-1, -1, 11, 9, 11, 11])
+        ]
+        for line in lines:
+            self.assertIn("transposed down an octave from A5", line)
+        self.assertEqual(len({line.index("(") for line in lines}), 1, lines)
+
+    def test_the_degree_column_names_the_melody_note(self):
+        rendered = self.build([("G4", "maj7", "Ebmaj7"), ("D4", "maj7", "Ebmaj7")])
+        lines = rendered.splitlines()
+        self.assertEqual(lines[0][_DEGREE_FIELD].strip(), "3")
+        self.assertEqual(lines[1][_DEGREE_FIELD].strip(), "7")
+
+    def test_a_tension_is_named_in_the_degree_column(self):
+        """`Eb` over `D7` is the b9 the reharmonisation below it names."""
+        rendered = self.build([("Eb4", "7", "D7")])
+        self.assertEqual(rendered.splitlines()[0][_DEGREE_FIELD].strip(), "b9")
+
+    def test_the_annotation_trails_the_tab(self):
+        """The explanation is appended after the shape, not between the melody and it."""
+        line = self.build([("Eb4", "7", "D7")]).splitlines()[0]
+        self.assertLess(_TAB_FIELD.stop, line.index("("))
+
+    def test_a_slot_with_no_melody_leaves_the_degree_column_blank(self):
+        """A comping slot at a position the tune is silent at has nothing to name."""
+        step = ArrangementStep(
+            chord="Gmaj9", melody=None, voicing=make_voicing([-1, -1, -1, -1, 7, 7])
+        )
+        line = format_progression([step])
+        self.assertEqual(line[_DEGREE_FIELD], "    ")

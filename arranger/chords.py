@@ -239,6 +239,78 @@ NON_CHORD_TONE_EXTENSIONS = {
 NON_CHORD_TONE_STRATEGIES = ("extension", "diminished", "sustain")
 
 
+# How a melody note's degree above its chord's root is spelled, keyed by the semitone
+# interval class (modulo 12). This is the *dominant-and-major* reading of each degree -
+# the one that calls the raised fourth a `#11` and the sixth a `13` - and the family
+# overrides below are what correct it where a chord spells a degree the other way: a
+# half-diminished chord's tritone is its `b5`, not an `#11`, and an augmented chord's
+# raised fifth is `#5`, not a `b13`. One table cannot be right for both, which is why
+# the spelling is chosen from the quality rather than from the pitch class alone.
+MELODY_DEGREE_NAMES: Dict[int, str] = {
+    0: "Root", 1: "b9", 2: "9", 3: "b3", 4: "3", 5: "11",
+    6: "#11", 7: "5", 8: "b13", 9: "13", 10: "b7", 11: "7",
+}
+
+# Qualities that spell degree 6 as `b5` rather than `#11`: the ones whose own tone set
+# holds the tritone as a chord tone (the half-diminished and diminished qualities) or
+# that name it in the symbol (`7b5`). Every other quality - a major or a dominant -
+# reads it as the `#11`.
+_FLAT_FIFTH_QUALITIES = frozenset({"m7b5", "m9b5", "dim7", "7b5"})
+
+# Raised-fifth qualities: the ones that name a `#5` in the symbol or are an augmented
+# triad. A `7b13` and `7alt` keep the `b13` spelling.
+_SHARP_FIFTH_QUALITIES = frozenset({"aug", "7#5"})
+
+# The sixth-chord family spells degree 9 as `6`; every other quality (a 13 chord, a
+# maj7 with a 13th in the melody) reads it as `13`.
+_SIXTH_QUALITIES = frozenset({"6", "m6", "6/9"})
+
+
+def melody_degree_name(melody_note: Note, chord_name: Optional[str]) -> str:
+    """How a melody note stands against a chord: its degree, or the tension it names.
+
+    A chord tone comes back as the degree it is (`Root`, `3`, `b7`); a note outside
+    the chord comes back as the tension it spells (`b9`, `#11`, `13`). The two share
+    one table because they are one question - *what is this note to this chord* - and
+    the answer is the same entry either way.
+
+    The spelling is **family-aware**, because a pitch class does not name itself: the
+    tritone over a half-diminished chord is its `b5`, but over a dominant it is the
+    `#11`, and degree 3 is a `b3` on a minor chord but the `#9` on anything that
+    already sounds a major third.
+
+    Returns the empty string when the chord is unreadable (no root, or a quality with
+    no tone set) or asks for no chord at all, so a caller can leave a column blank
+    rather than print a guess. A slash bass is stripped before the quality is read -
+    `Gmaj9/F#` is a `Gmaj9` whose bass is `F#`, and the degree is measured against the
+    root, not the bass.
+    """
+    root_str, quality = ChordParser.parse_chord_name(chord_name)
+    if not root_str or not quality:
+        return ""
+    canonical = ChordParser.canonical_quality(quality.split("/", 1)[0])
+    tones = ChordParser.CHORD_TONES_FROM_ROOT.get(canonical)
+    if not tones:
+        return ""
+    degree = ChordParser.get_melody_degree(root_str, melody_note)
+    pitch_classes = {tone % 12 for tone in tones}
+    if degree == 3 and 4 in pitch_classes:
+        # A minor third's pitch class over a chord that also sounds a major third is
+        # the #9, not a b3 - which is what the table's default would call it.
+        return "#9"
+    if degree == 6 and canonical in _FLAT_FIFTH_QUALITIES:
+        return "b5"
+    if degree == 8 and canonical in _SHARP_FIFTH_QUALITIES:
+        return "#5"
+    if degree == 9 and canonical in _SIXTH_QUALITIES:
+        return "6"
+    if degree == 2 and canonical == "sus2":
+        return "2"
+    if degree == 5 and canonical in {"sus4", "7sus4"}:
+        return "4"
+    return MELODY_DEGREE_NAMES[degree]
+
+
 # ------------------------------------------------------------------
 # Non-chord melody tones
 # ------------------------------------------------------------------

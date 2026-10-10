@@ -279,6 +279,42 @@ class Voicing:
             return getattr(self, item)
         raise KeyError(item)
 
+@dataclass(frozen=True)
+class Palette:
+    """What a palette offered under a melody note, and the shape it did not take.
+
+    Recorded by the route that *chooses* a shape, where the choice is the engine's, and
+    it is what makes a thin step explicable rather than mysterious: the chord name above
+    a step describes the harmony, so a reader counting strings otherwise has to take on
+    faith that nothing fuller was available.
+
+    `available` is the most voices any candidate in that palette states. A three-voice
+    shell under a palette that never had four is the palette's limit; the same shell
+    under one that did is a decision, and the two read differently.
+
+    `alternative` is the best candidate with **more** voices than the shape that was
+    taken - the chord that is not being played, which is the question a reader actually
+    asks - and `decided_by` is the element of `cost.voicing_cost` that ranked it lower.
+    That index is never the voice-count criterion, since a fuller shape cannot lose on
+    how many voices it has: it is correctness, the neck window or the hand's travel.
+
+    `decided_by` is an index into that tuple rather than a phrase because the phrases
+    live beside the tuple, as `cost.VOICING_COST_CRITERIA`. `cost.SPAN_CRITERION` is the
+    one entry recorded by the demotion rule (`decisions.should_demote_to_melody_alone`)
+    rather than by the tuple itself.
+
+    `inside_window` is whether **any** candidate sits wholly inside the neck window, which
+    is what makes an out-of-position shape explicable: the window is a preference and never
+    a filter, so a shape outside it is played rather than dropped, and only the palette can
+    say whether there was anything inside to play instead.
+    """
+
+    available: int
+    alternative: Optional[Voicing] = None
+    decided_by: Optional[int] = None
+    inside_window: bool = False
+
+
 @dataclass
 class ArrangementStep:
     """Represents one chord-melody step in an arranged progression."""
@@ -294,6 +330,10 @@ class ArrangementStep:
     # the dataclass and its dict-style shim backward compatible.
     non_chord_tone: bool = False
     strategy: Optional[str] = None
+    """The non-chord-tone strategy in force on this step: the one that produced
+    `harmonized_as` where a substitute was found, and the one that found nothing where the
+    written chord stands. Recorded rather than re-derived so the line can name it on both
+    sides of that outcome."""
     harmonized_as: Optional[str] = None
     # True for a step that was arranged melody-only because its chord slot was
     # NO_CHORD. Defaulted, so existing construction and the __getitem__ shim are
@@ -349,6 +389,12 @@ class ArrangementStep:
     # step describes the harmony, not every note sounding under it, so the renderers
     # annotate it. Defaulted, so an ordinary four-note step is unaffected.
     partial: bool = False
+    # The palette this step's shape was chosen from, when the engine chose it: what the
+    # melody-bearing route had under this melody note, and the fuller shape it did not
+    # take. None on every step whose shape was *not* chosen that way - a comping shape, a
+    # fill, a rescued melody - where "fewer voices than the palette could state" is not a
+    # claim the engine made. See `render._step_annotation`.
+    palette: Optional[Palette] = None
     # Which metric role the texture rules gave this step: ROLE_TARGET on a principal
     # melody note (a full chord states the harmony there), ROLE_FILL on a connecting
     # note (a shell, an interval or the melody alone). Set by
@@ -470,20 +516,13 @@ class ArrangementStep:
 _MUTED_CELL = "x"
 _STAFF_CELL_WIDTH = 2
 
-# A string that is not part of this step at all. A repeated melody strikes the
-# soprano alone, and the rest are left blank rather than marked 'x': the player is
-# not muting them, they are simply not played. This is the same blank the staff and
-# HTML already use for a voice that is not struck, so a repeated note reads as a
-# single note instead of as five mutes.
-_BLANK_CELL = ""
-
 
 def _cells_from_frets(frets: List[int]) -> List[str]:
     """
     Renders each fret as a one-character tab cell, muted strings as 'x'.
 
     A string that is sounding but not being struck is handled by the caller
-    (_step_cells), which blanks it; this function renders a literal voicing.
+    (_step_cells), which mutes it; this function renders a literal voicing.
     """
     return [_MUTED_CELL if fret < 0 else str(fret) for fret in frets]
 

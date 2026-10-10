@@ -32,13 +32,13 @@ python -m arranger head tests/data/heres_that_rainy_day.musicxml \
 ```
 
 ```text
-Gmaj9    D4   (shell - 3rd & 7th, partial) x-x-x-x-7-7
-Gmaj9    D4   (shell - 3rd & 7th, partial) x-x-x-x-7-7
-Gmaj9/F# D4   (shell - 3rd & 7th, partial) x-x-x-x-7-7
-Bb7/F    D4   (shell - 3rd & 7th, partial) x-x-x-x-3-4
-Bb7/F    F4   (shell - 3rd & 7th, partial) x-x-x-x-3-4
-E7b5     Bb4  (shell - 3rd & 7th, partial) x-x-x-x-3-4
-E7b5     D5   (shell - 3rd & 7th, partial) x-x-x-x-3-4
+Gmaj9    D4  5    x-x-x-x-7-7        (comping - 3 & 7; the guitar does not play the tune)
+Gmaj9    D4  5    x-x-x-x-7-7        (comping - 3 & 7; the guitar does not play the tune)
+Gmaj9/F# D4  5    x-x-x-x-7-7        (comping - 3 & 7; the guitar does not play the tune)
+Bb7/F    D4  3    x-x-x-x-3-4        (comping - 3 & b7; the guitar does not play the tune - the written bass F is not sounded - the lowest voice (D4) is 3 semitones from it)
+Bb7/F    F4  5    x-x-x-x-3-4        (comping - 3 & b7; the guitar does not play the tune - the written bass F is not sounded - the lowest voice (D4) is 3 semitones from it)
+E7b5     Bb4 b5   x-x-x-x-3-4        (comping - 3 & b7; the guitar does not play the tune)
+E7b5     D5  b7   x-x-x-x-3-4        (comping - 3 & b7; the guitar does not play the tune)
 ```
 
 Two notes per step: one per voice named.
