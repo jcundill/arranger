@@ -9,9 +9,10 @@ six `<staff-lines>` nor a fret and string per note. So the two renderers divide 
 by what each format can do: **notation in MusicXML, tab here**, with `_events` and
 `_substitute_steps` shared so a head lands on the same beats in both files.
 
-What it writes is one guitar track of shapes, each carrying the chord name it is
-sounding, on the written rhythm, with a held shape written as one longer note
-rather than a re-strike.
+What it writes is one guitar track of shapes, on the written rhythm, with a held
+shape written as one longer note rather than a re-strike. Each chord is labelled
+**where it changes**, with what is sounding - the same rule `tabxml` writes its
+`<harmony>` symbols by, so the two files name chords in the same places.
 
 **It is not a replacement for MusicXML.** GP5 opens in Guitar Pro and nowhere else;
 it has no notation staff, and it is a closed format. MusicXML remains the way into
@@ -57,7 +58,7 @@ from __future__ import annotations
 import io
 from typing import Any, Dict, List, Optional, Tuple
 
-from arranger.tuning import ArrangementStep
+from arranger.tuning import NO_CHORD, ArrangementStep
 from tabxml import _events, _substitute_steps
 
 # The GP file version written. (5, 1, 0) is the 5.1 format, which Guitar Pro 5 and
@@ -461,6 +462,14 @@ def _build_song(
     # hear and forgive; a wrong pitch in a file they are reading note-for-note is not.
     last_on_string: Dict[int, int] = {}
 
+    # The chord last *named*, over the whole file. A chord is written where it
+    # changes and not on every beat - the rule `tabxml.write_symbol` follows, so the
+    # GP5 and MusicXML outputs of a head carry their chord names in the same places.
+    # Continuation parts (a length split within the bar, a hold crossing one) share
+    # their event's chord and so never differ from this, which is what keeps the
+    # label on the attack rather than on every piece of it.
+    in_force: Optional[str] = None
+
     for index, beats in enumerate(measures, start=1):
         if index > 1:
             header = gp.MeasureHeader(
@@ -486,15 +495,34 @@ def _build_song(
         voice = gp.Voice(None)
         for step, length, tie in beats:
             # One beat per legal Duration. A length the format cannot hold exactly
-            # - a dotted half, say - becomes two tied-looking notes rather than one
-            # note of the wrong length, which is what made a bar outlast its
-            # signature. See `_duration_split`.
+            # - a dotted half, say - becomes two tied parts rather than one note of
+            # the wrong length, which is what made a bar outlast its signature. See
+            # `_duration_split`.
             #
-            # A beat that continues a note begun in an earlier bar is written as a
-            # GP **tie** rather than a second attack, so a shape held across a bar
-            # line is not re-struck at the head of the next one. `tie` carries that
-            # from `_measures`; it is False for the first chunk of every event.
-            for value, tuplet in _duration_split(length):
+            # Both ways a note can be split are written the same way: a beat that
+            # continues a note begun in an earlier bar (`tie`, from `_measures`) and
+            # every part after the first of a length split *within* the bar continue
+            # one held note, written as a GP **tie** rather than a second attack.
+            # `tie` alone used to be the whole condition, so every dotted length was
+            # written as its parts struck separately - a dotted half played as a
+            # half and then a re-struck quarter. `NoteType.tie` is a real GP5 tie
+            # and round-trips through PyGuitarPro, and a split writes the same frets
+            # as the part before it on the same strings, so the "same pitch as the
+            # last note here" claim a tie makes is true by construction - see
+            # `last_on_string`.
+            for part, (value, tuplet) in enumerate(_duration_split(length)):
+                continued = tie or part > 0
+                # One label per chord *change*, written at the attack that makes it
+                # - the same rule `tabxml._build_part` applies to its `<harmony>`
+                # symbols. A continuation part repeats its event's chord and so
+                # never differs from `in_force`; a name that is empty or `NO_CHORD`
+                # (the blanked `show_chords=False` steps, an unharmonised passage)
+                # is recorded as in force but not written.
+                label = None
+                if step is not None and step.chord != in_force:
+                    in_force = step.chord
+                    if in_force and in_force != NO_CHORD:
+                        label = in_force
                 duration = gp.Duration(value)
                 if tuplet is not None:
                     # A triplet is a Duration *plus* a Tuplet, not a Duration of 12.
@@ -513,7 +541,7 @@ def _build_song(
                     # says rest explicitly. See `_build_song`.
                     status=(gp.BeatStatus.normal if step is not None
                             else gp.BeatStatus.rest),
-                    text=step.chord if step is not None else None,
+                    text=label,
                 )
                 if step is not None:
                     for string_index, fret in _sounding_frets(step):
@@ -524,23 +552,23 @@ def _build_song(
                                 value=fret,
                                 string=gp_string,
                                 velocity=_VELOCITY,
-                                # `NoteType.tie` is a real GP5 tie and round-trips
-                                # through PyGuitarPro, so the two halves of a split
-                                # step are one held note. A split writes the same frets
-                                # as the chunk before it on the same strings, so the
-                                # "same pitch as the last note here" claim a tie makes
-                                # is true by construction - see `last_on_string`.
-                                type=gp.NoteType.tie if tie else gp.NoteType.normal,
+                                # A continuation part carries the tie from the part
+                                # before it, which is what makes the halves of a
+                                # split one held note rather than a re-struck shape.
+                                type=(gp.NoteType.tie if continued
+                                      else gp.NoteType.normal),
                             )
                         )
                         last_on_string[gp_string] = fret
                     # A bass-only beat still has to *say* the shape that is ringing
                     # above the thumb, because a GP beat cannot have an empty string
                     # in the way a tab cell can. Written as ties, so it reads as held
-                    # rather than re-struck - see `_sounding_frets`. Skipped on a
-                    # continuation chunk, which already carries the tie from the
-                    # chunk that began it.
-                    if step.bass_only and not tie and ringing is not None:
+                    # rather than re-struck - see `_sounding_frets`. Skipped on the
+                    # first part of a beat that continues a chunk from an earlier
+                    # bar, which already carries the tie from the chunk that began
+                    # it - but written on the later parts of a split, where nothing
+                    # else would say the shape rings for the rest of the beat.
+                    if step.bass_only and (part > 0 or not tie) and ringing is not None:
                         for string_index, fret in _held_upper_frets(
                             ringing, step.voicing.bass_string
                         ):
@@ -606,11 +634,13 @@ def format_gp5(
     the file without ever touching the filesystem.
 
     What it writes is one guitar track: each step as a beat whose notes are the
-    strings it actually sounds, each beat carrying the chord name it is sounding
-    so a substituted or extended chord is labelled with what is played, on the
-    written rhythm. A held shape is written as one longer note rather than
-    restruck, and a repeated melody as a single struck note - the same two rules
-    `tabstaff` and `tabxml` apply, so all three renderers agree.
+    strings it actually sounds, on the written rhythm. The chord name is written
+    **where the chord changes** and named with what is sounding - so a substituted
+    or extended chord is labelled as played, and a chord held over several beats or
+    bars is named once, as the MusicXML export names it. A held shape is written as
+    one longer note rather than restruck, and a repeated melody as a single struck
+    note - the same rules `tabstaff` and `tabxml` apply, so all three renderers
+    agree.
 
     Args:
         steps: arranged steps, typically from
@@ -635,7 +665,7 @@ def format_gp5(
             `format_musicxml` and `format_tab_staff` do, so a hand-written
             progression still exports.
         collapse: write a held shape as one longer note instead of restriking it.
-        show_chords: write the chord name above each shape.
+        show_chords: write the chord names, on the beats where the chord changes.
 
     Returns:
         The GP5 file as bytes, or b"" for no steps. Pure: nothing is printed and
