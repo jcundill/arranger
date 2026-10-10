@@ -80,7 +80,12 @@ from .bass import (
     comping_capacity,
     thumb_capacity,
 )
-from .chords import ChordParser, normalised_harmony, sounding_harmony
+from .chords import (
+    ChordParser,
+    melody_degree_name,
+    normalised_harmony,
+    sounding_harmony,
+)
 from .diagnostics import Diagnostics, default_diagnostics
 from .grips import (
     BASS_DEGREES_6432,
@@ -496,6 +501,7 @@ __all__ = [
     "ArrangementStep",
     "arrange_slots",
     "ChordParser",
+    "melody_degree_name",
     "Diagnostics",
     "GuitarFretboard",
     "StepPreparation",

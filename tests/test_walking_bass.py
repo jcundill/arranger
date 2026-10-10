@@ -1854,10 +1854,10 @@ class TestWalkingBassRendering(unittest.TestCase):
         The `bass_only` cell behaviour: the three slots the union invented draw **no**
         fret above the thumb, because the shape struck on beat 1 is still ringing.
 
-        The opposite rule to `repeated`, which blanks the inner voices and keeps the
-        soprano, so this is asserted as the *absence* of upper frets rather than as a
-        particular one - which is also what catches a fill silently reverting to a
-        duo.
+        The opposite rule to `repeated`, which mutes the strings it does not strike and
+        keeps the soprano, so this is asserted as the *absence* of upper frets rather
+        than as a particular one - which is also what catches a fill silently reverting
+        to a duo.
         """
         for step in self.steps[1:]:
             self.assertTrue(step.bass_only)
@@ -1994,7 +1994,10 @@ class TestWalkingBassRendering(unittest.TestCase):
 
         steps = VoiceLeadingEngine.arrange_progression(MINOR_CADENCE)
         rendered = format_progression(steps)
-        self.assertEqual(rendered.splitlines()[0], "Dm7      D5   x-x-10-10-10-10")
+        # The tab and the chord/melody/degree columns are the ones this renderer always
+        # produced; the trailing harmony annotation is added to every chord tone, and
+        # this step's is not a bass note.
+        self.assertIn("Dm7      D5  Root x-x-10-10-10-10", rendered.splitlines()[0])
         self.assertNotIn("(bass:", rendered)
         self.assertNotIn("bass:", format_tab_html(steps))
 

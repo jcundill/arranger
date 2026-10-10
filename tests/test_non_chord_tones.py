@@ -588,10 +588,10 @@ class TestNoChordSteps(unittest.TestCase):
             _print_step(steps[0])
         self.assertIn(expected, printed.getvalue())
 
-    def test_ordinary_step_annotation_is_unchanged(self):
-        """A chord tone still gets an empty annotation."""
+    def test_ordinary_step_annotation_names_the_degree(self):
+        """A chord tone names the degree it is and how many voices state it."""
         steps = self.engine.arrange_progression([("C5", "maj7", "Cmaj7")])
-        self.assertEqual(_step_annotation(steps[0]), "")
+        self.assertEqual(_step_annotation(steps[0]), " (harmony under Root - 4 voices)")
 
     def test_melody_only_defaults_to_false(self):
         """The defaulted field keeps plain construction and the shim working."""

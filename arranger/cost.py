@@ -11,7 +11,7 @@ here would make `cost` import `bass` and `bass` import `cost`.
 
 from __future__ import annotations
 
-from typing import Container, List, Optional, Tuple
+from typing import Container, List, Optional, Sequence, Tuple
 
 from .grips import BASS_DEGREES_6432
 from .tuning import NECK_FRET_MAX, NECK_FRET_MIN, GuitarFretboard, Voicing
@@ -179,6 +179,55 @@ def voicing_cost(
         movement,
         bass_root_or_fifth,
     )
+
+
+#: The name of each way a shape can lose to another, so a caller holding two candidates
+#: can say *which* one separated them: `movement` records the index on the step and
+#: `render` reads the phrase from here, which is what keeps the labels from going stale.
+#:
+#: The first seven are `voicing_cost`'s tuple in its own order - that order is the
+#: invariant and this spells it. The eighth is **not a cost criterion at all**: it names a
+#: shape removed by a caller's partition *before* the tuple ever saw it, which is how the
+#: written slash bass is honoured (`decisions.select_step_voicing`).
+#:
+#: Each entry is a predicate, read after "the N-voice voicing <tab>".
+VOICING_COST_CRITERIA = (
+    "sounds a note outside the chord",
+    "lies outside the neck window",
+    "leaves a voice out",
+    "needs a wider stretch",
+    "sits further up the neck",
+    "moves the inner voices more",
+    "sounds a weaker bass",
+    "does not sound the written bass",
+)
+
+#: `VOICING_COST_CRITERIA`'s span entry, which is the one
+#: `decisions.should_demote_to_melody_alone` turns a shape away for.
+SPAN_CRITERION = VOICING_COST_CRITERIA.index("needs a wider stretch")
+
+#: `VOICING_COST_CRITERIA`'s last entry: lost to a caller's partition rather than to a
+#: cost, so no element of the two tuples need differ.
+PARTITION_CRITERION = VOICING_COST_CRITERIA.index("does not sound the written bass")
+
+
+def decisive_criterion(winner: Sequence[float], loser: Sequence[float]) -> Optional[int]:
+    """Which element of `voicing_cost`'s tuple ranked `loser` below `winner`.
+
+    The first index at which two costs differ *is* the criterion that decided between
+    them, because every element before it is equal. None means the two tied, in which
+    case no criterion can be named - `_best_voicing` broke it on generation order.
+
+    Asking this of a shape with **more** voices than the winner never returns the
+    voice-count criterion, because a fuller shape cannot lose on how many voices it has.
+    That is what makes the answer worth recording: it says whether the chord was thinned
+    because of a wrong note, the neck window or the hand's travel rather than for its own
+    sake.
+    """
+    for index, (a, b) in enumerate(zip(winner, loser)):
+        if a != b:
+            return index
+    return None
 
 
 def _best_voicing(

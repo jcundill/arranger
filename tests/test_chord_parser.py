@@ -2,7 +2,7 @@ import unittest
 
 from musthe import Note
 
-from arranger import ChordParser
+from arranger import ChordParser, melody_degree_name
 
 
 class TestChordParser(unittest.TestCase):
@@ -143,6 +143,73 @@ class TestWidenedQualityVocabulary(unittest.TestCase):
         self.assertEqual(ChordParser.parse_chord_name("C"), ("C", ""))
         self.assertEqual(ChordParser.get_chord_tones(""), ())
         self.assertEqual(ChordParser.get_chord_tones("", "C"), ())
+
+
+class TestMelodyDegreeName(unittest.TestCase):
+    """The melody's degree above a chord, and the family-aware spelling of it.
+
+    `melody_degree_name` is what the one-line tab's degree column prints, so it has
+    two things to get right: the *degree* (which chord tone, or which tension) and the
+    *spelling* - a half-diminished chord's tritone is its `b5`, not a `#11`, and a
+    minor third's pitch class over a chord that already sounds a major third is the
+    `#9`, not a `b3`.
+    """
+
+    def test_every_interval_class_has_a_default_name(self):
+        """A hole in the table would raise instead of printing a degree."""
+        from arranger.chords import MELODY_DEGREE_NAMES
+
+        for degree in range(12):
+            self.assertIn(degree, MELODY_DEGREE_NAMES, degree)
+
+    def test_a_chord_tone_reads_as_its_degree(self):
+        cases = [
+            (Note("D5"), "Dm7", "Root"),
+            (Note("F5"), "Dm7", "b3"),
+            (Note("A5"), "Dm7", "5"),
+            (Note("C5"), "Dm7", "b7"),
+            (Note("G4"), "Ebmaj7", "3"),
+            (Note("D4"), "Ebmaj7", "7"),
+        ]
+        for note, chord, expected in cases:
+            self.assertEqual(melody_degree_name(note, chord), expected, (note, chord))
+
+    def test_a_tension_reads_as_the_extension_it_names(self):
+        cases = [
+            (Note("Eb4"), "D7", "b9"),
+            (Note("A5"), "G7", "9"),
+            (Note("C5"), "G7", "11"),
+            (Note("C#5"), "G7", "#11"),
+            (Note("E5"), "G7", "13"),
+        ]
+        for note, chord, expected in cases:
+            self.assertEqual(melody_degree_name(note, chord), expected, (note, chord))
+
+    def test_the_tritone_follows_the_chord_family(self):
+        """`b5` on a half-diminished chord, `#11` on a dominant - the same pitch class."""
+        self.assertEqual(melody_degree_name(Note("Ab5"), "Dm7b5"), "b5")
+        self.assertEqual(melody_degree_name(Note("C#5"), "G7"), "#11")
+
+    def test_a_minor_third_over_a_major_third_is_the_sharp_nine(self):
+        self.assertEqual(melody_degree_name(Note("F5"), "Dm7"), "b3")
+        self.assertEqual(melody_degree_name(Note("Bb4"), "G7"), "#9")
+
+    def test_a_raised_fifth_spells_as_sharp_five(self):
+        self.assertEqual(melody_degree_name(Note("D#5"), "Gaug"), "#5")
+        self.assertEqual(melody_degree_name(Note("Eb5"), "G7b13"), "b13")
+
+    def test_a_six_chord_spells_degree_nine_as_six(self):
+        self.assertEqual(melody_degree_name(Note("E5"), "G6"), "6")
+        self.assertEqual(melody_degree_name(Note("E5"), "Gmaj7"), "13")
+
+    def test_a_slash_bass_is_measured_against_the_root(self):
+        """`Gmaj9/F#` is a Gmaj9 whose bass is F#; the degree is above G, not F#."""
+        self.assertEqual(melody_degree_name(Note("D5"), "Gmaj9/F#"), "5")
+
+    def test_an_unreadable_chord_is_blank(self):
+        """No root or no tone set means no claim, rather than a guessed degree."""
+        for chord in ("NC", "", None, "X7"):
+            self.assertEqual(melody_degree_name(Note("C5"), chord), "", chord)
 
 
 if __name__ == "__main__":

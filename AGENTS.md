@@ -18,6 +18,7 @@ gate and the conventions — not the explanation.
 | If you are changing | Read first | Then |
 |---|---|---|
 | the drop-2 tables, a grip, `GRIP_MAX_SPAN`, `voicing_cost` | [docs/engine.md](docs/engine.md) | `arranger/grips.py`, `arranger/cost.py` |
+| the trailing annotation a step carries, why a shape is thin, or what **must** be explained when a choice is added (`ArrangementStep.palette`, `cost.VOICING_COST_CRITERIA`, `tests/test_explanations.py`) | [docs/engine.md](docs/engine.md) | `arranger/render.py`, `arranger/movement.py` |
 | `texture=`, target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/textures.py`, `arranger/bass.py`, `arranger/decisions.py` |
 | non-chord melody notes, a new chord quality | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` |
 | the step loop, `arrange_progression`, `Diagnostics` | [docs/engine.md](docs/engine.md) | `arranger/movement.py` |
@@ -47,10 +48,10 @@ frozen like the rest — it is not a home for an open plan.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1015 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **1056 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 14 of those 1015, and it is the one that fails if this
+(`tests/test_docs.py` is 14 of those 1056, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree. It also fails if a document
 exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
 new file cannot be added without being registered.)
@@ -342,6 +343,52 @@ because losing a chord of the tune is worse than being a fret out of position. A
 melody whose only position sits above `HIGH_FRET_LIMIT` is voiced an octave down, so
 `step.melody` may be an octave below the written note — the written pitch stays in
 `step.original_melody`.
+
+### Every choice about a voiced note is explained by the line that prints it
+
+**A step has to account for what it did, and for the shape it did it with.** This is an
+invariant of the artifact rather than a style preference: the one-line tab is what a user
+reads, so a choice it cannot see is a choice the library made silently. It is also the
+constraint on growth — **a new axis, grip, substitution or fallback arrives with its
+explanation**, because the alternative is a knob whose effect is invisible.
+
+The mechanism is that the explanation is **recorded on the step and composed by the
+renderer**, never re-derived at a call site:
+
+- a choice *among shapes* lives on `ArrangementStep.palette` (the most voices the palette
+  offered, the best fuller candidate, the `cost.voicing_cost` element that ranked it lower,
+  `inside_window`) and is phrased by `render._shape_clause` / `_window_clause`;
+- a fact that **corrects a column** — the octave a melody was moved to, the chord a
+  substitution actually states, a written slash bass no shape sounds — is a *derived clause*
+  (`_transposition_clause`, `_substitution_clause`, `_slash_bass_clause`), so it reaches every
+  route that can suffer it, a hold included;
+- a **route that chose no shape** states its own (`_comping_clause` names the degrees it
+  states; "the tune is silent here"; "the guitar rests here"; "the shape above is held"; "the
+  most a fill's palette offers" — the last is the difference between *the library ran out* and
+  *the caller asked for fewer*).
+
+`tests/test_explanations.py` is the standing check: a table of (decision, when this step is
+one of those, what the line must say), swept over every committed head and working from the
+step's **fields** rather than from the wording, so it cannot be satisfied by phrasing.
+**Adding a decision means adding its witness to that table in the same commit**, and a new
+`*_clause` helper fails a companion test until it is registered there — the enumeration is
+read off the module, so a clause cannot be added and forgotten.
+
+Three exemptions are deliberate and are named in that file rather than left implicit, because
+a rule with unnamed exceptions is a rule the next editor deletes: a **hold** does not restate
+the shape count (it was explained where the shape was chosen) though it does restate what
+corrects a column; a **melody-alone shape with no palette** gets no window clause, its fret
+being where the melody is rather than a choice; and the **slash bass** is pinned by its own
+test, because a witness that recomputed whether the bass sounds would be the clause agreeing
+with itself.
+
+What the invariant does **not** cover, and should not pretend to: a *phrase* (nothing groups
+steps), the **fingerings** (`fingers.py` assigns them and no renderer prints them — a barre is
+visible in the tab), and **positions that are dropped rather than voiced**, which have no line
+to explain them and only a warning to report them — the exception that proves the rule, since
+the rest step exists precisely because a position the guitar *declines* still owes the tab its
+place.
+
 
 ### The cost tuple is not being refactored
 

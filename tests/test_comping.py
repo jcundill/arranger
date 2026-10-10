@@ -65,7 +65,7 @@ from arranger import (
 )
 from arranger.options import ArrangeOptions
 from arranger.render import _step_cells
-from arranger.tuning import _BLANK_CELL
+from arranger.tuning import _MUTED_CELL
 
 PROGRESSION: List[Tuple[str, str, str]] = [
     ("D5", "m7", "Dm7"),
@@ -1372,13 +1372,32 @@ class TestRepeatedStepsHoldTheShape(unittest.TestCase):
     """The renderer rule the axis needs, and the reason it is stated in two places."""
 
     def test_a_repeat_re_strikes_the_soprano_when_the_guitar_sings(self):
-        """The historical rule, unchanged: one note, inner voices held."""
+        """The historical rule: one note, and the strings it does not strike are muted."""
         from tests.support import make_step
 
         cells = _step_cells(make_step([-1, -1, -1, 10, 12, 10], repeated=True))
         self.assertEqual(cells[5], "10")
-        self.assertEqual(cells[3], _BLANK_CELL)
-        self.assertEqual(cells[4], _BLANK_CELL)
+        self.assertEqual(cells[3], _MUTED_CELL)
+        self.assertEqual(cells[4], _MUTED_CELL)
+
+    def test_a_bass_only_fill_mutes_every_string_it_does_not_play(self):
+        """A bass slot prints 'x' above the thumb, like any other unplayed string.
+
+        The upper voices are **held** rather than restruck, but this renderer answers
+        "what does this step play": a string the player must not attack reads the same
+        as a mute, so no blank is left that could be mistaken for a missing voice.
+        """
+        from arranger import ArrangementStep
+        from tests.support import make_voicing
+
+        voicing = make_voicing([3, -1, -1, -1, -1, -1], bass_midi=41, bass_string=0)
+        step = ArrangementStep(
+            chord="Cmaj7", melody="B4", voicing=voicing, bass_only=True
+        )
+        cells = _step_cells(step)
+        self.assertEqual(cells[0], "3")
+        for string_index in range(1, 6):
+            self.assertEqual(cells[string_index], _MUTED_CELL)
 
     def test_a_repeat_holds_the_whole_shape_when_the_guitar_is_not_singing(self):
         """No soprano to re-strike, so nothing is struck anew.
