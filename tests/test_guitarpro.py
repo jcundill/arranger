@@ -1136,12 +1136,18 @@ class TestRhythm(GuitarProTestCase):
         2.75 quarters of music in a bar the signature calls three wide, and after it all
         37 are exactly full. A count of measures cannot see either state - 37 is 37 - so
         this is the sum, which is what `docs/renderers.md` promises catches this family.
+
+        **The waltz is 63 measures now, not 37, because it carries a repeat.** The
+        importer honours the 1st/2nd endings (bars 1-26, then 27-32, then 1-26 again, then
+        33), so the written 37 bars play as 63 and the GP5 file has 63. Every interior bar
+        is still full, which is the claim this test exists to make - the count moving is
+        the repeat being played, not a bar-length regression.
         """
         from headxml import arrange_xml_head
 
         data = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
         for name, expected in (("but_not_for_me.mxl", 32),
-                               ("The_Jitterbug_Waltz.musicxml", 37)):
+                               ("The_Jitterbug_Waltz.musicxml", 63)):
             with self.subTest(score=name):
                 steps, head, _notes = arrange_xml_head(os.path.join(data, name))
                 song = self.song(
@@ -1485,3 +1491,52 @@ class TestModuleSurface(unittest.TestCase):
         self.assertEqual(_duration_value(0.25), 16)   # a sixteenth
         self.assertEqual(_duration_value(0.0), 16)    # no length is not a whole note
         self.assertEqual(_duration_value(8.0), 1)     # a whole note
+
+
+@requires_guitarpro
+class TestRepeatMarkers(GuitarProTestCase):
+    """A head's repeats and endings written onto the measure headers.
+
+    Guitar Pro holds the same facts MusicXML's barlines do, in per-bar fields, so the
+    markers must land on the same bars: `isRepeatOpen`, `repeatClose` (the number of
+    **extra** passes) and the `repeatAlternative` bitmask.
+    """
+
+    def _song(self, count: int, markers):
+        from tabgp import format_gp5
+
+        progression = [
+            ("A4", "m7", "Dm7"), ("C5", "7", "G7"), ("B4", "maj7", "Cmaj7"),
+            ("A4", "m7", "Am7"), ("C5", "7", "D7"), ("B4", "maj7", "Fmaj7"),
+            ("A4", "m7", "Bm7"), ("C5", "7", "E7"),
+        ][:count]
+        steps = VoiceLeadingEngine().arrange_progression(progression)
+        return _parse(io.BytesIO(format_gp5(steps, markers=markers)))
+
+    def test_no_markers_leaves_every_repeat_field_default(self):
+        """The default file is unchanged - no bar repeats and no alternatives."""
+        song = self.song()
+        for header in song.measureHeaders:
+            self.assertFalse(header.isRepeatOpen)
+            self.assertEqual(header.repeatClose, -1)
+            self.assertEqual(header.repeatAlternative, 0)
+
+    def test_repeat_and_ending_flags_land_on_their_bars(self):
+        """`times=2` is one extra pass (`repeatClose=1`), and a volta is a bitmask."""
+        from headxml import BarMarker
+
+        markers = [
+            BarMarker(bar=1, kind="repeat_start", written_bar=1),
+            BarMarker(bar=1, kind="ending_start", written_bar=1, numbers=(1,)),
+            BarMarker(bar=2, kind="ending_stop", written_bar=2, numbers=(1,)),
+            BarMarker(bar=2, kind="repeat_end", written_bar=2, times=2),
+        ]
+        song = self._song(8, markers)
+        headers = song.measureHeaders
+        self.assertTrue(headers[0].isRepeatOpen)
+        # Ending 1 is a bitmask of 0b01, set on every bar the bracket spans.
+        self.assertEqual(headers[0].repeatAlternative, 1)
+        self.assertEqual(headers[1].repeatAlternative, 1)
+        # A two-pass repeat is one *extra* pass in PyGuitarPro's encoding.
+        self.assertEqual(headers[1].repeatClose, 1)
+

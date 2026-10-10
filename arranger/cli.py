@@ -25,8 +25,8 @@ edges rather than appended.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, List, Optional, Sequence
+from dataclasses import dataclass, replace
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 from .bass import BASS_AUTO, BASS_STYLES
 from .chords import NON_CHORD_TONE_STRATEGIES
@@ -246,6 +246,52 @@ def add_common_arguments(
     parser.add_argument("--gp5", default=None, metavar="PATH", help=help_text.gp5)
 
 
+def _as_written(
+    steps: List[ArrangementStep],
+    markers: Sequence[Any],
+    written_bars: Optional[Mapping[int, int]],
+) -> Tuple[List[ArrangementStep], List[Any]]:
+    """Folds a *played* arrangement onto the score's *written* bars, with the markers.
+
+    The engine arranges the bars a performer plays - a repeat's section is expanded, so
+    `heres_that_rainy_day` is 66 bars. A notation file must not then write those 66 bars
+    out **and** loop them with repeat signs: a reader would take the repeated section
+    twice more. So a renderer that draws the signs is given **one pass of each written
+    bar**, in written order, with each marker moved to the bar the score writes it on.
+
+    `written_bars` is `Head.written_bars` (absolute -> written). A head with no repeat,
+    no markers or no map is returned unchanged, so this is a no-op for every non-head
+    caller and every non-repeating score. The first play-order occurrence of a written
+    bar is the one kept, which is the pass a score reads first.
+    """
+    if not markers or not written_bars:
+        return list(steps), list(markers)
+
+    first: Dict[int, int] = {}
+    for step in steps:
+        if step.bar is None:
+            continue
+        written = written_bars.get(step.bar)
+        if written is None:
+            continue
+        if written not in first or step.bar < first[written]:
+            first[written] = step.bar
+
+    kept: List[ArrangementStep] = []
+    for step in steps:
+        if step.bar is None:
+            continue
+        written = written_bars.get(step.bar)
+        if written is None or step.bar != first.get(written):
+            continue
+        kept.append(replace(step, bar=written))
+    kept.sort(key=lambda s: (s.bar if s.bar is not None else 0, s.beat or 0.0))
+
+    moved = [replace(m, bar=m.written_bar) for m in markers]
+    moved.sort(key=lambda m: (m.bar, m.kind))
+    return kept, moved
+
+
 def render_and_write(
     args: argparse.Namespace,
     steps: List[ArrangementStep],
@@ -257,6 +303,8 @@ def render_and_write(
     beat_type: Optional[int] = None,
     fifths: Optional[int] = None,
     mode: str = "",
+    markers: Sequence[Any] = (),
+    written_bars: Optional[Mapping[int, int]] = None,
 ) -> int:
     """Print the arrangement and write whatever files `args` asked for.
 
@@ -285,10 +333,23 @@ def render_and_write(
     file writers have no notes list. `subtitle` defaults to `""`, which is also
     `format_musicxml`'s and `format_gp5`'s own default, so `head` passing nothing
     here is indistinguishable from passing an empty string.
+
+    `markers` are the head's repeat and ending instructions (`headxml.BarMarker`s), or
+    empty for none - every non-head caller, and a head with no repeat. Each reaches
+    every sign-drawing writer, which draws it as a `|:` / `:|` and a `1.` / `2.` bracket.
+
+    `written_bars` is `Head.written_bars` (absolute -> written), and it is what makes the
+    written score come out written: the arrangement is the bars a player *plays*, so a
+    renderer that draws the signs is handed the **written** bars instead - see
+    `_as_written`. The plain `line` tab keeps the played arrangement, which is the one
+    place every bar of a repeated head is still listed.
     """
     from tabgp import write_gp5
     from tabstaff import format_tab_staff, write_tab_html
     from tabxml import write_musicxml
+
+    # The score the sign-drawing renderers get: one pass of each written bar.
+    written_steps, written_markers = _as_written(steps, markers, written_bars)
 
     # A count without a denominator is not a metre, and `head` is the command that
     # has to say which. Four is the writer's own default, so a caller with no metre
@@ -308,20 +369,21 @@ def render_and_write(
         # in cut time is 2/2, and a count without a denominator is not a metre.
         print(
             format_tab_staff(
-                steps,
+                written_steps,
                 beats_per_bar=bars,
                 beat_type=beat,
                 measures_per_line=args.bars_per_line,
                 show_melody=args.melody,
                 show_mutes=args.mutes,
+                markers=written_markers,
             )
         )
     else:
         print(format_progression(steps))
 
     if args.html:
-        written = write_tab_html(
-            steps,
+        out_path = write_tab_html(
+            written_steps,
             args.html,
             title=title,
             subtitle=subtitle,
@@ -331,8 +393,9 @@ def render_and_write(
             show_melody=args.melody,
             show_mutes=args.mutes,
             notes=list(notes),
+            markers=written_markers,
         )
-        print(f"\nwrote {written}")
+        print(f"\nwrote {out_path}")
 
     # The two optional renderers are written separately from each other and from
     # the HTML, so a run asking for one does not need the others' dependency, and
@@ -344,8 +407,8 @@ def render_and_write(
         if not target:
             continue
         try:
-            written = writer(
-                steps,
+            out_path = writer(
+                written_steps,
                 target,
                 title=title,
                 subtitle=subtitle,
@@ -353,9 +416,10 @@ def render_and_write(
                 beat_type=beat,
                 fifths=key_fifths,
                 mode=mode,
+                markers=written_markers,
             )
         except ImportError as error:
             print(f"\n{error}")
             return 1
-        print(f"wrote {written}")
+        print(f"wrote {out_path}")
     return 0

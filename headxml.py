@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import re
 import zipfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Dict, List, Optional, Sequence, Tuple, Union
 from xml.etree import ElementTree
@@ -372,6 +372,13 @@ class HeadNote:
     beat: float
     pitch: int
     duration: float
+    # The measure number **as written on the score**. It equals `bar` for a head with
+    # no repeat; when a repeat renumbers `bar` to a unique play-order position (a
+    # repeated bar is played twice, so two physical bars would otherwise share the
+    # written number), this keeps the score's own numbering recoverable. The default
+    # `-1` is a hand-built note, which has no score behind it. See `BarMarker` and
+    # `_expand_repeats`.
+    written_bar: int = -1
     # True when the note came from a `<time-modification>`, i.e. it is part of a
     # tuplet. Carried **explicitly** rather than inferred from `duration`, because
     # the inference is wrong: a plain eighth is half a grid step under `eighths`, so
@@ -431,11 +438,37 @@ class HeadChange:
     chord: str
     quality: Optional[str] = None
     bass: Optional[str] = None
+    # The written measure number, exactly as on `HeadNote.written_bar`: equal to `bar`
+    # for a head with no repeat, and the score's own number when a repeat renumbered
+    # `bar`. Defaults to -1 for a hand-built change.
+    written_bar: int = -1
 
     @property
     def key(self) -> Tuple[int, float]:
         """The `(bar, beat)` this change takes effect at, for timeline lookups."""
         return (self.bar, round(self.beat, 6))
+
+
+@dataclass
+class BarMarker:
+    """A repeat or ending (volta) instruction read from a `<barline>`, on the
+    **absolute** play-order bar the loader assigned.
+
+    `kind` is one of `repeat_start` (a `direction="forward"` repeat, the bar the
+    player jumps back to), `repeat_end` (a `direction="backward"` repeat), or
+    `ending_start` / `ending_stop` (the bracket of a volta). `numbers` is the ending's
+    volta number set - "1", "2", or "1,2" for a bracket played on more than one pass -
+    and `times` is the repeat's play count (2 unless the file says otherwise).
+
+    These are what the writers draw as `|:` / `:|` and the `1.` / `2.` brackets, and
+    what `_expand_play_order` uses to build the sequence a performer actually plays.
+    """
+
+    bar: int
+    kind: str
+    written_bar: int
+    numbers: Tuple[int, ...] = ()
+    times: int = 2
 
 
 @dataclass
@@ -500,6 +533,17 @@ class Head:
     # not be cut short at the tune's end. `None` keeps a hand-built `Head`'s note span
     # working, since it has no file behind it to state a range.
     measure_range: Optional[Tuple[int, int]] = None
+    # Every repeat and ending (volta) instruction the score's barlines carried, on the
+    # absolute play-order bars. Empty by default, so a hand-built `Head` and a score
+    # with no repeat are both unaffected. The writers draw these; `Head.bars` is the
+    # expanded length, so a repeated head arranges every bar a player actually plays.
+    markers: List[BarMarker] = field(default_factory=list)
+    # Absolute play-order bar -> the measure number the score writes for it. Empty for
+    # a head with no repeat, where the two are the same number. A renderer that draws the
+    # repeat signs needs it to fold the played arrangement back onto the **written**
+    # score: writing the played bars out *and* looping them with signs would make a
+    # reader play the repeated section twice more. See `arranger.cli._as_written`.
+    written_bars: Dict[int, int] = field(default_factory=dict)
 
     def __len__(self) -> int:
         return len(self.notes)
@@ -921,6 +965,10 @@ def _flush_group(
     notes.append(
         HeadNote(
             bar=bar,
+            # The written measure number, captured at read time. It equals `bar` for a
+            # head with no repeat; `_expand_play_order` rewrites `bar` to the absolute
+            # play-order position afterwards and this keeps the score's own numbering.
+            written_bar=bar,
             # Beat *within* the bar, in notated beats, through the one conversion that
             # is right for every metre: `onset/divisions` is quarters and a beat is
             # `4 / beat_type` of them. That single factor is what makes a 2/2 bar two
@@ -998,6 +1046,240 @@ def load_musicxml(path: Union[str, Path], part: Optional[str] = None) -> Head:
     return head
 
 
+def _parse_barline(
+    barline: ElementTree.Element,
+) -> List[Tuple[str, Tuple[int, ...], int]]:
+    """One `<barline>` as a list of `(kind, numbers, times)` instructions.
+
+    `kind` is `BarMarker`'s vocabulary: `repeat_start` / `repeat_end` for a
+    `<repeat direction="forward|backward">`, and `ending_start` / `ending_stop` for a
+    volta bracket's `<ending type="start|stop">`. `numbers` is the ending's volta set
+    ("1", "2", or "1,2" for a bracket taken on more than one pass); `times` is the
+    repeat's play count, which MusicXML states only on the backward repeat and which
+    defaults to 2. A `<bar-style>` (a final `light-heavy`, say) yields nothing here -
+    it is decoration the engine has no use for, and reading it would make every score
+    look like it had a repeat.
+    """
+    out: List[Tuple[str, Tuple[int, ...], int]] = []
+    repeat = barline.find("repeat")
+    if repeat is not None:
+        direction = (repeat.get("direction") or "").strip()
+        times = max(2, _number(repeat.get("times"), 2))
+        if direction == "forward":
+            out.append(("repeat_start", (), times))
+        elif direction == "backward":
+            out.append(("repeat_end", (), times))
+    for ending in barline.findall("ending"):
+        etype = (ending.get("type") or "").strip()
+        numbers = tuple(int(n) for n in re.findall(r"\d+", ending.get("number") or ""))
+        if not numbers:
+            numbers = (1,)
+        if etype == "start":
+            out.append(("ending_start", numbers, 2))
+        elif etype == "stop":
+            out.append(("ending_stop", numbers, 2))
+        # "discontinue" is a bracket that stops without a repeat; it carries no
+        # play-order information, so it is ignored rather than guessed at.
+    return out
+
+
+def _expand_play_order(
+    measure_count: int,
+    raw_markers: Dict[int, List[Tuple[str, Tuple[int, ...], int]]],
+) -> List[Tuple[int, int]]:
+    """The measures a performer actually plays, as `(position, pass)` in order.
+
+    This is the repeat/volta expansion, and it is what makes an imported head honour
+    the score. Two rules, both straight from how a repeat is played:
+
+    - a **backward repeat** jumps back to the matching **forward repeat**, or to the
+      very start when the score marks no forward repeat (the common case - `heres_that_
+      rainy_day` and `The_Jitterbug_Waltz` both repeat to bar 1). The backward repeat's
+      `times` (default 2) is how many times the section is played.
+    - a **volta ending** numbered N is played only on pass N. On the last pass the
+      lower-numbered endings are skipped, which is exactly the "take the 1st ending,
+      repeat, skip it and take the 2nd" a lead sheet asks for.
+
+    So `heres_that_rainy_day`'s bars 1-30, ending 1 (31-32) and ending 2 (33-36) expand
+    to `1-30, 31-32, 1-30, 33-36` - **66** bars - and the arrangement plays the repeated
+    section rather than reading the 36 written bars once.
+
+    A head with no repeat or ending returns the identity order, so `_expand_repeats` can
+    leave it byte-identical. The limit guards a malformed score (a repeat that never
+    terminates) against looping forever; it is far above any real expansion.
+    """
+    if not raw_markers:
+        return [(position, 1) for position in range(measure_count)]
+
+    # Ending membership: which positions belong to which volta, so a pass can skip the
+    # endings that are not its own. A bracket runs from its `ending_start` to its
+    # `ending_stop` inclusive; an unterminated one runs to the last measure.
+    ending_at: Dict[int, set] = {}
+    open_ending: Dict[Tuple[int, ...], int] = {}
+    for position in sorted(raw_markers):
+        for kind, numbers, _times in raw_markers[position]:
+            if kind == "ending_start":
+                open_ending[numbers] = position
+            elif kind == "ending_stop":
+                start = open_ending.pop(numbers, None)
+                if start is not None:
+                    for p in range(start, position + 1):
+                        ending_at[p] = set(numbers)
+    for numbers, start in open_ending.items():
+        for p in range(start, measure_count):
+            ending_at[p] = set(numbers)
+
+    repeat_end: Dict[int, int] = {}
+    repeat_starts: List[int] = []
+    for position in sorted(raw_markers):
+        for kind, _numbers, times in raw_markers[position]:
+            if kind == "repeat_end":
+                repeat_end[position] = times
+            elif kind == "repeat_start":
+                repeat_starts.append(position)
+
+    def target_for(position: int) -> int:
+        earlier = [s for s in repeat_starts if s < position]
+        return max(earlier) if earlier else 0
+
+    order: List[Tuple[int, int]] = []
+    pass_no = 1
+    index = 0
+    guard = 0
+    limit = 8 * (measure_count + 1) + 64
+    while index < measure_count and guard < limit:
+        guard += 1
+        numbers = ending_at.get(index)
+        # A volta this pass does not take is skipped - but only when a pass is actually
+        # in play. On a head with an ending and no repeat the pass never advances past
+        # 1, so an ending numbered "2" would otherwise never sound.
+        if numbers is not None and pass_no not in numbers:
+            index += 1
+            continue
+        order.append((index, pass_no))
+        if index in repeat_end and pass_no < repeat_end[index]:
+            pass_no += 1
+            index = target_for(index)
+            continue
+        index += 1
+    return order
+
+
+def _expand_repeats(
+    head: Head,
+    measure_numbers: List[int],
+    raw_markers: Dict[int, List[Tuple[str, Tuple[int, ...], int]]],
+) -> None:
+    """Rewrite a head so it plays its repeats, in place, once everything is read.
+
+    The measures were walked once in document order, each note and `<harmony>` stamped
+    with the written measure number. This recomputes the **play order** and renumbers
+    `bar` to a unique absolute position, duplicating the notes and chords of a repeated
+    section so the arrangement states them on every pass a player makes.
+
+    `bar` must be unique because the engine keys everything - `chord_at`, `melody_at`,
+    the bass timeline, the renderers' bar grouping - on `(bar, beat)`, and a repeat puts
+    two physical bars on the same written number. The written number is kept on
+    `HeadNote.written_bar` / `HeadChange.written_bar` so the score's own numbering is
+    never lost, and `--bars a-b` filters on the **absolute** (played) bars - so on a
+    repeated head `--bars 31-32` is the 1st ending as played, not written bar 31.
+
+    A no-op on a head with no repeat or ending: it returns before touching anything, so
+    every committed score but the two with a repeat loads byte-identically. Markers are
+    recorded on `Head.markers` for the writers to draw as `|:` / `:|` and `1.` / `2.`.
+    """
+    if not raw_markers or not measure_numbers:
+        return
+    order = _expand_play_order(len(measure_numbers), raw_markers)
+    # An ending with no repeat, or a lone `<bar-style>`, expands to the identity order.
+    # Touching the head then would renumber bars for no musical reason, so it is left
+    # exactly as read.
+    if order == [(position, 1) for position in range(len(measure_numbers))]:
+        return
+
+    base = measure_numbers[0]
+    notes_by_bar: Dict[int, List[HeadNote]] = {}
+    for note in head.notes:
+        notes_by_bar.setdefault(note.written_bar, []).append(note)
+    changes_by_bar: Dict[int, List[HeadChange]] = {}
+    for change in head.chords:
+        changes_by_bar.setdefault(change.written_bar, []).append(change)
+
+    new_notes: List[HeadNote] = []
+    new_changes: List[HeadChange] = []
+    first_abs: Dict[int, int] = {}
+    for index, (position, _pass) in enumerate(order):
+        absolute = base + index
+        first_abs.setdefault(position, absolute)
+        written = measure_numbers[position]
+        for note in notes_by_bar.get(written, ()):
+            new_notes.append(replace(note, bar=absolute))
+        for change in changes_by_bar.get(written, ()):
+            new_changes.append(replace(change, bar=absolute))
+    head.notes = new_notes
+    head.chords = new_changes
+
+    # A backward repeat jumps back to a target - an explicit forward repeat, or the very
+    # start when the score marks none (both committed repeats do). The writers draw a
+    # `|:` there, so a target with no `<repeat direction="forward">` of its own still gets
+    # a `repeat_start` marker: the opening barline of `heres_that_rainy_day` carries no
+    # repeat sign in the file, yet a player reads one there.
+    repeat_targets: Dict[int, None] = {}
+    for position in sorted(raw_markers):
+        for kind, _numbers, _times in raw_markers[position]:
+            if kind == "repeat_end":
+                earlier = [
+                    p
+                    for p in sorted(raw_markers)
+                    if any(k == "repeat_start" for k, _n, _t in raw_markers[p])
+                    and p < position
+                ]
+                target = max(earlier) if earlier else 0
+                repeat_targets.setdefault(target, None)
+    marked_starts = {
+        position
+        for position in sorted(raw_markers)
+        if any(k == "repeat_start" for k, _n, _t in raw_markers[position])
+    }
+
+    markers: List[BarMarker] = []
+    for position in sorted(raw_markers):
+        # A marker on a measure the expansion never played (an ending bracket no pass
+        # takes) has no absolute bar to land on, so it is dropped rather than guessed.
+        absolute = first_abs.get(position)
+        if absolute is None:
+            continue
+        for kind, numbers, times in raw_markers[position]:
+            markers.append(
+                BarMarker(
+                    bar=absolute,
+                    kind=kind,
+                    written_bar=measure_numbers[position],
+                    numbers=numbers,
+                    times=times,
+                )
+            )
+    for position in sorted(repeat_targets):
+        if position not in marked_starts and position in first_abs:
+            markers.append(
+                BarMarker(
+                    bar=first_abs[position],
+                    kind="repeat_start",
+                    written_bar=measure_numbers[position],
+                )
+            )
+            marked_starts.add(position)
+    markers.sort(key=lambda m: (m.bar, m.kind))
+    head.markers = markers
+    head.measure_range = (base, base + len(order) - 1)
+    # The absolute -> written bar map, for the renderers that draw the signs: it is what
+    # lets them write the score the file actually contains rather than the played bars.
+    head.written_bars = {
+        base + index: measure_numbers[position]
+        for index, (position, _pass) in enumerate(order)
+    }
+
+
 def _read_notes(part: ElementTree.Element, head: Head) -> None:
     """Walks one part, filling `head` with its melody and their chords.
 
@@ -1046,6 +1328,14 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
     def skip(reason: str) -> None:
         skipped[reason] = skipped.get(reason, 0) + 1
 
+    # Barline instructions (repeats and volta endings) keyed by the measure's
+    # **document position**, not its written number: a score's measure numbers can be
+    # non-contiguous, and the expansion walks positions in order. Consumed by
+    # `_expand_repeats` after the walk; empty for a score with no barlines of interest,
+    # which is every committed head but the three that carry a repeat.
+    raw_markers: Dict[int, List[Tuple[str, Tuple[int, ...], int]]] = {}
+    position = 0
+
     for measure in part.findall("measure"):
         for attributes in measure.findall("attributes"):
             stated = attributes.findtext("divisions")
@@ -1060,6 +1350,10 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
             if number:
                 skip(f'measures not numbered with an integer ("{number}")')
         measure_numbers.append(bar)
+
+        for barline in measure.findall("barline"):
+            for kind, numbers, times in _parse_barline(barline):
+                raw_markers.setdefault(position, []).append((kind, numbers, times))
 
         cursor = 0
         group.clear()
@@ -1102,6 +1396,7 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
                 changes.append(
                     HeadChange(
                         bar=bar,
+                        written_bar=bar,
                         beat=_beat_from_onset(cursor, divisions, beat_type),
                         chord=chord,
                         quality=quality,
@@ -1188,6 +1483,7 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
                      group_chord, group_quality, group_bass,
                      tie_stop=group_tie, lyrics=group_lyrics, tuplet=group_tuplet)
         group.clear()
+        position += 1
         bar_index = bar + 1
 
     head.notes = notes
@@ -1197,6 +1493,12 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
     # step A'). Recorded here because this is the one place the measures are walked.
     if measure_numbers:
         head.measure_range = (measure_numbers[0], measure_numbers[-1])
+    # A bar the melody never enters and a bar with no notes at all are still walked, so
+    # their barlines are read too. Expand the repeat now that every measure, marker,
+    # note and change is in hand: `_expand_repeats` rewrites `bar` to the absolute
+    # play-order position, sets `Head.markers` and updates `measure_range`. It is a
+    # no-op (byte-identical) on a score with no repeat, which is every head but three.
+    _expand_repeats(head, measure_numbers, raw_markers)
     head.unmapped = tuple(dict.fromkeys(unmapped))
     head.skipped = tuple(f"{count} {reason}" for reason, count in sorted(skipped.items()))
     report: List[str] = []
@@ -1786,6 +2088,15 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
         f"melody note(s), bars {head.bars[0]}-{head.bars[1] - 1}; neck window: "
         f"frets {args.fret_min}-{args.fret_max}; grips: {', '.join(args.grips)}"
     )
+    if head.markers:
+        # The arrangement is the bars played; a score is written with repeats. Saying
+        # both keeps the header's `bars 1-66` from reading as a claim about a file that
+        # now holds the written score.
+        written = len(set(head.written_bars.values()))
+        print(
+            f"  repeats: {written} written bars play as "
+            f"{head.bars[1] - head.bars[0]} - signposted, not written out"
+        )
     for note in notes:
         print(f"  note: {note}")
     if args.texture == "targets":
@@ -1821,4 +2132,6 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
         beat_type=head.beat_type,
         fifths=head.key_fifths,
         mode=head.key_mode,
+        markers=head.markers,
+        written_bars=head.written_bars,
     )

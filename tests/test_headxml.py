@@ -796,7 +796,7 @@ class TestChordTimeline(unittest.TestCase):
         self.assertEqual(self._chords_in_bar(head, 32), [(1.0, "Am7"), (2.0, "D9")])
 
     def test_the_timeline_reproduces_every_notes_own_chord(self):
-        """The cross-check: 271 of 271, on all three fixtures.
+        """The cross-check: 458 of 458, on all three fixtures.
 
         `notes[i].chord` is the shipped fact and `head.chords` is the new one; the
         timeline is forward-filled to a note's own `(bar, beat)` and must agree. A
@@ -821,7 +821,13 @@ class TestChordTimeline(unittest.TestCase):
                     f"{in_force!r} and the note says {note.chord!r}",
                 )
         # A count as well as an agreement, so an empty fixture cannot make this vacuous.
-        self.assertEqual(checked, 271)
+        #
+        # **458, not 271, because three of these scores carry a repeat.** `heres_that_
+        # rainy_day` (bars 1-30, then 31-32 and 33-36) and `i_was_doing_all_right` (bars
+        # 1-34, then 35) now expand to the bars a player actually plays, so their repeated
+        # sections - and the notes and `<harmony>` in them - are stated on every pass. The
+        # cross-check is over the expanded head, and the count is the expanded note count.
+        self.assertEqual(checked, 458)
 
     def test_a_hand_built_case_isolates_it(self):
         """One note, then a chord that only rests follow.
@@ -971,12 +977,27 @@ class TestChordAt(unittest.TestCase):
         Not a synthetic tie: measured on the committed score. First-wins would put
         `Gmaj` and `G6` under notes that ship with `Eb7`, so this is the rule that keeps
         the query from disagreeing with the output it will one day feed.
+
+        **Identified by `written_bar`, queried by `bar`.** `i_was_doing_all_right` carries
+        a repeat, so the loader renumbers written bar 33 (the 1st ending's bar) to the
+        absolute 33 and written bar 35 (the 2nd ending's bar) to the absolute 68; the
+        rule under test is about the score's own numbering, so the bar is found by
+        `written_bar` and the query is made at the absolute position it landed on.
         """
         head = load_musicxml(I_WAS_DOING_ALL_RIGHT)
-        for bar, first in ((33, "Gmaj"), (35, "G6")):
-            at_bar = [(c.beat, c.chord) for c in head.chords if c.bar == bar]
-            self.assertEqual(at_bar, [(1.0, first), (1.0, "Eb7")], f"bar {bar} changed")
-            self.assertEqual(chord_or_fail(head.chords, bar, 1.0).chord, "Eb7", f"bar {bar}")
+        for written, first in ((33, "Gmaj"), (35, "G6")):
+            at_bar = [
+                (c.beat, c.chord) for c in head.chords if c.written_bar == written
+            ]
+            self.assertEqual(
+                at_bar, [(1.0, first), (1.0, "Eb7")], f"written bar {written} changed"
+            )
+            bar = next(
+                c.bar for c in head.chords if c.written_bar == written
+            )
+            self.assertEqual(
+                chord_or_fail(head.chords, bar, 1.0).chord, "Eb7", f"bar {bar}"
+            )
             # And the note in that bar agrees, which is what makes the rule measurable
             # rather than merely asserted.
             self.assertEqual(
@@ -1009,11 +1030,14 @@ class TestChordAt(unittest.TestCase):
         self.assertEqual(chord_at(head.chords, first.bar, first.beat), first)
 
     def test_it_agrees_with_the_note_path_on_every_note(self):
-        """The cross-check, now over the shipped function: 271 of 271.
+        """The cross-check, now over the shipped function: 458 of 458.
 
         `TestChordTimeline` proved the *data* reproduces the notes; this proves the
         *query* over that data does, which is a different thing and could have been wrong
-        at the boundary the duplicate-position rule covers.
+        at the boundary the duplicate-position rule covers. The count is 458 rather than
+        271 because the repeat-bearing fixtures (`heres_that_rainy_day`,
+        `i_was_doing_all_right`) now expand to the bars a player actually plays - see
+        `test_the_timeline_reproduces_every_notes_own_chord`.
         """
         checked = 0
         for path in (BUT_NOT_FOR_ME, RAINY_DAY, I_WAS_DOING_ALL_RIGHT):
@@ -1031,7 +1055,7 @@ class TestChordAt(unittest.TestCase):
                     f"{path}: bar {note.bar} beat {note.beat} - {change.chord!r} vs "
                     f"{note.chord!r}",
                 )
-        self.assertEqual(checked, 271)
+        self.assertEqual(checked, 458)
 
     def test_an_unsorted_timeline_still_answers_correctly(self):
         """A hand-built `Head.chords` need not be in position order.
@@ -1883,17 +1907,23 @@ class TestReductionAndArranging(unittest.TestCase):
         A hand-built fixture is fine for a rule but not for a count: the point here is
         that the reduction no longer *loses notes of the tune*, and the only honest way
         to say that is against a real score's note count. `i_was_doing_all_right.mxl`
-        carries 39 tuplets among its 110 notes, and before this rule `eighths` kept 86
-        of them - losing 11 in the tuplet bars and **13 in the straight ones**, because
-        any two notes closer together than the grid collided.
+        carries 39 tuplets among its 110 written notes, and before this rule `eighths`
+        kept 86 of them - losing 11 in the tuplet bars and **13 in the straight ones**,
+        because two notes closer together than the grid collided.
+
+        **78, not 39, is the tuplet count on the expanded head.** The score has a repeat,
+        so its tuplet-bearing first section is played twice and every tuplet is stated on
+        both passes: 39 written tuplets, 78 played. The claim - every note kept - is what
+        the equality below asserts, and it holds at either count.
         """
         head = load_musicxml(I_WAS_DOING_ALL_RIGHT)
-        # Every written note, including all 39 tuplets. Under `eighths` this head used
-        # to keep 86 of 110 - losing 11 in the tuplet bars and **13 in the straight
-        # ones**, because two notes closer together than the grid shared a slot and one
-        # was dropped from the arrangement without a word.
+        # Every written note, including all 78 played tuplets (39 written, doubled by the
+        # repeat). Under `eighths` this head used to keep 86 of 110 - losing 11 in the
+        # tuplet bars and **13 in the straight ones**, because two notes closer together
+        # than the grid shared a slot and one was dropped from the arrangement without a
+        # word.
         self.assertEqual(len(head_skeleton(head)), len(head.notes))
-        self.assertEqual(sum(1 for n in head.notes if n.tuplet), 39)
+        self.assertEqual(sum(1 for n in head.notes if n.tuplet), 78)
 
     def test_a_chord_change_sounds_under_every_note_it_governs(self):
         """Two chords in the bar, six notes, and the harmony changes part-way through.
@@ -2740,4 +2770,297 @@ class TestHeadCli(unittest.TestCase):
         # the install command that fixes it.
         self.assertIn("Dm7", output)
         self.assertIn("jazz-arranger[xml]", output)
+
+
+
+def _bar(number: int, pitch: str, inner: str = "", barline: str = "") -> str:
+    """One whole-note measure with an optional harmony and barline, for repeat tests.
+
+    `divisions=4` and a 4/4 bar, so a whole note is `duration` 16 and every measure is
+    full. The synthetic counterpart to the committed scores: a real file cannot be
+    edited to add the ending or the `times` a case needs.
+    """
+    return (
+        f'<measure number="{number}">'
+        + barline
+        + inner
+        + "<note><pitch>"
+        + f"<step>{pitch[0]}</step><octave>{pitch[1]}</octave>"
+        + "</pitch><duration>16</duration><type>whole</type></note>"
+        + "</measure>"
+    )
+
+
+class TestRepeats(unittest.TestCase):
+    """A score's repeats and volta endings: the head plays what a performer plays.
+
+    Before this the loader read every `<measure>` once in document order, so a backward
+    repeat was ignored and both endings were played. The tests below are the synthetic
+    cases (a real file cannot be edited to add one) plus the committed score, whose play
+    order and bar count are the end-to-end pin.
+    """
+
+    def load(self, measures: str, beats: int = 4, beat_type: int = 4) -> Head:
+        # The divisions and metre go in the **first** measure rather than a synthetic
+        # bar 0: an extra measure would be a bar of the play order with no notes, and the
+        # absolute numbering these tests read is a fact about the play order.
+        attributes = (
+            f"<attributes><divisions>4</divisions>"
+            f"<time><beats>{beats}</beats><beat-type>{beat_type}</beat-type></time>"
+            "</attributes>"
+        )
+        opening = measures.find(">") + 1
+        measures = measures[:opening] + attributes + measures[opening:]
+        document = (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<score-partwise version="3.1">\n'
+            "  <part-list><score-part id=\"P1\"><part-name>Voice</part-name>"
+            "</score-part></part-list>\n"
+            '  <part id="P1">\n'
+            f"{measures}\n"
+            "  </part>\n</score-partwise>\n"
+        )
+        path = write_score(document)
+        self.addCleanup(os.unlink, path)
+        return load_musicxml(path)
+
+    def test_a_backward_repeat_plays_the_section_twice(self):
+        """Four written bars with a backward repeat at the last play as eight.
+
+        The simplest expansion, and the one the count speaks for: `bar` is renumbered to
+        the absolute play order (1-8) and `written_bar` keeps the score's own (1-4, twice).
+        """
+        measures = (
+            _bar(1, "C4") + _bar(2, "D4") + _bar(3, "E4")
+            + _bar(4, "F4", barline='<barline location="right">'
+                                 '<repeat direction="backward"/></barline>')
+        )
+        head = self.load(measures)
+        self.assertEqual(head.bars, (1, 9), "4 written bars played twice is 8 bars")
+        self.assertEqual([n.bar for n in head.notes], [1, 2, 3, 4, 5, 6, 7, 8])
+        self.assertEqual(
+            [n.written_bar for n in head.notes], [1, 2, 3, 4, 1, 2, 3, 4]
+        )
+
+
+    def test_the_second_ending_replaces_the_first_on_the_repeat(self):
+        """The 1st/2nd ending taken in turn: play the 1st, repeat, skip it, play the 2nd.
+
+        Bars 1-2 are the body, bar 3 the 1st ending (which carries the backward repeat),
+        bar 4 the 2nd. A player hears `1 2 3 | 1 2 4` - six bars, and `written_bar` shows
+        exactly which pass each one came from.
+        """
+        measures = (
+            _bar(1, "C4") + _bar(2, "D4")
+            + _bar(
+                3, "E4",
+                barline=(
+                    '<barline location="left"><ending number="1" type="start"/></barline>'
+                    '<barline location="right"><ending number="1" type="stop"/>'
+                    '<repeat direction="backward"/></barline>'
+                ),
+            )
+            + _bar(
+                4, "F4",
+                barline=(
+                    '<barline location="left"><ending number="2" type="start"/></barline>'
+                    '<barline location="right"><ending number="2" type="stop"/></barline>'
+                ),
+            )
+        )
+        head = self.load(measures)
+        self.assertEqual([n.written_bar for n in head.notes], [1, 2, 3, 1, 2, 4])
+        self.assertEqual([n.bar for n in head.notes], [1, 2, 3, 4, 5, 6])
+
+    def test_times_three_plays_the_section_three_times(self):
+        """`times` is honoured rather than assumed to be two."""
+        measures = (
+            _bar(1, "C4") + _bar(2, "D4")
+            + _bar(3, "E4", barline='<barline location="right">'
+                                 '<repeat direction="backward" times="3"/></barline>')
+        )
+        head = self.load(measures)
+        self.assertEqual([n.bar for n in head.notes], [1, 2, 3, 4, 5, 6, 7, 8, 9])
+
+    def test_a_forward_repeat_is_the_jump_back_target(self):
+        """An explicit `direction="forward"` replaces the repeat-to-start default."""
+        measures = (
+            _bar(1, "C4")
+            + _bar(2, "D4", barline='<barline location="left">'
+                                  '<repeat direction="forward"/></barline>')
+            + _bar(3, "E4", barline='<barline location="right">'
+                                  '<repeat direction="backward"/></barline>')
+        )
+        head = self.load(measures)
+        # Bar 1 once, then 2-3 twice: 1 2 3 2 3.
+        self.assertEqual([n.written_bar for n in head.notes], [1, 2, 3, 2, 3])
+
+    def test_a_head_with_no_repeat_is_untouched(self):
+        """No barlines: nothing is renumbered and no markers are recorded.
+
+        The contract that keeps the six non-repeating committed scores loading exactly as
+        they did. `written_bar` is always the score's own number - it equals `bar` here
+        because no repeat moved anything - and `markers` stays empty.
+        """
+        head = self.load(_bar(1, "C4") + _bar(2, "D4"))
+        self.assertEqual([n.bar for n in head.notes], [1, 2])
+        self.assertEqual([n.written_bar for n in head.notes], [1, 2])
+        self.assertEqual(head.markers, [])
+
+
+    def test_the_markers_name_the_repeat_and_both_endings(self):
+        """The two-volta structure, on the bar numbers the expanded head landed on."""
+        measures = (
+            _bar(1, "C4") + _bar(2, "D4")
+            + _bar(
+                3, "E4",
+                barline=(
+                    '<barline location="left"><ending number="1" type="start"/></barline>'
+                    '<barline location="right"><ending number="1" type="stop"/>'
+                    '<repeat direction="backward"/></barline>'
+                ),
+            )
+            + _bar(
+                4, "F4",
+                barline=(
+                    '<barline location="left"><ending number="2" type="start"/></barline>'
+                    '<barline location="right"><ending number="2" type="stop"/></barline>'
+                ),
+            )
+        )
+        head = self.load(measures)
+        marks = sorted((m.bar, m.kind) for m in head.markers)
+        self.assertEqual(
+            marks,
+            [
+                (1, "repeat_start"),
+                (3, "ending_start"),
+                (3, "ending_stop"),
+                (3, "repeat_end"),
+                (6, "ending_start"),
+                (6, "ending_stop"),
+            ],
+        )
+
+    def test_the_committed_rainy_day_plays_its_repeat(self):
+        """The end-to-end case: 36 written bars, the 1st ending skipped on the repeat.
+
+        `heres_that_rainy_day` is 1-30, then ending 1 (31-32) with the backward repeat,
+        then ending 2 (33-36). Played, that is `1-30, 31-32, 1-30, 33-36` - 66 bars - and
+        the melody note count rises from 113 written to 160 played.
+        """
+        head = load_musicxml(RAINY_DAY)
+        self.assertEqual(head.bars, (1, 67))
+        self.assertEqual(len(head.notes), 160)
+        # The 1st ending is written bars 31-32, but bar 32 has no note of its own: its
+        # G4 is the tie-stop of bar 31's held note, so the ending contributes one written
+        # bar of melody. The 2nd ending (written 33-36) is a four-bar tie chain and
+        # likewise contributes one, at absolute bars 63-66.
+        self.assertEqual(
+            sorted({n.written_bar for n in head.notes if n.bar in (31, 32)}), [31]
+        )
+        self.assertEqual(
+            sorted({n.written_bar for n in head.notes if n.bar in (63, 64, 65, 66)}),
+            [33],
+        )
+        # And the repeat's own written bar - 32 - is never a melody bar at all.
+        self.assertEqual([n.bar for n in head.notes if n.written_bar == 32], [])
+
+    def test_the_play_order_maps_back_to_the_written_bars(self):
+        """`Head.written_bars` is the inverse the writers need to write a written score.
+
+        The arrangement is the 66 bars a player plays; a notation file holds the 36 the
+        score writes, with the repeat signposted. `_as_written` is the fold between them,
+        and it moves the markers onto the written bars at the same time.
+        """
+        from arranger.cli import _as_written
+
+        steps, head, _ = arrange_xml_head(RAINY_DAY)
+        self.assertEqual(head.bars, (1, 67))
+        written_steps, written_markers = _as_written(
+            steps, head.markers, head.written_bars
+        )
+        bars = sorted(
+            {bar for bar in (step.bar for step in written_steps) if bar is not None}
+        )
+        self.assertEqual(bars, list(range(1, 37)))
+        self.assertEqual(
+            [(m.bar, m.kind) for m in written_markers],
+            [
+                (1, "repeat_start"),
+                (31, "ending_start"),
+                (32, "ending_stop"),
+                (32, "repeat_end"),
+                (33, "ending_start"),
+                (36, "ending_stop"),
+            ],
+        )
+
+    def test_a_head_with_no_repeat_projects_to_itself(self):
+        """No markers and no map: `_as_written` is the identity on the arrangement."""
+        from arranger.cli import _as_written
+
+        steps, head, _ = arrange_xml_head(BUT_NOT_FOR_ME)
+        self.assertEqual(head.markers, [])
+        self.assertEqual(head.written_bars, {})
+        written_steps, written_markers = _as_written(
+            steps, head.markers, head.written_bars
+        )
+        self.assertEqual([s.bar for s in written_steps], [s.bar for s in steps])
+        self.assertEqual(written_markers, [])
+
+
+class TestRepeatSignsInTheAsciiStaff(unittest.TestCase):
+    """The tab staff draws the `|:` / `:|` and the volta numbers the markers name.
+
+    The staff is the display the head CLI prints, so a reader can see the repeat rather
+    than only the extra bars it produced. The signs ride the barline of the bar they open
+    - `|:` on a repeat's start, `:|` on the bar after its end - and an ending's number is
+    a label row (`1.` / `2.`) above the staff.
+    """
+
+    def _arrangement(self, count: int = 8):
+        engine = arranger.VoiceLeadingEngine()
+        progression = [
+            ("A4", "m7", "Dm7"), ("C5", "7", "G7"), ("B4", "maj7", "Cmaj7"),
+            ("A4", "m7", "Am7"), ("C5", "7", "D7"), ("B4", "maj7", "Fmaj7"),
+            ("A4", "m7", "Bm7"), ("C5", "7", "E7"),
+        ][:count]
+        steps = engine.arrange_progression(progression)
+        for index, step in enumerate(steps):
+            step.bar = 1 + index // 4
+            step.beat = 1.0 + index % 4
+            step.duration = 0.25
+        return steps
+
+    def test_no_markers_draws_no_repeat_signs(self):
+        """The default staff is unchanged - the markers are the only thing that adds signs."""
+        text = format_tab_staff(self._arrangement(), measures_per_line=2)
+        self.assertNotIn("|:", text)
+        self.assertNotIn(":|", text)
+
+    def test_repeat_start_and_end_ride_their_barlines(self):
+        from headxml import BarMarker
+
+        markers = [
+            BarMarker(bar=1, kind="repeat_start", written_bar=1),
+            BarMarker(bar=2, kind="repeat_end", written_bar=2, times=2),
+        ]
+        text = format_tab_staff(
+            self._arrangement(), measures_per_line=2, markers=markers
+        )
+        self.assertIn("e*|:", text, "the opening barline of bar 1 should be a repeat")
+        self.assertIn(":|", text, "bar 2's close should be a repeat")
+
+    def test_a_volta_number_is_labelled_above_the_staff(self):
+        from headxml import BarMarker
+
+        markers = [
+            BarMarker(bar=1, kind="ending_start", written_bar=1, numbers=(1,)),
+            BarMarker(bar=2, kind="ending_stop", written_bar=2, numbers=(1,)),
+        ]
+        text = format_tab_staff(
+            self._arrangement(), measures_per_line=2, markers=markers
+        )
+        self.assertIn("1.", text)
 

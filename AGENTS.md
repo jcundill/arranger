@@ -22,6 +22,7 @@ gate and the conventions — not the explanation.
 | non-chord melody notes, a new chord quality | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` |
 | the step loop, `arrange_progression`, `Diagnostics` | [docs/engine.md](docs/engine.md) | `arranger/movement.py` |
 | tab staff, HTML, MusicXML, GP5, or the MusicXML importer | [docs/renderers.md](docs/renderers.md) | `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py` |
+| an imported head's **repeats or volta endings** — why it is longer than the file's measure count, or the `|:` / `:|` / `1.` / `2.` the writers draw | [docs/renderers.md](docs/renderers.md) | `headxml.py` (`_parse_barline`, `_expand_play_order`, `_expand_repeats`, `BarMarker`, `Head.markers`, `HeadNote.written_bar`); each writer's `markers=` parameter |
 | the slot layer: triples to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
 | the MusicXML **importer's chord timeline**, or a bar the melody skips | [docs/open-issues.md](docs/open-issues.md) item 1 | `headxml.py` (`chord_at`, `chord_slots`, `_merge_chord_slots`) — the bar-level half is **built**: a melody-anchored grid adds a bar the melody never enters and nothing below it, so `every_note` is byte-identical over every note-bearing bar and a chords-only head arranges all four bars. **Generated slots** (a beat the melody skips *inside* a bar it occupies) and the fifth `melody_alone_case` kind are still owed |
 | an open bug, with its measurement | [docs/open-issues.md](docs/open-issues.md) | — |
@@ -46,10 +47,10 @@ frozen like the rest — it is not a home for an open plan.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **976 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **993 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 14 of those 971, and it is the one that fails if this
+(`tests/test_docs.py` is 14 of those 993, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree. It also fails if a document
 exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
 new file cannot be added without being registered.)

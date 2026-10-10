@@ -116,6 +116,14 @@ wants `zipfile` and `xml.etree`, which are in the standard library. A plain
 `skipUnless`-guarded at all — the scores it reads are committed in `tests/data/`,
 so a clone runs the whole thing.
 
+**The score's repeats and endings are honoured.** A backward repeat plays its section
+again, and a 1st/2nd ending is taken in turn — so `heres_that_rainy_day`, written as 36
+bars, is arranged as the **66** a player hears (`1-30, 31-32, 1-30, 33-36`). The repeat
+lands in the output too: `--musicxml`, `--gp5`, `--html` and `--tab staff` write the
+**written** 36 bars with the `|:` / `:|` signs and the `1.` / `2.` brackets, so the file
+is a score a player reads rather than the played bars written out with the repeat on top.
+(The plain `--tab line` listing still shows every bar the arrangement plays.)
+
 ```bash
 python -m arranger head tests/data/heres_that_rainy_day.musicxml --tab staff --melody
 python -m arranger head tests/data/i_was_doing_all_right.mxl --bars 1-3 --html head.html

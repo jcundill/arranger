@@ -150,6 +150,43 @@ Six decisions are load-bearing, and each was forced by a real file:
   both callers (a note's `<chord>` group and a `<harmony>`) go through it. The `<time>`
   read is the **last** one stated, since a score may change metre.
 
+### Repeats and endings are played, not just read
+
+**A score's `<repeat>` and `<ending>` barlines are honoured: the head plays the bars a
+performer plays, not the bars the file writes.** `heres_that_rainy_day` writes 36 bars —
+1-30, a 1st ending at 31-32 with the backward repeat, a 2nd ending at 33-36 — and a player
+hears `1-30, 31-32, 1-30, 33-36`: **66** bars, the 1st ending taken once and skipped on
+the repeat. Three committed scores carry a repeat (the two above plus
+`i_was_doing_all_right`, which has an explicit forward repeat); the other five load exactly
+as they always did.
+
+`headxml._parse_barline` reads each `<barline>`; `_expand_play_order` builds the play order
+(a backward repeat jumps to the matching forward repeat, or to the start when the score
+marks none, and a volta numbered N plays only on pass N); `_expand_repeats` renumbers
+`bar` to the **absolute** play-order position and duplicates the notes and `<harmony>` of
+the repeated section. That renumbering is forced by the engine: every consumer —
+`chord_at`, `melody_at`, the walking bass, the renderers' bar grouping — keys on
+`(bar, beat)`, and a repeat puts two physical bars on the same written number. The score's
+own number stays on `HeadNote.written_bar` / `HeadChange.written_bar`, and `Head.markers`
+records the repeat and ending instructions on their absolute bars. **`--bars LO-HI`
+therefore selects on the expanded (absolute) bars** — on a repeated head `--bars 31-32` is
+the 1st ending as played, not written bar 31.
+
+**The writers draw them back - on the written bars.** Each takes a `markers=` argument
+(threaded from `head_cli` as `head.markers`), and each is handed the **written** score
+rather than the played bars: `arranger.cli._as_written` folds the 66 played bars back onto
+the 36 the file writes, using `Head.written_bars`, and moves the markers onto those bars.
+A file that wrote the played bars out *and* carried repeat signs would make a reader take
+the repeated section twice more, so the signs replace the written-out repeat rather than
+sitting on top of it. `tabxml` writes `<barline>` `<repeat>` and `<ending>` elements,
+`tabgp` sets `isRepeatOpen` / `repeatClose` / `repeatAlternative` on the measure headers,
+and `tabstaff` draws `|:` / `:|` on the barline and a `1.` / `2.` label row above the
+staff. With no markers - every non-head caller and every non-repeating score - each writer
+is byte-identical to what it produced before.
+
+The plain `--tab line` listing is the exception: it prints the played arrangement, so a
+repeated head still shows every bar a player plays there.
+
 ### A beat is not a quarter note
 
 Cut time is where every metre assumption in this library comes apart, and it did so

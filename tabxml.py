@@ -46,7 +46,7 @@ time.
 from __future__ import annotations
 
 import re
-from typing import Any, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 from xml.etree import ElementTree
 
 from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES, ArrangementStep, GuitarFretboard
@@ -650,6 +650,98 @@ def _document_prologue(document: str) -> str:
     return prologue + "\n"
 
 
+def _barline_element(
+    location: str, markers: Sequence[Any]
+) -> ElementTree.Element:
+    """A `<barline>` carrying the repeat and ending signs the markers name.
+
+    Child order is MusicXML's: `<ending>` before `<repeat>`, and both after any
+    `<bar-style>` a merge kept. A `repeat_end` states its `times` so a reader loops the
+    section the right number of times; a `repeat_start` does not (MusicXML takes it from
+    the matching backward repeat). The ending `number` is a comma-joined list, which is
+    how MusicXML spells a bracket taken on more than one pass.
+    """
+    barline = ElementTree.Element("barline", {"location": location})
+    for marker in markers:
+        kind = getattr(marker, "kind", "")
+        if kind in ("ending_start", "ending_stop"):
+            ending = ElementTree.SubElement(barline, "ending")
+            ending.set("number", ",".join(str(n) for n in marker.numbers) or "1")
+            ending.set("type", "start" if kind == "ending_start" else "stop")
+        elif kind == "repeat_start":
+            ElementTree.SubElement(barline, "repeat").set("direction", "forward")
+        elif kind == "repeat_end":
+            repeat = ElementTree.SubElement(barline, "repeat")
+            repeat.set("direction", "backward")
+            repeat.set("times", str(marker.times))
+    return barline
+
+
+def _apply_repeat_markers(
+    root: ElementTree.Element, markers: Sequence[Any]
+) -> None:
+    """Writes the head's repeats and endings into the exported score.
+
+    Markers are keyed on the head's **absolute** bars, which are the measure numbers
+    `_build_part` writes when the arrangement starts on bar 1 with no pickup - the case
+    every repeated head is. A left sign (`repeat_start`, `ending_start`) goes near the
+    top of its measure and a right one (`repeat_end`, `ending_stop`) at the end; a
+    measure carrying both (the 1st ending's single bar in `i_was_doing_all_right`) gets
+    one of each.
+
+    A `<barline>` music21 already wrote for the same location is **reused rather than
+    duplicated**, so a final `light-heavy` at the last bar survives and the `<ending>`
+    merges into it. A marker for a bar the score does not have (a renumbered pickup,
+    say) is dropped rather than guessed onto a neighbour.
+    """
+    by_bar: Dict[int, List[Any]] = {}
+    for marker in markers:
+        by_bar.setdefault(marker.bar, []).append(marker)
+    if not by_bar:
+        return
+    for measure in root.iter("measure"):
+        number = measure.get("number")
+        if number is None or not number.strip().lstrip("-").isdigit():
+            continue
+        group = by_bar.get(int(number))
+        if not group:
+            continue
+        left = [m for m in group if m.kind in ("repeat_start", "ending_start")]
+        right = [m for m in group if m.kind in ("repeat_end", "ending_stop")]
+        if left:
+            _merge_barline(measure, "left", left, at_start=True)
+        if right:
+            _merge_barline(measure, "right", right, at_start=False)
+
+
+def _merge_barline(
+    measure: ElementTree.Element,
+    location: str,
+    markers: Sequence[Any],
+    at_start: bool,
+) -> None:
+    """Inserts or extends the `<barline location=...>` of one measure.
+
+    A new element is placed where MusicXML expects it: a left barline right after any
+    leading `<print>` / `<attributes>` and a right barline at the very end, so the
+    signs bracket the bar's own notes rather than landing inside them.
+    """
+    for existing in measure.findall("barline"):
+        if existing.get("location") == location:
+            for child in _barline_element(location, markers):
+                existing.append(child)
+            return
+    barline = _barline_element(location, markers)
+    if at_start:
+        index = 0
+        for position, child in enumerate(measure):
+            if child.tag in ("print", "attributes", "direction", "sound"):
+                index = position + 1
+        measure.insert(index, barline)
+    else:
+        measure.append(barline)
+
+
 def _chord_symbol(name: str) -> Any:
     """
     A chord symbol for the score, or a text-only one when music21 cannot read the name.
@@ -822,6 +914,7 @@ def format_musicxml(
     rhythm: bool = True,
     collapse: bool = True,
     show_chords: bool = True,
+    markers: Optional[Sequence[Any]] = None,
 ) -> str:
     """
     Renders a whole progression as a MusicXML (score-partwise) document.
@@ -855,6 +948,10 @@ def format_musicxml(
             `format_tab_staff` does, so a hand-written progression still exports.
         collapse: write a held shape as one longer note instead of restriking it.
         show_chords: write the chord symbols.
+        markers: the head's repeat and ending instructions (`headxml.BarMarker`s), or
+            `None` for none. Each carries the **absolute** bar it sits on, so the signs
+            land on the measures a repeated head expanded to. Written as MusicXML
+            `<barline>` `<repeat>` and `<ending>` elements.
 
     Returns:
         A complete MusicXML document as a string, or "" for no steps. Pure: nothing
@@ -909,6 +1006,11 @@ def format_musicxml(
     root = ElementTree.fromstring(document)
     _unique_instrument_ids(root)
     _drop_empty_inversions(root)
+    # The head's repeats and endings, before the compatibility filter so the filter
+    # sees a finished document (the signs carry no `<kind>`, so the order is immaterial
+    # to it - but this keeps "downgrade runs last" true).
+    if markers:
+        _apply_repeat_markers(root, markers)
     # A compatibility filter, so it runs last: it sees the finished document, and
     # nothing below it can put a 4.0-only value back.
     _downgrade_kinds(root)
