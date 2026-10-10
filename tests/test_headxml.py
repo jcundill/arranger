@@ -2821,6 +2821,74 @@ class TestHeadCli(unittest.TestCase):
         self.assertIn("Dm7", output)
         self.assertIn("jazz-arranger[xml]", output)
 
+    def test_the_grips_flag_is_a_comma_separated_list(self):
+        """`--grips shell,duo` is one argument naming two families.
+
+        The flag spelled a list with spaces (`nargs="+"`) while `--voices`, in the
+        same parser, spelled one with commas - so the obvious spelling was refused
+        with `invalid choice: 'shell,duo'`, and the run header printed the request
+        back *comma-separated*, which is the spelling the flag did not accept.
+        """
+        output = self.run_cli(RAINY_DAY, "--bars", "1-3", "--grips", "closed,shell,duo")
+        self.assertEqual(self.code, 0)
+        self.assertIn("grips: closed, shell, duo", output)
+
+    def test_a_grip_named_before_the_file_still_arranges_that_file(self):
+        """`head --grips shell,duo FILE` finds the file.
+
+        The second half of the same defect, and the quieter half: a `nargs="+"`
+        option consumes the positional written after it, so `--grips` used to have to
+        come *last* - `head --grips shell FILE` failed with
+        `invalid choice: 'tests/data/...'`, reporting the filename as a grip.
+        """
+        output = self.run_cli("--bars", "1-3", "--grips", "shell,duo", RAINY_DAY)
+        self.assertEqual(self.code, 0)
+        self.assertIn("grips: shell, duo", output)
+
+    def test_the_request_reaches_the_engine(self):
+        """The flag is a spelling of `grips=`, so both reach the same arrangement.
+
+        Asserted against the library call rather than against a recorded tab, which
+        is what makes it a claim about the *wiring*: a flag that parsed correctly and
+        then arranged the default would pass a snapshot and fail this.
+        """
+        path = self.score_path()
+        output = self.run_cli(path, "--grips", "duo,shell")
+        self.assertEqual(self.code, 0)
+        steps, _head, _notes = arrange_xml_head(path, grips=("duo", "shell"))
+        self.assertIn(format_progression(steps), output)
+
+    def test_the_banner_echoes_a_legal_grips_argument(self):
+        """The `grips:` list in the run header can be pasted back onto the flag.
+
+        The header is how a reader reproduces a run, and it joins the families with
+        commas. That was true before the flag took commas, so the line a reader
+        copied was the one spelling that did not work - hence the assertion is a
+        round trip through `parse_grips` rather than a string comparison.
+        """
+        output = self.run_cli(RAINY_DAY, "--bars", "1-3", "--grips", "shell,duo")
+        row = next(line for line in output.splitlines() if "grips: " in line)
+        self.assertEqual(
+            arranger.parse_grips(row.split("grips: ", 1)[1].strip()),
+            ("shell", "duo"),
+        )
+
+    def test_an_unknown_grip_is_a_usage_error_naming_the_palette(self):
+        """A name outside the palette is refused with the palette, not dropped.
+
+        This is what `choices=GRIP_PREFERENCE` used to do at parse time; the check
+        moved into `parse_grips` so the palette is written down once, and it must
+        still fail loudly rather than quietly arranging without the family asked for.
+        """
+        import io
+        from contextlib import redirect_stderr
+
+        errors = io.StringIO()
+        with redirect_stderr(errors), self.assertRaises(SystemExit):
+            self.run_cli(self.score_path(), "--grips", "drop2,nope")
+        self.assertIn("nope", errors.getvalue())
+        self.assertIn("duo", errors.getvalue())
+
 
 
 def _bar(number: int, pitch: str, inner: str = "", barline: str = "") -> str:

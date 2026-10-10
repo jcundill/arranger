@@ -52,6 +52,7 @@ from arranger import (
     grid_positions,
     melody_only_selection,
     parse_grid,
+    parse_grips,
     parse_voices,
     resolve_grid,
     resolve_voices,
@@ -2085,6 +2086,13 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     if not Path(args.file).is_file():
         parser.error(f"no such file: {args.file}")
 
+    try:
+        grips = parse_grips(args.grips)
+    except ValueError as error:
+        # An unknown family is a usage error, on the same route as a bad `--bars`
+        # range - and refused here, before the score is read.
+        parser.error(str(error))
+
     section: Optional[Tuple[int, int]] = None
     if args.bars:
         try:
@@ -2110,7 +2118,7 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
             non_chord_tone=args.non_chord_tone,
             fallback=args.fallback,
             section=section,
-            grips=tuple(args.grips),
+            grips=grips,
             texture=args.texture,
             bass=args.bass,
             melody=args.voices,
@@ -2127,7 +2135,7 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     print(
         f"  {head.beats_per_bar}/{head.beat_type}, {_key_label(head)}, {len(head)} "
         f"melody note(s), bars {head.bars[0]}-{head.bars[1] - 1}; neck window: "
-        f"frets {args.fret_min}-{args.fret_max}; grips: {', '.join(args.grips)}"
+        f"frets {args.fret_min}-{args.fret_max}; grips: {', '.join(grips)}"
     )
     if head.markers:
         # The arrangement is the bars played; a score is written with repeats. Saying

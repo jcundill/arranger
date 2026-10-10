@@ -91,6 +91,7 @@ from .grips import (
     SHELL_DEGREES,
     _interval_offsets,
     get_comping_voicings,
+    parse_grips,
     supported_string_sets,
 )
 from .render import _print_step, _step_annotation, format_progression
@@ -475,6 +476,7 @@ __all__ = [
     "voices_have_soprano",
     "GRIP_PREFERENCE",
     "GRIP_STRING_SETS",
+    "parse_grips",
     "HIGH_FRET_LIMIT",
     "MELODY_STRING_CHOICES",
     "MELODY_STRING_CHOICES_FULL",

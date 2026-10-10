@@ -9,6 +9,7 @@ hand-authored tables rather than a replacement for them.
 """
 
 import unittest
+from dataclasses import replace
 
 from musthe import Note
 
@@ -26,6 +27,7 @@ from arranger import (
     VoiceLeadingEngine,
     Voicing,
     format_progression,
+    parse_grips,
     supported_string_sets,
 )
 from arranger.grips import THUMB_REACH_STRINGS, _string_sets_for, finger_skip_count
@@ -1496,8 +1498,8 @@ class TestDerivedGripShapes(unittest.TestCase):
     """
     drop-3 and close position, asserted as *music* rather than as offsets.
 
-    Neither family is offered by default, and for a long time both were unreachable at
-    the default span limit, which is what let two defects survive: the string order
+    Both are in `GRIP_PREFERENCE`, and both were unreachable at the default span limit
+    for a long time, which is what let two defects survive: the string order
     `_string_sets_for` returned, and the voice drop-3 actually dropped. Both are
     invisible in a generated tab - the pitches are right either way - so they are pinned
     here against the definition rather than against a previous output.
@@ -1747,6 +1749,147 @@ class TestDerivedGripShapes(unittest.TestCase):
             )
 
 
+class TestClosePosition(unittest.TestCase):
+    """
+    Close position (`closed`): the traditional shapes, and the family behind them.
+
+    A close-position four-note chord is the tightest voicing there is - no voice is
+    dropped - and it sits **second** in `GRIP_PREFERENCE`, behind only drop-2, so that
+    where a melody *can* fret it it beats every other four-note family on a tie. Most
+    melodies cannot: a close stack under a melody is a seventh or more of pitch on four
+    strings only four or five semitones apart in tuning, so it is simply never generated
+    there rather than offered and rejected. The two shapes below are the ones a player
+    learns; they are pinned as tabs because the pitches alone do not distinguish close
+    position from a drop voicing of the same chord, and the *strings* are the whole
+    content of the shape.
+    """
+
+    def setUp(self):
+        self.engine = VoiceLeadingEngine()
+
+    # (chord, quality, melody, soprano string, tab). The first is the D-G-B-E close
+    # position with the major 7th on top; the second the A-D-G-B form with the melody on
+    # the B string, which is the one a low melody reaches.
+    SHAPES = (
+        ("Gmaj7", "maj7", "F#4", 5, "x-x-5-4-3-2"),
+        ("Dmaj7", "maj7", "C#4", 4, "x-5-4-2-2-x"),
+    )
+
+    def test_the_two_traditional_close_position_shapes(self):
+        """Each shape is a close stack under the melody with no voice displaced."""
+        for chord_name, quality, melody, top_string, tab in self.SHAPES:
+            voicings = self.engine.get_grip_voicings(
+                Note(melody), quality, chord_name=chord_name,
+                top_string=top_string, grips=("closed",),
+            )
+            self.assertEqual(
+                [v.tab_string() for v in voicings], [tab],
+                f"{chord_name} under {melody}",
+            )
+
+    def test_the_family_covers_minor_dominant_and_half_diminished(self):
+        """
+        The family is derived from the chord's own tones, so it is not maj7-only.
+
+        A minor 7th, a dominant 7th and a half-diminished share the same soprano degree
+        (the b7), so the three shapes sit on the same frets and differ only in the third
+        and fifth - which is exactly what a close stack should do.
+        """
+        expected = {
+            ("m7", "Gm7"): "x-x-5-3-3-1",
+            ("7", "G7"): "x-x-5-4-3-1",
+            ("m7b5", "Gm7b5"): "x-x-5-3-2-1",
+        }
+        for (quality, chord_name), tab in expected.items():
+            voicings = self.engine.get_grip_voicings(
+                Note("F4"), quality, chord_name=chord_name, top_string=5,
+                grips=("closed",),
+            )
+            self.assertEqual(
+                [v.tab_string() for v in voicings], [tab], chord_name
+            )
+
+    def test_a_close_position_voicing_is_a_complete_chord_on_the_melody(self):
+        """Every generated shape is a chord tone set with the melody on top, in span."""
+        count = 0
+        for chord_name, quality in QUALITIES:
+            tones = set(ChordParser.get_chord_tones(quality, chord_name))
+            for melody in every_chord_tone(chord_name, quality):
+                for top_string in MELODY_STRING_CHOICES_FULL:
+                    for v in self.engine.get_grip_voicings(
+                        Note(melody), quality, chord_name=chord_name,
+                        top_string=top_string, grips=("closed",),
+                    ):
+                        count += 1
+                        where = f"{chord_name} {melody} {v.tab_string()}"
+                        self.assertEqual(v.grip, "closed", where)
+                        self.assertTrue(set(v.pitch_classes()) <= tones, where)
+                        self.assertLessEqual(
+                            v.fret_span(), GRIP_MAX_SPAN["closed"], where
+                        )
+                        self.assertIn(
+                            frozenset(v.active_strings),
+                            supported_string_sets(), where,
+                        )
+                        self.assertEqual(
+                            max(v.midi_notes()), Note(melody).midi_note(), where
+                        )
+        # Reachable per melody rather than never, and not for every melody either: the
+        # guard is "not nothing", never a remembered count.
+        self.assertGreater(count, 0, "no close-position shape was generated at all")
+
+    def test_close_position_is_offered_and_can_win_a_default_arrangement(self):
+        """
+        `closed` is in `GRIP_PREFERENCE`, and the selector reaches it on its merits.
+
+        A triad under its 3rd has no drop-2 shape as tight as the close stack, so span
+        decides and the close voicing wins. Asserting the *chosen* grip is what makes
+        this the acceptance gate for offering the family at all - a generator that
+        cannot be selected is dead weight.
+        """
+        self.assertIn("closed", GRIP_PREFERENCE)
+        step = VoiceLeadingEngine.arrange_progression(
+            [("E4", "maj", "Cmaj")]
+        )[0]
+        self.assertEqual(step.grip, "closed")
+        self.assertEqual(step.voicing.tab_string(), "x-7-5-5-5-x")
+
+    def test_an_exact_tie_goes_to_the_earlier_family_in_the_order(self):
+        """
+        The order *is* the tie-break: no criterion names a family, so the order decides.
+
+        `Cmaj` under a `C4` or `G4` melody on the B string is the live case. Close
+        position and the drop-2 & 4 reading tie on every element of the cost tuple -
+        including bass function, because one states the root underneath and the other the
+        5th, and `BASS_DEGREES_6432` scores those the same - so the position of `closed`
+        in `GRIP_PREFERENCE` is what picks between them. That is what makes a caller's own
+        `grips=` order part of the rule, and asserting it in **both** directions is the
+        point: with the shipped order `closed` wins, and with the same set reversed the
+        drop-2 & 4 reading does.
+        """
+        self.assertEqual(GRIP_PREFERENCE.index("closed"), 1)
+        for melody, closed_tab, dropped_tab in (
+            ("C4", "x-3-2-0-1-x", "3-x-2-0-1-x"),
+            ("G4", "x-10-10-9-8-x", "8-x-10-9-8-x"),
+        ):
+            chosen = VoiceLeadingEngine.arrange_progression(
+                [(melody, "maj", "Cmaj")], top_strings=(4,)
+            )[0]
+            self.assertEqual(
+                (chosen.grip, chosen.voicing.tab_string()), ("closed", closed_tab), melody
+            )
+            reversed_order = VoiceLeadingEngine.arrange_progression(
+                [(melody, "maj", "Cmaj")],
+                top_strings=(4,),
+                grips=tuple(reversed(GRIP_PREFERENCE)),
+            )[0]
+            self.assertEqual(
+                (reversed_order.grip, reversed_order.voicing.tab_string()),
+                ("drop2_6432", dropped_tab),
+                melody,
+            )
+
+
 class TestKnownTableGaps(unittest.TestCase):
     """Pre-existing gaps in the hand-authored drop-2 tables, pinned so they stay visible.
 
@@ -1846,6 +1989,65 @@ class TestKnownTableGaps(unittest.TestCase):
                         set(step.voicing.pitch_classes()) <= tones,
                         f"{chord_name} {melody} -> {step.tab_line()}",
                     )
+
+
+class TestTheGripSpelling(unittest.TestCase):
+    """`parse_grips` - the one spelling a caller types for a list of grip families.
+
+    The CLI's `--grips` is this function, and a library caller can use it too;
+    `GRIP_PREFERENCE` is the vocabulary. It is asserted here rather than only through
+    the parser because the *order* the families are named in is the promise the flag
+    makes - "most preferred first" - and that is a property of this function.
+    """
+
+    def test_the_default_spelling_parses_back_to_the_palette(self):
+        """The palette spelled the way a user would spell it is the palette.
+
+        The CLI's default for `--grips` is exactly this string, so an unflagged run
+        is the request it always was - and a family added to `GRIP_PREFERENCE`
+        reaches both the default and the help with no second list to edit.
+        """
+        self.assertEqual(parse_grips(",".join(GRIP_PREFERENCE)), GRIP_PREFERENCE)
+
+    def test_the_order_is_the_request_and_not_a_canonical_form(self):
+        """`"shell,drop2"` is not `"drop2,shell"`.
+
+        An exact tie between two candidates goes to the family generated first, so
+        the typed order **is** the preference. Deliberately the opposite of
+        `textures.parse_voices`, which re-sorts into `VOICE_NAMES` order because a
+        voice list has no order; copying that shape here would silently delete the
+        caller's preference and two arrangements would become one.
+        """
+        self.assertEqual(parse_grips("shell,drop2"), ("shell", "drop2"))
+        self.assertEqual(parse_grips("drop2,shell"), ("drop2", "shell"))
+        self.assertNotEqual(parse_grips("shell,drop2"), parse_grips("drop2,shell"))
+
+    def test_whitespace_and_case_are_tolerated(self):
+        """`" Closed , SHELL "` is one request, spelled the way a shell word arrives."""
+        self.assertEqual(parse_grips(" Closed , SHELL "), ("closed", "shell"))
+
+    def test_a_repeat_is_dropped_keeping_its_first_place(self):
+        """A family named twice is one family, ranked where it was named first."""
+        self.assertEqual(parse_grips("shell,drop2,shell"), ("shell", "drop2"))
+
+    def test_an_unknown_name_is_refused_by_name(self):
+        """A spelling nobody recognises is a question, not a family to drop.
+
+        Answering it by ignoring the name would hand back an arrangement missing
+        something nobody asked it to drop - which is why the message names both the
+        offending word and the palette, as `parse_voices` does for a voice.
+        """
+        with self.assertRaises(ValueError) as caught:
+            parse_grips("closed,nope")
+        message = str(caught.exception)
+        self.assertIn("nope", message)
+        self.assertIn("shell", message)
+
+    def test_an_empty_request_is_refused(self):
+        """`--grips ''` names no family, which is not the same as naming all of them."""
+        for empty in ("", "   "):
+            with self.subTest(empty=empty), self.assertRaises(ValueError):
+                parse_grips(empty)
 
 
 class TestVoicingCost(unittest.TestCase):
@@ -2158,6 +2360,30 @@ class TestVoicingCost(unittest.TestCase):
                 v.tab_string(),
             )
         self.assertTrue(found, "no drop-2 & 4 under this melody to check")
+
+    def test_the_tuple_is_seven_wide_and_no_criterion_reads_the_grip(self):
+        """
+        A grip family is not a property of a shape, so nothing in the tuple ranks one.
+
+        Two families can generate the very same tab, and a four-note drop-2 never even
+        reaches a tie with a shell - criterion 2 separates them on note count - so a grip
+        term could only choose a *name*, or paper over a genuine tie. The width is pinned
+        because the element that used to sit at the end is gone and must not be replaced
+        by something else there, which would move bass function off it.
+        """
+        v = self.engine.get_drop2_voicings(Note("C5"), "maj7", chord_name="Cmaj7")[0]
+        self.assertEqual(len(self.engine.voicing_cost(v, previous=None, root_pc=0)), 7)
+        # Relabelling the very same shape as each other family changes nothing at all, at
+        # any width: `grip` is informational, and this is where that has to hold.
+        chosen_cost = self.engine.voicing_cost(v, previous=None, root_pc=0)
+        for grip in GRIP_PREFERENCE:
+            self.assertEqual(
+                self.engine.voicing_cost(
+                    replace(v, grip=grip), previous=None, root_pc=0
+                ),
+                chosen_cost,
+                f"relabelling the shape as {grip} changed its cost",
+            )
 
 
 class TestVoicingAccessors(unittest.TestCase):

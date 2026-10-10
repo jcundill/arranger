@@ -152,6 +152,45 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
             ],
         )
 
+    def test_the_grip_palette_is_derived_rather_than_listed(self):
+        """`--grips` names the palette once, and the parser holds no copy of it.
+
+        The flag used to carry `choices=GRIP_PREFERENCE` with `nargs="+"`, so the
+        palette was written out in the parser *and* in the engine - the shape
+        `AGENTS.md` trap 1 is about - and, being the parser's only `nargs` option, it
+        also swallowed the `file` positional written after it. It is a
+        comma-separated string now, parsed by `arranger.parse_grips` on the same
+        route as `--voices`.
+
+        **The assertion is inverted rather than deleted** (trap 5): what replaces
+        `choices` is the *default*, which is the palette spelled out and must parse
+        back to it, so a grip added to the engine is still offered in the same commit
+        with no second list to edit.
+        """
+        action = self.parser()["grips"]
+        self.assertIsNone(action.choices, "the palette must not be listed twice")
+        self.assertIsNone(action.nargs, "a list option must not take the positional")
+        self.assertEqual(
+            arranger.parse_grips(action.default), arranger.GRIP_PREFERENCE
+        )
+
+    def test_a_list_option_leaves_the_file_positional_alone(self):
+        """`head --grips shell,duo FILE` finds the file.
+
+        This is the defect a `head FILE --grips a b` run hid: `nargs="+"` consumed
+        the filename as a grip and then refused it (`invalid choice:
+        'tests/data/...'`), so `--grips` written *before* the file could not work at
+        all. Asserted on the parse rather than on a whole run, because a positional
+        is the parser's business and no score is needed to see it eaten.
+        """
+        from headxml import head_cli
+
+        parsed = _parser_of(head_cli).parse_args(
+            ["--grips", "shell,duo", "head.musicxml"]
+        )
+        self.assertEqual(parsed.grips, "shell,duo")
+        self.assertEqual(parsed.file, "head.musicxml")
+
     def test_the_help_text_is_not_one_shared_string(self):
         """Eleven flags take their prose from `CommonHelp`, and nine are written inline.
 

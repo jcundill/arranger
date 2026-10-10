@@ -220,10 +220,13 @@ def add_common_arguments(
     )
     parser.add_argument(
         "--grips",
-        nargs="+",
-        choices=GRIP_PREFERENCE,
-        default=list(GRIP_PREFERENCE),
-        help="grip families to use, most preferred first (default: all of them)",
+        default=",".join(GRIP_PREFERENCE),
+        metavar="GRIP[,GRIP...]",
+        help=(
+            "grip families to use, comma-separated and most preferred first - the "
+            "order decides an exact tie, so 'shell,drop2' is not 'drop2,shell' "
+            "(default: all of them)"
+        ),
     )
     parser.add_argument(
         "--tab",

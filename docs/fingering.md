@@ -370,7 +370,7 @@ not in the tuple.** §4.4's finger skip was measured at every placement: **0** p
 below `position`, **17** just after `span`, **94** of 1,204 pools on the committed heads —
 and the four `drop24` string sets that carry it were **removed from the tables instead**,
 at a price counted in chords (57 four-note steps lose a voice, 41 to the melody alone).
-So `voicing_cost` still has its 8 elements. The one place a finger question enters the
+So `voicing_cost` gained no element. The one place a finger question enters the
 engine as a *filter* rather than a score is the right hand's budget
 (`RIGHT_HAND_STRINGS`, `grips.thumb_safe_grips`), and the one place a finger question
 reaches the **tables** is `grips.finger_skip_count`, which the sets are held to by test

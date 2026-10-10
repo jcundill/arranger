@@ -574,8 +574,8 @@ purpose"*. The integer won by implementation and the question was never revisite
 
 ## 7. What is deliberately **not** proposed
 
-- **No change to `voicing_cost`.** Its 8-element tuple is the library's central
-  invariant (AGENTS.md). A register or density preference belongs in the
+- **No change to `voicing_cost`.** Its tuple is the library's central invariant
+  (AGENTS.md). A register or density preference belongs in the
   *generator's* degree rule, not in the selector's cost.
 - **No new grip families.** `shell_root` is reachable on the existing shell sets (11/11).
 - **No change to the drop-2 tables**, and no touching the 54 hardcoded tab strings.

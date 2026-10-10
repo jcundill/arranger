@@ -6,11 +6,11 @@ Given a progression of `(melody note, chord quality, chord name)` triples, `arra
 builds voicings in several grip families, pins the melody to the soprano string, and
 picks among them with one position-aware cost function.
 
-- **Six grip families**, drop-2 first: `drop2`, `drop3`, `drop24`, `drop2_6432`,
-  `shell` and `duo` — four-note voicings down to two-note guide-tone pairs. Every
-  one sounds the chord's **3rd and 7th**, the two notes that decide whether the ear
-  hears a major or a minor chord; a `duo` sounds one of them, under any chord tone,
-  since two notes is the floor this library will play ([grips](#grips)).
+- **Seven grip families**, drop-2 first: `drop2`, `closed`, `drop3`, `drop24`,
+  `drop2_6432`, `shell` and `duo` — four-note voicings down to two-note guide-tone
+  pairs. Every one sounds the chord's **3rd and 7th**, the two notes that decide whether
+  the ear hears a major or a minor chord; a `duo` sounds one of them, under any chord
+  tone, since two notes is the floor this library will play ([grips](#grips)).
 - **Melody pinned to the soprano**, on the high E, B or G string, so a low melody can
   still be harmonised in position.
 - **Playable or absent.** Every voicing sits in frets 0–18 within a 5-fret span on a
@@ -141,7 +141,7 @@ python -m arranger head tests/data/i_was_doing_all_right.mxl --bars 1-3 --html h
 | `--harmony` | `auto` (= `guide`) | `full`, `guide`, `shell_root`, `root` — which degrees the part states when it is *not* singing; see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
 | `--grid` | `every_note` | `every_note`, `freddie`, `charleston`, `joe_pass`, `final_and` — where a chord *falls* in the bar; see [where a chord falls](#where-a-chord-falls-the-grid-axis) |
 | `--fret-min` / `--fret-max` | `2` / `13` | the neck window to aim for |
-| `--grips` | all six | which grip families to consider, **most preferred first** |
+| `--grips` | all seven | comma-separated grip families to consider, **most preferred first** — `--grips shell,duo` |
 | `--tab` | `line` | `staff` lays the head on one six-line staff, spaced on its real rhythm |
 | `--melody` / `--mutes` | off | with `--tab staff`: add a melody row / spell muted strings as `x` |
 | `--bars-per-line` | `4` | with `--tab staff`: bars per staff line |
@@ -153,8 +153,10 @@ is a separate question — the `grid=` axis — so a note is never quantised ont
 dropped for sharing a slot with another.
 
 **`--grips` is ordered.** It is a preference list, not a set: putting `shell` first
-will displace a four-note drop-2 whenever the two cost the same. Leave it alone unless
-you want a thinner arrangement.
+will displace a four-note drop-2 whenever the two cost the same. Spell the families
+comma-separated, as the flag's own default does — `--grips drop2,drop3` is two
+families, and `--grips drop3,drop2` is the same two in the other order, which is not
+the same request. Leave it alone unless you want a thinner arrangement.
 
 **The fret window is an aim, not a filter.** A step with no voicing inside your window
 is still played, outside it, and the run header echoes your window whether or not it was
@@ -477,13 +479,20 @@ can stay where the previous one left the hand.
 | `drop2_6432` | 4 | **6-4-3-2** — low E, D, G and B, so the bass can be a root |
 | `shell` | 3 | the 3rd and 7th plus one more: 1-2-3, 2-3-4, 5-4-3, **6-4-3** or **5-3-2** |
 | `duo` | 2 | the chord's guide tone — the 3rd, or the 4th on a sus chord — under any chord tone |
+| `closed` | 4 | **close position** — the chord tones stacked tightest under the melody, no voice dropped (e.g. `x-x-5-4-3-2`) |
 | `interval` | 2 | a 3rd, 6th or 10th below the melody — a *fill*, not a harmony |
 
-The first six are `GRIP_PREFERENCE`, the order they are tried in. `interval` is not in
+The first seven are `GRIP_PREFERENCE`, and that one order does both jobs: it is the order
+the families are tried in **and** the order an exact tie between two equal-cost shapes is
+broken in — there is no separate grip term in the cost function. It cannot reorder a
+complete chord against a partial one, though: a shape's note count is a criterion of its
+own, so a four-note shape always beats a shell that costs the same. `interval` is not in
 it, because an interval is a texture rather than a harmony — the `targets` texture offers
-it for fills only. `closed` exists as a generator but is left out, because a
-close-position chord under a melody cannot be fretted inside the span budget; a caller
-who widens `GRIP_MAX_SPAN` reaches it.
+it for fills only. `closed` sits **second**, right after `drop2`: it is the tightest shape
+there is, so where a melody can fret it at all it beats the other four-note families on a
+tie. Most melodies cannot — a close-position chord under a melody is a seventh or more of
+pitch on four strings only four or five semitones apart in tuning — which is why it is a
+family that is usually simply never generated rather than one the selector has to reject.
 
 `drop3` and `drop24` derive themselves from the close-position stack under the melody,
 which keeps every *other* voice a chord tone — measured over every quality and every
@@ -1120,8 +1129,10 @@ renderers.
   the 6-4-3 shell — deliberately skips the A string.
 - Melodies are confined to `G3`–`Bb5`.
 - A fixed maximum fret span of 5 (4 for a duo and an interval) and a fret range of 0–18
-  are assumed. `closed` is generated but left out of the default grip list, because a
-  close-position chord under a melody cannot be fretted inside that budget.
+  are assumed. `closed` (close position) is offered but listed last: a close-position
+  chord under a melody is a seventh or more of pitch on four strings only four or five
+  semitones apart in tuning, so most melodies cannot fret it inside that budget and it
+  wins only where it does.
 - Non-chord melody notes are handled only for the mappings in
   `NON_CHORD_TONE_EXTENSIONS` (9ths, 6/9s, 11ths, #11s, b13s, 13ths, the
   half-diminished 9th and the 9th over a plain triad) plus dim7; anything else keeps
