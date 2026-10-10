@@ -351,8 +351,11 @@ write_musicxml(steps, "head.musicxml", title="Blue Train", subtitle="John Coltra
 ```
 
 The document is a **notation staff** — one staff, in the treble clef a chord-melody
-part is written in — carrying the **chord symbols** on each change. The written rhythm
-is preserved: each step becomes a note or chord of the length it occupies, a shape that
+part is written in — carrying the **chord symbols** on each change. It is written
+**an octave above** what it sounds, as guitar music is: the part declares the guitar's
+transposition, so a notation program notates the notes up the staff and still plays
+them back at concert pitch. The written rhythm is preserved: each step becomes a note
+or chord of the length it occupies, a shape that
 is *held* rather than restruck becomes one longer note, and an event that runs across a
 bar line is tied rather than stretched. A hand-written progression with no timing falls
 back to one chord per beat, exactly as the other renderers do.

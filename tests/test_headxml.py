@@ -97,12 +97,17 @@ def score(
     part_id: str = "P1",
     fifths: Optional[int] = None,
     mode: str = "",
+    transpose: str = "",
 ) -> str:
     """A minimal score-partwise document around the measures given.
 
     `fifths` states a `<key>` when given, and omitting it writes no `<key>` at all -
     which is a real case rather than a gap in the fixture, because a score with no
     signature states C major.
+
+    `transpose` is raw `<transpose>` XML placed in the part's `<attributes>`, so a
+    test can state a transposing instrument: a guitar notated an octave above its
+    sound, or a Bb horn a tone above it.
     """
     key = "" if fifths is None else f"<key><fifths>{fifths}</fifths>{mode}</key>"
     return f"""<?xml version="1.0" encoding="UTF-8"?>
@@ -115,6 +120,7 @@ def score(
         <divisions>{divisions}</divisions>
         {key}
         <time><beats>{beats}</beats><beat-type>{beat_type}</beat-type></time>
+        {transpose}
       </attributes>
       {measures}
     </measure>
@@ -2141,6 +2147,11 @@ class TestReductionAndArranging(unittest.TestCase):
         The two halves of the MusicXML support in this library, and the round trip
         is the only test that can catch one writing a chord the other cannot read.
         It is skipped without music21, which is the exporter's own optional extra.
+
+        It pins the **octave** as well: the exporter writes the guitar part an octave
+        above what it sounds and declares the transposition, and the assertion below
+        that the reloaded melody equals the sounding pitches only holds because the
+        importer undoes that shift. Break either half and this goes an octave out.
         """
         try:
             import music21  # noqa: F401
@@ -2164,10 +2175,49 @@ class TestReductionAndArranging(unittest.TestCase):
         # music21 cannot classify as `<kind text="...">other</kind>`, and the
         # importer reads exactly that back through ChordParser.
         self.assertEqual([n.chord for n in reloaded.notes], [s.chord for s in steps])
-        # And the melody does, so the reloaded head is the same tune.
+        # And the melody does, so the reloaded head is the same tune. The exporter
+        # wrote it an octave high and declared the transposition; the importer read
+        # it back at concert pitch, which is what makes these two lists equal.
         self.assertEqual([n.pitch for n in reloaded.notes],
                          [max(s.voicing.midi_notes()) for s in steps])
 
+
+class TestTheInstrumentTranspositionIsRead(unittest.TestCase):
+    """A part notated for a transposing instrument is arranged at **concert** pitch.
+
+    MusicXML's `<transpose>` is *what is added to a written pitch to get the sounding
+    pitch*, and guitar is the instrument this library itself writes: its part is
+    notated an octave above it sounds, so `headxml` has to undo that or the exporter's
+    own round trip comes back an octave high. A Bb instrument is the same rule with a
+    different number and pins the *sign* - the reader adds the stated value rather
+    than subtracting it, which an octave-only test cannot tell apart.
+    """
+
+    def load(self, measures: str, transpose: str) -> Head:
+        path = write_score(score(measures, transpose=transpose))
+        self.addCleanup(os.unlink, path)
+        return load_musicxml(path)
+
+    def test_a_guitar_part_is_read_an_octave_below_its_notation(self):
+        """`octave-change -1` is the guitar's own transposition, played back down."""
+        head = self.load(
+            note("E", octave=5),
+            "<transpose><chromatic>0</chromatic><octave-change>-1</octave-change></transpose>",
+        )
+        self.assertEqual([n.note_name for n in head.notes], ["E4"])
+
+    def test_a_bb_part_is_read_a_tone_below_its_notation(self):
+        """`chromatic -2` moves a written C down to the sounding Bb."""
+        head = self.load(
+            note("C", octave=5),
+            "<transpose><chromatic>-2</chromatic></transpose>",
+        )
+        self.assertEqual([n.note_name for n in head.notes], ["Bb4"])
+
+    def test_a_part_with_no_transposition_is_concert_pitch(self):
+        """The default is 0, so every committed head is read exactly as written."""
+        head = self.load(note("C", octave=5), "")
+        self.assertEqual([n.note_name for n in head.notes], ["C5"])
 
 
 class TestTheMetreHasADenominator(unittest.TestCase):

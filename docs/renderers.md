@@ -520,8 +520,23 @@ Sibelius, MuseScore and Final. Everything that is genuinely *shared* - `_events`
 `_is_hold`, `_substitute_steps` - is still shared, so a head lands on the same beats in
 both files.
 
-Five decisions in here were each forced by a failure, not chosen:
+Six decisions in here were each forced by a failure or by the instrument's own
+convention, not chosen:
 
+- **The guitar's part is written an octave above its sound, and the transposition is
+  declared rather than merely implied.** Guitar sounds an octave below its written
+  pitch - the convention that keeps the staff off the ledger lines - so `_build_note`
+  writes every pitch raised by `_WRITTEN_OCTAVE_SHIFT`, and `format_musicxml` makes the
+  part `instrument.Guitar()` transposing by `interval.Interval('P-8')`, which music21
+  emits as `<transpose><octave-change>-1</octave-change></transpose>` in the first
+  measure. **Both halves are required**: raised pitches alone notate the staff correctly
+  and *play* an octave too high, and the transposition alone notates concert pitch. The
+  clef stays a plain treble clef - the form most lead sheets use - rather than an 8vb
+  glyph, so the octave is never marked twice. `headxml._transposition` reads the value
+  back, summing `<chromatic>` with twelve per `<octave-change>`, so the exporter's own
+  round trip returns the melody at concert pitch and a head written for *any*
+  transposing instrument - a Bb part, say - is arranged at concert pitch rather than
+  shifted.
 - **The document is post-processed with `ElementTree` after music21 writes it** - for
   `_drop_empty_inversions` and `_downgrade_kinds`, and `_unique_instrument_ids`. The
   two passes that used to repair a tab staff are gone with it.

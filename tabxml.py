@@ -8,7 +8,8 @@ MuseScore or Final without being retyped.
 What it writes is a real score rather than a note list:
 
 - a **notation staff** of the music, in the treble clef a chord-melody part is
-  written in, and
+  written in and **an octave above** what it sounds (guitar's own transposition,
+  declared on the part so playback is not raised with the notation), and
 - the **chord symbols** on each chord change, on
 - the **written rhythm**: each step is a note or chord of the length it occupies, an
   unchanged shape is written as one longer note rather than a re-strike, and an event
@@ -54,6 +55,12 @@ from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES, ArrangementStep, Guitar
 # The shortest event MusicXML can write, in quarter lengths: a sixteenth. See the
 # duration floor in `_events`.
 _MIN_EVENT_LENGTH = 0.25
+
+# Guitar sounds an octave below its written pitch, so a score is written an octave
+# higher than the arrangement sounds. The shift is applied to the written pitches and
+# **declared on the part** (the guitar transposition in `format_musicxml`), so a reader
+# notates the notes up the staff and still plays them back at concert pitch.
+_WRITTEN_OCTAVE_SHIFT = 12
 
 
 # The MusicXML 3.1 `kind-value` enumeration, transcribed from the 3.1 schema.
@@ -383,7 +390,10 @@ def _build_note(step: ArrangementStep, length: float) -> Any:
 
     pitches = []
     for midi in sounding:
-        step_name, octave = _pitch(midi)
+        # Written an octave higher than it sounds, as guitar music is. The
+        # transposition is declared on the part, so the reader plays it back down -
+        # see `_WRITTEN_OCTAVE_SHIFT`.
+        step_name, octave = _pitch(midi + _WRITTEN_OCTAVE_SHIFT)
         pitches.append(f"{step_name}{octave}")
     if len(pitches) == 1:
         return note.Note(pitches[0], quarterLength=length)
@@ -974,7 +984,7 @@ def format_musicxml(
     if not steps:
         return ""
 
-    from music21 import instrument, metadata, musicxml, stream
+    from music21 import instrument, interval, metadata, musicxml, stream
 
     # The sounding harmony is settled here rather than inside the note builder,
     # because a substitution is a property of the *step* - it changes the chord name
@@ -986,7 +996,15 @@ def format_musicxml(
         return ""
 
     score = stream.Score()
-    score.insert(0, instrument.Guitar())
+    # Guitar sounds an octave below its written pitch, so the instrument is declared
+    # **transposing** rather than left at concert pitch. music21 writes this as a
+    # `<transpose>` with octave-change -1 in the first measure, which is what tells a
+    # reader to play the octave-higher notation back an octave down. Writing the notes
+    # an octave up without this would notate the staff correctly and play it a whole
+    # octave too high.
+    guitar = instrument.Guitar()
+    guitar.transposition = interval.Interval("P-8")
+    score.insert(0, guitar)
     score.insert(0, metadata.Metadata(title=title, composer=composer or None))
     if subtitle:
         score.metadata.movementName = subtitle

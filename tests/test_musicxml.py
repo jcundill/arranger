@@ -12,7 +12,12 @@ from typing import List
 from xml.etree import ElementTree
 
 from arranger import VoiceLeadingEngine
-from tabxml import _READABLE_KINDS, _downgrade_kinds, _sounding
+from tabxml import (
+    _READABLE_KINDS,
+    _WRITTEN_OCTAVE_SHIFT,
+    _downgrade_kinds,
+    _sounding,
+)
 from tests.support import make_step
 
 try:
@@ -333,6 +338,10 @@ class TestMusicXMLVoices(MusicXMLTestCase):
         The pitch list is the arrangement itself on a notation staff; the *fretting*
         is `tabgp`'s job now, so this is checked on the pitches rather than on
         `<fret>`/`<string>`, which the document no longer contains.
+
+        Each note is written **an octave above** the pitch it sounds - guitar's own
+        transposition - so the written list is `_sounding` raised by
+        `_WRITTEN_OCTAVE_SHIFT`, and the part declares the transposition that undoes it.
         """
         sounded = self.notes(self.part(self.root()))
         self.assertTrue(sounded)
@@ -343,8 +352,29 @@ class TestMusicXMLVoices(MusicXMLTestCase):
         # played: low string first within a step, as `_sounding` returns them.
         expected: List[int] = []
         for step in self.steps:
-            expected.extend(_sounding(step))
+            expected.extend(midi + _WRITTEN_OCTAVE_SHIFT for midi in _sounding(step))
         self.assertEqual(written, expected)
+
+    def test_the_part_declares_the_guitar_transposition(self):
+        """The staff is an octave of notation above the sound, and says so.
+
+        Guitar sounds an octave below its written pitch, so the document writes the
+        notes an octave high **and** declares the instrument transposing: without
+        that, a reader would notate the octave-up staff correctly and play it an
+        octave too high. music21 spells it `<octave-change>-1</octave-change>`, and
+        the value has to undo exactly the shift the pitches were written with.
+        """
+        part = self.part(self.root())
+        transposes = list(part.iter("transpose"))
+        self.assertEqual(len(transposes), 1, "the part must declare one transposition")
+        transpose = transposes[0]
+        chromatic = int(transpose.findtext("chromatic", "0"))
+        octave_change = int(transpose.findtext("octave-change", "0"))
+        self.assertEqual(
+            chromatic + 12 * octave_change,
+            -_WRITTEN_OCTAVE_SHIFT,
+            "the declared transposition must undo the written octave",
+        )
 
     def test_a_held_shape_is_not_rewritten_as_a_second_attack(self):
         """A repeated melody is a single note, as it is in the tab."""

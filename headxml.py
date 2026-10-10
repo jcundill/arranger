@@ -773,6 +773,32 @@ def _key_signature(part: ElementTree.Element) -> Tuple[int, str]:
     return fifths, mode
 
 
+def _transposition(part: ElementTree.Element) -> int:
+    """The part's `<transpose>` in semitones, or 0 when it declares none.
+
+    MusicXML defines `<transpose>` as **what is added to a written pitch to get the
+    sounding pitch**, so a guitar part - written an octave above what it sounds -
+    states octave-change -1, and a Bb instrument states chromatic -2. Both spellings
+    the format allows are summed here, `<chromatic>` plus twelve per
+    `<octave-change>`, because a writer may state an octave either way. `<diatonic>`
+    is deliberately ignored: it selects an enharmonic *spelling*, and this reader
+    wants the pitch itself, which `<chromatic>` already fixes.
+
+    The **last** stated value wins, for the same reason as the metre and the key: a
+    score that changes instrument states it again, and a melody is read at concert
+    pitch for the instrument it ends on. An absent or unparseable value is 0, which
+    is concert pitch.
+    """
+    transposition = 0
+    for element in part.iter("transpose"):
+        chromatic = _number(element.findtext("chromatic"), 0)
+        octave_change = _number(element.findtext("octave-change"), 0)
+        stated = chromatic + 12 * octave_change
+        if stated:
+            transposition = stated
+    return transposition
+
+
 def _midi(pitch: ElementTree.Element) -> Optional[int]:
     """A `<pitch>` as a MIDI number, or None if its spelling is unusable."""
     step = (pitch.findtext("step") or "").strip()
@@ -1015,6 +1041,11 @@ def load_musicxml(path: Union[str, Path], part: Optional[str] = None) -> Head:
     The metre and the **key signature** are both read from the last one stated, and
     both are carried on the `Head`: a head that dropped its key would be exported in
     C major, which is a wrong score rather than a missing decoration.
+
+    The part's **`<transpose>`** is applied to every melody pitch, so a head written
+    for a transposing instrument - guitar above all, whose part is notated an octave
+    above it sounds - is arranged at concert pitch rather than an octave high. It is
+    the inverse of the exporter's `_WRITTEN_OCTAVE_SHIFT`.
     """
     document = _read_document(path)
     root = ElementTree.fromstring(document)
@@ -1042,7 +1073,7 @@ def load_musicxml(path: Union[str, Path], part: Optional[str] = None) -> Head:
         key_fifths=fifths,
         key_mode=mode,
     )
-    _read_notes(chosen, head)
+    _read_notes(chosen, head, _transposition(chosen))
     return head
 
 
@@ -1280,8 +1311,14 @@ def _expand_repeats(
     }
 
 
-def _read_notes(part: ElementTree.Element, head: Head) -> None:
+def _read_notes(
+    part: ElementTree.Element, head: Head, transposition: int = 0
+) -> None:
     """Walks one part, filling `head` with its melody and their chords.
+
+    `transposition` is the part's `<transpose>` in semitones (see `_transposition`),
+    added to every written pitch so the melody is read at **sounding** pitch. It is 0
+    for a concert-pitch part, which is every committed head.
 
     The cursor runs in **divisions** and is converted on the way out, because
     `divisions` is stated per measure and a score may change it; a single running
@@ -1432,10 +1469,14 @@ def _read_notes(part: ElementTree.Element, head: Head) -> None:
                 if child.find("chord") is None:
                     cursor += _duration_in_divisions(child, divisions)
                 continue
-            pitch = _midi(pitch_element)
-            if pitch is None:
+            written = _midi(pitch_element)
+            if written is None:
                 skip("notes with an unreadable pitch")
                 continue
+            # Written pitch to sounding: `<transpose>` is what is added to a written
+            # note to get the sounding one, so a guitar part - octave-change -1 - is
+            # read a whole octave below its notation. See `_transposition`.
+            pitch = written + transposition
 
             length = _duration_in_divisions(child, divisions)
             onset = cursor
