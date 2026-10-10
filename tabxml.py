@@ -214,7 +214,19 @@ def _events(
     right in 4/4 and four times too small in 2/2 - which is why a bar written that
     way holds a quarter of the music its signature claims. `AGENTS.md` records
     this as the one error 4/4 cannot catch.
+
+    An arrangement with **no steps** has no first onset to measure a pickup from,
+    so it yields no events and a pickup of 0 rather than raising. The empty case
+    is answered here, at the definition: `format_musicxml` and `format_gp5` both
+    place through this seam, and each renderer's own `if not steps` guard is its
+    documented empty-in/empty-out contract (an empty document for an empty
+    arrangement), not what keeps this function safe to call.
     """
+    if not steps:
+        # No first onset, so no pickup to measure - and nothing to place. Answered
+        # at the definition rather than guarded at each caller: `format_musicxml`
+        # and `format_gp5` both place through this seam.
+        return [], 0.0
     beat_in_quarters = 4.0 / float(beat_type)
     timed = bool(rhythm) and bool(steps) and all(step.has_timing for step in steps)
 

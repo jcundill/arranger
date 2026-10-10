@@ -699,3 +699,30 @@ class TestMusicXMLWithoutMusic21(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("format_musicxml", result.stdout)
+
+
+class TestEventsWithNoSteps(unittest.TestCase):
+    """`_events` answers the empty arrangement itself, at the definition.
+
+    The pickup is read from the first onset of the steps placed, and an arrangement
+    with no steps has no first onset - so the empty case belongs to `_events`, the
+    one seam `format_musicxml` and `format_gp5` both place through, rather than to a
+    guard at each caller. Undecorated on purpose: `_events` needs neither optional
+    extra, so this runs on a clean clone.
+    """
+
+    def test_no_steps_is_no_events_and_no_pickup(self):
+        """No steps means `([], 0.0)` - not an `IndexError` from a missing onset.
+
+        Both placement routes are covered: the timed grid and the uniform-grid
+        fallback both end at the pickup, which is where the empty arrangement used
+        to raise. The pickup is 0 because there is no first note to measure it
+        from - the same answer a head that starts on a downbeat gets.
+        """
+        from tabxml import _events
+
+        self.assertEqual(_events([], 4, True), ([], 0.0))
+        self.assertEqual(_events([], 4, False), ([], 0.0))
+        # A cut-time metre as well: with no steps there is nothing to place in any
+        # bar, so the beat arithmetic is never asked.
+        self.assertEqual(_events([], 2, True, 2), ([], 0.0))

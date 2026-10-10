@@ -31,6 +31,13 @@ melody slots — can only *keep* or *drop* a slot and can never *create* one.
 - On the comping route a bar whose melody is entirely rests produces **no part at all** — not
   quiet, absent. Measured over the three committed 2/2 fixtures: **49 of 190** beat positions
   (25%) have a chord in force and no melody note, and `freddie` emits only 41/44/56 stabs.
+- The extreme of that is a **chords-only lead sheet**:
+  `tests/data/lead_sheet_chords_only.musicxml` is four bars of `<harmony>` and no melody,
+  `arrange_xml_head` returns **0 steps** for it (`0 melody note(s)` … `6 rests and unpitched
+  notes`), and every export path declines — so the file's music is absent from every rendering
+  rather than crashed into it. A part is built from melody notes, so a document with none
+  produces none, and the harmony timeline recorded on the way in has no route to a chord it
+  could voice on its own.
 - On a beat the melody skips, a stab has to borrow the *previous* note's chord, and it lasts that
   note's duration rather than the grid's next position.
 - The case is **structurally inexpressible**, not merely quiet: `headxml` counts rests in
@@ -132,36 +139,6 @@ not among them.
 
 ---
 
-## 4. `_events` cannot be handed an empty arrangement
-
-**Status: open, latent — no shipped caller reaches it, and the chords-only case that produces
-zero steps is silent rather than crashed.**
-
-**The issue.** `tabxml._events` reads the pickup from the first onset of the steps it has
-placed (`placed[0][0]`) before considering that there may be none, so an empty arrangement
-raises `IndexError: list index out of range` — a crash that names no file, no flag and no
-reason.
-
-**The problem it produces, and the one it does not.** Nothing a user runs hits the crash
-today: all three renderers guard first (`format_gp5` returns `b""`, `format_musicxml` and
-`format_tab_staff` return `""`), and the head CLI reports `nothing could be voiced from this
-file` and writes nothing. What does reach the empty case in practice is a **chords-only lead
-sheet**: `tests/data/lead_sheet_chords_only.musicxml` is four bars of `<harmony>` and no
-melody, `arrange_xml_head` returns **0 steps** for it (`0 melody note(s)` … `6 rests and
-unpitched notes`), and every export path then declines — so the file's music is not crashed
-but *absent*. That half is issue 1's extreme case: a part is built from melody notes, so a
-document with none produces none, and the harmony timeline recorded on the way in has no
-route to a chord it could voice on its own.
-
-**Why it exists.** `_events` is an internal seam whose callers have each grown their own
-`if not steps` guard, so the empty case was written around three times rather than once at
-the boundary: the guard is *accidental* at every call site and *absent* at the definition.
-The fix at the definition is one early return (or a refusal with a message worth reading);
-whether a melody-less arrangement should export its chords as a rhythm-less lead sheet is
-issue 1's question and deliberately not decided here.
-
----
-
 ## Reproducing
 
 ```bash
@@ -194,17 +171,13 @@ print('bars walked:', sorted({n.bar for n in line}))
 "
 # bars walked: [1, 3]   <- bar 2 has no beats to walk
 
-# 4. an empty arrangement, and the chords-only head that produces one
-.venv/bin/python -c "
-from tabxml import _events
-_events([], 4, True)   # IndexError: list index out of range
-"
+# the extreme case: a chords-only lead sheet arranges nothing at all
 .venv/bin/python -c "
 from headxml import arrange_xml_head
 steps, _head, _notes = arrange_xml_head('tests/data/lead_sheet_chords_only.musicxml')
 print('steps:', len(steps))   # 0 - four bars of harmony, nothing voiced
 "
-# steps: 0
+# steps: 0   <- every export path then declines: the music is absent, not crashed
 ```
 
 Item 2's counts come from a throwaway script (not committed — `AGENTS.md` trap 8): wrap

@@ -459,6 +459,17 @@ has to be post-processed before it is correct.
 | `_drop_empty_inversions` | removes the meaningless `<inversion>-1</inversion>` |
 | `_downgrade_kinds` | rewrites a `<kind>` value MusicXML 3.1 does not have |
 
+**An empty arrangement is answered at the definition.** `_events` returns no events and a
+pickup of 0 when it is handed no steps: the pickup is measured from the first onset of the
+steps placed, and an arrangement with none has no first onset. This is the seam both score
+renderers place through (`tabxml.format_musicxml` and `tabgp.format_gp5`), so the empty case
+belongs to it rather than to a guard at each caller — the renderers' own `if not steps`
+guards are their documented contracts (an empty document for no steps), not what keeps
+`_events` safe to call. What that case *means* is a separate question: a **chords-only lead
+sheet** produces zero steps because a part is built from melody notes, so its music is
+declined by every export path rather than rendered — [open-issues](open-issues.md) item 1's
+extreme case, not a renderer defect.
+
 **There is no TAB staff, deliberately.** This was a measured decision, not a
 simplification. music21 cannot write a TAB staff a notation program renders
 correctly: it emits neither the `<staff-lines>6</staff-lines>` a tab staff needs nor a
