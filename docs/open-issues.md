@@ -2,11 +2,11 @@
 
 Each item states the **issue**, the **problem it produces**, and **why it exists**, with the
 measurement behind it. A fixed issue is **removed** from this file rather than kept as history —
-its record lives in the commit that fixed it and in the document it belongs to. Three are open:
+its record lives in the commit that fixed it and in the document it belongs to. Three are open,
+one of them partly fixed:
 
 1. **A chord in force is stored per melody note, so a bar the melody skips is silent** — the
-   largest: a quarter of a named grid's positions produce no chord, and the importer cannot even
-   represent the case.
+   **bar-level** half is fixed and only generated slots are owed, at the level below the bar.
 2. **A refused thumb note is usually not the shape being unplayable** — measured, decision left
    open: the selector's lever recovers nothing harmlessly, and the walk's own pitch reaches only
    twelve events in one head.
@@ -19,52 +19,61 @@ Reproduce the measurements with the commands in [Reproducing](#reproducing).
 
 ## 1. A chord in force is stored per melody note, so a bar the melody skips is silent
 
-**Status: open — the timeline is recorded, queryable, and unioned on the comping route; the
-defect is only partly fixed.**
+**Status: the bar-level defect is fixed; the beat-level one is deferred by decision.** A bar
+the melody never enters is now arranged under every route that voices chords, including the
+default grid. What is still owed is **generated slots** — beats *inside* a bar the melody
+does occupy, and rests as time rather than skipped elements.
 
 **The issue.** Harmony is stored *per melody note*, not per time position. There is no
 chord-in-force structure a position without a note can read, so the step loop — which iterates
 melody slots — can only *keep* or *drop* a slot and can never *create* one.
 
-**The problem.**
+**The problem, and what of it is closed.**
 
-- On the comping route a bar whose melody is entirely rests produces **no part at all** — not
-  quiet, absent. Measured over the three committed 2/2 fixtures: **49 of 190** beat positions
-  (25%) have a chord in force and no melody note, and `freddie` emits only 41/44/56 stabs.
-- The extreme of that is a **chords-only lead sheet**:
-  `tests/data/lead_sheet_chords_only.musicxml` is four bars of `<harmony>` and no melody,
-  `arrange_xml_head` returns **0 steps** for it (`0 melody note(s)` … `6 rests and unpitched
-  notes`), and every export path declines — so the file's music is absent from every rendering
-  rather than crashed into it. A part is built from melody notes, so a document with none
-  produces none, and the harmony timeline recorded on the way in has no route to a chord it
-  could voice on its own.
-- On a beat the melody skips, a stab has to borrow the *previous* note's chord, and it lasts that
-  note's duration rather than the grid's next position.
-- The case is **structurally inexpressible**, not merely quiet: `headxml` counts rests in
-  `skipped`, and a skipped rest contributes no slot and no bar number. Nothing raises and no
-  warning is emitted, so every assertion that counts steps passes.
-- The walking bass shares the limit one level down: `_walking_slots` walks the bars the melody
-  *touches*, so a melody-less bar yields no beats. The walk needs the chord timeline too, and
-  cannot copy a rhythm the timeline has nothing to supply.
+- ~~A bar whose melody is entirely rests produces **no part at all**~~ — **fixed at the level
+  of the bar.** `_merge_chord_slots` unions a melody-anchored grid's positions for a bar
+  `head_skeleton` never touched, so `lead_sheet_chords_only` now arranges **16 steps** under
+  the default and **57 steps** were added across five of the eight committed heads. The two
+  with no melody-less bar (`tenor_madness`, `but_not_for_me`) are untouched, which is what
+  keeps the change a fix rather than a behaviour change.
+- ~~A chords-only lead sheet is silent on every export path~~ — **fixed.** It arranges all
+  four bars under the default grid and 16 under `freddie`. The one route still silent is a
+  **melody-only selection** (`soprano`, `soprano,bass`), which is a different claim: it plays
+  the tune and nothing else, and there is no tune.
+- ~~The walking bass shares the limit one level down~~ — **was already fixed wherever a named
+  grid ran**, and the default grid's silence was the only thing withholding the bar from it.
+  `_walking_slots` walks the bars the *timings* touch, and the union writes its added slots
+  into those timings, so the default now reaches **exactly** the bars `freddie` reaches.
+- ~~The case is structurally inexpressible~~ — **the field half was already done** before this
+  item was last measured: `(None, quality, name)` is a legal triple, and `chord_slots` emits
+  exactly that shape.
+- **Still open: a beat the melody skips *inside* a bar it occupies.** A grid could only filter
+  melody slots there, so `joe_pass` on a head whose notes all sit on the beat is silent — which
+  is what the union excludes `every_note` for (it names every beat, and merging would *thin* a
+  part whose melody runs at sixteenths). Closing this needs **generated slots**.
+- **Still open: a stab's duration on the comping route.** `chord_slots` computes a length from
+  the following grid position and `head_skeleton` from the melody note, but no axis decides
+  which a *comping* step obeys. It is `docs/comping-styles.md` §9.4's business, and it is the
+  fifth `melody_alone_case` kind that item predicts.
 
-**Why it exists.** Fixing it means slots a grid position can *create*, which changes three
-things: `head_skeleton` (rests become time rather than skipped elements, and it must emit chord
-slots as well as note slots), `ArrangementStep.melody` (`None` where no note sounds — the field
-half is done), and `decisions.melody_alone_case` (an invented slot has no note to be alone
+**Why the rest exists.** Closing it means slots a grid position can *create*, which changes
+three things: `head_skeleton` (rests become time rather than skipped elements, and it must emit
+chord slots as well as note slots), `ArrangementStep.melody` (`None` where no note sounds — the
+field half is done), and `decisions.melody_alone_case` (an invented slot has no note to be alone
 *with*, so its `kind` vocabulary needs a fifth value). That is a different order of change: a
 harmonisation engine whose input is a **chord timeline**, not a list of melody notes.
 
-**Landed so far.** `Head.chords` / `HeadChange` record the timeline as the document is walked;
-`headxml.chord_at` queries it by forward fill (the last change at a position wins, `None` before
-the first); `headxml.chord_slots` yields one slot per position the grid names, and
-`arrange_xml_head` unions them with `head_skeleton`'s on the **comping route only**
-(`comps+freddie`: 80/81/110 → 102/103/124). `every_note` is excluded from the union — it names
-every beat, so merging would *thin* the part — and a stab's duration is now the grid's, capped
-at the barline. Still owed: generated slots, and the `melody_alone_case` kind.
+**Landed.** `Head.chords` / `HeadChange` record the timeline as the document is walked;
+`headxml.chord_at` queries it by forward fill; `headxml.chord_slots` yields one slot per position
+the grid names; and `arrange_xml_head` unions them with `head_skeleton`'s for any selection that
+voices chords (`comps+freddie`: 80/81/110 → 102/103/124), **plus the bar-level `every_note`
+exception** that closes the silence. A stab's duration is now the grid's, capped at the barline.
+Still owed: generated slots, and the `melody_alone_case` kind.
 
 **The rule it suggests.** A rhythm needs a source of its own. Where a grid's positions are
-filtered out of the melody rather than generated from the metre, a quarter of them vanish
-silently and no warning can be issued, because the question was never asked.
+filtered out of the melody rather than generated from the metre, they vanish silently and no
+warning can be issued, because the question was never asked. The bar is the largest unit for
+which that silence was a defect; below it, deferring to the melody is the documented decision.
 
 ---
 
@@ -142,9 +151,35 @@ not among them.
 ## Reproducing
 
 ```bash
-# 1. the chord timeline: a bar the melody does not enter
-# Three bars of melody where bar 2 carries only a chord symbol in force.
-# Cmaj7 begins at bar 1 beat 2 and governs all of bar 2.
+# 1. the bar-level rule: a bar the melody never enters, under the default grid
+# Three measures of a hand-written head: melody in bars 1 and 3, a chord symbol only in bar 2.
+# `every_note` is melody-anchored, and the union's exception is the BAR - so bar 2 is added
+# beat for beat while every bar the tune has is untouched.
+.venv/bin/python -c "
+from headxml import arrange_xml_head
+steps, _head, _notes = arrange_xml_head('tests/data/heres_that_rainy_day.musicxml')
+bars = sorted({s.bar for s in steps})
+print('bars arranged:', len(bars), 'of', 37)
+print('bar 32 (no notes at all):', [(s.beat, s.chord) for s in steps if s.bar == 32])
+"
+# bars arranged: 36 of 37, and bar 32 sounds Am7 then D9 - it used to be absent entirely.
+
+# the chords-only lead sheet: the extreme case, now arranged under the default grid
+.venv/bin/python -c "
+from headxml import arrange_xml_head
+steps, _head, _notes = arrange_xml_head('tests/data/lead_sheet_chords_only.musicxml')
+print('steps:', len(steps))   # 16 - four bars, four beats each
+"
+# and the one route still silent, which is a different claim:
+.venv/bin/python -c "
+from headxml import arrange_xml_head
+steps, _head, _notes = arrange_xml_head('tests/data/lead_sheet_chords_only.musicxml', melody='soprano')
+print('steps:', len(steps))   # 0 - a melody-only selection has no tune to play
+"
+
+# what is still open, at the level below the bar: the LIBRARY entry point takes its
+# harmony per melody note, so a hand-built progression with no slot in bar 2 cannot
+# express one. The importer no longer shares this limit.
 .venv/bin/python -c "
 from arranger import Diagnostics, VoiceLeadingEngine
 prog = [('D5','m7','Dm7'), ('C5','maj7','Cmaj7'), ('E4','7','A7')]
@@ -152,15 +187,13 @@ timings = [(1,1.0,1.0), (1,2.0,1.0), (3,1.0,1.0), (3,2.0,1.0)]   # no slot in ba
 steps = VoiceLeadingEngine.arrange_progression(
     prog, timings=timings, melody='alto,tenor', grid='freddie',
     diagnostics=Diagnostics())
-for s in steps:
-    print('bar', s.bar, 'beat', s.beat, s.chord, s.voicing.frets)
 print('bar 2 present:', any(s.bar == 2 for s in steps))
 print('Cmaj7 duration:', [s.duration for s in steps if s.chord == 'Cmaj7'])
 "
-# bar 2 is absent, and Cmaj7 is voiced once, at bar 1 beat 2, for that melody note's
-# own duration - so it cannot be heard sounding under the bar it governs.
+# bar 2 present: False, and Cmaj7 is voiced once for the melody note's own duration -
+# the caller supplies the slots, so this route needs generated slots to answer it.
 
-# the walking bass has the same limit ('every bar the melody touches')
+# the walking bass: the same limit, only where the caller builds the timings by hand
 .venv/bin/python -c "
 from arranger.bass import bass_line_for
 from arranger.chords import ChordParser
@@ -169,15 +202,8 @@ chords = [(ChordParser.parse_chord_name(n)[0], ChordParser.parse_chord_name(n)[1
 line = bass_line_for('walk', chords, [(1,1.0), (1,2.0), (3,1.0), (3,2.0)], 4)
 print('bars walked:', sorted({n.bar for n in line}))
 "
-# bars walked: [1, 3]   <- bar 2 has no beats to walk
-
-# the extreme case: a chords-only lead sheet arranges nothing at all
-.venv/bin/python -c "
-from headxml import arrange_xml_head
-steps, _head, _notes = arrange_xml_head('tests/data/lead_sheet_chords_only.musicxml')
-print('steps:', len(steps))   # 0 - four bars of harmony, nothing voiced
-"
-# steps: 0   <- every export path then declines: the music is absent, not crashed
+# bars walked: [1, 3]   <- on the head path the union supplies bar 2, so this is the
+#                            library function called directly with hand-built timings.
 ```
 
 Item 2's counts come from a throwaway script (not committed — `AGENTS.md` trap 8): wrap

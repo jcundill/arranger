@@ -853,7 +853,11 @@ predicted.
 - **Every decision in §9 is settled.** The questions that shaped it — what `every_note` means
   on a head with no melody, whether the melody-less file warns or is silent, what an unknown
   grid does, whether `--fallback` reaches this route — are all answered below and marked as
-  decisions rather than left open.
+  decisions rather than left open. **One of them has since been reversed, and it is marked
+  where it stands**: `every_note` on a head with no melody is no longer silent, because
+  `docs/open-issues.md` item 1's bar-level union landed after this plan. The reversal is
+  narrow — a bar the melody never enters, nothing below it — and the reasoning below survives
+  for the level it was written about.
 - **Read §9.1 and §9.2 first** for what is true of the code today, then §9.3 for the order.
   §9.4 is the one item that reorders the plan if adopted, and §9.5 has the commands and the
   fixture needed to re-measure any of it.
@@ -1062,9 +1066,18 @@ this plan made `auto` resolve against the head — `every_note` when there is a 
 `freddie` when there is not — so that a chords-only file would harmonise without a named grid.
 The measurement above is why that was a bad idea rather than a good one: **`auto` resolving by
 melody presence looks correct on all six committed fixtures, every one of which has a
-melody**, so the context-sensitivity would be invisible to the entire suite. It was also
-rejected on its merits — the default arrangement of a chords-only file is empty, and that is
-the decision, not an oversight (step A').
+melody**, so the context-sensitivity would be invisible to the entire suite.
+
+**Its stated justification is now partly superseded, and the load-bearing half is not.** The
+draft also argued that "the default arrangement of a chords-only file is empty, and that is the
+decision, not an oversight (step A')" — and `docs/open-issues.md` item 1 measured that silence
+as the defect: a bar the melody never entered produced **no part at all** on every export path.
+The union now excepts at the level of the **bar**, so a chords-only file does arrange under the
+default grid, and the withdrawal decision survives on its stronger ground alone: `auto`'s
+context-sensitivity would be invisible to the suite, and `every_note` is already a selectable
+member of `GRID_STYLES` that the CLI help calls the default. What is *still* true below the bar
+— a beat the melody skips inside a bar it occupies is silent, and `every_note` cannot supply it
+— is item 1's remaining half, and it needs generated slots rather than a sentinel.
 
 So the departure from the house rule that every axis carries a `*_AUTO` sentinel stands, and
 is recorded here so a later reader does not "restore" it. The sentinel's purpose is to let an
@@ -1127,36 +1140,39 @@ Gate: all six fixtures byte-identical, plus the new tests.
    still knows how long it is, and a head whose changes span bars 1 and 20 with nothing
    between is 20 bars rather than a span of the same two numbers by accident.
    `_choose_part` stops requiring `_part_note_count(p) > 0`.
-2. **`every_note` defers to the melody, so a chords-only head produces nothing — by default
-   as well as when named.** `auto` resolves to `every_note`, so
-   `arranger head leadsheet.musicxml --voices alto,tenor` on a chords-only file arranges
-   **nothing at all**. That is the decision, and it is the honest reading: `every_note` is
-   "the absence of a rhythm restriction", so something else has to supply the positions, and
-   here there is no melody to supply them. *Decided against a warning* — naming
-   `--grid freddie` was considered and rejected, on the grounds that an empty arrangement is
-   the flag's own instruction rather than a hole to report.
+2. ~~**`every_note` defers to the melody, so a chords-only head produces nothing — by default
+   as well as when named.**~~ **Superseded.** `docs/open-issues.md` item 1 measured this as
+   the defect rather than the decision: a bar the melody never entered produced **no part at
+   all**, not quiet, absent, on every export path. The union now excepts at the level of the
+   **bar**, so `arranger head leadsheet.musicxml --voices alto,tenor` on a chords-only file
+   arranges all four bars. *Decided against a warning* — naming `--grid freddie` was considered
+   and rejected, on the grounds that an empty arrangement is the flag's own instruction rather
+   than a hole to report. That reasoning held for the bar and not for the head: below the bar,
+   deferring to the melody is still the documented decision (item 1's remaining half).
 
-   **What "works fine" means for a chords-only file is therefore narrower than it first
-   sounds, and the distinction is the whole point of this step.** Today such a file is
-   *refused* — `arranger head: error: leadsheet.musicxml has no readable melody part` — and
-   that is a hard failure a user cannot act on without reading the source. After this step the
-   file **loads, reports its bars and metre, and arranges to the rhythm the grid names**:
-   `--grid freddie`, `--grid joe_pass` and the rest all produce a part, measured in §9.1. So
-   the chords-only route works; what it does not do is guess a rhythm for itself. The user
-   names one, exactly as they already must for any head whose melody does not sit on a beat.
-
-   The cost is recorded because it is real: the most natural command returns an empty
-   arrangement with no output and no explanation, and silence is indistinguishable from a bug
-   on first run. A clause in `--grid`'s help — *"'every_note' needs a melody"* — would reach
-   exactly the user who would be stuck, at no runtime cost. Offered, not assumed.
-3. **A soprano-only selection on a chords-only head produces nothing**, for the same reason
-   and by the same decision. This is not a special case to be caught — it falls out of
-   `every_note`-style deference once "the guitar sings" is separated from "the guitar has
-   voices". Today it is the worst outcome of the three: measured, it takes the melody-bearing
-   route, tries to voice the sentinel against every chord, and warns sixteen times —
-   `melody C4 is not a chord tone of Emaj7 and the 'extension' strategy found no voicing`.
+   **What "works fine" means for a chords-only file is therefore the whole head, and the
+   distinction this step drew still holds one level down.** Such a file used to be *refused* —
+   `arranger head: error: leadsheet.musicxml has no readable melody part` — and that was a hard
+   failure a user cannot act on without reading the source. It now **loads, reports its bars and
+   metre, and arranges**, and it does so under the default grid too, because a head with no
+   melody at all is a head every bar of which the melody never enters. What it still does not do
+   is guess a rhythm *inside* a bar the tune occupies — a `joe_pass` stab on a head whose notes
+   all sit on the beat is still silent, exactly as it is for any head whose melody does not sit
+   on a beat.
+3. **A soprano-only selection on a chords-only head produces nothing**, and this one did *not*
+   move — it is a different claim. It falls out of `every_note`-style deference once "the guitar
+   sings" is separated from "the guitar has voices": a melody-only selection plays the tune and
+   nothing else, so a bar with no tune has nothing for it to play. `melody_only_selection` gates
+   the union in `arrange_xml_head`. It used to be the worst outcome of the three — measured, it
+   took the melody-bearing route, tried to voice the sentinel against every chord, and warned
+   sixteen times — `melody C4 is not a chord tone of Emaj7 and the 'extension' strategy found no
+   voicing`. It is now simply empty, which is the honest answer.
 
 Gate: a committed chords-only fixture, and the six existing fixtures byte-identical.
+**The gate's second half is re-read, not waived** (AGENTS.md trap 5): "byte-identical" is now
+*every note-bearing bar* of every fixture. Five of the eight heads gained **57** steps between
+them, all in bars the melody never enters; `tenor_madness` and `but_not_for_me` have no such
+bar and are untouched.
 
 **Landed.** `Head` carries a `measure_range`, set by `_read_notes` from the measures it
 walks, and `bars` reports it — falling back to the note span only for a `Head` built by
@@ -1165,9 +1181,11 @@ hand, which has no file behind it to state a range. `_choose_part` now scores on
 melody is chosen instead of returning `None`: the file that used to raise
 `has no readable melody part` now loads. The fixture is committed as
 `tests/data/lead_sheet_chords_only.musicxml`, exactly the document §9.5 prints. Measured:
-it reports `(1, 5)`, six chords, zero notes, 4/4; the default grid and a soprano-only
-selection each arrange **nothing**, while `--grid freddie` places 16 chords, `joe_pass` 16
-and `final_and` 4 — §9.1's numbers, now reproducible on the committed tree.
+it reports `(1, 5)`, six chords, zero notes, 4/4; `--grid freddie` places 16 chords,
+`joe_pass` 16 and `final_and` 4 — §9.1's numbers, now reproducible on the committed tree.
+A soprano-only selection arranges **nothing**. **The default grid also arranges 16 now**,
+because `docs/open-issues.md` item 1's bar-level union landed after this section: a head
+with no melody at all is a head every bar of which the melody never enters.
 
 **One measurement this section did not have, and it reshapes the gate.** Making `bars` the
 file's extent is not free. Three fixtures — `Trouble_in_Mind_Blues`,
@@ -1273,10 +1291,13 @@ did not say, each measured on `but_not_for_me`:
   `soprano,bass` play the tune and nothing else, so a grid position with no tune has nothing
   for them to play; they are left unmerged and unchanged. This is why the union is gated on
   `melody_only_selection` and not on `voices_have_soprano`.
-- **The default is still inert.** `every_note` names no positions of its own, so
-  `_merge_chord_slots` returns the slots untouched and every no-flags arrangement on all
-  seven fixtures is byte-identical — the acceptance criterion of §7, and the property that
-  makes the change safe to ship.
+- ~~**The default is still inert.**~~ **Re-scoped when open-issues item 1's bar-level half
+  landed.** `every_note` names no positions of its own, so `_merge_chord_slots` merges nothing
+  a named grid would have merged inside a bar the melody occupies — and every no-flags
+  arrangement is byte-identical **over those bars**, which is the acceptance criterion of §7
+  and the property that makes the change safe to ship. What it now adds is the **bar the
+  melody never enters**, which used to produce no part at all: 57 steps across five heads,
+  zero on `tenor_madness` and `but_not_for_me`.
 
 The one behaviour change beyond the axis itself is at the library surface: a hand-built
 `None` melody under a *singing* selection used to be refused with a warning and a skipped

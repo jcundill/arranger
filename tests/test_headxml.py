@@ -1101,6 +1101,123 @@ class TestChordSlots(unittest.TestCase):
         )
         self.assertEqual(positions, [(1.0, "Am7"), (2.0, "D9")])
 
+    def test_the_default_grid_adds_a_bar_the_melody_never_enters(self):
+        """**The bar-level rule, and the fix for open-issues item 1's remaining defect.**
+
+        `every_note` is melody-anchored, so merging *every* position it names would thin a
+        part whose melody runs at sixteenths against a grid at beats - the reason the
+        union excluded it outright. The unit of exception is therefore the **bar**: a bar
+        the melody never enters is added beat for beat, and a bar it does enter is left to
+        the melody exactly as before.
+
+        Bar 32 is the case the old behaviour got wrong: no notes at all, two changes, and
+        **no part produced** - not quiet, absent - on every export path. Under the default
+        grid it now sounds both chords. Measured on a 2/2 head, so the assertion is two
+        steps and not four, which is also the count-with-a-denominator rule of AGENTS.md
+        trap 9.
+        """
+        steps, _head, _notes = arrange_xml_head(RAINY_DAY)
+        silent = [s for s in steps if s.bar == 32]
+        silent.sort(key=lambda step: (step.bar or 0, step.beat or 0.0))
+        self.assertEqual([(s.beat, s.chord) for s in silent], [(1.0, "Am7"), (2.0, "D9")])
+        for step in silent:
+            self.assertIsNone(step.melody, step.tab_line())
+            self.assertFalse(step.melody_voiced, step.tab_line())
+
+    def test_a_bar_the_melody_does_enter_is_untouched_by_the_default_grid(self):
+        """The deference survives where it was load-bearing: inside a bar the tune has.
+
+        This is the other half of the bar-level rule and the reason it is a bar-level rule
+        rather than a merge. A note-bearing bar keeps exactly the slots `head_skeleton`
+        produced - so `docs/comping-styles.md` §8's acceptance criterion (an arrangement
+        with no flags passed is byte-identical) holds over every note-bearing bar of every
+        fixture, which a beat-level merge could not do.
+
+        Stated as an arithmetic claim over the whole head: the union adds only positions
+        in bars `head_skeleton` never touched.
+        """
+        skeleton = head_skeleton(self.rainy, None)
+        melody_bars = {bar for _triple, bar, _beat, _duration in skeleton}
+        steps, _head, _notes = arrange_xml_head(RAINY_DAY)
+        added = {(s.bar, s.beat) for s in steps} - {
+            (bar, round(beat, 6)) for _t, bar, beat, _d in skeleton
+        }
+        self.assertTrue(added, "the fixture must have a bar the melody never enters")
+        for bar, _beat in added:
+            self.assertNotIn(bar, melody_bars, f"bar {bar} has notes and was added to")
+
+    def test_a_melody_less_bar_with_no_harmony_behind_it_adds_nothing(self):
+        """The bar-level rule never guesses a chord, which is the invariant that matters most.
+
+        `chord_at` forward-fills, so a bar the melody never enters inherits the last change
+        before it - bar 2 of `heres_that_rainy_day` states the chord that was already in
+        force. But a bar with **nothing** behind it has no chord to inherit, and
+        `chord_slots` skips the position rather than inventing one. Measured on a head whose
+        only harmony is absent: the melody-less bar produces no step, so the rule adds a bar
+        the *timeline* can speak for and stays silent where it cannot.
+
+        This is `Head.unmapped`'s rule and `chord_at`'s `None` doing their job through the
+        union rather than beside it - the union does not have its own idea of what a bar
+        sounds.
+        """
+        document = f"""<?xml version="1.0"?>
+<score-partwise version="3.1"><part-list><score-part id="P1"/></part-list><part id="P1">
+<measure number="1"><attributes><divisions>4</divisions></attributes>
+  {note("C", 5)}
+</measure>
+<measure number="2"></measure>
+</part></score-partwise>"""
+        path = write_score(document)
+        self.addCleanup(os.unlink, path)
+        steps, _head, _notes = arrange_xml_head(path)
+        self.assertEqual([s.bar for s in steps], [1], "a bar with no harmony was guessed")
+
+    def test_the_default_grid_moves_no_count_on_a_head_with_no_gap_bar(self):
+        """`but_not_for_me` and `tenor_madness` have no melody-less bar, so nothing moves.
+
+        The byte-identical claim, measured rather than asserted by inspection: these two
+        fixtures' default arrangements are the same length as their skeletons, because
+        there is no bar to add. That is what makes the change a fix rather than a
+        behaviour change on the whole corpus - 57 added steps across five heads, zero on
+        the other two.
+        """
+        for path in (BUT_NOT_FOR_ME, TENOR_MADNESS):
+            with self.subTest(head=os.path.basename(path)):
+                head = load_musicxml(path)
+                steps, _head, _notes = arrange_xml_head(path)
+                self.assertEqual(len(steps), len(head_skeleton(head, None)))
+
+    def test_the_walking_bass_inherits_the_added_bar(self):
+        """The default grid now walks the bars the melody never entered.
+
+        `_walking_slots` walks the bars the *timings* touch, and the union writes its
+        added slots into those timings - so the bass half of item 1 was already correct
+        wherever a named grid ran. The default grid's silence was the only thing
+        withholding the bar from it, and `freddie` is the pre-existing witness: under the
+        default the walk now reaches **exactly** the bars `freddie` reaches, no more and no
+        fewer.
+
+        **Bars 32 and 35 still get no thumb note, and that is a different issue.**
+        `_place_bass` refuses them for the reason `docs/open-issues.md` **item 2** measures
+        as dominant - no octave of the walk's pitch below the shape - and it refuses them
+        identically under `freddie`, before and after this change. Asserting a thumb note
+        in bar 32 would be asserting item 2's fix, which is deliberately not built. So the
+        claim is about which bars the walk *visits*, not which it can place a note in.
+        """
+        def walked(grid):
+            steps, _head, _notes = arrange_xml_head(
+                RAINY_DAY, bass="walk", texture="walking_bass", grid=grid
+            )
+            return {s.bar for s in steps}
+
+        head = load_musicxml(RAINY_DAY)
+        melody_bars = {n.bar for n in head.notes}
+        every = walked("every_note")
+        named = walked("freddie")
+        self.assertEqual(every, named, "the default withholds a bar the named grid walks")
+        for bar in every - melody_bars:
+            self.assertNotIn(bar, melody_bars)
+
     def test_the_union_adds_exactly_the_positions_without_a_note(self):
         """The two lists are disjoint where it matters, and the union is their sum.
 
@@ -1385,9 +1502,13 @@ class TestChordsOnlyHead(unittest.TestCase):
     Four bars, six `<harmony>` elements, **zero pitched notes** — measured, the loader
     used to refuse it outright (`has no readable melody part`) because `_choose_part`
     selected on the note count alone. It now reads, reports its metre and bar count, and
-    arranges **to the rhythm the grid names**. What it does *not* do is guess a rhythm:
-    the default grid (`every_note`) defers to the melody, and a head with no melody has
-    nothing to defer to, so the default arrangement is empty — the decision, not a gap.
+    arranges **the whole head**.
+
+    The default grid's silence here was `docs/open-issues.md` item 1's extreme case, and
+    it is now fixed: a bar the melody never enters is added beat for beat, so a head with
+    *no* melody at all gets all of its bars. A **melody-only** selection still gets
+    nothing — it plays the tune and nothing else, and there is no tune — and that is the
+    one refusal left, deliberately.
     """
 
     def setUp(self):
@@ -1405,22 +1526,41 @@ class TestChordsOnlyHead(unittest.TestCase):
         self.assertEqual(self.head.bars, (1, 5))
         self.assertEqual((self.head.beats_per_bar, self.head.beat_type), (4, 4))
 
-    def test_the_default_grid_arranges_nothing(self):
-        """`every_note` defers to a melody that is not there, so nothing is placed.
+    def test_the_default_grid_arranges_every_bar(self):
+        """A bar the melody never enters is added, so a head with no melody gets all of it.
 
-        No warning: an empty arrangement is the default grid's own instruction rather
-        than a hole to report (step A', decision 2). A comping part is what the user has
-        to ask for by naming a rhythm — exactly as for any head whose tune is off-beat.
+        **This assertion is inverted, not deleted** (AGENTS.md trap 5). It used to assert
+        `steps == []`, and the premise it rested on was step A' decision 2: "an empty
+        arrangement is the default grid's own instruction rather than a hole to report."
+        That premise is exactly what `docs/open-issues.md` item 1 measures as the defect —
+        a chord in force that produces **no part at all**, not quiet, absent, on every
+        export path. The rule now unions at the level of the **bar**, so a melody-less
+        head is fully arranged and a note-bearing bar is untouched; `every_note`'s
+        deference to the melody survives where it was load-bearing, which is inside a bar
+        the tune already articulates.
+
+        The soprano refusal below is the one case that did not move, and it is a different
+        claim: a melody-only selection has nothing to *play* here, which is not the same
+        as a grid having nowhere to *place* a chord.
         """
         steps, _head, _notes = arrange_xml_head(CHORDS_ONLY, melody="alto,tenor")
-        self.assertEqual(steps, [])
+        self.assertEqual(len(steps), 16, "four bars, four beats each")
+        self.assertEqual((steps[0].bar, steps[0].beat), (1, 1.0))
+        self.assertTrue(
+            all(step.melody is None for step in steps),
+            "a chords-only head has no tune to invent",
+        )
 
     def test_a_soprano_only_selection_arranges_nothing(self):
         """Naming soprano routes to the melody-bearing branch, where there is no tune.
 
-        Decision 3: it falls out of the same deference rather than needing a case of its
-        own. It used to take the melody route, voice the placeholder against every chord
-        and warn; with step B's honest `None` there is simply no slot to build.
+        **This is the one refusal left, and it is not the same claim as the grid's
+        deference.** `every_note` used to be silent here too, and that was the defect; a
+        melody-only selection is silent because it *plays the tune and nothing else*, so a
+        bar with no tune has nothing for it to play. A grid can place a chord there and a
+        soprano cannot voice one without a top note. `melody_only_selection` gates the
+        union in `arrange_xml_head`, which is why this still returns nothing while
+        `alto,tenor` above now returns all four bars.
         """
         steps, _head, _notes = arrange_xml_head(CHORDS_ONLY, melody="soprano")
         self.assertEqual(steps, [])
@@ -2130,6 +2270,17 @@ class TestTheMetreHasADenominator(unittest.TestCase):
         eighths (1.5 … 3.5), and the exported-then-re-read bar 1 is five eighths from 1.0,
         the rest dropped rather than written. That is wrong under either spelling of the
         conversion, so it is recorded rather than encoded here.
+
+        **The count is re-scoped, not kept** (AGENTS.md trap 5). It used to assert
+        `len(again.notes) == len(head.notes)`, which was true only because the default grid
+        produced no steps in a bar the melody never entered - the silence
+        `docs/open-issues.md` item 1 measures. Those bars are arranged now, and the
+        exporter has always written a comping step as a note: `freddie` and `joe_pass`
+        already round-tripped **22 and 27** extra beats on this head before this change,
+        `every_note` **5**. The claim that actually matters is the one the assertion was a
+        proxy for - every written beat comes back at the same beat - and that still holds
+        exactly. What is asserted instead is that the extras are *only* the melody-less
+        bars, so a round trip cannot silently add a beat inside a bar the tune has.
         """
         try:
             import music21  # noqa: F401
@@ -2155,12 +2306,19 @@ class TestTheMetreHasADenominator(unittest.TestCase):
 
         again = load_musicxml(out)
         self.assertEqual((again.beats_per_bar, again.beat_type), (3, 4))
-        self.assertEqual(len(again.notes), len(head.notes))
         written = [n for n in head.notes if n.bar >= 2]
         reread = [n for n in again.notes if n.bar >= 2]
-        self.assertEqual(len(reread), len(written))
-        for original, copy in zip(written, reread):
-            self.assertAlmostEqual(original.beat, copy.beat, places=6, msg=str(copy))
+        # Every beat the file wrote comes back at the same beat - the claim.
+        original = {(n.bar, round(n.beat, 6)) for n in written}
+        surviving = {(n.bar, round(n.beat, 6)) for n in reread}
+        self.assertTrue(original <= surviving, sorted(original - surviving)[:5])
+        # And the extras are confined to the bars the melody never entered.
+        melody_bars = {n.bar for n in head.notes}
+        for bar, _beat in surviving - original:
+            self.assertNotIn(bar, melody_bars, f"bar {bar} has notes and gained a beat")
+        for original_note, copy in zip(written, (n for n in reread
+                                                if n.bar in melody_bars)):
+            self.assertAlmostEqual(original_note.beat, copy.beat, places=6, msg=str(copy))
 
 
 class TestHeadTexture(unittest.TestCase):

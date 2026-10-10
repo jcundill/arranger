@@ -1558,8 +1558,10 @@ def arrange_xml_head(
     # `docs/comping-styles.md` §9.3 **step D**: the soprano is per slot, not per route.
     # A *melody-only* selection (`soprano`, `soprano,bass`) is the one case that is not
     # merged: it plays the tune and nothing else, so a position with no tune has nothing
-    # for it to play. `_merge_chord_slots` returns the slots untouched for a
-    # melody-anchored grid, so the default (`every_note`, no flags) is a no-op.
+    # for it to play. `_merge_chord_slots` unions the whole bar only for a melody-anchored
+    # grid, so the default (`every_note`, no flags) is a no-op on every note-bearing bar —
+    # which is what `docs/comping-styles.md` §8's acceptance criterion asks for — while a
+    # bar the melody never enters now gets its chords.
     #
     # **Both `parse_voices` and `resolve_voices`, and the second one is not optional.**
     # `parse_voices("auto")` returns the **sentinel** `("auto",)`, which contains no
@@ -1619,12 +1621,17 @@ def _merge_chord_slots(
     the better description of that instant. The grid's contribution is the positions where
     there is no note, which is the only thing this function adds.
 
-    **A melody-anchored grid (`every_note`) returns the melody slots untouched**, which
-    is what keeps the default byte-identical: it names every beat of the bar, so its
-    union with the notes would include positions the note path already covers and *drop*
-    positions it does not — the melody runs at sixteenths and the grid at beats, so the
-    union would thin the part. That is the one case where the two lists must not be
-    merged at all, and it is checked rather than assumed.
+    **A melody-anchored grid (`every_note`) adds whole bars and nothing else**, which is
+    what keeps the default byte-identical *where it matters*: it names every beat of the
+    bar, so a full union with the notes would include positions the note path already
+    covers and *drop* positions it does not — the melody runs at sixteenths and the grid
+    at beats, so the union would thin the part. The unit of exception is therefore the
+    **bar**: a bar the melody never enters is added beat for beat, and a bar it does
+    enter is left to the melody exactly as before. That closes `docs/open-issues.md`
+    item 1's remaining defect — a melody-less bar produced **no part at all**, not quiet,
+    absent — while leaving every note-bearing bar of every fixture byte-identical. It is a
+    bar-level rule rather than a beat-level one for that reason, and it is checked rather
+    than assumed.
 
     **Order is `(bar, beat)`, which is what both producers already emit.** Sorting is
     done here rather than trusted from either, because the step loop indexes the melody
@@ -1633,10 +1640,17 @@ def _merge_chord_slots(
     """
     grid_policy = resolve_grid(parse_grid(grid), head.beats_per_bar,
                                default_diagnostics())
-    if grid_defers_to_melody(grid_policy):
-        return slots
 
     extra = chord_slots(head, section, grid_policy)
+    if grid_defers_to_melody(grid_policy):
+        # **The bar-level exception, and the whole of the melody-anchored case.** Merging
+        # every position would thin a part whose melody runs finer than the grid, so the
+        # exception is the bar a melody never enters — added beat for beat — and a bar it
+        # does enter is untouched. `chord_slots` has already skipped the positions with no
+        # chord in force, so a silent bar with no `<harmony>` behind it still adds nothing
+        # and is never guessed a chord.
+        melody_bars = {bar for _triple, bar, _beat, _dur in slots}
+        extra = [slot for slot in extra if slot[3] not in melody_bars]
     if not extra:
         return slots
 

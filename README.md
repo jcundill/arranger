@@ -743,9 +743,11 @@ practice is the middle one: the chord's own lowest note is already so low that t
 has no octave beneath it, and the note is left out for that reason. The counts over the committed
 heads are in [docs/open-issues.md](docs/open-issues.md) item 2.
 
-`docs/open-issues.md` records the defects still open, and two concern this part of the engine.
-**Item 1**: a chord in force is stored per melody note, so a bar the melody skips is silent —
-the schedule the comping grid is written against does not exist. **Item 2** is a measured cost
+`docs/open-issues.md` records the defects still open, and one concerns this part of the engine.
+**Item 1**: a chord in force is stored per melody note, so a *beat* the melody skips inside a bar
+it occupies is silent — the schedule the comping grid is written against does not exist. The
+**bar**-level half of that is fixed: a bar the melody never enters is now arranged under every
+route that voices chords, including the default grid. **Item 2** is a measured cost
 left unbuilt rather than a defect: most dropped bass notes are the shape sitting too low for
 the walk's pitch to have an octave under it, and the ordinary candidate pool cannot recover
 them without changing which notes the chord states. Stating a *different pitch* under the
