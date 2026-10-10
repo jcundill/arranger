@@ -116,6 +116,14 @@ wants `zipfile` and `xml.etree`, which are in the standard library. A plain
 `skipUnless`-guarded at all — the scores it reads are committed in `tests/data/`,
 so a clone runs the whole thing.
 
+**The score's repeats and endings are honoured.** A backward repeat plays its section
+again, and a 1st/2nd ending is taken in turn — so `heres_that_rainy_day`, written as 36
+bars, is arranged as the **66** a player hears (`1-30, 31-32, 1-30, 33-36`). The repeat
+lands in the output too: `--musicxml`, `--gp5`, `--html` and `--tab staff` write the
+**written** 36 bars with the `|:` / `:|` signs and the `1.` / `2.` brackets, so the file
+is a score a player reads rather than the played bars written out with the repeat on top.
+(The plain `--tab line` listing still shows every bar the arrangement plays.)
+
 ```bash
 python -m arranger head tests/data/heres_that_rainy_day.musicxml --tab staff --melody
 python -m arranger head tests/data/i_was_doing_all_right.mxl --bars 1-3 --html head.html
@@ -343,8 +351,11 @@ write_musicxml(steps, "head.musicxml", title="Blue Train", subtitle="John Coltra
 ```
 
 The document is a **notation staff** — one staff, in the treble clef a chord-melody
-part is written in — carrying the **chord symbols** on each change. The written rhythm
-is preserved: each step becomes a note or chord of the length it occupies, a shape that
+part is written in — carrying the **chord symbols** on each change. It is written
+**an octave above** what it sounds, as guitar music is: the part declares the guitar's
+transposition, so a notation program notates the notes up the staff and still plays
+them back at concert pitch. The written rhythm is preserved: each step becomes a note
+or chord of the length it occupies, a shape that
 is *held* rather than restruck becomes one longer note, and an event that runs across a
 bar line is tied rather than stretched. A hand-written progression with no timing falls
 back to one chord per beat, exactly as the other renderers do.
@@ -743,9 +754,11 @@ practice is the middle one: the chord's own lowest note is already so low that t
 has no octave beneath it, and the note is left out for that reason. The counts over the committed
 heads are in [docs/open-issues.md](docs/open-issues.md) item 2.
 
-`docs/open-issues.md` records the defects still open, and two concern this part of the engine.
-**Item 1**: a chord in force is stored per melody note, so a bar the melody skips is silent —
-the schedule the comping grid is written against does not exist. **Item 2** is a measured cost
+`docs/open-issues.md` records the defects still open, and one concerns this part of the engine.
+**Item 1**: a chord in force is stored per melody note, so a *beat* the melody skips inside a bar
+it occupies is silent — the schedule the comping grid is written against does not exist. The
+**bar**-level half of that is fixed: a bar the melody never enters is now arranged under every
+route that voices chords, including the default grid. **Item 2** is a measured cost
 left unbuilt rather than a defect: most dropped bass notes are the shape sitting too low for
 the walk's pitch to have an octave under it, and the ordinary candidate pool cannot recover
 them without changing which notes the chord states. Stating a *different pitch* under the

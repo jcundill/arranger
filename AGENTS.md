@@ -22,7 +22,9 @@ gate and the conventions — not the explanation.
 | non-chord melody notes, a new chord quality | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` |
 | the step loop, `arrange_progression`, `Diagnostics` | [docs/engine.md](docs/engine.md) | `arranger/movement.py` |
 | tab staff, HTML, MusicXML, GP5, or the MusicXML importer | [docs/renderers.md](docs/renderers.md) | `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py` |
+| an imported head's **repeats or volta endings** — why it is longer than the file's measure count, or the `|:` / `:|` / `1.` / `2.` the writers draw | [docs/renderers.md](docs/renderers.md) | `headxml.py` (`_parse_barline`, `_expand_play_order`, `_expand_repeats`, `BarMarker`, `Head.markers`, `HeadNote.written_bar`); each writer's `markers=` parameter |
 | the slot layer: triples to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
+| the MusicXML **importer's chord timeline**, or a bar the melody skips | [docs/open-issues.md](docs/open-issues.md) item 1 | `headxml.py` (`chord_at`, `chord_slots`, `_merge_chord_slots`) — the bar-level half is **built**: a melody-anchored grid adds a bar the melody never enters and nothing below it, so `every_note` is byte-identical over every note-bearing bar and a chords-only head arranges all four bars. **Generated slots** (a beat the melody skips *inside* a bar it occupies) and the fifth `melody_alone_case` kind are still owed |
 | an open bug, with its measurement | [docs/open-issues.md](docs/open-issues.md) | — |
 | which finger frets which string, or a per-finger cost criterion; which strings the right hand's `p-i-m-a` pluck, the gaps between them, and how far the thumb reaches | [docs/fingering.md](docs/fingering.md) | `arranger/fingers.py` (not inert any more: `bass` reads `can_fret` for the four-fret budget — `tests/test_fingers.py` holds the caller set to exactly `{bass}`; no per-finger cost yet). Its §4.3 measurement landed a *right-hand* rule first (`grips.thumb_safe_grips`, read by `decisions.resolve_texture_grips`) and then a *left-hand* one (`fingers.can_fret`, read by `bass._place_bass`); its **§4.4 finger-skip half is now built**, not recorded: the four `drop24` sets that carried the skip were removed from `GRIP_STRING_SETS` (`grips.finger_skip_count` is the rule and `tests/test_grips.py` holds the tables to it), which takes the default row's skip-carrying steps **223 → 1** and costs 57 of that row's 1,087 four-note steps a voice, **41 of them their chord** - the price, and the three rejected forms of the same lever, are in §4.4 and [docs/engine.md](docs/engine.md). Its thumb's-reach half still changes no count (`tests/test_texture.py::TestTheThumbReach` pins the reach), and §4.3's follow-on (should the *selector* leave room for the thumb?) is measured and unbuilt, on a **re-measured** count: 53 dropped bass notes when it was asked, **39** on the current tree, and the harmless recovery is now **none** rather than ten (those hosts were the removed `drop24` sets), so every recovery pays the span bucket. Its **fourth lever — the walk's own pitch — was measured with the re-measurement** and pays the tuple nothing: 24 of 38 refusals are recoverable by another pitch, 12 by a chord tone and 14 by none. [docs/open-issues.md](docs/open-issues.md) item 2 carries the counts, attributed across five trees, and the stale-53 warning |
 | `voices=`, which voices the guitar plays | [docs/voices-axis.md](docs/voices-axis.md) | `arranger/textures.py` |
@@ -45,10 +47,10 @@ frozen like the rest — it is not a home for an open plan.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **971 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **997 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 14 of those 971, and it is the one that fails if this
+(`tests/test_docs.py` is 14 of those 997, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree. It also fails if a document
 exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
 new file cannot be added without being registered.)

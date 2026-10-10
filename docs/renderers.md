@@ -150,6 +150,43 @@ Six decisions are load-bearing, and each was forced by a real file:
   both callers (a note's `<chord>` group and a `<harmony>`) go through it. The `<time>`
   read is the **last** one stated, since a score may change metre.
 
+### Repeats and endings are played, not just read
+
+**A score's `<repeat>` and `<ending>` barlines are honoured: the head plays the bars a
+performer plays, not the bars the file writes.** `heres_that_rainy_day` writes 36 bars —
+1-30, a 1st ending at 31-32 with the backward repeat, a 2nd ending at 33-36 — and a player
+hears `1-30, 31-32, 1-30, 33-36`: **66** bars, the 1st ending taken once and skipped on
+the repeat. Three committed scores carry a repeat (the two above plus
+`i_was_doing_all_right`, which has an explicit forward repeat); the other five load exactly
+as they always did.
+
+`headxml._parse_barline` reads each `<barline>`; `_expand_play_order` builds the play order
+(a backward repeat jumps to the matching forward repeat, or to the start when the score
+marks none, and a volta numbered N plays only on pass N); `_expand_repeats` renumbers
+`bar` to the **absolute** play-order position and duplicates the notes and `<harmony>` of
+the repeated section. That renumbering is forced by the engine: every consumer —
+`chord_at`, `melody_at`, the walking bass, the renderers' bar grouping — keys on
+`(bar, beat)`, and a repeat puts two physical bars on the same written number. The score's
+own number stays on `HeadNote.written_bar` / `HeadChange.written_bar`, and `Head.markers`
+records the repeat and ending instructions on their absolute bars. **`--bars LO-HI`
+therefore selects on the expanded (absolute) bars** — on a repeated head `--bars 31-32` is
+the 1st ending as played, not written bar 31.
+
+**The writers draw them back - on the written bars.** Each takes a `markers=` argument
+(threaded from `head_cli` as `head.markers`), and each is handed the **written** score
+rather than the played bars: `arranger.cli._as_written` folds the 66 played bars back onto
+the 36 the file writes, using `Head.written_bars`, and moves the markers onto those bars.
+A file that wrote the played bars out *and* carried repeat signs would make a reader take
+the repeated section twice more, so the signs replace the written-out repeat rather than
+sitting on top of it. `tabxml` writes `<barline>` `<repeat>` and `<ending>` elements,
+`tabgp` sets `isRepeatOpen` / `repeatClose` / `repeatAlternative` on the measure headers,
+and `tabstaff` draws `|:` / `:|` on the barline and a `1.` / `2.` label row above the
+staff. With no markers - every non-head caller and every non-repeating score - each writer
+is byte-identical to what it produced before.
+
+The plain `--tab line` listing is the exception: it prints the played arrangement, so a
+repeated head still shows every bar a player plays there.
+
 ### A beat is not a quarter note
 
 Cut time is where every metre assumption in this library comes apart, and it did so
@@ -483,8 +520,23 @@ Sibelius, MuseScore and Final. Everything that is genuinely *shared* - `_events`
 `_is_hold`, `_substitute_steps` - is still shared, so a head lands on the same beats in
 both files.
 
-Five decisions in here were each forced by a failure, not chosen:
+Six decisions in here were each forced by a failure or by the instrument's own
+convention, not chosen:
 
+- **The guitar's part is written an octave above its sound, and the transposition is
+  declared rather than merely implied.** Guitar sounds an octave below its written
+  pitch - the convention that keeps the staff off the ledger lines - so `_build_note`
+  writes every pitch raised by `_WRITTEN_OCTAVE_SHIFT`, and `format_musicxml` makes the
+  part `instrument.Guitar()` transposing by `interval.Interval('P-8')`, which music21
+  emits as `<transpose><octave-change>-1</octave-change></transpose>` in the first
+  measure. **Both halves are required**: raised pitches alone notate the staff correctly
+  and *play* an octave too high, and the transposition alone notates concert pitch. The
+  clef stays a plain treble clef - the form most lead sheets use - rather than an 8vb
+  glyph, so the octave is never marked twice. `headxml._transposition` reads the value
+  back, summing `<chromatic>` with twelve per `<octave-change>`, so the exporter's own
+  round trip returns the melody at concert pitch and a head written for *any*
+  transposing instrument - a Bb part, say - is arranged at concert pitch rather than
+  shifted.
 - **The document is post-processed with `ElementTree` after music21 writes it** - for
   `_drop_empty_inversions` and `_downgrade_kinds`, and `_unique_instrument_ids`. The
   two passes that used to repair a tab staff are gone with it.

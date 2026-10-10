@@ -56,7 +56,7 @@ imported inside the functions, never at module level, so the library keeps worki
 from __future__ import annotations
 
 import io
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from arranger.tuning import NO_CHORD, ArrangementStep
 from tabxml import _events, _substitute_steps
@@ -611,6 +611,72 @@ def _build_song(
     return song
 
 
+def _apply_repeat_markers(
+    song: Any, markers: Sequence[Any]
+) -> None:
+    """Writes the head's repeats and endings onto the song's measure headers.
+
+    Guitar Pro holds the same two facts MusicXML's barlines do, in per-bar fields:
+
+    - `isRepeatOpen` on the bar a forward repeat starts on;
+    - `repeatClose` on the bar a backward repeat ends on, holding the number of
+      **extra** passes (`times - 1`: a two-pass section is 1). PyGuitarPro stores it
+      as the extra count and its reader/writer add and subtract the 1, so setting
+      `times - 1` writes the file a reader loops `times` times.
+    - `repeatAlternative` is a **bitmask** of which passes a bar is the alternative
+      for: ending 1 is `0b01`, ending 2 `0b10`, a bar in both `0b11`. It is set on
+      **every** bar the ending spans, not only its first, which is the difference
+      between a one-bar mark and a bracket.
+
+    Markers are keyed on the head's absolute bars, which are the measure numbers a
+    `Song` built from a contiguous head already carries. A marker on a bar the song
+    does not have is dropped rather than guessed onto a neighbour.
+    """
+    by_bar: Dict[int, List[Any]] = {}
+    for marker in markers:
+        by_bar.setdefault(marker.bar, []).append(marker)
+    if not by_bar:
+        return
+
+    # An ending's bars: from its `ending_start` to its `ending_stop`, so the whole
+    # bracket is flagged rather than its two ends.
+    ending_ranges: List[Tuple[int, int, Tuple[int, ...]]] = []
+    for bar in sorted(by_bar):
+        starts = [m for m in by_bar[bar] if m.kind == "ending_start"]
+        for start in starts:
+            stop = next(
+                (
+                    later
+                    for later in sorted(by_bar)
+                    if later >= bar
+                    and any(
+                        m.kind == "ending_stop" and m.numbers == start.numbers
+                        for m in by_bar[later]
+                    )
+                ),
+                bar,
+            )
+            ending_ranges.append((bar, stop, start.numbers))
+    ending_mask: Dict[int, int] = {}
+    for start, stop, numbers in ending_ranges:
+        mask = 0
+        for number in numbers:
+            mask |= 1 << (number - 1)
+        for bar in range(start, stop + 1):
+            ending_mask[bar] = ending_mask.get(bar, 0) | mask
+
+    for header in song.measureHeaders:
+        group = by_bar.get(header.number)
+        if group:
+            for marker in group:
+                if marker.kind == "repeat_start":
+                    header.isRepeatOpen = True
+                elif marker.kind == "repeat_end":
+                    header.repeatClose = max(0, marker.times - 1)
+        if header.number in ending_mask:
+            header.repeatAlternative |= ending_mask[header.number]
+
+
 def format_gp5(
     steps: List[ArrangementStep],
     title: str = "Chord-melody arrangement",
@@ -624,6 +690,7 @@ def format_gp5(
     rhythm: bool = True,
     collapse: bool = True,
     show_chords: bool = True,
+    markers: Sequence[Any] = (),
 ) -> bytes:
     """
     Renders an arrangement as a Guitar Pro 5 file and returns the bytes.
@@ -666,6 +733,10 @@ def format_gp5(
             progression still exports.
         collapse: write a held shape as one longer note instead of restriking it.
         show_chords: write the chord names, on the beats where the chord changes.
+        markers: the head's repeat and ending instructions (`headxml.BarMarker`s), or
+            empty for none. Each carries the **absolute** bar it sits on, so the repeat
+            and ending signs land on the measures a repeated head expanded to, held in
+            Guitar Pro's per-bar `isRepeatOpen` / `repeatClose` / `repeatAlternative`.
 
     Returns:
         The GP5 file as bytes, or b"" for no steps. Pure: nothing is printed and
@@ -710,6 +781,8 @@ def format_gp5(
         gp, measures, title, subtitle, composer, tempo, beats_per_bar, beat_type,
         fifths, mode,
     )
+    if markers:
+        _apply_repeat_markers(song, markers)
     buffer = io.BytesIO()
     gp.write(song, buffer, version=GP_VERSION)
     return buffer.getvalue()

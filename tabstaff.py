@@ -19,7 +19,7 @@ except for the public re-exports at the bottom - see the note there.
 
 from __future__ import annotations
 
-from typing import Any, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from arranger.tuning import _MUTED_CELL, STRING_NAMES, ArrangementStep
 
@@ -615,6 +615,7 @@ def format_tab_staff(
     collapse: bool = True,
     measures_per_line: int = 4,
     show_timing: bool = False,
+    markers: Sequence[Any] = (),
 ) -> str:
     """
     Renders a whole progression as a standard six-line guitar staff.
@@ -700,6 +701,35 @@ def format_tab_staff(
     # falls) and `breaks` is every `measures_per_line` bars (where the line wraps).
     bar_marks = _staff_barlines(bars)
     breaks = _staff_breaks(columns, beats_per_bar, measures_per_line)
+
+    # **Repeat and ending signs, keyed by the global column a bar opens at.** A repeated
+    # head has had its bars expanded by the importer, so the arrangement already contains
+    # every bar a player plays; these markers put the `|:` / `:|` and `1.` / `2.` back on
+    # the page so a reader can see the repeat rather than only its effects. `_staff_bars`
+    # counts in the same bar numbers the steps carry (`onset = bar * beats_per_bar + ...`,
+    # so bar N is the value N), which is what makes a marker's bar the key to find its
+    # column. A bar opens with `|:` when a repeat starts there and `:|` when the bar
+    # before it was the repeat's end; an ending's number is a label on its opening bar.
+    open_column: Dict[int, int] = {}
+    for index, value in enumerate(bars):
+        open_column.setdefault(value, index)
+    barline_token: Dict[int, str] = {}
+    volta_at: Dict[int, str] = {}
+    for marker in markers:
+        if marker.kind == "repeat_start":
+            index = open_column.get(marker.bar)
+            if index is not None:
+                barline_token[index] = "|:"
+        elif marker.kind == "repeat_end":
+            # The `:|` is drawn where the *next* bar opens - the end of this one.
+            index = open_column.get(marker.bar + 1)
+            if index is not None:
+                barline_token[index] = ":|"
+        elif marker.kind == "ending_start":
+            index = open_column.get(marker.bar)
+            if index is not None:
+                volta_at[index] = ",".join(str(n) for n in marker.numbers) + "."
+
     # The rhythm row and the column grid go through one predicate, so the row can
     # never claim a written rhythm the columns were not laid out by.
     timed = _is_timed(steps, rhythm)
@@ -754,6 +784,11 @@ def format_tab_staff(
         width = _STAFF_CELL_WIDTH
         for index in system:
             step = columns[index][1]
+            label = volta_at.get(index)
+            if label:
+                # A volta's `1.` is a label like any other and must not knock the grid
+                # out of alignment - the same rule the chord and melody rows obey.
+                width = max(width, len(label))
             if step is None:
                 continue
             if show_chords:
@@ -823,7 +858,7 @@ def format_tab_staff(
         # starts in the column of its own frets and every row is ruled identically.
         # The closing barline matters as much as the leading one: without it these
         # rows stop short of the string rows and the staff reads as unaligned.
-        out = ["  |"]
+        out = ["  " + barline_token.get(system[0], "|")]
         previous = in_force
         # **One separator after every barline, including this row's own opening one.**
         # TuxGuitar writes a dash between the barline and the first fret of the bar and
@@ -846,7 +881,7 @@ def format_tab_staff(
             if index in bar_marks and position:
                 # The barline's own lead-in, for the reason given in `string_line`:
                 # every barline is followed by a separator, not only the opening one.
-                out.append("| ")
+                out.append(barline_token.get(index, "|") + " ")
             if cells is not None:
                 text = cells[index] if index < len(cells) else ""
             else:
@@ -870,7 +905,8 @@ def format_tab_staff(
         return "".join(out) + "|", previous
 
     def string_line(width: int, system: List[int], string_index: int) -> str:
-        out = ["*", "|"] if show_melody_string and _carries_melody(steps, string_index) else [" ", "|"]
+        lead = "*" if show_melody_string and _carries_melody(steps, string_index) else " "
+        out = [lead, barline_token.get(system[0], "|")]
         # The lead-in dash, for the reason given in `line`. On a string row it is a
         # real dash rather than the space used there, because here the character is
         # part of the string's own drawn line.
@@ -883,7 +919,7 @@ def format_tab_staff(
                 # the opening one is. Without it the first fret of the second bar sat
                 # hard against the `|`, where TuxGuitar - and the opening bar, and
                 # every other bar - all have a dash between the two.
-                out.append("|-")
+                out.append(barline_token.get(index, "|") + "-")
             # **The fill is a dash, not a space** - and this is the whole reason the
             # staff reads as tab rather than as a chord list. A string is one
             # continuous line running the length of the system, with the fret numbers
@@ -908,6 +944,10 @@ def format_tab_staff(
     # break is named once - the rule `_html_chord_row` already follows for the page.
     in_force: Optional[str] = None
     labels = [label for label, _kind in values]
+    # The volta labels, by global column index: the ending's number over the bar it
+    # begins at, blank everywhere else. Routed through `line` like the metre and rhythm
+    # rows, so it is ruled identically and cannot drift from the grid beneath it.
+    volta_cells = [volta_at.get(index, "") for index in range(len(columns))]
     for position, system in enumerate(_staff_lines(columns, breaks, beats_per_bar)):
         if position:
             # A blank line between systems. Without it two systems run together and
@@ -918,6 +958,13 @@ def format_tab_staff(
         # because two bars drawn on one line have to share a grid or a fret stops
         # lining up across the six strings.
         width = system_width(system)
+        if volta_at:
+            # The `1.` / `2.` bracket numbers, over the bars the endings span, where a
+            # printed score puts them. Above everything else so the bracket reads as a
+            # label on the repeat rather than on a chord.
+            lines.append(line(
+                width, system, lambda step: "", when_struck=True, cells=volta_cells,
+            )[0])
         if show_timing:
             # The metre goes in the first column of the *first* system, over the bar it
             # governs, which is where a printed score puts a time signature - and not
@@ -990,6 +1037,12 @@ _CLASS_METER = "meter"
 _CLASS_RHYTHM = "rhythm"
 _CLASS_HOLD = "hold"
 _CLASS_REST = "rest"
+# The repeat and ending marks, so a page shows the structure the importer honoured
+# rather than only its effect. `repeat-start` / `repeat-end` thicken the measure's
+# left / right rule into a repeat sign, and `volta` is the `1.` / `2.` label above it.
+_CLASS_REPEAT_START = "repeat-start"
+_CLASS_REPEAT_END = "repeat-end"
+_CLASS_VOLTA = "volta"
 
 _HTML_STYLESHEET = """
 :root { color-scheme: light dark; --ink: #1b1b1b; --rule: #b8b8b8;
@@ -1009,8 +1062,13 @@ p.sub { margin: 0 0 .35rem; color: var(--faint); font-size: .9rem; }
 p.meta { margin: 0 0 2rem; font-size: .8rem; color: var(--faint); }
 .systems { display: flex; flex-direction: column; gap: 1.6rem; }
 .system { display: flex; align-items: stretch; overflow-x: auto; }
-.measure { border-left: 1px solid var(--rule); padding: 0 .5rem; }
+.measure { border-left: 1px solid var(--rule); padding: 0 .5rem; position: relative; }
 .measure:first-of-type { border-left: 2px solid var(--rule); }
+.measure.repeat-start { border-left: 3px double var(--ink); }
+.measure.repeat-end { border-right: 3px double var(--ink); }
+.volta { position: absolute; top: -.1rem; left: .5rem; font-size: .7rem;
+         color: var(--accent); border-top: 1px solid var(--accent);
+         padding: 0 .2rem; }
 .barnum { font-variant-numeric: tabular-nums; font-size: .7rem; color: var(--faint);
           align-self: flex-start; padding-top: .1rem; min-width: 1.6rem;
           text-align: right; }
@@ -1274,6 +1332,7 @@ def format_tab_html(
     measures_per_line: int = 4,
     notes: Optional[Sequence[str]] = None,
     show_timing: bool = True,
+    markers: Sequence[Any] = (),
 ) -> str:
     """
     Renders a whole progression as a self-contained HTML tab page.
@@ -1308,6 +1367,10 @@ def format_tab_html(
         notes: optional lines of provenance, e.g. the register lift decision.
         show_timing: draw the metre and the note-value rows. On by default; `False`
             restores the page this renderer produced before them.
+        markers: the head's repeat and ending instructions (`headxml.BarMarker`s), or
+            empty for none. Each carries the **absolute** bar it sits on; the page marks
+            the repeat bars and labels the volta brackets, the same structure the ASCII
+            staff draws.
 
     Returns:
         A complete HTML document as a string, or "" for no steps. Pure: nothing is
@@ -1359,6 +1422,11 @@ def format_tab_html(
     parts.append('<div class="systems">')
 
     start_bar = int(columns[0][0] // beats_per_bar)
+    # The head's repeat and ending signs, by the absolute bar they sit on - the same
+    # bars the steps carry, so the page and the ASCII staff mark the same measures.
+    markers_by_bar: Dict[int, List[Any]] = {}
+    for marker in markers:
+        markers_by_bar.setdefault(marker.bar, []).append(marker)
     # The chord in force, carried across systems so a chord held over a system
     # break is not named a second time.
     in_force: Optional[str] = None
@@ -1381,7 +1449,24 @@ def format_tab_html(
             else:
                 measures.append([index])
         for measure in measures:
-            parts.append(f'<div class="{_CLASS_MEASURE}"><table>')
+            absolute = int(columns[measure[0]][0] // beats_per_bar)
+            group = markers_by_bar.get(absolute, ())
+            classes = [_CLASS_MEASURE]
+            if any(m.kind == "repeat_start" for m in group):
+                classes.append(_CLASS_REPEAT_START)
+            if any(m.kind == "repeat_end" for m in group):
+                classes.append(_CLASS_REPEAT_END)
+            opening = f'<div class="{" ".join(classes)}">'
+            volta = next(
+                (m for m in group if m.kind == "ending_start"), None
+            )
+            if volta is not None:
+                number = ",".join(str(n) for n in volta.numbers)
+                opening += f'<span class="{_CLASS_VOLTA}">{number}.</span>'
+            # `<table>` is appended to the same string so the default markup stays
+            # `<div class="measure"><table>`, which is what the layout tests match.
+            opening += "<table>"
+            parts.append(opening)
             if show_timing:
                 parts.extend(
                     _html_timing_rows(columns, measure, values, meter, first_measure)

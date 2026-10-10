@@ -8,7 +8,8 @@ MuseScore or Final without being retyped.
 What it writes is a real score rather than a note list:
 
 - a **notation staff** of the music, in the treble clef a chord-melody part is
-  written in, and
+  written in and **an octave above** what it sounds (guitar's own transposition,
+  declared on the part so playback is not raised with the notation), and
 - the **chord symbols** on each chord change, on
 - the **written rhythm**: each step is a note or chord of the length it occupies, an
   unchanged shape is written as one longer note rather than a re-strike, and an event
@@ -46,7 +47,7 @@ time.
 from __future__ import annotations
 
 import re
-from typing import Any, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 from xml.etree import ElementTree
 
 from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES, ArrangementStep, GuitarFretboard
@@ -54,6 +55,12 @@ from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES, ArrangementStep, Guitar
 # The shortest event MusicXML can write, in quarter lengths: a sixteenth. See the
 # duration floor in `_events`.
 _MIN_EVENT_LENGTH = 0.25
+
+# Guitar sounds an octave below its written pitch, so a score is written an octave
+# higher than the arrangement sounds. The shift is applied to the written pitches and
+# **declared on the part** (the guitar transposition in `format_musicxml`), so a reader
+# notates the notes up the staff and still plays them back at concert pitch.
+_WRITTEN_OCTAVE_SHIFT = 12
 
 
 # The MusicXML 3.1 `kind-value` enumeration, transcribed from the 3.1 schema.
@@ -383,7 +390,10 @@ def _build_note(step: ArrangementStep, length: float) -> Any:
 
     pitches = []
     for midi in sounding:
-        step_name, octave = _pitch(midi)
+        # Written an octave higher than it sounds, as guitar music is. The
+        # transposition is declared on the part, so the reader plays it back down -
+        # see `_WRITTEN_OCTAVE_SHIFT`.
+        step_name, octave = _pitch(midi + _WRITTEN_OCTAVE_SHIFT)
         pitches.append(f"{step_name}{octave}")
     if len(pitches) == 1:
         return note.Note(pitches[0], quarterLength=length)
@@ -650,6 +660,98 @@ def _document_prologue(document: str) -> str:
     return prologue + "\n"
 
 
+def _barline_element(
+    location: str, markers: Sequence[Any]
+) -> ElementTree.Element:
+    """A `<barline>` carrying the repeat and ending signs the markers name.
+
+    Child order is MusicXML's: `<ending>` before `<repeat>`, and both after any
+    `<bar-style>` a merge kept. A `repeat_end` states its `times` so a reader loops the
+    section the right number of times; a `repeat_start` does not (MusicXML takes it from
+    the matching backward repeat). The ending `number` is a comma-joined list, which is
+    how MusicXML spells a bracket taken on more than one pass.
+    """
+    barline = ElementTree.Element("barline", {"location": location})
+    for marker in markers:
+        kind = getattr(marker, "kind", "")
+        if kind in ("ending_start", "ending_stop"):
+            ending = ElementTree.SubElement(barline, "ending")
+            ending.set("number", ",".join(str(n) for n in marker.numbers) or "1")
+            ending.set("type", "start" if kind == "ending_start" else "stop")
+        elif kind == "repeat_start":
+            ElementTree.SubElement(barline, "repeat").set("direction", "forward")
+        elif kind == "repeat_end":
+            repeat = ElementTree.SubElement(barline, "repeat")
+            repeat.set("direction", "backward")
+            repeat.set("times", str(marker.times))
+    return barline
+
+
+def _apply_repeat_markers(
+    root: ElementTree.Element, markers: Sequence[Any]
+) -> None:
+    """Writes the head's repeats and endings into the exported score.
+
+    Markers are keyed on the head's **absolute** bars, which are the measure numbers
+    `_build_part` writes when the arrangement starts on bar 1 with no pickup - the case
+    every repeated head is. A left sign (`repeat_start`, `ending_start`) goes near the
+    top of its measure and a right one (`repeat_end`, `ending_stop`) at the end; a
+    measure carrying both (the 1st ending's single bar in `i_was_doing_all_right`) gets
+    one of each.
+
+    A `<barline>` music21 already wrote for the same location is **reused rather than
+    duplicated**, so a final `light-heavy` at the last bar survives and the `<ending>`
+    merges into it. A marker for a bar the score does not have (a renumbered pickup,
+    say) is dropped rather than guessed onto a neighbour.
+    """
+    by_bar: Dict[int, List[Any]] = {}
+    for marker in markers:
+        by_bar.setdefault(marker.bar, []).append(marker)
+    if not by_bar:
+        return
+    for measure in root.iter("measure"):
+        number = measure.get("number")
+        if number is None or not number.strip().lstrip("-").isdigit():
+            continue
+        group = by_bar.get(int(number))
+        if not group:
+            continue
+        left = [m for m in group if m.kind in ("repeat_start", "ending_start")]
+        right = [m for m in group if m.kind in ("repeat_end", "ending_stop")]
+        if left:
+            _merge_barline(measure, "left", left, at_start=True)
+        if right:
+            _merge_barline(measure, "right", right, at_start=False)
+
+
+def _merge_barline(
+    measure: ElementTree.Element,
+    location: str,
+    markers: Sequence[Any],
+    at_start: bool,
+) -> None:
+    """Inserts or extends the `<barline location=...>` of one measure.
+
+    A new element is placed where MusicXML expects it: a left barline right after any
+    leading `<print>` / `<attributes>` and a right barline at the very end, so the
+    signs bracket the bar's own notes rather than landing inside them.
+    """
+    for existing in measure.findall("barline"):
+        if existing.get("location") == location:
+            for child in _barline_element(location, markers):
+                existing.append(child)
+            return
+    barline = _barline_element(location, markers)
+    if at_start:
+        index = 0
+        for position, child in enumerate(measure):
+            if child.tag in ("print", "attributes", "direction", "sound"):
+                index = position + 1
+        measure.insert(index, barline)
+    else:
+        measure.append(barline)
+
+
 def _chord_symbol(name: str) -> Any:
     """
     A chord symbol for the score, or a text-only one when music21 cannot read the name.
@@ -822,6 +924,7 @@ def format_musicxml(
     rhythm: bool = True,
     collapse: bool = True,
     show_chords: bool = True,
+    markers: Optional[Sequence[Any]] = None,
 ) -> str:
     """
     Renders a whole progression as a MusicXML (score-partwise) document.
@@ -855,6 +958,10 @@ def format_musicxml(
             `format_tab_staff` does, so a hand-written progression still exports.
         collapse: write a held shape as one longer note instead of restriking it.
         show_chords: write the chord symbols.
+        markers: the head's repeat and ending instructions (`headxml.BarMarker`s), or
+            `None` for none. Each carries the **absolute** bar it sits on, so the signs
+            land on the measures a repeated head expanded to. Written as MusicXML
+            `<barline>` `<repeat>` and `<ending>` elements.
 
     Returns:
         A complete MusicXML document as a string, or "" for no steps. Pure: nothing
@@ -877,7 +984,7 @@ def format_musicxml(
     if not steps:
         return ""
 
-    from music21 import instrument, metadata, musicxml, stream
+    from music21 import instrument, interval, metadata, musicxml, stream
 
     # The sounding harmony is settled here rather than inside the note builder,
     # because a substitution is a property of the *step* - it changes the chord name
@@ -889,7 +996,15 @@ def format_musicxml(
         return ""
 
     score = stream.Score()
-    score.insert(0, instrument.Guitar())
+    # Guitar sounds an octave below its written pitch, so the instrument is declared
+    # **transposing** rather than left at concert pitch. music21 writes this as a
+    # `<transpose>` with octave-change -1 in the first measure, which is what tells a
+    # reader to play the octave-higher notation back an octave down. Writing the notes
+    # an octave up without this would notate the staff correctly and play it a whole
+    # octave too high.
+    guitar = instrument.Guitar()
+    guitar.transposition = interval.Interval("P-8")
+    score.insert(0, guitar)
     score.insert(0, metadata.Metadata(title=title, composer=composer or None))
     if subtitle:
         score.metadata.movementName = subtitle
@@ -909,6 +1024,11 @@ def format_musicxml(
     root = ElementTree.fromstring(document)
     _unique_instrument_ids(root)
     _drop_empty_inversions(root)
+    # The head's repeats and endings, before the compatibility filter so the filter
+    # sees a finished document (the signs carry no `<kind>`, so the order is immaterial
+    # to it - but this keeps "downgrade runs last" true).
+    if markers:
+        _apply_repeat_markers(root, markers)
     # A compatibility filter, so it runs last: it sees the finished document, and
     # nothing below it can put a 4.0-only value back.
     _downgrade_kinds(root)

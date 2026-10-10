@@ -12,7 +12,12 @@ from typing import List
 from xml.etree import ElementTree
 
 from arranger import VoiceLeadingEngine
-from tabxml import _READABLE_KINDS, _downgrade_kinds, _sounding
+from tabxml import (
+    _READABLE_KINDS,
+    _WRITTEN_OCTAVE_SHIFT,
+    _downgrade_kinds,
+    _sounding,
+)
 from tests.support import make_step
 
 try:
@@ -333,6 +338,10 @@ class TestMusicXMLVoices(MusicXMLTestCase):
         The pitch list is the arrangement itself on a notation staff; the *fretting*
         is `tabgp`'s job now, so this is checked on the pitches rather than on
         `<fret>`/`<string>`, which the document no longer contains.
+
+        Each note is written **an octave above** the pitch it sounds - guitar's own
+        transposition - so the written list is `_sounding` raised by
+        `_WRITTEN_OCTAVE_SHIFT`, and the part declares the transposition that undoes it.
         """
         sounded = self.notes(self.part(self.root()))
         self.assertTrue(sounded)
@@ -343,8 +352,29 @@ class TestMusicXMLVoices(MusicXMLTestCase):
         # played: low string first within a step, as `_sounding` returns them.
         expected: List[int] = []
         for step in self.steps:
-            expected.extend(_sounding(step))
+            expected.extend(midi + _WRITTEN_OCTAVE_SHIFT for midi in _sounding(step))
         self.assertEqual(written, expected)
+
+    def test_the_part_declares_the_guitar_transposition(self):
+        """The staff is an octave of notation above the sound, and says so.
+
+        Guitar sounds an octave below its written pitch, so the document writes the
+        notes an octave high **and** declares the instrument transposing: without
+        that, a reader would notate the octave-up staff correctly and play it an
+        octave too high. music21 spells it `<octave-change>-1</octave-change>`, and
+        the value has to undo exactly the shift the pitches were written with.
+        """
+        part = self.part(self.root())
+        transposes = list(part.iter("transpose"))
+        self.assertEqual(len(transposes), 1, "the part must declare one transposition")
+        transpose = transposes[0]
+        chromatic = int(transpose.findtext("chromatic", "0"))
+        octave_change = int(transpose.findtext("octave-change", "0"))
+        self.assertEqual(
+            chromatic + 12 * octave_change,
+            -_WRITTEN_OCTAVE_SHIFT,
+            "the declared transposition must undo the written octave",
+        )
 
     def test_a_held_shape_is_not_rewritten_as_a_second_attack(self):
         """A repeated melody is a single note, as it is in the tab."""
@@ -726,3 +756,89 @@ class TestEventsWithNoSteps(unittest.TestCase):
         # A cut-time metre as well: with no steps there is nothing to place in any
         # bar, so the beat arithmetic is never asked.
         self.assertEqual(_events([], 2, True, 2), ([], 0.0))
+
+
+@requires_music21
+class TestMusicXMLRepeatMarkers(MusicXMLTestCase):
+    """A head's repeats and endings written back as `<barline>` signs.
+
+    The markers are keyed on the **absolute** bars the importer expanded to, and the
+    arrangement carries those bars, so the signs land on the measures a player would see.
+    """
+
+    def _document(self, count: int, markers) -> ElementTree.Element:
+        """A `count`-beat arrangement on the uniform grid, with the markers applied.
+
+        Eight distinct chords with no timing lay one beat each, so a 4/4 bar holds four
+        of them and `count=8` is two measures - which is what lets a marker land on a bar
+        other than bar 1.
+        """
+        from arranger import format_musicxml
+
+        progression = [
+            ("A4", "m7", "Dm7"), ("C5", "7", "G7"), ("B4", "maj7", "Cmaj7"),
+            ("A4", "m7", "Am7"), ("C5", "7", "D7"), ("B4", "maj7", "Fmaj7"),
+            ("A4", "m7", "Bm7"), ("C5", "7", "E7"),
+        ][:count]
+        steps = VoiceLeadingEngine().arrange_progression(progression)
+        return ElementTree.fromstring(format_musicxml(steps, markers=markers))
+
+    def test_no_markers_writes_no_repeat_or_ending(self):
+        """The default document is unchanged - the markers are the only thing that adds signs."""
+        root = ElementTree.fromstring(self.document())
+        self.assertEqual(list(root.iter("repeat")), [])
+        self.assertEqual(list(root.iter("ending")), [])
+
+    def test_a_repeat_start_and_end_become_barline_signs(self):
+        """`repeat_start` / `repeat_end` ride the left / right barline of their bar."""
+        from headxml import BarMarker
+
+        root = self._document(
+            8,
+            [
+                BarMarker(bar=1, kind="repeat_start", written_bar=1),
+                BarMarker(bar=2, kind="repeat_end", written_bar=2, times=2),
+            ],
+        )
+        measures = list(root.iter("measure"))
+        left = [
+            b for b in measures[0].findall("barline") if b.get("location") == "left"
+        ]
+        self.assertEqual(len(left), 1)
+        repeat = left[0].find("repeat")
+        assert repeat is not None
+        self.assertEqual(repeat.get("direction"), "forward")
+        right = [
+            b for b in measures[1].findall("barline") if b.get("location") == "right"
+        ]
+        found_backward = False
+        for barline in right:
+            repeat = barline.find("repeat")
+            if repeat is not None and repeat.get("direction") == "backward":
+                found_backward = True
+        self.assertTrue(found_backward, "bar 2 should close with a backward repeat")
+
+    def test_an_ending_becomes_start_and_stop_barlines(self):
+        """A volta's `number` is written on the `<ending>` of its bar."""
+        from headxml import BarMarker
+
+        root = self._document(
+            8,
+            [
+                BarMarker(bar=1, kind="ending_start", written_bar=1, numbers=(1,)),
+                BarMarker(bar=2, kind="ending_stop", written_bar=2, numbers=(1,)),
+            ],
+        )
+        measures = list(root.iter("measure"))
+        start_barline = measures[0].find("barline")
+        assert start_barline is not None
+        start = start_barline.find("ending")
+        assert start is not None
+        self.assertEqual((start.get("number"), start.get("type")), ("1", "start"))
+        stop_barline = measures[1].find("barline")
+        assert stop_barline is not None
+        stop = stop_barline.find("ending")
+        assert stop is not None
+        self.assertEqual((stop.get("number"), stop.get("type")), ("1", "stop"))
+
+
