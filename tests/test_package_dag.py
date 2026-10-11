@@ -38,7 +38,6 @@ PACKAGE = Path(arranger.__file__).parent
 ORDER = [
     "tuning",       # the instrument, and the Voicing / ArrangementStep value types
     "fingers",      # which finger holds which fret; `bass` reads it for the four-fret budget
-    "diagnostics",  # where the warnings go - a value, and nothing depends on it
     "chords",       # chord symbols and the non-chord-tone routing
     "grips",        # the grip tables, builders and candidate generators
     "cost",         # voicing_cost: which candidate is played
@@ -66,7 +65,7 @@ ALLOWED_EDGES: Dict[str, Set[str]] = {
     # `decisions.select_step_voicing` is the corpus's slash-bass rule and needs the
     # engine's own cost function. `steps` imports `decisions`, so this edge has to
     # point down - which is why it imports `cost` and never `steps`.
-    "decisions": {"tuning", "chords", "cost", "grips", "diagnostics"},
+    "decisions": {"tuning", "chords", "cost", "grips"},
 }
 
 def _is_below(module: str, other: str) -> bool:
@@ -205,7 +204,6 @@ class TestPackageDag(unittest.TestCase):
             ("bass_cost", "bass", "bass_cost"),
             ("format_progression", "render", "format_progression"),
             ("supported_string_sets", "grips", "supported_string_sets"),
-            ("Diagnostics", "diagnostics", "Diagnostics"),
         ]:
             module = __import__(f"arranger.{home}", fromlist=[attribute])
             self.assertIs(

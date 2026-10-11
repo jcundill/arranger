@@ -41,7 +41,6 @@ from arranger import (
     GRID_PATTERNS,
     GRID_STYLES,
     SUB,
-    Diagnostics,
     GridPattern,
     grid_allowed,
     grid_defers_to_melody,
@@ -82,11 +81,18 @@ def _temporary_pattern(name: str, pattern: GridPattern):
         GRID_PATTERNS.pop(name, None)
 
 
-def warning_text(run) -> str:
-    """Every warning one call emits, joined - the collector is silent, not absent."""
-    diagnostics = Diagnostics()
-    run(diagnostics)
-    return "\n".join(diagnostics.warnings)
+def refusal_text(call) -> str:
+    """The message a refused call raises, or "" when it raises nothing.
+
+    The refusals raise now rather than warning into a collector, so the assertion
+    reads the exception - which is stronger than the collector was: a refusal that
+    stopped refusing used to be invisible, and now it fails here.
+    """
+    try:
+        call()
+    except ValueError as exc:
+        return str(exc)
+    return ""
 
 
 class TestTheGridTable(unittest.TestCase):
@@ -295,20 +301,18 @@ class TestTheRefusalIsOneDirectional(unittest.TestCase):
                     allowed, reason = grid_allowed(style, beats)
                     self.assertTrue(allowed, f"{style} in {beats}/4: {reason}")
 
-    def test_a_metre_relative_figure_that_cannot_fit_warns_and_names_the_pattern(self):
+    def test_a_metre_relative_figure_that_cannot_fit_raises_and_names_the_pattern(self):
         """The refusal, exercised against a pattern that genuinely places nothing.
 
         A row of the table, not a shipped one: the function is *derived* from
         `GRID_PATTERNS`, so testing the derivation needs a row the derivation can
         fail on. The alternative - asserting only that no shipped row is refused -
-        would leave both warning messages unexercised, and a message nothing can
-        produce is a message nothing has checked.
+        would leave both messages unexercised, and a message nothing can produce is
+        a message nothing has checked.
         """
         pattern = GridPattern(positions=((4, 0), (4, SUB)), bar_relative=False)
         with _temporary_pattern(GRID_OUT_OF_METRE, pattern):
-            text = warning_text(
-                lambda d: resolve_grid(GRID_OUT_OF_METRE, 3, d)
-            )
+            text = refusal_text(lambda: resolve_grid(GRID_OUT_OF_METRE, 3))
         self.assertIn(GRID_OUT_OF_METRE, text)
         self.assertIn("bar-relative", text)
 
@@ -325,7 +329,7 @@ class TestTheRefusalIsOneDirectional(unittest.TestCase):
         self.assertFalse(allowed)
         self.assertIn("defect in the pattern", reason)
 
-    def test_a_pattern_that_places_nothing_in_a_bar_is_not_a_warning(self):
+    def test_a_pattern_that_places_nothing_in_a_bar_is_not_refused(self):
         """A bar with no note on a grid position is the answer, not an error.
 
         This is the measurement that keeps the refusal honest. `final_and` places one
@@ -334,14 +338,10 @@ class TestTheRefusalIsOneDirectional(unittest.TestCase):
         choosing a sparse pattern. Resolving the grid consults only the metre, never
         the material, so this holds before a single note is read.
         """
-        diagnostics = Diagnostics()
-        self.assertEqual(resolve_grid(GRID_FINAL_AND, 2, diagnostics), GRID_FINAL_AND)
-        self.assertEqual(diagnostics.warnings, [])
+        self.assertEqual(resolve_grid(GRID_FINAL_AND, 2), GRID_FINAL_AND)
 
-    def test_the_default_grid_never_warns(self):
-        """`every_note` places everywhere, so the default is silent in every metre."""
+    def test_the_default_grid_is_never_refused(self):
+        """`every_note` places everywhere, so the default resolves in every metre."""
         for beats in (1, 2, 3, 4, 7):
             with self.subTest(metre=beats):
-                diagnostics = Diagnostics()
-                resolve_grid(GRID_EVERY_NOTE, beats, diagnostics)
-                self.assertEqual(diagnostics.warnings, [])
+                self.assertEqual(resolve_grid(GRID_EVERY_NOTE, beats), GRID_EVERY_NOTE)

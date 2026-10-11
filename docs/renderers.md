@@ -121,7 +121,7 @@ which is what makes the TAB-staff part-selection test possible.
 | `Head` / `HeadNote` | the loaded melody, its timing, its key, and each note's chord |
 | `load_musicxml(path, part=None)` | `.mxl` or `.musicxml` → `Head` |
 | `head_skeleton(head, strategy, section, pick)` | slots of `(triple, bar, beat, duration)` |
-| `arrange_xml_head(path, …)` | the whole pipeline → steps, the `Head`, and diagnostics |
+| `arrange_xml_head(path, …)` | the whole pipeline → steps, the `Head`, and the loader's notes |
 | `head_cli(argv)` | the `head` command |
 
 Six decisions are load-bearing, and each was forced by a real file:

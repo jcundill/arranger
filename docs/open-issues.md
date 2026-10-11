@@ -95,10 +95,10 @@ calls) refusals number **39** today — 53 on the tree the measurement was first
 | **no octave of the walk's pitch below the shape** | **38** |
 | five frets for four fingers | **1** |
 
-The middle row is the common case, and it is the one the message did not use to name (it does
-now). 24 of the 38 are a *doubling*: the walk's pitch class is the shape's own bottom class an
-octave up, so the thumb would restate what the chord already sounds. The other 14 are a pitch
-the shape has no octave of beneath it.
+The middle row is the common case, and it is the one the line did not use to name. 24 of the 38
+are a *doubling*: the walk's pitch class is the shape's own bottom class an octave up, so the
+thumb would restate what the chord already sounds. The other 14 are a pitch the shape has no
+octave of beneath it.
 
 **Why the levers do not pay.** All three filters are right, and dropping the note is deliberate
 policy — a step is never dropped because the thumb could not reach it. The candidate-level
@@ -181,12 +181,12 @@ print('steps:', len(steps))   # 0 - a melody-only selection has no tune to play
 # harmony per melody note, so a hand-built progression with no slot in bar 2 cannot
 # express one. The importer no longer shares this limit.
 .venv/bin/python -c "
-from arranger import Diagnostics, VoiceLeadingEngine
+from arranger import VoiceLeadingEngine
 prog = [('D5','m7','Dm7'), ('C5','maj7','Cmaj7'), ('E4','7','A7')]
 timings = [(1,1.0,1.0), (1,2.0,1.0), (3,1.0,1.0), (3,2.0,1.0)]   # no slot in bar 2
 steps = VoiceLeadingEngine.arrange_progression(
     prog, timings=timings, melody='alto,tenor', grid='freddie',
-    diagnostics=Diagnostics())
+    )
 print('bar 2 present:', any(s.bar == 2 for s in steps))
 print('Cmaj7 duration:', [s.duration for s in steps if s.chord == 'Cmaj7'])
 "

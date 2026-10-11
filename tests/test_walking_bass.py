@@ -44,7 +44,6 @@ from arranger import (
     ArrangementStep,
     BassNote,
     ChordParser,
-    Diagnostics,
     VoiceLeadingEngine,
     Voicing,
     _place_bass,
@@ -1324,7 +1323,7 @@ class TestBassPlacement(unittest.TestCase):
         self.assertEqual(step.bass, 41)
 
 
-class TestTheRefusalMessage(unittest.TestCase):
+class TestTheRefusal(unittest.TestCase):
     """
     The three ways a thumb note is refused, and the one message that names them all.
 
@@ -1345,30 +1344,38 @@ class TestTheRefusalMessage(unittest.TestCase):
     # the thumb is meant to support, so the note is refused with a string to spare.
     NO_OCTAVE = ([4, -1, 4, 5, -1, -1], "Ab")
 
-    def _warning(self, step: ArrangementStep, name: str,
-                 arrangements: Optional[List[ArrangementStep]] = None) -> List[str]:
-        """The warnings `_attach_bass` emits when it tries to place one walked note."""
-        diagnostics = Diagnostics()
+    def _refusal(self, step: ArrangementStep, name: str,
+                 arrangements: Optional[List[ArrangementStep]] = None) -> Optional[str]:
+        """What `_attach_bass` records on the step when it cannot place one note.
+
+        The refusal is `step.bass_refused` now rather than a warning, so this reads
+        the field. Running `_attach_bass` also proves the step *survives*, which is
+        the other half of the trade: the upper voicing is kept.
+        """
         VoiceLeadingEngine._attach_bass(
             step,
             BassNote(bar=1, beat=1.0, pitch_class=pc(name), role=BASS_ROLE_ANCHOR),
             arrangements if arrangements is not None else [step],
-            diagnostics,
         )
-        return diagnostics.warnings
+        return step.bass_refused
 
     def test_the_commonest_refusal_is_the_pitch_having_no_octave_below_the_shape(self):
         """A free string, a playable pitch, and no octave of it beneath the shape."""
         frets, name = self.NO_OCTAVE
         self.assertIsNone(_place_bass(upper_shape(frets), pc(name)))
 
-    def test_the_message_names_all_three_causes_whichever_one_refused(self):
+    def test_the_line_names_all_three_causes_whichever_one_refused(self):
         """Every refusal says the same three things, so a reader is not left guessing.
 
-        The text is one string, so it cannot distinguish the causes - and that is the
-        point: all three occur, so a message naming two of them says something false
+        The clause is one string, so it cannot distinguish the causes - and that is the
+        point: all three occur, so a line naming two of them says something false
         about the third. Each fixture here is refused for a different reason, one per
         cause, and all three must produce the same three clauses.
+
+        Read off the rendered **line** rather than off `step.bass_refused`, because the
+        field carries the wanted pitch class alone and the enumeration of causes is
+        `render._bass_refusal_clause`'s. That split is deliberate: the tab cannot show
+        which note went missing, so the field names it and the clause explains it.
         """
         held = make_step([-1, 9, -1, 8, 12, 10], chord="Bmaj7", melody="F#4")
         cases: List[Tuple[ArrangementStep, str, Optional[List[ArrangementStep]]]] = [
@@ -1381,14 +1388,14 @@ class TestTheRefusalMessage(unittest.TestCase):
                        bass_only=True), "B", [held]),
         ]
         for step, name, arrangements in cases:
-            warnings = self._warning(step, name, arrangements)
-            self.assertEqual(len(warnings), 1, step.tab_line())
-            message = warnings[0]
-            self.assertIn(f"bass {name}", message)
-            self.assertIn("no free string below the melody", message)
-            self.assertIn("no octave of that pitch below the shape", message)
-            self.assertIn("the hand would need a fifth fret", message)
-            self.assertIn("keeps its upper voicing", message)
+            refused = self._refusal(step, name, arrangements)
+            self.assertEqual(refused, name, step.tab_line())
+            line = format_progression([step])
+            self.assertIn(f"bass {name}", line)
+            self.assertIn("no free string below the melody", line)
+            self.assertIn("no octave of that pitch below the shape", line)
+            self.assertIn("the hand would need a fifth fret", line)
+            self.assertIn("keeps its upper voicing", line)
 
 
 class TestTheInvariant(unittest.TestCase):
@@ -2237,13 +2244,7 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
         the arrangement still sounds, one step per melody note - so a silently dropped
         chord cannot pass for a working bass line.
         """
-        messages = []
-        diagnostics = arranger.Diagnostics(emit=messages.append)
-        steps = self.arrange(texture="uniform", bass="walk", diagnostics=diagnostics)
-        self.assertEqual(
-            [m for m in messages if "no bass string free" in m], [],
-            "the refusal outlived the set that caused it",
-        )
+        steps = self.arrange(texture="uniform", bass="walk")
         self.assertTrue(
             any(s.bass is not None for s in steps), "the walk wrote no note at all"
         )

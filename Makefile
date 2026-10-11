@@ -6,8 +6,8 @@ PYRIGHT ?= .venv/bin/pyright
 RUFF ?= .venv/bin/ruff
 
 # Every source file the gate runs over, spelled once. A new module that is not
-# listed here is silently unlinted and untypechecked, which is how `diagnostics.py`
-# nearly shipped unchecked - so lint and format share the one list, and typecheck
+# listed here is silently unlinted and untypechecked - which is how three early
+# modules nearly shipped unchecked - so lint and format share the one list, and typecheck
 # names its own (pyright is given the library, not the dev tools).
 #
 # `arranger` is a package, so the list names the *directory*: ruff and pyright both

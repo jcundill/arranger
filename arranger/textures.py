@@ -28,7 +28,7 @@ caller who names no texture gets.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from .grips import GRIP_PREFERENCE
 from .tuning import ROLE_FILL, ROLE_TARGET
@@ -351,27 +351,25 @@ def parse_harmony(argument: str) -> str:
     return text
 
 
-def resolve_harmony(
-    harmony: str, voices: Tuple[str, ...], diagnostics: Any
-) -> str:
-    """The degree family to actually voice: `auto` resolved, validated, or refused.
+def resolve_harmony(harmony: str, voices: Tuple[str, ...]) -> str:
+    """The degree family to actually voice: `auto` resolved, or validated.
 
     `auto` resolves through `HARMONY_POLICIES`, which is what keeps the axis inert: the
     resolved value is the shipped behaviour, so an arrangement that names no harmony is
     byte-identical to one that never had the axis.
 
-    A combination the generator cannot voice is **refused rather than degraded**, on
-    the rule `bass_allowed` follows: an arrangement that says something other than what
-    was asked for is worse than one that says nothing, and the caller is told which
-    selection would work. Returning `guide` here is deliberate and is the *inert*
-    answer rather than a silent substitution - it is what a part that names no
-    harmony gets.
+    A combination the generator cannot voice **raises** rather than degrading to
+    `guide`. An arrangement that states something other than what was asked for is
+    worse than one that refuses, and there is no inert answer to fall back to here:
+    `guide` is what a caller gets by asking for `guide`, so handing it back for
+    `shell_root` would be a silent substitution wearing the default's clothes. The
+    message names the selection that would work, which is the same information the
+    refusal used to print and now reaches the caller instead of the terminal.
     """
     resolved = HARMONY_POLICIES.get(harmony, harmony)
     allowed, reason = harmony_allowed(resolved, voices)
     if not allowed:
-        diagnostics.warn(f"Warning: {reason}")
-        return HARMONY_GUIDE
+        raise ValueError(reason)
     return resolved
 
 
@@ -546,10 +544,10 @@ GRID_PATTERNS: Dict[str, GridPattern] = {
 #: Which grids name **no positions of their own**, so the melody decides where a chord
 #: falls: `every_note` is the *absence* of a pattern rather than a pattern. That one
 #: fact is what `on_grid` answers with "every beat", `grid_allowed` with "every metre",
-#: and `resolve_grid` falls back to. Derived from `GRID_PATTERNS`, so a grid cannot be
+#: derived from `GRID_PATTERNS`, so a grid cannot be
 #: emptied without becoming melody-anchored, and a second melody-anchored grid is a row
 #: in that table rather than a branch at each of the call sites that read this -
-#: `on_grid`, `grid_allowed` and `resolve_grid` here, and `chord_slots` and
+#: `on_grid` and `grid_allowed` here, and `chord_slots` and
 #: `_merge_chord_slots` in `headxml`.
 GRID_DEFERS_TO_MELODY: Dict[str, bool] = {
     name: not pattern.positions for name, pattern in GRID_PATTERNS.items()
@@ -564,18 +562,6 @@ def grid_defers_to_melody(grid: str) -> bool:
     which is to refuse it rather than silently defer to the melody.
     """
     return GRID_DEFERS_TO_MELODY.get(grid, False)
-
-
-def _melody_anchored_grid() -> str:
-    """The grid every refusal falls back to: the one that names no positions.
-
-    `every_note` today. Resolved from `GRID_DEFERS_TO_MELODY` rather than named here,
-    so the fallback cannot point at a grid that is not melody-anchored.
-    """
-    for name, defers in GRID_DEFERS_TO_MELODY.items():
-        if defers:
-            return name
-    raise AssertionError("no melody-anchored grid is registered")
 
 
 def parse_grid(argument: str) -> str:
@@ -705,23 +691,24 @@ def grid_allowed(grid: str, beats_per_bar: int) -> Tuple[bool, str]:
     )
 
 
-def resolve_grid(grid: str, beats_per_bar: int, diagnostics: Any) -> str:
-    """The grid to actually place chords on: validated, or refused.
+def resolve_grid(grid: str, beats_per_bar: int) -> str:
+    """The grid to actually place chords on: validated.
 
     Unlike `resolve_harmony` there is no sentinel to resolve - `grid=auto` is
     withdrawn and the default is `every_note` outright - so an arrangement naming no
     grid takes `every_note`.
 
-    A grid this metre cannot express is **refused rather than degraded**, on the rule
-    every axis in this module follows. The fallback is the melody-anchored grid -
-    `every_note`, one chord per written note - which is the *inert* answer and what a
-    part that names no grid gets, rather than a silent substitution of some
-    other figure that does fit.
+    A grid this metre cannot express **raises** rather than degrading to the
+    melody-anchored grid. `every_note` is what a caller gets by asking for
+    `every_note`, so returning it for a metre-relative figure would be a silent
+    substitution wearing the default's clothes - and a figure asked of the wrong
+    metre is a question the caller can answer, which is the reason to raise rather
+    than to guess. The message names the patterns that would fit, which is the same
+    information the refusal used to print.
     """
     allowed, reason = grid_allowed(grid, beats_per_bar)
     if not allowed:
-        diagnostics.warn(f"Warning: {reason}")
-        return _melody_anchored_grid()
+        raise ValueError(reason)
     return grid
 
 

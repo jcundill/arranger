@@ -51,7 +51,6 @@ from arranger import (
     VOICES_ALL,
     VOICES_NONE,
     ChordParser,
-    Diagnostics,
     VoiceLeadingEngine,
     format_progression,
     get_comping_voicings,
@@ -439,21 +438,16 @@ class TestTheCompingArrangement(unittest.TestCase):
 
         The guitar is genuinely silent there, and the position is still **emitted**
         (item 4): a part that quietly omits a bar reads as a mistake, and a reader
-        lining the comp against the tune needs the bar to be there. The warning
-        stays, and `silence` is what the tab's line reads for the reason.
+        lining the comp against the tune needs the bar to be there. `silence` is
+        what the tab's line reads for the reason, so it is what is asserted.
         """
-        diagnostics = Diagnostics()
         steps = self.engine.arrange_progression(
             [("D5", "m7", "Dm7"), ("C5", "NC", "NC"), ("A4", "7", "A7")],
-            melody=VOICES_ARG, diagnostics=diagnostics,
+            melody=VOICES_ARG,
         )
         self.assertEqual([step.chord for step in steps], ["Dm7", "NC", "A7"])
         self.assertEqual(steps[1].silence, "nc_comping")
         self.assertEqual(steps[1].voicing.frets, [-1] * 6)
-        self.assertTrue(
-            any("NC" in warning for warning in diagnostics.warnings),
-            diagnostics.warnings,
-        )
 
     def test_the_corpus_nc_bar_keeps_its_place_in_the_tab(self):
         """The measured case: `Trouble_in_Mind_Blues` bar 1 is `NC`.
@@ -771,13 +765,18 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
         self.assertEqual([s.harmonized_as for s in steps], ["Bdim7", "Bdim7"])
 
     def test_the_substitution_is_reported(self):
-        """A guitarist with no melody on their part must be told why the chord moved."""
-        diagnostics = Diagnostics()
-        self._comp([("D5", "maj7", "Cmaj7")], "diminished", diagnostics=diagnostics)
-        self.assertTrue(
-            any("Bdim7" in warning for warning in diagnostics.warnings),
-            diagnostics.warnings,
-        )
+        """A guitarist with no melody on their part must be told why the chord moved.
+
+        Asserted on the step's `harmonized_as` and `strategy`, which are the fields
+        `render._substitution_clause` reads - so this is the same fact the tab line
+        phrases, rather than a second spelling of it. One triple in, one step out:
+        the fixture is a single slot, so a second element would mean the route
+        duplicated it.
+        """
+        steps = self._comp([("D5", "maj7", "Cmaj7")], "diminished")
+        self.assertEqual(len(steps), 1)
+        self.assertEqual([s.harmonized_as for s in steps], ["Bdim7"])
+        self.assertTrue(all(s.strategy for s in steps))
 
     def test_the_fallback_fires_at_onsets_only(self):
         """`--fallback` obeys the same §9.2 guard, at the slot layer where it lives.
@@ -829,7 +828,7 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
     def comped(self, **kwargs):
         steps = self.engine.arrange_progression(
             PROGRESSION, melody=VOICES_ARG,
-            diagnostics=Diagnostics(), timings=self.timings, **kwargs,
+            timings=self.timings, **kwargs,
         )
         self.assertTrue(steps, "an arrangement with no steps at all is a defect")
         return steps
@@ -937,19 +936,16 @@ class TestMelodyOnlySelections(unittest.TestCase):
         Before the collapse, `melody=alto,tenor` on a melody-only texture was
         refused with a warning and the melody handed back to the guitar. With
         the claim keyed on the selection, the same request comps, on every
-        texture, without a warning.
+        texture, without a refusal.
         """
-        diagnostics = Diagnostics()
         for texture in TEXTURE_STYLES:
             steps = VoiceLeadingEngine().arrange_progression(
                 PROGRESSION, melody=VOICES_ARG, texture=texture,
-                diagnostics=diagnostics,
             )
             self.assertTrue(steps, texture)
             self.assertTrue(
                 all(not step.melody_voiced for step in steps), texture
             )
-        self.assertEqual(diagnostics.warnings, [])
 
     def test_soprano_alone_arranges_the_melody_and_nothing_else(self):
         """The old texture's behaviour, unchanged under its new spelling.
@@ -1563,13 +1559,20 @@ class TestTheHarmonyAxis(unittest.TestCase):
         corpus builds an `ArrangeOptions` and passes it, so a default that disagreed
         with the keyword's would make every corpus call look like a caller who had
         passed both.
+
+        Asserted on `HARMONY_ROOT` under a **single-voice** selection rather than
+        `HARMONY_SHELL_ROOT` under two voices, which is what this used to ask for: it
+        only reached the comparison because the refused family fell back to `guide`,
+        so it was comparing two arrangements that had both silently dropped the
+        request. `root` under `(bass,)` is the *voiceable* form of the same axis, so
+        the two spellings are compared on an arrangement that states what was asked.
         """
         by_keyword = VoiceLeadingEngine.arrange_progression(
-            PROGRESSION, melody=VOICES_ARG, harmony=HARMONY_SHELL_ROOT
+            PROGRESSION, melody=MELODY_BASS, harmony=HARMONY_ROOT
         )
         by_options = VoiceLeadingEngine.arrange_progression(
             PROGRESSION,
-            options=ArrangeOptions(melody=VOICES_ARG, harmony=HARMONY_SHELL_ROOT),
+            options=ArrangeOptions(melody=MELODY_BASS, harmony=HARMONY_ROOT),
         )
         self.assertEqual(
             [s.voicing.frets for s in by_keyword],
@@ -1739,31 +1742,26 @@ class TestTheHarmonyAxis(unittest.TestCase):
         self.assertTrue(harmony_allowed(HARMONY_ROOT, ("bass",))[0])
         self.assertFalse(harmony_allowed(HARMONY_ROOT, ("alto", "tenor"))[0])
 
-    def test_a_refused_combination_warns_and_keeps_the_guide_tones(self):
-        """The warning names what would work, and the output is the inert answer.
+    def test_a_refused_combination_raises_and_names_the_guide_tones(self):
+        """The refusal raises, and its message names the selection that would work.
 
-        Asserted on the output as well as the warning, because a refusal that warned
-        and then produced something else would be the worse of the two failures.
+        **This test used to assert the opposite**, and the inversion is the point
+        rather than a weakening: it asserted that a refused `harmony=shell_root`
+        warned and then produced an arrangement byte-identical to the default
+        `guide` one. That behaviour was the defect - the caller asked for one
+        degree family and was silently handed another, on an axis whose whole
+        selling point (`docs/comping-styles.md`) is that it is *inert* unless
+        named. `guide` is what a caller gets by asking for `guide`, so returning
+        it for `shell_root` is a substitution wearing the default's clothes.
+
+        What is kept from the original is the half that still means something:
+        the message names the family, so a caller can tell what was refused.
         """
-        diagnostics = Diagnostics()
-        collected: List[str] = []
-        diagnostics.emit = collected.append  # type: ignore[method-assign]
-        steps = VoiceLeadingEngine.arrange_progression(
-            PROGRESSION, melody=VOICES_ARG, harmony=HARMONY_SHELL_ROOT,
-            diagnostics=diagnostics,
-        )
-        self.assertTrue(
-            any(HARMONY_SHELL_ROOT in w for w in collected),
-            f"no warning names the refused family: {collected}",
-        )
-        reference = VoiceLeadingEngine.arrange_progression(
-            PROGRESSION, melody=VOICES_ARG
-        )
-        self.assertEqual(
-            [s.voicing.frets for s in steps],
-            [s.voicing.frets for s in reference],
-            "a refused family changed the arrangement",
-        )
+        with self.assertRaises(ValueError) as caught:
+            VoiceLeadingEngine.arrange_progression(
+                PROGRESSION, melody=VOICES_ARG, harmony=HARMONY_SHELL_ROOT,
+            )
+        self.assertIn(HARMONY_SHELL_ROOT, str(caught.exception))
 
     def test_an_unknown_family_is_reported_even_on_a_singing_arrangement(self):
         """Resolution happens up front, so a typo is never silently ignored.

@@ -237,6 +237,11 @@ WITNESSES: List[Witness] = [
         lambda step: "bass: " in _line(step),
     ),
     (
+        "a bass note the walk asked for could not be placed, so the walk reads whole but is not",
+        lambda step: step.bass_refused is not None,
+        lambda step: "no playable bass note" in _line(step),
+    ),
+    (
         "the shape reaches outside the neck window",
         lambda step: (
             step.palette is not None or len(step.voicing.upper_midi_notes()) > 1
@@ -405,6 +410,7 @@ class TestNewClausesMustBeRegistered(unittest.TestCase):
         from arranger import render
 
         known = {
+            "_bass_refusal_clause",
             "_comping_clause",
             "_held_clause",
             "_omission_clause",

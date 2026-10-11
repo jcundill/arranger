@@ -480,7 +480,7 @@ moves exactly one pinned tab — the last fill of the `targets` texture, `x-x-x-
 → `x-x-10-9-10-x`, which is the same stay-in-place behaviour on a different chord.
 A bucket of `0/1/2` was measured too and **rejected**: it costs 13 tests, including
 the low-Dm7 trade reverting to `5-x-3-5-3-x` and two walking-bass anchor
-diagnostics, because a four-fret reach competing with barres on position is a
+refusals, because a four-fret reach competing with barres on position is a
 different decision than a one-fret reach doing so.
 
 **The one case it costs, and why it is not tuned away.** A low Dm7 under D4 is now

@@ -47,7 +47,6 @@ from arranger import (
     PITCH_CLASS_NAMES,
     ArrangementStep,
     ChordParser,
-    default_diagnostics,
     grid_defers_to_melody,
     grid_positions,
     melody_only_selection,
@@ -484,7 +483,7 @@ class Head:
     the tune is in instead of falling back to the format's default of C major. See
     their comments for the encoding, and `_key_signature` for how it is read.
 
-    The diagnostics are the reason a chord can go missing without the user
+    The notes are the reason a chord can go missing without the user
     wondering why: `unmapped` lists the chord symbols this library cannot voice,
     `skipped` the notes that were not melodic, and `report` the prose for the
     terminal. `report` is a separate field from `notes` because `notes` is the
@@ -1870,7 +1869,7 @@ def arrange_xml_head(
     """Loads a MusicXML head, reduces it and arranges it, end to end.
 
     Returns the steps, the `Head` they came from - so the caller can report the
-    title, the metre and the loader's diagnostics - and any notes worth printing.
+    title, the metre and the loader's notes - and any notes worth printing.
 
     The voicings come from `arranger.slots.arrange_slots`, the engine's own slot
     layer, so the non-chord-tone strategies, the opt-in diminished retry, the
@@ -1982,8 +1981,7 @@ def _merge_chord_slots(
     and a `bass_only`-style union that arrived out of order would attribute the wrong
     note to the wrong beat, reached from a new direction.
     """
-    grid_policy = resolve_grid(parse_grid(grid), head.beats_per_bar,
-                               default_diagnostics())
+    grid_policy = resolve_grid(parse_grid(grid), head.beats_per_bar)
 
     extra = chord_slots(head, section, grid_policy)
     if grid_defers_to_melody(grid_policy):

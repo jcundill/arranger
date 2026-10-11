@@ -5,8 +5,8 @@ is now the *source* rather than a generator checked against one: `_drop2_templat
 the shape for a degree on demand and `_drop2_palette` is that rule read at every chord tone,
 so the hand-written tables left the engine in step 3 and live on in `tests/support.py` as the
 witness the rule is asserted against. Step 2 — one placement rule, and one place a fret
-becomes a shape — is landed as well, measured at **0 of 1,103 steps** and 0 of the 300
-diagnostics, and so is the clause the tab owed for a tone a shape leaves out. §4 describes
+becomes a shape — is landed as well, measured at **0 of 1,103 steps**, and so is the
+clause the tab owed for a tone a shape leaves out. §4 describes
 both; §3 records what step 3 measured, including the decision it turned out not to need. The
 label the placement would derive, and the levers that price it, are **not** built.
 
@@ -153,8 +153,8 @@ which enumerates with `_frets_in_span`, reached through the memo `_place_shape`)
 **layouts** (`_place_template`, which computes the frets from an interval template — the
 template and the string set fix each one).
 
-Across the eight committed heads this moved **0 of 1,103 steps** and **0** of the 300
-diagnostics, byte for byte, and the head sweep's wall time is unchanged. Two things it
+Across the eight committed heads this moved **0 of 1,103 steps**, byte for byte, and the
+head sweep's wall time is unchanged. Two things it
 *states* rather than inherits from one producer:
 
 - **The melody is the highest sounding note.** Pinning it to the top *string* does not put it

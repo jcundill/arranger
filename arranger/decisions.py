@@ -28,7 +28,6 @@ from typing import Any, Callable, Container, List, Optional, Sequence, Tuple
 
 from .chords import sounding_harmony
 from .cost import _best_voicing
-from .diagnostics import Diagnostics
 from .grips import GRIP_MAX_SPAN, GRIP_PREFERENCE, thumb_safe_grips
 from .tuning import NO_CHORD, ROLE_FILL, ROLE_TARGET, ArrangementStep, Voicing
 
@@ -45,7 +44,6 @@ def resolve_texture_grips(
     texture: str,
     texture_grips: Any,
     requested: Tuple[str, ...],
-    diagnostics: Diagnostics,
     has_thumb: bool = False,
 ) -> Tuple[str, ...]:
     """Which grips this slot may use: the role's palette, narrowed by the caller.
@@ -61,9 +59,8 @@ def resolve_texture_grips(
     tables; a target palette of four-note grips (`targets`' `drop2`/`drop3`) resolves to
     the widest statement that leaves a finger free, which is the `("shell",)` palette
     `walking_bass` already names. Applied *before* `requested` narrows, so
-    `--grips drop2 --texture targets --bass walk` still reads as "that grip is not
-    available here" and takes the existing reported fallback rather than resurrecting a
-    five-pluck step.
+    `--grips drop2 --texture targets --bass walk` reads as "that grip is not available
+    here" below.
 
     **`has_thumb` is a fact about *this slot*, not about the arrangement**, and the
     caller passes it that way: a bass policy places a note on some beats and not others
@@ -84,17 +81,19 @@ def resolve_texture_grips(
     So the rule is: an explicit restriction intersects, and the default - which is
     not a restriction, just the absence of one - does not.
 
-    An empty intersection is a caller asking for a grip the texture never uses. The
-    step still sounds, and says so: losing a chord of the tune is worse than
-    ignoring a flag, so the texture's own set stands.
+    An empty intersection is a caller asking for a grip this texture cannot use, and it
+    **raises** rather than falling back to the texture's own set. The fallback was a
+    silent substitution: `--grips shell --texture targets` used to arrange every strong
+    beat as a four-note drop-2, which is the same defect the axis refusals in `textures`
+    had, and it reached a caller who passed no collector not at all.
 
     A palette that is **itself** empty is the one case that is not a caller error, and
-    it is not reported. `walking_bass`'s fill palette is `()` deliberately - it means
-    "the left hand plays nothing between the anchors" - so `--grips shell --texture
-    walking_bass` intersects to nothing on *every* fill, and warning on each printed
-    the same line 76 times over one arrangement. The distinction is the difference
-    between a texture that cannot use the grip and a texture that means to play
-    nothing: only the former is worth interrupting the output to mention.
+    it is not an error here either. `walking_bass`'s fill palette is `()` deliberately -
+    it means "the left hand plays nothing between the anchors" - so `--grips shell
+    --texture walking_bass` intersects to nothing on *every* fill, and refusing that
+    would make a shipped texture unusable. The distinction is the difference between a
+    texture that cannot use the grip and a texture that means to play nothing: only the
+    former is a question for the caller.
     """
     role_grips: Tuple[str, ...] = texture_grips[role]
     # The right hand's budget first, because it is a fact about the hand rather than a
@@ -108,13 +107,11 @@ def resolve_texture_grips(
     if narrowed:
         return narrowed
     if not role_grips:
-        return role_grips  # nothing to fall back *from*, and nothing to say
-    diagnostics.warn(
-        f"Warning: {texture} uses {role_grips} for a "
-        f"{role}, none of which is in the requested {requested}; "
-        f"using the texture's own set"
+        return role_grips  # nothing to fall back *from*, and nothing to refuse
+    raise ValueError(
+        f"{texture} uses {role_grips} for a {role}, none of which is in the "
+        f"requested {requested}"
     )
-    return role_grips
 
 
 def melody_alone_case(

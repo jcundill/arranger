@@ -25,7 +25,6 @@ from typing import Container, Dict, List, Optional, Sequence, Tuple
 
 from musthe import Note
 
-from arranger.diagnostics import Diagnostics, default_diagnostics
 from arranger.grips import GRIP_PREFERENCE
 from arranger.options import ArrangeOptions
 from arranger.steps import VoiceLeadingEngine
@@ -245,7 +244,6 @@ def arrange_slots(
     grid: str = "every_note",
     beats_per_bar: int = 4,
     beat_type: int = 4,
-    diagnostics: Optional[Diagnostics] = None,
     onsets: Optional[Container[int]] = None,
 ) -> Tuple[List[ArrangementStep], List[int], List[str]]:
     """Voices a list of (note, quality, name) triples, one step per slot.
@@ -297,9 +295,8 @@ def arrange_slots(
     3/4 head passing only the count has every span a quarter short.
 
     Returns the steps, the indexes of the steps the diminished retry actually
-    substituted, and any diagnostic notes worth printing. The `notes` are *not* the
-    `diagnostics` warnings: they are arrangement-level remarks the caller is
-    expected to print itself.
+    substituted, and any notes worth printing. The `notes` are arrangement-level
+    remarks the caller is expected to print itself.
     """
     if texture not in TEXTURE_STYLES:
         raise ValueError(
@@ -307,8 +304,6 @@ def arrange_slots(
         )
     if fallback not in (None, "diminished"):
         raise ValueError(f"Unknown fallback {fallback!r}; expected None or 'diminished'")
-    if diagnostics is None:
-        diagnostics = default_diagnostics()
 
     engine = VoiceLeadingEngine()
     notes: List[str] = []
@@ -370,7 +365,7 @@ def arrange_slots(
     )
 
     steps = engine.arrange_progression(
-        list(working), options=options, diagnostics=diagnostics
+        list(working), options=options,
     )
     return steps, rescued, notes
 

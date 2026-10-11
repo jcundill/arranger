@@ -59,9 +59,8 @@ jazz-arranger = "arranger:main"
 # `arranger`; it is stdlib-only, so unlike `tabxml` it needs no optional extra
 # to work.
 #
-# `arranger.diagnostics` holds the warning collector the engine reports to,
-# `arranger.options` the knobs the engine reads, and `arranger.decisions` the
-# step-loop decisions the engine shares. All three are runtime
+# `arranger.options` holds the knobs the engine reads and `arranger.decisions` the
+# step-loop decisions the engine shares. Both are runtime
 # modules *of* the distribution, not optional extras alongside it.
 packages = ["arranger"]
 py-modules = [

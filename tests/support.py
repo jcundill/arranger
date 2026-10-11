@@ -12,8 +12,6 @@ What is **not** here, deliberately:
 * a helper two files both want but which reads better in one of them - the walked
   line's `names(chords, onsets)` in `test_bass` and a step's thumb note in
   `test_walking_bass` share a name and nothing else, so both stay local;
-* `capture_diagnostics`, which needs the `Diagnostics` collector the engine does
-  not have yet. It arrives with that work, not before.
 
 Every fixture here builds a value by hand rather than by running the engine, which
 is the point: a test that arranges a progression and then asserts on the result is

@@ -727,7 +727,7 @@ only removes *chords*, so the two axes are orthogonal — which is the orthogona
 claim of §4 tested rather than asserted. An earlier reading of that measurement as a
 `bass=walk` bug was wrong: `bass=walk` with `texture=uniform` is **refused by design**
 (`bass_allowed`, with a warning naming `texture='targets'`), and the diagnostic was
-missed only because no `Diagnostics` collector was passed.
+missed only because the refusal was a warning into a collector nobody read.
 
 **Not done, and deliberately:**
 
@@ -1470,11 +1470,11 @@ import copy, hashlib
 from headxml import load_musicxml, head_skeleton, _merge_chord_slots
 from arranger.slots import arrange_slots
 from arranger.textures import parse_voices, resolve_voices, voices_have_soprano
-from arranger import Diagnostics
+from arranger import resolve_voices, voices_have_soprano, parse_voices
 
 def run(head, vox, grid):
     slots = head_skeleton(head, None)
-    if not voices_have_soprano(resolve_voices(parse_voices(vox), 'uniform', Diagnostics())):
+    if not voices_have_soprano(resolve_voices(parse_voices(vox), 'uniform')):
         slots = _merge_chord_slots(slots, head, None, grid) or slots
     steps, _, _ = arrange_slots(
         [s[0] for s in slots], [(s[1], s[2], s[3]) for s in slots],

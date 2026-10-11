@@ -1,6 +1,6 @@
 """`jazz-arranger`: playable jazz guitar chord-melody from a chord progression.
 
-This module is a **facade**. The engine is a package of fifteen modules with a
+This module is a **facade**. The engine is a package of fourteen modules with a
 strict dependency order, and nothing above imports anything below it by accident:
 
     tuning -> chords -> grips -> cost
@@ -86,7 +86,6 @@ from .chords import (
     normalised_harmony,
     sounding_harmony,
 )
-from .diagnostics import Diagnostics, default_diagnostics
 from .grips import (
     BASS_DEGREES_6432,
     DUO_DEGREES,
@@ -512,7 +511,6 @@ __all__ = [
     "arrange_slots",
     "ChordParser",
     "melody_degree_name",
-    "Diagnostics",
     "GuitarFretboard",
     "StepPreparation",
     "VoiceLeadingEngine",
@@ -526,8 +524,6 @@ __all__ = [
     "cli",
     "cost",
     "decisions",
-    "default_diagnostics",
-    "diagnostics",
     "fingers",
     "format_progression",
     "format_gp5",

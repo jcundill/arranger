@@ -56,7 +56,6 @@ from .decisions import (
     should_demote_to_melody_alone,
     should_promote_fill,
 )
-from .diagnostics import Diagnostics, default_diagnostics
 from .grips import (
     GRIP_PREFERENCE,
     MELODY_STRING_CHOICES_FULL,
@@ -142,9 +141,8 @@ def _resolve_bass(
     texture: str,
     bass: str,
     voices: Tuple[str, ...],
-    diagnostics: Diagnostics,
 ) -> str:
-    """The policy to actually run: `BASS_AUTO` resolved, validated, or refused.
+    """The policy to actually run: `BASS_AUTO` resolved or validated.
 
     Three outcomes, in the order they are decided:
 
@@ -157,10 +155,14 @@ def _resolve_bass(
     - an unknown spelling raises. The same rule as everywhere else in the library: a
       policy nobody recognises is a question, and answering it by defaulting to a walk
       would put a bass line under an arrangement that did not ask for one.
-    - a combination the left hand cannot accommodate is **refused with a warning**, and
-      the arrangement proceeds without a thumb line. Not dropped and not degraded: a
-      walking line with gaps in it is worse than no line, and losing the bass costs less
-      than losing the tune. The warning names a texture that would work.
+    - a combination the left hand cannot accommodate **raises**. It used to fall back
+      to `BASS_NONE` with a warning, and that was the wrong shape for the same reason
+      `resolve_harmony` now raises: `none` is what a caller gets by asking for `none`,
+      so handing it back for a `walk` the texture cannot carry is a silent
+      substitution. A walking line with gaps in it is worse than no line, so the
+      choice between them is the caller's, and the message names a texture that would
+      work. Losing the *bass* still costs less than losing the tune - that trade is
+      made per beat, by `_attach_bass`, where the step survives and the tab says so.
 
     **The selection is passed rather than the flags derived from it** - the route
     (`voices_have_soprano`), the comping arity (`len(voices)`), the lone-bass case
@@ -207,8 +209,7 @@ def _resolve_bass(
         melody_only=melody_only,
     )
     if not allowed:
-        diagnostics.warn(f"Warning: {reason}")
-        return BASS_NONE
+        raise ValueError(reason)
     return bass
 
 
@@ -228,13 +229,13 @@ def _resolve_melody(voices: str) -> Tuple[str, ...]:
 
 
 def _resolve_harmony(
-    harmony: str, voices: Tuple[str, ...], diagnostics: Diagnostics
+    harmony: str, voices: Tuple[str, ...]
 ) -> str:
-    """The degree family to actually voice: `auto` resolved, parsed, or refused.
+    """The degree family to actually voice: `auto` resolved, parsed, validated.
 
     The same two-step shape as `_resolve_melody` above - parse, then resolve - because
     it is the same rule about the same thing: `textures` owns the vocabulary and the
-    refusal, this function owns nothing but the wiring.
+    validation, this function owns nothing but the wiring.
 
     Takes **no texture**, and that is deliberate rather than an oversight: whether a
     degree family can be voiced depends on how many notes were asked for, and on
@@ -244,22 +245,22 @@ def _resolve_harmony(
     Resolved **once per arrangement**, next to `_resolve_melody` and for the reason
     stated there: the band does not change halfway through a tune.
     """
-    return resolve_harmony(parse_harmony(harmony), voices, diagnostics)
+    return resolve_harmony(parse_harmony(harmony), voices)
 
 
-def _resolve_grid(grid: str, beats_per_bar: int, diagnostics: Diagnostics) -> str:
-    """The grid to place chords on: parsed, `auto` resolved, validated or refused.
+def _resolve_grid(grid: str, beats_per_bar: int) -> str:
+    """The grid to place chords on: parsed, `auto` resolved, validated.
 
     The same two-step shape as `_resolve_melody` and `_resolve_harmony` above,
     because it is the same rule about the same kind of thing: `textures` owns the
-    vocabulary and the refusal, this function owns only the wiring.
+    vocabulary and the validation, this function owns only the wiring.
 
     **Takes the metre rather than a texture**, and that is what distinguishes it from
     `harmony`. Whether a rhythm fits is a property of the metre - `final_and` is the
     upbeat of the last beat whatever the arrangement is doing - so it is resolved
     against `beats_per_bar` and nothing else.
     """
-    return resolve_grid(parse_grid(grid), beats_per_bar, diagnostics)
+    return resolve_grid(parse_grid(grid), beats_per_bar)
 
 
 def _sounding_melody(voicing: Voicing, written: str) -> Tuple[str, Optional[str]]:
@@ -330,7 +331,6 @@ def prepare_step(
     fret_min: int = NECK_FRET_MIN,
     fret_max: int = NECK_FRET_MAX,
     grips: Tuple[str, ...] = GRIP_PREFERENCE,
-    diagnostics: Optional[Diagnostics] = None,
 ) -> Optional[StepPreparation]:
     """
     Builds one step's candidates, leaving the choice of shape to the caller.
@@ -345,12 +345,7 @@ def prepare_step(
     by the `sustain` strategy, and `previous_chord` is what that strategy
     reports as `harmonized_as`.
 
-    `diagnostics` receives the one warning this function can raise - a
-    non-chord tone no strategy could resolve. It defaults to printing, which
-    is what this function always did; see `diagnostics.Diagnostics`.
     """
-    if diagnostics is None:
-        diagnostics = default_diagnostics()
     note_str, chord_type, name = progression[index]
     if note_str is None:
         # No melody to pin. `arrange_progression` skips such a slot before it can
@@ -432,10 +427,6 @@ def prepare_step(
                     harmonized_as = substitute_name
 
         if strategy_used is None:
-            diagnostics.warn(
-                f"Warning: melody {note_str} is not a chord tone of {name} and the "
-                f"'{non_chord_tone}' strategy found no voicing; keeping the fallback"
-            )
             # The strategy is recorded even though it settled nothing, because the line has
             # to name it: "non-chord tone" alone cannot tell a substitution that failed from
             # one that was never attempted. What distinguishes the two is `harmonized_as`,
@@ -470,7 +461,7 @@ class _Knobs:
 
     `arrange_progression` takes thirteen knobs twice over - once as keywords and
     once as `ArrangeOptions` fields - and has to decide between them, validate
-    them and derive two more (`texture_grips`, and the defaulted `diagnostics`)
+    them and derive one more (`texture_grips`)
     before the loop can start. That prologue is this function's job; the loop then
     unpacks the result straight back into the names it has always used, so the
     extraction changed nothing downstream of it.
@@ -493,7 +484,6 @@ class _Knobs:
     bass_pcs: Optional[Mapping[int, Optional[int]]]
     slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]]
     texture_grips: Dict[str, Tuple[str, ...]]
-    diagnostics: Diagnostics
 
 
 def _resolve_knobs(
@@ -513,7 +503,6 @@ def _resolve_knobs(
     beat_type: int,
     melody_onsets: Optional[Container[int]],
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
-    diagnostics: Optional[Diagnostics],
 ) -> _Knobs:
     """`options=` and the keywords reconciled into one `_Knobs`.
 
@@ -593,8 +582,6 @@ def _resolve_knobs(
     # Resolved once, here, and passed down: every warning this function reaches
     # goes to the one collector, so a caller that passed one sees all of them
     # rather than the first few. Defaults to printing, as this always did.
-    if diagnostics is None:
-        diagnostics = default_diagnostics()
 
     return _Knobs(
         top_strings=top_strings,
@@ -614,7 +601,6 @@ def _resolve_knobs(
         bass_pcs=bass_pcs,
         slash_bass_cost=slash_bass_cost,
         texture_grips=texture_grips,
-        diagnostics=diagnostics,
     )
 
 
@@ -650,7 +636,6 @@ def _resolve_policies(
     beats_per_bar: int,
     beat_type: int,
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
-    diagnostics: Diagnostics,
 ) -> _Policies:
     """The axes resolved once per arrangement, plus the walked-beat union.
 
@@ -692,7 +677,6 @@ def _resolve_policies(
         texture,
         bass,
         voices,
-        diagnostics,
     )
     has_thumb = bass != BASS_NONE
 
@@ -701,14 +685,14 @@ def _resolve_policies(
     # `if not melody_voiced` is deliberate: a spelling nobody recognises must be
     # reported **once, up front**, rather than never at all on an arrangement where
     # the guitar happens to be singing - the same argument as `_resolve_melody`'s.
-    harmony_family = _resolve_harmony(harmony, voices, diagnostics)
+    harmony_family = _resolve_harmony(harmony, voices)
     # The grid axis, resolved here for the same reason and read by **both** routes
     # below rather than only the comping one - unlike `harmony=`, which the guitar
     # singing makes unreachable. A grid says where a chord lands, and that is a
     # question about the part whether the guitar is singing it or comping under a
     # horn, so scoping it to one route would make `grid=` silently inert on a
     # melody-bearing arrangement rather than doing nothing there.
-    grid_pattern = _resolve_grid(grid, beats_per_bar, diagnostics)
+    grid_pattern = _resolve_grid(grid, beats_per_bar)
 
     slots: Optional[List[_Slot]] = None
     if has_thumb:
@@ -766,7 +750,6 @@ def _rest_step(
     weight: int,
     sings_here: bool,
     silence: str,
-    diagnostics: Diagnostics,
 ) -> None:
     """Append the silent step for a position the guitar does not play.
 
@@ -805,7 +788,7 @@ def _rest_step(
     # `bass=none`, and dropping the attach here would silently delete the
     # walk from every bar the grid thinned.
     _attach_bass(
-        arrangements[-1], slot.bass, arrangements, diagnostics
+        arrangements[-1], slot.bass, arrangements
     )
 
 
@@ -822,7 +805,6 @@ def _texture_fill_step(
     duration: Optional[float],
     role: str,
     weight: int,
-    diagnostics: Diagnostics,
 ) -> bool:
     """Append the thin "fill" step for a slot the texture thins to a melody.
 
@@ -860,7 +842,7 @@ def _texture_fill_step(
             metric_weight=weight,
             bass_only=is_bass_only(slot.bass_only, role),
         )
-        _attach_bass(fill, slot.bass, arrangements, diagnostics)
+        _attach_bass(fill, slot.bass, arrangements)
         arrangements.append(fill)
         return True
     return False
@@ -879,7 +861,6 @@ def _no_chord_step(
     duration: Optional[float],
     role: str,
     weight: int,
-    diagnostics: Diagnostics,
 ) -> None:
     """Append the melody-alone step for an `NC` bar: melody, but no harmony.
 
@@ -893,17 +874,12 @@ def _no_chord_step(
     assert melody_note is not None and note_str is not None
     solo_voicing = _grips.get_melody_only_voicing(melody_note, prefer=top_strings)
     if solo_voicing is None:
-        diagnostics.warn(
-            f"Warning: melody {note_str} is unreachable on any string; "
-            f"the guitar plays nothing here"
-        )
         _rest_step(
             arrangements, slot,
             name=name, note_str=note_str,
             bar=bar, beat=beat, duration=duration,
             role=role, weight=weight,
             sings_here=False, silence=SILENCE_OUT_OF_REACH,
-            diagnostics=diagnostics,
         )
         return
     # get_melody_only_voicing may have dropped the note an octave to stay
@@ -931,7 +907,7 @@ def _no_chord_step(
     # string free. Attaching it here rather than only on harmonised steps is
     # what keeps a bar of no-chord melody from being a hole in the walk.
     arrangements[-1].bass_only = is_bass_only(slot.bass_only, role)
-    _attach_bass(arrangements[-1], slot.bass, arrangements, diagnostics)
+    _attach_bass(arrangements[-1], slot.bass, arrangements)
 
 
 def _comping_step(
@@ -957,7 +933,6 @@ def _comping_step(
     duration: Optional[float],
     role: str,
     weight: int,
-    diagnostics: Diagnostics,
 ) -> bool:
     """The comping route: the guitar harmonises, somebody else sings.
 
@@ -991,18 +966,12 @@ def _comping_step(
     # warn twice or hand the horn's line back to the guitarist. The guitar
     # is silent on this bar, and the horn is not - so the line says which.
     if chord_type == NO_CHORD or name == NO_CHORD:
-        diagnostics.warn(
-            f"Warning: {name} has no chord and this voice selection "
-            f"({', '.join(voices)}) leaves the guitar nothing to comp; "
-            f"the guitar plays nothing here"
-        )
         _rest_step(
             arrangements, slot,
             name=name, note_str=note_str,
             bar=bar, beat=beat, duration=duration,
             role=role, weight=weight,
             sings_here=False, silence=SILENCE_NC_COMPING,
-            diagnostics=diagnostics,
         )
         return True
     # --- the non-chord-tone strategy, at harmony level (§9.3 step C) ---
@@ -1042,11 +1011,6 @@ def _comping_step(
             # A guitarist handed `Cmaj7 -> Bdim7` with no melody on their own
             # part cannot see why the chord moved; the note that forced it is
             # the horn's, so it has to be named here or the part reads wrong.
-            diagnostics.warn(
-                f"Warning: comping {name} as {comp_name} "
-                f"({comp_strategy}) to accommodate the melody note "
-                f"{note_str}"
-            )
     # How many chord voices the guitar states here. **A voice is a *role*
     # in the stack, not a count of parts played twice** - `--voices
     # alto,tenor` is two notes, and padding it to three would put a voice
@@ -1089,18 +1053,12 @@ def _comping_step(
             # to either, so the chord of the tune cannot be stated here at
             # all. Reported as the hole it is, and the position emitted
             # silent; the next grid position still gets its chance.
-            diagnostics.warn(
-                f"Warning: no guide-tone comping shape found for {name} "
-                f"and no melody note at this position to fall back to; "
-                f"the guitar plays nothing here"
-            )
             _rest_step(
                 arrangements, slot,
                 name=name, note_str=note_str,
                 bar=bar, beat=beat, duration=duration,
                 role=role, weight=weight,
                 sings_here=False, silence=SILENCE_NO_SHAPE,
-                diagnostics=diagnostics,
             )
             return True
         # No guide-tone shape in a playable position. The chord of the tune
@@ -1109,10 +1067,6 @@ def _comping_step(
         # trade `prepare_step` makes when a strategy finds nothing. The
         # guitar plays the tune here, which is a worse answer than a thin
         # one and a better one than silence.
-        diagnostics.warn(
-            f"Warning: no guide-tone comping shape found for {name}; "
-            f"falling back to voicing the melody on the guitar"
-        )
     else:
         # The root, read once for the selector's bass-function tie-break.
         # `get_comping_voicings` has already refused to generate anything
@@ -1173,7 +1127,7 @@ def _comping_step(
             harmonized_as=comp_harmonized_as,
         ))
         _attach_bass(
-            arrangements[-1], slot.bass, arrangements, diagnostics
+            arrangements[-1], slot.bass, arrangements
         )
         return True
     return False
@@ -1192,7 +1146,6 @@ def _rescue_melody_alone(
     duration: Optional[float],
     role: str,
     weight: int,
-    diagnostics: Diagnostics,
 ) -> bool:
     """Play the tune alone when no shape in the palette can carry the chord.
 
@@ -1244,7 +1197,7 @@ def _rescue_melody_alone(
             metric_weight=weight,
             bass_only=is_bass_only(slot.bass_only, role),
         )
-        _attach_bass(step, slot.bass, arrangements, diagnostics)
+        _attach_bass(step, slot.bass, arrangements)
         arrangements.append(step)
         return True
     return False
@@ -1265,7 +1218,6 @@ def _promoted_fill(
     role: str,
     has_thumb: bool,
     melody_only: bool,
-    diagnostics: Diagnostics,
 ) -> Optional[StepPreparation]:
     """Re-prepare a fill that produced nothing as a principal note.
 
@@ -1299,7 +1251,6 @@ def _promoted_fill(
         fret_min=fret_min,
         fret_max=fret_max,
         grips=grips,
-        diagnostics=diagnostics,
     )
 
 def _lost_to_the_bass_partition(
@@ -1402,7 +1353,6 @@ def _demoted_to_melody_alone(
     duration: Optional[float],
     role: str,
     weight: int,
-    diagnostics: Diagnostics,
 ) -> bool:
     """Play the tune alone when the only shape that fitted needs a stretch.
 
@@ -1418,11 +1368,6 @@ def _demoted_to_melody_alone(
         melody_note, prefer=top_strings
     )
     if solo is not None and solo.fret_span() < best_voicing.fret_span():
-        diagnostics.warn(
-            f"Warning: {name} with melody {note_str} needs a "
-            f"{best_voicing.fret_span()}-fret stretch "
-            f"({best_voicing.tab_string()}); playing the melody alone"
-        )
         arrangements.append(ArrangementStep(
             chord=name,
             melody=note_str,
@@ -1444,7 +1389,7 @@ def _demoted_to_melody_alone(
             metric_weight=weight,
             bass_only=is_bass_only(slot.bass_only, role),
         ))
-        _attach_bass(arrangements[-1], slot.bass, arrangements, diagnostics)
+        _attach_bass(arrangements[-1], slot.bass, arrangements)
         return True
     return False
 
@@ -1474,7 +1419,6 @@ def _harmonised_step(
     duration: Optional[float],
     role: str,
     weight: int,
-    diagnostics: Diagnostics,
 ) -> None:
     """The melody-bearing route: pin the tune, and voice the chord under it.
 
@@ -1501,7 +1445,6 @@ def _harmonised_step(
         fret_min=fret_min,
         fret_max=fret_max,
         grips=slot_grips,
-        diagnostics=diagnostics,
     )
     if prepared is None:
         # The tune is never dropped while it can be played at all: play it
@@ -1511,7 +1454,7 @@ def _harmonised_step(
             arrangements, slot,
             name=name, note_str=note_str, melody_note=melody_note,
             top_strings=top_strings, bar=bar, beat=beat, duration=duration,
-            role=role, weight=weight, diagnostics=diagnostics,
+            role=role, weight=weight,
         ):
             return
         prepared = _promoted_fill(
@@ -1521,7 +1464,6 @@ def _harmonised_step(
             fret_min=fret_min, fret_max=fret_max,
             grips=grips, slot_grips=slot_grips, texture=texture,
             role=role, has_thumb=has_thumb, melody_only=melody_only,
-            diagnostics=diagnostics,
         )
         if prepared is None:
             # Reached only when the melody **cannot be played at all** - the
@@ -1534,11 +1476,6 @@ def _harmonised_step(
             # *skipped* because that is what happens to the note. Naming a family
             # the caller never asked for, or wording it like a fallback that had
             # happened, would both misdescribe the step.
-            diagnostics.warn(
-                f"Warning: no voicing for {name} with melody {note_str} in the "
-                f"palette ({', '.join(slot_grips) or 'none'}) and the melody "
-                f"cannot be played alone either; the guitar plays nothing here"
-            )
             # The reason, told apart at the source: no string reaches the
             # written pitch at all (`out_of_reach`) versus a reachable melody
             # under a chord nothing could voice (`no_shape`). The rescue above
@@ -1557,7 +1494,6 @@ def _harmonised_step(
                     ) is None
                     else SILENCE_NO_SHAPE
                 ),
-                diagnostics=diagnostics,
             )
             return
         role = ROLE_TARGET
@@ -1674,7 +1610,7 @@ def _harmonised_step(
             top_strings=top_strings, best_voicing=best_voicing,
             palette=palette,
             bar=bar, beat=beat, duration=duration,
-            role=role, weight=weight, diagnostics=diagnostics,
+            role=role, weight=weight,
         ):
             return
     # A repeated melody is a hold, so the renderers strike the soprano alone and
@@ -1723,7 +1659,7 @@ def _harmonised_step(
     # Select first, merge after: the bass is written into the fret vector only
     # once `_best_voicing` has returned, so it cannot enter the cost tuple by
     # construction rather than by discipline.
-    _attach_bass(arrangements[-1], slot.bass, arrangements, diagnostics)
+    _attach_bass(arrangements[-1], slot.bass, arrangements)
 
 
 @dataclass
@@ -1782,7 +1718,6 @@ def _slot_state(
     melody_onsets: Optional[Container[int]],
     grid_pattern: str,
     beats_per_bar: int,
-    diagnostics: Diagnostics,
 ) -> Optional[_SlotPlan]:
     """One slot's decisions, and the one refusal that ends a slot here.
 
@@ -1808,10 +1743,6 @@ def _slot_state(
             # the tune is silent at - and the guitar **comps** them rather than
             # being refused, which is why they fall through to the comping
             # branch below.
-            diagnostics.warn(
-                f"Warning: slot {index} has no melody note and this voice "
-                f"selection plays the tune alone; the guitar plays nothing here"
-            )
             bar, beat, duration = slot.bar, slot.beat, slot.duration
             weight = _metric_weight(bar, beat, beats_per_bar)
             # The role the slot would have had, read without committing to
@@ -1919,13 +1850,13 @@ def _slot_state(
     # every slot, whatever the texture's palettes say, so the loop hands the
     # empty palette straight through - the same declaration `TEXTURE_GRIPS`
     # makes with an empty tuple, and the one channel `melody_alone_case`
-    # reads. Skipping the resolution also skips its warnings, which is what
+    # reads. Skipping the resolution is what
     # makes `texture=` and `grips=` silently inert here rather than noisily so.
     slot_grips = (
         ()
         if melody_only
         else resolve_texture_grips(
-            role, texture, texture_grips, grips, diagnostics,
+            role, texture, texture_grips, grips,
             # The right hand's budget, and a fact about *this slot* rather than
             # about the arrangement: a target may sound three strings only where
             # a bass note is actually being placed under it, which is what
@@ -2004,7 +1935,6 @@ def arrange_progression(
     # timeline, and what keeps a bare `arrange_progression(..., melody="alto,tenor")`
     # honouring `--non-chord-tone`. See `ArrangeOptions.melody_onsets`.
     melody_onsets: Optional[Container[int]] = None,
-    diagnostics: Optional[Diagnostics] = None,
     options: Optional[ArrangeOptions] = None,
 ) -> List[ArrangementStep]:
     """
@@ -2121,14 +2051,6 @@ def arrange_progression(
     `supported_string_sets()`: the playability invariant applies to the upper
     voices, with exactly one `BASS_STRING_INDICES` string outside that set carrying
     the thumb below it.
-
-    `diagnostics` collects this function's warnings - a melody that reaches no
-    voicing, a step demoted to the melody alone, a fill promoted to a target, an
-    unresolvable non-chord tone, a thumb with nowhere to go. It defaults to
-    printing each one, which is what this function has always done, so a caller
-    that passes nothing sees no change. Pass a `Diagnostics()` to collect them
-    silently instead; see the `diagnostics` module for why that is a value
-    rather than a logging call.
     """
     _k = _resolve_knobs(
         options,
@@ -2146,7 +2068,6 @@ def arrange_progression(
         beat_type=beat_type,
         melody_onsets=melody_onsets,
         timings=timings,
-        diagnostics=diagnostics,
     )
     # Unpacked into the names the loop below has always used, so the extraction
     # above changes nothing downstream of it.
@@ -2167,7 +2088,6 @@ def arrange_progression(
     bass_pcs = _k.bass_pcs
     slash_bass_cost_for = _k.slash_bass_cost
     texture_grips = _k.texture_grips
-    diagnostics = _k.diagnostics
 
     arrangements: List[ArrangementStep] = []
 
@@ -2187,7 +2107,6 @@ def arrange_progression(
         beats_per_bar=beats_per_bar,
         beat_type=beat_type,
         timings=timings,
-        diagnostics=diagnostics,
     )
     # Unpacked into the names the loop below has always used, so the extraction
     # above changes nothing downstream of it.
@@ -2246,7 +2165,6 @@ def arrange_progression(
             melody_onsets=melody_onsets,
             grid_pattern=grid_pattern,
             beats_per_bar=beats_per_bar,
-            diagnostics=diagnostics,
         )
         if plan is None:
             continue
@@ -2258,7 +2176,6 @@ def arrange_progression(
                 bar=plan.bar, beat=plan.beat, duration=plan.duration,
                 role=plan.role, weight=plan.weight,
                 sings_here=plan.sings_here, silence=plan.silence,
-                diagnostics=diagnostics,
             )
             continue
         if plan.melody_alone == MELODY_ALONE_TEXTURE:
@@ -2268,7 +2185,6 @@ def arrange_progression(
                 melody_note=plan.melody_note, top_strings=top_strings,
                 bar=plan.bar, beat=plan.beat, duration=plan.duration,
                 role=plan.role, weight=plan.weight,
-                diagnostics=diagnostics,
             ):
                 continue
 
@@ -2279,7 +2195,6 @@ def arrange_progression(
                 melody_note=plan.melody_note, top_strings=top_strings,
                 bar=plan.bar, beat=plan.beat, duration=plan.duration,
                 role=plan.role, weight=plan.weight,
-                diagnostics=diagnostics,
             )
             continue
 
@@ -2299,7 +2214,7 @@ def arrange_progression(
                 fret_min=fret_min, fret_max=fret_max,
                 bass_pcs=bass_pcs, slash_bass_cost_for=slash_bass_cost_for,
                 bar=plan.bar, beat=plan.beat, duration=plan.duration,
-                role=plan.role, weight=plan.weight, diagnostics=diagnostics,
+                role=plan.role, weight=plan.weight,
             ):
                 continue
 
@@ -2317,7 +2232,7 @@ def arrange_progression(
             melody_note=plan.melody_note,
             bass_pcs=bass_pcs, slash_bass_cost_for=slash_bass_cost_for,
             bar=plan.bar, beat=plan.beat, duration=plan.duration,
-            role=plan.role, weight=plan.weight, diagnostics=diagnostics,
+            role=plan.role, weight=plan.weight,
         )
 
     return arrangements
@@ -2327,17 +2242,17 @@ def _attach_bass(
     step: ArrangementStep,
     note: Optional[BassNote],
     arrangements: List[ArrangementStep],
-    diagnostics: Optional[Diagnostics] = None,
 ) -> None:
     """
     Merges one walked beat into a step: records it, then places it on a string.
 
     Deliberately after selection (see the caller). Three independent failures are
-    all handled the same way - **the step survives and the bass is reported**:
+    all handled the same way - **the step survives and the bass is named**:
 
     - no candidate string survives `_place_bass`'s filters, so there is nowhere to
-      put the thumb. The message names **all three** ways that happens, because a
-      reader cannot tell them apart from the outside and the common one is not the
+      put the thumb. `step.bass_refused` records the wanted pitch class and
+      `render._bass_refusal_clause` phrases it, because a reader cannot tell the
+      three ways that happens apart from the outside and the common one is not the
       intuitive one: no free string below the melody, **no octave of the wanted
       pitch below the shape's own lowest note**, or a fifth fret for four fingers.
       Measured over the committed heads the split is **0 / 38 / 1** of 39 refusals
@@ -2377,19 +2292,10 @@ def _attach_bass(
         held=held,
     )
     if placed is None:
-        # `if ... is None`, never `or`: `Diagnostics.__bool__` is False until it holds
-        # something, so an empty collector handed in by a caller would be replaced by
-        # the printing default and its first warnings lost. It is the same
-        # `or`-on-a-falsy-collector trap the other three call sites avoid.
-        if diagnostics is None:
-            diagnostics = default_diagnostics()
-        diagnostics.warn(
-            f"Warning: no playable bass note for bass "
-            f"{PITCH_CLASS_NAMES[note.pitch_class % 12]} - no free string "
-            f"below the melody, no octave of that pitch below the shape, "
-            f"or the hand would need a fifth fret; "
-            f"the step keeps its upper voicing"
-        )
+        # The pitch class rather than a flag: the tab shows no thumb, so a reader
+        # has no way to derive which note of the walk went missing, and the
+        # `bass_role` above has already been recorded for this beat.
+        step.bass_refused = PITCH_CLASS_NAMES[note.pitch_class % 12]
         return
     midi, string_index, fret = placed
     step.voicing.bass_midi = midi

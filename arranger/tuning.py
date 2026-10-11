@@ -121,8 +121,8 @@ ROLE_FILL = "fill"
 # Why a step sounds nothing, recorded on `ArrangementStep.silence` and phrased by
 # the renderer (`render._silence_clause`). A position the guitar cannot play is
 # still **emitted** - carrying the bar, the beat and the chord name - so the tab
-# keeps its line-up against the tune; the warning alone was not enough, because it
-# goes to a Diagnostics sink while the tab is what a user reads. Five values, one
+# keeps its line-up against the tune; a warning alone was not enough, because it
+# reaches nobody reading the part. Five values, one
 # per route that can decline to play:
 SILENCE_GRID = "grid"            # the grid places no chord on this beat
 SILENCE_NC_COMPING = "nc_comping"  # an NC bar: nothing for a comping part to state
@@ -468,6 +468,21 @@ class ArrangementStep:
     # play (`movement._rest_step`); defaulted, so a hand-built step and every
     # existing construction are unaffected.
     silence: Optional[str] = None
+    # The pitch class of a bass note the left hand **could not place**, or None
+    # when every thumb note the arrangement asked for sounded. Recorded on the
+    # step rather than reported to a sink, because the step survives it: the
+    # upper voicing is kept and only the thumb is missing, so the tab shows
+    # nothing that distinguishes a walk with a gap from one without.
+    #
+    # A *name* rather than a flag, because the wanted pitch is the one fact the
+    # tab cannot supply - the fret vector has no thumb, so a reader cannot derive
+    # which note went missing. `render._bass_refusal_clause` phrases it.
+    #
+    # Set by `movement._attach_bass`, at the one point the refusal is known, and
+    # read by the renderer alone: `bass` above is a derived view of
+    # `voicing.bass_midi`, so this is a fact the voicing does not own - it is
+    # about a note that is *not* sounding.
+    bass_refused: Optional[str] = None
 
     @property
     def grip(self) -> str:

@@ -245,7 +245,8 @@ def _annotate(step: ArrangementStep, *clauses: str) -> str:
     because it was explained where the shape was chosen), the chord **tone** it leaves out
     (`_omission_clause`), the **window** it had to leave
     (`_window_clause`), the **written bass** it does not sound (`_slash_bass_clause`) and the
-    **held** shape above a moving thumb (`_held_clause`). The alternative is a dozen return
+    **held** shape above a moving thumb (`_held_clause`). The eighth is the thumb that could
+    not be placed at all (`_bass_refusal_clause`). The alternative is a dozen return
     sites each remembering to append them, which is how a fact comes to be printed on one
     route and silently dropped on another - and `_bass_annotation` is threaded the same way,
     through this list, for the same reason.
@@ -262,6 +263,7 @@ def _annotate(step: ArrangementStep, *clauses: str) -> str:
         _window_clause(step),
         _slash_bass_clause(step),
         _held_clause(step),
+        _bass_refusal_clause(step),
     )
     for clause in derived:
         if clause:
@@ -484,6 +486,36 @@ def _held_clause(step: ArrangementStep) -> str:
     return "the shape above is held"
 
 
+
+
+def _bass_refusal_clause(step: ArrangementStep) -> str:
+    """Says a thumb note the arrangement asked for could not be placed.
+
+    `step.bass_refused` is the wanted pitch class, and the step is emitted with
+    its upper voicing intact: only the thumb is missing. So the tab's fret vector
+    has no hole in it a reader could count, and the walk reads as complete -
+    which is the false reading this clause corrects.
+
+    Three independent causes reach it, and the clause names **all three** rather
+    than the one that fired, because they are indistinguishable from outside:
+    no free string below the melody, no octave of the wanted pitch below the
+    shape's own lowest note, or a fifth fret for four fingers. Measured over the
+    committed heads the middle one is almost the whole of it
+    (`docs/open-issues.md` item 2), which is not the intuitive answer - so the
+    list is the honest form. A per-cause spelling would need `_place_bass` to
+    return its reason, and that is the follow-on rather than the clause.
+
+    Not suppressed on a hold, and it cannot be one: `bass_only` restates nothing
+    above the thumb, but the step still carries the refusal for *this* beat's
+    note, and a held shape's previous chord is a different fact.
+    """
+    if not step.bass_refused:
+        return ""
+    return (
+        f"no playable bass note for bass {step.bass_refused} - no free string "
+        f"below the melody, no octave of that pitch below the shape, or the hand "
+        f"would need a fifth fret; the step keeps its upper voicing"
+    )
 
 
 def _omission_clause(step: ArrangementStep) -> str:

@@ -31,7 +31,6 @@ from .chords import (
     NON_CHORD_TONE_EXTENSIONS,
     NON_CHORD_TONE_STRATEGIES,
 )
-from .diagnostics import Diagnostics
 from .grips import (
     GRIP_PREFERENCE,
     MELODY_STRING_CHOICES,
@@ -321,10 +320,9 @@ class VoiceLeadingEngine:
         step: ArrangementStep,
         note: Optional[BassNote],
         arrangements: List[ArrangementStep],
-        diagnostics: Optional[Diagnostics] = None,
     ) -> None:
         """See `movement._attach_bass` - the full docstring is there."""
-        return _attach_bass(step, note, arrangements, diagnostics)
+        return _attach_bass(step, note, arrangements)
 
     @classmethod
     def prepare_step(
@@ -338,12 +336,18 @@ class VoiceLeadingEngine:
         fret_min: int = NECK_FRET_MIN,
         fret_max: int = NECK_FRET_MAX,
         grips: Tuple[str, ...] = GRIP_PREFERENCE,
-        diagnostics: Optional[Diagnostics] = None,
     ) -> Optional[StepPreparation]:
         """See `movement.prepare_step` - the full docstring is there."""
         return prepare_step(
-            progression, index, previous, previous_chord, top_strings,
-            non_chord_tone, fret_min, fret_max, grips, diagnostics,
+            progression,
+            index,
+            previous,
+            previous_chord,
+            top_strings,
+            non_chord_tone,
+            fret_min,
+            fret_max,
+            grips,
         )
 
     @classmethod
@@ -377,13 +381,24 @@ class VoiceLeadingEngine:
         # timeline, and what keeps a bare `arrange_progression(..., melody="alto,tenor")`
         # honouring `--non-chord-tone`. See `ArrangeOptions.melody_onsets`.
         melody_onsets: Optional[Container[int]] = None,
-        diagnostics: Optional[Diagnostics] = None,
         options: Optional[ArrangeOptions] = None,
     ) -> List[ArrangementStep]:
         """See `movement.arrange_progression` - the full docstring is there."""
         return arrange_progression(
-            progression, top_strings, non_chord_tone, fret_min,
-            fret_max, grips, timings, texture, bass, melody, harmony,
-            grid, beats_per_bar, beat_type, melody_onsets, diagnostics,
-            options,
+            progression,
+            top_strings,
+            non_chord_tone,
+            fret_min,
+            fret_max,
+            grips,
+            timings,
+            texture,
+            bass,
+            melody,
+            harmony,
+            grid,
+            beats_per_bar,
+            beat_type,
+            melody_onsets,
+            options=options,
         )

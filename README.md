@@ -687,7 +687,7 @@ make build        # build a wheel into dist/
 
 **CI runs `make check` on Python 3.11 through 3.14**, both optional extras installed so guarded tests not silently skipped. Whole gate in one job: nothing a clean clone cannot run, so green check means entire suite ran.
 
-Engine lives in `arranger` package, fifteen modules in strict dependency order that `tests/test_package_dag.py` asserts from AST. `AGENTS.md` has module map and conventions; [docs/](docs/) the reasoning behind engine and renderers.
+Engine lives in `arranger` package, fourteen modules in strict dependency order that `tests/test_package_dag.py` asserts from AST. `AGENTS.md` has module map and conventions; [docs/](docs/) the reasoning behind engine and renderers.
 
 ## Known limitations
 

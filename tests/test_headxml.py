@@ -19,7 +19,7 @@ from typing import Optional
 from xml.etree import ElementTree
 
 import arranger
-from arranger import NO_CHORD, ChordParser, Diagnostics, format_progression
+from arranger import NO_CHORD, SILENCE_TUNE_SILENT, ChordParser, format_progression
 from arranger.slots import arrange_slots
 from headxml import (
     Head,
@@ -1484,21 +1484,21 @@ class TestSilentSlotsCarryNoMelody(unittest.TestCase):
         renderers print blank. This is the inversion AGENTS.md trap 5 asks for - the
         premise the old assertion rested on is gone.
         """
-        diagnostics = Diagnostics()
         steps, _rescued, _notes = arrange_slots(
             [(None, "m7", "Dm7"), ("C5", "maj7", "Cmaj7")],
             [(1, 1.0, 0.5), (1, 2.0, 0.5)],
             melody="auto",
-            diagnostics=diagnostics,
         )
         self.assertEqual([s.chord for s in steps], ["Dm7", "Cmaj7"])
         self.assertIsNone(steps[0].melody)
         self.assertFalse(steps[0].melody_voiced, "the guitar does not sing a note it has not got")
         self.assertTrue(steps[1].melody_voiced)
-        self.assertFalse(
-            any("has no melody note" in w for w in diagnostics.warnings),
-            diagnostics.warnings,
-        )
+        # It states the chord rather than resting, and the line says which it did:
+        # a slot the tune is silent at is comped, which reads differently from a
+        # position the guitar declined.
+        self.assertNotEqual(steps[0].silence, SILENCE_TUNE_SILENT)
+        self.assertIn("comping", format_progression([steps[0]]))
+        self.assertIn("the tune is silent here", format_progression([steps[0]]))
 
 
 class TestAnUnknownGridIsRefused(unittest.TestCase):

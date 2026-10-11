@@ -34,7 +34,6 @@ from arranger import (
     TEXTURE_STYLES,
     THUMB_TEXTURES,
     ChordParser,
-    Diagnostics,
     VoiceLeadingEngine,
     _interval_offsets,
     _metric_weight,
@@ -371,73 +370,69 @@ class TestGripsIntersectTheTexture(unittest.TestCase):
             self.assertEqual(step.voicing.grip, "drop2", step.tab_line())
             self.assertEqual(len(step.voicing.active_frets()), 4, step.tab_line())
 
-    def test_an_empty_intersection_falls_back_and_says_so(self):
+    def test_an_empty_intersection_raises_and_says_so(self):
         """
-        Asking for a grip the texture never uses is a caller error, not a silent change.
+        Asking for a grip the texture never uses is a caller error, and it raises.
 
         `--grips shell --texture targets` on a *target* has nothing in common: a target
-        is only offered `("drop2", "drop3")`. The step still sounds - losing a chord of
-        the tune is worse than ignoring a flag - and the warning says what was ignored,
-        which the old code never did.
-        """
-        buffer = io.StringIO()
-        with contextlib.redirect_stdout(buffer):
-            steps = VoiceLeadingEngine.arrange_progression(
-                self.PROGRESSION,
-                grips=("shell",),
-                texture="targets",
-                timings=[(0, 1.0, 1.0)],
-            )
-        self.assertTrue(steps, "the step must not be lost")
-        self.assertIn("none of which is in the requested", buffer.getvalue())
+        is only offered `("drop2", "drop3")`.
 
-    def test_an_empty_palette_is_not_reported(self):
+        **Inverted rather than deleted.** This used to assert the step still sounded
+        with a four-note drop-2 - on the rule that "losing a chord of the tune is worse
+        than ignoring a flag". That rule is right about a *note* and wrong about an
+        *axis*: the caller asked for one grip family and was handed another, on every
+        strong beat, with the only trace in a collector most callers never passed. The
+        message names both palettes, which is what the warning used to print.
         """
-        The companion to the case above, and the one that was broken.
-
-        `walking_bass`'s **fill** palette is `()` on purpose - it means the left hand
-        plays nothing between the anchors - so an explicit `--grips shell` intersects
-        to nothing on every single fill. That is not a caller asking for a grip the
-        texture cannot use, so it is not a caller error, and warning about it printed
-        the same line 76 times over one arrangement: output that unusable on a
-        legitimate flag combination is a defect in its own right.
-
-        The warning still stands for the case above, where the palette is non-empty
-        and simply does not contain what was asked for.
-        """
-        self.assertEqual(
-            TEXTURE_GRIPS["walking_bass"][ROLE_FILL],
-            (),
-            "the premise: this palette is empty by design, not by accident",
-        )
-        buffer = io.StringIO()
-        with contextlib.redirect_stdout(buffer):
-            steps = VoiceLeadingEngine.arrange_progression(
-                MINOR_CADENCE,
-                grips=("shell",),
-                texture="walking_bass",
-            )
-        self.assertTrue(steps, "the arrangement must not be lost")
-        self.assertNotIn(
-            "none of which is in the requested",
-            buffer.getvalue(),
-            "a deliberately empty palette must not be reported as a caller error",
-        )
-        # Every warning that *is* legitimate still gets through, so this is a
-        # suppression of one case and not of the diagnostics path.
-        buffer = io.StringIO()
-        with contextlib.redirect_stdout(buffer):
+        with self.assertRaises(ValueError) as caught:
             VoiceLeadingEngine.arrange_progression(
                 self.PROGRESSION,
                 grips=("shell",),
                 texture="targets",
                 timings=[(0, 1.0, 1.0)],
             )
-        self.assertIn(
-            "none of which is in the requested",
-            buffer.getvalue(),
-            "the non-empty case must still be reported",
+        message = str(caught.exception)
+        self.assertIn("none of which is in the requested", message)
+        self.assertIn("shell", message)
+        self.assertIn("drop2", message)
+
+    def test_an_empty_palette_is_not_refused(self):
+        """
+        The companion to the case above, and the one that was broken.
+
+        `walking_bass`'s **fill** palette is `()` on purpose - it means the left hand
+        plays nothing between the anchors - so an explicit `--grips shell` intersects
+        to nothing on every single fill. That is not a caller asking for a grip the
+        texture cannot use, so it is not a caller error.
+
+        **Inverted rather than deleted.** This used to assert the case was silent on
+        *stdout* while a legitimate refusal elsewhere still printed - a suppression of
+        one case, checked through the one channel that could not tell the two apart.
+        Both halves now read the answer directly: the empty palette arranges, and the
+        non-empty one that lacks the grip **raises**. The distinction is the
+        difference between a texture that cannot use the grip and one that means to
+        play nothing, and it is now a control-flow fact rather than a message one.
+        """
+        self.assertEqual(
+            TEXTURE_GRIPS["walking_bass"][ROLE_FILL],
+            (),
+            "the premise: this palette is empty by design, not by accident",
         )
+        steps = VoiceLeadingEngine.arrange_progression(
+            MINOR_CADENCE,
+            grips=("shell",),
+            texture="walking_bass",
+        )
+        self.assertTrue(steps, "the arrangement must not be lost")
+        # The non-empty case, which *does* lack the grip, is a caller error.
+        with self.assertRaises(ValueError) as caught:
+            VoiceLeadingEngine.arrange_progression(
+                self.PROGRESSION,
+                grips=("shell",),
+                texture="targets",
+                timings=[(0, 1.0, 1.0)],
+            )
+        self.assertIn("none of which is in the requested", str(caught.exception))
 
     def test_the_default_grips_are_never_narrowed(self):
         """
@@ -622,7 +617,7 @@ class TestTheRightHandBudget(unittest.TestCase):
         for role in (ROLE_TARGET, ROLE_FILL):
             self.assertEqual(
                 resolve_texture_grips(
-                    role, "targets", TEXTURE_GRIPS["targets"], GRIP_PREFERENCE, Diagnostics()
+                    role, "targets", TEXTURE_GRIPS["targets"], GRIP_PREFERENCE
                 ),
                 TEXTURE_GRIPS["targets"][role],
             )
@@ -631,32 +626,32 @@ class TestTheRightHandBudget(unittest.TestCase):
         """The budget is one palette's, not the slot's: a fill falls between thumb notes."""
         target = resolve_texture_grips(
             ROLE_TARGET, "targets", TEXTURE_GRIPS["targets"], GRIP_PREFERENCE,
-            Diagnostics(), has_thumb=True,
+            has_thumb=True,
         )
         fill = resolve_texture_grips(
             ROLE_FILL, "targets", TEXTURE_GRIPS["targets"], GRIP_PREFERENCE,
-            Diagnostics(), has_thumb=True,
+            has_thumb=True,
         )
         self.assertEqual(target, ("shell",))
         self.assertEqual(fill, TEXTURE_GRIPS["targets"][ROLE_FILL])
 
-    def test_a_requested_grip_that_spends_all_four_fingers_is_reported_not_restored(self) -> None:
-        """`--grips drop2` under a thumb reads as "that grip is not available here".
+    def test_a_requested_grip_that_spends_all_four_fingers_is_refused_not_restored(self) -> None:
+        """`--grips drop2` under a thumb raises: that grip is not available here.
 
         The budget is applied *before* the caller's narrowing, so the intersection with
-        `("shell",)` is empty and takes the existing reported fallback - rather than
-        resurrecting the five-pluck step the caller asked for by name.
+        `("shell",)` is empty. It used to fall back to the texture's own set with a
+        warning, which meant the caller got `shell` for a request that said `drop2` -
+        the silent substitution the axis refusals were fixed for. The message names both
+        palettes, so a caller can tell what would have worked.
         """
-        diagnostics = Diagnostics()
-        resolved = resolve_texture_grips(
-            ROLE_TARGET, "targets", TEXTURE_GRIPS["targets"], ("drop2",), diagnostics,
-            has_thumb=True,
-        )
-        self.assertEqual(resolved, ("shell",))
-        self.assertTrue(
-            any("none of which is in the requested" in w for w in diagnostics.warnings),
-            "the fallback must be reported rather than silent",
-        )
+        with self.assertRaises(ValueError) as caught:
+            resolve_texture_grips(
+                ROLE_TARGET, "targets", TEXTURE_GRIPS["targets"], ("drop2",),
+                has_thumb=True,
+            )
+        message = str(caught.exception)
+        self.assertIn("shell", message)
+        self.assertIn("drop2", message)
 
     def test_a_thumb_carrying_targets_arrangement_never_sounds_five_strings(self) -> None:
         """The engine-level sweep, and the assertion whose absence let this ship."""

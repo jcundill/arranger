@@ -23,7 +23,7 @@ gate and the conventions — not the explanation.
 | the trailing annotation a step carries, why a shape is thin, or what **must** be explained when a choice is added (`ArrangementStep.palette`, `cost.VOICING_COST_CRITERIA`, `tests/test_explanations.py`) | [docs/engine.md](docs/engine.md) | `arranger/render.py`, `arranger/movement.py` |
 | `texture=`, target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/textures.py`, `arranger/bass.py`, `arranger/decisions.py` |
 | non-chord melody notes, a new chord quality | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` |
-| the step loop, `arrange_progression`, `Diagnostics` | [docs/engine.md](docs/engine.md) | `arranger/movement.py` |
+| the step loop, `arrange_progression` | [docs/engine.md](docs/engine.md) | `arranger/movement.py` |
 | tab staff, HTML, MusicXML, GP5, or the MusicXML importer | [docs/renderers.md](docs/renderers.md) | `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py` |
 | an imported head's **repeats or volta endings** — why it is longer than the file's measure count, or the `|:` / `:|` / `1.` / `2.` the writers draw | [docs/renderers.md](docs/renderers.md) | `headxml.py` (`_parse_barline`, `_expand_play_order`, `_expand_repeats`, `BarMarker`, `Head.markers`, `HeadNote.written_bar`); each writer's `markers=` parameter |
 | the slot layer: triples to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
@@ -50,10 +50,10 @@ frozen like the rest — it is not a home for an open plan.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1103 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **1086 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 14 of those 1103, and it is the one that fails if this
+(`tests/test_docs.py` is 14 of those 1086, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree. It also fails if a document
 exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
 new file cannot be added without being registered.)
@@ -125,7 +125,6 @@ arranger/
 │   ├── __main__.py      #   `python -m arranger`
 │   ├── tuning.py        #   STANDARD_TUNING, Voicing, ArrangementStep
 │   ├── fingers.py       #   which finger holds which fret; read by bass for the fret budget
-│   ├── diagnostics.py   #   Diagnostics - warnings are a value, not a print
 │   ├── chords.py        #   ChordParser, non-chord-tone routing
 │   ├── grips.py         #   grip tables and the candidate generators
 │   ├── cost.py          #   voicing_cost - the library's central invariant
@@ -163,10 +162,10 @@ dynamically from `arranger.__version__` — that is the single source of truth, 
 ### The engine is a package, and the order is enforced
 
 The engine was one 4290-line module until Phase 5 of the package refactor. It is
-now fifteen modules in a strict dependency order:
+now fourteen modules in a strict dependency order:
 
 ```
-tuning -> diagnostics -> chords -> grips -> cost -> textures
+tuning -> fingers -> chords -> grips -> cost -> textures
                                                    |
                             bass <- options -----+----> decisions
                                                    |
@@ -276,10 +275,12 @@ There is no build step for local development.
   which chord tone is in the top voice, and why a shape is unreachable — not syntax.
 - **Rendering is pure.** Every renderer returns a string (or list of them) and prints
   nothing. Only `main()` and the demo write to stdout.
-- **The library never prints.** Warnings go through `Diagnostics`, a collector whose
-  `emit` hook defaults to `print`, so nothing a user sees changed but a test can now
-  read them. Adding a `print()` to the engine is a regression, and `tests/
-  test_diagnostics.py` asserts stdout is empty when a collector is passed.
+- **The library never prints**, and it has no warning channel either. What the engine
+  used to report through a `Diagnostics` collector is now either **on the tab line** -
+  read off the step's own fields and phrased by a `render` `*_clause` - or a
+  `ValueError` from the axis that could not honour the request. Adding a `print()` to
+  the engine is a regression, and `tests/test_explanations.py` is what keeps a choice
+  from going *unexplained* rather than merely unprinted.
 - **Do not add a third-party dependency** without explicit approval. `musthe` is the
   only runtime one; that is load-bearing for the LGPL reasoning above.
 
@@ -488,8 +489,8 @@ gate, and a snapshot mechanism would let a regression pass by regenerating itsel
 Each of these cost real time, or nearly shipped a defect.
 
 1. **A gate that enumerates its inputs by hand silently skips whatever was added
-   last.** The Makefile named each source file in three places, so `diagnostics.py`,
-   `decisions.py` and `options.py` were unlinted and untypechecked until noticed.
+   last.** The Makefile named each source file in three places, so `decisions.py` and
+   `options.py` were unlinted and untypechecked until noticed.
    Lint and format now share one `MODULES` list; the package is named as a directory,
    so an engine module cannot be forgotten. A new *top-level* module is still a
    two-line change, in `MODULES` and in `typecheck`.
@@ -640,6 +641,25 @@ Each of these cost real time, or nearly shipped a defect.
     accepted** (the round trip is asserted). Note the order is *not* canonicalised
     (`parse_voices` re-sorts into `VOICE_NAMES` order, `parse_grips` must not), because
     a caller's grip order is the tie-break the tuple no longer names.
+
+15. **A parameter removed from the middle of a signature silently shifts every
+    positional call.** `arrange_progression` took `diagnostics` at position 12 and
+    `steps.arrange_progression` forwarded to it positionally, ending at `options` -
+    so deleting the parameter left `options` landing in `grid`, and every bare
+    `arrange_progression(prog)` call died three frames later in
+    `parse_grid(None).strip()`. **266 test errors from one line**, and the traceback
+    named a function that had not been touched. The same edit then deleted three
+    *whole argument lines* (`role, texture, texture_grips, grips, diagnostics,` and two
+    `role=role, weight=weight, diagnostics=diagnostics,`) because the strip matched
+    them as text rather than as syntax - trap 7's shape arriving from a new direction.
+
+    The general form: **a mechanical parameter removal is an AST edit, not a text
+    edit**, and a facade forwarding positionally is what turns it from a type error
+    into a silent mis-bind. Two things follow. Name every argument at a facade
+    boundary - `steps.arrange_progression` now spells all fifteen and passes
+    `options=options` as the only keyword. And when a strip script reports "lines
+    removed", read the `git diff`'s removed lines rather than counting them: all four
+    casualties above were visible there before any test ran.
 
 ## Where things are documented
 
