@@ -62,6 +62,36 @@ class TestTheRuleReproducesTheTables(unittest.TestCase):
         self.assertEqual(checked, TEMPLATE_COUNT)
         self.assertEqual(len(TONE_PRIORITY), QUALITY_COUNT)
 
+    def test_a_degree_rows_content_is_a_prefix_of_the_rule(self):
+        """What a row *says* is the rule's; only the order it says it in is its own.
+
+        `DEGREE_OFFSETS_FROM_ROOT` is what the melodic route indexes the templates by, and it
+        is the table Step 3 of `docs/generated-grips.md` retires. Measured over all 29 rows:
+        every row holds the **prefix** of that quality's `TONE_PRIORITY` row, cut to the length
+        of the template list, and not one of them holds it in the rule's order - so the row
+        carries an order and nothing else, which is exactly what a retirement has left to
+        decide.
+
+        That is worth asserting because `test_the_generated_templates_are_the_hand_written_table`
+        cannot see it: it compares generated templates to the table's in the row's own order, so
+        any permutation of a row's degrees agrees with itself. A row given a tone its quality
+        does not have fails here and says which quality moved. The five rows *shorter* than
+        their priority row are the qualities with more tones than a template list covers
+        (`13`, `7#11`, `7b13`, `maj7#11`, and `7alt` two tones over), and this rule is what
+        makes that a property of the rule rather than a number someone typed.
+
+        Nothing here asserts the order, and a row later reordered *into* the rule's order would
+        pass: that would be the simplification, not a defect.
+        """
+        for quality, degrees in VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT.items():
+            canonical = ChordParser.canonical_quality(quality)
+            priority = TONE_PRIORITY[canonical]
+            self.assertEqual(
+                set(degrees),
+                set(priority[: len(degrees)]),
+                f"{quality}: {degrees} is not the first {len(degrees)} of {priority}",
+            )
+
     def test_every_alias_reaches_the_same_templates(self):
         """A quality spelled another way gets the same shapes, through the same row.
 

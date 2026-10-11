@@ -13,11 +13,16 @@ and would otherwise live only in a conversation. `docs/one-fact.md` records why 
 failure mode rather than a style point: a plan off disk is not a plan the next session
 can read.
 
-Measured at plan time, on the default arrangement (`uniform`, `every_note`, auto voices)
-of all eight committed heads: **1,103 steps**, which is every step of that sweep that
-sounds anything. **1,016** of them carry a melody as well; the other 87 are comping slots
-the grid places where the tune is silent, which is why a count of steps and a count of
-*melodies* are different numbers and every table below says which it is.
+Measured at plan time, on the default arrangement (`uniform`, `every_note`, auto voices) of all
+eight committed heads: **1,103 steps**, which is every step of that sweep that sounds anything.
+Three counts come out of that one sweep, and every table below says which it uses, so a count
+of steps and a count of *melodies* cannot be confused:
+
+| count | the predicate | why it is the one asked for |
+|---|---|---|
+| **1,103** | the step sounds | every step of the sweep, and the denominator the fingerprints are taken over |
+| **1,016** | it carries a melody | the other 87 are comping slots the grid places where the tune is silent |
+| **967** | the melody sounds with at least one other voice | what the plan-time tables call *melody-bearing*: the comparisons there are about shapes, and a melody alone has no shape to compare |
 
 ## 1. What was measured
 
@@ -103,15 +108,16 @@ than it is.
 melody was *reharmonised* into an extension (`harmonized_as` set) reaches the palette route
 with the flag clear, so the true split needs a per-step record of the routed quality.
 
-**Re-measured since, and the two numbers do not agree.** Defining the route from the step's
-own fields — "the melody is not a chord tone of the routed chord (`harmonized_as or
-chord`)" — gives **276 of the 1,016** steps that carry both a melody and a sounding shape,
-94 of them reached through a `harmonized_as` substitute, and **0** through the "chord tone
-with no named inversion" branch on this corpus. The 476 of 967 recorded here is a different
-definition, and neither is wrong: they are two questions, and which one a lever is priced
-against is a decision rather than a measurement. So the palette route is to be sized by
-**instrumenting `_templates_for`** and counting the palette calls per step, not by
-re-deriving the route from the fields.
+**Sized since, by instrumenting the route rather than re-deriving it.** The census is in §4.
+Counting the steps whose melody is not a chord tone of the chart the part **states**
+(`harmonized_as or chord` — the name the generator is actually called with) gives **268 of the
+1,103 steps** of the default sweep, 24%, against the **476 of 967** recorded at plan time that
+no definition tried since reproduces. Reading the same census against the **written** chord
+gives 350, and 82 of that difference is steps whose melody was reharmonised into an extension
+that contains it — exactly the case this caveat is about. The second branch, a chord tone with
+no inversion of its own, is **0**: every quality's degree row covers as many of its tones as
+its template list has entries, `13` being the one exception (5 inversions, 6 tones) and no
+committed step putting a melody on the tone it omits.
 
 Some of the moves are large and audible:
 
@@ -189,7 +195,7 @@ three levers for that, each measured separately:
 |---|---|---|
 | **Admit crossings** (a string carrying a pitch above the string above it) | 1,441 alternative frettings exist on 794 of 967 melody-bearing steps; **47 would win** — 8 on the *foreign-note* criterion (a better choice of which tone to double, all `drop2_6432`), 35 on span and 4 on neck position | a real change, and it needs a name for a shape that is not one of the four transformations |
 | **Offer 6-5-4-3** (a G-string melody with four voices) | **104 of 967 steps** would gain 2–4 shapes, and criterion 2 (`missing = 4 - len(active)`) ranks them above the three-note shell that wins there today | the `_BOTTOM_FOUR` exclusion is load-bearing for ~11% of steps, not a set nobody happens to generate |
-| **One shape per set from the rule** (a non-chord melody stating `stated_tones` rather than being offered the whole template list) | **476 of 967 steps** are on the routes that bypass the degree index — 297 non-chord-tone, 179 chord-tone with no named inversion | the largest lever, and the least understood: 29 of the 65 moves in §3 came through it |
+| **One shape per set from the rule** (a non-chord melody stating `stated_tones` rather than being offered the whole template list) | **268 of 1,103 steps** have a melody that is not a chord tone of the chart the part states, and **99.2%** of their candidate passes take the whole-list route (3,690 of 3,719); one is offered a median of **11 candidates out of 28 templates** (max 22 out of 36, over ~20 (grip, string set) calls), where the rule would offer one shape per set | the largest lever, and the least understood: 29 of the 65 moves in §3 came through it. The 476 of 967 recorded at plan time is not reproducible — §3 states the definition that is, and the reason the route exists at all: a non-chord melody has no inversion *by definition*, so this is not a gap in a table but the shape of the question |
 
 **Step 3 — retire the tables.** `DROP2_INTERVAL_SETS` and the numbers in
 `DEGREE_OFFSETS_FROM_ROOT` go once the rule is the source of the templates;
@@ -197,6 +203,18 @@ three levers for that, each measured separately:
 quality" collapses from seven steps to a tone set plus one priority row — a quality with no
 row would then get a canonical derived one and be voiceable everywhere on the day it is
 added.
+
+**What it still costs is one decision and no derivation.** Measured over the 29 degree rows:
+every row's *content* is the **prefix** of that quality's `TONE_PRIORITY` row, cut to the
+length of its template list — 29 of 29, so the row says nothing the rule does not, except the
+order it says it in. Not one row is in the rule's order, and that order is what `grip_chart.py`
+draws `common_grips.md` in. So retiring the table means **choosing an order**, or keeping the
+row as an order-witness with its content asserted against the rule — which is the shape
+`DROP2_INTERVAL_SETS` already has, and is what
+`tests/test_generated_grips.py::test_a_degree_rows_content_is_a_prefix_of_the_rule` now holds.
+The five rows shorter than their priority row are the qualities with more tones than a template
+list covers (`13`, `7#11`, `7b13`, `maj7#11`, and `7alt` two tones over), and what they cut is
+the rule's own tail — the same tone a four-voice shape gives up.
 
 **The explanation the tab owed, and it is paid.** "Every choice about a voiced note is
 explained by the line that prints it" is an invariant of the artifact rather than a style
@@ -211,13 +229,13 @@ against the pitches of the **whole** step (`midi_notes()`, so a thumb that lands
 counts as stating it), named through `chords.melody_degree_name` — the vocabulary
 `_comping_clause` names the degrees a shape *states* with.
 
-Measured on the default sweep: **185** of the 1,016 melody-bearing steps are a four-voice
-shape leaving a chord tone out — 162 leaving one, 23 leaving two, so 208 tones in all — and
-the tone left out is the **root in 117 of them**, then the 5th (32), the 9th (20), the 3rd
-(14), the b5 (13), the 7th (4), the 13th (3), the b7 (3) and the b9 (2); by quality `6` and
-`9` lead at 40 each. Before it, not one line in the corpus named an omitted tone: the census
-of every annotation the eight heads print found `(harmony under 7 - 4 voices)` and stopped
-there.
+Measured on the default sweep: **185** of the 1,016 steps that carry a melody and a sounding
+shape are a four-voice shape leaving a chord tone out — 162 leaving one, 23 leaving two, so 208
+tones in all — and the tone left out is the **root in 117 of them**, then the 5th (32), the 9th
+(20), the 3rd (14), the b5 (13), the 7th (4), the 13th (3), the b7 (3) and the b9 (2); by
+quality `6` and `9` lead at 40 each. Before it, not one line in the corpus named an omitted
+tone: the census of every annotation the eight heads print found
+`(harmony under 7 - 4 voices)` and stopped there.
 
 **Two fingerprints, because this move changes text by design.** The head-step fingerprint
 (chord, melody, tab, grip) is **unchanged over all 2,145 steps** of the
