@@ -287,6 +287,22 @@ class TestDocsMatchTheCode(unittest.TestCase):
             broken, [], "a docstring links to a file that does not exist"
         )
 
+    def test_every_document_has_balanced_code_fences(self):
+        """An unclosed fence renders everything after it as code, silently.
+
+        Found on `docs/open-issues.md`, whose `Reproducing` block opened a ```bash fence and
+        never closed it: the method note that followed rendered as a shell script, across four
+        commits, with `make check` green, because nothing read the markdown. A defect no
+        behavioural test can see is the one this module exists for, and the count is the
+        cheapest form of it — a fence opened is a fence that must be closed.
+        """
+        unbalanced: List[str] = []
+        for name in DOCUMENTS:
+            fences = len(re.findall(r"^```", _read(name), re.M))
+            if fences % 2:
+                unbalanced.append(f"{name}: {fences} fences")
+        self.assertEqual(unbalanced, [], "a document has an unclosed code fence")
+
     def test_a_stated_module_count_is_the_count_on_disk(self):
         """A document that says how many modules the engine has must be right.
 

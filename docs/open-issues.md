@@ -243,6 +243,7 @@ print('bars walked:', sorted({n.bar for n in line}))
 "
 # bars walked: [1, 3]   <- on the head path the union supplies bar 2, so this is the
 #                            library function called directly with hand-built timings.
+```
 
 
 Item 2's counts are re-measured the same way (no committed script — `AGENTS.md` trap 8): wrap
