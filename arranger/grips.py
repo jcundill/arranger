@@ -266,12 +266,62 @@ GRIP_STRING_SETS: Dict[str, Tuple[Tuple[Tuple[int, ...], int], ...]] = {
     "interval": (((5, 4), 5), ((4, 3), 4), ((3, 2), 3)),
 }
 
+# --- Which of a chord's tones a shape states -----------------------------------
+#
+# One row per quality: that chord's own tones, most defining first. A shape of `voices`
+# voices states the melody's tone and then the next `voices - 1` entries of the row, so a
+# four-note drop-2, a three-note shell and a two-note duo are this one rule at three
+# arities. It is the rule the hand-written drop-2 tables encode: `DROP2_TEMPLATES` below
+# is generated from these rows, and `DROP2_INTERVAL_SETS` is the table the generation is
+# held to (`tests/test_generated_grips.py`). The reasoning, the measurements and the
+# order that was *not* taken are in `docs/generated-grips.md`.
+#
+# What the rows say, read off the tables they reproduce:
+#
+#   - **The first two entries are `SHELL_DEGREES`, in that order** - all 29 qualities. A
+#     shell and a drop-2 state the same pair, so the row is the one place that fact lives.
+#   - **The root goes first when something must, and the natural 5th next.** Of the 119
+#     templates, 24 drop the root and keep the natural 5th, and 18 drop the 5th and keep
+#     the root - and every one of those 18 is either a melody that *is* the root, or a
+#     chord whose 5th is altered, so the natural 5th is not part of the sound at all.
+#     Which of the two a quality gives up is its own row order: `7b9` and `13` drop the
+#     root, `7#11`, `7b13` and `maj7#11` drop the natural 5th. No single global order
+#     reproduces them, which is the whole reason this is a table and not one rule.
+#   - **An altered 5th is not a 5th.** 39 of the 45 altered-5th occurrences in the tables
+#     are stated; the 6 that are not are the `b5` of an `m9b5`, and of `7alt`, which has
+#     seven tones and must lose two. So a b5, #5, #11 or b13 ranks near the top of its
+#     row, not down beside the natural 5th.
+#   - **A name-given extension is not optional, and one the name does not give is.** A
+#     `13` states its 13th and its b7 and drops its 9th, which the name never promised:
+#     its row reads 3, 13, b7, 5, root, 9.
+#
+# The first two entries are pinned by `SHELL_DEGREES` at every quality. Entries beyond
+# them only *bite* where a chord has more tones than the shape has voices, which is 11 of
+# these 29 - the other 18 are free orderings, and their tail carries no information. Do
+# not tidy them into a shared shape: for the 11 that are constrained, the row is the
+# decision.
+TONE_PRIORITY: Dict[str, Tuple[int, ...]] = {
+    "maj7": (4, 11, 0, 7), "6": (4, 9, 0, 7), "m7": (3, 10, 0, 7),
+    "m7b5": (3, 10, 0, 6), "dim7": (3, 9, 0, 6), "m6": (3, 9, 0, 7),
+    "mMaj7": (3, 11, 0, 7), "7": (4, 10, 0, 7),
+    "7b9": (4, 10, 1, 7, 0), "7alt": (4, 10, 1, 8, 0, 3, 6),
+    "maj9": (4, 11, 2, 7, 0), "m9": (3, 10, 2, 7, 0), "9": (4, 10, 2, 7, 0),
+    "6/9": (4, 9, 2, 7, 0), "13": (4, 9, 10, 7, 0, 2),
+    "7#11": (4, 10, 0, 6, 7), "7b13": (4, 10, 0, 8, 7),
+    "maj7#11": (4, 11, 0, 6, 7), "m9b5": (3, 10, 2, 6, 0),
+    "maj": (4, 7, 0), "m": (3, 7, 0), "aug": (4, 8, 0),
+    "sus4": (5, 7, 0), "sus2": (2, 7, 0),
+    "add9": (4, 7, 0, 2), "madd9": (3, 7, 0, 2),
+    "7sus4": (5, 10, 0, 7), "7b5": (4, 10, 0, 6), "7#5": (4, 10, 0, 8),
+}
+
+
 # The two guide tones a shell is built from - the 3rd and the 7th - as semitones above
-# the root. The table is explicit rather than derived because the house rule is never
-# to guess a chord: a quality that is not listed simply has no shell, and the
-# selector falls back to a four-note grip for it. Triads and suspended chords appear
-# here with their nearest available pair (a triad's "7th" slot is its 5th), because a
-# shell under a triad is just the triad in a playable position.
+# the root. This is `TONE_PRIORITY`'s first two entries per quality, spelled out: it is
+# what `_place_shell` and `_duo_offsets` read today, and a quality that is not listed
+# simply has no shell, so the selector falls back to a four-note grip for it. Triads and
+# suspended chords appear here with their nearest available pair (a triad's "7th" slot is
+# its 5th), because a shell under a triad is just the triad in a playable position.
 SHELL_DEGREES: Dict[str, Tuple[int, int]] = {
     "maj7": (4, 11), "m7": (3, 10), "m7b5": (3, 10), "dim7": (3, 9),
     "m6": (3, 9), "mMaj7": (3, 11), "maj9": (4, 11), "m9": (3, 10),
@@ -494,6 +544,36 @@ def finger_skip_count(voicing: Voicing) -> int:
 # below the soprano. It is deliberately separate from VoiceLeadingEngine so the
 # theory - which notes go in a grip, and in what order - is stated once and can be
 # read without reading the search that follows it.
+
+
+def stated_tones(
+    quality: str, melody_degree: int, voices: int = 4
+) -> Tuple[int, ...]:
+    """
+    The chord tones a shape of `voices` voices states, the melody's own tone first.
+
+    This is `TONE_PRIORITY` read out: the melody's degree, then the next `voices - 1`
+    of that quality's row. It **narrows and never widens** - asking it for more voices
+    than the chord has tones returns the whole row - so a shape can never state a note
+    the chord does not contain.
+
+    The melody's degree is returned whether or not it is a chord tone, because the
+    melody is the caller's note and is never rewritten. Degrees are pitch classes
+    relative to the chord's root, which is the unit `DEGREE_OFFSETS_FROM_ROOT` and the
+    drop-2 tables are written in.
+
+    Every degree in `DEGREE_OFFSETS_FROM_ROOT[quality]` is a chord tone by
+    construction, so the drop-2 generator only ever asks for one of those. A melody
+    that is *not* a chord tone is a different question, answered today by offering the
+    whole template list as a palette rather than by this rule.
+    """
+    order = TONE_PRIORITY.get(ChordParser.canonical_quality(quality))
+    if order is None:
+        return ()
+    degree = melody_degree % 12
+    return tuple(
+        [degree] + [t for t in order if t % 12 != degree][: max(0, voices - 1)]
+    )
 
 
 def _nearest_tone_below(midi: int, pitch_class: int, max_drop: int = 24) -> Optional[int]:
@@ -820,12 +900,17 @@ def _interval_set_for_grip(
     The interval templates for a quality under a given grip, as offsets from the
     soprano (0 for the melody itself, negative below it).
 
-    `drop2` returns DROP2_INTERVAL_SETS verbatim and derives nothing. Those tables are
-    hand-authored: the extended qualities are voiced *rootless* on purpose, so a 9 or a
-    13 that fits into four voices without the root is a musical decision rather than an
-    accident of a stack search. Deriving drop-3 and close position from the same chord
-    tones therefore gives a fuller chord - a legitimate but different voicing - and it
-    is precisely why drop-2's own table is left alone.
+    `drop2` returns `DROP2_TEMPLATES`, which `TONE_PRIORITY` generates: the shape for a
+    degree is the textbook drop-2 of the tones that degree *states*, so the root is
+    dropped before the natural 5th and an altered 5th is kept. The hand-written
+    `DROP2_INTERVAL_SETS` is what that generation is held to, and no longer what the
+    engine reads - `tests/test_generated_grips.py` is the assertion that the two agree,
+    which is what lets the rule be the source and the table be the witness.
+
+    Deriving drop-3 and close position from the same chord tones gives a *fuller* chord
+    than this - every tone the rule left out comes back - which is a legitimate but
+    different voicing rather than an error, and is why those families have their own
+    rule below instead of sharing this one.
 
     drop-2, drop-3 and close position share one close-position stack of four voices,
     taken as v1, v2, v3, v4 from the top:
@@ -840,7 +925,7 @@ def _interval_set_for_grip(
     seventh chord land on the D and G strings in the familiar 4-3-2-1 shell shape.
     """
     if grip == "drop2":
-        return DROP2_INTERVAL_SETS.get(quality, [])
+        return DROP2_TEMPLATES.get(quality, [])
 
     if grip not in ("drop3", "closed", "drop24"):
         return []
@@ -1114,7 +1199,7 @@ def _place_drop2_6432(
     It needs its own placement for the reason 6-4-3 does, and the reason is
     structural: **this set skips the A string, so its strings are not in descending
     pitch order.** The D string is tuned a fifth above the low E, so the low E's note is
-    frequently *not* the lowest sounding pitch - a hand-authored drop-2 table, which lays
+    frequently *not* the lowest sounding pitch - an interval-laid drop-2 table, which lays
     voices down by interval, cannot express a shape whose bottom string is not the bottom
     voice. Reusing _place_shell's approach is the answer rather than a second way to
     place notes: hold the melody, search every combination of frets within the span
@@ -1494,6 +1579,58 @@ DEGREE_OFFSETS_FROM_ROOT = {
     "7b13": [0, 4, 8, 10],
     "maj7#11": [0, 4, 6, 11],
     "m9b5": [0, 3, 6, 10, 2],
+}
+
+
+def _priority_drop2_templates(quality: str) -> List[List[int]]:
+    """
+    The drop-2 templates for one quality, generated from `TONE_PRIORITY`.
+
+    One template per degree in `DEGREE_OFFSETS_FROM_ROOT[quality]`, in that order, and
+    each is the textbook drop-2 of the tones that degree states: `_close_stack_offsets`
+    walks the nearest stated tone below the one above it, and the second voice from the
+    top is then lowered an octave - which is what puts the 3rd and the 7th on the D and
+    G strings in the familiar 4-3-2-1 shell shape.
+
+    Two properties are the whole reason this is a rule and not a table:
+
+      - the tone set is `stated_tones`, so the root goes before the natural 5th and an
+        altered 5th is kept, which is the musical decision the hand tables encode;
+      - the walk sees only the *stated* tones, so it cannot spend a voice on a tone the
+        rule left out.
+
+    **A triad has only three tones, so its fourth voice is the root doubled an octave
+    down** - and the walk finds it rather than a special case naming it: handed the full
+    tone set it wraps to the root on its own. Handing it the three stated tones only
+    produces a duplicate of the 5th instead (`[0, -8, -17, -17]` for a C major), which
+    is not a chord at all. That is why `walk` is the stated tones when there are four of
+    them and the quality's whole tone set when there are not.
+
+    Returns `[]` for a quality with no priority row or no tone set, so an unknown
+    quality is offered nothing rather than a guess.
+    """
+    order = TONE_PRIORITY.get(quality)
+    degrees = DEGREE_OFFSETS_FROM_ROOT.get(quality)
+    tones = ChordParser.CHORD_TONES_FROM_ROOT.get(quality)
+    if order is None or degrees is None or not tones:
+        return []
+    templates: List[List[int]] = []
+    for degree in degrees:
+        keep = stated_tones(quality, degree, 4)
+        walk = keep if len(keep) >= 4 else tuple(tones)
+        stack = _close_stack_offsets(walk, 60 + degree, 0)
+        # A shape this rule cannot build is offered as nothing, not as a truncated one:
+        # `_place_template` would otherwise sound the melody alone under a drop-2 label.
+        templates.append([0, stack[2], stack[3], stack[1] - 12] if len(stack) >= 4 else [])
+    return templates
+
+
+# The live drop-2 tables, generated once from `TONE_PRIORITY` above. `DROP2_INTERVAL_SETS`
+# is the hand-written table this reproduces, and `tests/test_generated_grips.py` is what
+# holds the two together - 119 templates over 29 qualities. A quality with a priority row
+# and a degree list needs no table row of its own.
+DROP2_TEMPLATES: Dict[str, List[List[int]]] = {
+    quality: _priority_drop2_templates(quality) for quality in DEGREE_OFFSETS_FROM_ROOT
 }
 
 
@@ -1913,7 +2050,7 @@ def get_grip_voicings(
     produces exactly what that method always has. The other families differ in what
     they carry rather than in where they sit:
 
-      drop2   four voices, from the hand-authored tables
+      drop2   four voices, from the tone-priority rule (`DROP2_TEMPLATES`)
       drop3   four voices, a close stack with the third voice dropped
       drop24  four voices, a close stack with the second *and* fourth dropped
       closed  four voices in close position under the melody

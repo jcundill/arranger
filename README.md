@@ -482,7 +482,7 @@ can stay where the previous one left the hand.
 
 | grip | voices | what it is |
 |---|---|---|
-| `drop2` | 4 | the hand-authored drop-2 tables, on 4-3-2-1 or 5-4-3-2, or 5-4-3-2 / 6-4-3-2 with the bass on a lower string |
+| `drop2` | 4 | four-note drop-2 shapes, on 4-3-2-1 or 5-4-3-2, or 5-4-3-2 / 6-4-3-2 with the bass on a lower string |
 | `drop3` | 4 | **drop-3** — the third voice down an octave; every other voice is still a chord tone |
 | `drop24` | 4 | **drop-2 & 4** — the second *and* fourth voices an octave down |
 | `drop2_6432` | 4 | **6-4-3-2** — low E, D, G and B, so the bass can be a root |
@@ -1149,7 +1149,7 @@ renderers.
   the quality-only fallback — and a melody-only palette (`shell`, `duo`, `interval`)
   has no fallback to keep, so the note sounds alone under its chord and the step says
   `(melody alone - no voicing for this chord)`.
-- A chord tone with no matching inversion in the hand-authored drop-2 tables — a 9th in
+- A chord tone drop-2 has no inversion for — a 9th in
   the melody of a 13 chord, for instance — falls through to the quality-only fallback,
   which can sound a note the chord does not contain. The selector rejects such a shape
   whenever a correct one exists, so an *arrangement* only hears it when nothing else is

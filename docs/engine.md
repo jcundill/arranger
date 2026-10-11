@@ -488,7 +488,7 @@ inclusively would describe a reach the hand does not make, and would make the li
 
 | grip | voices | how it is built |
 |---|---|---|
-| `drop2` | 4 | `DROP2_INTERVAL_SETS`, verbatim — the tables are hand-authored |
+| `drop2` | 4 | `TONE_PRIORITY`'s rule at four voices — generated; the hand table it reproduces is the witness ([generated-grips.md](generated-grips.md)) |
 | `drop2_6432` | 4 | 6-4-3-2, found by search — the one default set that reaches the low E |
 | `drop3` | 4 | derived from a close stack; offered through the bass-skipping sets |
 | `drop24` | 4 | **drop-2 & 4** — the second *and* fourth voices lowered an octave; offered through the bass-skipping sets |
@@ -510,8 +510,9 @@ one — except a suspended chord, which has no 3rd and whose guide tone is there
 already said so, and `tests/test_grips.py::TestGuideTones` holds the three tables to
 the same answer. Those two notes are what decide whether the ear hears a major or minor chord, and
 a dominant or a minor 7th, so a shape without them is a different chord rather than a
-thinner one. All 109 hand-authored drop-2 templates keep both in all four inversions;
-the rule is enforced where a table has no entry for the melody's degree, and
+thinner one. All 119 drop-2 templates — generated from `TONE_PRIORITY`, and held to the
+hand table they replace — keep both in every inversion;
+the rule is enforced where no inversion matches the melody's degree, and
 `_drop2_for_untabled_degree` derives that shape from the close stack under *this*
 melody, falling back to `_guide_tone_drop2` if the derivation drops a guide tone. An
 empty result offers nothing rather than borrowing another degree's template.
@@ -549,11 +550,18 @@ set is ordered descending with the gap at the bottom.
 
 Five decisions in here were each forced by something measurable:
 
-- **drop-2's tables are never derived.** The extended qualities are voiced *rootless*
-  on purpose, so a 9 or a 13 that fits in four voices without the root is a musical
-  decision. Deriving drop-3 and close position from the same chord tones gives a
-  *fuller* chord — a legitimate but different voicing — which is exactly why drop-2 is
-  left alone.
+- **drop-2's shapes are generated, and the decision the tables encode is a tone
+  priority.** `TONE_PRIORITY` says which of a chord's tones a shape states, most defining
+  first; `DROP2_TEMPLATES` is that rule at four voices, and it is what the engine reads.
+  `DROP2_INTERVAL_SETS` is the hand-written table the generation is held to — the witness,
+  asserted by `tests/test_generated_grips.py` rather than trusted. The extended qualities
+  are voiced *rootless* on purpose, so a 9 or a 13 that fits in four voices without the
+  root is a musical decision; it is now a rule rather than 119 numbers, which is what makes
+  it auditable and worth one line to change. Deriving drop-3 and close position from the
+  same chord tones instead gives a *fuller* chord — every tone the rule left out comes back
+  — a legitimate but different voicing, which is why those families keep their own rule.
+  The measurements, the order that was not taken and what is still open are in
+  [generated-grips.md](generated-grips.md).
 - **Duos sound the chord's guide tone, under any chord tone.** The second voice is read
   from `SHELL_DEGREES` — the 3rd, or the **4th** on a suspended chord, with the 7th as the
   fallback — rather than from a list written out separately. That table already encodes
@@ -608,7 +616,7 @@ Five decisions in here were each forced by something measurable:
   set that can reach one.
 - **6-4-3-2 is searched for, and it needed a cost term to be chosen at all.** The same
   reason as 6-4-3: the set skips a string, so it is not in descending pitch order down
-  the strings, so a hand-authored table cannot express it — the D string is a fifth above
+  the strings, so an interval-laid table cannot express it — the D string is a fifth above
   the low E, and the low E's note is frequently *not* the lowest sounding pitch.
   `_place_drop2_6432` therefore reuses `_place_shell`'s exhaustive search rather than
   inventing a second way to place notes, and ranks the survivors by `(fret_span,
