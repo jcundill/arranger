@@ -2255,9 +2255,9 @@ def _attach_bass(
       three ways that happens apart from the outside and the common one is not the
       intuitive one: no free string below the melody, **no octave of the wanted
       pitch below the shape's own lowest note**, or a fifth fret for four fingers.
-      Measured over the committed heads the split is **0 / 38 / 1** of 39 refusals
-      (`docs/open-issues.md` item 2), so the middle clause is the one that fires
-      almost every time. Same argument as the neck window being a penalty rather than
+      The counts are in `docs/open-issues.md` item 2, and the field carries the
+      wanted pitch rather than the cause, so a reader who needs the split has to
+      re-measure it there. Same argument as the neck window being a penalty rather than
       a filter: losing a step is worse than losing its bass.
     - a candidate string exists, but every one of them would need a **fifth fret**
       from a hand already holding the shape - the `bass_only` case. A bass note a player cannot finger is not a
