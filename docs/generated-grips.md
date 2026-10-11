@@ -116,29 +116,38 @@ the numbers it would cost to flip all six at once. It is a live option, not a de
 
 ## 4. What is not built
 
-**Step 2 — one placement search.** A template becomes frets by arithmetic
-(`_place_template`), while the four non-contiguous string sets already *search*. **The two
-searches are now one**: `_place_shape` (`arranger/grips.py`) is the enumerating validator
-they share — hold the melody, enumerate the other strings inside `GRIP_MAX_SPAN`, keep the
-shapes whose sounding set is the family's claim — and `_place_shell` and `_place_drop2_6432`
-are now requests to it rather than nests of loops. Across the eight committed heads that
-moved **0 of 1,103 steps** and **0** of the 300 diagnostics, byte for byte.
+**Step 2 — one placement rule, and one place a fret becomes a shape.** A candidate is now
+*proposed* one of two ways and *validated* one way. `_candidate` (`arranger/grips.py`) is the
+only place a set of frets becomes a voicing: the melody sounds and is the highest note, every
+fret is on the board and inside `GRIP_MAX_SPAN`, the family's tone claim (`required`) and bass
+claim (`lowest_pc_allowed`) hold, nothing outside the chord sounds when the family makes that
+claim at all, and the sounding strings are one `supported_string_sets()` entry — a set is a
+musical decision, so a shape cannot invent one. The proposers are the search (`_place_shape`,
+which enumerates with `_frets_in_span`) and the **layouts** (`_place_template`, which computes
+the frets from an interval template — the template and the string set fix each one).
 
-It also closed a latent defect, which is the part worth recording: the shared search states
-that the melody is the **highest sounding note**, and `_place_shell` had never asked.
-Pinning the melody to the top *string* does not put it on top in *pitch* — the B and G
-strings are four semitones apart — and nine (quality, root, set, fret) configurations
-reach a shape whose inner voice sounds above the melody. Am9 with a B3 melody on the B
-string is the pinned case, its `(4,3,2)` shape reaching C4 a semitone above; no committed
-head reaches one, which is why the sweep is unchanged.
+Across the eight committed heads this moved **0 of 1,103 steps** and **0** of the 300
+diagnostics, byte for byte, and the head sweep's wall time is unchanged. Two things it
+*states* rather than inherits from one producer:
 
-**What remains is the arithmetic families**, and it is a smaller change than it sounds.
-Every template is monotone — its voices descend down the strings — and on a fixed string
-set a monotone fretting of a given pitch list is *forced*, up to a duplicated pitch.
-Measured over the committed heads: **2 alternative frettings of a winner's own note set are
-monotone, and neither would win**. So routing `drop2`, `drop3`, `drop24`, `closed`, `duo`
-and `interval` through the same search is behaviour-preserving by construction, and the
-family name stays what it is today — the layout that was asked for.
+- **The melody is the highest sounding note.** Pinning it to the top *string* does not put it
+  on top in *pitch* — the B and G strings are four semitones apart — and nine (quality, root,
+  set, fret) configurations reach a shape whose inner voice sounds above the melody. Am9 with
+  a B3 melody on the B string is the pinned case, its `(4,3,2)` shape reaching C4 a semitone
+  above. `_place_shell` had never asked, and no committed head reaches one, which is why the
+  sweep is unchanged.
+- **A computed fret of -1 is a refusal, not a mute.** -1 is how a producer mutes a string it
+  does not use, and a note one semitone below a string's open pitch computes to the very
+  same number: C7 under E4 reaches it on the B string, a tritone below the melody. Read as a
+  mute, that shape thins to three of a four-string set and sounds G, A and the high E — a set
+  no table offers. `voices` on the request is what tells the two apart.
+
+**What remains is the *proposal*, not the rules.** Every template is monotone — its voices
+descend down the strings — and on a fixed string set a monotone fretting of a given pitch list
+is *forced*, up to a duplicated pitch. Measured over the committed heads: **2 alternative
+frettings of a winner's own note set are monotone, and neither would win**. So making the
+layout families *search* for tones rather than compute a layout is behaviour-preserving by
+construction, and the family name stays what it is today — the layout that was asked for.
 
 **A derived label needs one more step, and the numbers say which.** `closed` and `drop2`
 state the *same* four pitch classes on a four-tone chord and differ only in whether the
@@ -175,5 +184,5 @@ registering it is a change to `render` and that table, not to the placement.
 | the accessor | `arranger/grips.py` — `stated_tones()` |
 | the generator and the live table | `arranger/grips.py` — `_priority_drop2_templates()`, `DROP2_TEMPLATES` |
 | the witness | `DROP2_INTERVAL_SETS`, unchanged, asserted by `tests/test_generated_grips.py` |
-| the placement search the searched families share | `arranger/grips.py` — `_Placement`, `_place_shape`; held by `tests/test_placement.py` |
+| the placement rule, and the one place frets become a voicing | `arranger/grips.py` — `_Placement`, `_candidate`, proposed by `_place_shape` and `_place_template`; held by `tests/test_placement.py` |
 | the decision behind the rows | this document, §3 |

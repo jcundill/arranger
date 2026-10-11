@@ -1214,9 +1214,14 @@ def _place_template(
     Fits an interval template onto a string set, or returns None if it will not play.
 
     The voices go on the strings from the top down, so the template's order is the
-    order they are heard. Playability is the rule the drop-2 engine has always used:
-    every fret on the board, and a hand that does not stretch -
-    `fret_span() <= GRIP_MAX_SPAN[grip]`.
+    order they are heard - which is what makes this a *layout*: the shape is the template,
+    not a claim about which of the chord's tones sound. A family placed this way asks
+    nothing of the tone set, and that is deliberate rather than lax: the template is the
+    whole claim, and `interval` is free to sound a key tone under a passing note.
+
+    The frets are computed rather than searched, because the template and the string set
+    fix each one. What they are then held to is `_candidate`, the same rules every searched
+    shape is held to, so the melody-on-top rule reaches the template families too.
 
     The span is checked on the frets actually placed, not as "within N of the soprano".
     Those are not the same condition: bounding each finger to five frets either side of
@@ -1233,27 +1238,26 @@ def _place_template(
 
     frets = [-1] * len(STANDARD_TUNING)
     frets[strings[0]] = top_fret
-    limit = GRIP_MAX_SPAN.get(grip, 5)
-
     for position, offset in enumerate(template[1:], start=1):
         string_idx = strings[position]
-        fret = melody_midi + offset - STANDARD_TUNING[string_idx].midi_note()
-        if not 0 <= fret <= 18:
-            return None
-        frets[string_idx] = fret
+        frets[string_idx] = (
+            melody_midi + offset - STANDARD_TUNING[string_idx].midi_note()
+        )
 
-    active = [f for f in frets if f >= 0]
-    if max(active) - min(active) > limit:
-        return None
-    midis = sorted(
-        GuitarFretboard.fret_to_midi(s, f) for s, f in enumerate(frets) if f >= 0
-    )
-    return Voicing(
-        frets=frets,
-        top_fret=top_fret,
-        avg_fret=sum(active) / len(active),
-        grip=grip,
-        bass_pc=midis[0] % 12 if midis else None,
+    return _candidate(
+        _Placement(
+            grip=grip,
+            strings=strings,
+            melody_midi=melody_midi,
+            top_fret=top_fret,
+            required=frozenset(),
+            # The template's own voices, which may be fewer than the set offers - the rest
+            # of the set is muted.
+            voices=len(template),
+        ),
+        frets,
+        # No claim about the chord's tones - the template is the claim.
+        None,
     )
 _INTERVAL_CLASSES = (3, 9, 8)
 
@@ -1992,6 +1996,11 @@ class _Placement:
     and leaves which ones to the string set. `lowest_pc_allowed` is the separate claim about
     the **bottom** voice, for the families whose shape is defined by its bass (a 6-4-3-2
     states the chord's function, so its lowest note is a root or a 5th); None asks nothing.
+
+    `voices` is how many of `strings` the shape sounds, counting down from the soprano, and
+    None means all of them. It exists because a template may be shorter than the set it sits
+    on - a two-note pair on a three-string shell set - and the shape then has to leave the
+    rest of the set **muted** rather than placing a voice there.
     """
 
     grip: str
@@ -2000,19 +2009,95 @@ class _Placement:
     top_fret: int
     required: FrozenSet[int]
     lowest_pc_allowed: Optional[FrozenSet[int]] = None
+    voices: Optional[int] = None
+
+
+#: The string sets a candidate may sound, as one set for the membership test `_candidate`
+#: makes. Built from `supported_string_sets()`, which is the playability invariant stated
+#: from the shape's side, so no producer can put a shape on strings the tables never
+#: offered - a set is a musical decision, and this is what makes it one rather than an
+#: accident of which strings a producer happened to fill in.
+_SUPPORTED_STRING_SETS = frozenset(supported_string_sets())
+
+
+def _candidate(
+    placement: _Placement, frets: List[int], allowed: Optional[FrozenSet[int]]
+) -> Optional[Voicing]:
+    """
+    The one place a set of frets becomes a candidate voicing, or None when it is not one.
+
+    Every rule a candidate has to satisfy is here, so no family can be placed by a path that
+    skips one: the melody sounds and is the **highest** sounding note, every fret is on the
+    board, the fret span is within `GRIP_MAX_SPAN[placement.grip]`, the family's tone claim
+    (`required`) and bass claim (`lowest_pc_allowed`) hold, nothing outside `allowed`
+    sounds - `allowed` being None when the family makes no claim about the chord's tones at
+    all, which is what a template-laid shape is: the template *is* the claim, and the
+    interval family is free to sound a key tone under a passing note - and the sounding
+    strings are one `supported_string_sets()` entry.
+
+    Both proposers call it: the search (`_place_shape`), which enumerates frets, and the
+    layouts (`_place_template`), which compute them from an interval template. One producer
+    per shape, one rule set for all of them - a rule stated in a producer reaches only the
+    families that producer serves.
+
+    `frets` is a full board vector, and only its entries for `placement.strings` are read.
+    The `voices` strings from the soprano down are the shape and must each carry a fret
+    between 0 and 18; **the rest of the set must be muted**. Both halves matter: a computed
+    -1 is a note below its string's open pitch rather than a mute, and reading that as
+    unused thins the shape into strings the tables never offered.
+    """
+    strings = placement.strings
+    top_fret = placement.top_fret
+    limit = GRIP_MAX_SPAN[placement.grip]
+
+    set_frets = [frets[string] for string in strings]
+    voices = len(strings) if placement.voices is None else placement.voices
+    used, unused = set_frets[:voices], set_frets[voices:]
+    if any(fret < 0 or fret > 18 for fret in used):
+        return None
+    if any(fret != -1 for fret in unused):
+        return None
+    if frozenset(strings[:voices]) not in _SUPPORTED_STRING_SETS:
+        return None
+    if not used or max(used) - min(used) > limit:
+        return None
+    sounded = strings[:voices]
+    active = used
+    midis = sorted(
+        GuitarFretboard.fret_to_midi(string, fret)
+        for string, fret in zip(sounded, active)
+    )
+    if midis[-1] != GuitarFretboard.fret_to_midi(strings[0], top_fret):
+        return None
+    pcs = {midi % 12 for midi in midis}
+    if not placement.required <= pcs:
+        return None
+    if allowed is not None and not pcs <= allowed:
+        return None
+    if (
+        placement.lowest_pc_allowed is not None
+        and midis[0] % 12 not in placement.lowest_pc_allowed
+    ):
+        return None
+    return Voicing(
+        frets=list(frets),
+        top_fret=top_fret,
+        avg_fret=sum(active) / len(active),
+        grip=placement.grip,
+        bass_pc=midis[0] % 12,
+    )
 
 
 def _place_shape(
-    placement: _Placement, allowed: FrozenSet[int]
+    placement: _Placement, allowed: Optional[FrozenSet[int]] = None
 ) -> Optional[Voicing]:
     """
     The one shape `placement` asks for on its string set, or None when it will not play.
 
-    Exhaustive within the playability invariant, because the search window is exactly the
-    span limit: the melody is held at its own fret and every combination of frets within
+    An enumerator over `_frets_in_span`, and `_candidate` is what decides: the melody is
+    held at its own fret and every combination of the other frets within
     `GRIP_MAX_SPAN[placement.grip]` of it is tried, so if a playable shape exists in this
-    position this finds it. Every candidate keeps the melody as the **highest sounding
-    note** - the same rule the whole library states - and sounds nothing outside `allowed`.
+    position this finds it, and "found nothing" means there is none.
 
     A window that runs off the end of the board yields nothing, which is the melody being
     too high to voice here rather than a shape being refused: `get_octave_down_candidates`
@@ -2033,45 +2118,18 @@ def _place_shape(
     if hi > 18:
         return None
 
-    melody_pitch = GuitarFretboard.fret_to_midi(strings[0], top_fret)
-    best: Optional[Tuple[int, float, Voicing]] = None
+    best: Optional[Tuple[Tuple[int, float], Voicing]] = None
     for tail in _frets_in_span(strings[1:], lo, hi, limit):
-        active = (top_fret,) + tail
-        if max(active) - min(active) > limit:
-            continue
-        midis = sorted(
-            GuitarFretboard.fret_to_midi(string, fret)
-            for string, fret in zip(strings, active)
-        )
-        # The melody is the highest sounding note, which is not implied by pinning it to the
-        # top *string*: the B and G strings are only four semitones apart, so an inner voice
-        # a fret above the melody sounds above it. Am9 with a B3 melody on the B string is
-        # the pinned case - its (4,3,2) shape reaches C4 on the G, a semitone higher.
-        if midis[-1] != melody_pitch:
-            continue
-        pcs = {midi % 12 for midi in midis}
-        if not placement.required <= pcs or not pcs <= allowed:
-            continue
-        if (
-            placement.lowest_pc_allowed is not None
-            and midis[0] % 12 not in placement.lowest_pc_allowed
-        ):
-            continue
         frets = [-1] * len(STANDARD_TUNING)
-        for string, fret in zip(strings, active):
+        for string, fret in zip(strings, (top_fret,) + tail):
             frets[string] = fret
-        spread = max(active) - min(active)
-        voicing = Voicing(
-            frets=frets,
-            top_fret=top_fret,
-            avg_fret=sum(active) / len(active),
-            grip=placement.grip,
-            bass_pc=midis[0] % 12,
-        )
-        key = (spread, voicing.avg_fret)
-        if best is None or key < best[:2]:
-            best = (spread, voicing.avg_fret, voicing)
-    return best[2] if best else None
+        voicing = _candidate(placement, frets, allowed)
+        if voicing is None:
+            continue
+        key = (voicing.fret_span(), voicing.avg_fret)
+        if best is None or key < best[0]:
+            best = (key, voicing)
+    return best[1] if best else None
 
 
 def get_grip_voicings(

@@ -40,11 +40,13 @@ from arranger import (
     GuitarFretboard,
 )
 from arranger.grips import (
+    _candidate,
     _chord_context,
     _frets_in_span,
     _place_drop2_6432,
     _place_shape,
     _place_shell,
+    _place_template,
     _Placement,
     _string_sets_for,
 )
@@ -395,6 +397,59 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
         self.assertIsNotNone(found)
         assert found is not None
         self.assertEqual(found.active_strings, [3, 4, 5])
+
+    def test_a_shape_cannot_sound_strings_the_tables_never_offered(self):
+        """`supported_string_sets()` is enforced where the frets are, not only in the table.
+
+        Which strings a shape sounds is a *musical* decision, so the validator is where it
+        has to hold: the 5-3-2 shell set is offered, the top two of it are not, and the
+        request says how many strings the shape uses. Without the rule a producer that
+        filled in a different subset would ship a shape nobody chose.
+        """
+        placement = _Placement(
+            grip="shell",
+            strings=(5, 3, 2),
+            melody_midi=Note("E4").midi_note(),
+            top_fret=GuitarFretboard.note_to_fret(5, Note("E4")),
+            required=frozenset(),
+        )
+        frets = [-1, -1, 0, 0, -1, 0]
+        self.assertIsNotNone(_candidate(placement, frets, None))
+        # The same frets read as a two-voice shape sound the high E and the G, which is
+        # `{3, 5}` - a set no table entry offers.
+        self.assertIsNone(_candidate(replace(placement, voices=2), frets, None))
+
+    def test_a_voice_below_a_strings_open_pitch_refuses_the_shape(self):
+        """A fret of -1 is a refusal here, not a mute - and it is reachable.
+
+        `voices` is what says which of the set's strings the shape uses, so anything below
+        the set's first `voices` strings is muted and the used ones must each carry a real
+        fret. A computed -1 - the note one semitone below a string's open pitch - must not
+        be mistaken for "unused": reading it that way thins the shape, and on a disjoint set
+        it invents one. C7 under E4 reaches both, its guide tone lying a tritone below the
+        melody, which is exactly -1 on the B string.
+        """
+        melody = Note("E4")
+        top_fret = GuitarFretboard.note_to_fret(5, melody)
+        # A duo's second voice a tritone below the melody: -1 on the B string.
+        self.assertIsNone(
+            _place_template([0, -6], (5, 4), melody.midi_note(), top_fret, "duo")
+        )
+        # A four-voice drop-2 of C7 reaches the same string. Read as a mute, this shape
+        # sounded the high E, the G and the A - {1, 3, 5}, which is no set in the table.
+        self.assertIsNone(
+            _place_template(
+                [0, -6, -9, -16], (5, 4, 3, 1), melody.midi_note(), top_fret, "drop2"
+            )
+        )
+        # A note *further* below the open pitch is refused for the same reason, so the rule
+        # is "used strings carry a fret on the board" rather than "no fret of exactly -1".
+        self.assertIsNone(
+            _place_template(
+                [0, -14], (3, 2), Note("C4").midi_note(),
+                GuitarFretboard.note_to_fret(3, Note("C4")), "duo",
+            )
+        )
 
     def test_the_tightest_shape_wins_a_choice(self):
         """Ranking is `(span, position)`, so the shape a player would pick is the one kept.

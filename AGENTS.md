@@ -18,7 +18,7 @@ gate and the conventions — not the explanation.
 | If you are changing | Read first | Then |
 |---|---|---|
 | the drop-2 tables, a grip, `GRIP_MAX_SPAN`, `voicing_cost` | [docs/engine.md](docs/engine.md) | `arranger/grips.py`, `arranger/cost.py` |
-| how a shape is placed on its strings — a family that *searches* versus the ones that stack, `_Placement`, `_place_shape` | [docs/generated-grips.md](docs/generated-grips.md) §4 | `arranger/grips.py`, `tests/test_placement.py` |
+| how a shape is placed on its strings — a family that *searches* versus one that computes a layout, `_Placement`, `_candidate` | [docs/generated-grips.md](docs/generated-grips.md) §4 | `arranger/grips.py`, `tests/test_placement.py` |
 | which chord tones a shape states — `TONE_PRIORITY`, the tone a four-voice shape gives up, or the order that was not taken | [docs/generated-grips.md](docs/generated-grips.md) | `arranger/grips.py` (`TONE_PRIORITY`, `stated_tones`, `_priority_drop2_templates`, `DROP2_TEMPLATES`), `tests/test_generated_grips.py` |
 | the trailing annotation a step carries, why a shape is thin, or what **must** be explained when a choice is added (`ArrangementStep.palette`, `cost.VOICING_COST_CRITERIA`, `tests/test_explanations.py`) | [docs/engine.md](docs/engine.md) | `arranger/render.py`, `arranger/movement.py` |
 | `texture=`, target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/textures.py`, `arranger/bass.py`, `arranger/decisions.py` |
@@ -50,10 +50,10 @@ frozen like the rest — it is not a home for an open plan.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1086 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **1088 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 14 of those 1086, and it is the one that fails if this
+(`tests/test_docs.py` is 14 of those 1088, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree. It also fails if a document
 exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
 new file cannot be added without being registered.)
