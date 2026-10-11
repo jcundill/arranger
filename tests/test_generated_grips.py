@@ -85,7 +85,7 @@ class TestTheRuleReproducesTheTables(unittest.TestCase):
     def test_the_first_two_tone_priorities_are_the_shell_table(self):
         """A shell and a drop-2 state the same guide tones, and this is where they agree.
 
-        `SHELL_DEGREES` is read by `_place_shell` and `_duo_offsets`; the priority row is
+        `SHELL_DEGREES` is read by `_shell_request` and `_duo_offsets`; the priority row is
         read by the drop-2 generator. Two answers to one question would be free to drift,
         so the shell pair is asserted to be the row's head, in order.
         """

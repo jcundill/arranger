@@ -134,7 +134,7 @@ diagnostics, byte for byte, and the head sweep's wall time is unchanged. Two thi
   on top in *pitch* — the B and G strings are four semitones apart — and nine (quality, root,
   set, fret) configurations reach a shape whose inner voice sounds above the melody. Am9 with
   a B3 melody on the B string is the pinned case, its `(4,3,2)` shape reaching C4 a semitone
-  above. `_place_shell` had never asked, and no committed head reaches one, which is why the
+  above. The shell path had never asked, and no committed head reaches one, which is why the
   sweep is unchanged.
 - **A computed fret of -1 is a refusal, not a mute.** -1 is how a producer mutes a string it
   does not use, and a note one semitone below a string's open pitch computes to the very
@@ -142,12 +142,22 @@ diagnostics, byte for byte, and the head sweep's wall time is unchanged. Two thi
   mute, that shape thins to three of a four-string set and sounds G, A and the high E — a set
   no table offers. `voices` on the request is what tells the two apart.
 
-**What remains is the *proposal*, not the rules.** Every template is monotone — its voices
-descend down the strings — and on a fixed string set a monotone fretting of a given pitch list
-is *forced*, up to a duplicated pitch. Measured over the committed heads: **2 alternative
-frettings of a winner's own note set are monotone, and neither would win**. So making the
-layout families *search* for tones rather than compute a layout is behaviour-preserving by
-construction, and the family name stays what it is today — the layout that was asked for.
+**The two ways are the two kinds of family, and which is which is a table.**
+`_LAYOUT_GRIPS` and `_SEARCHED_GRIPS` name them, `tests/test_grips.py` holds the two to
+partitioning the families, and the generator is one loop over (family, string set) that asks
+the appropriate one: a family listed in neither would generate nothing at all, which is what
+makes adding one a decision rather than a silent omission. The loop collapsed from a ladder of
+per-family branches, and with it went a duplicated tone-set computation and a membership list
+that mixed the two kinds (`duo` and `interval` sat in the guide-tone branch and were placed as
+layouts).
+
+**Making the layout families search is behaviour-preserving, and not needed.** Every template
+is monotone — its voices descend down the strings — and on a fixed string set a monotone
+fretting of a given pitch list is *forced*, up to a duplicated pitch. Measured over the
+committed heads: **2 alternative frettings of a winner's own note set are monotone, and
+neither would win**. So a layout could be found by the search rather than computed; what it
+would not be is *named*, because the family name is the layout. That is the next decision, and
+it is where the derived-label question below starts.
 
 **A derived label needs one more step, and the numbers say which.** `closed` and `drop2`
 state the *same* four pitch classes on a four-tone chord and differ only in whether the

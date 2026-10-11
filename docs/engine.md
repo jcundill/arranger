@@ -618,7 +618,8 @@ Five decisions in here were each forced by something measurable:
   reason as 6-4-3: the set skips a string, so it is not in descending pitch order down
   the strings, so an interval-laid table cannot express it — the D string is a fifth above
   the low E, and the low E's note is frequently *not* the lowest sounding pitch.
-  `_place_drop2_6432` therefore asks that same search rather than inventing a second way to
+  `_drop2_6432_request` therefore states that claim as a request to the shared search rather
+  than inventing a second way to
   place notes, and the search ranks the survivors by `(fret_span, avg_fret)`. Two
   measurements forced the rest. Ranking is not cosmetic: an unranked
   search returns the first shape it meets, which puts the low E at fret 0–1, below
@@ -1198,10 +1199,11 @@ passes, so the table and the argument vocabulary cannot drift apart.
 
 ### `get_comping_voicings`: a chord with no melody on top
 
-The generator behind `voices="none"`. **It is `_place_shell`'s own search with nothing held
+The generator behind `voices="none"`. **It is the same exhaustive search with nothing held
 at the top.** A shell is already a claim about the chord's 3rd and 7th rather than about
-the tune, so `_place_shell` needed no change: it already tries every fret combination on
-the remaining strings and keeps the ones where both guide tones sound and nothing outside
+the tune, so the search needed no new rule: `_frets_in_span` already tries every fret
+combination on the remaining strings and the candidate keeps the ones where both guide
+tones sound and nothing outside
 the chord does. The only difference is that the top fret is searched too rather than fixed
 by a melody. Because the window is exactly `GRIP_MAX_SPAN["shell"]`, the search stays
 *exhaustive within the playability invariant*.

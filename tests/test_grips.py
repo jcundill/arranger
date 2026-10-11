@@ -30,7 +30,13 @@ from arranger import (
     parse_grips,
     supported_string_sets,
 )
-from arranger.grips import THUMB_REACH_STRINGS, _string_sets_for, finger_skip_count
+from arranger.grips import (
+    _LAYOUT_GRIPS,
+    _SEARCHED_GRIPS,
+    THUMB_REACH_STRINGS,
+    _string_sets_for,
+    finger_skip_count,
+)
 from tests.support import note_name
 
 # A representative spread of the families the library voices well: sevenths, sixths,
@@ -1026,8 +1032,8 @@ class TestStringSetTable(unittest.TestCase):
         """
         Every family in GRIP_STRING_SETS is also in GRIP_MAX_SPAN, and vice versa.
 
-        The two tables are read independently - the span by `_place_template` and
-        `_place_shell`, the sets by `_string_sets_for` - so a family added to one and
+        The two tables are read independently - the span by `_candidate` and the sets by
+        `_string_sets_for` - so a family added to one and
         not the other would fail with a bare KeyError deep inside placement, naming
         neither the grip nor the omission. The two-note families are held to 4 rather
         than 5 for the same reason a duo is: two fingers, no reason to stretch.
@@ -1038,6 +1044,27 @@ class TestStringSetTable(unittest.TestCase):
         )
         self.assertEqual(GRIP_MAX_SPAN["duo"], 4)
         self.assertEqual(GRIP_MAX_SPAN["interval"], 4)
+
+    def test_every_family_is_placed_exactly_one_way(self):
+        """
+        `_LAYOUT_GRIPS` and `_SEARCHED_GRIPS` partition the families, with nothing left over.
+
+        The two are placed by different code - a layout's frets are computed from its
+        template, and a searched family's shape is *found* - so a family in neither would
+        silently generate nothing at all, and one in both would be placed twice by two paths
+        that could disagree. Stated as a table rather than a branch in the generator, which is
+        what makes adding a family a decision: it has to be put in one of the two.
+        """
+        self.assertEqual(
+            set(_LAYOUT_GRIPS) | set(_SEARCHED_GRIPS),
+            set(GRIP_STRING_SETS),
+            "a family is placed by neither path",
+        )
+        self.assertEqual(
+            set(_LAYOUT_GRIPS) & set(_SEARCHED_GRIPS),
+            set(),
+            "a family is placed by both paths",
+        )
 
     def test_an_interval_uses_only_the_adjacent_pairs_a_duo_also_declares(self):
         """

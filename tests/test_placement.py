@@ -31,7 +31,6 @@ from musthe import Note
 
 import headxml
 from arranger import (
-    BASS_DEGREES_6432,
     GRIP_MAX_SPAN,
     GRIP_PREFERENCE,
     MELODY_STRING_CHOICES_FULL,
@@ -42,13 +41,14 @@ from arranger import (
 from arranger.grips import (
     _candidate,
     _chord_context,
+    _drop2_6432_request,
     _frets_in_span,
-    _place_drop2_6432,
     _place_shape,
-    _place_shell,
     _place_template,
     _Placement,
+    _shell_request,
     _string_sets_for,
+    get_grip_voicings,
 )
 
 HEADS = sorted(glob.glob("tests/data/*.musicxml") + glob.glob("tests/data/*.mxl"))
@@ -168,13 +168,15 @@ class TestTheSearchIsExhaustive(unittest.TestCase):
         self.assertEqual(list(_frets_in_span((), 0, 5, 5)), [()])
 
 
-def _requests(chord_name: str, melody: str, top_string: int) -> List[Tuple[_Placement, frozenset]]:
+def _requests(
+    chord_name: str, melody: str, top_string: int
+) -> List[Tuple[_Placement, FrozenSet[int]]]:
     """The requests the two searched families make for one melody on one soprano string.
 
-    Built here from the rules each family states - a shell wants both guide tones on the
-    three strings from the soprano down, the 6-4-3-2 wants four of the chord's tones with a
-    root or a 5th underneath - so the search is asked the same question the family asks it,
-    rather than a question a test invented.
+    Built through the families' *own* request builders, so the search is asked the question
+    the generator asks it: a shell wants both guide tones on the three strings from the
+    soprano down, and the 6-4-3-2 wants four of the chord's tones with a root or a 5th
+    underneath.
     """
     canonical, root_pc, tones = _context(chord_name)
     melody_midi = Note(melody).midi_note()
@@ -182,36 +184,14 @@ def _requests(chord_name: str, melody: str, top_string: int) -> List[Tuple[_Plac
     if top_fret < 0:
         return []
     allowed = _allowed_for(canonical, root_pc, tones)
-    guide = SHELL_DEGREES[canonical]
-    requests: List[Tuple[_Placement, frozenset]] = []
+    requests: List[Tuple[_Placement, FrozenSet[int]]] = []
     for strings in _string_sets_for("shell", top_string):
-        requests.append(
-            (
-                _Placement(
-                    grip="shell",
-                    strings=strings[:3],
-                    melody_midi=melody_midi,
-                    top_fret=top_fret,
-                    required=frozenset((root_pc + g) % 12 for g in guide),
-                ),
-                allowed,
-            )
-        )
+        request = _shell_request(canonical, root_pc, strings, melody_midi, top_fret)
+        if request is not None:
+            requests.append((request, allowed))
     for strings in _string_sets_for("drop2_6432", top_string):
         requests.append(
-            (
-                _Placement(
-                    grip="drop2_6432",
-                    strings=strings,
-                    melody_midi=melody_midi,
-                    top_fret=top_fret,
-                    required=frozenset(),
-                    lowest_pc_allowed=frozenset(
-                        (root_pc + d) % 12 for d in BASS_DEGREES_6432
-                    ),
-                ),
-                allowed,
-            )
+            (_drop2_6432_request(root_pc, strings, melody_midi, top_fret), allowed)
         )
     return requests
 
@@ -234,53 +214,54 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
                     checked += 1
         self.assertGreater(checked, 60)
 
-    def test_the_families_ask_the_question_the_reference_checks(self):
-        """A shell's own answer is the search's answer to the request above.
+    def test_the_generator_places_the_request_the_family_states(self):
+        """The requests above are the ones `get_grip_voicings` places, not lookalikes.
 
-        Which is what makes `_place_shell` and `_place_drop2_6432` one placement path
-        rather than two that happen to agree - a test of the seam, not of the rules.
+        A seam check rather than a rule check: the generator and this file both go through
+        the families' own request builders, so what this catches is the wiring coming apart -
+        a request built one way in the engine and another way here - which is the failure the
+        two old private searches made possible and nothing else could see.
         """
         for chord_name, melody in CASES:
             canonical, root_pc, tones = _context(chord_name)
-            melody_midi = Note(melody).midi_note()
+            allowed = _allowed_for(canonical, root_pc, tones)
             for top_string in MELODY_STRING_CHOICES_FULL:
-                top_fret = GuitarFretboard.note_to_fret(top_string, Note(melody))
-                if top_fret < 0:
+                if GuitarFretboard.note_to_fret(top_string, Note(melody)) < 0:
                     continue
-                for strings in _string_sets_for("shell", top_string):
-                    by_family = _place_shell(
-                        canonical, tones, root_pc, strings, melody_midi, top_fret
-                    )
-                    by_search = _place_shape(
-                        next(
-                            p
-                            for p, _ in _requests(chord_name, melody, top_string)
-                            if p.grip == "shell" and p.strings == strings[:3]
-                        ),
-                        _allowed_for(canonical, root_pc, tones),
-                    )
+                for grip in ("shell", "drop2_6432"):
+                    generated = {
+                        tuple(voicing.frets)
+                        for voicing in get_grip_voicings(
+                            Note(melody), canonical, chord_name, top_string, (grip,)
+                        )
+                    }
+                    searched = set()
+                    for request, _allowed in _requests(chord_name, melody, top_string):
+                        if request.grip != grip:
+                            continue
+                        found = _place_shape(request, allowed)
+                        if found is not None:
+                            searched.add(tuple(found.frets))
                     self.assertEqual(
-                        by_family.frets if by_family else None,
-                        by_search.frets if by_search else None,
+                        generated, searched, f"{chord_name} {melody} {grip}"
                     )
 
     def test_the_melody_is_always_the_highest_sounding_note(self):
         """The invariant for every searched shape, not merely for the ones tried here."""
         for chord_name, melody in CASES:
             canonical, root_pc, tones = _context(chord_name)
-            melody_midi = Note(melody).midi_note()
+            allowed = _allowed_for(canonical, root_pc, tones)
             for top_string in MELODY_STRING_CHOICES_FULL:
-                top_fret = GuitarFretboard.note_to_fret(top_string, Note(melody))
-                if top_fret < 0:
+                if GuitarFretboard.note_to_fret(top_string, Note(melody)) < 0:
                     continue
-                for strings in _string_sets_for("shell", top_string):
-                    found = _place_shell(
-                        canonical, tones, root_pc, strings, melody_midi, top_fret
-                    )
+                for request, _allowed in _requests(chord_name, melody, top_string):
+                    found = _place_shape(request, allowed)
                     if found is None:
                         continue
-                    self.assertEqual(found.midi_notes()[-1], melody_midi, found.frets)
-                    self.assertEqual(found.soprano_string(), strings[0])
+                    self.assertEqual(
+                        found.midi_notes()[-1], Note(melody).midi_note(), found.frets
+                    )
+                    self.assertEqual(found.soprano_string(), request.strings[0])
 
     def test_the_melody_must_be_the_highest_sounding_note(self):
         """A shape whose inner voice sounds *above* the melody is refused, not returned.
@@ -298,10 +279,10 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
         melody = Note("B3")
         top_fret = GuitarFretboard.note_to_fret(4, melody)
         self.assertEqual(top_fret, 0)
+        request = _shell_request(canonical, root_pc, (4, 3, 2), melody.midi_note(), top_fret)
+        assert request is not None
         self.assertIsNone(
-            _place_shell(
-                canonical, tones, root_pc, (4, 3, 2), melody.midi_note(), top_fret
-            )
+            _place_shape(request, _allowed_for(canonical, root_pc, tones))
         )
 
         guide = frozenset((root_pc + g) % 12 for g in SHELL_DEGREES[canonical])
@@ -376,12 +357,14 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
 
     def test_an_empty_required_makes_no_claim_about_which_tones_sound(self):
         """The 6-4-3-2's rule: four of the chord's tones, and the string set decides which."""
-        _, root_pc, tones = _context("Cmaj7")
-        found = _place_drop2_6432(
-            tones, root_pc, Note("B4").midi_note(),
-            GuitarFretboard.note_to_fret(4, Note("B4")),
+        canonical, root_pc, tones = _context("Cmaj7")
+        request = _drop2_6432_request(
+            root_pc,
             _string_sets_for("drop2_6432", 4)[0],
+            Note("B4").midi_note(),
+            GuitarFretboard.note_to_fret(4, Note("B4")),
         )
+        found = _place_shape(request, _allowed_for(canonical, root_pc, tones))
         self.assertIsNotNone(found)
         assert found is not None
         self.assertLessEqual({midi % 12 for midi in found.midi_notes()}, {0, 4, 7, 11})
@@ -390,10 +373,12 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
     def test_a_shell_uses_the_three_strings_from_the_soprano_down(self):
         """A four-string set cannot silently become a four-voice shell."""
         canonical, root_pc, tones = _context("Cmaj7")
-        found = _place_shell(
-            canonical, tones, root_pc, (5, 4, 3, 2), Note("B4").midi_note(),
+        request = _shell_request(
+            canonical, root_pc, (5, 4, 3, 2), Note("B4").midi_note(),
             GuitarFretboard.note_to_fret(5, Note("B4")),
         )
+        assert request is not None
+        found = _place_shape(request, _allowed_for(canonical, root_pc, tones))
         self.assertIsNotNone(found)
         assert found is not None
         self.assertEqual(found.active_strings, [3, 4, 5])
