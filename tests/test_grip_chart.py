@@ -16,9 +16,12 @@ tests do not already exercise, so no guard is needed here.
 """
 
 import unittest
+from pathlib import Path
 
 import grip_chart
 from arranger import ChordParser, VoiceLeadingEngine, Voicing
+
+ROOT = Path(__file__).resolve().parent.parent
 
 # A minimal chart in the hand-written style: a heading, a label line, and one tab
 # line per string with a column per inversion. `E` is the high E, as it is at the
@@ -115,6 +118,26 @@ class TestGeneratedChart(unittest.TestCase):
                             f"{quality} on string {soprano}: {cell.tab} "
                             f"sounds a pitch the chord does not contain",
                         )
+
+
+class TestTheCommittedChart(unittest.TestCase):
+    """`common_grips.md` is generated, so it must equal what the generator writes.
+
+    `--audit` re-derives the shapes a chart *contains*, which means it cannot see a
+    row the chart is **missing**. That is how the committed file came to say the 3rd
+    of a `Cmaj7` was `_not voiceable on this block_` on the 4-3-2-1 block while the
+    engine voiced it (`x-3-x-0-0-0`), one line stale, with `make chart-audit`
+    reporting agreement "on every shape checked". Comparing the whole file closes
+    the other direction, and it fails on a hand-edit as well as on drift.
+    """
+
+    def test_the_committed_chart_is_what_the_generator_writes(self):
+        committed = (ROOT / "common_grips.md").read_text(encoding="utf-8")
+        self.assertEqual(
+            grip_chart.render_markdown(),
+            committed,
+            "common_grips.md is stale or hand-edited; run `make chart`",
+        )
 
 
 class TestAuditFindsRealDefects(unittest.TestCase):

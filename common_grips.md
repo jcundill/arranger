@@ -18,7 +18,7 @@ The two are independent. A chart that names the inversion after the melody misla
 |---|---|---|---|---|
 | 7 (B4) | 2nd Inv | 7-5-5-5 | G3 C4 E4 B4 | `x-x-5-5-5-7` |
 | Root (C5) | 3rd Inv | 8-8-9-9 | B3 E4 G4 C5 | `x-x-9-9-8-8` |
-| _none_ | - | _not voiceable on this block_ | - | - |
+| 3 (E4) | Root Pos | 0-0-0-3 | C3 G3 B3 E4 | `x-3-x-0-0-0` |
 | 5 (G4) | 1st Inv | 3-1-4-2 | E3 B3 C4 G4 | `x-x-2-4-1-3` |
 
 ### Cm7
