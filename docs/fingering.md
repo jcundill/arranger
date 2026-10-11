@@ -184,8 +184,9 @@ binary rather than text during this session, so specific claims in §2.2–2.3
 are from general knowledge and the readable sources only, and no citation here
 should be treated as checked line-by-line. Ground truth that *is* available
 locally: standard chord-diagram dictionaries carry author-written finger
-numbers, and our own hand-authored drop-2 tables were written by a player —
-both are testable against our assignment once it exists.
+numbers, and our own hand-authored drop-2 tables — the 119 templates, now
+`tests/support.py::WITNESS` — were written by a player — both are testable
+against our assignment once it exists.
 
 **The external search is exhausted, and one avenue is closed.** The common jazz
 chord-chart sources do **not** carry left-hand fingerings: a representative
@@ -193,8 +194,9 @@ page (jazzguitar.be's beginner chord charts) numbers the *circles* with chord
 tones — its own legend reads "the numbers in the black circles are the other
 chord tones" — so the diagrams validate tone-sets and shapes, not fingerings.
 That leaves two usable ground truths locally: our own hand-authored drop-2
-tables (a player's written shape encodes a sensible fingering) and the
-feasibility invariants in §3. The single hard external data point worth keeping
+tables (the 119 templates, now `tests/support.py::WITNESS`, since the engine
+stopped carrying them — a player's written shape encodes a sensible fingering)
+and the feasibility invariants in §3. The single hard external data point worth keeping
 is corroborative rather than new: a jazz-guitar source treats thumb-over as
 non-idiomatic ("strictly speaking this is bad technique"), which supports the
 §2.1 item 5 decision.

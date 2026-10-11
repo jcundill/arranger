@@ -1,12 +1,14 @@
 # Generated grips: one rule for the tones, a search for the placement
 
-**Status: steps 1 and 2 of 3 landed.** The tone-priority rule is in `arranger/grips.py` and
-is what the engine now reads; the hand-written drop-2 tables are kept as the witness that
-holds it, asserted by `tests/test_generated_grips.py`. Step 2 — one placement rule, and one
-place a fret becomes a shape — is landed as well, measured at **0 of 1,103 steps** and 0 of
-the 300 diagnostics, and so is the clause the tab owed for a tone a shape leaves out. §4
-describes both; step 3 (retiring the tables), the label the placement would derive and the
-levers that price it are **not** built, and are marked there.
+**Status: all three steps landed.** The tone-priority rule is in `arranger/grips.py`, and it
+is now the *source* rather than a generator checked against one: `_drop2_template_for` builds
+the shape for a degree on demand and `_drop2_palette` is that rule read at every chord tone,
+so the hand-written tables left the engine in step 3 and live on in `tests/support.py` as the
+witness the rule is asserted against. Step 2 — one placement rule, and one place a fret
+becomes a shape — is landed as well, measured at **0 of 1,103 steps** and 0 of the 300
+diagnostics, and so is the clause the tab owed for a tone a shape leaves out. §4 describes
+both; §3 records what step 3 measured, including the decision it turned out not to need. The
+label the placement would derive, and the levers that price it, are **not** built.
 
 This document exists because the reasoning behind the change did not fit in a docstring
 and would otherwise live only in a conversation. `docs/one-fact.md` records why that is a
@@ -32,7 +34,8 @@ cannot express. Two measurements settle it.
 
 **The templates.** Generating every template from a per-quality tone order (`melody first,
 then the next three tones by priority`, laid out as a textbook drop-2) reproduces the hand
-table **exactly, 119 of 119**, for all 29 qualities in `DEGREE_OFFSETS_FROM_ROOT`. The
+table **exactly, 119 of 119**, for all 29 qualities — compared by degree, since step 3, so
+the claim is that the *pairing* is the rule's rather than a position in a list. The
 same rule at arity 3 reproduces `SHELL_DEGREES` — the pair a shell states — for all 29,
 **in order**, which is what the duo reads. That was checked by brute force over every
 permutation of each quality's tones, not by assuming an order:
@@ -43,7 +46,9 @@ permutation of each quality's tones, not by assuming an order:
 - the 11 with more tones than voices are the ones whose order is a real decision, and
   each admits between 6 and 36 consistent orders. So the tables are *consistent with* a
   rule and do not determine one: the rows in `TONE_PRIORITY` are a choice among them,
-  held to the tables by the equivalence test.
+  held to the tables by the equivalence test — and that is also why step 3 could not
+  derive an *order* from the tables, and did not need one: a degree is the question now,
+  so no list is read in any order.
 
 **The arrangement.** With the rule live and the engine reading it, **0 of 1,103 steps
 move** over all eight committed heads, compared line by line against the same sweep on a
@@ -101,7 +106,8 @@ so the engine offers *the whole template list* as a palette of positions, and ch
 list changes the palette. `Eb6/9` alone accounts for 12 of them, and `Fm9` for 4. That is
 a second consumer of `DROP2_INTERVAL_SETS`, invisible from the table's name and from its
 docstring, and it is the finding that would otherwise have made this change look smaller
-than it is.
+than it is. **Step 3 made it a named function** (`_drop2_palette`) rather than a fall-through
+to a table, which is the shape it should always have had.
 
 **Attribution caveat, and it is still open.** The 36/29 split is by the step's
 `non_chord_tone` flag, which marks a melody that stayed a non-chord tone. A step whose
@@ -172,10 +178,10 @@ that mixed the two kinds (`duo` and `interval` sat in the guide-tone branch and 
 layouts).
 
 **Owed, and not built.** What follows is a decision the placement has *made possible* rather
-than one it has taken: the label the one search would derive, the three levers that price a
-derived label (**the derived label needs one more step, and the numbers say which** below),
-and step 3. The one thing step 2 owed the tab — a chord tone the rule dropped, named on the
-line — is **paid**, and is the last paragraph here.
+than one it has taken: the label the one search would derive, and the three levers that price
+a derived label (**the derived label needs one more step, and the numbers say which** below).
+The one thing step 2 owed the tab — a chord tone the rule dropped, named on the line — is
+**paid**, and is the last paragraph here.
 
 **Making the layout families search is behaviour-preserving, and not needed.** Every template
 is monotone — its voices descend down the strings — and on a fixed string set a monotone
@@ -195,14 +201,41 @@ three levers for that, each measured separately:
 |---|---|---|
 | **Admit crossings** (a string carrying a pitch above the string above it) | 1,441 alternative frettings exist on 794 of 967 melody-bearing steps; **47 would win** — 8 on the *foreign-note* criterion (a better choice of which tone to double, all `drop2_6432`), 35 on span and 4 on neck position | a real change, and it needs a name for a shape that is not one of the four transformations |
 | **Offer 6-5-4-3** (a G-string melody with four voices) | **104 of 967 steps** would gain 2–4 shapes, and criterion 2 (`missing = 4 - len(active)`) ranks them above the three-note shell that wins there today | the `_BOTTOM_FOUR` exclusion is load-bearing for ~11% of steps, not a set nobody happens to generate |
-| **One shape per set from the rule** (a non-chord melody stating `stated_tones` rather than being offered the whole template list) | **268 of 1,103 steps** have a melody that is not a chord tone of the chart the part states, and **99.2%** of their candidate passes take the whole-list route (3,690 of 3,719); one is offered a median of **11 candidates out of 28 templates** (max 22 out of 36, over ~20 (grip, string set) calls), where the rule would offer one shape per set | the largest lever, and the least understood: 29 of the 65 moves in §3 came through it. The 476 of 967 recorded at plan time is not reproducible — §3 states the definition that is, and the reason the route exists at all: a non-chord melody has no inversion *by definition*, so this is not a gap in a table but the shape of the question |
+| **One shape per set from the rule** (a non-chord melody stating `stated_tones` rather than being offered the palette) | **268 of 1,103 steps** have a melody that is not a chord tone of the chart the part states, and **99.2%** of their candidate passes take the whole-list route (3,690 of 3,719); one is offered a median of **11 candidates out of 28 templates** (max 22 out of 36, over ~20 (grip, string set) calls), where the rule would offer one shape per set | the largest lever, and the least understood: 29 of the 65 moves in §3 came through it. The 476 of 967 recorded at plan time is not reproducible — §3 states the definition that is, and the reason the route exists at all: a non-chord melody has no inversion *by definition*, so this is not a gap in a table but the shape of the question |
 
-**Step 3 — retire the tables.** `DROP2_INTERVAL_SETS` and the numbers in
-`DEGREE_OFFSETS_FROM_ROOT` go once the rule is the source of the templates;
-`grip_chart.py` reads the generated table instead; and `AGENTS.md`'s "Adding a new chord
-quality" collapses from seven steps to a tone set plus one priority row — a quality with no
-row would then get a canonical derived one and be voiceable everywhere on the day it is
-added.
+**Step 3 — landed, and the order it was meant to decide dissolved.** The tables had exactly
+one open question: `DROP2_INTERVAL_SETS` paired *positionally* with `DEGREE_OFFSETS_FROM_ROOT`,
+that pairing is an order, and `grip_chart.py` draws its rows in it. Measured before deciding
+it: **no order tried reproduces the 29 rows** — the rule's own order 0 of 29, ascending from
+the root 13, seventh-family-first 15, and the best of them, "the ascending order rotated" 22,
+is an accident of how the table was written rather than a rule. And *reordering* changes
+nothing: with the rows permuted into the rule's order the 1,103-step fingerprint is
+byte-identical, because the table is an index→degree map and the pairing survives a
+permutation.
+
+So the decision was not made, it was **dissolved**. `_drop2_template_for(quality, degree)`
+builds the shape for one degree on demand — the body of the loop that generated the table —
+and `_templates_for` asks it with the melody's own degree, so there is no list and no index
+left to order. What a melody with no degree to match is offered became `_drop2_palette`: the
+same rule read at every chord tone.
+
+| | |
+|---|---|
+| gone: `DROP2_INTERVAL_SETS`, `DEGREE_OFFSETS_FROM_ROOT`, `DROP2_TEMPLATES`, `_priority_drop2_templates` | the 119 numbers are `tests/support.py::WITNESS`, keyed by the degree their top voice states |
+| gone: `_drop2_for_untabled_degree`, `_guide_tone_drop2`, `_duplicates_pitch`, `_REACH`, `_BLOCK_SPACING` | the rule answers for **every** chord tone of all 29 qualities (125 degrees): none empty, none impure, none missing a guide tone. The runtime fallback they formed never fired, so the invariant is a gate in `tests/test_generated_grips.py` instead of a branch |
+| gone from the facade | `VoiceLeadingEngine.DROP2_INTERVAL_SETS` and `.DEGREE_OFFSETS_FROM_ROOT` — the API change this step is |
+| `grip_chart` | reads `_drop2_template_for` and the quality's own tones; its rows read low-degree-first and depend on no engine-side order at all |
+
+Measured on this tree: **0 of 1,103 steps** move and `make demo` is byte-identical. The
+palette gains six shapes — the 9th of a `13`, the #9 and #11 of a `7alt`, and the natural 5th
+of `7#11`, `7b13` and `maj7#11` — and **no committed step reaches any of them**: 350 steps
+take the palette route and none is on one of those five qualities. So the growth is real and
+unexercised, and is recorded here rather than left to be discovered.
+
+**A bug went with the deleted branch, and it is worth naming.** It tested `(t - root_pc)` on
+tones `_chord_context` already returns *relative to the root*, so for a root other than C it
+matched melodies that were not chord tones at all and spent the derived shape on them; the
+replacement tests the degree, which is the same arithmetic written once.
 
 **What it still costs is one decision and no derivation.** Measured over the 29 degree rows:
 every row's *content* is the **prefix** of that quality's `TONE_PRIORITY` row, cut to the
@@ -256,7 +289,8 @@ hold was answered where the shape was chosen.
 |---|---|
 | the rows | `arranger/grips.py` — `TONE_PRIORITY` |
 | the accessor | `arranger/grips.py` — `stated_tones()` |
-| the generator and the live table | `arranger/grips.py` — `_priority_drop2_templates()`, `DROP2_TEMPLATES` |
-| the witness | `DROP2_INTERVAL_SETS`, unchanged, asserted by `tests/test_generated_grips.py` |
+| the rule, one degree at a time | `arranger/grips.py` — `_drop2_template_for()` |
+| the palette a melody with no degree to match is offered | `arranger/grips.py` — `_drop2_palette()` |
+| the witness | `tests/support.py` — `WITNESS`, the 119 hand-written templates keyed by the degree their top voice states, asserted by `tests/test_generated_grips.py` |
 | the placement rule, and the one place frets become a voicing | `arranger/grips.py` — `_Placement`, `_candidate`, proposed by `_place_shape` and `_place_template`; held by `tests/test_placement.py` |
 | the decision behind the rows | this document, §3 |

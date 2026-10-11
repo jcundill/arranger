@@ -232,14 +232,10 @@ you whether a change is an improvement or a different library.
   (case-sensitive alias resolution: `M7` -> `maj7`, `M` -> `maj`, `m7` stays `m7`)
   and
   `get_chord_tones(quality, chord_name=None)` -> every pitch class in the chord.
-  `CHORD_TONES_FROM_ROOT` is the full tone set per quality, deliberately distinct
-  from `DEGREE_OFFSETS_FROM_ROOT`, which lists only the four notes a drop-2 shape
-  voices — so the root of a rootless `7b9` still counts as a chord tone.
+  `CHORD_TONES_FROM_ROOT` is the full tone set per quality, and is what
+  `grips._drop2_template_for` reads, so the root of a rootless `7b9` still counts
+  as a chord tone and every tone of the chord can carry the melody.
 - `VoiceLeadingEngine` — the core engine:
-  - `DROP2_INTERVAL_SETS`: semitone offsets from the soprano voice for each
-    supported chord quality (seventh, extended, triad, suspended and altered
-    families) plus aliases.
-  - `DEGREE_OFFSETS_FROM_ROOT`: which chord tone each inversion places on top.
   - `get_drop2_voicings(melody_note, chord_type, chord_name=None, top_string=5)`
     — one string block; `top_string=4` pins the melody to the B string.
   - `get_grip_voicings(melody_note, chord_type, chord_name=None, top_string=5,
@@ -359,43 +355,45 @@ step tells the next, which live on a small `_Carried`.
 
 ### Adding a new chord quality
 
-1. Add a template list to `DROP2_INTERVAL_SETS` (one inversion template per voiced
-   tone, each `[0, offset2, offset3, offset4]` in semitones below the soprano).
-   Derive each template from the close-position stack under the melody: with
-   `d1 < d2 < d3` the **cumulative** semitone distances down from the top voice to
-   the next three chord tones (each the nearest chord tone below), the drop-2 shape
-   is `[0, -d2, -d3, -(d1 + 12)]` — the second voice from the top lowered an octave.
-   A triad needs a fourth voice, so its templates double the root an octave below the
-   stack; ninth/13th qualities are voiced rootless (root, or 5th when the root is on
-   top, omitted) so the extra tone still fits four strings.
-2. Add the matching entry to `DEGREE_OFFSETS_FROM_ROOT` **in the same order** as
-   the templates, so each melody note is matched to the correct inversion.
-3. Add the quality's full tone set to `ChordParser.CHORD_TONES_FROM_ROOT`. This is also
+**Two rows, and the shapes follow.** The drop-2 templates, the derived grips and the
+point the quality becomes voiceable are all computed from these, so there is no template
+list, degree list or interval number to write down.
+
+1. Add the quality's full tone set to `ChordParser.CHORD_TONES_FROM_ROOT`. This is also
    what `drop3`, `closed`, `shell` and `duo` build themselves from, so it is required
-   for the new grips to reach the quality at all. If the quality should also get a
-   shell, add it to `SHELL_DEGREES` — the default drop-2 and the derived grips work
-   without one.
-4. Add aliases to `ChordParser.QUALITY_ALIASES` (and, for backward compatibility,
-   optionally to the `DROP2_INTERVAL_SETS[...] = ...` block).
-5. To make the quality reachable by the `extension` strategy, add it to
+   for every grip family to reach the quality at all.
+2. Add the quality's tones to `TONE_PRIORITY`, most defining first — the same row a shell
+   and a duo read. Its **first two entries are `SHELL_DEGREES`' pair**, and its tail is
+   which tone a four-voice shape gives up when the chord has more tones than voices: the
+   root goes first, then the natural 5th, and a name-given extension is never the one
+   dropped. `_drop2_template_for` then builds each shape from the row, and
+   `_drop2_palette` offers them for a melody with no degree to match.
+   `tests/test_generated_grips.py` holds the row to the hand-written witness for every
+   quality, and `tests/test_voicings.py::TestQualityTableInvariants` checks the row is a
+   permutation of the tone set — a tone missing from it would have no shape at all.
+3. Add aliases to `ChordParser.QUALITY_ALIASES`.
+4. To make the quality reachable by the `extension` strategy, add it to
    `NON_CHORD_TONE_EXTENSIONS`.
-6. **If a MusicXML file should be able to spell it**, add the matching
+5. **If a MusicXML file should be able to spell it**, add the matching
    `kind-value` to `MUSICXML_KIND_QUALITIES` in `headxml.py`, and any `<degree>`
    alteration that reaches it to `_DEGREE_REFINEMENTS`. The same rule applies: an
    absent kind resolves to `None` and is counted in `Head.unmapped`, so a new
    quality MusicXML cannot spell stays silent until this step is done. Note the
    table is keyed on the *library* quality, so a `kind` that only a `<degree>`
    reaches (a 7b5, say) needs a degree entry rather than a kind entry.
-8. Add tests to `tests/test_voicings.py` for the drop-2 fingerings and to
+6. Add tests to `tests/test_voicings.py` for the drop-2 fingerings and to
    `tests/test_grips.py` for the other grips: exact fingerings, pitch classes a subset
    of `ChordParser.get_chord_tones(...)`, `fret_span() <= 5`, and the sounding strings
    a member of `supported_string_sets()`.
-   `TestQualityTableInvariants` checks the template and degree lists stay the same
-   length, and `tests/test_non_chord_tones.py` covers any new
-   `NON_CHORD_TONE_EXTENSIONS` route.
+   `tests/test_non_chord_tones.py` covers any new
+   `NON_CHORD_TONE_EXTENSIONS` route, and
    `tests/test_headxml.py::TestChordParsing::test_every_kind_the_table_names_is_voiceable`
    asserts that every quality `MUSICXML_KIND_QUALITIES` names can be voiced, so a
    table entry naming an unvoiceable quality fails the suite.
+
+A quality with a tone set but **no** `TONE_PRIORITY` row is offered no drop-2 shapes at
+all — `[]` rather than a guess — which is what `_drop2_template_for` returns for it, and
+what `tests/test_generated_grips.py` asserts.
 
 ## Grips, and the position-aware selector
 
@@ -522,11 +520,10 @@ one — except a suspended chord, which has no 3rd and whose guide tone is there
 already said so, and `tests/test_grips.py::TestGuideTones` holds the three tables to
 the same answer. Those two notes are what decide whether the ear hears a major or minor chord, and
 a dominant or a minor 7th, so a shape without them is a different chord rather than a
-thinner one. All 119 drop-2 templates — generated from `TONE_PRIORITY`, and held to the
-hand table they replace — keep both in every inversion;
-the rule is enforced where no inversion matches the melody's degree, and
-`_drop2_for_untabled_degree` derives that shape from the close stack under *this*
-melody, falling back to `_guide_tone_drop2` if the derivation drops a guide tone. An
+thinner one. All 119 drop-2 templates — the rule's own output, and held to the hand table
+they came from by `tests/test_generated_grips.py` — keep both in every inversion, and every
+degree of every one of the 29 qualities does too; the hand table was the witness, and step 3
+of [generated-grips.md](generated-grips.md) records what retiring it cost. An
 empty result offers nothing rather than borrowing another degree's template.
 
 **Drop-2 & 4** lowers the second and fourth voices of a close stack an octave each — the
@@ -562,11 +559,12 @@ set is ordered descending with the gap at the bottom.
 
 Five decisions in here were each forced by something measurable:
 
-- **drop-2's shapes are generated, and the decision the tables encode is a tone
+- **drop-2's shapes are generated, and the decision the tables encoded is a tone
   priority.** `TONE_PRIORITY` says which of a chord's tones a shape states, most defining
-  first; `DROP2_TEMPLATES` is that rule at four voices, and it is what the engine reads.
-  `DROP2_INTERVAL_SETS` is the hand-written table the generation is held to — the witness,
-  asserted by `tests/test_generated_grips.py` rather than trusted. The extended qualities
+  first, and `_drop2_template_for` builds the shape for one degree from it — there is no
+  table left to read. The 119 hand-written templates are kept as the witness the rule is
+  asserted against (`tests/support.py::WITNESS`, read by `tests/test_generated_grips.py`)
+  rather than trusted. The extended qualities
   are voiced *rootless* on purpose, so a 9 or a 13 that fits in four voices without the
   root is a musical decision; it is now a rule rather than 119 numbers, which is what makes
   it auditable and worth one line to change. Deriving drop-3 and close position from the
@@ -921,13 +919,19 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
   what decides: `x-3-2-0-1-x` and `x-10-10-9-8-x` against the drop-2 & 4 readings
   `3-x-2-0-1-x` and `8-x-10-9-8-x`. Raising the span to admit the rest is a real change to
   the library's playability contract, not a tuning knob.
-- **A chord tone with no matching inversion in the drop-2 tables falls through to the
-  quality-only fallback**, which can sound a note the chord does not contain — a 9th in
-  the melody of a 13 chord, for example. `voicing_cost`'s first criterion rejects such a
-  shape whenever a correct one exists, so an *arrangement* only hears one when nothing
-  else is playable, but `get_drop2_voicings` still offers it. Completing the tables is
-  a separate piece of work and would change the published drop-2 output.
-  `tests/test_grips.py::TestKnownTableGaps` pins the gap so it stays visible.
+- **A chord tone with no matching inversion used to fall through to the quality-only
+  fallback**, which can sound a note the chord does not contain — a 9th in the melody of a
+  13 chord, for example. That gap is **closed**, and closed for every chord tone: the rule
+  answers for all 125 degrees of the 29 qualities, each pure and stating both guide tones,
+  so `get_drop2_voicings` has a shape of its own for every chord tone a melody can be.
+  `tests/test_grips.py::TestKnownTableGaps` pins the closure, so a regression re-opens it
+  visibly rather than silently.
+- **A *non-chord* melody is still offered borrowed shapes.** No degree matches it, so the
+  palette (`_drop2_palette`) hands the selector the rule's shape for each chord tone,
+  placed under the caller's own note — and a shape built for one degree can spell a note
+  outside the chord under another. `voicing_cost`'s first criterion rejects such a shape
+  whenever a pure one exists, so an *arrangement* hears one only when nothing else is
+  playable, but `get_drop2_voicings` still offers it.
   Measured over 25 transcriptions after the head-path fix, **26.0%** of head steps still
   carry an inner voice outside the sounding chord, against **23.0%** for the same
   progressions through the library. The two are close, which is the point: the head
