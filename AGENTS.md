@@ -17,7 +17,9 @@ gate and the conventions — not the explanation.
 
 | If you are changing | Read first | Then |
 |---|---|---|
-| the drop-2 tables, a grip, `GRIP_MAX_SPAN`, `voicing_cost` | [docs/engine.md](docs/engine.md) | `arranger/grips.py`, `arranger/cost.py` |
+| the drop-2 rule, a grip, `GRIP_MAX_SPAN`, `voicing_cost` | [docs/engine.md](docs/engine.md) | `arranger/grips.py`, `arranger/cost.py` |
+| how a shape is placed on its strings — a family that *searches* versus one that computes a layout, `_Placement`, `_candidate` | [docs/generated-grips.md](docs/generated-grips.md) §4 | `arranger/grips.py`, `tests/test_placement.py` |
+| which chord tones a shape states — `TONE_PRIORITY`, the tone a four-voice shape gives up, the palette a melody with no degree to match is offered, or the order that was not taken | [docs/generated-grips.md](docs/generated-grips.md) | `arranger/grips.py` (`TONE_PRIORITY`, `stated_tones`, `_drop2_template_for`, `_drop2_palette`), `tests/test_generated_grips.py`, `tests/support.py` (`WITNESS`) |
 | the trailing annotation a step carries, why a shape is thin, or what **must** be explained when a choice is added (`ArrangementStep.palette`, `cost.VOICING_COST_CRITERIA`, `tests/test_explanations.py`) | [docs/engine.md](docs/engine.md) | `arranger/render.py`, `arranger/movement.py` |
 | `texture=`, target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/textures.py`, `arranger/bass.py`, `arranger/decisions.py` |
 | non-chord melody notes, a new chord quality | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` |
@@ -48,10 +50,10 @@ frozen like the rest — it is not a home for an open plan.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1056 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **1099 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 14 of those 1056, and it is the one that fails if this
+(`tests/test_docs.py` is 14 of those 1099, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree. It also fails if a document
 exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
 new file cannot be added without being registered.)
@@ -333,9 +335,10 @@ correct:
   Measured over the committed heads: **1** such step before the fix, **0** after.
   It is the smaller twin of the bullet above: the same
   trap, the rule asserted on the part of the whole that happened to be checked;
-- every sounding pitch is a chord tone — except where the drop-2 tables have no
-  inversion for the melody's degree and the quality-only fallback takes over. The
-  selector's first cost criterion rejects such a shape whenever a correct one exists.
+- every sounding pitch is a chord tone, except the melody itself when it is not one.
+  Every shape the rule builds is pure — measured over every chord tone of all 29
+  qualities — so what a non-chord melody carries is the caller's own note rather than
+  a shape's, and the selector's first cost criterion ranks pure candidates first.
 
 Two more that follow from the neck window, which is a **preference and never a
 filter**: a step with no voicing inside frets 2–13 is still played, just outside it,
@@ -362,6 +365,12 @@ renderer**, never re-derived at a call site:
   substitution actually states, a written slash bass no shape sounds — is a *derived clause*
   (`_transposition_clause`, `_substitution_clause`, `_slash_bass_clause`), so it reaches every
   route that can suffer it, a hold included;
+- a **choice the shape embodies** that no field records is derived from the step's own fields
+  too, but is suppressed on a hold like the `palette` clauses, because it accounts for the
+  shape rather than for a column: `_omission_clause` names the chord tone a four-voice shape
+  gives up (`TONE_PRIORITY`'s tail). Derived rather than recorded because the whole fact — the
+  routed chord's tones against the pitches sounding — is already on the step, and a field
+  beside it would be a second source for one fact;
 - a **route that chose no shape** states its own (`_comping_clause` names the degrees it
   states; "the tune is silent here"; "the guitar rests here"; "the shape above is held"; "the
   most a fill's palette offers" — the last is the difference between *the library ran out* and
@@ -435,39 +444,41 @@ gate, and a snapshot mechanism would let a regression pass by regenerating itsel
    user's to push.
 ## Adding a new chord quality
 
-1. Add a template list to `DROP2_INTERVAL_SETS` (one inversion template per voiced
-   tone, each `[0, offset2, offset3, offset4]` in semitones below the soprano).
-   Derive each template from the close-position stack under the melody: with
-   `d1 < d2 < d3` the **cumulative** semitone distances down from the top voice to
-   the next three chord tones (each the nearest chord tone below), the drop-2 shape
-   is `[0, -d2, -d3, -(d1 + 12)]` — the second voice from the top lowered an octave.
-   A triad needs a fourth voice, so its templates double the root an octave below the
-   stack; ninth/13th qualities are voiced rootless (root, or 5th when the root is on
-   top, omitted) so the extra tone still fits four strings.
-2. Add the matching entry to `DEGREE_OFFSETS_FROM_ROOT` **in the same order** as
-   the templates, so each melody note is matched to the correct inversion.
-3. Add the quality's full tone set to `ChordParser.CHORD_TONES_FROM_ROOT`. This is also
+1. Add the quality's tones to `TONE_PRIORITY`, most defining first. **That row is the
+   drop-2 rule** — `_drop2_template_for` builds each shape from it and `_drop2_palette` is
+   that rule read at every degree — so there is no list of interval numbers to write down.
+   Its first two entries are the quality's `SHELL_DEGREES` pair, and the tail says which
+   tone a four-voice shape gives up when the chord has more tones than voices: the root
+   goes first, then the natural 5th, and a name-given extension (the 9th of a `9`, the 13th
+   of a `13`) is never the tone dropped. The shape itself is the close-position stack under
+   the melody with its second voice lowered an octave, and a triad's fourth voice is the
+   root doubled an octave below the stack.
+2. Add the quality's full tone set to `ChordParser.CHORD_TONES_FROM_ROOT`. This is also
    what `drop3`, `closed`, `shell` and `duo` build themselves from, so it is required
    for the new grips to reach the quality at all. If the quality should also get a
-   shell, add it to `SHELL_DEGREES` — the default drop-2 and the derived grips work
+   shell, add it to `SHELL_DEGREES` — the drop-2 rule and the derived grips work
    without one.
-4. Add aliases to `ChordParser.QUALITY_ALIASES` (and, for backward compatibility,
-   optionally to the `DROP2_INTERVAL_SETS[...] = ...` block).
-5. To make the quality reachable by the `extension` strategy, add it to
+   `tests/test_generated_grips.py` holds the rule to the hand-written 119
+   (`tests/support.py::WITNESS`), so **a new quality needs no table row of its own**;
+   see [docs/generated-grips.md](docs/generated-grips.md). A quality with a priority row
+   and a tone set needs nothing else, and one with a tone set but no row is offered no
+   drop-2 shapes at all rather than a guess.
+3. Add aliases to `ChordParser.QUALITY_ALIASES`.
+4. To make the quality reachable by the `extension` strategy, add it to
    `NON_CHORD_TONE_EXTENSIONS`.
-6. **If a MusicXML file should be able to spell it**, add the matching
+5. **If a MusicXML file should be able to spell it**, add the matching
    `kind-value` to `MUSICXML_KIND_QUALITIES` in `headxml.py`, and any `<degree>`
    alteration that reaches it to `_DEGREE_REFINEMENTS`. The same rule applies: an
    absent kind resolves to `None` and is counted in `Head.unmapped`, so a new
    quality MusicXML cannot spell stays silent until this step is done. Note the
    table is keyed on the *library* quality, so a `kind` that only a `<degree>`
    reaches (a 7b5, say) needs a degree entry rather than a kind entry.
-7. Add tests to `tests/test_voicings.py` for the drop-2 fingerings and to
+6. Add tests to `tests/test_voicings.py` for the drop-2 fingerings and to
    `tests/test_grips.py` for the other grips: exact fingerings, pitch classes a subset
    of `ChordParser.get_chord_tones(...)`, `fret_span() <= 5`, and the sounding strings
    a member of `supported_string_sets()`.
-   `TestQualityTableInvariants` checks the template and degree lists stay the same
-   length, and `tests/test_non_chord_tones.py` covers any new
+   `tests/test_voicings.py::TestQualityTableInvariants` checks the priority row is a
+   permutation of the tone set, and `tests/test_non_chord_tones.py` covers any new
    `NON_CHORD_TONE_EXTENSIONS` route.
    `tests/test_headxml.py::TestChordParsing::test_every_kind_the_table_names_is_voiceable`
    is the same assertion for `MUSICXML_KIND_QUALITIES`.
@@ -637,6 +648,7 @@ Each of these cost real time, or nearly shipped a defect.
 |---|---|
 | [README.md](README.md) | user-facing overview, worked examples, limitations |
 | [docs/engine.md](docs/engine.md) | grips, the selector, texture, the cost tuple, non-chord tones |
+| [docs/generated-grips.md](docs/generated-grips.md) | which chord tones a shape states: the `TONE_PRIORITY` rule, the tone a four-voice shape gives up, and the order that was not taken |
 | [docs/renderers.md](docs/renderers.md) | tab staff, MusicXML import/export, GP5, and their traps |
 | [docs/open-issues.md](docs/open-issues.md) | the open bugs, each stated as **issue / problem / why it exists** with its measurement; a fixed one is removed, and its record lives in git |
 | [docs/history/reharmonisation-proposals.md](docs/history/reharmonisation-proposals.md) | **retired** - tritone substitution (shipped) and chromatic approach chords (measured, not built), with the corpus numbers behind each. Its reproduction path went with the Weimar corpus |

@@ -30,7 +30,13 @@ from arranger import (
     parse_grips,
     supported_string_sets,
 )
-from arranger.grips import THUMB_REACH_STRINGS, _string_sets_for, finger_skip_count
+from arranger.grips import (
+    _LAYOUT_GRIPS,
+    _SEARCHED_GRIPS,
+    THUMB_REACH_STRINGS,
+    _string_sets_for,
+    finger_skip_count,
+)
 from tests.support import note_name
 
 # A representative spread of the families the library voices well: sevenths, sixths,
@@ -73,25 +79,6 @@ def every_chord_tone(chord_name, quality):
 
 
 
-def tones_with_an_inversion(chord_name, quality):
-    """
-    The chord's tones that DROP2_INTERVAL_SETS actually has an inversion for.
-
-    Several of the extended qualities have no template for every one of their chord
-    tones - a 9th-in-top inversion of a 13 chord, for instance - and a melody in one of
-    those falls through to the quality-only fallback, which is free to sound a note the
-    chord does not contain. That is pre-existing behaviour, and TestKnownTableGaps
-    below pins it explicitly so it stays visible instead of being quietly excluded.
-    """
-    root_pc = root_midi_of(chord_name) % 12
-    degrees = VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT.get(quality, ())
-    return [
-        melody
-        for melody in every_chord_tone(chord_name, quality)
-        if (Note(melody).midi_note() - root_pc) % 12 in degrees
-    ]
-
-
 def a_shape_on(strings):
     """A bare `Voicing` sounding exactly `strings`, for the table-level questions.
 
@@ -117,7 +104,7 @@ class TestGripGeneration(unittest.TestCase):
         """Chord tones only, a known string set, the melody on top, a hand's span."""
         seen = set()
         for chord_name, quality in QUALITIES:
-            for melody in tones_with_an_inversion(chord_name, quality):
+            for melody in every_chord_tone(chord_name, quality):
                 candidates = self.engine.get_all_grip_voicings(
                     Note(melody), quality, chord_name=chord_name
                 )
@@ -929,35 +916,42 @@ class TestGuideTones(unittest.TestCase):
                 f"the shell keeps {shell[0]}",
             )
 
-    def test_every_drop2_template_sounds_both_guide_tones(self):
+    def test_every_drop2_voicing_states_both_guide_tones(self):
         """
-        The hand-authored tables keep both, in every inversion, for every quality.
+        The rule keeps both, for every chord tone, and so does every placement of it.
 
-        This is the property the fallback exists to preserve, checked on the tables
-        themselves rather than through generated output - so a table edit that dropped a
-        guide tone fails here by name rather than as a wrong note in a tab.
+        This is the property the retired fallback existed to preserve. It used to be checked
+        against the hand-authored tables, which no longer exist; checked here on what the
+        engine actually offers, which is the stronger claim - a shape the rule builds still
+        has to be fretted on a string set, and a placement is where a note could go missing.
         """
         from arranger.grips import _guide_tones
 
         checked = 0
-        for quality in VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT:
+        for chord_name, quality in QUALITIES:
             tones = ChordParser.CHORD_TONES_FROM_ROOT.get(quality)
             if not tones:
                 continue
             guide = _guide_tones(tones, 0)
             if not guide:
                 continue
-            for degree, template in zip(
-                VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT[quality],
-                VoiceLeadingEngine.DROP2_INTERVAL_SETS[quality],
-            ):
-                sounding = {(degree + offset) % 12 for offset in template}
-                for want in guide:
-                    checked += 1
-                    self.assertIn(
-                        want % 12, sounding,
-                        f"{quality} soprano {degree}: missing degree {want}",
-                    )
+            root_pc = root_midi_of(chord_name) % 12
+            for melody in every_chord_tone(chord_name, quality):
+                for top_string in (5, 4):
+                    for voicing in VoiceLeadingEngine.get_drop2_voicings(
+                        Note(melody), quality, chord_name=chord_name,
+                        top_string=top_string,
+                    ):
+                        sounding = {
+                            (pc - root_pc) % 12 for pc in voicing.pitch_classes()
+                        }
+                        for want in guide:
+                            checked += 1
+                            self.assertIn(
+                                want % 12, sounding,
+                                f"{chord_name} {melody} {voicing.tab_string()}: "
+                                f"missing degree {want}",
+                            )
         self.assertGreater(checked, 100, "the check covered almost nothing")
 
 
@@ -1026,8 +1020,8 @@ class TestStringSetTable(unittest.TestCase):
         """
         Every family in GRIP_STRING_SETS is also in GRIP_MAX_SPAN, and vice versa.
 
-        The two tables are read independently - the span by `_place_template` and
-        `_place_shell`, the sets by `_string_sets_for` - so a family added to one and
+        The two tables are read independently - the span by `_candidate` and the sets by
+        `_string_sets_for` - so a family added to one and
         not the other would fail with a bare KeyError deep inside placement, naming
         neither the grip nor the omission. The two-note families are held to 4 rather
         than 5 for the same reason a duo is: two fingers, no reason to stretch.
@@ -1038,6 +1032,27 @@ class TestStringSetTable(unittest.TestCase):
         )
         self.assertEqual(GRIP_MAX_SPAN["duo"], 4)
         self.assertEqual(GRIP_MAX_SPAN["interval"], 4)
+
+    def test_every_family_is_placed_exactly_one_way(self):
+        """
+        `_LAYOUT_GRIPS` and `_SEARCHED_GRIPS` partition the families, with nothing left over.
+
+        The two are placed by different code - a layout's frets are computed from its
+        template, and a searched family's shape is *found* - so a family in neither would
+        silently generate nothing at all, and one in both would be placed twice by two paths
+        that could disagree. Stated as a table rather than a branch in the generator, which is
+        what makes adding a family a decision: it has to be put in one of the two.
+        """
+        self.assertEqual(
+            set(_LAYOUT_GRIPS) | set(_SEARCHED_GRIPS),
+            set(GRIP_STRING_SETS),
+            "a family is placed by neither path",
+        )
+        self.assertEqual(
+            set(_LAYOUT_GRIPS) & set(_SEARCHED_GRIPS),
+            set(),
+            "a family is placed by both paths",
+        )
 
     def test_an_interval_uses_only_the_adjacent_pairs_a_duo_also_declares(self):
         """
@@ -1551,7 +1566,7 @@ class TestDerivedGripShapes(unittest.TestCase):
         _canonical, root_pc, tones = _chord_context(quality, chord_name)
         melody_midi = Note(melody).midi_note()
         templates = _interval_set_for_grip(
-            quality, grip, tones, melody_midi, root_pc,
+            grip, tones, melody_midi, root_pc,
         )
         self.assertEqual(len(templates), 1, f"{chord_name} under {melody}")
         return [melody_midi + offset for offset in templates[0]], templates[0]
@@ -1689,7 +1704,7 @@ class TestDerivedGripShapes(unittest.TestCase):
         checked = 0
         for chord_name, quality in QUALITIES:
             tones = {t % 12 for t in ChordParser.get_chord_tones(quality, chord_name)}
-            for melody in tones_with_an_inversion(chord_name, quality):
+            for melody in every_chord_tone(chord_name, quality):
                 for v in VoiceLeadingEngine.get_grip_voicings(
                     Note(melody), quality, chord_name=chord_name,
                     top_string=5, grips=("drop24",),
@@ -1891,12 +1906,13 @@ class TestClosePosition(unittest.TestCase):
 
 
 class TestKnownTableGaps(unittest.TestCase):
-    """Pre-existing gaps in the hand-authored drop-2 tables, pinned so they stay visible.
+    """The gap this class was written for, and what closed it.
 
-    These are not regressions and are not fixed here - completing the tables is a
-    separate piece of work, and changing them would change the published drop-2 output.
-    Pinning them means the next person to touch the tables finds a failing test that
-    tells them the gap closed, rather than a passing test that hid it.
+    It pinned the 13-chord 9th. A melody that is a chord tone with no template of its own
+    used to fall through to the quality-only fallback, which was free to sound a note the
+    chord does not contain. The tone-priority rule now answers for **every** chord tone, so
+    there is no such melody left to pin - and the assertion is inverted rather than
+    deleted, so a regression re-opens the gap and fails here.
     """
 
     def setUp(self):
@@ -1919,14 +1935,13 @@ class TestKnownTableGaps(unittest.TestCase):
             )
             if not set(v.pitch_classes()) <= tones
         ]
-        # The gap this class existed to pin has closed. A 9th in the melody of a 13 chord
-        # has no inversion in DROP2_INTERVAL_SETS, and used to fall through to the
-        # quality-only fallback, which offered shapes sounding a b3 against a chord whose
-        # identity is 3 and b7 - `x-x-10-8-10-10`, 1 b3 6 9.
-        #
-        # It is now derived instead, and it states both guide tones: `1 3 b7 9`. The
-        # assertion is inverted rather than deleted, so a regression re-opens the gap and
-        # fails here instead of passing silently.
+        # The gap this class existed to pin has closed - and closed for every chord tone,
+        # not just this one melody: the tone-priority rule builds the shape for a 9th in
+        # the melody of a 13 (`1 3 b7 9`, both guide tones), where the table had no
+        # inversion for it and the quality-only fallback offered `x-x-10-8-10-10`, 1 b3 6 9
+        # against a chord whose identity is 3 and b7. The assertion is inverted rather than
+        # deleted, so a regression re-opens the gap and fails here instead of passing
+        # silently.
         self.assertFalse(
             impure,
             f"the 13-chord 9th gap reopened: {[v.tab_string() for v in impure]}",

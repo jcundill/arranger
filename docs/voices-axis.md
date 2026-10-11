@@ -268,7 +268,8 @@ section, where it applies to any new axis rather than to that one entry point.
   The register fix is in the **generator's string sets and degree rule**, deliberately: a
   register preference belongs in the cost function only if it is a general preference, and
   "the bass voice goes low" is a fact about one voice rather than about every shape.
-- The drop-2 tables, `SHELL_DEGREES`, `GRIP_STRING_SETS`, `DUO_DEGREES`.
+- The drop-2 shapes (`_drop2_template_for`, the tables since retired),
+  `SHELL_DEGREES`, `GRIP_STRING_SETS`, `DUO_DEGREES`.
 - `BASS_DEGREES_6432` — **read** by the new branch, not rewritten. One table, one rule.
 - Every other grip family, texture, and the `bass=` axis.
 - `make demo` output, and all 883 pre-existing tests.

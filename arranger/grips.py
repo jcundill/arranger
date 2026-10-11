@@ -14,12 +14,13 @@ spellings working. It leaves one implementation, so there is nothing to keep in 
 The four non-contiguous string sets - 6-4-3, both 5-3-2s and 6-4-3-2 - are
 *searched* rather than stacked, because their voices are not in descending pitch
 order down the strings: the A string is tuned five semitones above the D. See
-`_place_shell` and `_place_drop2_6432`.
+`_place_shape`, which is the search they share.
 """
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Dict, FrozenSet, Iterable, List, Optional, Tuple
 
 from musthe import Note
 
@@ -217,7 +218,7 @@ GRIP_STRING_SETS: Dict[str, Tuple[Tuple[Tuple[int, ...], int], ...]] = {
     # shape for a melody - but it relocates steps onto a better melodic position by letting
     # the melody hold its place and change strings, which is the whole point of that; the
     # measurement is in `docs/engine.md` §"Grips, and the position-aware selector". It needs
-    # the search in `_place_shell`, not stacking, for the same reason 6-4-3 does.
+    # a search, not stacking, for the same reason 6-4-3 does.
     #
     # (5, 3, 2) is the *other* 5-3-2: high E, G and D, skipping the B on the way up
     # rather than the D on the way down. It balances the shell sets by soprano - the high
@@ -225,7 +226,7 @@ GRIP_STRING_SETS: Dict[str, Tuple[Tuple[Tuple[int, ...], int], ...]] = {
     # this gives it a second shape where the B and the G each have two. It is also the
     # three-layer split a walking-bass shell wants (melody on the high E, guide tones on the
     # G and the D, leaving the 5th and 6th strings to the thumb), so it earns its place
-    # twice over. Like the other non-contiguous sets it needs `_place_shell`'s search, not
+    # twice over. Like the other non-contiguous sets it needs a searched placement, not
     # stacking: its D-string note can sound above its G-string note, so the voices are not
     # in descending pitch order down the strings.
     "shell": (
@@ -266,12 +267,63 @@ GRIP_STRING_SETS: Dict[str, Tuple[Tuple[Tuple[int, ...], int], ...]] = {
     "interval": (((5, 4), 5), ((4, 3), 4), ((3, 2), 3)),
 }
 
+# --- Which of a chord's tones a shape states -----------------------------------
+#
+# One row per quality: that chord's own tones, most defining first. A shape of `voices`
+# voices states the melody's tone and then the next `voices - 1` entries of the row, so a
+# four-note drop-2, a three-note shell and a two-note duo are this one rule at three
+# arities. It is the rule the hand-written drop-2 tables encoded, and it is now the source
+# as well as the rule: `_drop2_template_for` reads one degree out of a row, and the 119
+# templates the tables held are kept as the witness the rule is asserted against
+# (`tests/support.py`, read by `tests/test_generated_grips.py`). The reasoning, the
+# measurements and the order that was *not* taken are in `docs/generated-grips.md`.
+#
+# What the rows say, read off the templates that reproduce them:
+#
+#   - **The first two entries are `SHELL_DEGREES`, in that order** - all 29 qualities. A
+#     shell and a drop-2 state the same pair, so the row is the one place that fact lives.
+#   - **The root goes first when something must, and the natural 5th next.** Of the 119
+#     templates, 24 drop the root and keep the natural 5th, and 18 drop the 5th and keep
+#     the root - and every one of those 18 is either a melody that *is* the root, or a
+#     chord whose 5th is altered, so the natural 5th is not part of the sound at all.
+#     Which of the two a quality gives up is its own row order: `7b9` and `13` drop the
+#     root, `7#11`, `7b13` and `maj7#11` drop the natural 5th. No single global order
+#     reproduces them, which is the whole reason this is a table and not one rule.
+#   - **An altered 5th is not a 5th.** 39 of the 45 altered-5th occurrences in the tables
+#     are stated; the 6 that are not are the `b5` of an `m9b5`, and of `7alt`, which has
+#     seven tones and must lose two. So a b5, #5, #11 or b13 ranks near the top of its
+#     row, not down beside the natural 5th.
+#   - **A name-given extension is not optional, and one the name does not give is.** A
+#     `13` states its 13th and its b7 and drops its 9th, which the name never promised:
+#     its row reads 3, 13, b7, 5, root, 9.
+#
+# The first two entries are pinned by `SHELL_DEGREES` at every quality. Entries beyond
+# them only *bite* where a chord has more tones than the shape has voices, which is 11 of
+# these 29 - the other 18 are free orderings, and their tail carries no information. Do
+# not tidy them into a shared shape: for the 11 that are constrained, the row is the
+# decision.
+TONE_PRIORITY: Dict[str, Tuple[int, ...]] = {
+    "maj7": (4, 11, 0, 7), "6": (4, 9, 0, 7), "m7": (3, 10, 0, 7),
+    "m7b5": (3, 10, 0, 6), "dim7": (3, 9, 0, 6), "m6": (3, 9, 0, 7),
+    "mMaj7": (3, 11, 0, 7), "7": (4, 10, 0, 7),
+    "7b9": (4, 10, 1, 7, 0), "7alt": (4, 10, 1, 8, 0, 3, 6),
+    "maj9": (4, 11, 2, 7, 0), "m9": (3, 10, 2, 7, 0), "9": (4, 10, 2, 7, 0),
+    "6/9": (4, 9, 2, 7, 0), "13": (4, 9, 10, 7, 0, 2),
+    "7#11": (4, 10, 0, 6, 7), "7b13": (4, 10, 0, 8, 7),
+    "maj7#11": (4, 11, 0, 6, 7), "m9b5": (3, 10, 2, 6, 0),
+    "maj": (4, 7, 0), "m": (3, 7, 0), "aug": (4, 8, 0),
+    "sus4": (5, 7, 0), "sus2": (2, 7, 0),
+    "add9": (4, 7, 0, 2), "madd9": (3, 7, 0, 2),
+    "7sus4": (5, 10, 0, 7), "7b5": (4, 10, 0, 6), "7#5": (4, 10, 0, 8),
+}
+
+
 # The two guide tones a shell is built from - the 3rd and the 7th - as semitones above
-# the root. The table is explicit rather than derived because the house rule is never
-# to guess a chord: a quality that is not listed simply has no shell, and the
-# selector falls back to a four-note grip for it. Triads and suspended chords appear
-# here with their nearest available pair (a triad's "7th" slot is its 5th), because a
-# shell under a triad is just the triad in a playable position.
+# the root. This is `TONE_PRIORITY`'s first two entries per quality, spelled out: it is
+# what `_shell_request` and `_duo_offsets` read today, and a quality that is not listed
+# simply has no shell, so the selector falls back to a four-note grip for it. Triads and
+# suspended chords appear here with their nearest available pair (a triad's "7th" slot is
+# its 5th), because a shell under a triad is just the triad in a playable position.
 SHELL_DEGREES: Dict[str, Tuple[int, int]] = {
     "maj7": (4, 11), "m7": (3, 10), "m7b5": (3, 10), "dim7": (3, 9),
     "m6": (3, 9), "mMaj7": (3, 11), "maj9": (4, 11), "m9": (3, 10),
@@ -282,6 +334,21 @@ SHELL_DEGREES: Dict[str, Tuple[int, int]] = {
     "7sus4": (5, 10),
     "maj": (4, 7), "m": (3, 7), "aug": (4, 8), "sus4": (5, 7), "sus2": (2, 7),
 }
+
+# How each family's shape is placed, as two tables rather than a branch in the generator.
+#
+# A **layout** family's shape *is* its interval template: `_place_template` lays the
+# template's voices on the strings from the soprano down, and the template and the string
+# set fix every fret. A **searched** family's shape is a claim about what it sounds - both
+# guide tones, or four chord tones with a root or a 5th underneath - and `_place_shape`
+# finds it. The two are placed by different code, so a family listed in neither would
+# generate nothing at all; `tests/test_grips.py` holds the two to partitioning the
+# families, which is what makes a new one a decision rather than a silent omission.
+_LAYOUT_GRIPS: Tuple[str, ...] = (
+    "drop2", "closed", "drop3", "drop24", "duo", "interval",
+)
+_SEARCHED_GRIPS: Tuple[str, ...] = ("shell", "drop2_6432")
+
 
 # The four lowest strings. A four-note voicing here is deliberately NOT offered, and
 # this constant is the only place that says so.
@@ -496,6 +563,35 @@ def finger_skip_count(voicing: Voicing) -> int:
 # read without reading the search that follows it.
 
 
+def stated_tones(
+    quality: str, melody_degree: int, voices: int = 4
+) -> Tuple[int, ...]:
+    """
+    The chord tones a shape of `voices` voices states, the melody's own tone first.
+
+    This is `TONE_PRIORITY` read out: the melody's degree, then the next `voices - 1`
+    of that quality's row. It **narrows and never widens** - asking it for more voices
+    than the chord has tones returns the whole row - so a shape can never state a note
+    the chord does not contain.
+
+    The melody's degree is returned whether or not it is a chord tone, because the
+    melody is the caller's note and is never rewritten. Degrees are pitch classes
+    relative to the chord's root, which is the unit `_drop2_template_for` is asked in.
+
+    Every degree of a quality's row is one of its chord tones, so the drop-2 generator
+    only ever asks for one of those - a tone with no place in the row would have no shape
+    at all. A melody that is *not* a chord tone is a different question, answered by
+    offering `_drop2_palette` rather than by this rule.
+    """
+    order = TONE_PRIORITY.get(ChordParser.canonical_quality(quality))
+    if order is None:
+        return ()
+    degree = melody_degree % 12
+    return tuple(
+        [degree] + [t for t in order if t % 12 != degree][: max(0, voices - 1)]
+    )
+
+
 def _nearest_tone_below(midi: int, pitch_class: int, max_drop: int = 24) -> Optional[int]:
     """
     The highest pitch at or below `midi` that has `pitch_class`, or None.
@@ -546,48 +642,8 @@ def _close_stack_offsets(
     return offsets
 
 
-# How far below the melody the guide-tone fallback will look for a voice, in semitones.
-# A fourth's breadth, which is about what the four strings below a soprano can voice
-# without the shape spanning past a hand: the tuning there is five semitones across, so
-# anything wider than this stops being one grip. Generous enough for the deepest guide
-# tone (a b7 sits a tone below the melody's octave) and its ninth, and no wider - the
-# point is to refuse a root that would name the right notes unplayably rather than to
-# search further for one.
-_REACH = 14
 
 
-# The gap between two adjacent strings on a contiguous four-string block, in
-# semitones: high E to B is 5, B to G is 5. Consecutive voices must clear each other by
-# at least this or the shape cannot be fretted - two voices a semitone apart land on the
-# same fret of neighbouring strings and collapse into one note. Read from the tuning
-# rather than hardcoded, so a retuning cannot leave this lying.
-_BLOCK_SPACING = min(
-    abs(
-        STANDARD_TUNING[hi].midi_note() - STANDARD_TUNING[lo].midi_note()
-    )
-    for lo in range(len(STANDARD_TUNING))
-    for hi in (lo + 1, lo + 2)
-    if hi < len(STANDARD_TUNING)
-)
-
-
-def _duplicates_pitch(pitch: int, placed: List[int]) -> bool:
-    """
-    Whether `pitch` would land on a note that is *already sounding* at that octave.
-
-    Deliberately almost nothing, and the reason is musical rather than technical: the
-    engine's own tables contain adjacent voices a semitone and a tone apart, because a b7
-    under a 3rd is the tritone a dominant chord is named for and a b5 against a 3 is what
-    "altered" means. A rule that rejected a small interval would refuse the chord's own 3rd
-    whenever the melody sat a tone above it - the ordinary case for an altered chord, since
-    a b5 over its 3rd *is* a minor 3rd. So the only real constraints are that a voice must
-    be a *chord tone* (checked by the caller) and must not duplicate one already placed at
-    the same pitch.
-
-    Kept as a named predicate because "no doubled pitch" is a real requirement: two voices
-    on one fret would be one note played twice, not a four-note voicing.
-    """
-    return any(pitch == other for other in placed)
 
 
 def _guide_tones(tones: Tuple[int, ...], root_pc: Optional[int]) -> Tuple[int, ...]:
@@ -629,203 +685,21 @@ def _guide_tones(tones: Tuple[int, ...], root_pc: Optional[int]) -> Tuple[int, .
     return tuple(d for d in (third, seventh) if d is not None)
 
 
-def _drop2_for_untabled_degree(
-    tones: Tuple[int, ...],
-    melody_midi: int,
-    root_pc: int,
-) -> List[List[int]]:
-    """
-    A drop-2 for a melody degree the hand tables have no inversion for.
-
-    Two steps, in this order, because they answer different questions.
-
-    **1. Derive it.** The close stack under *this* melody, with its second voice lowered
-    an octave, which is the textbook definition and what keeps the result a real drop-2
-    of this inversion rather than a template borrowed from another one. For a 5th in the
-    melody of a 7#11 that is `5 3 1 b5`.
-
-    **2. Check the guide tones.** A four-note voicing states the chord's 3rd and 7th.
-    The derivation does not guarantee it - a walk takes the nearest chord tone below and
-    keeps going, so for a melody low in the chord it will spend its voices on the root
-    and the 5th and drop the 7th, which changes the chord rather than thinning it. When
-    the derived shape is missing a guide tone it is rebuilt from `_guide_tone_drop2`.
-
-    Returns `[]` when neither route produces a shape, and the caller then keeps the
-    table's own templates - which is the pre-existing behaviour, and is still better than
-    inventing one.
-    """
-    stack = _close_stack_offsets(tones, melody_midi, root_pc)
-    if len(stack) >= 4:
-        derived = [0, stack[2], stack[3], stack[1] - 12]
-        # `_guide_tones` answers in degrees from the root; the template is absolute
-        # pitches below the melody. Comparing the two directly would test a degree
-        # against a pitch class and fail for every chord but C, so the sounding set is
-        # reduced back to degrees first.
-        sounding = {
-            (melody_midi + offset - root_pc) % 12 for offset in derived
-        }
-        if all(degree % 12 in sounding for degree in _guide_tones(tones, root_pc)):
-            return [derived]
-    return _guide_tone_drop2(tones, melody_midi, root_pc)
-
-
-def _guide_tone_drop2(
-    tones: Tuple[int, ...],
-    melody_midi: int,
-    root_pc: int,
-) -> List[List[int]]:
-    """
-    A drop-2 for a melody the hand tables have no inversion for, built from guide tones.
-
-    **Every four-note voicing states the chord's 3rd and 7th.** That is the rule this
-    exists to satisfy: the two notes that decide whether the ear hears a major or minor
-    chord, and a dominant or a minor 7th. A shape that drops either is not a thinner
-    version of the chord, it is a different one - which is why the tables keep them in
-    all four inversions rather than treating them as optional.
-
-    So when the melody is a chord tone with no template, the shape is built *backwards
-    from the guide tones* instead of from a close stack under the melody. A stack walk
-    takes the nearest chord tone below and keeps going, so it will happily spend its
-    voices on the root and the 5th and leave the 7th out, producing `4 7 b9 5` for a 5th in
-    the melody of a 7#11: a major 3rd and a major 7th against a chord whose identity is 3
-    and b7.
-
-    The construction, top to bottom:
-      - the melody, which is the soprano by definition;
-      - both guide tones, each at the nearest octave below the melody that fits;
-      - then the nearest remaining chord tone below, to give the bass something to say.
-
-    "Fits" is the whole difficulty, and it is not a rule about intervals. Two
-    *consecutive* voices on a contiguous four-string block are separated by the tuning
-    between those strings - five semitones from the high E down to the B, five more to
-    the G - so consecutive voices must be at least that far apart or the shape cannot be
-    fretted at all. That is why a naive walk produces templates like `[0, -1, -2, -9]`,
-    two adjacent voices a semitone apart: `_place_template` then puts both on the same
-    fret of adjacent strings and returns a *three*-note shape, which is not a four-note
-    voicing and is not a member of any supported string set.
-
-    So each voice is accepted only where it clears every voice above it by at least the
-    block's own spacing, and where it is not already sounding. Both are checked against
-    `_BLOCK_SPACING`, the real tuning rather than a guess.
-
-    Returns a template only when both guide tones fit. When they do not - the melody is
-    very low, or the chord is a sus with no 3rd to find - this returns nothing and the
-    caller falls back to the table, because a shape that cannot state the chord's
-    identity is worse than an honest absence of one.
-    """
-    guide = _guide_tones(tones, root_pc)
-    if not guide:
-        return []
-
-    melody_pc = melody_midi % 12
-    chosen: List[int] = [melody_midi]
-    # Guide tones first, so the two notes that define the chord are never the ones
-    # squeezed out by a later voice competing for the same octave.
-    for degree in guide:
-        target = (root_pc + degree) % 12
-        if target == melody_pc:
-            continue  # the melody already states this guide tone
-        pitch: Optional[int] = None
-        for candidate in range(melody_midi - 1, melody_midi - _REACH, -1):
-            if candidate % 12 != target:
-                continue
-            if _duplicates_pitch(candidate, chosen):
-                continue  # already sounding at this octave
-            if (melody_midi - candidate) < _BLOCK_SPACING:
-                continue  # too close under the melody to be fretted
-            pitch = candidate
-            break
-        if pitch is not None:
-            chosen.append(pitch)
-
-    if len(chosen) < 3:
-        return []  # could not state both guide tones; do not fake a chord
-
-    def clashes(pitch: int) -> bool:
-        """
-        Whether this pitch cannot be voiced *below* the voices already placed.
-
-        Two conditions, and the second is the one that actually shapes the result:
-        it must not duplicate a pitch already sounding, and it must clear the nearest
-        voice above it by at least the string spacing. A voice a semitone or a tone
-        under another is fine *musically* - the tables are full of minor 3rds and
-        tritones - but two voices that close together cannot both be fretted on
-        neighbouring strings, because the strings themselves are four or five semitones
-        apart. That is a property of the instrument rather than of the chord, and it is
-        why a b7 in the melody of a dominant yields no four-note shape here: the 3rd
-        sits a tone below it, so the two cannot be placed in sequence.
-        """
-        if _duplicates_pitch(pitch, chosen):
-            return True
-        above = [placed for placed in chosen if placed > pitch]
-        if not above:
-            return False
-        return (min(above) - pitch) < _BLOCK_SPACING
-
-    chord_degrees = {(t - root_pc) % 12 for t in tones}
-    # The bass should be a *new* chord tone rather than the melody an octave down.
-    # Doubling the melody at the bottom is what the nearest-tone walk keeps choosing,
-    # and it gives `5 3 b7 5` for a 5th in the melody of a 7#11: the melody heard twice
-    # and the root missing. Preferring the root is also the musically stronger choice -
-    # it puts the chord's identity in the bass, which is the same reason voicing_cost
-    # has a bass-function tie-break.
-    #
-    # Placed *before* the generic fill, not after it. Filling first would take the
-    # octave of the melody as the fourth voice and leave nothing for the root, which is
-    # how `5 3 b7 5` survived a bass preference that was otherwise correct.
-    preferred_bass = 0 if 0 in chord_degrees else min(chord_degrees)
-    # Bounded by what a hand can hold, not by a two-octave search. The guide tones
-    # already sit a 4th and a 7th below the melody here, so a root a further octave
-    # down would be a fifth below *those* - `5 3 b7 1` spanning nineteen semitones.
-    # That names the right four notes and cannot be played as one shape, so
-    # _place_template rejects it and the step loses its chord entirely. Preferring
-    # the root is only useful while the root is reachable.
-    for candidate in range(melody_midi - 1, melody_midi - _REACH, -1):
-        if len(chosen) >= 4:
-            break
-        if candidate % 12 != (root_pc + preferred_bass) % 12:
-            continue
-        if clashes(candidate):
-            continue
-        chosen.append(candidate)
-
-    for pitch in range(min(chosen) - 1, min(chosen) - _REACH, -1):
-        if len(chosen) >= 4:
-            break
-        if (pitch - root_pc) % 12 not in chord_degrees:
-            continue
-        if clashes(pitch):
-            continue
-        chosen.append(pitch)
-    if len(chosen) < 4:
-        return []
-
-    chosen.sort(reverse=True)
-    # A drop-2 is a close stack with its second voice lowered an octave, and the
-    # lowest note is that lowered voice - so the template is simply the four pitches,
-    # top to bottom. What makes it *this* rather than close position is the gap
-    # between the top two, which is now a fourth or more because the guide tones sit
-    # below the melody rather than beside it.
-    return [[pitch - melody_midi for pitch in chosen]]
-
 
 def _interval_set_for_grip(
-    quality: str,
     grip: str,
     tones: Tuple[int, ...],
     melody_midi: int,
     root_pc: Optional[int] = None,
 ) -> List[List[int]]:
     """
-    The interval templates for a quality under a given grip, as offsets from the
-    soprano (0 for the melody itself, negative below it).
+    The close-position templates for one grip, as offsets from the soprano (0 for the
+    melody itself, negative below it).
 
-    `drop2` returns DROP2_INTERVAL_SETS verbatim and derives nothing. Those tables are
-    hand-authored: the extended qualities are voiced *rootless* on purpose, so a 9 or a
-    13 that fits into four voices without the root is a musical decision rather than an
-    accident of a stack search. Deriving drop-3 and close position from the same chord
-    tones therefore gives a fuller chord - a legitimate but different voicing - and it
-    is precisely why drop-2's own table is left alone.
+    Deriving drop-3 and close position from the chord tones gives a *fuller* chord than
+    the tone-priority rule gives at four voices - every tone the rule left out comes
+    back - which is a legitimate but different voicing rather than an error, and is why
+    these families have their own rule instead of sharing drop-2's.
 
     drop-2, drop-3 and close position share one close-position stack of four voices,
     taken as v1, v2, v3, v4 from the top:
@@ -839,9 +713,6 @@ def _interval_set_for_grip(
     therefore the octave of v2, not v4 - which is what makes the 3rd and the 7th of a
     seventh chord land on the D and G strings in the familiar 4-3-2-1 shell shape.
     """
-    if grip == "drop2":
-        return DROP2_INTERVAL_SETS.get(quality, [])
-
     if grip not in ("drop3", "closed", "drop24"):
         return []
 
@@ -1025,19 +896,18 @@ def _interval_offsets(
     return templates
 
 
-def _place_shell(
+def _shell_request(
     quality: str,
-    tones: Tuple[int, ...],
     root_pc: int,
     strings: Tuple[int, ...],
     melody_midi: int,
     top_fret: int,
-) -> Optional[Voicing]:
+) -> Optional[_Placement]:
     """
-    A three-note shell on one string set, found by searching rather than stacking.
+    What a shell asks the search for on one string set: three voices, and both guide tones.
 
-    This needs its own placement for the same reason 6-4-3 does, and the reason is not
-    specific to that shape: **a shell's notes are not in descending pitch order down the
+    A shell cannot come from a stack, and the reason is not specific to the 6-4-3 shape:
+    **a shell's notes are not in descending pitch order down the
     strings.** The tuning is not monotonic in the useful direction. The A string is
     tuned five semitones *above* the D string, and the D string five above the G, so a
     note fretted on the lower string can easily sound higher than its neighbour. A G7
@@ -1049,134 +919,135 @@ def _place_shell(
     So the shape is found by searching: the melody is held at `top_fret` on the soprano
     string and every combination of frets within the span limit is tried on the
     remaining strings, keeping the ones where the guide tones sound and nothing outside
-    the chord does. Because the search window is exactly the span limit, the search is
-    *exhaustive within the playability invariant* - if a playable shell exists in this
-    position, this finds it, which is a stronger guarantee than stacking a nearest-tone
-    stack and hoping.
+    the chord does. This states the *request*; `_place_shape` is what answers it, so this
+    and every other searched family cannot drift apart on what a candidate may sound or on
+    how two equally playable ones are ranked.
 
-    Ties are broken by fret spread, then by position, so the shape a player would pick
-    wins over the first one the search happens to reach.
+    Returns None when the chord has no shell pair - a quality `SHELL_DEGREES` does not
+    know, or a set too small to hold three voices.
     """
     guide = SHELL_DEGREES.get(quality)
     if guide is None or len(strings) < 3:
         return None
-    allowed = {(root_pc + t) % 12 for t in tones}
-    needed = {(root_pc + g) % 12 for g in guide}
-    limit = GRIP_MAX_SPAN["shell"]
-
-    lo = max(0, top_fret - limit)
-    hi = top_fret + limit
-    if hi > 18:
-        return None
-
-    best: Optional[Tuple[int, float, Voicing]] = None
-    for first in range(lo, hi + 1):
-        for second in range(lo, hi + 1):
-            frets = [-1] * len(STANDARD_TUNING)
-            frets[strings[0]] = top_fret
-            frets[strings[1]] = first
-            frets[strings[2]] = second
-            active = [top_fret, first, second]
-            if max(active) - min(active) > limit:
-                continue
-            midis = sorted(
-                GuitarFretboard.fret_to_midi(str, fret)
-                for str, fret in zip(strings, (top_fret, first, second))
-            )
-            pcs = {m % 12 for m in midis}
-            # Both guide tones have to sound, and nothing outside the chord may.
-            if not needed <= pcs or not pcs <= allowed:
-                continue
-            spread = max(active) - min(active)
-            voicing = Voicing(
-                frets=frets,
-                top_fret=top_fret,
-                avg_fret=sum(active) / len(active),
-                grip="shell",
-                bass_pc=min(midis) % 12,
-            )
-            key = (spread, voicing.avg_fret)
-            if best is None or key < best[:2]:
-                best = (spread, voicing.avg_fret, voicing)
-    return best[2] if best else None
+    return _Placement(
+        grip="shell",
+        # The three strings from the soprano down: a shell is a three-voice grip, so a set
+        # with a fourth string in it places the shape on the top three.
+        strings=strings[:3],
+        melody_midi=melody_midi,
+        top_fret=top_fret,
+        # Both guide tones have to sound.
+        required=frozenset((root_pc + g) % 12 for g in guide),
+    )
 
 
-def _place_drop2_6432(
-    tones: Tuple[int, ...],
+def _drop2_6432_request(
     root_pc: int,
+    strings: Tuple[int, ...],
     melody_midi: int,
     top_fret: int,
-) -> Optional[Voicing]:
+) -> _Placement:
     """
-    A four-note 6-4-3-2 shape (low E, D, G and the B under the melody), found by
-    searching rather than stacking.
+    What the 6-4-3-2 family asks the search for: four voices, and a root or a 5th underneath.
 
-    It needs its own placement for the reason 6-4-3 does, and the reason is
-    structural: **this set skips the A string, so its strings are not in descending
-    pitch order.** The D string is tuned a fifth above the low E, so the low E's note is
-    frequently *not* the lowest sounding pitch - a hand-authored drop-2 table, which lays
-    voices down by interval, cannot express a shape whose bottom string is not the bottom
-    voice. Reusing _place_shell's approach is the answer rather than a second way to
-    place notes: hold the melody, search every combination of frets within the span
-    limit, keep the legal ones. Because the window is exactly the span limit, the search
-    is *exhaustive within the playability invariant*.
+    It cannot come from the interval-laid drop-2 table for the reason 6-4-3 cannot, and
+    the reason is structural: **this set skips the A string, so its strings are not in
+    descending pitch order.** The D string is tuned a fifth above the low E, so the low
+    E's note is frequently *not* the lowest sounding pitch, and a table that lays voices
+    down by interval cannot express a shape whose bottom string is not the bottom voice.
 
-    The one extra rule is BASS_DEGREES_6432: the low E carries the chord's root or its
-    5th. That is the entire point of the shape, and it is also why it needs a root at
+    The extra rule is BASS_DEGREES_6432: the low E carries the chord's root or its 5th.
+    That is the entire point of the shape, and it is also why the family needs a root at
     all - a rootless quality has nothing to measure the low E against, and gets nothing.
-
-    Ties are broken by fret spread then by position, matching _place_shell, so the shape
-    a player would pick wins over the first one the search reaches. Ranking the survivors
-    is not cosmetic: an unranked search returns whatever comes first, so the grip can look
-    as though it is never selected when it is merely ranked last.
     """
-    allowed = {(root_pc + t) % 12 for t in tones}
-    limit = GRIP_MAX_SPAN["drop2_6432"]
+    return _Placement(
+        grip="drop2_6432",
+        strings=strings,
+        melody_midi=melody_midi,
+        top_fret=top_fret,
+        # No guide-tone claim: the shape states four of the chord's own tones and the
+        # string set decides which, exactly as the four-note families do.
+        required=frozenset(),
+        # The lowest voice carries the chord's *function* rather than its quality, so it is
+        # a root or a 5th - read from BASS_DEGREES_6432, which is where that rule is stated.
+        lowest_pc_allowed=frozenset(
+            (root_pc + degree) % 12 for degree in BASS_DEGREES_6432
+        ),
+    )
 
-    lo = max(0, top_fret - limit)
-    hi = top_fret + limit
-    if hi > 18:
+
+def _searched_request(
+    grip: str,
+    canonical: str,
+    root_pc: Optional[int],
+    strings: Tuple[int, ...],
+    melody_midi: int,
+    top_fret: int,
+) -> Optional[_Placement]:
+    """
+    What a **searched** family asks for on one string set, or None when it asks nothing.
+
+    Every claim these families make is measured *from the root* - a shell states this
+    chord's 3rd and 7th, and a 6-4-3-2 states the chord's function in the bass - so a chord
+    whose root cannot be found gets nothing here. That is a limitation rather than a
+    fallback: a shell is a claim about *this* chord, and guessing a guide tone is how a
+    wrong note gets in.
+
+    Returns None for a family this is not about, so a family listed in neither
+    `_SEARCHED_GRIPS` nor `_LAYOUT_GRIPS` generates nothing rather than something nobody
+    asked for.
+    """
+    if root_pc is None or grip not in _SEARCHED_GRIPS:
         return None
+    if grip == "shell":
+        return _shell_request(canonical, root_pc, strings, melody_midi, top_fret)
+    return _drop2_6432_request(root_pc, strings, melody_midi, top_fret)
 
-    best: Optional[Tuple[int, float, Voicing]] = None
-    for low_e in range(lo, hi + 1):
-        for d_fret in range(lo, hi + 1):
-            for g_fret in range(lo, hi + 1):
-                active = (top_fret, low_e, d_fret, g_fret)
-                spread = max(active) - min(active)
-                if spread > limit:
-                    continue
-                frets = [-1] * len(STANDARD_TUNING)
-                frets[4] = top_fret
-                frets[0] = low_e
-                frets[2] = d_fret
-                frets[3] = g_fret
-                midis = sorted(
-                    GuitarFretboard.fret_to_midi(s, frets[s]) for s in (0, 2, 3, 4)
-                )
-                # The melody stays the top voice, nothing outside the chord sounds, and
-                # the low E carries a root or a 5th.
-                if midis[-1] != melody_midi:
-                    continue
-                if not {m % 12 for m in midis} <= allowed:
-                    continue
-                # The *low E string's* note, which is not the same as the lowest
-                # sounding pitch: the D string is a fifth above it.
-                if (GuitarFretboard.fret_to_midi(0, low_e) % 12 - root_pc) % 12 not in (
-                    BASS_DEGREES_6432
-                ):
-                    continue
-                voicing = Voicing(
-                    frets=frets,
-                    top_fret=top_fret,
-                    avg_fret=sum(active) / len(active),
-                    grip="drop2_6432",
-                    bass_pc=midis[0] % 12,
-                )
-                key = (spread, voicing.avg_fret)
-                if best is None or key < best[:2]:
-                    best = (spread, voicing.avg_fret, voicing)
-    return best[2] if best else None
+
+def _templates_for(
+    grip: str,
+    canonical: str,
+    tones: Tuple[int, ...],
+    melody_midi: int,
+    root_pc: Optional[int],
+) -> List[List[int]]:
+    """
+    The interval templates a **layout** family places on one string set.
+
+    A template is the shape, so nothing here is searched: `drop3`, `drop24` and `closed`
+    are transformations of the close stack under the melody, drop-2 reads the tone-priority
+    rule, and `duo` and `interval` are the two notes they name. Those last two are the ones
+    that need a root, because each *names a chord tone* - a guide tone, or an interval from
+    the root - where the others are built from the stack itself.
+
+    `drop2` has two cases and they are told apart by what the melody *is*. A melody that is
+    a chord tone takes the rule's own shape for its degree, and one shape only: offering
+    the quality's other degrees would pin this melody to the soprano string and let each
+    other template's top note fall *below* it, so the result sounds whatever those offsets
+    happen to spell over this melody rather than the inversion the melody belongs in. A
+    melody that is **not** a chord tone has no degree to match, and neither has a call with
+    no root at all - both are offered the rule at every degree the chord has
+    (`_drop2_palette`), which is where `voicing_cost`'s tone-purity criterion earns its
+    place by choosing among them.
+    """
+    if grip == "duo":
+        if root_pc is None:
+            return []
+        duo = _duo_offsets(tones, melody_midi, root_pc, canonical)
+        return [duo] if duo else []
+    if grip == "interval":
+        # A texture rather than a claim about the chord, and built from templates because
+        # an interval *is* the two notes it names.
+        return [] if root_pc is None else _interval_offsets(tones, melody_midi, root_pc)
+
+    if grip == "drop2":
+        if root_pc is not None and tones:
+            degree = (melody_midi - root_pc) % 12
+            if degree in {t % 12 for t in tones}:
+                shape = _drop2_template_for(canonical, degree)
+                return [shape] if shape else []
+        return _drop2_palette(canonical)
+    return _interval_set_for_grip(grip, tones, melody_midi, root_pc)
 
 
 def _place_template(
@@ -1190,9 +1061,14 @@ def _place_template(
     Fits an interval template onto a string set, or returns None if it will not play.
 
     The voices go on the strings from the top down, so the template's order is the
-    order they are heard. Playability is the rule the drop-2 engine has always used:
-    every fret on the board, and a hand that does not stretch -
-    `fret_span() <= GRIP_MAX_SPAN[grip]`.
+    order they are heard - which is what makes this a *layout*: the shape is the template,
+    not a claim about which of the chord's tones sound. A family placed this way asks
+    nothing of the tone set, and that is deliberate rather than lax: the template is the
+    whole claim, and `interval` is free to sound a key tone under a passing note.
+
+    The frets are computed rather than searched, because the template and the string set
+    fix each one. What they are then held to is `_candidate`, the same rules every searched
+    shape is held to, so the melody-on-top rule reaches the template families too.
 
     The span is checked on the frets actually placed, not as "within N of the soprano".
     Those are not the same condition: bounding each finger to five frets either side of
@@ -1209,27 +1085,26 @@ def _place_template(
 
     frets = [-1] * len(STANDARD_TUNING)
     frets[strings[0]] = top_fret
-    limit = GRIP_MAX_SPAN.get(grip, 5)
-
     for position, offset in enumerate(template[1:], start=1):
         string_idx = strings[position]
-        fret = melody_midi + offset - STANDARD_TUNING[string_idx].midi_note()
-        if not 0 <= fret <= 18:
-            return None
-        frets[string_idx] = fret
+        frets[string_idx] = (
+            melody_midi + offset - STANDARD_TUNING[string_idx].midi_note()
+        )
 
-    active = [f for f in frets if f >= 0]
-    if max(active) - min(active) > limit:
-        return None
-    midis = sorted(
-        GuitarFretboard.fret_to_midi(s, f) for s, f in enumerate(frets) if f >= 0
-    )
-    return Voicing(
-        frets=frets,
-        top_fret=top_fret,
-        avg_fret=sum(active) / len(active),
-        grip=grip,
-        bass_pc=midis[0] % 12 if midis else None,
+    return _candidate(
+        _Placement(
+            grip=grip,
+            strings=strings,
+            melody_midi=melody_midi,
+            top_fret=top_fret,
+            required=frozenset(),
+            # The template's own voices, which may be fewer than the set offers - the rest
+            # of the set is muted.
+            voices=len(template),
+        ),
+        frets,
+        # No claim about the chord's tones - the template is the claim.
+        None,
     )
 _INTERVAL_CLASSES = (3, 9, 8)
 
@@ -1240,261 +1115,73 @@ _INTERVAL_NAMES: Dict[int, str] = {3: "3rd", 8: "b6", 9: "6th"}
 
 
 
-# Accurate Drop-2 interval structures relative to top melody voice for top 4 strings (Strings 4-3-2-1: D, G, B, E).
-# Semitone offsets from the soprano (String 1 / High E) down to String 2 (B), String 3 (G), and String 4 (D).
-DROP2_INTERVAL_SETS = {
-    # --- Major Family ---
-    "maj7": [
-        [0, -7, -11, -16],  # 7th in top voice
-        [0, -5, -8, -13],   # Root in top voice
-        [0, -5, -9, -16],   # 3rd in top voice
-        [0, -7, -8, -15],   # 5th in top voice
-    ],
-    "6": [
-        [0, -5, -9, -14],   # 6th in top voice
-        [0, -5, -8, -15],   # Root in top voice
-        [0, -7, -9, -16],   # 3rd in top voice
-        [0, -7, -10, -15],  # 5th in top voice
-    ],
+# --- The drop-2 rule -----------------------------------------------------------
+#
+# One shape per degree, computed rather than tabulated. `TONE_PRIORITY` above says which
+# of the chord's tones a shape states; these two say what the shape *is*.
 
-    # --- Minor Family (Essential for Minor Tunes) ---
-    "m7": [
-        [0, -7, -10, -15],  # b7 in top voice
-        [0, -5, -9, -14],   # Root in top voice
-        [0, -5, -8, -15],   # b3 in top voice
-        [0, -7, -9, -16],   # 5th in top voice
-    ],
-    "m7b5": [
-        [0, -7, -10, -16],  # b7 in top voice (half-diminished ii chord)
-        [0, -6, -9, -14],   # Root in top voice
-        [0, -5, -9, -15],   # b3 in top voice
-        [0, -6, -8, -15],   # b5 in top voice
-    ],
-    "dim7": [
-        [0, -6, -9, -15],   # bb7 / dim7 in top voice (symmetrical)
-        [0, -6, -9, -15],   # Root in top voice
-        [0, -6, -9, -15],   # b3 in top voice
-        [0, -6, -9, -15],   # b5 in top voice
-    ],
-    "m6": [
-        [0, -6, -9, -14],   # 6th in top voice (tonic minor)
-        [0, -5, -9, -15],   # Root in top voice
-        [0, -6, -8, -15],   # b3 in top voice
-        [0, -7, -10, -16],  # 5th in top voice
-    ],
-    "mMaj7": [
-        [0, -8, -11, -16],  # 7th in top voice (melodic minor tonic)
-        [0, -5, -9, -13],   # Root in top voice
-        [0, -4, -8, -15],   # b3 in top voice
-        [0, -7, -8, -16],   # 5th in top voice
-    ],
 
-    # --- Dominant Family (Resolutions in Major & Minor Keys) ---
-    "7": [
-        [0, -6, -10, -15],  # b7 in top voice
-        [0, -5, -8, -14],   # Root in top voice
-        [0, -6, -9, -16],   # 3rd in top voice
-        [0, -7, -9, -15],   # 5th in top voice
-    ],
-    "7b9": [
-        [0, -6, -9, -15],   # b9 in top voice (rootless diminished 7th shell: 3, 5, b7, b9)
-        [0, -6, -9, -15],   # 3rd in top voice
-        [0, -6, -9, -15],   # 5th in top voice
-        [0, -6, -9, -15],   # b7 in top voice
-        [0, -8, -11, -14],  # Root in top voice (5th omitted: 1, b9, 3, b7)
-    ],
-    "7alt": [
-        [0, -6, -9, -14],   # b7 in top voice (altered dominant: 3, b7, b9, b13)
-        [0, -5, -9, -15],   # b9 in top voice
-        [0, -6, -8, -15],   # 3rd in top voice
-        [0, -7, -10, -16],  # b13 in top voice
-        [0, -8, -11, -14],  # Root in top voice (b13 omitted: root, b9, 3, b7)
-    ],
+def _drop2_template_for(quality: str, degree: int) -> List[int]:
+    """
+    The textbook drop-2 of the tones `degree` states, as offsets below the soprano.
 
-    # --- Extended / colour qualities ---
-    # These are voiced rootless (root, 5th or 13th omitted as needed) so the
-    # five chord tones of a ninth always fit the four strings. They are what
-    # the 'extension' non-chord-tone strategy reharmonises into, e.g. the 9th
-    # of Cmaj7 (D) becomes a Cmaj9, so D is a genuine chord tone again.
-    "maj9": [
-        [0, -8, -10, -13],  # Root in top voice (5th omitted)
-        [0, -5, -9, -14],   # 3rd in top voice (rootless 3-5-7-9)
-        [0, -5, -8, -15],   # 5th in top voice
-        [0, -7, -9, -16],   # 7th in top voice
-        [0, -7, -10, -15],  # 9th in top voice
-    ],
-    "m9": [
-        [0, -9, -10, -14],  # Root in top voice (5th omitted)
-        [0, -5, -8, -13],   # b3 in top voice (rootless b3-5-b7-9)
-        [0, -5, -9, -16],   # 5th in top voice
-        [0, -7, -8, -15],   # b7 in top voice
-        [0, -7, -11, -16],  # 9th in top voice
-    ],
-    "9": [
-        [0, -8, -10, -14],  # Root in top voice (5th omitted)
-        [0, -6, -9, -14],   # 3rd in top voice (rootless 3-5-b7-9)
-        [0, -5, -9, -15],   # 5th in top voice
-        [0, -6, -8, -15],   # b7 in top voice
-        [0, -7, -10, -16],  # 9th in top voice
-    ],
-    "6/9": [
-        [0, -8, -10, -15],  # Root in top voice (5th omitted)
-        [0, -7, -9, -14],   # 3rd in top voice (rootless 3-5-6-9)
-        [0, -5, -10, -15],  # 5th in top voice
-        [0, -5, -7, -14],   # 6th in top voice
-        [0, -7, -10, -17],  # 9th in top voice
-    ],
-    "13": [
-        [0, -3, -8, -14],   # Root in top voice (5th omitted)
-        [0, -7, -9, -18],   # 3rd in top voice (rootless 3-5-b7-13)
-        [0, -9, -10, -15],  # 5th in top voice
-        [0, -3, -6, -13],   # b7 in top voice
-        [0, -5, -11, -14],  # 13th in top voice
-    ],
+    `degree` is the melody's own degree above the root, so the melody is `0` and the
+    three voices below it are the walk's: `_close_stack_offsets` takes the nearest
+    *stated* tone below each voice already placed, and the second voice from the top is
+    then lowered an octave - which is what puts the 3rd and the 7th on the D and G
+    strings in the familiar 4-3-2-1 shell shape.
 
-    # --- Triads (four voices: the root is doubled an octave below the stack) ---
-    "maj": [
-        [0, -8, -12, -17],  # Root in top voice (root doubled underneath)
-        [0, -9, -12, -16],  # 3rd in top voice
-        [0, -7, -12, -15],  # 5th in top voice
-    ],
-    "m": [
-        [0, -9, -12, -17],  # Root in top voice (root doubled underneath)
-        [0, -8, -12, -15],  # b3 in top voice
-        [0, -7, -12, -16],  # 5th in top voice
-    ],
-    "aug": [
-        # Symmetrical, so every inversion fingers identically (like dim7).
-        [0, -8, -12, -16],  # Root in top voice
-        [0, -8, -12, -16],  # 3rd in top voice
-        [0, -8, -12, -16],  # #5 in top voice
-    ],
+    Two properties are the whole reason this is a rule and not a table:
 
-    # --- Suspended chords ---
-    "sus4": [
-        [0, -7, -12, -17],   # Root in top voice
-        [0, -10, -12, -17],  # 4th in top voice
-        [0, -7, -12, -14],   # 5th in top voice
-    ],
-    "sus2": [
-        [0, -10, -12, -17],  # Root in top voice
-        [0, -7, -12, -14],   # 2nd (9th) in top voice
-        [0, -7, -12, -17],   # 5th in top voice
-    ],
-    "7sus4": [
-        [0, -5, -7, -14],   # Root in top voice (3rd replaced by the 4th)
-        [0, -7, -10, -17],  # 4th in top voice
-        [0, -7, -9, -14],   # 5th in top voice
-        [0, -5, -10, -15],  # b7 in top voice
-    ],
+      - the tone set is `stated_tones`, so the root goes before the natural 5th and an
+        altered 5th is kept, which is the musical decision the tables encode;
+      - the walk sees only the *stated* tones, so it cannot spend a voice on a tone the
+        rule left out.
 
-    # --- Added-note colours ---
-    "add9": [
-        [0, -8, -10, -17],  # Root in top voice (5th omitted)
-        [0, -7, -10, -14],  # 9th in top voice
-        [0, -4, -9, -14],   # 3rd in top voice
-        [0, -5, -7, -15],   # 5th in top voice
-    ],
-    "madd9": [
-        [0, -9, -10, -17],  # Root in top voice (5th omitted)
-        [0, -7, -11, -14],  # 9th in top voice
-        [0, -3, -8, -13],   # b3 in top voice
-        [0, -5, -7, -16],   # 5th in top voice
-    ],
+    **A triad has only three tones, so its fourth voice is the root doubled an octave
+    down** - and the walk finds it rather than a special case naming it: handed the full
+    tone set it wraps to the root on its own. Handing it the three stated tones only
+    produces a duplicate of the 5th instead (`[0, -8, -17, -17]` for a C major), which is
+    not a chord at all. That is why `walk` is the stated tones when there are four of
+    them and the quality's whole tone set when there are not.
 
-    # --- Altered and Lydian dominants ---
-    "7b5": [
-        # Symmetrical, so only two distinct shapes cover the four inversions.
-        [0, -6, -8, -14],   # Root in top voice
-        [0, -6, -10, -16],  # 3rd in top voice
-        [0, -6, -8, -14],   # b5 in top voice
-        [0, -6, -10, -16],  # b7 in top voice
-    ],
-    "7#5": [
-        [0, -4, -8, -14],   # Root in top voice
-        [0, -6, -8, -16],   # 3rd in top voice
-        [0, -8, -10, -16],  # #5 in top voice
-        [0, -6, -10, -14],  # b7 in top voice
-    ],
-    "7#11": [
-        # The #11 replaces the perfect 5th: root, 3rd, #11, b7.
-        [0, -6, -8, -14],   # Root in top voice (5th omitted)
-        [0, -6, -10, -16],  # 3rd in top voice
-        [0, -6, -8, -14],   # #11 in top voice
-        [0, -6, -10, -16],  # b7 in top voice
-    ],
-    "7b13": [
-        # b13 is enharmonic with #5, so the shapes match 7#5.
-        [0, -4, -8, -14],   # Root in top voice (natural 5th omitted)
-        [0, -6, -8, -16],   # 3rd in top voice
-        [0, -8, -10, -16],  # b13 in top voice
-        [0, -6, -10, -14],  # b7 in top voice
-    ],
-    "maj7#11": [
-        [0, -6, -8, -13],   # Root in top voice (5th omitted)
-        [0, -5, -10, -16],  # 3rd in top voice
-        [0, -6, -7, -14],   # #11 in top voice
-        [0, -7, -11, -17],  # 7th in top voice
-    ],
-    "m9b5": [
-        # Half-diminished ninth: the m9 shapes with the 5th flattened.
-        [0, -9, -10, -14],  # Root in top voice (b5 omitted: root-9-b3-b7)
-        [0, -5, -9, -13],   # b3 in top voice (rootless b3-b5-b7-9)
-        [0, -4, -8, -15],   # b5 in top voice
-        [0, -7, -8, -16],   # b7 in top voice
-        [0, -8, -11, -16],  # 9th in top voice
-    ],
-}
+    Returns `[]` - nothing offered rather than a guess - for a quality with no priority
+    row or no tone set, and for a degree the rule cannot build a shape for. Measured over
+    every chord tone of all 29 qualities (125 degrees): none empty, none sounding a note
+    outside the chord, and every one stating both guide tones, which is what
+    `tests/test_generated_grips.py` holds it to.
+    """
+    tones = ChordParser.CHORD_TONES_FROM_ROOT.get(quality)
+    if quality not in TONE_PRIORITY or not tones:
+        return []
+    keep = stated_tones(quality, degree, 4)
+    walk = keep if len(keep) >= 4 else tuple(tones)
+    stack = _close_stack_offsets(walk, 60 + degree, 0)
+    if len(stack) < 4:
+        return []
+    return [0, stack[2], stack[3], stack[1] - 12]
 
-# Aliases for flexible chord quality notation
-DROP2_INTERVAL_SETS["min7"] = DROP2_INTERVAL_SETS["m7"]
-DROP2_INTERVAL_SETS["min7b5"] = DROP2_INTERVAL_SETS["m7b5"]
-DROP2_INTERVAL_SETS["ø7"] = DROP2_INTERVAL_SETS["m7b5"]
-DROP2_INTERVAL_SETS["ø"] = DROP2_INTERVAL_SETS["m7b5"]
-DROP2_INTERVAL_SETS["half-dim"] = DROP2_INTERVAL_SETS["m7b5"]
-DROP2_INTERVAL_SETS["°7"] = DROP2_INTERVAL_SETS["dim7"]
-DROP2_INTERVAL_SETS["°"] = DROP2_INTERVAL_SETS["dim7"]
-DROP2_INTERVAL_SETS["dim"] = DROP2_INTERVAL_SETS["dim7"]
-DROP2_INTERVAL_SETS["min6"] = DROP2_INTERVAL_SETS["m6"]
-DROP2_INTERVAL_SETS["minMaj7"] = DROP2_INTERVAL_SETS["mMaj7"]
-DROP2_INTERVAL_SETS["mmaj7"] = DROP2_INTERVAL_SETS["mMaj7"]
-DROP2_INTERVAL_SETS["dom7"] = DROP2_INTERVAL_SETS["7"]
-DROP2_INTERVAL_SETS["M7"] = DROP2_INTERVAL_SETS["maj7"]
 
-# Degree pitch classes relative to chord root (matches the soprano note to an inversion).
-# Each entry lines up one-to-one with DROP2_INTERVAL_SETS[quality]: entry i is the
-# chord tone sitting in the top voice of template i.
-DEGREE_OFFSETS_FROM_ROOT = {
-    "maj7": [11, 0, 4, 7],
-    "6": [9, 0, 4, 7],
-    "m7": [10, 0, 3, 7],
-    "m7b5": [10, 0, 3, 6],
-    "dim7": [9, 0, 3, 6],
-    "m6": [9, 0, 3, 7],
-    "mMaj7": [11, 0, 3, 7],
-    "7": [10, 0, 4, 7],
-    "7b9": [1, 4, 7, 10, 0],
-    "7alt": [10, 1, 4, 8, 0],
-    "maj9": [0, 4, 7, 11, 2],
-    "m9": [0, 3, 7, 10, 2],
-    "9": [0, 4, 7, 10, 2],
-    "6/9": [0, 4, 7, 9, 2],
-    "13": [0, 4, 7, 10, 9],
-    "maj": [0, 4, 7],
-    "m": [0, 3, 7],
-    "aug": [0, 4, 8],
-    "sus4": [0, 5, 7],
-    "sus2": [0, 2, 7],
-    "add9": [0, 2, 4, 7],
-    "madd9": [0, 2, 3, 7],
-    "7sus4": [0, 5, 7, 10],
-    "7b5": [0, 4, 6, 10],
-    "7#5": [0, 4, 8, 10],
-    "7#11": [0, 4, 6, 10],
-    "7b13": [0, 4, 8, 10],
-    "maj7#11": [0, 4, 6, 11],
-    "m9b5": [0, 3, 6, 10, 2],
-}
+def _drop2_palette(quality: str) -> List[List[int]]:
+    """
+    Every drop-2 shape the rule builds for a quality, in the rule's own order.
+
+    This is what a melody with **no degree to match** is offered: one that is not a chord
+    tone, and any call with no root at all. Each shape's top voice *is* the melody by
+    construction, so the palette is the set of harmonisations the rule can put under it,
+    and `voicing_cost` chooses among them - tone purity first, so the shapes that state
+    the chord rank above the ones that merely fit.
+
+    Shaped off `TONE_PRIORITY` rather than a list of degrees, which is what makes the
+    palette the same rule as a single shape: the degrees a quality has *are* its priority
+    row, so there is no second table to keep in step with this one.
+    """
+    return [
+        shape
+        for degree in TONE_PRIORITY.get(quality, ())
+        if (shape := _drop2_template_for(quality, degree))
+    ]
+
 
 
 def _parse_chord_name(name: str) -> Tuple[Optional[str], Optional[str]]:
@@ -1613,8 +1300,8 @@ def _shell_voicing(
     One comping candidate, or None when it does not state the chord.
 
     Both guide tones must sound and nothing outside the chord may, which is the rule
-    `_place_shell` already enforces and the reason this is a helper rather than being
-    written twice. Shared by the melody-bearing shell and the melody-free one so the
+    `_candidate` enforces for the melody-bearing shell and the reason this one shares its
+    vocabulary. Shared by the melody-bearing shell and the melody-free one so the
     two cannot drift apart on what counts as a shell.
 
     `notes` is **how many voices the guitar was asked to play**, which is the arity of the
@@ -1745,11 +1432,11 @@ def get_comping_voicings(
     in this module is built around pinning the melody to the soprano string; this is
     the one that has none to pin.
 
-    **It is `_place_shell`'s own search with nothing held at the top.** A shell is
-    already a claim about the chord's 3rd and 7th rather than about the tune, so
-    `_place_shell` needed no change: it already tries every fret combination on the
-    remaining strings and keeps the ones where both guide tones sound and nothing
-    outside the chord does. The only difference is that the top fret is searched too
+    **It is the same exhaustive search with nothing held at the top.** A shell is
+    already a claim about the chord's 3rd and 7th rather than about the tune, so the
+    search needed no new rule: `_frets_in_span` already tries every fret combination on
+    the remaining strings and the candidate keeps the ones where both guide tones sound
+    and nothing outside the chord does. The only difference is that the top fret is searched too
     rather than fixed by a melody, and the shape is ranked on spread and position
     instead of against a pinned note. Because the window is exactly `GRIP_MAX_SPAN`,
     the search stays exhaustive within the playability invariant.
@@ -1899,6 +1586,159 @@ def _frets_in_span(
             yield (first,) + tail
 
 
+@dataclass(frozen=True)
+class _Placement:
+    """
+    One family's request of the placement search: where to sit, and what must sound.
+
+    A *value*, so a caller states the request and the search answers it - which is what
+    lets the non-contiguous families share one placement instead of each owning a nest of
+    loops. `strings` is ordered from the soprano downwards, as `_string_sets_for` returns
+    it, so `strings[0]` is the string the melody is pinned to and `melody_midi` is that
+    pin's pitch.
+
+    `required` is the family's claim about which of the chord's tones have to be present,
+    as pitch classes; **empty means the family makes no claim** and any subset of the
+    chord's own tones will do, which is the drop-2 & 4 rule - it states four chord tones
+    and leaves which ones to the string set. `lowest_pc_allowed` is the separate claim about
+    the **bottom** voice, for the families whose shape is defined by its bass (a 6-4-3-2
+    states the chord's function, so its lowest note is a root or a 5th); None asks nothing.
+
+    `voices` is how many of `strings` the shape sounds, counting down from the soprano, and
+    None means all of them. It exists because a template may be shorter than the set it sits
+    on - a two-note pair on a three-string shell set - and the shape then has to leave the
+    rest of the set **muted** rather than placing a voice there.
+    """
+
+    grip: str
+    strings: Tuple[int, ...]
+    melody_midi: int
+    top_fret: int
+    required: FrozenSet[int]
+    lowest_pc_allowed: Optional[FrozenSet[int]] = None
+    voices: Optional[int] = None
+
+
+#: The string sets a candidate may sound, as one set for the membership test `_candidate`
+#: makes. Built from `supported_string_sets()`, which is the playability invariant stated
+#: from the shape's side, so no producer can put a shape on strings the tables never
+#: offered - a set is a musical decision, and this is what makes it one rather than an
+#: accident of which strings a producer happened to fill in.
+_SUPPORTED_STRING_SETS = frozenset(supported_string_sets())
+
+
+def _candidate(
+    placement: _Placement, frets: List[int], allowed: Optional[FrozenSet[int]]
+) -> Optional[Voicing]:
+    """
+    The one place a set of frets becomes a candidate voicing, or None when it is not one.
+
+    Every rule a candidate has to satisfy is here, so no family can be placed by a path that
+    skips one: the melody sounds and is the **highest** sounding note, every fret is on the
+    board, the fret span is within `GRIP_MAX_SPAN[placement.grip]`, the family's tone claim
+    (`required`) and bass claim (`lowest_pc_allowed`) hold, nothing outside `allowed`
+    sounds - `allowed` being None when the family makes no claim about the chord's tones at
+    all, which is what a template-laid shape is: the template *is* the claim, and the
+    interval family is free to sound a key tone under a passing note - and the sounding
+    strings are one `supported_string_sets()` entry.
+
+    Both proposers call it: the search (`_place_shape`), which enumerates frets, and the
+    layouts (`_place_template`), which compute them from an interval template. One producer
+    per shape, one rule set for all of them - a rule stated in a producer reaches only the
+    families that producer serves.
+
+    `frets` is a full board vector, and only its entries for `placement.strings` are read.
+    The `voices` strings from the soprano down are the shape and must each carry a fret
+    between 0 and 18; **the rest of the set must be muted**. Both halves matter: a computed
+    -1 is a note below its string's open pitch rather than a mute, and reading that as
+    unused thins the shape into strings the tables never offered.
+    """
+    strings = placement.strings
+    top_fret = placement.top_fret
+    limit = GRIP_MAX_SPAN[placement.grip]
+
+    set_frets = [frets[string] for string in strings]
+    voices = len(strings) if placement.voices is None else placement.voices
+    used, unused = set_frets[:voices], set_frets[voices:]
+    if any(fret < 0 or fret > 18 for fret in used):
+        return None
+    if any(fret != -1 for fret in unused):
+        return None
+    if frozenset(strings[:voices]) not in _SUPPORTED_STRING_SETS:
+        return None
+    if not used or max(used) - min(used) > limit:
+        return None
+    sounded = strings[:voices]
+    active = used
+    midis = sorted(
+        GuitarFretboard.fret_to_midi(string, fret)
+        for string, fret in zip(sounded, active)
+    )
+    if midis[-1] != GuitarFretboard.fret_to_midi(strings[0], top_fret):
+        return None
+    pcs = {midi % 12 for midi in midis}
+    if not placement.required <= pcs:
+        return None
+    if allowed is not None and not pcs <= allowed:
+        return None
+    if (
+        placement.lowest_pc_allowed is not None
+        and midis[0] % 12 not in placement.lowest_pc_allowed
+    ):
+        return None
+    return Voicing(
+        frets=list(frets),
+        top_fret=top_fret,
+        avg_fret=sum(active) / len(active),
+        grip=placement.grip,
+        bass_pc=midis[0] % 12,
+    )
+
+
+def _place_shape(
+    placement: _Placement, allowed: Optional[FrozenSet[int]] = None
+) -> Optional[Voicing]:
+    """
+    The one shape `placement` asks for on its string set, or None when it will not play.
+
+    An enumerator over `_frets_in_span`, and `_candidate` is what decides: the melody is
+    held at its own fret and every combination of the other frets within
+    `GRIP_MAX_SPAN[placement.grip]` of it is tried, so if a playable shape exists in this
+    position this finds it, and "found nothing" means there is none.
+
+    A window that runs off the end of the board yields nothing, which is the melody being
+    too high to voice here rather than a shape being refused: `get_octave_down_candidates`
+    is what covers a melody above the neck window.
+
+    **Ties are broken by fret spread, then by position**, so the shape a player would pick
+    wins over the first one the search reaches; and of two still equal the earlier one
+    survives, which is the enumeration order `_frets_in_span` yields in. Ranking the
+    survivors is not cosmetic: an unranked search returns whatever comes first, so a family
+    can look as though it is never selected when it is merely ranked last.
+    """
+    strings = placement.strings
+    top_fret = placement.top_fret
+    limit = GRIP_MAX_SPAN[placement.grip]
+
+    lo = max(0, top_fret - limit)
+    hi = top_fret + limit
+    if hi > 18:
+        return None
+
+    best: Optional[Tuple[Tuple[int, float], Voicing]] = None
+    for tail in _frets_in_span(strings[1:], lo, hi, limit):
+        frets = [-1] * len(STANDARD_TUNING)
+        for string, fret in zip(strings, (top_fret,) + tail):
+            frets[string] = fret
+        voicing = _candidate(placement, frets, allowed)
+        if voicing is None:
+            continue
+        key = (voicing.fret_span(), voicing.avg_fret)
+        if best is None or key < best[0]:
+            best = (key, voicing)
+    return best[1] if best else None
+
+
 def get_grip_voicings(
     melody_note: Note,
     chord_type: str,
@@ -1913,7 +1753,7 @@ def get_grip_voicings(
     produces exactly what that method always has. The other families differ in what
     they carry rather than in where they sit:
 
-      drop2   four voices, from the hand-authored tables
+      drop2   four voices, from the tone-priority rule (`_drop2_template_for`)
       drop3   four voices, a close stack with the third voice dropped
       drop24  four voices, a close stack with the second *and* fourth dropped
       closed  four voices in close position under the melody
@@ -1927,9 +1767,12 @@ def get_grip_voicings(
     _best_voicing's job. Keeping that split is what stops the grip families and the
     octave-down rescue from having to know about each other.
 
-    Every candidate sounds only chord tones, uses 2-4 strings all belonging to one
-    GRIP_STRING_SETS entry, carries the melody on its topmost string, and holds a
-    fret span of at most GRIP_MAX_SPAN[grip].
+    Every candidate uses 2-4 strings belonging to one `supported_string_sets()` entry,
+    carries the melody as the **highest** sounding note, and holds a fret span of at most
+    `GRIP_MAX_SPAN[grip]`. It sounds chord tones only, with one deliberate exception: an
+    `interval` fill may sit a diatonic tone of the key under a melody that is not a chord
+    tone, because a fill is a texture rather than a claim about the chord - see
+    `_interval_offsets` for why that cannot quietly reharmonise the bar.
     """
     melody_midi = melody_note.midi_note()
 
@@ -1939,123 +1782,37 @@ def get_grip_voicings(
 
     canonical, root_pc, tones = _chord_context(chord_type, chord_name)
 
-    # Which inversion of a drop-2 table puts this melody in the top voice. The
-    # derived families build their shape from the chord tones themselves and so
-    # need no steering; this only narrows the table lookup.
-    target_idx: Optional[int] = None
-    deg_offsets = DEGREE_OFFSETS_FROM_ROOT.get(canonical)
-    if chord_name and deg_offsets and root_pc is not None:
-        mel_degree = (melody_midi - root_pc) % 12
-        for idx, d in enumerate(deg_offsets):
-            if d % 12 == mel_degree:
-                target_idx = idx
-                break
+    # The chord's tones as pitch classes: what `_candidate` holds a searched shape's own
+    # notes to. Computed once, because every searched family measures the same chord.
+    allowed = (
+        None if root_pc is None else frozenset((root_pc + t) % 12 for t in tones)
+    )
 
     valid_voicings: List[Voicing] = []
     for grip in grips:
         for strings in _string_sets_for(grip, top_string):
-            if grip in ("shell", "duo", "interval", "drop2_6432"):
-                # These three are defined by the guide tones, so a chord with no root
-                # to measure them from gets nothing. That is a real limitation
-                # rather than a fallback: a shell is a claim about *this* chord's
-                # 3rd and 7th, and guessing them without a root is how a chord gets
-                # a wrong note in it. An interval is measured from the root for the
-                # same reason - it is placed against a named chord, not a key.
-                if root_pc is None:
-                    continue
-                if grip == "duo":
-                    duo = _duo_offsets(tones, melody_midi, root_pc, canonical)
-                    templates = [duo] if duo else []
-                elif grip == "drop2_6432":
-                    # Found by its own search, like every other non-contiguous
-                    # shape: a skipped-string set cannot come from a table, and
-                    # the bass rule needs a root to measure against. No inversion
-                    # is narrowed here, because `target_idx` picks a template for a
-                    # contiguous block and has no meaning for a set of four
-                    # strings the voices were not laid on.
-                    if root_pc is None:
-                        continue
-                    found = _place_drop2_6432(
-                        tones, root_pc, melody_midi, top_fret
+            if grip not in _SEARCHED_GRIPS:
+                # A layout family: each template *is* a shape, so each is placed in turn.
+                for template in _templates_for(
+                    grip, canonical, tones, melody_midi, root_pc
+                ):
+                    voicing = _place_template(
+                        template, strings, melody_midi, top_fret, grip
                     )
-                    if found is not None:
-                        valid_voicings.append(found)
-                    continue
-                elif grip == "interval":
-                    # A texture rather than a claim about the chord, so it is built
-                    # from templates and placed like a drop-2 - no search needed,
-                    # because an interval *is* the two notes it names.
-                    templates = _interval_offsets(tones, melody_midi, root_pc)
-                else:
-                    # Every shell set is placed by the same search, 6-4-3 included:
-                    # a shell's notes are not in descending pitch order down the
-                    # strings, so none of them can come from a stack.
-                    found = _place_shell(
-                        canonical, tones, root_pc, strings, melody_midi, top_fret
-                    )
-                    if found is not None:
-                        valid_voicings.append(found)
-                    continue
-            else:
-                templates = _interval_set_for_grip(
-                    canonical, grip, tones, melody_midi, root_pc
-                )
-                if grip == "drop2":
-                    if (
-                        target_idx is not None
-                        and 0 <= target_idx < len(templates)
-                    ):
-                        templates = [templates[target_idx]]
-                    elif (
-                        root_pc is not None
-                        and tones
-                        and (melody_midi - root_pc) % 12
-                        in {(t - root_pc) % 12 for t in tones}
-                        # Only for a quality whose table is genuinely *incomplete*. Every
-                        # triad and every four-note quality has a template for each of its
-                        # tones, so `target_idx` is None there only when the melody is
-                        # not a chord tone at all - and then the derivation below would
-                        # invent the missing voices. It did: Ebmaj under G4, whose tones
-                        # are Eb G Bb, came out `b7 5 b3 5` - a b3 and a 5th against a
-                        # major triad, which is Eb minor. The guard is the tone count,
-                        # because a chord that has more tones than four cannot have a
-                        # template for every one of them.
-                        and len({(t - root_pc) % 12 for t in tones}) > 4
-                    ):
-                        # The melody is a chord tone with no inversion in the table.
-                        # The templates that *do* exist are for other soprano degrees,
-                        # so offering them here would pin this melody to the soprano
-                        # string and put each template's own top note *below* it - the
-                        # shape stops being that inversion and sounds whatever the
-                        # offsets happen to spell over this melody. For a 5th in the
-                        # melody of a 7#11 that produced `5 b9 7 4`: a b9 and a major
-                        # 3rd against a chord whose identity is 3, b5 and b7.
-                        #
-                        # So the shape is derived from the close stack under this
-                        # melody, which keeps it a genuine drop-2 of *this* inversion,
-                        # and is then held to the rule that a four-note voicing states
-                        # the chord's 3rd and 7th.
-                        #
-                        # An empty result means no four-note voicing of this inversion is
-                        # playable, and the honest answer is to offer *none*: falling
-                        # back to another degree's template reintroduces exactly the
-                        # defect above. A step with no voicing is demoted to the melody
-                        # alone or promoted to a shell, both of which still state the
-                        # chord; a step with a borrowed template states a different one.
-                        templates = _drop2_for_untabled_degree(
-                            tones, melody_midi, root_pc,
-                        )
-
-            for template in templates:
-                voicing = _place_template(
-                    template, strings, melody_midi, top_fret, grip
-                )
-                if voicing is not None:
-                    valid_voicings.append(voicing)
+                    if voicing is not None:
+                        valid_voicings.append(voicing)
+                continue
+            # A searched family: one shape per string set, and the search finds it.
+            request = _searched_request(
+                grip, canonical, root_pc, strings, melody_midi, top_fret
+            )
+            if request is None:
+                continue
+            found = _place_shape(request, allowed)
+            if found is not None:
+                valid_voicings.append(found)
 
     return valid_voicings
-
-
 def get_drop2_voicings(
     melody_note: Note,
     chord_type: str,

@@ -14,6 +14,7 @@ from arranger import (
     _step_annotation,
     format_progression,
 )
+from arranger.grips import _drop2_template_for
 
 
 class TestMelodyOnlyVoicing(unittest.TestCase):
@@ -254,8 +255,12 @@ class TestExtendedExtensionMappings(unittest.TestCase):
                 self.assertNotIn(degree % 12, source_tones, (quality, degree))
                 target_tones = {tone % 12 for tone in ChordParser.CHORD_TONES_FROM_ROOT[target]}
                 self.assertIn(degree % 12, target_tones, (quality, degree, target))
-                target_top = {d % 12 for d in VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT[target]}
-                self.assertIn(degree % 12, target_top, (quality, degree, target))
+                # "Can top it" is now the shape itself rather than a degree list: the rule
+                # answers for every chord tone, so asking for one proves the substitution can
+                # be voiced with the melody on top.
+                topped = _drop2_template_for(target, degree % 12)
+                self.assertTrue(topped, (quality, degree, target))
+                self.assertEqual(topped[0], 0, (quality, degree, target))
 
     def test_new_routes_resolve_to_their_extension(self):
         cases = [

@@ -16,37 +16,37 @@ The two are independent. A chart that names the inversion after the melody misla
 
 | top degree | inversion | top frets (high E -> low E) | sounding notes | tab |
 |---|---|---|---|---|
-| 7 (B4) | 2nd Inv | 7-5-5-5 | G3 C4 E4 B4 | `x-x-5-5-5-7` |
 | Root (C5) | 3rd Inv | 8-8-9-9 | B3 E4 G4 C5 | `x-x-9-9-8-8` |
-| _none_ | - | _not voiceable on this block_ | - | - |
+| 3 (E4) | Root Pos | 0-0-0-3 | C3 G3 B3 E4 | `x-3-x-0-0-0` |
 | 5 (G4) | 1st Inv | 3-1-4-2 | E3 B3 C4 G4 | `x-x-2-4-1-3` |
+| 7 (B4) | 2nd Inv | 7-5-5-5 | G3 C4 E4 B4 | `x-x-5-5-5-7` |
 
 ### Cm7
 
 | top degree | inversion | top frets (high E -> low E) | sounding notes | tab |
 |---|---|---|---|---|
-| b7 (Bb4) | 2nd Inv | 6-4-5-5 | G3 C4 Eb4 Bb4 | `x-x-5-5-4-6` |
 | Root (C5) | 3rd Inv | 8-8-8-8 | Bb3 Eb4 G4 C5 | `x-x-8-8-8-8` |
 | b3 (Eb5) | Root Pos | 11-11-12-10 | C4 G4 Bb4 Eb5 | `x-x-10-12-11-11` |
 | 5 (G4) | 1st Inv | 3-1-3-1 | Eb3 Bb3 C4 G4 | `x-x-1-3-1-3` |
+| b7 (Bb4) | 2nd Inv | 6-4-5-5 | G3 C4 Eb4 Bb4 | `x-x-5-5-4-6` |
 
 ### C7
 
 | top degree | inversion | top frets (high E -> low E) | sounding notes | tab |
 |---|---|---|---|---|
-| b7 (Bb4) | 2nd Inv | 6-5-5-5 | G3 C4 E4 Bb4 | `x-x-5-5-5-6` |
 | Root (C5) | 3rd Inv | 8-8-9-8 | Bb3 E4 G4 C5 | `x-x-8-9-8-8` |
 | _none_ | - | _not voiceable on this block_ | - | - |
 | 5 (G4) | 1st Inv | 3-1-3-2 | E3 Bb3 C4 G4 | `x-x-2-3-1-3` |
+| b7 (Bb4) | 2nd Inv | 6-5-5-5 | G3 C4 E4 Bb4 | `x-x-5-5-5-6` |
 
 ### Cm7b5
 
 | top degree | inversion | top frets (high E -> low E) | sounding notes | tab |
 |---|---|---|---|---|
-| b7 (Bb4) | 1st Inv | 6-4-5-4 | F#3 C4 Eb4 Bb4 | `x-x-4-5-4-6` |
 | Root (C5) | 3rd Inv | 8-7-8-8 | Bb3 Eb4 F#4 C5 | `x-x-8-8-7-8` |
 | b3 (Eb5) | Root Pos | 11-11-11-10 | C4 F#4 Bb4 Eb5 | `x-x-10-11-11-11` |
 | b5 (F#4) | 1st Inv | 2-1-3-1 | Eb3 Bb3 C4 F#4 | `x-x-1-3-1-2` |
+| b7 (Bb4) | 1st Inv | 6-4-5-4 | F#3 C4 Eb4 Bb4 | `x-x-4-5-4-6` |
 
 ## 5-4-3-2 block (melody on string 2)
 
@@ -54,37 +54,37 @@ The two are independent. A chart that names the inversion after the melody misla
 
 | top degree | inversion | top frets (high E -> low E) | sounding notes | tab |
 |---|---|---|---|---|
-| _none_ | - | _not voiceable on this block_ | - | - |
 | Root (C4) | 3rd Inv | 1-0-2-2 | B2 E3 G3 C4 | `x-2-2-0-1-x` |
 | 3 (E4) | Root Pos | 5-4-5-3 | C3 G3 B3 E4 | `x-3-5-4-5-x` |
 | 5 (G4) | 1st Inv | 8-5-9-7 | E3 B3 C4 G4 | `x-7-9-5-8-x` |
+| _none_ | - | _not voiceable on this block_ | - | - |
 
 ### Cm7
 
 | top degree | inversion | top frets (high E -> low E) | sounding notes | tab |
 |---|---|---|---|---|
-| b7 (Bb4) | 2nd Inv | 11-8-10-10 | G3 C4 Eb4 Bb4 | `x-10-10-8-11-x` |
 | Root (C4) | 3rd Inv | 1-0-1-1 | Bb2 Eb3 G3 C4 | `x-1-1-0-1-x` |
 | b3 (Eb4) | Root Pos | 4-3-5-3 | C3 G3 Bb3 Eb4 | `x-3-5-3-4-x` |
 | 5 (G4) | 1st Inv | 8-5-8-6 | Eb3 Bb3 C4 G4 | `x-6-8-5-8-x` |
+| b7 (Bb4) | 2nd Inv | 11-8-10-10 | G3 C4 Eb4 Bb4 | `x-10-10-8-11-x` |
 
 ### C7
 
 | top degree | inversion | top frets (high E -> low E) | sounding notes | tab |
 |---|---|---|---|---|
-| b7 (Bb4) | 2nd Inv | 11-9-10-10 | G3 C4 E4 Bb4 | `x-10-10-9-11-x` |
 | Root (C4) | 3rd Inv | 1-0-2-1 | Bb2 E3 G3 C4 | `x-1-2-0-1-x` |
 | 3 (E4) | Root Pos | 5-3-5-3 | C3 G3 Bb3 E4 | `x-3-5-3-5-x` |
 | 5 (G4) | 1st Inv | 8-5-8-7 | E3 Bb3 C4 G4 | `x-7-8-5-8-x` |
+| b7 (Bb4) | 2nd Inv | 11-9-10-10 | G3 C4 E4 Bb4 | `x-10-10-9-11-x` |
 
 ### Cm7b5
 
 | top degree | inversion | top frets (high E -> low E) | sounding notes | tab |
 |---|---|---|---|---|
-| b7 (Bb4) | 1st Inv | 11-8-10-9 | F#3 C4 Eb4 Bb4 | `x-9-10-8-11-x` |
 | _none_ | - | _not voiceable on this block_ | - | - |
 | b3 (Eb4) | Root Pos | 4-3-4-3 | C3 F#3 Bb3 Eb4 | `x-3-4-3-4-x` |
 | b5 (F#4) | 1st Inv | 7-5-8-6 | Eb3 Bb3 C4 F#4 | `x-6-8-5-7-x` |
+| b7 (Bb4) | 1st Inv | 11-8-10-9 | F#3 C4 Eb4 Bb4 | `x-9-10-8-11-x` |
 
 ## Why some cells are empty
 

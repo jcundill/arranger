@@ -37,7 +37,7 @@ class ChordParser:
     """Parses chord symbols and identifies harmonic degrees."""
 
     # Canonical chord-quality spellings. Keys are every accepted spelling; values
-    # are the keys used by DROP2_INTERVAL_SETS / DEGREE_OFFSETS_FROM_ROOT. The
+    # are the keys every table here and in `grips` is held under. The
     # lookup is case-sensitive on purpose: "M7" is a major seventh while "m7" is a
     # minor seventh, so normalising with .lower() would confuse the two families.
     QUALITY_ALIASES = {
@@ -318,10 +318,10 @@ def is_chord_tone(melody_note: Note, chord_type: str, chord_name: Optional[str] 
     """
     True when melody_note is one of the chord's tones.
 
-    Detection uses ChordParser.CHORD_TONES_FROM_ROOT (every chord tone), not
-    DEGREE_OFFSETS_FROM_ROOT (only the four notes a drop-2 shape can voice),
-    so the root of a rootless quality such as 7b9 still counts as a chord
-    tone and is not needlessly reharmonised. Unknown qualities return False.
+    Detection uses ChordParser.CHORD_TONES_FROM_ROOT (every chord tone) rather than
+    the four voices a grip can sound, so the root of a rootless quality such as 7b9
+    still counts as a chord tone and is not needlessly reharmonised. Unknown
+    qualities return False.
     """
     canonical = ChordParser.canonical_quality(chord_type)
     tones = ChordParser.CHORD_TONES_FROM_ROOT.get(canonical)
