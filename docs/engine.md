@@ -91,8 +91,9 @@ you whether a change is an improvement or a different library.
   `pitch_classes()`, `soprano_string()` (index of the highest sounding string;
   `-1` if all muted). Supports legacy dict-style access (`v["frets"]`).
 - Tab rendering is **pure**: every renderer returns a string (or list of
-  strings) and prints nothing, so callers control display. Only `main()` and the
-  `arrange_progression` warning paths write to stdout.
+  strings) and prints nothing, so callers control display. **Only `main()` writes to
+  stdout** — the engine has no warning channel, so every choice it makes is either on the
+  tab line or a `ValueError` from the axis that could not honour the request.
 - `ArrangementStep` — a dataclass of `chord`, `melody`, `voicing` plus the
   non-chord-tone bookkeeping `non_chord_tone` (bool), `strategy` (which strategy
   handled the step) and `harmonized_as` (the substitute chord name). Also
@@ -717,7 +718,8 @@ Five decisions are load-bearing:
   cost tuple would not have chosen it anyway (`missing` is index 2, above span). Ebmaj
   under G4 in "But Not For Me" is the real case: the engine can sound `x-x-8-8-8-x`
   (span 0) there, but the only complete option a target is offered is `x-6-5-3-8-x`, a
-  five-fret stretch. The step falls back to the melody alone, and warns.
+  five-fret stretch. The step falls back to the melody alone, and `render`'s shape clause
+  says so on the line.
 
   It is a **fallback, not a re-ranking**, and deliberately the last thing tried. Lowering
   `GRIP_MAX_SPAN` is a filter that deletes the voicing everywhere; promoting span above
@@ -887,7 +889,8 @@ Three decisions are load-bearing:
   contract that `tests/test_voicings.py::TestMelodyStringChoices` asserts.
 - **The guard requires candidates to exist.** This repositions a voicing that is
   playable but too high; a melody unreachable at the written pitch (`B5` is fret 19,
-  `C6` is fret 20 — past the end of the board) is still skipped with a warning.
+  `C6` is fret 20 — past the end of the board) is still emitted as a rest, with
+  `silence="out_of_reach"` on the step and `_silence_clause` naming the reason.
   Silently respelling it would hide a real problem behind a plausible-looking tab.
 - **The transposition is reported from the sounding pitch, not the fret.** The
   octave-down note lands at a *lower* fret, so a fret comparison would read it as
@@ -958,8 +961,9 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
 - Non-chord melody notes are only covered for the mappings in
   `NON_CHORD_TONE_EXTENSIONS` (9ths, 6/9s, 11ths, #11s, b13s, 13ths, the
   half-diminished 9th and the 9th over a plain triad) plus the dim7 substitution. An
-  unmapped non-chord tone prints a warning and keeps the quality-only fallback,
-  which can sound the melody over a different chord's shape.
+  unmapped non-chord tone keeps the quality-only fallback, which can sound the melody
+  over a different chord's shape — and the step's non-chord-tone clause says that is
+  what happened.
 - **A palette that cannot voice a chord leaves the tune alone** rather than dropping it.
   `shell`, `duo` and `interval` are built from the chord's own degrees, so they have no
   quality-only fallback to thin to — where the four-note families always have something.
@@ -970,8 +974,8 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
   alone, and the step says so. Two things bound the rescue: `top_strings` is still
   honoured — a note the named strings cannot carry is refused, which is what
   `tests/test_progressions.py` pins, the position emitted silent — and a melody no string
-  reaches at all is likewise emitted silent rather than voiced, with the warning naming
-  the palette and `silence="out_of_reach"` on the step.
+  reaches at all is likewise emitted silent rather than voiced, with `silence="out_of_reach"`
+  on the step and `_silence_clause` naming the palette.
 - A handful of low melodies (around `G3`–`C4`) reach no chord-tone-matched inversion
   and therefore use the quality-only fallback. Triad shapes double the root, so their
   second voice can sit up to 10 semitones below the melody — the same span limit, not a
@@ -991,8 +995,9 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
   physically stay put.
 - `7b9`/`7alt` are voiced rootless apart from their new root-in-top inversion;
   other omitted tones (e.g. a root-on-top `13`) have no template yet.
-- If no voicing matches a melody/chord, `arrange_progression` prints a warning
-  and **skips** that step (rather than raising).
+- If no voicing matches a melody/chord, `arrange_progression` **emits a rest step** with
+  `silence="no_shape"` — the bar stays on the tab and `_silence_clause` says why — rather
+  than raising or dropping the position.
 - **Texture (`texture="targets"`):**
   - **The target-note rule is a fixed `(1, 3)`.** There is no way to say "chords on
     beat 1 only", or "fills on beat 2 as well", or to mark a bar that is all target
@@ -1121,7 +1126,7 @@ frets, so all three thumb strings are free whatever the texture's palette says, 
 **Nothing in the tree is refused any more, and that is a consequence of the grip tables
 rather than of this rule.** `uniform` used to be the one that failed: its palette held
 `drop24`'s `(4,2,1,0)`, the one reachable set that spanned all three thumb strings, so
-`bass="walk"` under the default texture was refused with a warning naming a texture that
+`bass="walk"` under the default texture was refused, naming a texture that
 would work. Removing the four inner-skip `drop24` sets for the right-hand reason in
 [fingering.md](fingering.md) §4.4 removed that set with them, so the worst case anywhere
 is now one free string — the rule's threshold — and `uniform` carries every policy. The
@@ -1142,7 +1147,8 @@ Two honest caveats, both measured rather than assumed:
   loses 11 of 151 (7.3%) under `walk`, 7 of 88 (8.0%) under `anchors`. The two melody
   textures lose **none**, because a single left-hand note leaves every thumb string
   free. So the rule was aimed at the one combination that can *never* work and let the
-  others through with their existing warning, rather than refusing a texture whose loss
+  others through, each dropped note reported on its own step by `bass_refused`, rather than
+  refusing a texture whose loss
   rate is the same order as the flagship's — and the one it did refuse lost the set that
   made it fail, so the rule now has nothing to fire on.
 
@@ -1262,8 +1268,8 @@ has always offered for exactly that, so two voices take the `duo` sets and three
 sound both guide tones, which is what states the chord; one note cannot, so a single note
 keeps the **first** guide tone (the 3rd, or the 4th on a sus chord) — the same preference
 order `_duo_offsets` already applies. Refusing instead would have made `--voices alto` fall
-through to the melody-bearing route: measured, it warned on every step and handed the
-horn's line back to the guitarist, the opposite of what naming one voice asked for.
+through to the melody-bearing route: measured, it put the horn's line back on the guitar on
+every step, the opposite of what naming one voice asked for.
 
 **With no melody to support, a fourth voice would be the root or the 5th** — the two notes
 that carry no information about the chord's quality. That is why only the `shell` family is
@@ -1339,8 +1345,8 @@ there are no guide tones, and the guitar is genuinely silent while the horn is n
 position is a rest step carrying `silence="nc_comping"` - the tab keeps the bar, so a
 reader lining the comp up against the tune is not one bar short - and one sentence
 names the reason, rather than reaching the generator (which correctly refuses a chord
-with no root) and then falling through to a melody-bearing route that would either
-warn twice or hand the horn's line back to the guitarist.
+with no root) and then falling through to a melody-bearing route that would either state
+it twice or hand the horn's line back to the guitarist.
 
 
 
@@ -1379,13 +1385,13 @@ recording it as data is what stops "the pattern silently did nothing" reading as
 
 **`every_note` is not a pattern with positions; it is the absence of one.** `grid_positions`
 returns nothing for it, so `grid_allowed` must test it explicitly — deriving the check from
-`grid_positions` made the *default* warn in every metre, which is the false reading the
+`grid_positions` made the *default* a mismatch in every metre, which is the false reading the
 check exists to avoid. "Places nothing" and "has no positions to place" are different
 claims and only the first is a mismatch.
 
 **The refusal is unreachable through the shipped rows**, measured: every metre-relative
 pattern fits every metre, because `charleston` keeps its beat 1 and `joe_pass` is built on
-`ALL`. `grid_allowed` is therefore defensive, and the two warning messages are tested
+`ALL`. `grid_allowed` is therefore defensive, and the refusal and its reason are tested
 against a temporary row. `tests/test_grid.py::test_no_shipped_row_is_a_mismatch_in_any_metre`
 exists to keep that fact from being forgotten — a check no input can fail proves nothing.
 
@@ -1406,8 +1412,8 @@ alongside `MELODY_ALONE_NONE`, `MELODY_ALONE_TEXTURE` and `MELODY_ALONE_NO_CHORD
   part keeps its bar and beat and lines up against the tune; all six strings are muted, so
   every renderer draws silence rather than a held shape.
 - **`NC`** → unchanged per route. It has *no chord to place*, so "off the grid" is not a
-  claim about it: the comping route drops the bar with a warning, the singing route plays
-  the note alone.
+  claim about it: the comping route emits a rest step carrying `silence="nc_comping"`, the
+  singing route plays the note alone.
 
 The **ordering of those guards is load-bearing and was got wrong twice** — see
 [../AGENTS.md](../AGENTS.md) trap 12 for the three orderings and what each one breaks.

@@ -99,7 +99,7 @@ Each row is a command worth running. The first three are the claim; the rest are
 | 8 | `--voices alto,tenor` under any texture | comps — the old `--texture melody` refusal dissolved when the melody-only claim moved onto the selection |
 | 9 | `--voices alto,tenor --tab staff --melody` | staff draws; no soprano string marked |
 | 10 | `--voices alto,tenor --bass walk` | thumb walks *under* a 2-note shape, or refuses |
-| 11 | a head containing an `NC` bar | warns once, skips the bar |
+| 11 | a head containing an `NC` bar | comps nothing: a rest step carrying `silence="nc_comping"` |
 | 12 | `--voices alto,tenor --html out.html` | page renders, no melody on the tab |
 | 13 | `--voices alto,tenor --musicxml x.musicxml --gp5 y.gp5` | both write without error |
 
@@ -165,8 +165,8 @@ a small change and a real decision.
 1. **A one-voice selection states the chord weakly.** Two notes can sound both guide tones;
    one cannot, so `--voices alto` keeps only the **first** guide tone (the 3rd, or the 4th
    on a sus chord). It is a `duo`-grade statement, not a shell. The alternative was to
-   refuse, which measured worse: it warned on every step and handed the horn's line back
-   to the guitarist. **`--voices bass` is the exception** and no longer reads this way — see
+   refuse, which measured worse: it stated the horn's line on the guitar on every step and
+   handed it back. **`--voices bass` is the exception** and no longer reads this way — see
    §8a.
 2. **The arity picks the grip family.** Two voices use the `duo` string sets, three use the
    `shell` sets. Truncating a shell set to two strings looks free and is not — it yields
@@ -178,8 +178,9 @@ a small change and a real decision.
    one as a single moving note — a melody line on the guitar part, on exactly the beats
    where the tune had been given away. Stated in two places on purpose (`render` and
    `tabstaff`) so the renderers cannot disagree; a test asserts they agree.
-4. **An `NC` bar is skipped, with a warning.** No chord means no guide tones, so the guitar
-   is silent there while the horn is not.
+4. **An `NC` bar is a rest that says why.** No chord means no guide tones, so the guitar
+   is silent there while the horn is not; the comping route emits a rest step carrying
+   `silence="nc_comping"`, which `_silence_clause` phrases.
 5. **`--voices` is not validated by `argparse`.** It is a free string, so a bad value is
    reported as a usage error by the parser rather than by `choices=`. That was the price of
    accepting a comma list, and it means `--help` no longer lists the vocabulary.

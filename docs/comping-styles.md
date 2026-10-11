@@ -343,10 +343,10 @@ different answers:
 
 | cause | measured example | the right response |
 |---|---|---|
-| **the grid is too coarse** | `final_and` (2.5) under `--skeleton beats`, which offers only 1.0 and 2.0 | warn — the user asked for something the grid cannot express |
+| **the grid is too coarse** | `final_and` (2.5) under a beats-only grid, which offers only 1.0 and 2.0 | **refuse** — the user asked for something the grid cannot express |
 | **no melody note there** | a bar whose notes are all on the beat, under any grid | **nothing** — a chord cannot go where there is no note, and the melody-alone route handles it |
 
-Warning on the second would be noise: "you asked for comping on the ands, there are no
+A refusal on the second would be noise: "you asked for comping on the ands, there are no
 notes on the ands" is not an error, it is the answer. Only the first deserves a message,
 and it must name the grid that is too coarse. The test is therefore one-directional —
 **the grid must be at least as fine as the pattern** — rather than the two-way
@@ -423,7 +423,7 @@ and finer.
 Two different reasons a position can be unavailable, and only the first is about the
 metre: **the metre decides which beat the position sits on**, and **the lattice decides
 whether that position has a slot to sit in**. A grid naming the final upbeat therefore
-needs `--skeleton eighths` or finer, and a warning when it is asked for under `beats` is
+needs a finer grid, and a refusal when it is asked for under a beats-only lattice is
 the honest answer — not silence, and not an invented beat.
 
 ### 4.3 Does the guitar sing
@@ -702,13 +702,13 @@ Three things the implementation settled that this section did not say:
 
 - **`every_note` is not a pattern with positions; it is the absence of one.** Reading
   its "does it place anything?" off `grid_positions` reports it as placing nothing in
-  every metre, which made the *default* warn everywhere. Caught by
+  every metre, which made the *default* a mismatch everywhere. Caught by
   `test_a_bar_relative_pattern_is_allowed_in_every_metre`. "Places nothing" and "has no
   positions to place" are different claims, and only the first is a mismatch.
 - **The refusal is unreachable through the shipped vocabulary.** Measured over every
   metre-relative row against every metre from 1 up: none is ever refused, because
   `charleston` keeps its beat 1 (which exists everywhere) and `joe_pass` is built on
-  `ALL`. The two warning messages are therefore exercised against a *temporary* row
+  `ALL`. The refusal and its reason are therefore exercised against a *temporary* row
   (`_temporary_pattern`), and `test_no_shipped_row_is_a_mismatch_in_any_metre` exists
   to keep that fact from being quietly forgotten — a check no input can fail proves
   nothing about the axis.
@@ -726,8 +726,8 @@ at `grid=auto` and under `grid=freddie`. The walk visits whole beats only and a 
 only removes *chords*, so the two axes are orthogonal — which is the orthogonality
 claim of §4 tested rather than asserted. An earlier reading of that measurement as a
 `bass=walk` bug was wrong: `bass=walk` with `texture=uniform` is **refused by design**
-(`bass_allowed`, with a warning naming `texture='targets'`), and the diagnostic was
-missed only because the refusal was a warning into a collector nobody read.
+(`bass_allowed`, which raises and names a texture that would work), and the diagnostic was
+missed only because the refusal went into a collector nobody read.
 
 **Not done, and deliberately:**
 
@@ -780,7 +780,7 @@ settled and the second remains a design decision:
   the concern dissolves.** A guide-tone comp is the same pair of notes whether the melody
   above it is a chord tone or a 9th, and the same on beat 1 as on beat 2: `Ebmaj` with the
   9th `D5` over it returns `[2, 7]` in every case, with `non_chord_tone=False`, no strategy
-  consulted and no warning. The strategies are not "a no-op on weak beats" — they are
+  consulted and no clause beside it. The strategies are not "a no-op on weak beats" — they are
   **structurally unreachable** from this route, because `get_comping_voicings` is never
   handed a beat and never sees the melody pitch that a tension strategy would resolve.
   The guitar states the chord; the tune is somebody else's, so there is no tension of ours
@@ -853,7 +853,7 @@ predicted.
   §9.4 is the one item still a proposal; each description below carries its own **Landed**
   marker where it has one.
 - **Every decision in §9 is settled.** The questions that shaped it — what `every_note` means
-  on a head with no melody, whether the melody-less file warns or is silent, what an unknown
+  on a head with no melody, whether the melody-less file is refused or silent, what an unknown
   grid does, whether `--fallback` reaches this route — are all answered below and marked as
   decisions rather than left open. **One of them has since been reversed, and it is marked
   where it stands**: `every_note` on a head with no melody is no longer silent, because
@@ -1053,8 +1053,8 @@ convention it can safely break:
 
 ```
 GRID_POLICIES = {'auto': 'every_note'}
-grid=auto         2/4 -> every_note   warnings=0
-grid=every_note   2/4 -> every_note   warnings=0
+grid=auto         2/4 -> every_note
+grid=every_note   2/4 -> every_note
 voices=alto,tenor   auto == every_note: True    (identical voicings)
 voices=auto         auto == every_note: True
 ```
@@ -1093,9 +1093,9 @@ explicitly named metre-relative figure such as `charleston` asked of a 2/2 bar. 
 fire for `auto`, because `every_note` is allowed in every metre by construction.
 
 **Three tests encode the reason rather than the spelling, and are inverted rather than
-deleted.** `test_auto_resolves_to_every_note` and `test_a_resolved_auto_never_warns` state
-that the default is inert; both properties survive under `every_note` and are worth keeping
-in that spelling. `test_a_pattern_may_be_named_on_the_command_line` asserted
+deleted.** `test_the_default_grid_is_every_note` and `test_the_default_grid_is_never_refused`
+state that the default is inert; both properties survive under `every_note` and are worth
+keeping in that spelling. `test_a_pattern_may_be_named_on_the_command_line` asserted
 `parse_grid(GRID_AUTO) == GRID_AUTO`; the inverse is that `auto` is no longer vocabulary and
 is now refused like any other unknown name.
 
@@ -1132,9 +1132,10 @@ replace the five `== GRID_EVERY_NOTE` sites (`on_grid`, `grid_allowed`, `resolve
 **withdrawn**: the default is `every_note` outright, `parse_grid("auto")` raises like any
 unknown name, and `headxml._merge_chord_slots` no longer coerces an unrecognised grid to
 `every_note`. Three tests encode the reason and were **inverted rather than deleted**:
-`parse_grid(GRID_AUTO) == GRID_AUTO` became "`auto` is refused", `test_auto_resolves_to_every_note`
-was re-spelled as the default naming `every_note` (`ArrangeOptions().grid`), and
-`test_a_resolved_auto_never_warns` became `test_the_default_grid_never_warns`. A new
+`parse_grid(GRID_AUTO) == GRID_AUTO` became "`auto` is refused",
+`test_the_default_grid_is_every_note` was re-spelled as the default naming `every_note`
+(`ArrangeOptions().grid`), and the never-refused assertion became
+`test_the_default_grid_is_never_refused`. A new
 `tests/test_headxml.py::TestAnUnknownGridIsRefused` covers the library-only behaviour change.
 Gate: all six fixtures byte-identical, plus the new tests.
 
@@ -1169,13 +1170,13 @@ Gate: all six fixtures byte-identical, plus the new tests.
    sings" is separated from "the guitar has voices": a melody-only selection plays the tune and
    nothing else, so a bar with no tune has nothing for it to play. `melody_only_selection` gates
    the union in `arrange_xml_head`. It used to be the worst outcome of the three — measured, it
-   took the melody-bearing route, tried to voice the sentinel against every chord, and warned
-   sixteen times — `melody C4 is not a chord tone of Emaj7 and the 'extension' strategy found no
-   voicing`. It is now simply empty, which is the honest answer.
+   took the melody-bearing route and tried to voice the sentinel against every chord, sixteen
+   times over, each one reporting `melody C4 is not a chord tone of Emaj7`. It is now simply
+   empty, which is the honest answer.
 
 Gate: a committed chords-only fixture, and the six existing fixtures byte-identical.
 **The gate's second half is re-read, not waived** (AGENTS.md trap 5): "byte-identical" is now
-*every note-bearing bar* of every fixture. Five of the eight heads gained **57** steps between
+*every note-bearing bar* of every fixture. Six of the eight heads gained **87** steps between
 them, all in bars the melody never enters; `tenor_madness` and `but_not_for_me` have no such
 bar and are untouched.
 
@@ -1302,12 +1303,12 @@ did not say, each measured on `but_not_for_me`:
   a named grid would have merged inside a bar the melody occupies — and every no-flags
   arrangement is byte-identical **over those bars**, which is the acceptance criterion of §7
   and the property that makes the change safe to ship. What it now adds is the **bar the
-  melody never enters**, which used to produce no part at all: 57 steps across five heads,
+  melody never enters**, which used to produce no part at all: 87 steps across six heads,
   zero on `tenor_madness` and `but_not_for_me`.
 
 The one behaviour change beyond the axis itself is at the library surface: a hand-built
-`None` melody under a *singing* selection used to be refused with a warning and a skipped
-slot, and is now **comped** — the note-less slot the grid union produces on that route is a
+`None` melody under a *singing* selection used to be refused and its slot skipped, and is now
+**comped** — the note-less slot the grid union produces on that route is a
 real case now, and dropping the bar is worse than stating its chord. `TestSilentSlotsCarry
 NoMelody`'s assertion was inverted rather than deleted (AGENTS.md trap 5).
 

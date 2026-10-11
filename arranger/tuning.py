@@ -44,7 +44,7 @@ PITCH_CLASS_NAMES = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb",
 
 # The Weimar Jazz Database's "no chord" marker: a bar that carries melody but no
 # harmony. Such a step is voiced as melody alone - no harmonisation, no
-# reharmonisation, no warning (see VoiceLeadingEngine.get_melody_only_voicing).
+# reharmonisation, no clause (see VoiceLeadingEngine.get_melody_only_voicing).
 NO_CHORD = "NC"
 # Soprano (melody) string indices a Drop-2 voicing may be pinned to, and the four
 # contiguous strings each one uses. Index 0 = low E ... index 5 = high E.
@@ -67,7 +67,8 @@ MELODY_STRING_CHOICES_FULL = (5, 4, 3)
 # The comfortable neck window. Both ends are a strong *preference*, not a filter: a
 # voicing is penalised by how many of its frets fall outside, never rejected for
 # falling outside. A filter would silently drop every step whose melody has no
-# in-window shape, and arrange_progression already skips such a step with a warning -
+# in-window shape, and arrange_progression already emits such a step as a rest with the
+# reason on it -
 # losing a chord of the tune to keep a fretboard preference would be a bad trade.
 NECK_FRET_MIN = 2
 NECK_FRET_MAX = 13
@@ -121,8 +122,8 @@ ROLE_FILL = "fill"
 # Why a step sounds nothing, recorded on `ArrangementStep.silence` and phrased by
 # the renderer (`render._silence_clause`). A position the guitar cannot play is
 # still **emitted** - carrying the bar, the beat and the chord name - so the tab
-# keeps its line-up against the tune; a warning alone was not enough, because it
-# reaches nobody reading the part. Five values, one
+# keeps its line-up against the tune; a message alone was not enough, because it
+# reached nobody reading the part. Five values, one
 # per route that can decline to play:
 SILENCE_GRID = "grid"            # the grid places no chord on this beat
 SILENCE_NC_COMPING = "nc_comping"  # an NC bar: nothing for a comping part to state

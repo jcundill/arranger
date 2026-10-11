@@ -438,7 +438,7 @@ TEXTURE_GRIPS: Dict[str, Dict[str, Tuple[str, ...]]] = {
     # the empty tuple through `get_melody_only_voicing` rather than through grip
     # lookup, and the same route is the fallback for a target no shell can sound -
     # `grips=("shell",)` has no second option, so without it a melody like D over
-    # Bbm7 would disappear with only a warning.
+    # Bbm7 would be dropped from the arrangement.
     "walking_bass": {
         "target": ("shell",),
         "fill": (),
@@ -594,7 +594,7 @@ def grid_positions(
 
     An **empty** result means the pattern places nothing in this metre, and that is
     a real answer rather than a bug: `charleston` is a 4/4 figure, so asked of a
-    2/2 bar it has nowhere to go. `grid_allowed` is what turns that into a warning
+    2/2 bar it has nowhere to go. `grid_allowed` is what turns that into a refusal
     naming the pattern; this function only reports the geometry.
     """
     pattern = GRID_PATTERNS[grid]
@@ -662,7 +662,7 @@ def grid_allowed(grid: str, beats_per_bar: int) -> Tuple[bool, str]:
     and deliberately not "does every bar carry a note on one of its positions". The
     second question has a correct answer of "no, and that is fine": a bar whose
     melody is all on the beat has nothing at 2.5 for `final_and` to land on, the
-    melody-alone route handles it, and a warning would be noise. Only a pattern that
+    melody-alone route handles it, and a refusal would be wrong. Only a pattern that
     places **nothing anywhere** is a real mismatch, and it is nearly always a
     metre-relative figure asked of a metre it was not written for.
     `every_note` is not a pattern with positions at all - it is the absence of a

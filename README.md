@@ -179,7 +179,7 @@ Every step annotated: chord-tone melody names its degree (`(harmony under b7)`),
 from headxml import arrange_xml_head
 from arranger import format_tab_staff
 
-steps, head, warnings = arrange_xml_head("tests/data/but_not_for_me.mxl", section=(0, 2))
+steps, head, notes = arrange_xml_head("tests/data/but_not_for_me.mxl", section=(0, 2))
 print(format_tab_staff(steps, beats_per_bar=head.beats_per_bar, beat_type=head.beat_type))
 ```
 
@@ -360,7 +360,7 @@ Step with unplayable bass note keeps upper voicing and says so rather than writi
 
 `texture` and `bass` answer separate questions — *where notes fall* and *who plays bottom*; `voices` adds third: **who plays tune**.
 
-`bass` has `none`, `anchors` (root or 5th on strong beats), `walk` (note on every beat). Default follows request: `walking_bass` walks, melody-only selection naming bass voice walks (`--voices soprano,bass`), everything else none. Unknown spelling raises; combination left hand cannot accommodate **refused with warning**, arrangement proceeding without thumb line — walking line with gaps worse than none, losing bass costs less than losing tune.
+`bass` has `none`, `anchors` (root or 5th on strong beats), `walk` (note on every beat). Default follows request: `walking_bass` walks, melody-only selection naming bass voice walks (`--voices soprano,bass`), everything else none. Unknown spelling raises; a combination the left hand cannot accommodate at all **refused outright** (`ValueError`); a single note the thumb cannot reach dropped and named on its own step (`bass_refused`), arrangement proceeding without it — walking line with gaps worse than none, losing bass costs less than losing tune.
 
 ### Which degrees a non-singing part states: `harmony=`
 
@@ -373,7 +373,7 @@ Step with unplayable bass note keeps upper voicing and says so rather than writi
 | `root` | root, or 5th where root unreachable — bass note alone | `--voices bass` alone |
 | `full` | whole chord | ordinary chord-melody route — see [the five axes](#the-five-axes) |
 
-`--harmony shell_root --voices alto,tenor,bass` = horn on tune, guitar stating quality *and* root underneath; needs three notes, asking with two refused with warning, not quietly thinned. Where guitar *is* singing, `--harmony` does nothing — shell chord-melody is `--grips shell`, a grip choice not degree family, melody stays pinned to top string.
+`--harmony shell_root --voices alto,tenor,bass` = horn on tune, guitar stating quality *and* root underneath; needs three notes, asking with two **refused outright** (`ValueError`), not quietly thinned. Where guitar *is* singing, `--harmony` does nothing — shell chord-melody is `--grips shell`, a grip choice not degree family, melody stays pinned to top string.
 
 `--bass none` + `--voices alto,tenor` together are the ensemble: bassist on root, sax on melody, guitar comping two middle voices. Chosen separately because separate decisions — "next to a bass player, none of the 1s and 5s, no walking motion" is `bass=none`; "melody isn't mine either" drops `soprano` from `voices`.
 
@@ -405,7 +405,7 @@ Ebmaj    G4  3    6-x-x-x-x-x        (comping - 5; the guitar does not play the 
 
 One note per step, on low E, A or D: **lowest voice of shape**, taken from whatever reaches it — root where convenient (`Bb7` gives `Bb`, not `D` a guide-tone shape would), 5th where not (every `Ebmaj` above). Annotation names degrees sounding, so line reads for itself. Melody column is *written* melody, which guitar not playing (`melody_voiced` False); still on step so band lines up against it.
 
-Guitar comps under *written* melody, so melody note outside chord makes part restate its chord rather than ignore it; each such chord reported — `--voices bass` prints one `comping Bb7 as Bb13 (extension) to accommodate the melody note G4`-style warning per substituted chord.
+Guitar comps under *written* melody, so melody note outside chord makes part restate its chord rather than ignore it; each such chord reported **on the tab line**, one `comping Bb7 as Bb13 (extension) to accommodate the melody note G4`-style clause per substituted chord.
 
 `bass` treated this way only when named **alone**. `--voices tenor,bass` and `--voices alto,tenor,bass` are duo and shell, their lowest note belongs to shape's own string set.
 
@@ -583,7 +583,7 @@ Dm7      A4  5    10-x-10-10-10-x    (harmony under 5 - transposed down an octav
 
 Two deliberate limits:
 
-- **Only repositions a voicing that exists.** Melody unreachable at written pitch (`B5` fret 19, `C6` fret 20 — past end of board) not silently respelled. Position emitted empty, warning names problem, `silence="out_of_reach"` on step.
+- **Only repositions a voicing that exists.** Melody unreachable at written pitch (`B5` fret 19, `C6` fret 20 — past end of board) not silently respelled. Position emitted as a rest, clause names problem, `silence="out_of_reach"` on step.
 - **Per step, and melody only.** No phrase transposition, so melody leaping across limit can arrive octave apart from neighbour: no step ever unplayable, cost is one melodic interval.
 
 `get_all_drop2_voicings` deliberately *not* filtered by fret — pure candidate generation; `get_octave_down_candidates` is separate, explicitly opt-in entry for transposed form.
@@ -667,7 +667,7 @@ for note, quality, name in colours:
     print(f"{name:<9} {note:<3} {voicing.tab_string()}")
 ```
 
-Unsupported qualities return no voicings; `arrange_progression` warns and skips step, no raise.
+Unsupported qualities return no voicings; `arrange_progression` emits a rest step carrying `silence="no_shape"` — no raise, and no dropped position.
 
 ## Development
 

@@ -1223,7 +1223,7 @@ def _comping_no_room_reason(notes: int, bass_voice: bool) -> str:
     sentences are about different things: that one names a texture to try instead, and
     there is no texture to try here - the route is chosen by the voice selection, not
     by a palette. Naming a texture on this route is how the original bug produced a
-    warning that told the player to change a setting that had no effect.
+    message that told the player to change a setting that had no effect.
     """
     return (
         f"a {notes}-note comping shape can occupy all of "

@@ -162,8 +162,9 @@ def add_common_arguments(
             "beat, 'anchors' only where the harmony changes, 'none' (the default with "
             "--texture uniform or targets) no line at all. 'auto' follows the texture "
             "and the voice selection, so --texture walking_bass walks, as does "
-            "--voices soprano,bass, unless you say otherwise. Refused, with a "
-            "warning, where the left hand leaves the thumb no string"
+            "--voices soprano,bass, unless you say otherwise. Refused outright where "
+            "the left hand leaves the thumb no string at all; a single note it cannot "
+            "reach is dropped from that step and named on it"
         ),
     )
     parser.add_argument(
@@ -188,7 +189,7 @@ def add_common_arguments(
             "default) is the 3rd and the 7th, 'shell_root' adds a root or 5th under "
             "them, 'root' is a bass note alone, 'full' is the whole chord. Read only "
             "when the guitar has no melody of its own, so it composes with --voices "
-            "rather than replacing it. Refused, with a warning, where the voice "
+            "rather than replacing it. Refused where the voice "
             "selection leaves no room for it"
         ),
     )

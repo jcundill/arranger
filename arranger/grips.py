@@ -1395,8 +1395,8 @@ def _shell_voicing(
         # which is the same preference order `_duo_offsets` already applies.
         #
         # Refusing here would instead make `--voices alto` fall through to the ordinary
-        # melody-bearing route, which warns on every step and hands the horn's line back
-        # to the guitarist - the opposite of what naming one voice asked for.
+        # melody-bearing route, which states the horn's line on the guitar on every step
+        # and hands it back - the opposite of what naming one voice asked for.
         keep = 2 if notes >= 2 else 1
         needed = {(root_pc + degree) % 12 for degree in guide[:keep]}
         allowed = {(root_pc + tone) % 12 for tone in tones}

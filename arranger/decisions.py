@@ -137,7 +137,7 @@ def melody_alone_case(
     Why each is a branch rather than a missing case:
 
     - **an `NC` bar** carries melody but no harmony, so there is nothing to voice.
-      Taken before any chord logic, so it is never reharmonised and never warns.
+      Taken before any chord logic, so it is never reharmonised and carries no clause.
     - **a fill under a thumb texture**, **a target no shell can sound**, and **every
       slot of a melody-only voice selection.** A fill is *meant* to be thin; a target that
       cannot be voiced must not be dropped, because the note of the tune survives and
@@ -177,8 +177,9 @@ def melody_alone_case(
     So for a slot the guitar is not singing, only an `NC` bar may take this route - and
     that one is *also* wrong, for a different reason: an NC bar has no chord, so there is
     no guide tone to state and nothing for the guitar to play. It is answered as
-    `MELODY_ALONE_NONE` and the caller warns instead, which keeps the tune's silence
-    visible rather than quietly handing the horn's line to the guitarist.
+    `MELODY_ALONE_NONE` and the caller emits a rest step carrying its own reason
+    instead, which keeps the tune's silence visible rather than quietly handing the
+    horn's line to the guitarist.
 
     **`on_grid=False` is the grid axis, and it is the one case where the guitar plays
     nothing rather than one note.** Every other answer ends at
@@ -200,11 +201,11 @@ def melody_alone_case(
     # only ever *removes* chords, so it cannot reintroduce a soprano the voice
     # selection removed.
     if not melody_voiced:
-        # An `NC` bar is **not** a rest. It has no chord, so there is no guide tone to
-        # place and nothing to comp: the caller drops the bar and warns, which is the
-        # honest report. Answering `REST` here would emit a step where there should be
-        # none and swallow that warning - measured: the `NC` bar reappeared in the
-        # arrangement as a silent step, and
+        # An `NC` bar is **not** a rest of this kind. It has no chord, so there is no guide
+        # tone to place and nothing to comp: the caller emits a rest step that says why
+        # (`silence="nc_comping"`), which is the honest report. Answering `REST` here would
+        # give the caller no reason to state - measured: the `NC` bar reappeared in the
+        # arrangement as an unexplained silent step, and
         # `test_an_nc_bar_is_reported_rather_than_silently_dropped` caught it
         # returning `['Dm7', 'NC', 'A7']` where it had returned `['Dm7', 'A7']`.
         #
@@ -216,7 +217,7 @@ def melody_alone_case(
         return MELODY_ALONE_REST if not on_grid else MELODY_ALONE_NONE
     # The singing route answers `NC` the way it always has, and it must keep doing so
     # even though the comping route above returns `NONE` for the same slot: the two
-    # routes build different steps there (the caller drops the bar and warns, versus
+    # routes build different steps there (the caller emits a rest step that says why, versus
     # `get_melody_only_voicing` with `melody_only=True`), which is the reason this
     # function returns a *kind* and not a bool. Dropping the `NC` answer along with the
     # comping one sent the note through the harmonised path instead, where it found no

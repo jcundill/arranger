@@ -579,9 +579,10 @@ def _resolve_knobs(
         raise ValueError(
             f"Unknown texture {texture!r}; expected one of {TEXTURE_STYLES}"
         )
-    # Resolved once, here, and passed down: every warning this function reaches
-    # goes to the one collector, so a caller that passed one sees all of them
-    # rather than the first few. Defaults to printing, as this always did.
+    # Resolved once, here, and passed down: an axis that cannot honour the request
+    # raises rather than degrading to a value the caller did not ask for, so what a
+    # caller sees is the refusal rather than an arrangement answering a different
+    # question.
 
     return _Knobs(
         top_strings=top_strings,
@@ -864,8 +865,8 @@ def _no_chord_step(
 ) -> None:
     """Append the melody-alone step for an `NC` bar: melody, but no harmony.
 
-    This happens before any chord logic, so there is no non-chord-tone strategy,
-    no substitute chord and no warning about either. The `melody_only` flag is
+    This happens before any chord logic, so there is no non-chord-tone strategy and
+    no substitute chord. The `melody_only` flag is
     set here and *only* here; the texture case above reaches the same shape
     deliberately without it.
     """
@@ -963,7 +964,7 @@ def _comping_step(
     # keeps its place in the tab with the reason on it, rather than reaching
     # `get_comping_voicings` (which correctly refuses a chord with no root)
     # and then falling through to a melody-bearing route that would either
-    # warn twice or hand the horn's line back to the guitarist. The guitar
+    # state it twice or hand the horn's line back to the guitarist. The guitar
     # is silent on this bar, and the horn is not - so the line says which.
     if chord_type == NO_CHORD or name == NO_CHORD:
         _rest_step(
@@ -1480,7 +1481,7 @@ def _harmonised_step(
             # written pitch at all (`out_of_reach`) versus a reachable melody
             # under a chord nothing could voice (`no_shape`). The rescue above
             # asked the same question, so the answer is read back rather than
-            # re-derived from the warning's own words.
+            # re-derived from the clause's own words.
             _rest_step(
                 arrangements, slot,
                 name=name, note_str=note_str,
@@ -1970,7 +1971,7 @@ def arrange_progression(
     A step whose chord_type or name is NO_CHORD ("NC") is voiced as the melody
     alone on a single fret (get_melody_only_voicing) and flagged
     melody_only=True. Such a step is short-circuited before any chord logic,
-    so it is never reharmonised and never warns; it also does not take part in
+    so it is never reharmonised and never carries a clause; it also does not take part in
     voice-leading minimisation, and being neither a drop-2 voicing nor a
     four-string shape it is exempt from that playability invariant.
 
@@ -1989,7 +1990,7 @@ def arrange_progression(
     of patterns is open - a new one is a row in `BASS_POLICY_ROLES`.
 
     `BASS_AUTO`, the default here, resolves from the texture and the selection, and a
-    combination the left hand cannot accommodate is refused with a warning rather
+    combination the left hand cannot accommodate is refused rather
     than degraded. **Both rules, and the measurement behind the second, are stated
     once** - in `_resolve_bass` and `bass.bass_allowed` - rather than repeated here.
     Two consequences a caller is most likely to meet: `texture="walking_bass"` and

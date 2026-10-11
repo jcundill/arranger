@@ -1585,8 +1585,8 @@ def chord_at(
       measurement.
     - **`None` before the first change**, never a guess. A position no chord has reached
       has no harmony, and inventing one is the failure this module refuses everywhere
-      else. The caller decides what to do — drop the bar, or warn — because only it knows
-      whether the position is real.
+      else. The caller decides what to do — drop the bar, or emit a rest for it — because
+      only it knows whether the position is real.
 
     **The answer is the change with the greatest position at or before the target**, which
     makes the scan order-independent: an unsorted list gives the same answer as a sorted
