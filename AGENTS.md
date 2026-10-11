@@ -50,10 +50,10 @@ frozen like the rest — it is not a home for an open plan.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1089 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **1096 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 14 of those 1089, and it is the one that fails if this
+(`tests/test_docs.py` is 14 of those 1096, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree. It also fails if a document
 exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
 new file cannot be added without being registered.)
@@ -364,6 +364,12 @@ renderer**, never re-derived at a call site:
   substitution actually states, a written slash bass no shape sounds — is a *derived clause*
   (`_transposition_clause`, `_substitution_clause`, `_slash_bass_clause`), so it reaches every
   route that can suffer it, a hold included;
+- a **choice the shape embodies** that no field records is derived from the step's own fields
+  too, but is suppressed on a hold like the `palette` clauses, because it accounts for the
+  shape rather than for a column: `_omission_clause` names the chord tone a four-voice shape
+  gives up (`TONE_PRIORITY`'s tail). Derived rather than recorded because the whole fact — the
+  routed chord's tones against the pitches sounding — is already on the step, and a field
+  beside it would be a second source for one fact;
 - a **route that chose no shape** states its own (`_comping_clause` names the degrees it
   states; "the tune is silent here"; "the guitar rests here"; "the shape above is held"; "the
   most a fill's palette offers" — the last is the difference between *the library ran out* and

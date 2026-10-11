@@ -100,10 +100,10 @@ But Not For Me - George Gershwin
   note: 15 rests and unpitched notes
 
 Bb7      F4  5    6-x-6-7-6-x        (harmony under 5 - 4 voices)
-Bb7      G4  13   6-x-6-7-8-x        (non-chord tone -> Bb13 via extension - 4 voices)
+Bb7      G4  13   6-x-6-7-8-x        (non-chord tone -> Bb13 via extension - 4 voices - the chord tones it leaves out are 9 & 5)
 Bb7      F4  5    6-x-6-7-6-x        (harmony under 5 - 4 voices)
 Ebmaj    G4  3    6-x-8-8-8-x        (harmony under 3 - 4 voices)
-Ebmaj    F4  9    6-x-8-8-6-x        (non-chord tone -> Ebadd9 via extension - 4 voices)
+Ebmaj    F4  9    6-x-8-8-6-x        (non-chord tone -> Ebadd9 via extension - 4 voices - the chord tone it leaves out is 3)
 ```
 
 Both forms of the format are read: a bare `.musicxml` document and a zipped `.mxl`
@@ -525,7 +525,7 @@ python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-2
 ```
 
 ```text
-Gmaj9    D4  5    3-x-4-4-3-x        (harmony under 5 - 4 voices)
+Gmaj9    D4  5    3-x-4-4-3-x        (harmony under 5 - 4 voices - the chord tone it leaves out is 9)
 Gmaj9    D4  5    x-x-x-x-3-x        (melody repeated - single note)
 Gmaj9/F# D4  5    x-x-4-4-3-x        (shell - 3rd & 7th, partial - 3 voices: the 4-voice voicing 3-x-4-4-3-x does not sound the written bass)
 ```
@@ -544,7 +544,7 @@ python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-2 --te
 ```text
   texture: targets - a full chord on beats 1 and 3 of 2/2, a shell, a 3rd/6th or the melody alone elsewhere
 
-Gmaj9    D4  5    5-x-5-4-3-x        (harmony under 5 - 4 voices)
+Gmaj9    D4  5    5-x-5-4-3-x        (harmony under 5 - 4 voices - the chord tone it leaves out is 7)
 Gmaj9    D4  5    x-x-x-x-3-x        (melody repeated - single note)
 Gmaj9/F# D4  5    x-x-4-4-3-x        (shell - 3rd & 7th, partial - 3 voices, the most this palette offers)
 ```
@@ -643,8 +643,8 @@ python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-4 --fa
   note: diminished fallback replaced the written chord on 1 step(s)
 
 Ebmaj7   D5  7    x-x-8-8-8-10       (harmony under 7 - 4 voices)
-Ebmaj7   C5  13   x-x-8-10-8-8       (non-chord tone -> Eb6/9 via extension - 4 voices)
-Adim7    B4  9    x-9-x-8-10-7       (non-chord tone - the extension strategy found no voicing; the written chord stands - 4 voices)
+Ebmaj7   C5  13   x-x-8-10-8-8       (non-chord tone -> Eb6/9 via extension - 4 voices - the chord tone it leaves out is Root)
+Adim7    B4  9    x-9-x-8-10-7       (non-chord tone - the extension strategy found no voicing; the written chord stands - 4 voices - the chord tone it leaves out is b3)
 ```
 
 *Expect the tune to change. The written chord is genuinely replaced, which is why the run

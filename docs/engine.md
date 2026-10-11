@@ -144,6 +144,18 @@ you whether a change is an improvement or a different library.
   symbol asks for that note and no part of the tab answers, so the line does — read from the
   chord symbol and the shape, through `slots._slash_bass` and `slots.slash_bass_cost`.
 
+  A sixth names the other loss the tab cannot show, and it is the rule's own price: a
+  four-voice shape on a chord with more tones than voices *gives one up* — the root first,
+  then the natural 5th (`TONE_PRIORITY`, [generated-grips.md](generated-grips.md)) — and four
+  strings that count as a complete shape read as a complete chord. So the line says which tone
+  went (`the chord tone it leaves out is Root`), named through the same
+  `chords.melody_degree_name` vocabulary `_comping_clause` names the degrees it *states* with,
+  against the chord the part **states** (`harmonized_as` where a substitute was found) and the
+  pitches of the **whole** step, so a thumb that lands on the root counts as stating it. Only
+  the four-voice shape is asked about: fewer voices is a different decision, already answered
+  by the count or by `partial`'s `shell - 3rd & 7th`, and a hold was answered where the shape
+  was chosen.
+
   Two outcomes that used to print the same words are told apart. A non-chord tone whose
   strategy found nothing reads `non-chord tone - the extension strategy found no voicing; the
   written chord stands`, where before it read only `non-chord tone` — the words a route that

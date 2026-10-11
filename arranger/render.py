@@ -230,13 +230,14 @@ def _substitution_clause(step: ArrangementStep) -> str:
 def _annotate(step: ArrangementStep, *clauses: str) -> str:
     """Wrap a step's clauses - with the clauses read from the step itself - into the line.
 
-    Six clauses are derived here rather than passed in, so that every path out of
+    Seven clauses are derived here rather than passed in, so that every path out of
     `_step_annotation` that can have one carries it. Two correct a **column** and so are
     restated on every line that suffers them - the **octave** the sounding melody is at
     (`_transposition_clause`) and the chord the part actually **states**
-    (`_substitution_clause`). Four explain the shape itself, and a hold is the one step that
+    (`_substitution_clause`). Five explain the shape itself, and a hold is the one step that
     suppresses them: the shape **count** (`_shape_clause`, which stays silent on a hold
-    because it was explained where the shape was chosen), the **window** it had to leave
+    because it was explained where the shape was chosen), the chord **tone** it leaves out
+    (`_omission_clause`), the **window** it had to leave
     (`_window_clause`), the **written bass** it does not sound (`_slash_bass_clause`) and the
     **held** shape above a moving thumb (`_held_clause`). The alternative is a dozen return
     sites each remembering to append them, which is how a fact comes to be printed on one
@@ -251,6 +252,7 @@ def _annotate(step: ArrangementStep, *clauses: str) -> str:
         _transposition_clause(step),
         _substitution_clause(step),
         _shape_clause(step),
+        _omission_clause(step),
         _window_clause(step),
         _slash_bass_clause(step),
         _held_clause(step),
@@ -448,6 +450,60 @@ def _held_clause(step: ArrangementStep) -> str:
     return "the shape above is held"
 
 
+
+
+def _omission_clause(step: ArrangementStep) -> str:
+    """Says which of the chord's tones a four-voice shape leaves out.
+
+    `TONE_PRIORITY` decides which tone a four-voice shape gives up when the chord has more
+    tones than voices - the root first, then the natural 5th, and a name-given extension
+    never. The tab cannot show that: the chord name above the step describes the harmony
+    rather than the notes sounding under it, and four strings that count as a complete
+    shape read as a complete chord. So the line names the tone the rule dropped.
+
+    Only the **four-voice** shape is asked about, because that is the shape the rule is
+    about. Fewer voices is a different decision with its own answer - a count from
+    `_shape_clause`, or `partial`'s `shell - 3rd & 7th` - and a hold, a `bass_only` step
+    and a melody alone were explained where the shape was chosen. A thin shell is
+    therefore silent here even though it leaves tones out, which is the same boundary
+    `_shape_clause` draws.
+
+    Read from the step alone: the tones come from `chords.ChordParser` and the chord the
+    part **states** (`harmonized_as` where a substitute was found), so this composes with
+    `_substitution_clause` instead of contradicting it. The sounding pitches are
+    `Voicing.midi_notes()` - the **whole** step, so a thumb that lands on the root counts
+    as stating it, exactly as `_slash_bass_clause` reasons.
+    """
+    if step.repeated or step.bass_only or step.partial or step.melody_only:
+        return ""
+    if step.chord_unvoiced:
+        return ""
+    if len(step.voicing.upper_midi_notes()) != 4:
+        return ""
+    harmony = step.harmonized_as or step.chord
+    root_str, quality = ChordParser.parse_chord_name(harmony)
+    canonical = ChordParser.canonical_quality((quality or "").split("/", 1)[0])
+    tones = ChordParser.CHORD_TONES_FROM_ROOT.get(canonical)
+    if not root_str or not tones:
+        return ""
+    root_pc = Note(root_str + "4").midi_note() % 12
+    sounding = {pitch % 12 for pitch in step.voicing.midi_notes()}
+    missing = [tone for tone in tones if (root_pc + tone) % 12 not in sounding]
+    if not missing:
+        return ""
+    # Named through `melody_degree_name`, the same vocabulary `_comping_clause` names the
+    # degrees a shape *states* with, so one line's omission is the other line's list. Any
+    # octave will do: the name depends on the interval from the root, not the register.
+    names = [
+        melody_degree_name(Note(_note_name(48 + (root_pc + tone) % 12)), harmony)
+        for tone in missing
+    ]
+    names = [name for name in names if name]
+    if not names:
+        return ""
+    if len(names) == 1:
+        return f"the chord tone it leaves out is {names[0]}"
+    return f"the chord tones it leaves out are {_and_list(names)}"
 
 
 def _bass_annotation(step: ArrangementStep, existing: str = "") -> str:
