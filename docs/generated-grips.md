@@ -116,30 +116,41 @@ the numbers it would cost to flip all six at once. It is a live option, not a de
 
 ## 4. What is not built
 
-**Step 2 — one placement search.** Today a template becomes frets by arithmetic
-(`_place_template`), while the four non-contiguous string sets already *search*
-(`_place_shell`, `_place_drop2_6432`, both exhaustive through `_frets_in_span`). Unifying
-them — hold the melody, enumerate inner frets inside `GRIP_MAX_SPAN`, keep the shapes whose
-sounding set is the priority set — subsumes `drop2`, `drop3`, `drop24`, `closed`,
-`drop2_6432` and `shell`, and makes the family name a *derived* view of the found shape
-rather than the thing that selected it (`docs/one-fact.md` is the precedent). Four
-decisions have to be made before it is written, and each needs a measurement:
+**Step 2 — one placement search.** A template becomes frets by arithmetic
+(`_place_template`), while the four non-contiguous string sets already *search*. **The two
+searches are now one**: `_place_shape` (`arranger/grips.py`) is the enumerating validator
+they share — hold the melody, enumerate the other strings inside `GRIP_MAX_SPAN`, keep the
+shapes whose sounding set is the family's claim — and `_place_shell` and `_place_drop2_6432`
+are now requests to it rather than nests of loops. Across the eight committed heads that
+moved **0 of 1,103 steps** and **0** of the 300 diagnostics, byte for byte.
 
-- **The tie-break.** `voicing_cost` names no family, so an exact tie falls to generation
-  order. With one search there is no family order to fall back on, so the tie-break has to
-  be stated. The last time a criterion that did this work was deleted it moved 0 of 799
-  steps — a count like that is what says whether the choice matters.
-- **The palette route.** Should a non-chord melody be offered the whole template list, or
-  should it state `stated_tones` — its own note plus the top three by priority — and be
-  offered *one* shape? The rule already has an answer available; today's code does the
-  other thing. This is the route 29 of the 65 moves above came through, so it is where the
-  behaviour is least understood.
-- **`_BOTTOM_FOUR`.** A four-note shape on 6-5-4-3 is excluded today for a musical reason
-  ("four voices in the bottom fourth of the compass"), not a mechanical one. A general
-  search makes it *reachable*, so the exclusion becomes a decision to re-assert rather
-  than a set nobody generates.
-- **A name for a shape that is not one of the four transformations.** Some legal frettings
-  of a legal tone set are neither close position nor a drop of any voice.
+It also closed a latent defect, which is the part worth recording: the shared search states
+that the melody is the **highest sounding note**, and `_place_shell` had never asked.
+Pinning the melody to the top *string* does not put it on top in *pitch* — the B and G
+strings are four semitones apart — and nine (quality, root, set, fret) configurations
+reach a shape whose inner voice sounds above the melody. Am9 with a B3 melody on the B
+string is the pinned case, its `(4,3,2)` shape reaching C4 a semitone above; no committed
+head reaches one, which is why the sweep is unchanged.
+
+**What remains is the arithmetic families**, and it is a smaller change than it sounds.
+Every template is monotone — its voices descend down the strings — and on a fixed string
+set a monotone fretting of a given pitch list is *forced*, up to a duplicated pitch.
+Measured over the committed heads: **2 alternative frettings of a winner's own note set are
+monotone, and neither would win**. So routing `drop2`, `drop3`, `drop24`, `closed`, `duo`
+and `interval` through the same search is behaviour-preserving by construction, and the
+family name stays what it is today — the layout that was asked for.
+
+**A derived label needs one more step, and the numbers say which.** `closed` and `drop2`
+state the *same* four pitch classes on a four-tone chord and differ only in whether the
+second voice sits an octave down, so a search told only ``these pitch classes must sound''
+cannot name what it produced. What it *can* do is find shapes no family names, and there are
+three levers for that, each measured separately:
+
+| lever | what it would change | measured |
+|---|---|---|
+| **Admit crossings** (a string carrying a pitch above the string above it) | 1,441 alternative frettings exist on 794 of 967 melody-bearing steps; **47 would win** — 8 on the *foreign-note* criterion (a better choice of which tone to double, all `drop2_6432`), 35 on span and 4 on neck position | a real change, and it needs a name for a shape that is not one of the four transformations |
+| **Offer 6-5-4-3** (a G-string melody with four voices) | **104 of 967 steps** would gain 2–4 shapes, and criterion 2 (`missing = 4 - len(active)`) ranks them above the three-note shell that wins there today | the `_BOTTOM_FOUR` exclusion is load-bearing for ~11% of steps, not a set nobody happens to generate |
+| **One shape per set from the rule** (a non-chord melody stating `stated_tones` rather than being offered the whole template list) | **476 of 967 steps** are on the routes that bypass the degree index — 297 non-chord-tone, 179 chord-tone with no named inversion | the largest lever, and the least understood: 29 of the 65 moves in §3 came through it |
 
 **Step 3 — retire the tables.** `DROP2_INTERVAL_SETS` and the numbers in
 `DEGREE_OFFSETS_FROM_ROOT` go once the rule is the source of the templates;
@@ -152,8 +163,9 @@ added.
 line that prints it" is an invariant of the artifact rather than a style preference. A rule
 that *omits* a chord tone is exactly such a choice — a reader cannot see it in the fret
 numbers — so it needs a derived clause and a witness in `tests/test_explanations.py`, which
-fails until the clause is registered. This is owed by step 2, not step 3: it becomes
-visible the moment the omission is a rule instead of a number someone typed.
+fails until the clause is registered. **Owed, and not built.** It became due when the
+omission stopped being a number someone typed and became a rule (`TONE_PRIORITY`'s tail);
+registering it is a change to `render` and that table, not to the placement.
 
 ## 5. Where the rule lives, and what holds it
 
@@ -163,4 +175,5 @@ visible the moment the omission is a rule instead of a number someone typed.
 | the accessor | `arranger/grips.py` — `stated_tones()` |
 | the generator and the live table | `arranger/grips.py` — `_priority_drop2_templates()`, `DROP2_TEMPLATES` |
 | the witness | `DROP2_INTERVAL_SETS`, unchanged, asserted by `tests/test_generated_grips.py` |
+| the placement search the searched families share | `arranger/grips.py` — `_Placement`, `_place_shape`; held by `tests/test_placement.py` |
 | the decision behind the rows | this document, §3 |

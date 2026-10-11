@@ -14,12 +14,13 @@ spellings working. It leaves one implementation, so there is nothing to keep in 
 The four non-contiguous string sets - 6-4-3, both 5-3-2s and 6-4-3-2 - are
 *searched* rather than stacked, because their voices are not in descending pitch
 order down the strings: the A string is tuned five semitones above the D. See
-`_place_shell` and `_place_drop2_6432`.
+`_place_shape`, which is the search they share.
 """
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Optional, Tuple
+from dataclasses import dataclass
+from typing import Dict, FrozenSet, Iterable, List, Optional, Tuple
 
 from musthe import Note
 
@@ -1134,56 +1135,27 @@ def _place_shell(
     So the shape is found by searching: the melody is held at `top_fret` on the soprano
     string and every combination of frets within the span limit is tried on the
     remaining strings, keeping the ones where the guide tones sound and nothing outside
-    the chord does. Because the search window is exactly the span limit, the search is
-    *exhaustive within the playability invariant* - if a playable shell exists in this
-    position, this finds it, which is a stronger guarantee than stacking a nearest-tone
-    stack and hoping.
-
-    Ties are broken by fret spread, then by position, so the shape a player would pick
-    wins over the first one the search happens to reach.
+    the chord does. The request is a `_Placement` and `_place_shape` answers it, so this
+    and every other searched family cannot drift apart on what a candidate may sound or
+    on how two equally playable ones are ranked.
     """
     guide = SHELL_DEGREES.get(quality)
     if guide is None or len(strings) < 3:
         return None
-    allowed = {(root_pc + t) % 12 for t in tones}
-    needed = {(root_pc + g) % 12 for g in guide}
-    limit = GRIP_MAX_SPAN["shell"]
-
-    lo = max(0, top_fret - limit)
-    hi = top_fret + limit
-    if hi > 18:
-        return None
-
-    best: Optional[Tuple[int, float, Voicing]] = None
-    for first in range(lo, hi + 1):
-        for second in range(lo, hi + 1):
-            frets = [-1] * len(STANDARD_TUNING)
-            frets[strings[0]] = top_fret
-            frets[strings[1]] = first
-            frets[strings[2]] = second
-            active = [top_fret, first, second]
-            if max(active) - min(active) > limit:
-                continue
-            midis = sorted(
-                GuitarFretboard.fret_to_midi(str, fret)
-                for str, fret in zip(strings, (top_fret, first, second))
-            )
-            pcs = {m % 12 for m in midis}
-            # Both guide tones have to sound, and nothing outside the chord may.
-            if not needed <= pcs or not pcs <= allowed:
-                continue
-            spread = max(active) - min(active)
-            voicing = Voicing(
-                frets=frets,
-                top_fret=top_fret,
-                avg_fret=sum(active) / len(active),
-                grip="shell",
-                bass_pc=min(midis) % 12,
-            )
-            key = (spread, voicing.avg_fret)
-            if best is None or key < best[:2]:
-                best = (spread, voicing.avg_fret, voicing)
-    return best[2] if best else None
+    return _place_shape(
+        _Placement(
+            grip="shell",
+            # The three strings from the soprano down: a shell is a three-voice grip, so
+            # a set with a fourth string in it places the shape on the top three.
+            strings=strings[:3],
+            melody_midi=melody_midi,
+            top_fret=top_fret,
+            # Both guide tones have to sound.
+            required=frozenset((root_pc + g) % 12 for g in guide),
+        ),
+        # Nothing outside the chord may.
+        frozenset((root_pc + t) % 12 for t in tones),
+    )
 
 
 def _place_drop2_6432(
@@ -1191,77 +1163,44 @@ def _place_drop2_6432(
     root_pc: int,
     melody_midi: int,
     top_fret: int,
+    strings: Tuple[int, ...],
 ) -> Optional[Voicing]:
     """
     A four-note 6-4-3-2 shape (low E, D, G and the B under the melody), found by
     searching rather than stacking.
 
-    It needs its own placement for the reason 6-4-3 does, and the reason is
-    structural: **this set skips the A string, so its strings are not in descending
-    pitch order.** The D string is tuned a fifth above the low E, so the low E's note is
-    frequently *not* the lowest sounding pitch - an interval-laid drop-2 table, which lays
-    voices down by interval, cannot express a shape whose bottom string is not the bottom
-    voice. Reusing _place_shell's approach is the answer rather than a second way to
-    place notes: hold the melody, search every combination of frets within the span
-    limit, keep the legal ones. Because the window is exactly the span limit, the search
-    is *exhaustive within the playability invariant*.
+    It cannot come from the interval-laid drop-2 table for the reason 6-4-3 cannot, and
+    the reason is structural: **this set skips the A string, so its strings are not in
+    descending pitch order.** The D string is tuned a fifth above the low E, so the low
+    E's note is frequently *not* the lowest sounding pitch, and a table that lays voices
+    down by interval cannot express a shape whose bottom string is not the bottom voice.
+    The request is a `_Placement` and `_place_shape` answers it - one placement for the
+    searched families, not a second way to place notes.
 
     The one extra rule is BASS_DEGREES_6432: the low E carries the chord's root or its
     5th. That is the entire point of the shape, and it is also why it needs a root at
     all - a rootless quality has nothing to measure the low E against, and gets nothing.
-
-    Ties are broken by fret spread then by position, matching _place_shell, so the shape
-    a player would pick wins over the first one the search reaches. Ranking the survivors
-    is not cosmetic: an unranked search returns whatever comes first, so the grip can look
-    as though it is never selected when it is merely ranked last.
     """
-    allowed = {(root_pc + t) % 12 for t in tones}
-    limit = GRIP_MAX_SPAN["drop2_6432"]
 
-    lo = max(0, top_fret - limit)
-    hi = top_fret + limit
-    if hi > 18:
-        return None
-
-    best: Optional[Tuple[int, float, Voicing]] = None
-    for low_e in range(lo, hi + 1):
-        for d_fret in range(lo, hi + 1):
-            for g_fret in range(lo, hi + 1):
-                active = (top_fret, low_e, d_fret, g_fret)
-                spread = max(active) - min(active)
-                if spread > limit:
-                    continue
-                frets = [-1] * len(STANDARD_TUNING)
-                frets[4] = top_fret
-                frets[0] = low_e
-                frets[2] = d_fret
-                frets[3] = g_fret
-                midis = sorted(
-                    GuitarFretboard.fret_to_midi(s, frets[s]) for s in (0, 2, 3, 4)
-                )
-                # The melody stays the top voice, nothing outside the chord sounds, and
-                # the low E carries a root or a 5th.
-                if midis[-1] != melody_midi:
-                    continue
-                if not {m % 12 for m in midis} <= allowed:
-                    continue
-                # The *low E string's* note, which is not the same as the lowest
-                # sounding pitch: the D string is a fifth above it.
-                if (GuitarFretboard.fret_to_midi(0, low_e) % 12 - root_pc) % 12 not in (
-                    BASS_DEGREES_6432
-                ):
-                    continue
-                voicing = Voicing(
-                    frets=frets,
-                    top_fret=top_fret,
-                    avg_fret=sum(active) / len(active),
-                    grip="drop2_6432",
-                    bass_pc=midis[0] % 12,
-                )
-                key = (spread, voicing.avg_fret)
-                if best is None or key < best[:2]:
-                    best = (spread, voicing.avg_fret, voicing)
-    return best[2] if best else None
+    return _place_shape(
+        _Placement(
+            grip="drop2_6432",
+            strings=strings,
+            melody_midi=melody_midi,
+            top_fret=top_fret,
+            # No guide-tone claim: the shape states four of the chord's own tones and the
+            # string set decides which, exactly as the four-note families do.
+            required=frozenset(),
+            # The lowest voice carries the chord's *function* rather than its quality, so
+            # it is a root or a 5th - read from BASS_DEGREES_6432, which is where that rule
+            # is stated.
+            lowest_pc_allowed=frozenset(
+                (root_pc + degree) % 12 for degree in BASS_DEGREES_6432
+            ),
+        ),
+        # Nothing outside the chord may sound.
+        frozenset((root_pc + t) % 12 for t in tones),
+    )
 
 
 def _place_template(
@@ -2036,6 +1975,105 @@ def _frets_in_span(
             yield (first,) + tail
 
 
+@dataclass(frozen=True)
+class _Placement:
+    """
+    One family's request of the placement search: where to sit, and what must sound.
+
+    A *value*, so a caller states the request and the search answers it - which is what
+    lets the non-contiguous families share one placement instead of each owning a nest of
+    loops. `strings` is ordered from the soprano downwards, as `_string_sets_for` returns
+    it, so `strings[0]` is the string the melody is pinned to and `melody_midi` is that
+    pin's pitch.
+
+    `required` is the family's claim about which of the chord's tones have to be present,
+    as pitch classes; **empty means the family makes no claim** and any subset of the
+    chord's own tones will do, which is the drop-2 & 4 rule - it states four chord tones
+    and leaves which ones to the string set. `lowest_pc_allowed` is the separate claim about
+    the **bottom** voice, for the families whose shape is defined by its bass (a 6-4-3-2
+    states the chord's function, so its lowest note is a root or a 5th); None asks nothing.
+    """
+
+    grip: str
+    strings: Tuple[int, ...]
+    melody_midi: int
+    top_fret: int
+    required: FrozenSet[int]
+    lowest_pc_allowed: Optional[FrozenSet[int]] = None
+
+
+def _place_shape(
+    placement: _Placement, allowed: FrozenSet[int]
+) -> Optional[Voicing]:
+    """
+    The one shape `placement` asks for on its string set, or None when it will not play.
+
+    Exhaustive within the playability invariant, because the search window is exactly the
+    span limit: the melody is held at its own fret and every combination of frets within
+    `GRIP_MAX_SPAN[placement.grip]` of it is tried, so if a playable shape exists in this
+    position this finds it. Every candidate keeps the melody as the **highest sounding
+    note** - the same rule the whole library states - and sounds nothing outside `allowed`.
+
+    A window that runs off the end of the board yields nothing, which is the melody being
+    too high to voice here rather than a shape being refused: `get_octave_down_candidates`
+    is what covers a melody above the neck window.
+
+    **Ties are broken by fret spread, then by position**, so the shape a player would pick
+    wins over the first one the search reaches; and of two still equal the earlier one
+    survives, which is the enumeration order `_frets_in_span` yields in. Ranking the
+    survivors is not cosmetic: an unranked search returns whatever comes first, so a family
+    can look as though it is never selected when it is merely ranked last.
+    """
+    strings = placement.strings
+    top_fret = placement.top_fret
+    limit = GRIP_MAX_SPAN[placement.grip]
+
+    lo = max(0, top_fret - limit)
+    hi = top_fret + limit
+    if hi > 18:
+        return None
+
+    melody_pitch = GuitarFretboard.fret_to_midi(strings[0], top_fret)
+    best: Optional[Tuple[int, float, Voicing]] = None
+    for tail in _frets_in_span(strings[1:], lo, hi, limit):
+        active = (top_fret,) + tail
+        if max(active) - min(active) > limit:
+            continue
+        midis = sorted(
+            GuitarFretboard.fret_to_midi(string, fret)
+            for string, fret in zip(strings, active)
+        )
+        # The melody is the highest sounding note, which is not implied by pinning it to the
+        # top *string*: the B and G strings are only four semitones apart, so an inner voice
+        # a fret above the melody sounds above it. Am9 with a B3 melody on the B string is
+        # the pinned case - its (4,3,2) shape reaches C4 on the G, a semitone higher.
+        if midis[-1] != melody_pitch:
+            continue
+        pcs = {midi % 12 for midi in midis}
+        if not placement.required <= pcs or not pcs <= allowed:
+            continue
+        if (
+            placement.lowest_pc_allowed is not None
+            and midis[0] % 12 not in placement.lowest_pc_allowed
+        ):
+            continue
+        frets = [-1] * len(STANDARD_TUNING)
+        for string, fret in zip(strings, active):
+            frets[string] = fret
+        spread = max(active) - min(active)
+        voicing = Voicing(
+            frets=frets,
+            top_fret=top_fret,
+            avg_fret=sum(active) / len(active),
+            grip=placement.grip,
+            bass_pc=midis[0] % 12,
+        )
+        key = (spread, voicing.avg_fret)
+        if best is None or key < best[:2]:
+            best = (spread, voicing.avg_fret, voicing)
+    return best[2] if best else None
+
+
 def get_grip_voicings(
     melody_note: Note,
     chord_type: str,
@@ -2113,7 +2151,7 @@ def get_grip_voicings(
                     if root_pc is None:
                         continue
                     found = _place_drop2_6432(
-                        tones, root_pc, melody_midi, top_fret
+                        tones, root_pc, melody_midi, top_fret, strings
                     )
                     if found is not None:
                         valid_voicings.append(found)

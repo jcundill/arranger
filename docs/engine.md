@@ -602,7 +602,7 @@ Five decisions in here were each forced by something measurable:
   `2-3-0-x-x-x` — B2 on the A string, F3 on the D string, G3 on the G — where the A string
   carries the *lower* note while being the higher string; Gm7 in 6-4-3 is `3-x-3-3-x-x`,
   with G3 on the D string below A2 on the low E. A model that stacks voices by pitch gets
-  both backwards and finds nothing, so `_place_shell` holds the melody and searches every
+  both backwards and finds nothing, so `_place_shape` holds the melody and searches every
   combination of frets inside the span limit. That makes the search *exhaustive within the
   playability invariant*: if a playable shell exists in that position, it is found.
 - **No four-note voicing on 6-5-4-3.** A G-string soprano has no four-note block, because
@@ -618,9 +618,9 @@ Five decisions in here were each forced by something measurable:
   reason as 6-4-3: the set skips a string, so it is not in descending pitch order down
   the strings, so an interval-laid table cannot express it — the D string is a fifth above
   the low E, and the low E's note is frequently *not* the lowest sounding pitch.
-  `_place_drop2_6432` therefore reuses `_place_shell`'s exhaustive search rather than
-  inventing a second way to place notes, and ranks the survivors by `(fret_span,
-  avg_fret)`. Two measurements forced the rest. Ranking is not cosmetic: an unranked
+  `_place_drop2_6432` therefore asks that same search rather than inventing a second way to
+  place notes, and the search ranks the survivors by `(fret_span, avg_fret)`. Two
+  measurements forced the rest. Ranking is not cosmetic: an unranked
   search returns the first shape it meets, which puts the low E at fret 0–1, below
   `NECK_FRET_MIN`, and an earlier "0 of 22, never selected" reading was that bug. And
   ranked correctly it still lost — `voicing_cost` reached the neck-position term first
