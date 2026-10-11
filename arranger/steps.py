@@ -33,8 +33,6 @@ from .chords import (
 )
 from .diagnostics import Diagnostics
 from .grips import (
-    DEGREE_OFFSETS_FROM_ROOT,
-    DROP2_INTERVAL_SETS,
     GRIP_PREFERENCE,
     MELODY_STRING_CHOICES,
     MELODY_STRING_CHOICES_FULL,
@@ -79,11 +77,10 @@ class VoiceLeadingEngine:
     before it. Real one-line methods satisfy both.
     """
 
-    # Tables, re-exported as class attributes. `grip_chart`, `headxml` and the
-    # tests all read these off the class; they are the same objects, not
-    # copies, so a caller editing one edits the one the engine reads.
-    DROP2_INTERVAL_SETS = DROP2_INTERVAL_SETS
-    DEGREE_OFFSETS_FROM_ROOT = DEGREE_OFFSETS_FROM_ROOT
+    # Tables, re-exported as class attributes. The package's own modules and the
+    # tests read these off the class as well as from the module that owns them;
+    # they are the same objects, not copies, so a caller editing one edits the one
+    # the engine reads.
     NON_CHORD_TONE_EXTENSIONS = NON_CHORD_TONE_EXTENSIONS
     NON_CHORD_TONE_STRATEGIES = NON_CHORD_TONE_STRATEGIES
 

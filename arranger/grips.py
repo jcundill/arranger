@@ -272,12 +272,13 @@ GRIP_STRING_SETS: Dict[str, Tuple[Tuple[Tuple[int, ...], int], ...]] = {
 # One row per quality: that chord's own tones, most defining first. A shape of `voices`
 # voices states the melody's tone and then the next `voices - 1` entries of the row, so a
 # four-note drop-2, a three-note shell and a two-note duo are this one rule at three
-# arities. It is the rule the hand-written drop-2 tables encode: `DROP2_TEMPLATES` below
-# is generated from these rows, and `DROP2_INTERVAL_SETS` is the table the generation is
-# held to (`tests/test_generated_grips.py`). The reasoning, the measurements and the
-# order that was *not* taken are in `docs/generated-grips.md`.
+# arities. It is the rule the hand-written drop-2 tables encoded, and it is now the source
+# as well as the rule: `_drop2_template_for` reads one degree out of a row, and the 119
+# templates the tables held are kept as the witness the rule is asserted against
+# (`tests/support.py`, read by `tests/test_generated_grips.py`). The reasoning, the
+# measurements and the order that was *not* taken are in `docs/generated-grips.md`.
 #
-# What the rows say, read off the tables they reproduce:
+# What the rows say, read off the templates that reproduce them:
 #
 #   - **The first two entries are `SHELL_DEGREES`, in that order** - all 29 qualities. A
 #     shell and a drop-2 state the same pair, so the row is the one place that fact lives.
@@ -575,13 +576,12 @@ def stated_tones(
 
     The melody's degree is returned whether or not it is a chord tone, because the
     melody is the caller's note and is never rewritten. Degrees are pitch classes
-    relative to the chord's root, which is the unit `DEGREE_OFFSETS_FROM_ROOT` and the
-    drop-2 tables are written in.
+    relative to the chord's root, which is the unit `_drop2_template_for` is asked in.
 
-    Every degree in `DEGREE_OFFSETS_FROM_ROOT[quality]` is a chord tone by
-    construction, so the drop-2 generator only ever asks for one of those. A melody
-    that is *not* a chord tone is a different question, answered today by offering the
-    whole template list as a palette rather than by this rule.
+    Every degree of a quality's row is one of its chord tones, so the drop-2 generator
+    only ever asks for one of those - a tone with no place in the row would have no shape
+    at all. A melody that is *not* a chord tone is a different question, answered by
+    offering `_drop2_palette` rather than by this rule.
     """
     order = TONE_PRIORITY.get(ChordParser.canonical_quality(quality))
     if order is None:
@@ -642,48 +642,8 @@ def _close_stack_offsets(
     return offsets
 
 
-# How far below the melody the guide-tone fallback will look for a voice, in semitones.
-# A fourth's breadth, which is about what the four strings below a soprano can voice
-# without the shape spanning past a hand: the tuning there is five semitones across, so
-# anything wider than this stops being one grip. Generous enough for the deepest guide
-# tone (a b7 sits a tone below the melody's octave) and its ninth, and no wider - the
-# point is to refuse a root that would name the right notes unplayably rather than to
-# search further for one.
-_REACH = 14
 
 
-# The gap between two adjacent strings on a contiguous four-string block, in
-# semitones: high E to B is 5, B to G is 5. Consecutive voices must clear each other by
-# at least this or the shape cannot be fretted - two voices a semitone apart land on the
-# same fret of neighbouring strings and collapse into one note. Read from the tuning
-# rather than hardcoded, so a retuning cannot leave this lying.
-_BLOCK_SPACING = min(
-    abs(
-        STANDARD_TUNING[hi].midi_note() - STANDARD_TUNING[lo].midi_note()
-    )
-    for lo in range(len(STANDARD_TUNING))
-    for hi in (lo + 1, lo + 2)
-    if hi < len(STANDARD_TUNING)
-)
-
-
-def _duplicates_pitch(pitch: int, placed: List[int]) -> bool:
-    """
-    Whether `pitch` would land on a note that is *already sounding* at that octave.
-
-    Deliberately almost nothing, and the reason is musical rather than technical: the
-    engine's own tables contain adjacent voices a semitone and a tone apart, because a b7
-    under a 3rd is the tritone a dominant chord is named for and a b5 against a 3 is what
-    "altered" means. A rule that rejected a small interval would refuse the chord's own 3rd
-    whenever the melody sat a tone above it - the ordinary case for an altered chord, since
-    a b5 over its 3rd *is* a minor 3rd. So the only real constraints are that a voice must
-    be a *chord tone* (checked by the caller) and must not duplicate one already placed at
-    the same pitch.
-
-    Kept as a named predicate because "no doubled pitch" is a real requirement: two voices
-    on one fret would be one note played twice, not a four-note voicing.
-    """
-    return any(pitch == other for other in placed)
 
 
 def _guide_tones(tones: Tuple[int, ...], root_pc: Optional[int]) -> Tuple[int, ...]:
@@ -725,208 +685,21 @@ def _guide_tones(tones: Tuple[int, ...], root_pc: Optional[int]) -> Tuple[int, .
     return tuple(d for d in (third, seventh) if d is not None)
 
 
-def _drop2_for_untabled_degree(
-    tones: Tuple[int, ...],
-    melody_midi: int,
-    root_pc: int,
-) -> List[List[int]]:
-    """
-    A drop-2 for a melody degree the hand tables have no inversion for.
-
-    Two steps, in this order, because they answer different questions.
-
-    **1. Derive it.** The close stack under *this* melody, with its second voice lowered
-    an octave, which is the textbook definition and what keeps the result a real drop-2
-    of this inversion rather than a template borrowed from another one. For a 5th in the
-    melody of a 7#11 that is `5 3 1 b5`.
-
-    **2. Check the guide tones.** A four-note voicing states the chord's 3rd and 7th.
-    The derivation does not guarantee it - a walk takes the nearest chord tone below and
-    keeps going, so for a melody low in the chord it will spend its voices on the root
-    and the 5th and drop the 7th, which changes the chord rather than thinning it. When
-    the derived shape is missing a guide tone it is rebuilt from `_guide_tone_drop2`.
-
-    Returns `[]` when neither route produces a shape, and the caller then keeps the
-    table's own templates - which is the pre-existing behaviour, and is still better than
-    inventing one.
-    """
-    stack = _close_stack_offsets(tones, melody_midi, root_pc)
-    if len(stack) >= 4:
-        derived = [0, stack[2], stack[3], stack[1] - 12]
-        # `_guide_tones` answers in degrees from the root; the template is absolute
-        # pitches below the melody. Comparing the two directly would test a degree
-        # against a pitch class and fail for every chord but C, so the sounding set is
-        # reduced back to degrees first.
-        sounding = {
-            (melody_midi + offset - root_pc) % 12 for offset in derived
-        }
-        if all(degree % 12 in sounding for degree in _guide_tones(tones, root_pc)):
-            return [derived]
-    return _guide_tone_drop2(tones, melody_midi, root_pc)
-
-
-def _guide_tone_drop2(
-    tones: Tuple[int, ...],
-    melody_midi: int,
-    root_pc: int,
-) -> List[List[int]]:
-    """
-    A drop-2 for a melody the hand tables have no inversion for, built from guide tones.
-
-    **Every four-note voicing states the chord's 3rd and 7th.** That is the rule this
-    exists to satisfy: the two notes that decide whether the ear hears a major or minor
-    chord, and a dominant or a minor 7th. A shape that drops either is not a thinner
-    version of the chord, it is a different one - which is why the tables keep them in
-    all four inversions rather than treating them as optional.
-
-    So when the melody is a chord tone with no template, the shape is built *backwards
-    from the guide tones* instead of from a close stack under the melody. A stack walk
-    takes the nearest chord tone below and keeps going, so it will happily spend its
-    voices on the root and the 5th and leave the 7th out, producing `4 7 b9 5` for a 5th in
-    the melody of a 7#11: a major 3rd and a major 7th against a chord whose identity is 3
-    and b7.
-
-    The construction, top to bottom:
-      - the melody, which is the soprano by definition;
-      - both guide tones, each at the nearest octave below the melody that fits;
-      - then the nearest remaining chord tone below, to give the bass something to say.
-
-    "Fits" is the whole difficulty, and it is not a rule about intervals. Two
-    *consecutive* voices on a contiguous four-string block are separated by the tuning
-    between those strings - five semitones from the high E down to the B, five more to
-    the G - so consecutive voices must be at least that far apart or the shape cannot be
-    fretted at all. That is why a naive walk produces templates like `[0, -1, -2, -9]`,
-    two adjacent voices a semitone apart: `_place_template` then puts both on the same
-    fret of adjacent strings and returns a *three*-note shape, which is not a four-note
-    voicing and is not a member of any supported string set.
-
-    So each voice is accepted only where it clears every voice above it by at least the
-    block's own spacing, and where it is not already sounding. Both are checked against
-    `_BLOCK_SPACING`, the real tuning rather than a guess.
-
-    Returns a template only when both guide tones fit. When they do not - the melody is
-    very low, or the chord is a sus with no 3rd to find - this returns nothing and the
-    caller falls back to the table, because a shape that cannot state the chord's
-    identity is worse than an honest absence of one.
-    """
-    guide = _guide_tones(tones, root_pc)
-    if not guide:
-        return []
-
-    melody_pc = melody_midi % 12
-    chosen: List[int] = [melody_midi]
-    # Guide tones first, so the two notes that define the chord are never the ones
-    # squeezed out by a later voice competing for the same octave.
-    for degree in guide:
-        target = (root_pc + degree) % 12
-        if target == melody_pc:
-            continue  # the melody already states this guide tone
-        pitch: Optional[int] = None
-        for candidate in range(melody_midi - 1, melody_midi - _REACH, -1):
-            if candidate % 12 != target:
-                continue
-            if _duplicates_pitch(candidate, chosen):
-                continue  # already sounding at this octave
-            if (melody_midi - candidate) < _BLOCK_SPACING:
-                continue  # too close under the melody to be fretted
-            pitch = candidate
-            break
-        if pitch is not None:
-            chosen.append(pitch)
-
-    if len(chosen) < 3:
-        return []  # could not state both guide tones; do not fake a chord
-
-    def clashes(pitch: int) -> bool:
-        """
-        Whether this pitch cannot be voiced *below* the voices already placed.
-
-        Two conditions, and the second is the one that actually shapes the result:
-        it must not duplicate a pitch already sounding, and it must clear the nearest
-        voice above it by at least the string spacing. A voice a semitone or a tone
-        under another is fine *musically* - the tables are full of minor 3rds and
-        tritones - but two voices that close together cannot both be fretted on
-        neighbouring strings, because the strings themselves are four or five semitones
-        apart. That is a property of the instrument rather than of the chord, and it is
-        why a b7 in the melody of a dominant yields no four-note shape here: the 3rd
-        sits a tone below it, so the two cannot be placed in sequence.
-        """
-        if _duplicates_pitch(pitch, chosen):
-            return True
-        above = [placed for placed in chosen if placed > pitch]
-        if not above:
-            return False
-        return (min(above) - pitch) < _BLOCK_SPACING
-
-    chord_degrees = {(t - root_pc) % 12 for t in tones}
-    # The bass should be a *new* chord tone rather than the melody an octave down.
-    # Doubling the melody at the bottom is what the nearest-tone walk keeps choosing,
-    # and it gives `5 3 b7 5` for a 5th in the melody of a 7#11: the melody heard twice
-    # and the root missing. Preferring the root is also the musically stronger choice -
-    # it puts the chord's identity in the bass, which is the same reason voicing_cost
-    # has a bass-function tie-break.
-    #
-    # Placed *before* the generic fill, not after it. Filling first would take the
-    # octave of the melody as the fourth voice and leave nothing for the root, which is
-    # how `5 3 b7 5` survived a bass preference that was otherwise correct.
-    preferred_bass = 0 if 0 in chord_degrees else min(chord_degrees)
-    # Bounded by what a hand can hold, not by a two-octave search. The guide tones
-    # already sit a 4th and a 7th below the melody here, so a root a further octave
-    # down would be a fifth below *those* - `5 3 b7 1` spanning nineteen semitones.
-    # That names the right four notes and cannot be played as one shape, so
-    # _place_template rejects it and the step loses its chord entirely. Preferring
-    # the root is only useful while the root is reachable.
-    for candidate in range(melody_midi - 1, melody_midi - _REACH, -1):
-        if len(chosen) >= 4:
-            break
-        if candidate % 12 != (root_pc + preferred_bass) % 12:
-            continue
-        if clashes(candidate):
-            continue
-        chosen.append(candidate)
-
-    for pitch in range(min(chosen) - 1, min(chosen) - _REACH, -1):
-        if len(chosen) >= 4:
-            break
-        if (pitch - root_pc) % 12 not in chord_degrees:
-            continue
-        if clashes(pitch):
-            continue
-        chosen.append(pitch)
-    if len(chosen) < 4:
-        return []
-
-    chosen.sort(reverse=True)
-    # A drop-2 is a close stack with its second voice lowered an octave, and the
-    # lowest note is that lowered voice - so the template is simply the four pitches,
-    # top to bottom. What makes it *this* rather than close position is the gap
-    # between the top two, which is now a fourth or more because the guide tones sit
-    # below the melody rather than beside it.
-    return [[pitch - melody_midi for pitch in chosen]]
-
 
 def _interval_set_for_grip(
-    quality: str,
     grip: str,
     tones: Tuple[int, ...],
     melody_midi: int,
     root_pc: Optional[int] = None,
 ) -> List[List[int]]:
     """
-    The interval templates for a quality under a given grip, as offsets from the
-    soprano (0 for the melody itself, negative below it).
+    The close-position templates for one grip, as offsets from the soprano (0 for the
+    melody itself, negative below it).
 
-    `drop2` returns `DROP2_TEMPLATES`, which `TONE_PRIORITY` generates: the shape for a
-    degree is the textbook drop-2 of the tones that degree *states*, so the root is
-    dropped before the natural 5th and an altered 5th is kept. The hand-written
-    `DROP2_INTERVAL_SETS` is what that generation is held to, and no longer what the
-    engine reads - `tests/test_generated_grips.py` is the assertion that the two agree,
-    which is what lets the rule be the source and the table be the witness.
-
-    Deriving drop-3 and close position from the same chord tones gives a *fuller* chord
-    than this - every tone the rule left out comes back - which is a legitimate but
-    different voicing rather than an error, and is why those families have their own
-    rule below instead of sharing this one.
+    Deriving drop-3 and close position from the chord tones gives a *fuller* chord than
+    the tone-priority rule gives at four voices - every tone the rule left out comes
+    back - which is a legitimate but different voicing rather than an error, and is why
+    these families have their own rule instead of sharing drop-2's.
 
     drop-2, drop-3 and close position share one close-position stack of four voices,
     taken as v1, v2, v3, v4 from the top:
@@ -940,9 +713,6 @@ def _interval_set_for_grip(
     therefore the octave of v2, not v4 - which is what makes the 3rd and the 7th of a
     seventh chord land on the D and G strings in the familiar 4-3-2-1 shell shape.
     """
-    if grip == "drop2":
-        return DROP2_TEMPLATES.get(quality, [])
-
     if grip not in ("drop3", "closed", "drop24"):
         return []
 
@@ -1240,7 +1010,6 @@ def _templates_for(
     tones: Tuple[int, ...],
     melody_midi: int,
     root_pc: Optional[int],
-    target_idx: Optional[int],
 ) -> List[List[int]]:
     """
     The interval templates a **layout** family places on one string set.
@@ -1251,8 +1020,15 @@ def _templates_for(
     that need a root, because each *names a chord tone* - a guide tone, or an interval from
     the root - where the others are built from the stack itself.
 
-    `target_idx` narrows drop-2 to the inversion this melody belongs in. The rest of this
-    function is the case where the table has no inversion for it at all.
+    `drop2` has two cases and they are told apart by what the melody *is*. A melody that is
+    a chord tone takes the rule's own shape for its degree, and one shape only: offering
+    the quality's other degrees would pin this melody to the soprano string and let each
+    other template's top note fall *below* it, so the result sounds whatever those offsets
+    happen to spell over this melody rather than the inversion the melody belongs in. A
+    melody that is **not** a chord tone has no degree to match, and neither has a call with
+    no root at all - both are offered the rule at every degree the chord has
+    (`_drop2_palette`), which is where `voicing_cost`'s tone-purity criterion earns its
+    place by choosing among them.
     """
     if grip == "duo":
         if root_pc is None:
@@ -1264,42 +1040,14 @@ def _templates_for(
         # an interval *is* the two notes it names.
         return [] if root_pc is None else _interval_offsets(tones, melody_midi, root_pc)
 
-    templates = _interval_set_for_grip(canonical, grip, tones, melody_midi, root_pc)
-    if grip != "drop2":
-        return templates
-    if target_idx is not None and 0 <= target_idx < len(templates):
-        return [templates[target_idx]]
-    # Only for a quality whose table is genuinely *incomplete*. Every triad and every
-    # four-note quality has a template for each of its tones, so `target_idx` is None there
-    # only when the melody is not a chord tone at all - and then the derivation below would
-    # invent the missing voices. It did: Ebmaj under G4, whose tones are Eb G Bb, came out
-    # `b7 5 b3 5` - a b3 and a 5th against a major triad, which is Eb minor. The guard is
-    # the tone count, because a chord that has more tones than four cannot have a template
-    # for every one of them.
-    if (
-        root_pc is not None
-        and tones
-        and (melody_midi - root_pc) % 12 in {(t - root_pc) % 12 for t in tones}
-        and len({(t - root_pc) % 12 for t in tones}) > 4
-    ):
-        # The melody is a chord tone with no inversion in the table. The templates that
-        # *do* exist are for other soprano degrees, so offering them here would pin this
-        # melody to the soprano string and put each template's own top note *below* it -
-        # the shape stops being that inversion and sounds whatever the offsets happen to
-        # spell over this melody. For a 5th in the melody of a 7#11 that produced
-        # `5 b9 7 4`: a b9 and a major 3rd against a chord whose identity is 3, b5 and b7.
-        #
-        # So the shape is derived from the close stack under this melody, which keeps it a
-        # genuine drop-2 of *this* inversion, and is then held to the rule that a four-note
-        # voicing states the chord's 3rd and 7th.
-        #
-        # An empty result means no four-note voicing of this inversion is playable, and the
-        # honest answer is to offer *none*: falling back to another degree's template
-        # reintroduces exactly the defect above. A step with no voicing is demoted to the
-        # melody alone or promoted to a shell, both of which still state the chord; a step
-        # with a borrowed template states a different one.
-        return _drop2_for_untabled_degree(tones, melody_midi, root_pc)
-    return templates
+    if grip == "drop2":
+        if root_pc is not None and tones:
+            degree = (melody_midi - root_pc) % 12
+            if degree in {t % 12 for t in tones}:
+                shape = _drop2_template_for(canonical, degree)
+                return [shape] if shape else []
+        return _drop2_palette(canonical)
+    return _interval_set_for_grip(grip, tones, melody_midi, root_pc)
 
 
 def _place_template(
@@ -1367,313 +1115,73 @@ _INTERVAL_NAMES: Dict[int, str] = {3: "3rd", 8: "b6", 9: "6th"}
 
 
 
-# Accurate Drop-2 interval structures relative to top melody voice for top 4 strings (Strings 4-3-2-1: D, G, B, E).
-# Semitone offsets from the soprano (String 1 / High E) down to String 2 (B), String 3 (G), and String 4 (D).
-DROP2_INTERVAL_SETS = {
-    # --- Major Family ---
-    "maj7": [
-        [0, -7, -11, -16],  # 7th in top voice
-        [0, -5, -8, -13],   # Root in top voice
-        [0, -5, -9, -16],   # 3rd in top voice
-        [0, -7, -8, -15],   # 5th in top voice
-    ],
-    "6": [
-        [0, -5, -9, -14],   # 6th in top voice
-        [0, -5, -8, -15],   # Root in top voice
-        [0, -7, -9, -16],   # 3rd in top voice
-        [0, -7, -10, -15],  # 5th in top voice
-    ],
-
-    # --- Minor Family (Essential for Minor Tunes) ---
-    "m7": [
-        [0, -7, -10, -15],  # b7 in top voice
-        [0, -5, -9, -14],   # Root in top voice
-        [0, -5, -8, -15],   # b3 in top voice
-        [0, -7, -9, -16],   # 5th in top voice
-    ],
-    "m7b5": [
-        [0, -7, -10, -16],  # b7 in top voice (half-diminished ii chord)
-        [0, -6, -9, -14],   # Root in top voice
-        [0, -5, -9, -15],   # b3 in top voice
-        [0, -6, -8, -15],   # b5 in top voice
-    ],
-    "dim7": [
-        [0, -6, -9, -15],   # bb7 / dim7 in top voice (symmetrical)
-        [0, -6, -9, -15],   # Root in top voice
-        [0, -6, -9, -15],   # b3 in top voice
-        [0, -6, -9, -15],   # b5 in top voice
-    ],
-    "m6": [
-        [0, -6, -9, -14],   # 6th in top voice (tonic minor)
-        [0, -5, -9, -15],   # Root in top voice
-        [0, -6, -8, -15],   # b3 in top voice
-        [0, -7, -10, -16],  # 5th in top voice
-    ],
-    "mMaj7": [
-        [0, -8, -11, -16],  # 7th in top voice (melodic minor tonic)
-        [0, -5, -9, -13],   # Root in top voice
-        [0, -4, -8, -15],   # b3 in top voice
-        [0, -7, -8, -16],   # 5th in top voice
-    ],
-
-    # --- Dominant Family (Resolutions in Major & Minor Keys) ---
-    "7": [
-        [0, -6, -10, -15],  # b7 in top voice
-        [0, -5, -8, -14],   # Root in top voice
-        [0, -6, -9, -16],   # 3rd in top voice
-        [0, -7, -9, -15],   # 5th in top voice
-    ],
-    "7b9": [
-        [0, -6, -9, -15],   # b9 in top voice (rootless diminished 7th shell: 3, 5, b7, b9)
-        [0, -6, -9, -15],   # 3rd in top voice
-        [0, -6, -9, -15],   # 5th in top voice
-        [0, -6, -9, -15],   # b7 in top voice
-        [0, -8, -11, -14],  # Root in top voice (5th omitted: 1, b9, 3, b7)
-    ],
-    "7alt": [
-        [0, -6, -9, -14],   # b7 in top voice (altered dominant: 3, b7, b9, b13)
-        [0, -5, -9, -15],   # b9 in top voice
-        [0, -6, -8, -15],   # 3rd in top voice
-        [0, -7, -10, -16],  # b13 in top voice
-        [0, -8, -11, -14],  # Root in top voice (b13 omitted: root, b9, 3, b7)
-    ],
-
-    # --- Extended / colour qualities ---
-    # These are voiced rootless (root, 5th or 13th omitted as needed) so the
-    # five chord tones of a ninth always fit the four strings. They are what
-    # the 'extension' non-chord-tone strategy reharmonises into, e.g. the 9th
-    # of Cmaj7 (D) becomes a Cmaj9, so D is a genuine chord tone again.
-    "maj9": [
-        [0, -8, -10, -13],  # Root in top voice (5th omitted)
-        [0, -5, -9, -14],   # 3rd in top voice (rootless 3-5-7-9)
-        [0, -5, -8, -15],   # 5th in top voice
-        [0, -7, -9, -16],   # 7th in top voice
-        [0, -7, -10, -15],  # 9th in top voice
-    ],
-    "m9": [
-        [0, -9, -10, -14],  # Root in top voice (5th omitted)
-        [0, -5, -8, -13],   # b3 in top voice (rootless b3-5-b7-9)
-        [0, -5, -9, -16],   # 5th in top voice
-        [0, -7, -8, -15],   # b7 in top voice
-        [0, -7, -11, -16],  # 9th in top voice
-    ],
-    "9": [
-        [0, -8, -10, -14],  # Root in top voice (5th omitted)
-        [0, -6, -9, -14],   # 3rd in top voice (rootless 3-5-b7-9)
-        [0, -5, -9, -15],   # 5th in top voice
-        [0, -6, -8, -15],   # b7 in top voice
-        [0, -7, -10, -16],  # 9th in top voice
-    ],
-    "6/9": [
-        [0, -8, -10, -15],  # Root in top voice (5th omitted)
-        [0, -7, -9, -14],   # 3rd in top voice (rootless 3-5-6-9)
-        [0, -5, -10, -15],  # 5th in top voice
-        [0, -5, -7, -14],   # 6th in top voice
-        [0, -7, -10, -17],  # 9th in top voice
-    ],
-    "13": [
-        [0, -3, -8, -14],   # Root in top voice (5th omitted)
-        [0, -7, -9, -18],   # 3rd in top voice (rootless 3-5-b7-13)
-        [0, -9, -10, -15],  # 5th in top voice
-        [0, -3, -6, -13],   # b7 in top voice
-        [0, -5, -11, -14],  # 13th in top voice
-    ],
-
-    # --- Triads (four voices: the root is doubled an octave below the stack) ---
-    "maj": [
-        [0, -8, -12, -17],  # Root in top voice (root doubled underneath)
-        [0, -9, -12, -16],  # 3rd in top voice
-        [0, -7, -12, -15],  # 5th in top voice
-    ],
-    "m": [
-        [0, -9, -12, -17],  # Root in top voice (root doubled underneath)
-        [0, -8, -12, -15],  # b3 in top voice
-        [0, -7, -12, -16],  # 5th in top voice
-    ],
-    "aug": [
-        # Symmetrical, so every inversion fingers identically (like dim7).
-        [0, -8, -12, -16],  # Root in top voice
-        [0, -8, -12, -16],  # 3rd in top voice
-        [0, -8, -12, -16],  # #5 in top voice
-    ],
-
-    # --- Suspended chords ---
-    "sus4": [
-        [0, -7, -12, -17],   # Root in top voice
-        [0, -10, -12, -17],  # 4th in top voice
-        [0, -7, -12, -14],   # 5th in top voice
-    ],
-    "sus2": [
-        [0, -10, -12, -17],  # Root in top voice
-        [0, -7, -12, -14],   # 2nd (9th) in top voice
-        [0, -7, -12, -17],   # 5th in top voice
-    ],
-    "7sus4": [
-        [0, -5, -7, -14],   # Root in top voice (3rd replaced by the 4th)
-        [0, -7, -10, -17],  # 4th in top voice
-        [0, -7, -9, -14],   # 5th in top voice
-        [0, -5, -10, -15],  # b7 in top voice
-    ],
-
-    # --- Added-note colours ---
-    "add9": [
-        [0, -8, -10, -17],  # Root in top voice (5th omitted)
-        [0, -7, -10, -14],  # 9th in top voice
-        [0, -4, -9, -14],   # 3rd in top voice
-        [0, -5, -7, -15],   # 5th in top voice
-    ],
-    "madd9": [
-        [0, -9, -10, -17],  # Root in top voice (5th omitted)
-        [0, -7, -11, -14],  # 9th in top voice
-        [0, -3, -8, -13],   # b3 in top voice
-        [0, -5, -7, -16],   # 5th in top voice
-    ],
-
-    # --- Altered and Lydian dominants ---
-    "7b5": [
-        # Symmetrical, so only two distinct shapes cover the four inversions.
-        [0, -6, -8, -14],   # Root in top voice
-        [0, -6, -10, -16],  # 3rd in top voice
-        [0, -6, -8, -14],   # b5 in top voice
-        [0, -6, -10, -16],  # b7 in top voice
-    ],
-    "7#5": [
-        [0, -4, -8, -14],   # Root in top voice
-        [0, -6, -8, -16],   # 3rd in top voice
-        [0, -8, -10, -16],  # #5 in top voice
-        [0, -6, -10, -14],  # b7 in top voice
-    ],
-    "7#11": [
-        # The #11 replaces the perfect 5th: root, 3rd, #11, b7.
-        [0, -6, -8, -14],   # Root in top voice (5th omitted)
-        [0, -6, -10, -16],  # 3rd in top voice
-        [0, -6, -8, -14],   # #11 in top voice
-        [0, -6, -10, -16],  # b7 in top voice
-    ],
-    "7b13": [
-        # b13 is enharmonic with #5, so the shapes match 7#5.
-        [0, -4, -8, -14],   # Root in top voice (natural 5th omitted)
-        [0, -6, -8, -16],   # 3rd in top voice
-        [0, -8, -10, -16],  # b13 in top voice
-        [0, -6, -10, -14],  # b7 in top voice
-    ],
-    "maj7#11": [
-        [0, -6, -8, -13],   # Root in top voice (5th omitted)
-        [0, -5, -10, -16],  # 3rd in top voice
-        [0, -6, -7, -14],   # #11 in top voice
-        [0, -7, -11, -17],  # 7th in top voice
-    ],
-    "m9b5": [
-        # Half-diminished ninth: the m9 shapes with the 5th flattened.
-        [0, -9, -10, -14],  # Root in top voice (b5 omitted: root-9-b3-b7)
-        [0, -5, -9, -13],   # b3 in top voice (rootless b3-b5-b7-9)
-        [0, -4, -8, -15],   # b5 in top voice
-        [0, -7, -8, -16],   # b7 in top voice
-        [0, -8, -11, -16],  # 9th in top voice
-    ],
-}
-
-# Aliases for flexible chord quality notation
-DROP2_INTERVAL_SETS["min7"] = DROP2_INTERVAL_SETS["m7"]
-DROP2_INTERVAL_SETS["min7b5"] = DROP2_INTERVAL_SETS["m7b5"]
-DROP2_INTERVAL_SETS["ø7"] = DROP2_INTERVAL_SETS["m7b5"]
-DROP2_INTERVAL_SETS["ø"] = DROP2_INTERVAL_SETS["m7b5"]
-DROP2_INTERVAL_SETS["half-dim"] = DROP2_INTERVAL_SETS["m7b5"]
-DROP2_INTERVAL_SETS["°7"] = DROP2_INTERVAL_SETS["dim7"]
-DROP2_INTERVAL_SETS["°"] = DROP2_INTERVAL_SETS["dim7"]
-DROP2_INTERVAL_SETS["dim"] = DROP2_INTERVAL_SETS["dim7"]
-DROP2_INTERVAL_SETS["min6"] = DROP2_INTERVAL_SETS["m6"]
-DROP2_INTERVAL_SETS["minMaj7"] = DROP2_INTERVAL_SETS["mMaj7"]
-DROP2_INTERVAL_SETS["mmaj7"] = DROP2_INTERVAL_SETS["mMaj7"]
-DROP2_INTERVAL_SETS["dom7"] = DROP2_INTERVAL_SETS["7"]
-DROP2_INTERVAL_SETS["M7"] = DROP2_INTERVAL_SETS["maj7"]
-
-# Degree pitch classes relative to chord root (matches the soprano note to an inversion).
-# Each entry lines up one-to-one with DROP2_INTERVAL_SETS[quality]: entry i is the
-# chord tone sitting in the top voice of template i.
-DEGREE_OFFSETS_FROM_ROOT = {
-    "maj7": [11, 0, 4, 7],
-    "6": [9, 0, 4, 7],
-    "m7": [10, 0, 3, 7],
-    "m7b5": [10, 0, 3, 6],
-    "dim7": [9, 0, 3, 6],
-    "m6": [9, 0, 3, 7],
-    "mMaj7": [11, 0, 3, 7],
-    "7": [10, 0, 4, 7],
-    "7b9": [1, 4, 7, 10, 0],
-    "7alt": [10, 1, 4, 8, 0],
-    "maj9": [0, 4, 7, 11, 2],
-    "m9": [0, 3, 7, 10, 2],
-    "9": [0, 4, 7, 10, 2],
-    "6/9": [0, 4, 7, 9, 2],
-    "13": [0, 4, 7, 10, 9],
-    "maj": [0, 4, 7],
-    "m": [0, 3, 7],
-    "aug": [0, 4, 8],
-    "sus4": [0, 5, 7],
-    "sus2": [0, 2, 7],
-    "add9": [0, 2, 4, 7],
-    "madd9": [0, 2, 3, 7],
-    "7sus4": [0, 5, 7, 10],
-    "7b5": [0, 4, 6, 10],
-    "7#5": [0, 4, 8, 10],
-    "7#11": [0, 4, 6, 10],
-    "7b13": [0, 4, 8, 10],
-    "maj7#11": [0, 4, 6, 11],
-    "m9b5": [0, 3, 6, 10, 2],
-}
+# --- The drop-2 rule -----------------------------------------------------------
+#
+# One shape per degree, computed rather than tabulated. `TONE_PRIORITY` above says which
+# of the chord's tones a shape states; these two say what the shape *is*.
 
 
-def _priority_drop2_templates(quality: str) -> List[List[int]]:
+def _drop2_template_for(quality: str, degree: int) -> List[int]:
     """
-    The drop-2 templates for one quality, generated from `TONE_PRIORITY`.
+    The textbook drop-2 of the tones `degree` states, as offsets below the soprano.
 
-    One template per degree in `DEGREE_OFFSETS_FROM_ROOT[quality]`, in that order, and
-    each is the textbook drop-2 of the tones that degree states: `_close_stack_offsets`
-    walks the nearest stated tone below the one above it, and the second voice from the
-    top is then lowered an octave - which is what puts the 3rd and the 7th on the D and
-    G strings in the familiar 4-3-2-1 shell shape.
+    `degree` is the melody's own degree above the root, so the melody is `0` and the
+    three voices below it are the walk's: `_close_stack_offsets` takes the nearest
+    *stated* tone below each voice already placed, and the second voice from the top is
+    then lowered an octave - which is what puts the 3rd and the 7th on the D and G
+    strings in the familiar 4-3-2-1 shell shape.
 
     Two properties are the whole reason this is a rule and not a table:
 
       - the tone set is `stated_tones`, so the root goes before the natural 5th and an
-        altered 5th is kept, which is the musical decision the hand tables encode;
+        altered 5th is kept, which is the musical decision the tables encode;
       - the walk sees only the *stated* tones, so it cannot spend a voice on a tone the
         rule left out.
 
     **A triad has only three tones, so its fourth voice is the root doubled an octave
     down** - and the walk finds it rather than a special case naming it: handed the full
     tone set it wraps to the root on its own. Handing it the three stated tones only
-    produces a duplicate of the 5th instead (`[0, -8, -17, -17]` for a C major), which
-    is not a chord at all. That is why `walk` is the stated tones when there are four of
+    produces a duplicate of the 5th instead (`[0, -8, -17, -17]` for a C major), which is
+    not a chord at all. That is why `walk` is the stated tones when there are four of
     them and the quality's whole tone set when there are not.
 
-    Returns `[]` for a quality with no priority row or no tone set, so an unknown
-    quality is offered nothing rather than a guess.
+    Returns `[]` - nothing offered rather than a guess - for a quality with no priority
+    row or no tone set, and for a degree the rule cannot build a shape for. Measured over
+    every chord tone of all 29 qualities (125 degrees): none empty, none sounding a note
+    outside the chord, and every one stating both guide tones, which is what
+    `tests/test_generated_grips.py` holds it to.
     """
-    order = TONE_PRIORITY.get(quality)
-    degrees = DEGREE_OFFSETS_FROM_ROOT.get(quality)
     tones = ChordParser.CHORD_TONES_FROM_ROOT.get(quality)
-    if order is None or degrees is None or not tones:
+    if quality not in TONE_PRIORITY or not tones:
         return []
-    templates: List[List[int]] = []
-    for degree in degrees:
-        keep = stated_tones(quality, degree, 4)
-        walk = keep if len(keep) >= 4 else tuple(tones)
-        stack = _close_stack_offsets(walk, 60 + degree, 0)
-        # A shape this rule cannot build is offered as nothing, not as a truncated one:
-        # `_place_template` would otherwise sound the melody alone under a drop-2 label.
-        templates.append([0, stack[2], stack[3], stack[1] - 12] if len(stack) >= 4 else [])
-    return templates
+    keep = stated_tones(quality, degree, 4)
+    walk = keep if len(keep) >= 4 else tuple(tones)
+    stack = _close_stack_offsets(walk, 60 + degree, 0)
+    if len(stack) < 4:
+        return []
+    return [0, stack[2], stack[3], stack[1] - 12]
 
 
-# The live drop-2 tables, generated once from `TONE_PRIORITY` above. `DROP2_INTERVAL_SETS`
-# is the hand-written table this reproduces, and `tests/test_generated_grips.py` is what
-# holds the two together - 119 templates over 29 qualities. A quality with a priority row
-# and a degree list needs no table row of its own.
-DROP2_TEMPLATES: Dict[str, List[List[int]]] = {
-    quality: _priority_drop2_templates(quality) for quality in DEGREE_OFFSETS_FROM_ROOT
-}
+def _drop2_palette(quality: str) -> List[List[int]]:
+    """
+    Every drop-2 shape the rule builds for a quality, in the rule's own order.
+
+    This is what a melody with **no degree to match** is offered: one that is not a chord
+    tone, and any call with no root at all. Each shape's top voice *is* the melody by
+    construction, so the palette is the set of harmonisations the rule can put under it,
+    and `voicing_cost` chooses among them - tone purity first, so the shapes that state
+    the chord rank above the ones that merely fit.
+
+    Shaped off `TONE_PRIORITY` rather than a list of degrees, which is what makes the
+    palette the same rule as a single shape: the degrees a quality has *are* its priority
+    row, so there is no second table to keep in step with this one.
+    """
+    return [
+        shape
+        for degree in TONE_PRIORITY.get(quality, ())
+        if (shape := _drop2_template_for(quality, degree))
+    ]
+
 
 
 def _parse_chord_name(name: str) -> Tuple[Optional[str], Optional[str]]:
@@ -2245,7 +1753,7 @@ def get_grip_voicings(
     produces exactly what that method always has. The other families differ in what
     they carry rather than in where they sit:
 
-      drop2   four voices, from the tone-priority rule (`DROP2_TEMPLATES`)
+      drop2   four voices, from the tone-priority rule (`_drop2_template_for`)
       drop3   four voices, a close stack with the third voice dropped
       drop24  four voices, a close stack with the second *and* fourth dropped
       closed  four voices in close position under the melody
@@ -2274,18 +1782,6 @@ def get_grip_voicings(
 
     canonical, root_pc, tones = _chord_context(chord_type, chord_name)
 
-    # Which inversion of a drop-2 table puts this melody in the top voice. The
-    # derived families build their shape from the chord tones themselves and so
-    # need no steering; this only narrows the table lookup.
-    target_idx: Optional[int] = None
-    deg_offsets = DEGREE_OFFSETS_FROM_ROOT.get(canonical)
-    if chord_name and deg_offsets and root_pc is not None:
-        mel_degree = (melody_midi - root_pc) % 12
-        for idx, d in enumerate(deg_offsets):
-            if d % 12 == mel_degree:
-                target_idx = idx
-                break
-
     # The chord's tones as pitch classes: what `_candidate` holds a searched shape's own
     # notes to. Computed once, because every searched family measures the same chord.
     allowed = (
@@ -2298,7 +1794,7 @@ def get_grip_voicings(
             if grip not in _SEARCHED_GRIPS:
                 # A layout family: each template *is* a shape, so each is placed in turn.
                 for template in _templates_for(
-                    grip, canonical, tones, melody_midi, root_pc, target_idx
+                    grip, canonical, tones, melody_midi, root_pc
                 ):
                     voicing = _place_template(
                         template, strings, melody_midi, top_fret, grip

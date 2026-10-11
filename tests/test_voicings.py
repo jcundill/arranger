@@ -13,6 +13,8 @@ from arranger import (
     format_progression,
     supported_string_sets,
 )
+from arranger.grips import TONE_PRIORITY, _drop2_template_for
+from tests.support import WITNESS
 
 
 class TestDrop2Voicings(unittest.TestCase):
@@ -479,7 +481,7 @@ class TestTriadSusAndAlteredQualities(unittest.TestCase):
                 chord_name = root_str + quality
                 tones = set(ChordParser.get_chord_tones(quality, chord_name))
                 root_pc = Note(root_str + "4").midi_note() % 12
-                for degree in VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT[quality]:
+                for degree in {t % 12 for t in ChordParser.CHORD_TONES_FROM_ROOT[quality]}:
                     midi = next(m for m in range(64, 83) if m % 12 == (root_pc + degree) % 12)
                     melody = PITCH_CLASS_NAMES[midi % 12] + str(midi // 12 - 1)
                     matched = [
@@ -505,9 +507,14 @@ class TestTriadSusAndAlteredQualities(unittest.TestCase):
 
     def test_symmetrical_qualities_reuse_their_shapes(self):
         """aug is symmetrical (like dim7), while 7b5/7#11 and 7#5/7b13 need only
-        two distinct shapes each."""
+        two distinct shapes each. Read off the degrees the hand table named: a `7#11`
+        also carries the natural 5th in its tone set, and the rule answers for that
+        degree too, which is a *third* shape - the palette's job, not this one's."""
         def shapes(quality):
-            return {tuple(template) for template in VoiceLeadingEngine.DROP2_INTERVAL_SETS[quality]}
+            return {
+                tuple(_drop2_template_for(quality, degree))
+                for degree in WITNESS[quality]
+            }
 
         self.assertEqual(len(shapes("aug")), 1)
         self.assertEqual(len(shapes("dim7")), 1)
@@ -536,24 +543,50 @@ class TestTriadSusAndAlteredQualities(unittest.TestCase):
 class TestQualityTableInvariants(unittest.TestCase):
     """Structural rules that keep the quality tables in step with each other."""
 
-    def test_templates_and_degree_offsets_have_one_entry_each(self):
-        for quality, degrees in VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT.items():
-            templates = VoiceLeadingEngine.DROP2_INTERVAL_SETS[quality]
-            self.assertEqual(len(templates), len(degrees), quality)
+    def test_a_priority_row_is_the_qualitys_own_tones(self):
+        """The row is a permutation of the tone set: no tone missing, none invented.
 
-    def test_templates_are_four_voice_drop2_shapes(self):
-        for quality in VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT:
-            for template in VoiceLeadingEngine.DROP2_INTERVAL_SETS[quality]:
-                self.assertEqual(len(template), 4, quality)
-                self.assertEqual(template[0], 0, quality)
-                self.assertEqual(template, sorted(template, reverse=True), (quality, template))
-                self.assertTrue(all(-19 <= offset < 0 for offset in template[1:]), (quality, template))
+        This is the invariant that replaced "the template list and the degree list have one
+        entry each". The rule is now read once per degree, and the palette is the rule read
+        at every entry of the row - so a tone with no place in the row would have no shape,
+        and a row holding a tone the chord does not have would offer one.
+        """
+        for quality, row in TONE_PRIORITY.items():
+            tones = [t % 12 for t in ChordParser.CHORD_TONES_FROM_ROOT[quality]]
+            self.assertEqual(sorted(t % 12 for t in row), sorted(tones), quality)
 
-    def test_every_top_degree_is_a_chord_tone(self):
-        for quality, degrees in VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT.items():
-            tones = {tone % 12 for tone in ChordParser.CHORD_TONES_FROM_ROOT[quality]}
-            for degree in degrees:
-                self.assertIn(degree % 12, tones, (quality, degree))
+    def test_every_grip_offered_for_a_chord_tone_is_a_legal_shape(self):
+        """What the engine actually hands back, for every chord tone of every quality.
+
+        The rule's own shapes are checked in `test_generated_grips`; this is one level out -
+        a shape the rule builds still has to be fretted on a supported string set, and the
+        coverage a retired degree row used to bound is now every chord tone the chord has.
+        """
+        for quality, chord_tones in ChordParser.CHORD_TONES_FROM_ROOT.items():
+            chord_name = "C" + quality
+            root_pc = Note("C4").midi_note() % 12
+            allowed = {pc % 12 for pc in ChordParser.get_chord_tones(quality, chord_name)}
+            for degree in {t % 12 for t in chord_tones}:
+                midi = next(m for m in range(64, 83) if m % 12 == (root_pc + degree) % 12)
+                melody = PITCH_CLASS_NAMES[midi % 12] + str(midi // 12 - 1)
+                for top_string in (5, 4):
+                    for voicing in VoiceLeadingEngine.get_drop2_voicings(
+                        Note(melody), quality, chord_name=chord_name,
+                        top_string=top_string,
+                    ):
+                        where = (chord_name, melody, voicing.tab_string())
+                        self.assertEqual(len(voicing.active_frets()), 4, where)
+                        self.assertLessEqual(
+                            voicing.fret_span(), GRIP_MAX_SPAN["drop2"], where
+                        )
+                        self.assertTrue(
+                            all(0 <= fret <= 18 for fret in voicing.active_frets()), where
+                        )
+                        self.assertIn(voicing.soprano_string(), (5, 4), where)
+                        self.assertEqual(voicing.midi_notes()[-1] % 12, midi % 12, where)
+                        self.assertLessEqual(
+                            {pc % 12 for pc in voicing.pitch_classes()}, allowed, where
+                        )
 
 
 if __name__ == "__main__":

@@ -10,8 +10,8 @@ So the chart is generated here rather than transcribed. Every fret number comes
 from `VoiceLeadingEngine.get_drop2_voicings`, and every label is derived from the
 pitches that come back:
 
-* the **top degree** is the melody, matched through `DEGREE_OFFSETS_FROM_ROOT` -
-  the same table the engine steers by;
+* the **top degree** is the melody, read from the quality's own tone set - one row
+  per chord tone, lowest first;
 * the **inversion** is named by the **bass**, which is the only correct way to
   name an inversion. In a drop-2 the top voice is the melody and does not
   determine the inversion, which is exactly the mistake the old chart made;
@@ -49,6 +49,7 @@ from arranger import (
     VoiceLeadingEngine,
     Voicing,
 )
+from arranger.grips import _drop2_template_for
 
 # The two four-string blocks a drop-2 chord melody actually uses, as
 # (conventional string numbers high-to-low, soprano string index). Drop-2 is
@@ -163,16 +164,33 @@ def _melody_for_degree(root_pc: int, degree: int, top_string: int) -> Optional[i
     return None
 
 
+def _degrees_for(quality: str) -> List[int]:
+    """Every chord tone of a quality, low degree first: one chart row each.
+
+    Read from the quality's own tone set rather than from a table of degrees, because
+    there is no longer a table of degrees: the engine voices the tone-priority rule at
+    *every* chord tone, so a chart that named only some of them would hide shapes the
+    engine will play.
+
+    The order is the chart's own, and deliberately not the rule's. Rows read lowest
+    degree first; the rule's order says which tone a *shape* states first, which is a
+    different claim about a different thing, and letting it order the rows would shuffle
+    a chart a player practises from whenever the rule's own order changed.
+    """
+    tones = ChordParser.CHORD_TONES_FROM_ROOT.get(quality, ())
+    return sorted({t % 12 for t in tones})
+
+
 def cells_for(quality: str, top_string: int, root: str = "C") -> List[Optional[Cell]]:
-    """One entry per degree in `DEGREE_OFFSETS_FROM_ROOT`, in table order.
+    """One entry per chord tone, in `_degrees_for`'s order.
 
     An entry is None where the engine has no playable voicing for that degree on
     that string. That is reported rather than replaced with a substitute, because
     the gap is information: it is the selector saying "hold this note on another
     string instead", and a chart that drew a stand-in would hide it.
     """
-    degrees = VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT.get(quality)
-    if degrees is None:
+    degrees = _degrees_for(quality)
+    if not degrees:
         raise ValueError(f"no degree table for quality {quality!r}")
     root_pc = chord_root_pc(quality, root)
     cells: List[Optional[Cell]] = []
@@ -548,7 +566,7 @@ def _quality_of(heading: str) -> Optional[str]:
     """
     for candidate in (heading, heading[1:]):
         parsed, quality = ChordParser.parse_chord_name(candidate)
-        if parsed and quality in VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT:
+        if parsed and quality in ChordParser.CHORD_TONES_FROM_ROOT:
             return quality
     return None
 
@@ -559,8 +577,8 @@ def _engine_has_shape(quality: str, top: int, chart_frets: List[int]) -> bool:
     The comparison is on the **interval structure**, which is what makes a shape a
     drop-2 of that chord, and it is position-independent by construction:
 
-    * a shape is correct if its notes, measured down from the melody, match one of
-      the engine's own `DROP2_INTERVAL_SETS` templates for the melody's degree;
+    * a shape is correct if its notes, measured down from the melody, match the rule's
+      own template for the melody's degree (`_drop2_template_for`);
     * failing that, it is correct if the engine can actually voice those notes on
       one of its two blocks.
 
@@ -578,15 +596,12 @@ def _engine_has_shape(quality: str, top: int, chart_frets: List[int]) -> bool:
             if f >= 0
         )
     )
-    degrees = VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT.get(quality, [])
+    tones = {t % 12 for t in ChordParser.CHORD_TONES_FROM_ROOT.get(quality, ())}
     root_pc = chord_root_pc(quality)
     degree = (top - root_pc) % 12
-    index = degrees.index(degree) if degree in degrees else None
-    templates = VoiceLeadingEngine.DROP2_INTERVAL_SETS.get(quality, [])
-    if index is not None and index < len(templates):
-        template = sorted(-offset for offset in templates[index])
-        if offsets == template:
-            return True
+    rule = _drop2_template_for(quality, degree) if degree in tones else []
+    if rule and offsets == sorted(-offset for offset in rule):
+        return True
 
     # Not a template shape: the last resort is asking the engine directly, on either
     # block, whether it can voice this melody with these notes at all.

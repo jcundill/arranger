@@ -1,26 +1,38 @@
-"""The drop-2 tables are generated, and this is what holds the rule to them.
+"""The drop-2 shapes are the tone-priority rule's output, held to the hand table it
+replaced.
 
 `TONE_PRIORITY` says which of a chord's tones a shape states, in what order, one row per
-quality; `grips._priority_drop2_templates` turns a row into the drop-2 templates and
-`DROP2_TEMPLATES` is the live table the engine reads. `DROP2_INTERVAL_SETS` is the
-hand-written table that generation reproduces, and it is kept as the witness: the
-assertion below compares the two rather than trusting either.
+quality; `grips._drop2_template_for` turns one degree into the shape for it, and
+`_drop2_palette` is that rule read at every degree the chord has. The 119 hand-written
+templates live in `tests/support.py` now - the engine stopped carrying them - re-keyed by
+the degree their top voice states (`WITNESS`), and the assertion below compares the rule
+with those numbers rather than trusting either.
 
 The rule is not a refactor of the table, and these tests are shaped to say so. The table
 is 119 numbers that encode a musical decision - which tone a four-voice shape gives up
 when the chord has five tones - and the decision is a *different* one per quality, which
-is why the row order is the rule and there is no single global order that reproduces
+is why the priority row is the rule and there is no single global order that reproduces
 them. `TestTheOmissionDecision` pins that per quality and by name, so a row edited into a
 tidier shared pattern fails here and says which quality moved.
 
-This file is the only place the two tables meet. If it is ever deleted, the rule becomes
-unverified and the hand table becomes decorative.
+This file is where the rule and those numbers meet. If it is ever deleted, the rule
+becomes unverified and the hand table becomes decorative.
 """
+
+from __future__ import annotations
 
 import unittest
 
+from musthe import Note
+
 from arranger import SHELL_DEGREES, ChordParser, VoiceLeadingEngine
-from arranger.grips import DROP2_TEMPLATES, TONE_PRIORITY, stated_tones
+from arranger.grips import (
+    TONE_PRIORITY,
+    _drop2_palette,
+    _drop2_template_for,
+    stated_tones,
+)
+from tests.support import WITNESS
 
 #: The acceptance gate's denominator. `docs/engine.md` had said "109 hand-authored
 #: templates" while the table held 119, which is why the count is asserted rather than
@@ -29,88 +41,102 @@ from arranger.grips import DROP2_TEMPLATES, TONE_PRIORITY, stated_tones
 QUALITY_COUNT = 29
 TEMPLATE_COUNT = 119
 
+#: Every degree the palette is read at: all the chord tones of all 29 qualities, in the
+#: rule's own order. Six more than the hand table named - the 9th of a `13`, the #9 and
+#: #11 of a `7alt`, and the natural 5th of `7#11`, `7b13` and `maj7#11` - which is what
+#: making the palette "the rule at every degree" adds.
+PALETTE_COUNT = 125
+
 
 class TestTheRuleReproducesTheTables(unittest.TestCase):
     """The generated templates are the hand-written ones, for every quality."""
 
-    def test_every_quality_with_a_table_has_a_priority_row(self):
-        """A quality the drop-2 generator is expected to voice names its tones somewhere."""
-        for quality in VoiceLeadingEngine.DROP2_INTERVAL_SETS:
+    def test_every_witnessed_quality_has_a_priority_row(self):
+        """A quality the witness names is one the rule can voice: it needs a row."""
+        for quality in WITNESS:
             canonical = ChordParser.canonical_quality(quality)
             self.assertIn(
                 canonical, TONE_PRIORITY, f"{quality} canonicalises to {canonical}"
             )
 
-    def test_the_generated_templates_are_the_hand_written_table(self):
-        """Every one of the 119 templates, to the semitone and in the same order.
+    def test_the_rule_reproduces_the_hand_written_templates(self):
+        """Every one of the 119 templates, to the semitone, by degree.
 
-        This is the assertion the arrangement rests on: it is what lets
-        `_interval_set_for_grip` read the rule and leave the table as its witness.
+        This is the assertion the arrangement rests on: it is what lets the engine read
+        the rule at all, with the hand numbers kept here as the witness rather than in
+        the library.
         """
         checked = 0
-        for quality, degrees in VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT.items():
-            table = VoiceLeadingEngine.DROP2_INTERVAL_SETS[quality]
-            generated = DROP2_TEMPLATES[quality]
-            self.assertEqual(len(generated), len(degrees), quality)
-            for degree, want, got in zip(degrees, table, generated):
+        for quality, by_degree in WITNESS.items():
+            for degree, want in by_degree.items():
                 checked += 1
+                got = _drop2_template_for(quality, degree)
                 self.assertEqual(
                     got, want,
                     f"{quality} with degree {degree} in the melody: "
-                    f"generated {got}, table says {want}",
+                    f"the rule builds {got}, the table says {want}",
                 )
         self.assertEqual(checked, TEMPLATE_COUNT)
         self.assertEqual(len(TONE_PRIORITY), QUALITY_COUNT)
 
-    def test_a_degree_rows_content_is_a_prefix_of_the_rule(self):
-        """What a row *says* is the rule's; only the order it says it in is its own.
+    def test_a_witness_degree_list_is_a_prefix_of_the_rule(self):
+        """The tones the hand table named are the rule's own, read from the top.
 
-        `DEGREE_OFFSETS_FROM_ROOT` is what the melodic route indexes the templates by, and it
-        is the table Step 3 of `docs/generated-grips.md` retires. Measured over all 29 rows:
-        every row holds the **prefix** of that quality's `TONE_PRIORITY` row, cut to the length
-        of the template list, and not one of them holds it in the rule's order - so the row
-        carries an order and nothing else, which is exactly what a retirement has left to
-        decide.
+        Measured over all 29 qualities: every witness's degree list is the **prefix** of
+        that quality's `TONE_PRIORITY` row, cut to the list's length - and not one of them
+        is in the rule's order, which is why the rule cannot be asked for the list as a
+        list and had to be asked for one degree at a time.
 
-        That is worth asserting because `test_the_generated_templates_are_the_hand_written_table`
-        cannot see it: it compares generated templates to the table's in the row's own order, so
-        any permutation of a row's degrees agrees with itself. A row given a tone its quality
-        does not have fails here and says which quality moved. The five rows *shorter* than
-        their priority row are the qualities with more tones than a template list covers
-        (`13`, `7#11`, `7b13`, `maj7#11`, and `7alt` two tones over), and this rule is what
-        makes that a property of the rule rather than a number someone typed.
-
-        Nothing here asserts the order, and a row later reordered *into* the rule's order would
-        pass: that would be the simplification, not a defect.
+        That is worth asserting because `test_the_rule_reproduces_the_hand_written_templates`
+        cannot see it: it compares shapes degree by degree, so any list of degrees agrees
+        with itself. A witness naming a tone its quality does not have fails here and says
+        which quality moved. The five lists *shorter* than their priority row are the
+        qualities with more tones than the table covered (`13`, `7#11`, `7b13`, `maj7#11`,
+        and `7alt` two tones over), which is what makes the rule's own degree list a
+        property of the rule rather than a number someone typed.
         """
-        for quality, degrees in VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT.items():
+        for quality, by_degree in WITNESS.items():
             canonical = ChordParser.canonical_quality(quality)
             priority = TONE_PRIORITY[canonical]
+            degrees = list(by_degree)
             self.assertEqual(
                 set(degrees),
                 set(priority[: len(degrees)]),
                 f"{quality}: {degrees} is not the first {len(degrees)} of {priority}",
             )
 
-    def test_every_alias_reaches_the_same_templates(self):
-        """A quality spelled another way gets the same shapes, through the same row.
+    def test_every_alias_reaches_the_same_shapes(self):
+        """A quality spelled another way gets the same shapes, through the same rule.
 
-        The table carries 13 alias keys (`min7`, `dom7`, `min7b5`, `mmaj7` and the rest)
-        that the generator has no row for. They work because `stated_tones` canonicalises
-        first, and this is what says so.
+        The aliases (`min7`, `dom7`, `min7b5`, `mmaj7` and the rest) have no priority row
+        of their own, so the rule itself answers nothing for them. They work because
+        `_chord_context` canonicalises the quality before the rule is asked, and this is
+        what says so - on the route a caller takes, not on a table key.
         """
         aliases = [
-            name for name in VoiceLeadingEngine.DROP2_INTERVAL_SETS
-            if name not in VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT
+            name for name in ChordParser.QUALITY_ALIASES if name not in TONE_PRIORITY
         ]
         self.assertTrue(aliases, "the alias keys are the point of this test")
         for name in aliases:
-            canonical = ChordParser.canonical_quality(name)
-            self.assertEqual(
-                VoiceLeadingEngine.DROP2_INTERVAL_SETS[name],
-                DROP2_TEMPLATES.get(canonical),
-                name,
-            )
+            with self.subTest(alias=name):
+                canonical = ChordParser.canonical_quality(name)
+                self.assertNotEqual(name, canonical)
+                for melody in ("C5", "E4", "B4"):
+                    self.assertEqual(
+                        [
+                            voicing.tab_string()
+                            for voicing in VoiceLeadingEngine.get_drop2_voicings(
+                                Note(melody), name
+                            )
+                        ],
+                        [
+                            voicing.tab_string()
+                            for voicing in VoiceLeadingEngine.get_drop2_voicings(
+                                Note(melody), canonical
+                            )
+                        ],
+                        name,
+                    )
 
     def test_the_first_two_tone_priorities_are_the_shell_table(self):
         """A shell and a drop-2 state the same guide tones, and this is where they agree.
@@ -164,10 +190,10 @@ class TestTheOmissionDecision(unittest.TestCase):
     )
 
     def _sounding(self, quality, degree):
-        """The degrees the generated shape for `degree` sounds, measured from the root."""
-        templates = DROP2_TEMPLATES[quality]
-        index = VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT[quality].index(degree)
-        return {(degree + offset) % 12 for offset in templates[index]}
+        """The degrees the rule's shape for `degree` sounds, measured from the root."""
+        return {
+            (degree + offset) % 12 for offset in _drop2_template_for(quality, degree)
+        }
 
     def test_the_shape_gives_up_the_tone_the_row_says_it_does(self):
         """Each named quality drops the tone the hand table drops, in that inversion."""
@@ -193,11 +219,11 @@ class TestTheOmissionDecision(unittest.TestCase):
 
     def test_a_four_tone_quality_gives_up_nothing(self):
         """With four voices and four tones the decision does not arise."""
-        for quality, degrees in VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT.items():
-            tones = {t % 12 for t in ChordParser.CHORD_TONES_FROM_ROOT[quality]}
+        for quality, tones in ChordParser.CHORD_TONES_FROM_ROOT.items():
+            tones = {t % 12 for t in tones}
             if len(tones) > 4:
                 continue
-            for degree in degrees:
+            for degree in tones:
                 self.assertEqual(self._sounding(quality, degree), tones, quality)
 
 
@@ -233,51 +259,99 @@ class TestStatedTones(unittest.TestCase):
     def test_an_unknown_quality_is_offered_nothing(self):
         """The house rule: never guess a chord. A quality with no row states no tones."""
         self.assertEqual(stated_tones("not-a-quality", 0), ())
-        self.assertIsNone(DROP2_TEMPLATES.get("not-a-quality"))
+        self.assertEqual(_drop2_template_for("not-a-quality", 0), [])
 
-    def test_a_quality_the_generator_cannot_build_is_given_no_templates(self):
-        """A quality with no priority row generates nothing rather than a truncated shape."""
-        from arranger.grips import _priority_drop2_templates
-
-        self.assertEqual(_priority_drop2_templates("not-a-quality"), [])
+    def test_a_quality_the_rule_cannot_build_has_no_palette(self):
+        """A quality with no priority row offers no shapes rather than truncated ones."""
+        self.assertEqual(_drop2_palette("not-a-quality"), [])
 
 
 class TestTheGeneratedShapesAreLegal(unittest.TestCase):
     """The invariants a generated template must satisfy on its own."""
 
     def test_a_generated_template_is_a_four_voice_drop2(self):
-        """Four voices, soprano first, descending, and inside a hand's reach."""
-        for quality, templates in DROP2_TEMPLATES.items():
-            for template in templates:
-                self.assertEqual(len(template), 4, quality)
-                self.assertEqual(template[0], 0, quality)
-                self.assertEqual(template, sorted(template, reverse=True), quality)
+        """Four voices, soprano first, descending, and inside a hand's reach.
+
+        Read over `_drop2_template_for` at **every chord tone** of every quality, not just
+        the degrees the hand table named: the rule is asked for one degree at a time, so
+        the degrees it is legal at is whatever it answers for.
+        """
+        for quality, chord_tones in ChordParser.CHORD_TONES_FROM_ROOT.items():
+            for degree in {t % 12 for t in chord_tones}:
+                template = _drop2_template_for(quality, degree)
+                self.assertEqual(len(template), 4, (quality, degree))
+                self.assertEqual(template[0], 0, (quality, degree))
+                self.assertEqual(
+                    template, sorted(template, reverse=True), (quality, degree)
+                )
                 self.assertTrue(
                     all(-19 <= offset < 0 for offset in template[1:]),
-                    (quality, template),
+                    (quality, degree, template),
                 )
 
     def test_every_generated_template_sounds_both_guide_tones(self):
-        """The property the hand tables were written to keep, held on the generation.
+        """The property the hand tables were written to keep, held on the rule.
 
         A four-note voicing states the chord's 3rd and 7th; where the chord has no 3rd
         it is the 4th, and where it has neither, the note standing in for them. A
         generated shape that dropped either would be a different chord rather than a
         thinner one.
+
+        This is a **gate rather than a branch**: the rule used to be held to it at runtime,
+        by a fallback that rebuilt a shape from the guide tones when the derived one lost
+        them, and that fallback was measured never to fire over all 125 degrees - so the
+        rule is now asserted to hold, and a quality added later that breaks it fails here.
         """
         from arranger.grips import _guide_tones
 
-        for quality, degrees in VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT.items():
-            tones = ChordParser.CHORD_TONES_FROM_ROOT.get(quality)
-            if not tones:
-                continue
-            guide = _guide_tones(tones, 0)
+        for quality, chord_tones in ChordParser.CHORD_TONES_FROM_ROOT.items():
+            guide = _guide_tones(chord_tones, 0)
             if not guide:
                 continue
-            for degree, template in zip(degrees, DROP2_TEMPLATES[quality]):
-                sounding = {(degree + offset) % 12 for offset in template}
+            for degree in {t % 12 for t in chord_tones}:
+                sounding = {
+                    (degree + offset) % 12
+                    for offset in _drop2_template_for(quality, degree)
+                }
                 for want in guide:
                     self.assertIn(want % 12, sounding, (quality, degree))
+
+
+class TestThePalette(unittest.TestCase):
+    """What a melody with no degree to match is offered: the rule at every chord tone."""
+
+    def test_the_palette_is_the_rule_read_at_every_chord_tone(self):
+        """One shape per chord tone, in the rule's order, and none of them empty."""
+        total = 0
+        for quality, row in TONE_PRIORITY.items():
+            self.assertEqual(
+                _drop2_palette(quality),
+                [_drop2_template_for(quality, d) for d in row],
+                quality,
+            )
+            self.assertEqual(
+                len(_drop2_palette(quality)),
+                len({t % 12 for t in ChordParser.CHORD_TONES_FROM_ROOT[quality]}),
+                quality,
+            )
+            total += len(_drop2_palette(quality))
+        self.assertEqual(total, PALETTE_COUNT)
+
+    def test_every_shape_in_the_palette_states_the_chord(self):
+        """Every one of the 125 shapes is pure, which is what lets the cost choose.
+
+        The selector's first criterion is tone purity, so a palette holding an impure shape
+        is only safe while that criterion outranks the rest. Held here instead: for every
+        quality and every degree, nothing in the shape sounds outside the chord.
+        """
+        for quality, row in TONE_PRIORITY.items():
+            tones = {t % 12 for t in ChordParser.CHORD_TONES_FROM_ROOT[quality]}
+            for degree, shape in zip(row, _drop2_palette(quality)):
+                sounding = {(degree + offset) % 12 for offset in shape}
+                self.assertTrue(
+                    sounding <= tones,
+                    f"{quality} on degree {degree}: {shape} sounds outside the chord",
+                )
 
 
 if __name__ == "__main__":

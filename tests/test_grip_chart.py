@@ -19,7 +19,7 @@ import unittest
 from pathlib import Path
 
 import grip_chart
-from arranger import ChordParser, VoiceLeadingEngine, Voicing
+from arranger import ChordParser, Voicing
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -206,7 +206,7 @@ class TestHelpers(unittest.TestCase):
     def test_degree_names_cover_every_chord_tone_the_engine_voices(self):
         """A degree with no name would render as "degree N" in the chart."""
         for quality in grip_chart.DEFAULT_QUALITIES:
-            for degree in VoiceLeadingEngine.DEGREE_OFFSETS_FROM_ROOT[quality]:
+            for degree in grip_chart._degrees_for(quality):
                 self.assertIn(degree % 12, grip_chart.DEGREE_NAMES, quality)
 
 
