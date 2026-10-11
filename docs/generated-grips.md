@@ -1,10 +1,12 @@
 # Generated grips: one rule for the tones, a search for the placement
 
-**Status: step 1 of 3 landed.** The tone-priority rule is in `arranger/grips.py` and is
-what the engine now reads; the hand-written drop-2 tables are kept as the witness that
-holds it, asserted by `tests/test_generated_grips.py`. Steps 2 (one placement search
-replacing the per-family template arithmetic) and 3 (retiring the tables) are below and
-are **not** built.
+**Status: steps 1 and 2 of 3 landed.** The tone-priority rule is in `arranger/grips.py` and
+is what the engine now reads; the hand-written drop-2 tables are kept as the witness that
+holds it, asserted by `tests/test_generated_grips.py`. Step 2 — one placement rule, and one
+place a fret becomes a shape — is landed as well, measured at **0 of 1,103 steps** and 0 of
+the 300 diagnostics. §4 describes it; step 3 (retiring the tables), the label the placement
+would derive, the levers that price it, and the clause the tab owes for a tone a shape
+leaves out are **not** built, and are marked there.
 
 This document exists because the reasoning behind the change did not fit in a docstring
 and would otherwise live only in a conversation. `docs/one-fact.md` records why that is a
@@ -12,7 +14,10 @@ failure mode rather than a style point: a plan off disk is not a plan the next s
 can read.
 
 Measured at plan time, on the default arrangement (`uniform`, `every_note`, auto voices)
-of all eight committed heads: **1,103 steps**.
+of all eight committed heads: **1,103 steps**, which is every step of that sweep that
+sounds anything. **1,016** of them carry a melody as well; the other 87 are comping slots
+the grid places where the tune is silent, which is why a count of steps and a count of
+*melodies* are different numbers and every table below says which it is.
 
 ## 1. What was measured
 
@@ -93,11 +98,20 @@ a second consumer of `DROP2_INTERVAL_SETS`, invisible from the table's name and 
 docstring, and it is the finding that would otherwise have made this change look smaller
 than it is.
 
-Attribution caveat: the 36/29 split is by the step's `non_chord_tone` flag, which marks a
-melody that stayed a non-chord tone. A step whose melody was *reharmonised* into an
-extension (`harmonized_as` set) reaches the palette route with the flag clear, so the true
-split needs a per-step record of the routed quality — which step 2 should add rather than
-guess.
+**Attribution caveat, and it is still open.** The 36/29 split is by the step's
+`non_chord_tone` flag, which marks a melody that stayed a non-chord tone. A step whose
+melody was *reharmonised* into an extension (`harmonized_as` set) reaches the palette route
+with the flag clear, so the true split needs a per-step record of the routed quality.
+
+**Re-measured since, and the two numbers do not agree.** Defining the route from the step's
+own fields — "the melody is not a chord tone of the routed chord (`harmonized_as or
+chord`)" — gives **276 of the 1,016** steps that carry both a melody and a sounding shape,
+94 of them reached through a `harmonized_as` substitute, and **0** through the "chord tone
+with no named inversion" branch on this corpus. The 476 of 967 recorded here is a different
+definition, and neither is wrong: they are two questions, and which one a lever is priced
+against is a decision rather than a measurement. So the palette route is to be sized by
+**instrumenting `_templates_for`** and counting the palette calls per step, not by
+re-deriving the route from the fields.
 
 Some of the moves are large and audible:
 
@@ -114,9 +128,9 @@ landing is provable; and the row order makes this a one-line decision per qualit
 `9` wants the rooted reading it can be flipped and measured on its own. This section is
 the numbers it would cost to flip all six at once. It is a live option, not a dead end.
 
-## 4. What is not built
+## 4. What step 2 landed, and what is still owed
 
-**Step 2 — one placement rule, and one place a fret becomes a shape.** A candidate is now
+**Landed — one placement rule, and one place a fret becomes a shape.** A candidate is now
 *proposed* one of two ways and *validated* one way. `_candidate` (`arranger/grips.py`) is the
 only place a set of frets becomes a voicing: the melody sounds and is the highest note, every
 fret is on the board and inside `GRIP_MAX_SPAN`, the family's tone claim (`required`) and bass
@@ -150,6 +164,11 @@ makes adding one a decision rather than a silent omission. The loop collapsed fr
 per-family branches, and with it went a duplicated tone-set computation and a membership list
 that mixed the two kinds (`duo` and `interval` sat in the guide-tone branch and were placed as
 layouts).
+
+**Owed, and not built.** Everything below is a decision the placement has *made possible*
+rather than one it has taken: the label the one search would derive, the three levers that
+price a derived label (**the derived label needs one more step, and the numbers say which**
+below), step 3, and **the explanation the tab owes** for a tone a shape leaves out.
 
 **Making the layout families search is behaviour-preserving, and not needed.** Every template
 is monotone — its voices descend down the strings — and on a fixed string set a monotone
