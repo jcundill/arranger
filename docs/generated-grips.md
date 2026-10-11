@@ -4,9 +4,9 @@
 is what the engine now reads; the hand-written drop-2 tables are kept as the witness that
 holds it, asserted by `tests/test_generated_grips.py`. Step 2 — one placement rule, and one
 place a fret becomes a shape — is landed as well, measured at **0 of 1,103 steps** and 0 of
-the 300 diagnostics. §4 describes it; step 3 (retiring the tables), the label the placement
-would derive, the levers that price it, and the clause the tab owes for a tone a shape
-leaves out are **not** built, and are marked there.
+the 300 diagnostics, and so is the clause the tab owed for a tone a shape leaves out. §4
+describes both; step 3 (retiring the tables), the label the placement would derive and the
+levers that price it are **not** built, and are marked there.
 
 This document exists because the reasoning behind the change did not fit in a docstring
 and would otherwise live only in a conversation. `docs/one-fact.md` records why that is a
@@ -165,10 +165,11 @@ per-family branches, and with it went a duplicated tone-set computation and a me
 that mixed the two kinds (`duo` and `interval` sat in the guide-tone branch and were placed as
 layouts).
 
-**Owed, and not built.** Everything below is a decision the placement has *made possible*
-rather than one it has taken: the label the one search would derive, the three levers that
-price a derived label (**the derived label needs one more step, and the numbers say which**
-below), step 3, and **the explanation the tab owes** for a tone a shape leaves out.
+**Owed, and not built.** What follows is a decision the placement has *made possible* rather
+than one it has taken: the label the one search would derive, the three levers that price a
+derived label (**the derived label needs one more step, and the numbers say which** below),
+and step 3. The one thing step 2 owed the tab — a chord tone the rule dropped, named on the
+line — is **paid**, and is the last paragraph here.
 
 **Making the layout families search is behaviour-preserving, and not needed.** Every template
 is monotone — its voices descend down the strings — and on a fixed string set a monotone
@@ -197,13 +198,39 @@ quality" collapses from seven steps to a tone set plus one priority row — a qu
 row would then get a canonical derived one and be voiceable everywhere on the day it is
 added.
 
-**The explanation the tab owes.** "Every choice about a voiced note is explained by the
-line that prints it" is an invariant of the artifact rather than a style preference. A rule
-that *omits* a chord tone is exactly such a choice — a reader cannot see it in the fret
-numbers — so it needs a derived clause and a witness in `tests/test_explanations.py`, which
-fails until the clause is registered. **Owed, and not built.** It became due when the
-omission stopped being a number someone typed and became a rule (`TONE_PRIORITY`'s tail);
-registering it is a change to `render` and that table, not to the placement.
+**The explanation the tab owed, and it is paid.** "Every choice about a voiced note is
+explained by the line that prints it" is an invariant of the artifact rather than a style
+preference, and a rule that *omits* a chord tone is exactly such a choice: a reader cannot see
+it in the fret numbers. It became due when the omission stopped being a number someone typed
+and became a rule (`TONE_PRIORITY`'s tail), and it was discharged where it was owed — in
+`render._omission_clause`, a derived clause in `_annotate`, not in the placement.
+
+Read from the step's own fields: the tones of the chord the part **states**
+(`harmonized_as` where a substitute was found, so it composes with the substitution clause)
+against the pitches of the **whole** step (`midi_notes()`, so a thumb that lands on the root
+counts as stating it), named through `chords.melody_degree_name` — the vocabulary
+`_comping_clause` names the degrees a shape *states* with.
+
+Measured on the default sweep: **185** of the 1,016 melody-bearing steps are a four-voice
+shape leaving a chord tone out — 162 leaving one, 23 leaving two, so 208 tones in all — and
+the tone left out is the **root in 117 of them**, then the 5th (32), the 9th (20), the 3rd
+(14), the b5 (13), the 7th (4), the 13th (3), the b7 (3) and the b9 (2); by quality `6` and
+`9` lead at 40 each. Before it, not one line in the corpus named an omitted tone: the census
+of every annotation the eight heads print found `(harmony under 7 - 4 voices)` and stopped
+there.
+
+**Two fingerprints, because this move changes text by design.** The head-step fingerprint
+(chord, melody, tab, grip) is **unchanged over all 2,145 steps** of the
+`tests/test_explanations.py` sweep — the music did not move — and of the 2,145 rendered lines
+exactly **98** changed, every one with its four columns byte-identical and only the annotation
+longer. 98 is also the number `tests/test_explanations.py` pins for the steps owing the
+clause, so the count that proves the work was done is the count that notices if it stops being
+done. `make demo` is the same check on the path a reader runs: **3** of its annotated lines
+gain the clause and every tab in it is byte-identical.
+
+Only the **four-voice** shape is asked about, because that is the shape the rule is about:
+fewer voices was already answered by the count or by `partial`'s `shell - 3rd & 7th`, and a
+hold was answered where the shape was chosen.
 
 ## 5. Where the rule lives, and what holds it
 
