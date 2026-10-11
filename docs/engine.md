@@ -899,7 +899,9 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
 
 - Voicings use two to four strings, never all six. The melody may be on the high E, B
   or G string; the A string and low E are inner voices only, so no grip puts the
-  soprano on either. There are no barres. Fret `0` does appear when a voice happens to
+  soprano on either. No grip is a barré chord; a repeated fret is written as frets, and
+  `fingers.py` does mark a barre where two strings share one, though no renderer prints a
+  fingering. Fret `0` does appear when a voice happens to
   land on an open string (e.g. `x-2-3-0-3-x`). 6-4-3, 5-3-2 and 6-4-3-2 are the
   non-contiguous sets.
 - Melodies are still confined to `G3`–`Bb5`: `G3` is the lowest pitch reachable on the

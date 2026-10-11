@@ -14,8 +14,9 @@ shape written as one longer note rather than a re-strike. Each chord is labelled
 **where it changes**, with what is sounding - the same rule `tabxml` writes its
 `<harmony>` symbols by, so the two files name chords in the same places.
 
-**It is not a replacement for MusicXML.** GP5 opens in Guitar Pro and nowhere else;
-it has no notation staff, and it is a closed format. MusicXML remains the way into
+**It is not a replacement for MusicXML.** GP5 has no notation staff and is a closed
+format, so it is read by *tab* programs - Guitar Pro 5 and later that read GP5, TuxGuitar,
+and the browser and mobile readers that import it - while MusicXML remains the way into
 Sibelius, MuseScore and Final. What the two share is the *placement*: both call
 `tabxml._events`, so a head lands on the same beats in both files and the two
 renderings cannot drift apart. Where they genuinely differ is bar lines - see

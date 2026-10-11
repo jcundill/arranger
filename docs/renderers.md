@@ -712,9 +712,11 @@ all. That is not merely tidier than the MusicXML tab staff used to be: it is the
 **only** one that works, since music21 cannot write a tab staff a notation program
 renders correctly (see [MusicXML export](#musicxml-export)). So the division is now
 by capability, not by preference: GP5 carries the fingering, MusicXML carries the
-notation, and neither renderer tries to do the other's job. But GP5 opens in Guitar
-Pro and nowhere else, has no notation staff, and is a closed format. MusicXML remains
-the way into Sibelius, MuseScore and Final. Both are shipped, and both are one flag
+notation, and neither renderer tries to do the other's job. But GP5 has no notation
+staff and is a closed (undocumented) format, so what reads it is the family of *tab*
+programs: Guitar Pro 5 and later that still read GP5, TuxGuitar, and the browser and
+mobile readers built on engines such as AlphaTab. MusicXML remains the way into
+Sibelius, MuseScore and Final. Both are shipped, and both are one flag
 on `corpus_cli` (`--musicxml`, `--gp5`).
 
 **What is shared, deliberately.** `tabgp` calls `tabxml._events` and
@@ -919,4 +921,5 @@ later that still reads GP5.
 - **Guitar Pro 5** is the newest format PyGuitarPro writes. Guitar Pro 7+ `.gp` is
   a different, zip-based format that nothing here can write, so a file from this
   renderer targets Guitar Pro 5 and 6 as well as anything later that still reads
-  GP5.
+  GP5 — which includes TuxGuitar and the browser and mobile tab readers built on
+  engines such as AlphaTab.
