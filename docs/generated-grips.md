@@ -148,9 +148,10 @@ only place a set of frets becomes a voicing: the melody sounds and is the highes
 fret is on the board and inside `GRIP_MAX_SPAN`, the family's tone claim (`required`) and bass
 claim (`lowest_pc_allowed`) hold, nothing outside the chord sounds when the family makes that
 claim at all, and the sounding strings are one `supported_string_sets()` entry — a set is a
-musical decision, so a shape cannot invent one. The proposers are the search (`_place_shape`,
-which enumerates with `_frets_in_span`) and the **layouts** (`_place_template`, which computes
-the frets from an interval template — the template and the string set fix each one).
+musical decision, so a shape cannot invent one. The proposers are the search (`_search_shape`,
+which enumerates with `_frets_in_span`, reached through the memo `_place_shape`) and the
+**layouts** (`_place_template`, which computes the frets from an interval template — the
+template and the string set fix each one).
 
 Across the eight committed heads this moved **0 of 1,103 steps** and **0** of the 300
 diagnostics, byte for byte, and the head sweep's wall time is unchanged. Two things it
@@ -176,6 +177,38 @@ makes adding one a decision rather than a silent omission. The loop collapsed fr
 per-family branches, and with it went a duplicated tone-set computation and a membership list
 that mixed the two kinds (`duo` and `interval` sat in the guide-tone branch and were placed as
 layouts).
+
+**The search is answered from a memo, and the memo changes nothing but the time.** It is one
+function asked the same question thousands of times: the placement search is **47.4s of the six
+heaviest test modules' 127.8s**, and **77,152 of its calls are 1,969 distinct requests**. One
+32-bar head at default settings asks 1,058 times for 298 distinct shapes. The repeats are
+intrinsic rather than a test artifact — a repeated melody degree, a repeated bar, and the
+target, fill and retry paths each asking again for what was already answered. `_search_shape` is
+the enumeration; `_searched_shape` (an `lru_cache`) remembers one request's answer;
+`_place_shape` — the name the generators call — rebuilds a fresh `Voicing` from the snapshot
+stored. With the memo the whole suite runs **171.1s → 112.3s**, and a fingerprint of every
+arrangement over the 8 committed heads and 16 settings is byte-identical across the change:
+**8,173 steps, 0 lines moved.**
+
+Three things make it safe rather than merely fast, and `tests/test_placement.py` holds each to
+a witness:
+
+- **The key is the whole request.** `_Placement` is a frozen dataclass of strings, tuples, ints
+  and frozensets and `allowed` is a frozenset or None, so equal requests share an entry and
+  different ones cannot — which is why nothing needs invalidating. The tables the search reads
+  besides the request (`GRIP_MAX_SPAN`, `STANDARD_TUNING`, `supported_string_sets()`) are fixed
+  when the module is imported: **reassigning one at runtime is the single thing that would leave
+  a stale answer behind.**
+- **A caller cannot write through it.** The fret vector is stored as a tuple and a fresh
+  `Voicing` is built per call, because `movement._attach_bass` merges the walking bass *into the
+  chosen shape* (`voicing.frets[string_index] = fret` and `voicing.bass_pc`). A memo handing out
+  the stored object would let one step's thumb line rewrite the shape the next step is handed —
+  silently, and only in the tab.
+- **It is read.** A memo nothing hits would leave every other check in that file passing while
+  the engine paid for a cache it never used, so a hit and a miss are counted.
+
+What it does **not** do is make the search cheaper. It is still exhaustive over the span window,
+so `_frets_in_span`'s cost is the floor for any request nobody has asked before.
 
 **Owed, and not built.** What follows is a decision the placement has *made possible* rather
 than one it has taken: the label the one search would derive, and the three levers that price

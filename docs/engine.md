@@ -404,6 +404,11 @@ filtering, no transposition) and `_best_voicing` does all the deciding. That spl
 what stops the grip families and the octave-down rescue from having to know about each
 other, and it is asserted in `tests/test_grips.py`.
 
+The searched families' one search is answered from a memo that builds a fresh shape per call,
+so generation stays pure in the observable sense: it changes the time and nothing else. What
+the memo is keyed on, why its answer is snapshotted, and what it was measured to save are in
+[generated-grips.md §4](generated-grips.md#4-what-step-2-landed-and-what-is-still-owed).
+
 **A shape sounding a foreign note is refused before any preference is consulted.**
 `allowed_tones` is the caller's tone set, and criterion 0 of the cost tuple counts the
 sounding notes outside it, the melody excepted. It is a *count* rather than a flag: as a

@@ -14,12 +14,13 @@ spellings working. It leaves one implementation, so there is nothing to keep in 
 The four non-contiguous string sets - 6-4-3, both 5-3-2s and 6-4-3-2 - are
 *searched* rather than stacked, because their voices are not in descending pitch
 order down the strings: the A string is tuned five semitones above the D. See
-`_place_shape`, which is the search they share.
+`_search_shape`, which is the search they share.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Dict, FrozenSet, Iterable, List, Optional, Tuple
 
 from musthe import Note
@@ -340,7 +341,7 @@ SHELL_DEGREES: Dict[str, Tuple[int, int]] = {
 # A **layout** family's shape *is* its interval template: `_place_template` lays the
 # template's voices on the strings from the soprano down, and the template and the string
 # set fix every fret. A **searched** family's shape is a claim about what it sounds - both
-# guide tones, or four chord tones with a root or a 5th underneath - and `_place_shape`
+# guide tones, or four chord tones with a root or a 5th underneath - and `_search_shape`
 # finds it. The two are placed by different code, so a family listed in neither would
 # generate nothing at all; `tests/test_grips.py` holds the two to partitioning the
 # families, which is what makes a new one a decision rather than a silent omission.
@@ -1642,10 +1643,10 @@ def _candidate(
     interval family is free to sound a key tone under a passing note - and the sounding
     strings are one `supported_string_sets()` entry.
 
-    Both proposers call it: the search (`_place_shape`), which enumerates frets, and the
-    layouts (`_place_template`), which compute them from an interval template. One producer
-    per shape, one rule set for all of them - a rule stated in a producer reaches only the
-    families that producer serves.
+    Both proposers call it: the search (`_search_shape`, reached through the memo
+    `_place_shape`), which enumerates frets, and the layouts (`_place_template`), which
+    compute them from an interval template. One producer per shape, one rule set for all of
+    them - a rule stated in a producer reaches only the families that producer serves.
 
     `frets` is a full board vector, and only its entries for `placement.strings` are read.
     The `voices` strings from the soprano down are the shape and must each carry a fret
@@ -1695,11 +1696,13 @@ def _candidate(
     )
 
 
-def _place_shape(
+def _search_shape(
     placement: _Placement, allowed: Optional[FrozenSet[int]] = None
 ) -> Optional[Voicing]:
     """
     The one shape `placement` asks for on its string set, or None when it will not play.
+
+    `_place_shape` is what the generators call; this is the search they are answered with.
 
     An enumerator over `_frets_in_span`, and `_candidate` is what decides: the melody is
     held at its own fret and every combination of the other frets within
@@ -1737,6 +1740,78 @@ def _place_shape(
         if best is None or key < best[0]:
             best = (key, voicing)
     return best[1] if best else None
+
+
+#: Everything a `Voicing` carries, with the fret vector as a tuple: what the memo below
+#: stores. The search's result is snapshotted rather than stored as a `Voicing` so that no
+#: caller can write through the memo - `movement._attach_bass` merges the walking bass by
+#: writing into the chosen shape's fret vector and `bass_pc`.
+_ShapeSnapshot = Tuple[
+    Tuple[int, ...], int, float, str, Optional[int], str, Optional[int], Optional[int]
+]
+
+
+@lru_cache(maxsize=None)
+def _searched_shape(
+    placement: _Placement, allowed: Optional[FrozenSet[int]]
+) -> Optional[_ShapeSnapshot]:
+    """
+    `_search_shape` remembered: one request searched once, and read back after that.
+
+    The search is a **pure function of the request**. `placement` and `allowed` carry
+    everything it reads, and the rest - `GRIP_MAX_SPAN`, `STANDARD_TUNING`,
+    `supported_string_sets()` - is fixed when this module is imported. That is what makes
+    the key sufficient and the memo need no invalidation, and it is why those tables must
+    not be reassigned at runtime.
+
+    The same request is asked over and over: a repeated melody degree, a repeated bar, and
+    the target, fill and retry paths each asking again for what was answered already. The
+    counts are in `docs/generated-grips.md` §4.
+    """
+    found = _search_shape(placement, allowed)
+    if found is None:
+        return None
+    return (
+        tuple(found.frets),
+        found.top_fret,
+        found.avg_fret,
+        found.grip,
+        found.bass_pc,
+        found.role,
+        found.bass_midi,
+        found.bass_string,
+    )
+
+
+def _place_shape(
+    placement: _Placement, allowed: Optional[FrozenSet[int]] = None
+) -> Optional[Voicing]:
+    """
+    The one shape `placement` asks for, answered through the memo.
+
+    **A fresh `Voicing` with a fresh fret vector on every call.** The engine writes into
+    the shape it chose - `movement._attach_bass` sets `frets[string]` and `bass_pc` for the
+    walking bass - so returning the stored object would let one step's thumb line rewrite
+    the shape the next step is handed.
+
+    The rules, the ranking and the enumeration order are `_search_shape`'s docstring; the
+    memo changes nothing but how often the search runs, which `tests/test_placement.py`
+    holds it to.
+    """
+    snapshot = _searched_shape(placement, allowed)
+    if snapshot is None:
+        return None
+    frets, top_fret, avg_fret, grip, bass_pc, role, bass_midi, bass_string = snapshot
+    return Voicing(
+        frets=list(frets),
+        top_fret=top_fret,
+        avg_fret=avg_fret,
+        grip=grip,
+        bass_pc=bass_pc,
+        role=role,
+        bass_midi=bass_midi,
+        bass_string=bass_string,
+    )
 
 
 def get_grip_voicings(

@@ -2,8 +2,10 @@
 
 The string sets whose voices are not in descending pitch order down the strings - 6-4-3,
 both 5-3-2s and 6-4-3-2 - are *searched* rather than stacked, because the tuning is not
-monotonic in the useful direction. `_place_shape` is that search stated once, and this
-file holds it to two things nothing else can:
+monotonic in the useful direction. `_search_shape` is that search stated once, answered
+through the memo `_searched_shape` - which must change nothing but the time, so the checks
+below call the search and `TestTheMemoChangesNothingButTheTime` is where the memo is asked
+for its own. What this file holds the search to, and nothing else can:
 
 * the **rules** every candidate in the library obeys - the melody on the highest sounding
   string, nothing outside the chord, the span limit, the bass degree when the family
@@ -46,6 +48,8 @@ from arranger.grips import (
     _place_shape,
     _place_template,
     _Placement,
+    _search_shape,
+    _searched_shape,
     _shell_request,
     _string_sets_for,
     get_grip_voicings,
@@ -205,7 +209,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
         for chord_name, melody in CASES:
             for top_string in MELODY_STRING_CHOICES_FULL:
                 for placement, allowed in _requests(chord_name, melody, top_string):
-                    found = _place_shape(placement, allowed)
+                    found = _search_shape(placement, allowed)
                     self.assertEqual(
                         found.frets if found else None,
                         _reference(placement, allowed),
@@ -239,7 +243,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
                     for request, _allowed in _requests(chord_name, melody, top_string):
                         if request.grip != grip:
                             continue
-                        found = _place_shape(request, allowed)
+                        found = _search_shape(request, allowed)
                         if found is not None:
                             searched.add(tuple(found.frets))
                     self.assertEqual(
@@ -255,7 +259,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
                 if GuitarFretboard.note_to_fret(top_string, Note(melody)) < 0:
                     continue
                 for request, _allowed in _requests(chord_name, melody, top_string):
-                    found = _place_shape(request, allowed)
+                    found = _search_shape(request, allowed)
                     if found is None:
                         continue
                     self.assertEqual(
@@ -282,7 +286,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
         request = _shell_request(canonical, root_pc, (4, 3, 2), melody.midi_note(), top_fret)
         assert request is not None
         self.assertIsNone(
-            _place_shape(request, _allowed_for(canonical, root_pc, tones))
+            _search_shape(request, _allowed_for(canonical, root_pc, tones))
         )
 
         guide = frozenset((root_pc + g) % 12 for g in SHELL_DEGREES[canonical])
@@ -315,7 +319,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
         )
         self.assertEqual(top_fret, 14)
         self.assertGreater(top_fret + GRIP_MAX_SPAN["shell"], 18)
-        self.assertIsNone(_place_shape(placement, frozenset(range(12))))
+        self.assertIsNone(_search_shape(placement, frozenset(range(12))))
 
     def test_a_tone_the_chord_does_not_contain_is_refused(self):
         """`required ⊆ pcs ⊆ allowed` is one condition, so an impossible claim finds nothing."""
@@ -328,7 +332,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
             required=frozenset({1}),
         )
         # Cmaj7 without its root: nothing can sound a Db, so no shape can honour the claim.
-        self.assertIsNone(_place_shape(placement, frozenset({4, 7, 11})))
+        self.assertIsNone(_search_shape(placement, frozenset({4, 7, 11})))
 
     def test_the_bass_rule_refuses_a_bottom_note_outside_the_degrees(self):
         """`lowest_pc_allowed` is the family's claim about the bass, and it is enforced."""
@@ -342,14 +346,14 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
         )
         # A Cmaj7 whose bass may only be an F: no shape of it can honour that.
         self.assertIsNone(
-            _place_shape(
+            _search_shape(
                 replace(base, lowest_pc_allowed=frozenset({5})),
                 frozenset({0, 4, 7, 11}),
             )
         )
         # The same request with the chord's own root or 5th allowed does find one.
         self.assertIsNotNone(
-            _place_shape(
+            _search_shape(
                 replace(base, lowest_pc_allowed=frozenset({0, 7})),
                 frozenset({0, 4, 7, 11}),
             )
@@ -364,7 +368,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
             Note("B4").midi_note(),
             GuitarFretboard.note_to_fret(4, Note("B4")),
         )
-        found = _place_shape(request, _allowed_for(canonical, root_pc, tones))
+        found = _search_shape(request, _allowed_for(canonical, root_pc, tones))
         self.assertIsNotNone(found)
         assert found is not None
         self.assertLessEqual({midi % 12 for midi in found.midi_notes()}, {0, 4, 7, 11})
@@ -378,7 +382,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
             GuitarFretboard.note_to_fret(5, Note("B4")),
         )
         assert request is not None
-        found = _place_shape(request, _allowed_for(canonical, root_pc, tones))
+        found = _search_shape(request, _allowed_for(canonical, root_pc, tones))
         self.assertIsNotNone(found)
         assert found is not None
         self.assertEqual(found.active_strings, [3, 4, 5])
@@ -444,7 +448,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
         """
         ranked = 0
         for placement, allowed in _requests("Cmaj7", "B4", 5):
-            found = _place_shape(placement, allowed)
+            found = _search_shape(placement, allowed)
             if found is None:
                 continue
             reference = _reference(placement, allowed)
@@ -456,6 +460,99 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
             )
             ranked += 1
         self.assertGreater(ranked, 0)
+
+
+class TestTheMemoChangesNothingButTheTime(unittest.TestCase):
+    """`_search_shape` is answered through `_searched_shape`; the answer may not move.
+
+    An invisible memo stops being invisible in only three ways, and each has an assertion
+    here: an answer that differs from the search's, a caller's write reaching the next
+    caller, and a memo that is not read at all - which would leave every other check in
+    this file passing while the engine paid for a cache it never used.
+    """
+
+    def setUp(self):
+        # These assertions are about the *entry point*, so the memo starts empty each time
+        # and no test here can inherit another's entries.
+        _searched_shape.cache_clear()
+
+    def test_the_memo_answers_what_the_search_answers(self):
+        """Two ways of asking one question, compared over every family's own requests.
+
+        The requests come from the families' own request builders, so what differs between
+        the two calls is *only* whether the answer was remembered - a memo keyed on less
+        than the whole request would answer a different family's question here.
+        """
+        checked = 0
+        for chord_name, melody in CASES:
+            for top_string in MELODY_STRING_CHOICES_FULL:
+                for request, allowed in _requests(chord_name, melody, top_string):
+                    searched = _search_shape(request, allowed)
+                    placed = _place_shape(request, allowed)
+                    self.assertEqual(
+                        None if searched is None else searched.tab_string(),
+                        None if placed is None else placed.tab_string(),
+                        f"{chord_name} {melody} on {request.strings}",
+                    )
+                    checked += 1
+        self.assertGreater(checked, 60)
+
+    def test_a_caller_writing_into_its_shape_does_not_reach_the_next_caller(self):
+        """The memo may not hand one object out twice, because the engine writes into it.
+
+        `movement._attach_bass` merges the walking bass into the shape it *chose*: a fret
+        onto a string the shape had muted, and `bass_pc` with it. Handing the stored object
+        back would let one step's thumb line become the next step's shape, silently and
+        only in the tab. The identity assertion is what makes this a witness: it is the
+        *sharing* that is forbidden, not the equality of the two answers.
+        """
+        request, allowed = _requests("Cmaj7", "B4", 4)[0]
+        first = _place_shape(request, allowed)
+        assert first is not None
+        pristine_tab = first.tab_string()
+        pristine_bass = first.bass_pc
+        # Exactly what `_attach_bass` does, down to the string: the thumb takes a string
+        # the shape left muted and writes its fret there.
+        muted = [index for index, fret in enumerate(first.frets) if fret < 0]
+        self.assertTrue(muted, "no muted string for the thumb note to be written onto")
+        first.frets[muted[0]] = 7
+        first.bass_pc = None if pristine_bass is None else (pristine_bass + 1) % 12
+
+        second = _place_shape(request, allowed)
+        assert second is not None
+        self.assertIsNot(second, first, "the memo handed one object out twice")
+        self.assertEqual(second.tab_string(), pristine_tab)
+        self.assertEqual(second.bass_pc, pristine_bass)
+
+    def test_the_memo_is_read_rather_than_bypassed(self):
+        """A memo nothing hits is a claim with no effect - trap 12's invisible knob.
+
+        Pinned as a *count* rather than as a timing, because the second call being fast is
+        exactly what a reader cannot see from the code.
+        """
+        request, allowed = _requests("Cmaj7", "B4", 4)[0]
+        before = _searched_shape.cache_info()
+        first = _place_shape(request, allowed)
+        second = _place_shape(request, allowed)
+        after = _searched_shape.cache_info()
+        self.assertIsNotNone(first)
+        self.assertIsNotNone(second)
+        self.assertEqual(after.misses - before.misses, 1)
+        self.assertEqual(after.hits - before.hits, 1)
+
+    def test_clearing_the_memo_runs_the_search_again(self):
+        """The seam the checks above need, and the one a changed table would need.
+
+        `cache_clear` is that seam: after it the search runs and the same shape comes back,
+        which is what makes "the search is still the thing under test" a fact about this
+        file rather than a hope.
+        """
+        request, allowed = _requests("Cmaj7", "B4", 4)[0]
+        _place_shape(request, allowed)
+        self.assertGreater(_searched_shape.cache_info().currsize, 0)
+        _searched_shape.cache_clear()
+        self.assertEqual(_searched_shape.cache_info().currsize, 0)
+        self.assertIsNotNone(_place_shape(request, allowed))
 
 
 class TestTheGripDistribution(unittest.TestCase):
