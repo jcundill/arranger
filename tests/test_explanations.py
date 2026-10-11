@@ -32,7 +32,16 @@ from musthe import Note
 from arranger import PITCH_CLASS_NAMES, ChordParser
 from arranger.chords import melody_degree_name
 from arranger.render import _omission_clause, _step_annotation
-from arranger.tuning import NECK_FRET_MAX, NECK_FRET_MIN, ArrangementStep
+from arranger.tuning import (
+    NECK_FRET_MAX,
+    NECK_FRET_MIN,
+    SILENCE_GRID,
+    SILENCE_NC_COMPING,
+    SILENCE_NO_SHAPE,
+    SILENCE_OUT_OF_REACH,
+    SILENCE_TUNE_SILENT,
+    ArrangementStep,
+)
 from headxml import arrange_xml_head
 from tests.support import make_step
 
@@ -149,6 +158,31 @@ WITNESSES: List[Witness] = [
         "the guitar sounds nothing at all there",
         lambda step: not step.voicing.active_frets(),
         lambda step: "rests here" in _line(step),
+    ),
+    (
+        "the guitar is silent because the grid places no chord",
+        lambda step: step.silence == SILENCE_GRID,
+        lambda step: "the grid places no chord" in _line(step),
+    ),
+    (
+        "the guitar is silent because an NC bar gives a comping part nothing to state",
+        lambda step: step.silence == SILENCE_NC_COMPING,
+        lambda step: "no chord to comp" in _line(step),
+    ),
+    (
+        "the guitar is silent because no shape could carry the chord or the tune",
+        lambda step: step.silence == SILENCE_NO_SHAPE,
+        lambda step: "no voicing for this chord and none for the melody" in _line(step),
+    ),
+    (
+        "the guitar is silent because no string reaches the written melody",
+        lambda step: step.silence == SILENCE_OUT_OF_REACH,
+        lambda step: "no string reaches the melody" in _line(step),
+    ),
+    (
+        "the guitar is silent because a melody-only selection has no tune here",
+        lambda step: step.silence == SILENCE_TUNE_SILENT,
+        lambda step: "the tune is silent here" in _line(step),
     ),
     (
         "the guitar comps: the tune is not its to play",
@@ -375,6 +409,7 @@ class TestNewClausesMustBeRegistered(unittest.TestCase):
             "_held_clause",
             "_omission_clause",
             "_shape_clause",
+            "_silence_clause",
             "_slash_bass_clause",
             "_substitution_clause",
             "_transposition_clause",

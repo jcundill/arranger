@@ -35,6 +35,11 @@ from .tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
     ROLE_FILL,
+    SILENCE_GRID,
+    SILENCE_NC_COMPING,
+    SILENCE_NO_SHAPE,
+    SILENCE_OUT_OF_REACH,
+    SILENCE_TUNE_SILENT,
     ArrangementStep,
     Voicing,
     _cells_from_frets,
@@ -124,11 +129,12 @@ def _step_annotation(step: ArrangementStep) -> str:
         )
         return _annotate(step, f"melody alone - {reason}")
     if not step.voicing.active_frets():
-        # Nothing sounds. The grid declined to place a chord on this beat, and the step
-        # exists so the horn's position and the thumb's walk keep their place in the tab -
-        # so naming a degree under it would claim the guitar is playing something it
-        # muted. This is the one annotation that was not merely thin but false.
-        return _annotate(step, "the guitar rests here - the grid places no chord")
+        # Nothing sounds. Each route that declines to play records its reason on
+        # `step.silence`, so the line says which rather than naming a degree the
+        # guitar is not playing - this is the one annotation that would be false
+        # rather than merely thin. A hand-built silent step with no recorded
+        # reason reads as the grid's own answer.
+        return _annotate(step, _silence_clause(step))
     if not step.melody_voiced:
         # The comping route: the guitar states harmony and somebody else has the tune.
         # The partial branch below would call a single bass note "shell - 3rd & 7th",
@@ -368,6 +374,34 @@ def _and_list(items: List[str]) -> str:
     if len(items) == 1:
         return items[0]
     return f"{', '.join(items[:-1])} & {items[-1]}"
+
+
+# Why a silent step sounds nothing, in the words the line prints. Keyed by the
+# SILENCE_* constants; a step carrying no reason (a hand-built rest) reads as the
+# grid's answer, which was the only reason before the other routes learned to emit
+# a step of their own.
+_SILENCE_PHRASES: Dict[str, str] = {
+    SILENCE_GRID: "the guitar rests here - the grid places no chord",
+    SILENCE_NC_COMPING: "the guitar rests here - no chord to comp",
+    SILENCE_NO_SHAPE: (
+        "the guitar rests here - no voicing for this chord and none for the melody"
+    ),
+    SILENCE_OUT_OF_REACH: "the guitar rests here - no string reaches the melody",
+    SILENCE_TUNE_SILENT: "the guitar rests here - the tune is silent here",
+}
+
+
+def _silence_clause(step: ArrangementStep) -> str:
+    """Why a step that sounds nothing is silent, read from `step.silence`.
+
+    The five reasons are the five routes that can decline to play, and an
+    all-muted fret vector cannot tell them apart: "the grid placed no chord",
+    "there is no chord to comp" and "no string reaches the melody" are the same
+    six mutes. A reason the table does not know - a future route, a typo by a
+    hand-built caller - spells the grid's answer rather than printing nothing,
+    which is the same rule `_criterion_phrase` follows for an unknown criterion.
+    """
+    return _SILENCE_PHRASES.get(step.silence or SILENCE_GRID, _SILENCE_PHRASES[SILENCE_GRID])
 
 
 def _window_clause(step: ArrangementStep) -> str:

@@ -566,9 +566,21 @@ class TestNoChordSteps(unittest.TestCase):
         self.assertIsNone(steps[0].strategy)
         self.assertEqual(ChordParser.canonical_quality(NO_CHORD), NO_CHORD)
 
-    def test_unreachable_nc_note_is_skipped_not_raised(self):
-        """An unplayable NC note warns and is skipped rather than raising."""
-        self.assertEqual(self.engine.arrange_progression([("D2", NO_CHORD, NO_CHORD)]), [])
+    def test_unreachable_nc_note_is_emitted_silent_not_raised(self):
+        """An unplayable NC note warns and its position is emitted silent.
+
+        **Inverted, not deleted** (AGENTS.md trap 5): this used to assert `[]`,
+        which left the bar the note sat in absent from the tab with nothing in it
+        to say which bar went. The step is still not *voiced* - no string reaches
+        D2 - but it carries the bar, the beat and the reason, which is what keeps
+        a reader's line-up against the rest of the band.
+        """
+        steps = self.engine.arrange_progression([("D2", NO_CHORD, NO_CHORD)])
+        self.assertEqual(len(steps), 1)
+        step = steps[0]
+        self.assertEqual(step.silence, "out_of_reach")
+        self.assertEqual(step.voicing.frets, [-1] * 6)
+        self.assertEqual(step.melody, "D2")
 
     def test_annotation_is_shared_by_both_renderings(self):
         """format_progression and _print_step report the same text.

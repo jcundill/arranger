@@ -364,14 +364,18 @@ class TestHighFretOctaveDown(unittest.TestCase):
         rendered = format_progression(self.engine.arrange_progression([("A5", "m7", "Dm7")]))
         self.assertIn("transposed down an octave from A5", rendered)
 
-    def test_unreachable_melody_is_still_skipped_not_transposed(self):
+    def test_unreachable_melody_is_emitted_silent_not_transposed(self):
         """
         C6 is fret 20 on the high E - past the end of the board - so there is no voicing
-        at all to reposition. The step is warned about and skipped rather than silently
-        respelled an octave down, which would hide the real problem.
+        at all to reposition. The step is warned about and its position emitted silent
+        rather than silently respelled an octave down, which would hide the real
+        problem: the tab keeps the bar, and `silence` says nothing could be played.
         """
         steps = self.engine.arrange_progression([("C6", "m7", "Dm7")])
-        self.assertEqual(steps, [])
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(steps[0].silence, "out_of_reach")
+        self.assertEqual(steps[0].voicing.frets, [-1] * 6)
+        self.assertIsNone(steps[0].original_melody)
 
     def test_melody_only_step_also_moves_down(self):
         """A no-chord step high on the neck is played an octave down on the B string too."""

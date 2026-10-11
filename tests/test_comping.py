@@ -434,22 +434,58 @@ class TestTheCompingArrangement(unittest.TestCase):
         self.assertTrue(steps, "an arrangement with no steps at all is a defect")
         self.assertTrue(any(step.bass is not None for step in steps))
 
-    def test_an_nc_bar_is_reported_rather_than_silently_dropped(self):
+    def test_an_nc_bar_is_emitted_silent_with_the_reason(self):
         """An `NC` bar has no chord, so there is no guide tone to state.
 
-        The guitar is genuinely silent there and that is worth a sentence: the horn is
-        not silent, and a part that quietly omits a bar reads as a mistake.
+        The guitar is genuinely silent there, and the position is still **emitted**
+        (item 4): a part that quietly omits a bar reads as a mistake, and a reader
+        lining the comp against the tune needs the bar to be there. The warning
+        stays, and `silence` is what the tab's line reads for the reason.
         """
         diagnostics = Diagnostics()
         steps = self.engine.arrange_progression(
             [("D5", "m7", "Dm7"), ("C5", "NC", "NC"), ("A4", "7", "A7")],
             melody=VOICES_ARG, diagnostics=diagnostics,
         )
-        self.assertEqual([step.chord for step in steps], ["Dm7", "A7"])
+        self.assertEqual([step.chord for step in steps], ["Dm7", "NC", "A7"])
+        self.assertEqual(steps[1].silence, "nc_comping")
+        self.assertEqual(steps[1].voicing.frets, [-1] * 6)
         self.assertTrue(
             any("NC" in warning for warning in diagnostics.warnings),
             diagnostics.warnings,
         )
+
+    def test_the_corpus_nc_bar_keeps_its_place_in_the_tab(self):
+        """The measured case: `Trouble_in_Mind_Blues` bar 1 is `NC`.
+
+        It used to be absent from the comping part's tab - **12** positions over
+        the three voice selections that reach the comping route, all of them this
+        bar - while the horn played in it, so a reader lining the two parts up was
+        one bar short with nothing to say which bar went. The bar is now present
+        under every one of those selections, and every position in it is silent
+        with the same reason.
+        """
+        from headxml import arrange_xml_head
+
+        path = "tests/data/Trouble_in_Mind_Blues.musicxml"
+        for voices in ("bass", "alto,tenor", "alto,tenor,bass"):
+            steps, head, _notes = arrange_xml_head(path, melody=voices)
+            bars = sorted(
+                bar for bar in {step.bar for step in steps} if bar is not None
+            )
+            self.assertIn(1, bars, f"bar 1 vanished under voices={voices}")
+            nc = [step for step in steps if step.silence == "nc_comping"]
+            self.assertTrue(nc, f"no silent NC position under voices={voices}")
+            self.assertTrue(
+                all(not step.voicing.active_frets() for step in nc),
+                f"a silent NC position sounds something under voices={voices}",
+            )
+            # Every bar the tune has is in the tab, bar 1 included.
+            tune_bars = {note.bar for note in head.notes}
+            self.assertTrue(
+                tune_bars <= set(bars),
+                f"bars missing under voices={voices}: {sorted(tune_bars - set(bars))}",
+            )
 
 
 class TestCompingMelodyIndependence(unittest.TestCase):

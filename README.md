@@ -446,7 +446,7 @@ Gmaj9    D4  5    x-x-x-x-3-x        (harmony under 5 - melody alone, the most t
 Gmaj9/F# D4  5    x-x-x-x-3-x        (harmony under 5 - melody alone, the most this palette offers - the written bass F# is not sounded - the lowest voice (D4) is 4 semitones from it)
 ```
 
-Chord name still printed above each step as context; nothing under it voiced. `NC` bar under comping selection reported rather than quietly dropped: no chord, so no guide tones, guitar genuinely silent while horn is not.
+Chord name still printed above each step as context; nothing under it voiced. `NC` bar under comping selection printed as empty bar (`silence="nc_comping"`), not dropped: no chord, so no guide tones, guitar genuinely silent while horn is not. Tab keeps bar count, lines up against tune.
 
 ## Where a chord falls: the `grid` axis
 
@@ -583,7 +583,7 @@ Dm7      A4  5    10-x-10-10-10-x    (harmony under 5 - transposed down an octav
 
 Two deliberate limits:
 
-- **Only repositions a voicing that exists.** Melody unreachable at written pitch (`B5` fret 19, `C6` fret 20 — past end of board) still skipped with warning rather than silently respelled, real problem stays visible.
+- **Only repositions a voicing that exists.** Melody unreachable at written pitch (`B5` fret 19, `C6` fret 20 — past end of board) not silently respelled. Position emitted empty, warning names problem, `silence="out_of_reach"` on step.
 - **Per step, and melody only.** No phrase transposition, so melody leaping across limit can arrive octave apart from neighbour: no step ever unplayable, cost is one melodic interval.
 
 `get_all_drop2_voicings` deliberately *not* filtered by fret — pure candidate generation; `get_octave_down_candidates` is separate, explicitly opt-in entry for transposed form.

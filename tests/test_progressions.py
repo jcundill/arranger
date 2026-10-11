@@ -163,19 +163,29 @@ class TestProgressions(unittest.TestCase):
         self.assertEqual(sorted(result[1].voicing.pitch_classes()), [2, 5, 7, 11])  # G B D F
         self.assertEqual(sorted(result[2].voicing.pitch_classes()), [0, 4, 11])  # C E B
 
-    def test_high_e_only_top_strings_still_skips_low_melodies(self):
-        """top_strings=(5,) restores the pre-existing behaviour of skipping these steps."""
+    def test_high_e_only_top_strings_emits_silent_steps(self):
+        """top_strings=(5,) keeps the old refusal, emitted silent rather than dropped.
+
+        The lower strings that would rescue these melodies are excluded by the
+        caller, so each position is a step the guitar does not play (item 4) -
+        three of them, one per note, each carrying the reason `no_shape`: the
+        pitch is reachable, but not on the strings this caller named.
+        """
         progression = [
             ("D4", "m7", "Dm7"),
             ("D4", "7", "G7"),
             ("C4", "maj7", "Cmaj7"),
         ]
-        self.assertEqual(self.engine.arrange_progression(progression, top_strings=(5,)), [])
+        steps = self.engine.arrange_progression(progression, top_strings=(5,))
+        self.assertEqual(len(steps), 3)
+        self.assertTrue(all(step.silence == "no_shape" for step in steps))
 
     def test_unplayable_first_chord_does_not_break_the_next_step(self):
         """
-        A skipped step must not leave the position-choosing logic with an empty
-        arrangement to measure against.
+        A silent position must not leave the position-choosing logic with an
+        all-muted voicing to measure against: the selector looks back to the last
+        *sounding* shape, which here is none - so the D5 after the hole is chosen
+        exactly as it was when the B5 position was dropped outright.
         """
         progression = [
             ("B5", "m7", "Dm7"),  # Above fret 18 on both the high E and B strings
@@ -183,9 +193,10 @@ class TestProgressions(unittest.TestCase):
         ]
         result = self.engine.arrange_progression(progression)
 
-        self.assertEqual(len(result), 1)
-        self.assertEqual(result[0].melody, "D5")
-        self.assertEqual(result[0].voicing.tab_string(), "x-x-10-10-10-10")
+        self.assertEqual(len(result), 2)
+        self.assertEqual(result[0].silence, "out_of_reach")
+        self.assertEqual(result[1].melody, "D5")
+        self.assertEqual(result[1].voicing.tab_string(), "x-x-10-10-10-10")
 
 
 if __name__ == "__main__":

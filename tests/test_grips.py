@@ -1278,14 +1278,21 @@ class TestSopranoStringChoices(unittest.TestCase):
         self.assertEqual(steps[1].grip, "shell")
         self.assertEqual(steps[1].voicing.soprano_string(), 3)
 
-    def test_restricting_the_soprano_set_restores_the_old_behaviour(self):
-        """top_strings=(5,) skips what the lower strings used to rescue."""
-        self.assertEqual(
-            VoiceLeadingEngine.arrange_progression(
-                [("D4", "m7", "Dm7")], top_strings=(5,)
-            ),
-            [],
+    def test_restricting_the_soprano_set_emits_a_silent_step(self):
+        """top_strings=(5,) leaves the lower strings out of the rescue.
+
+        The position is emitted silent rather than dropped (item 4): D4 cannot be
+        carried by the high E string, the caller excluded every string that could
+        carry it, and the tab keeps the bar with the reason on it. The chord has
+        no shape there either - the melody could not be placed - so the reason is
+        `no_shape` rather than a pitch no string reaches.
+        """
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("D4", "m7", "Dm7")], top_strings=(5,)
         )
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(steps[0].silence, "no_shape")
+        self.assertEqual(steps[0].voicing.frets, [-1] * 6)
 
 
 class TestFretWindow(unittest.TestCase):
@@ -1300,17 +1307,20 @@ class TestFretWindow(unittest.TestCase):
                 self.assertGreaterEqual(fret, NECK_FRET_MIN, step.tab_line())
                 self.assertLessEqual(fret, NECK_FRET_MAX, step.tab_line())
 
-    def test_a_melody_off_the_end_of_the_board_is_still_dropped(self):
+    def test_a_melody_off_the_end_of_the_board_is_emitted_silent(self):
         """
-        C6 is fret 20 - unplayable, not merely out of position - so the step goes, and
-        the following step must still be arranged rather than left with no previous
-        voicing to measure against.
+        C6 is fret 20 - unplayable, not merely out of position - so its position is
+        emitted silent rather than dropped, and the following step must still be
+        arranged rather than left with no previous voicing to measure against: the
+        selector looks back *past* the silent step to the last sounding shape.
         """
         steps = VoiceLeadingEngine.arrange_progression(
             [("C6", "m7", "Dm7"), ("D5", "m7", "Dm7")]
         )
-        self.assertEqual(len(steps), 1)
-        self.assertEqual(steps[0].melody, "D5")
+        self.assertEqual(len(steps), 2)
+        self.assertEqual(steps[0].silence, "out_of_reach")
+        self.assertEqual(steps[1].melody, "D5")
+        self.assertIsNone(steps[1].silence)
 
     def test_the_window_bounds_are_honoured_when_narrowed(self):
         """A caller can ask for a different window and the selector obeys it."""

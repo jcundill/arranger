@@ -130,7 +130,10 @@ you whether a change is an improvement or a different library.
 
   Four more clauses answer the routes that choose no shape from a palette, each of which
   used to read as something it was not: a **silent** step (`the guitar rests here - the grid
-  places no chord`, where the line previously claimed a harmony under a degree), a **comping**
+  places no chord`, where the line previously claimed a harmony under a degree - and the
+  reason after the dash is now `step.silence`'s own, of five: the grid, an `NC` bar with
+  nothing to comp, no shape for the chord or the tune, no string reaching the melody, or a
+  melody-only selection with no tune here), a **comping**
   step (`comping - 3 & 7; the guitar does not play the tune` — the degrees read off the shape,
   because the old grip label called a single bass note "shell - 3rd & 7th"), a step that exists
   for the thumb (`the shape above is held`), and a shape that had to leave the preferred frets
@@ -330,13 +333,15 @@ because the band does not change halfway through a tune and a spelling nobody re
 has to be reported **once** rather than never.
 
 **Once per slot**, `_slot_state` returns a `_SlotPlan` - the note, whether the guitar
-*sings* this slot, the metric weight, the role, the permitted grips and the melody-alone
-kind - or `None` when the slot is refused outright (a melody-only selection at a position
-with no note). The plan then goes to **one** of five routes:
+*sings* this slot, the metric weight, the role, the permitted grips, the melody-alone
+kind and, for a silent plan, *why* it is silent (`silence`, one of the `SILENCE_*`
+constants). It no longer refuses a slot outright: a melody-only selection at a position
+with no note gets a silent plan (`MELODY_ALONE_REST` + `tune_silent`) rather than `None`,
+so the tab keeps the bar. The plan then goes to **one** of five routes:
 
 | route | when |
 |---|---|
-| `_rest_step` | the guitar is **silent**: off the grid, and not an `NC` bar |
+| `_rest_step` | the guitar is **silent**, for the reason `step.silence` names: off the grid, an `NC` bar under a comping selection, a position nothing can voice, or a melody-only selection with no tune |
 | `_texture_fill_step` | the guitar sings the note and the texture thins the slot to it - a fill, a target no shell can sound, or an off-grid note |
 | `_no_chord_step` | an `NC` bar the guitar *is* singing: the melody, and no harmony to state |
 | `_comping_step` | the guitar does **not** sing this slot, so it comps under the horn |
@@ -963,9 +968,10 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
   **216** notes (157 of them on `tenor_madness`), 214 of them non-chord tones the table
   cannot route and 2 chord tones the shell's geometry cannot place. Every one now sounds,
   alone, and the step says so. Two things bound the rescue: `top_strings` is still
-  honoured — a note the named strings cannot carry is skipped, which is what
-  `tests/test_progressions.py` pins — and a melody no string reaches at all is still
-  skipped, with the warning naming the palette.
+  honoured — a note the named strings cannot carry is refused, which is what
+  `tests/test_progressions.py` pins, the position emitted silent — and a melody no string
+  reaches at all is likewise emitted silent rather than voiced, with the warning naming
+  the palette and `silence="out_of_reach"` on the step.
 - A handful of low melodies (around `G3`–`C4`) reach no chord-tone-matched inversion
   and therefore use the quality-only fallback. Triad shapes double the root, so their
   second voice can sit up to 10 semitones below the melody — the same span limit, not a
@@ -1328,10 +1334,12 @@ answer `MELODY_ALONE_TEXTURE` — or a texture *fill* would put the tune straigh
 guitar, and the axis would be honoured only on targets. Measured: before the guard, every
 fill under `--texture targets --bass walk` came back `x-7-x-x-x-8`, a bare melody note.
 
-**An `NC` bar is reported, not quietly dropped.** There is no chord, so there are no guide
-tones, and the guitar is genuinely silent while the horn is not. It is skipped with one
-sentence naming the reason, rather than reaching the generator (which correctly refuses a
-chord with no root) and then falling through to a melody-bearing route that would either
+**An `NC` bar is emitted silent, with the reason on the step.** There is no chord, so
+there are no guide tones, and the guitar is genuinely silent while the horn is not. The
+position is a rest step carrying `silence="nc_comping"` - the tab keeps the bar, so a
+reader lining the comp up against the tune is not one bar short - and one sentence
+names the reason, rather than reaching the generator (which correctly refuses a chord
+with no root) and then falling through to a melody-bearing route that would either
 warn twice or hand the horn's line back to the guitarist.
 
 

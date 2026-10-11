@@ -90,6 +90,11 @@ from .tuning import (
     NO_CHORD,
     PITCH_CLASS_NAMES,
     ROLE_TARGET,
+    SILENCE_GRID,
+    SILENCE_NC_COMPING,
+    SILENCE_NO_SHAPE,
+    SILENCE_OUT_OF_REACH,
+    SILENCE_TUNE_SILENT,
     STANDARD_TUNING,
     ArrangementStep,
     Palette,
@@ -729,6 +734,25 @@ def _resolve_policies(
     )
 
 
+def _last_sounding_step(
+    arrangements: List[ArrangementStep],
+) -> Optional[ArrangementStep]:
+    """The last step whose shape the hand was actually holding.
+
+    A position the guitar declined is emitted silent for the tab's line-up, but
+    its all-muted voicing is not a shape anybody held: scoring the next shape's
+    voice-leading against it would measure every candidate against fret 0,
+    which is not a position the hand was ever in. While such positions were
+    dropped entirely, the look-back found the last sounding step by accident;
+    this is the same answer written down, so the selector's behaviour is
+    unchanged by a hole appearing in the tab.
+    """
+    for step in reversed(arrangements):
+        if step.silence is None:
+            return step
+    return None
+
+
 def _rest_step(
     arrangements: List[ArrangementStep],
     slot: _Slot,
@@ -741,15 +765,17 @@ def _rest_step(
     role: str,
     weight: int,
     sings_here: bool,
+    silence: str,
     diagnostics: Diagnostics,
 ) -> None:
-    """Append the rest-or-hold step for a slot the guitar does not sing.
+    """Append the silent step for a position the guitar does not play.
 
-    The guitar is silent and the horn has the note. **The step is still
-    emitted**, carrying the bar, the beat and the chord name: it is what keeps
-    the melody's position in the tab staff, and a comping part whose bars
-    collapsed to their stabs would not line up against the tune it is
-    comping under.
+    The guitar is silent and the horn has the note - or the position is one the
+    guitar *declined* for another reason (`silence` names which, one of the
+    SILENCE_* constants). **The step is still emitted**, carrying the bar, the
+    beat and the chord name: it is what keeps the melody's position in the tab
+    staff, and a comping part whose bars collapsed to their stabs would not line
+    up against the tune it is comping under.
     """
     arrangements.append(ArrangementStep(
         chord=name,
@@ -769,6 +795,10 @@ def _rest_step(
         # False here by construction. The route-level `melody_voiced` would
         # claim the guitar sings a slot it just declined to play.
         melody_voiced=sings_here,
+        # Why nothing sounds, so the renderer can say so rather than infer
+        # silence from an all-muted fret vector, where the four reasons are
+        # indistinguishable.
+        silence=silence,
     ))
     # The thumb still walks on a rest. A comping grid thins the **chords**,
     # not the bass line - that is the whole difference between `grid=` and
@@ -865,7 +895,15 @@ def _no_chord_step(
     if solo_voicing is None:
         diagnostics.warn(
             f"Warning: melody {note_str} is unreachable on any string; "
-            f"skipping the no-chord step"
+            f"the guitar plays nothing here"
+        )
+        _rest_step(
+            arrangements, slot,
+            name=name, note_str=note_str,
+            bar=bar, beat=beat, duration=duration,
+            role=role, weight=weight,
+            sings_here=False, silence=SILENCE_OUT_OF_REACH,
+            diagnostics=diagnostics,
         )
         return
     # get_melody_only_voicing may have dropped the note an octave to stay
@@ -946,17 +984,25 @@ def _comping_step(
     """
     # An `NC` bar has no chord, so there is no guide tone to state and
     # nothing at all for the guitar to play under the horn's line. That is
-    # a real hole in the part and it is reported as one, in one sentence -
-    # rather than reaching `get_comping_voicings`, which correctly refuses a
-    # chord with no root, and then falling through to a melody-bearing route
-    # that would either warn twice or hand the horn's line back to the
-    # guitarist. Skipping is the honest answer: the guitar is silent on this
-    # bar, and the horn is not.
+    # a real hole in the part: the **silent step** records it, so the bar
+    # keeps its place in the tab with the reason on it, rather than reaching
+    # `get_comping_voicings` (which correctly refuses a chord with no root)
+    # and then falling through to a melody-bearing route that would either
+    # warn twice or hand the horn's line back to the guitarist. The guitar
+    # is silent on this bar, and the horn is not - so the line says which.
     if chord_type == NO_CHORD or name == NO_CHORD:
         diagnostics.warn(
             f"Warning: {name} has no chord and this voice selection "
             f"({', '.join(voices)}) leaves the guitar nothing to comp; "
-            f"skipping the bar"
+            f"the guitar plays nothing here"
+        )
+        _rest_step(
+            arrangements, slot,
+            name=name, note_str=note_str,
+            bar=bar, beat=beat, duration=duration,
+            role=role, weight=weight,
+            sings_here=False, silence=SILENCE_NC_COMPING,
+            diagnostics=diagnostics,
         )
         return True
     # --- the non-chord-tone strategy, at harmony level (§9.3 step C) ---
@@ -1041,12 +1087,20 @@ def _comping_step(
             # The ordinary fallback below voices *the melody*, and this
             # slot has none to voice - there is no thin shape to fall back
             # to either, so the chord of the tune cannot be stated here at
-            # all. Reported as the hole it is and skipped; the next grid
-            # position still gets its chance.
+            # all. Reported as the hole it is, and the position emitted
+            # silent; the next grid position still gets its chance.
             diagnostics.warn(
                 f"Warning: no guide-tone comping shape found for {name} "
                 f"and no melody note at this position to fall back to; "
-                f"skipping the slot"
+                f"the guitar plays nothing here"
+            )
+            _rest_step(
+                arrangements, slot,
+                name=name, note_str=note_str,
+                bar=bar, beat=beat, duration=duration,
+                role=role, weight=weight,
+                sings_here=False, silence=SILENCE_NO_SHAPE,
+                diagnostics=diagnostics,
             )
             return True
         # No guide-tone shape in a playable position. The chord of the tune
@@ -1066,6 +1120,10 @@ def _comping_step(
         # read from the same place the generator read it rather than
         # re-derived, so the two cannot disagree.
         _canonical, root_pc, _tones = _grips._chord_context(comp_chord_type, comp_name)
+        # The last *sounding* shape: a silent position between here and the
+        # previous chord is a hole in the tab, not a shape the hand held -
+        # see `_last_sounding_step`.
+        prev_sounding = _last_sounding_step(arrangements)
         arrangements.append(ArrangementStep(
             chord=name,
             # The written note, which is the horn's line. The guitar does not
@@ -1073,7 +1131,7 @@ def _comping_step(
             melody=note_str,
             voicing=select_step_voicing(
                 candidates,
-                arrangements[-1].voicing if arrangements else None,
+                prev_sounding.voicing if prev_sounding is not None else None,
                 fret_min,
                 fret_max,
                 # The tones the written chord allows. Passed even though the
@@ -1229,10 +1287,13 @@ def _promoted_fill(
         melody_only=melody_only,
     ):
         return None
+    prev_sounding = _last_sounding_step(arrangements)
     return prepare_step(
         progression, index,
-        previous=arrangements[-1].voicing if arrangements else None,
-        previous_chord=arrangements[-1].chord if arrangements else None,
+        # The last *sounding* shape, not the step before this one: a silent
+        # position is a hole in the tab rather than a shape the hand held.
+        previous=prev_sounding.voicing if prev_sounding is not None else None,
+        previous_chord=prev_sounding.chord if prev_sounding is not None else None,
         top_strings=top_strings,
         non_chord_tone=non_chord_tone,
         fret_min=fret_min,
@@ -1426,10 +1487,15 @@ def _harmonised_step(
     # Everything up to choosing a shape is shared with the corpus loader,
     # which needs the same candidates but honours a slash bass first. See
     # prepare_step.
+    #
+    # The previous shape is the last *sounding* one: a silent position between
+    # here and the previous chord is a hole in the tab, not a shape the hand
+    # held - see `_last_sounding_step`.
+    prev_sounding = _last_sounding_step(arrangements)
     prepared = prepare_step(
         progression, index,
-        previous=arrangements[-1].voicing if arrangements else None,
-        previous_chord=arrangements[-1].chord if arrangements else None,
+        previous=prev_sounding.voicing if prev_sounding is not None else None,
+        previous_chord=prev_sounding.chord if prev_sounding is not None else None,
         top_strings=top_strings,
         non_chord_tone=non_chord_tone,
         fret_min=fret_min,
@@ -1471,7 +1537,27 @@ def _harmonised_step(
             diagnostics.warn(
                 f"Warning: no voicing for {name} with melody {note_str} in the "
                 f"palette ({', '.join(slot_grips) or 'none'}) and the melody "
-                f"cannot be played alone either; skipping the step"
+                f"cannot be played alone either; the guitar plays nothing here"
+            )
+            # The reason, told apart at the source: no string reaches the
+            # written pitch at all (`out_of_reach`) versus a reachable melody
+            # under a chord nothing could voice (`no_shape`). The rescue above
+            # asked the same question, so the answer is read back rather than
+            # re-derived from the warning's own words.
+            _rest_step(
+                arrangements, slot,
+                name=name, note_str=note_str,
+                bar=bar, beat=beat, duration=duration,
+                role=role, weight=weight,
+                sings_here=False,
+                silence=(
+                    SILENCE_OUT_OF_REACH
+                    if _grips.get_melody_only_voicing(
+                        melody_note, prefer=top_strings
+                    ) is None
+                    else SILENCE_NO_SHAPE
+                ),
+                diagnostics=diagnostics,
             )
             return
         role = ROLE_TARGET
@@ -1506,7 +1592,13 @@ def _harmonised_step(
     # the neck"; every later chord is scored against the one before it, which is
     # what keeps the hand from jumping and lets a melody hold its place by
     # changing strings.
-    prev_voicing = prev_step.voicing if prev_step is not None else None
+    # The shape the selector leads *from* is the last sounding one, not the step
+    # before this one: a silent position is a hole in the tab rather than a shape
+    # the hand held (`_last_sounding_step`). `prev_step` above stays
+    # `arrangements[-1]`, because a hold is about what is *ringing* - and a rest
+    # stops the ringing, whether it is the grid's or a position the guitar
+    # declined.
+    prev_voicing = prev_sounding.voicing if prev_sounding is not None else None
     # The tones the *written* chord allows, so the selector can prefer a
     # shape that is merely out of position over one that sounds a wrong note.
     # The root enables the bass-function tie-break in voicing_cost; it is None
@@ -1670,6 +1762,10 @@ class _SlotPlan:
     role: str
     slot_grips: Tuple[str, ...]
     melody_alone: str
+    # Why a `MELODY_ALONE_REST` step sounds nothing, one of the SILENCE_* constants.
+    # Defaults to the grid's answer, which is the only reason the loop's rest route
+    # fired before the melody-only refusal learned to emit a step of its own.
+    silence: str = SILENCE_GRID
 
 
 def _slot_state(
@@ -1690,26 +1786,65 @@ def _slot_state(
 ) -> Optional[_SlotPlan]:
     """One slot's decisions, and the one refusal that ends a slot here.
 
-    Returns **None** for a position a melody-only selection has nothing to play,
-    which is reported and skipped. Otherwise the plan carries everything the
-    routes need, and the two values on `car` are updated in place.
+    Returns a **silent plan** for a position a melody-only selection has nothing
+    to play: the step is still emitted (`MELODY_ALONE_REST` with
+    `silence=SILENCE_TUNE_SILENT`) so the tab keeps its line-up. Otherwise the
+    plan carries everything the routes need, and the two values on `car` are
+    updated in place.
     """
     index = slot.index
     note_str, chord_type, name = progression[index]
     if note_str is None:
         if melody_only:
             # A melody-only selection plays the tune and nothing else, so a
-            # position with no note has nothing for the guitar to play. It is
-            # kept as the *only* refusal here because §9.3 step D made the other
-            # case a real one: a *singing* selection (soprano named) now receives
-            # note-less slots from the grid union - positions the tune is silent
-            # at - and the guitar **comps** them rather than being refused, which
-            # is why they fall through to the comping branch below.
+            # position with no note has nothing for the guitar to play. The
+            # position is still **emitted**, silent: the tab keeps its bar
+            # count and its line-up against the band, and `tune_silent` is
+            # what the line says rather than the grid's own reason.
+            #
+            # It is kept as the only *early* answer here because §9.3 step D
+            # made the other case a real one: a *singing* selection (soprano
+            # named) now receives note-less slots from the grid union - positions
+            # the tune is silent at - and the guitar **comps** them rather than
+            # being refused, which is why they fall through to the comping
+            # branch below.
             diagnostics.warn(
                 f"Warning: slot {index} has no melody note and this voice "
-                f"selection plays the tune alone; skipping the slot"
+                f"selection plays the tune alone; the guitar plays nothing here"
             )
-            return None
+            bar, beat, duration = slot.bar, slot.beat, slot.duration
+            weight = _metric_weight(bar, beat, beats_per_bar)
+            # The role the slot would have had, read without committing to
+            # `car`: a refused slot must not move the target or the tracked
+            # pitch that a later slot is judged against, so the two `car`
+            # writes further down stay where they are.
+            role = _roles_for_slot(
+                weight,
+                texture,
+                harmony_changed=(
+                    car.last_target_harmony is None
+                    or normalised_harmony(name) != car.last_target_harmony
+                ),
+                melody_moves=False,
+                has_thumb=has_thumb,
+                melody_only=melody_only,
+            )[0]
+            return _SlotPlan(
+                index=index,
+                note_str=note_str,
+                chord_type=chord_type,
+                name=name,
+                melody_note=None,
+                sings_here=False,
+                bar=bar,
+                beat=beat,
+                duration=duration,
+                weight=weight,
+                role=role,
+                slot_grips=(),
+                melody_alone=MELODY_ALONE_REST,
+                silence=SILENCE_TUNE_SILENT,
+            )
         melody_note = None
     else:
         melody_note = Note(note_str)
@@ -2122,7 +2257,8 @@ def arrange_progression(
                 name=plan.name, note_str=plan.note_str,
                 bar=plan.bar, beat=plan.beat, duration=plan.duration,
                 role=plan.role, weight=plan.weight,
-                sings_here=plan.sings_here, diagnostics=diagnostics,
+                sings_here=plan.sings_here, silence=plan.silence,
+                diagnostics=diagnostics,
             )
             continue
         if plan.melody_alone == MELODY_ALONE_TEXTURE:

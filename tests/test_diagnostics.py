@@ -189,20 +189,30 @@ class TestTheDefaultPathIsUnchanged(unittest.TestCase):
         self.assertTrue(any("is not a chord tone of" in w for w in printed), printed)
 
     def test_the_no_voicing_warning(self):
-        """The message names the palette, and says the **step is skipped**.
+        """The message names the palette, and says **the guitar plays nothing here**.
 
         `NO_VOICING_AT_ALL` is a melody no string reaches, which is now the only way
-        a step is skipped: every other "no voicing" case leaves the tune sounding
-        alone. The old text said "No valid drop-2 voicing found" whatever family had
-        been asked for - so a `--grips shell` run was told about a grip it never
-        requested - and it read like a fallback that had happened.
+        a step sounds nothing without a grid rest: every other "no voicing" case
+        leaves the tune sounding alone. The step is no longer *skipped* - its
+        position is emitted silent (item 4) - so the warning no longer says it is,
+        and the step carries the reason as `silence="out_of_reach"`. The old text
+        said "No valid drop-2 voicing found" whatever family had been asked for -
+        so a `--grips shell` run was told about a grip it never requested - and it
+        read like a fallback that had happened.
         """
         printed = self.assert_same_either_way(NO_VOICING_AT_ALL)
         self.assertTrue(
             any("no voicing for Cmaj7 with melody C2" in w for w in printed), printed
         )
         self.assertTrue(any("in the palette (" in w for w in printed), printed)
-        self.assertTrue(any("skipping the step" in w for w in printed), printed)
+        self.assertTrue(any("the guitar plays nothing here" in w for w in printed), printed)
+
+    def test_the_unvoiced_step_is_emitted_silent(self):
+        """The C2 position is a step, not a hole: bar, beat and reason intact."""
+        steps, _warnings = arrange(NO_VOICING_AT_ALL)
+        self.assertEqual(len(steps), 1)
+        self.assertEqual(steps[0].silence, "out_of_reach")
+        self.assertEqual(steps[0].voicing.frets, [-1] * 6)
 
     def test_the_grips_intersection_warning(self):
         """Asking for a grip the texture never uses warns, and keeps playing."""

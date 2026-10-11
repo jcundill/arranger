@@ -392,12 +392,11 @@ test, because a witness that recomputed whether the bass sounds would be the cla
 with itself.
 
 What the invariant does **not** cover, and should not pretend to: a *phrase* (nothing groups
-steps), the **fingerings** (`fingers.py` assigns them and no renderer prints them — a barre is
-visible in the tab), and **positions that are dropped rather than voiced**, which have no line
-to explain them and only a warning to report them. That last one is open issue 4 in
-[docs/open-issues.md](docs/open-issues.md) — and it is the exception that proves the rule:
-the rest step exists precisely because a position the guitar *declines* still owes the tab its
-place.
+steps) and the **fingerings** (`fingers.py` assigns them and no renderer prints them — a barre is
+visible in the tab). Positions the guitar *declines* used to be the third exemption — dropped
+from the tab with only a warning to report them — and are not any more: the four
+routes that dropped them emit a rest step whose `silence` names the reason, and
+`render._silence_clause` phrases it, which is why it carries a witness in the table above.
 
 
 ### The cost tuple is not being refactored

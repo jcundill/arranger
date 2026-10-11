@@ -118,6 +118,18 @@ ROLE_TARGET = "target"
 # A connecting note: a shell, an interval, or the melody alone.
 ROLE_FILL = "fill"
 
+# Why a step sounds nothing, recorded on `ArrangementStep.silence` and phrased by
+# the renderer (`render._silence_clause`). A position the guitar cannot play is
+# still **emitted** - carrying the bar, the beat and the chord name - so the tab
+# keeps its line-up against the tune; the warning alone was not enough, because it
+# goes to a Diagnostics sink while the tab is what a user reads. Five values, one
+# per route that can decline to play:
+SILENCE_GRID = "grid"            # the grid places no chord on this beat
+SILENCE_NC_COMPING = "nc_comping"  # an NC bar: nothing for a comping part to state
+SILENCE_NO_SHAPE = "no_shape"    # no shape in the palette, and the tune cannot stand alone
+SILENCE_OUT_OF_REACH = "out_of_reach"  # no string reaches the written melody note
+SILENCE_TUNE_SILENT = "tune_silent"    # a melody-only selection at a note-less position
+
 
 @dataclass
 class Voicing:
@@ -447,6 +459,15 @@ class ArrangementStep:
     # carrying the tune, so a `repeated` melody cannot be a soprano-only re-strike.
     # See `render._step_cells`, which holds the whole shape instead.
     melody_voiced: bool = True
+    # Why this step sounds nothing - one of the SILENCE_* constants above, or None
+    # on any step that plays. A silent position is emitted rather than dropped, so
+    # the tab keeps its bar count and lines up against the tune; this field is what
+    # lets the line say *why* instead of guessing from an all-muted fret vector,
+    # where "the grid placed no chord", "there is no chord to comp" and "no string
+    # reaches the melody" are indistinguishable. Set by the route that declines to
+    # play (`movement._rest_step`); defaulted, so a hand-built step and every
+    # existing construction are unaffected.
+    silence: Optional[str] = None
 
     @property
     def grip(self) -> str:
