@@ -283,17 +283,18 @@ GRIP_STRING_SETS: Dict[str, Tuple[Tuple[Tuple[int, ...], int], ...]] = {
 #
 #   - **The first two entries are `SHELL_DEGREES`, in that order** - all 29 qualities. A
 #     shell and a drop-2 state the same pair, so the row is the one place that fact lives.
-#   - **The root goes first when something must, and the natural 5th next.** Of the 119
-#     templates, 24 drop the root and keep the natural 5th, and 18 drop the 5th and keep
-#     the root - and every one of those 18 is either a melody that *is* the root, or a
-#     chord whose 5th is altered, so the natural 5th is not part of the sound at all.
-#     Which of the two a quality gives up is its own row order: `7b9` and `13` drop the
-#     root, `7#11`, `7b13` and `maj7#11` drop the natural 5th. No single global order
+#   - **The tail ranks which tone goes, and it is per-quality.** The nearer the end of a row
+#     a tone sits, the sooner a four-voice shape gives it up: a row ending `..., root, 5th`
+#     gives up the natural 5th first (`maj7`, `m7`, `7`, `6`), one ending `..., 5th, root`
+#     gives up the root first (`9`, `maj9`, `7b9`). Of the 119 templates, 24 drop the root and
+#     keep the natural 5th, and 18 drop the natural 5th and keep the root - 6 because the
+#     melody *is* the root, and 12 on `7#11`, `7b13` and `maj7#11`. No single global order
 #     reproduces them, which is the whole reason this is a table and not one rule.
 #   - **An altered 5th is not a 5th.** 39 of the 45 altered-5th occurrences in the tables
 #     are stated; the 6 that are not are the `b5` of an `m9b5`, and of `7alt`, which has
 #     seven tones and must lose two. So a b5, #5, #11 or b13 ranks near the top of its
-#     row, not down beside the natural 5th.
+#     row, not down beside the natural 5th - and **above the root**, so a reduced-arity
+#     shape gives the root up before it.
 #   - **A name-given extension is not optional, and one the name does not give is.** A
 #     `13` states its 13th and its b7 and drops its 9th, which the name never promised:
 #     its row reads 3, 13, b7, 5, root, 9.
@@ -305,17 +306,17 @@ GRIP_STRING_SETS: Dict[str, Tuple[Tuple[Tuple[int, ...], int], ...]] = {
 # decision.
 TONE_PRIORITY: Dict[str, Tuple[int, ...]] = {
     "maj7": (4, 11, 0, 7), "6": (4, 9, 0, 7), "m7": (3, 10, 0, 7),
-    "m7b5": (3, 10, 0, 6), "dim7": (3, 9, 0, 6), "m6": (3, 9, 0, 7),
+    "m7b5": (3, 10, 6, 0), "dim7": (3, 9, 6, 0), "m6": (3, 9, 0, 7),
     "mMaj7": (3, 11, 0, 7), "7": (4, 10, 0, 7),
     "7b9": (4, 10, 1, 7, 0), "7alt": (4, 10, 1, 8, 0, 3, 6),
     "maj9": (4, 11, 2, 7, 0), "m9": (3, 10, 2, 7, 0), "9": (4, 10, 2, 7, 0),
     "6/9": (4, 9, 2, 7, 0), "13": (4, 9, 10, 7, 0, 2),
-    "7#11": (4, 10, 0, 6, 7), "7b13": (4, 10, 0, 8, 7),
-    "maj7#11": (4, 11, 0, 6, 7), "m9b5": (3, 10, 2, 6, 0),
+    "7#11": (4, 10, 6, 0, 7), "7b13": (4, 10, 8, 0, 7),
+    "maj7#11": (4, 11, 6, 0, 7), "m9b5": (3, 10, 2, 6, 0),
     "maj": (4, 7, 0), "m": (3, 7, 0), "aug": (4, 8, 0),
     "sus4": (5, 7, 0), "sus2": (2, 7, 0),
     "add9": (4, 7, 0, 2), "madd9": (3, 7, 0, 2),
-    "7sus4": (5, 10, 0, 7), "7b5": (4, 10, 0, 6), "7#5": (4, 10, 0, 8),
+    "7sus4": (5, 10, 0, 7), "7b5": (4, 10, 6, 0), "7#5": (4, 10, 8, 0),
 }
 
 

@@ -447,9 +447,11 @@ gate, and a snapshot mechanism would let a regression pass by regenerating itsel
 1. Add the quality's tones to `TONE_PRIORITY`, most defining first. **That row is the
    drop-2 rule** — `_drop2_template_for` builds each shape from it and `_drop2_palette` is
    that rule read at every degree — so there is no list of interval numbers to write down.
-   Its first two entries are the quality's `SHELL_DEGREES` pair, and the tail says which
-   tone a four-voice shape gives up when the chord has more tones than voices: the root
-   goes first, then the natural 5th, and a name-given extension (the 9th of a `9`, the 13th
+   Its first two entries are the quality's `SHELL_DEGREES` pair, and the tail **ranks which
+   tone a four-voice shape gives up** when the chord has more tones than voices — the nearer
+   the end of the row, the sooner it goes, and the ranking is per-quality rather than one
+   global order (`9` gives up its root where `maj7` gives up its natural 5th). An altered 5th
+   is not a 5th: it ranks above the root. A name-given extension (the 9th of a `9`, the 13th
    of a `13`) is never the tone dropped. The shape itself is the close-position stack under
    the melody with its second voice lowered an octave, and a triad's fourth voice is the
    root doubled an octave below the stack.

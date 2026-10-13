@@ -7,7 +7,8 @@ so the hand-written tables left the engine in step 3 and live on in `tests/suppo
 witness the rule is asserted against. Step 2 — one placement rule, and one place a fret
 becomes a shape — is landed as well, measured at **0 of 1,103 steps**, and so is the
 clause the tab owed for a tone a shape leaves out. §4 describes
-both; §3 records what step 3 measured, including the decision it turned out not to need. The
+both; §3 records what step 3 measured — the order it turned out not to need, and, in §3a, the
+altered-5th rank it since adopted. The
 label the placement would derive, and the levers that price it, are **not** built.
 
 This document exists because the reasoning behind the change did not fit in a docstring
@@ -61,18 +62,24 @@ That is the assertion that matters: not that two tables agree, but that the musi
 `TONE_PRIORITY` is one row per quality: that chord's own tones, most defining first. A
 shape of `voices` voices states the melody's tone and the next `voices - 1` of the row, so
 a four-note drop-2, a three-note shell and a two-note duo are one rule at three arities.
-`stated_tones()` is the accessor; `_priority_drop2_templates()` turns a row into the
-templates; `DROP2_TEMPLATES` is the live table.
+`stated_tones()` is the accessor; `_drop2_template_for()` turns one degree into a shape and
+`_drop2_palette()` is that rule read at every degree.
 
 Read off the tables it reproduces:
 
 - **The first two entries are `SHELL_DEGREES`**, at every quality. A shell and a drop-2
   state the same pair, so this is one fact that was previously stated twice.
-- **The root goes first when something must, and the natural 5th next.** 24 templates
-  drop the root and keep the natural 5th; 18 drop the 5th and keep the root, and every one
-  of those 18 is either a melody that *is* the root or a chord whose 5th is altered.
-- **An altered 5th is not a 5th.** 39 of the 45 altered-5th occurrences are stated. A b5,
-  #5, #11 or b13 ranks near the top of its row; the natural 5th ranks near the bottom.
+- **The tail ranks which tone goes, and it is per-quality.** The nearer the end of a row a
+  tone sits, the sooner a four-voice shape gives it up. 24 templates drop the root and keep
+  the natural 5th; 18 drop the natural 5th and keep the root — 6 because the melody *is* the
+  root and 12 on `7#11`, `7b13` and `maj7#11`. So a row ending `..., root, 5th` gives up the
+  natural 5th first (`maj7`, `m7`, `7`, `6`) and one ending `..., 5th, root` gives up the root
+  first (`9`, `maj9`, `7b9`).
+- **An altered 5th is not a 5th, and it outranks the root.** A b5, #5, #11 or b13 ranks above
+  the root, and so above the natural 5th, which sits at or near the bottom of its row — so a
+  reduced-arity shape gives the root up before its altered 5th. Of the 41 witnessed templates
+  whose quality has an altered 5th, 39 state one; the two that do not are `7alt` and `m9b5`
+  under a root melody, where the melody holds the root and another tone takes the voice.
 - **A name-given extension is not optional, and one the name does not give is.** A `13`
   states its 13th and its b7 and drops its 9th: `(4, 9, 10, 7, 0, 2)`.
 
@@ -83,9 +90,10 @@ decision is a table of rows rather than one sentence.
 
 ## 3. The order that was not taken
 
-The proposal was the reverse preference: **drop the natural 5th first, then the root**,
-with an altered 5th counting as a guide tone. The second half of that is exactly what the
-tables already do (39 of 45 altered 5ths are stated). The first half is not, and it was
+The proposal was the reverse preference: **drop the natural 5th first, then the root**, with
+an altered 5th counting as a guide tone. Its **second half has since been adopted on its own**
+— the rows now put an altered 5th above the root, which is the rank §2 always claimed for it
+and the rows did not have — and it is measured in §3a. Its **first half was not**, and it was
 measured rather than argued.
 
 Moving the root and the natural 5th to the end of each row — the 5th last, the root
@@ -139,6 +147,26 @@ idiomatic rootless reading rather than a worse one; it costs 0 steps today, so t
 landing is provable; and the row order makes this a one-line decision per quality, so if
 `9` wants the rooted reading it can be flipped and measured on its own. This section is
 the numbers it would cost to flip all six at once. It is a live option, not a dead end.
+
+### 3a. The second half, adopted alone
+
+"An altered 5th counting as a guide tone" is a *rank* claim, and seven rows did not have it:
+`m7b5`, `dim7`, `7b5`, `7#5`, `7#11`, `7b13` and `maj7#11` all put the **root** above the
+altered 5th, so the root was the tone a reduced shape gave up first — the opposite of §2's own
+bullet. Moving the altered 5th above the root in those seven rows, measured from a clean
+worktree (AGENTS.md trap 8):
+
+- **0 of the 119 templates move.** The four-tone qualities state all four tones at four voices,
+  and `_close_stack_offsets` walks the *set* of stated tones, so a row's internal order cannot
+  reach a four-voice shape (`m7b5`, `dim7`, `7b5`, `7#5`: none of their templates each).
+- **3 of the 125 palette entries move** — the natural-5th melodies of `7#11`, `7b13` and
+  `maj7#11`, three of the six degrees the palette added over the witness (§4).
+- **0 of the 1,103 steps move**, and `make check` is green — not one pinned tab in the suite
+  shifts. So the cost is nothing like the 65 steps the *first* half would cost.
+
+What the rank buys is a **reduced arity**, which is where the parts model reads it
+(`docs/parts.md` §4 and §9): a chord part at three voices gives up its 5th, at two it is the
+guide pair, and on `Bbm7b5` the root goes before the `b5`.
 
 ## 4. What step 2 landed, and what is still owed
 
@@ -276,8 +304,8 @@ length of its template list — 29 of 29, so the row says nothing the rule does 
 order it says it in. Not one row is in the rule's order, and that order is what `grip_chart.py`
 draws `common_grips.md` in. So retiring the table means **choosing an order**, or keeping the
 row as an order-witness with its content asserted against the rule — which is the shape
-`DROP2_INTERVAL_SETS` already has, and is what
-`tests/test_generated_grips.py::test_a_degree_rows_content_is_a_prefix_of_the_rule` now holds.
+`WITNESS` already has, and is what
+`tests/test_generated_grips.py::test_a_witness_degree_list_is_a_prefix_of_the_rule` now holds.
 The five rows shorter than their priority row are the qualities with more tones than a template
 list covers (`13`, `7#11`, `7b13`, `maj7#11`, and `7alt` two tones over), and what they cut is
 the rule's own tail — the same tone a four-voice shape gives up.
