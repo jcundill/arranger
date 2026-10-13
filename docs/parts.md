@@ -1,13 +1,12 @@
 # Parts: melody, bass, chord — redesign of the harmonisation axes
 
-**Status: partly built. Steps 1 and the `NC` half of 2 (§7) have landed** — `bass_style`
-as a note-rule table replacing the `walk`/`anchors` policies, and the rule that a
-chordless bar has no bass part, both over the committed heads. The beat-level timeline
-step 2 also needs is already built (`Head.chords`, `chord_at`, `chord_slots`); what it
-still owes is **generated slots** under the default grid, measured in
-[open-issues.md](open-issues.md) item 1. Steps 3 onwards are still proposal, and the
-parts model itself (`parts=`) is not built. Counts live in the documents named here, not
-restated.
+**Status: built.** Steps 3-5 of §7 have landed and §6's deletions with them: `parts=`
+replaced `voices=`, `texture=` is an arity policy over the chord part, `grid=` is
+`PART:PATTERN` rows, and the `grips=` family-list spelling is gone from the library and the
+CLI - the grip *order* a caller used to give is the engine's `GRIP_PREFERENCE` now. Steps 1
+and 2 landed earlier (§7), so what §7 still owes is item 1's **generated slots** under the
+default grid, measured in [open-issues.md](open-issues.md) item 1. Counts live in the
+documents named here, not restated.
 
 ## 1. Why
 

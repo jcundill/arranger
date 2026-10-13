@@ -55,15 +55,14 @@ HEADS: List[str] = sorted(
 #: sweep of every committed head, so each config costs seconds.
 CONFIGS: List[Dict[str, Any]] = [
     {},
+    {"texture": "chord1"},
     {"texture": "targets"},
-    {"texture": "walking_bass"},
-    {"bass": "root,5th,approach,nearest"},
-    {"melody": "none"},
-    {"melody": "soprano"},
-    {"melody": "alto,tenor"},
-    {"grid": "freddie"},
-    {"grips": ("shell",)},
-    {"grips": ("duo",)},
+    {"parts": "melody"},
+    {"parts": "bass"},
+    {"parts": "chord"},
+    {"parts": "bass,chord"},
+    {"bass": "root,5th,approach,nearest", "grid": "melody:every_note,bass:walk"},
+    {"grid": "chord:freddie"},
     {"non_chord_tone": "sustain"},
 ]
 
@@ -306,11 +305,11 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         self.assertGreater(checked, 500, "the sweep stopped arranging anything")
         self.assertEqual(missing[:10], [], f"{len(missing)} unexplained steps")
         # A count, because a clause that stops firing is silent: measured over this sweep,
-        # **98** of the steps it arranges give up a chord tone, and every one of them is
+        # **82** of the steps it arranges give up a chord tone, and every one of them is
         # asked about above. A corpus, grip table or rule that stops reaching the clause
         # would otherwise leave every assertion here passing on its absence.
         self.assertEqual(
-            omitted, 98, "the number of steps owing an omitted-tone clause moved"
+            omitted, 82, "the number of steps owing an omitted-tone clause moved"
         )
 
     def test_the_slash_bass_clause_is_not_a_tautology(self):

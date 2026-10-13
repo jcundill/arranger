@@ -1,30 +1,36 @@
-"""The grid axis: `grid=`, and the rhythm a comping style places chords on.
+"""The grid axis: `grid=`, and the rhythm a part places its notes on.
 
-`harmony=` answers *what degrees* a stab states and this answers *where one lands*.
-Those are two different questions and both are needed for a comping style to mean
-anything: a shell on every beat and a shell on the ands are not variants of one
-another.
+`parts=` answers *which parts sound* and `texture=` *how many notes the chord part
+states*; this answers *where in the bar a part sounds*. Those are different questions
+and all three are needed for a comping style to mean anything: a shell on every beat
+and a shell on the ands are not variants of one another.
+
+A grid is **rows of `part:pattern`**, because the parts do not move together:
+`joe_pass` is a chord on every upbeat and a bass note on every beat.
 
 What is verified, in order:
 
-- **the table**: every name in `GRID_STYLES` has a row in `GRID_PATTERNS`, so a
-  pattern cannot be listed without a rule or given one without a name - the same
-  coupling `BASS_RULE_ROLES` asserts over the bass axis;
+- **the table**: every row name in `GRID_STYLES` is a pair the parts table allows,
+  and every pattern a part may take has a rule (`GRID_PATTERNS`) or is declared a
+  **timeline** pattern (`GRID_TIMELINE_PATTERNS`, whose positions come from the
+  harmony rather than the metre) - the same coupling `BASS_RULE_ROLES` asserts over
+  the bass axis;
 - **the metre**: positions are **bar-relative**, so `final_and` is the upbeat of the
   bar's last beat in 2/2, 3/4 and 4/4 alike. This is the claim
   `docs/comping-styles.md` section 4.2 makes about `LAST`, and it is a table of three
   metres rather than a comment;
-- **the default**: `every_note` is the default outright (there is no `auto` sentinel),
-  and it is on the grid at every beat - so the axis is inert and every existing
-  arrangement is unaffected;
+- **the default**: `melody:every_note` is the default outright (there is no `auto`
+  sentinel), and it defers to the melody's own slots at every beat - so the axis is
+  inert and every existing arrangement is unaffected;
 - **the refusal**: a metre-relative figure asked of a metre it was not written for
-  warns and falls back, and the test is **one-directional** - a bar with no note on a
-  grid position is not a warning, because that is the answer rather than an error.
+  raises and names the pattern, and the test is **one-directional** - a bar with no
+  note on a grid position is not a refusal, because that is the answer rather than an
+  error.
 
 The last one is the subtle half and it is why the last class below exists at all: a
-grid that warned whenever it placed nothing in a bar would warn on almost every bar
-of real material, and a warning that fires on the normal case teaches a reader to
-ignore warnings.
+grid that refused whenever it placed nothing in a bar would refuse on almost every bar
+of real material, and a refusal that fires on the normal case teaches a reader to
+ignore refusals.
 """
 
 import unittest
@@ -32,14 +38,20 @@ from contextlib import contextmanager
 from typing import Tuple
 
 from arranger import (
+    GRID_ANCHORS,
     GRID_CHARLESTON,
-    GRID_DEFERS_TO_MELODY,
+    GRID_DEFAULT,
     GRID_EVERY_NOTE,
     GRID_FINAL_AND,
     GRID_FREDDIE,
     GRID_JOE_PASS,
+    GRID_PART_PATTERNS,
     GRID_PATTERNS,
     GRID_STYLES,
+    GRID_TIMELINE_PATTERNS,
+    GRID_WALK,
+    PART_BASS,
+    PART_CHORD,
     SUB,
     GridPattern,
     grid_allowed,
@@ -64,21 +76,38 @@ PROGRESSION: Tuple[Tuple[str, str, str], ...] = (
 GRID_OUT_OF_METRE = "out_of_metre"
 
 
+def _chord(pattern: str) -> str:
+    """The **chord part's** row naming `pattern`, which is how a grid is spelled.
+
+    A bare pattern name is not a grid: `parse_grid` refuses it, because every row is
+    `part:pattern` and a pattern alone does not say which part moves. Every assertion
+    below that means "the chord part plays this figure" has to say so, and this is
+    that spelling in one place.
+    """
+    return f"{PART_CHORD}:{pattern}"
+
+
 @contextmanager
 def _temporary_pattern(name: str, pattern: GridPattern):
-    """Add one row to `GRID_PATTERNS` for the duration of a `with` block.
+    """Add one pattern to both tables for the duration of a `with` block.
 
-    The table is module state and the axis is a closed set, so the only honest way
-    to test the refusal is to add a row and take it out again. Restored in a
+    The tables are module state and the axis is a closed set, so the only honest way
+    to test the refusal is to add a row and take it out again. **Both** tables are
+    patched, because a pattern with a rule and no part that may take it is not
+    reachable through `parse_grid` and would fail for the wrong reason. Restored in a
     `finally` so a failing assertion cannot leave the vocabulary altered for the
     next test - which would be a genuinely nasty failure mode, since every later
     assertion in the suite would be reading a table this test corrupted.
     """
     GRID_PATTERNS[name] = pattern
+    GRID_PART_PATTERNS[PART_CHORD] = GRID_PART_PATTERNS[PART_CHORD] + (name,)
     try:
         yield
     finally:
         GRID_PATTERNS.pop(name, None)
+        GRID_PART_PATTERNS[PART_CHORD] = tuple(
+            p for p in GRID_PART_PATTERNS[PART_CHORD] if p != name
+        )
 
 
 def refusal_text(call) -> str:
@@ -98,63 +127,103 @@ def refusal_text(call) -> str:
 class TestTheGridTable(unittest.TestCase):
     """The vocabulary is closed, and every name in it has a rule."""
 
-    def test_every_style_has_a_pattern_and_every_pattern_a_style(self):
-        """No name can be listed without a rule, or ruled without being asked for.
+    def test_every_style_is_a_pair_the_parts_table_allows(self):
+        """No row can be listed without a rule, or ruled without being askable.
 
-        The coupling is bidirectional on purpose. A style with no row would reach
-        `grid_positions` and raise `KeyError` from inside a step loop; a row with no
-        style is a pattern nobody can select, which is how an axis quietly grows
-        vocabulary it does not use.
+        The coupling is bidirectional on purpose. A pattern a part may take but which
+        has no row in `GRID_PATTERNS` would read `None` where a position set is
+        expected; a rule no part names is a pattern nobody can select, which is how an
+        axis quietly grows vocabulary it does not use. A **timeline** pattern is the
+        one exception and is declared as one: `anchors` has no within-bar rule at all,
+        because its positions come from the harmony rather than the metre.
         """
-        self.assertEqual(sorted(GRID_STYLES), sorted(GRID_PATTERNS))
+        self.assertEqual(
+            sorted(GRID_STYLES),
+            sorted(
+                f"{part}:{pattern}"
+                for part, patterns in GRID_PART_PATTERNS.items()
+                for pattern in patterns
+            ),
+        )
+        for part, patterns in GRID_PART_PATTERNS.items():
+            for pattern in patterns:
+                with self.subTest(part=part, pattern=pattern):
+                    self.assertTrue(
+                        pattern in GRID_PATTERNS
+                        or pattern in GRID_TIMELINE_PATTERNS,
+                        pattern,
+                    )
+        for pattern in GRID_PATTERNS:
+            with self.subTest(pattern=pattern):
+                self.assertTrue(
+                    any(pattern in ps for ps in GRID_PART_PATTERNS.values()), pattern
+                )
         self.assertNotIn("auto", GRID_STYLES)
 
-    def test_the_melody_anchored_set_is_derived_from_the_patterns(self):
-        """`GRID_DEFERS_TO_MELODY` names every grid, and exactly one defers.
+    def test_the_melody_anchored_rows_are_derived_from_the_patterns(self):
+        """`grid_defers_to_melody` reads the chord row's own emptiness.
 
-        The table is derived from `GRID_PATTERNS` (`positions == ()`), so a grid
-        cannot be emptied without becoming melody-anchored, and a second one is a row
-        rather than a branch at each call site. `every_note` is the shipped one.
+        Derived rather than listed: a pattern cannot be emptied without becoming
+        melody-anchored, and a second one is a row rather than a branch at each call
+        site. `every_note` is the shipped pattern that does it, and a grid that names
+        no chord row defers for the same reason - the chord part then takes the
+        melody's slots. That is why the *bass* rows defer too: they say where the
+        thumb moves and nothing about the chord.
         """
-        self.assertEqual(sorted(GRID_DEFERS_TO_MELODY), sorted(GRID_PATTERNS))
-        self.assertEqual(
-            sorted(name for name, defers in GRID_DEFERS_TO_MELODY.items() if defers),
-            [GRID_EVERY_NOTE],
-        )
-        self.assertTrue(grid_defers_to_melody(GRID_EVERY_NOTE))
-        self.assertFalse(grid_defers_to_melody(GRID_FREDDIE))
-        # An unknown grid is not melody-anchored: it is refused, not deferred to.
-        self.assertFalse(grid_defers_to_melody("half-time"))
+        for part, patterns in GRID_PART_PATTERNS.items():
+            for pattern in patterns:
+                row = _chord(pattern) if part == PART_CHORD else f"{part}:{pattern}"
+                with self.subTest(row=row):
+                    self.assertEqual(
+                        grid_defers_to_melody(row),
+                        part != PART_CHORD or pattern == GRID_EVERY_NOTE,
+                        row,
+                    )
+        self.assertTrue(grid_defers_to_melody(GRID_DEFAULT))
+        self.assertTrue(grid_defers_to_melody(_chord(GRID_EVERY_NOTE)))
+        self.assertTrue(grid_defers_to_melody(f"{PART_BASS}:{GRID_WALK}"))
+        self.assertFalse(grid_defers_to_melody(_chord(GRID_FREDDIE)))
+        # A timeline row is not melody-anchored: it has positions, they just come
+        # from the harmony rather than the metre - a different claim from "none".
+        self.assertFalse(grid_defers_to_melody(_chord(GRID_ANCHORS)))
 
-    def test_a_pattern_may_be_named_on_the_command_line(self):
+    def test_a_row_is_spelled_part_colon_pattern(self):
         """`parse_grid` reads what the documentation tells a user to type.
 
         Spelled the way a caller passes it, because the surface is the string: a
         parser that could not read its own documented vocabulary would be caught by
-        nothing else here. Case is **not** significant, and a name differing only in
-        case resolves to the same pattern rather than raising - which is why the
-        unknown-name test below uses a spelling that differs in more than case.
+        nothing else here. Case is **not** significant, a row's order is not a request
+        (the result is sorted and de-duplicated), and a spelling that names no pair -
+        a bare pattern, or a pattern the named part cannot take - is refused rather
+        than guessed at.
         """
         for style in GRID_STYLES:
             self.assertEqual(parse_grid(style), style)
             self.assertEqual(parse_grid(style.upper()), style)
-        self.assertEqual(parse_grid("Charleston"), GRID_CHARLESTON)
-        # `auto` was withdrawn in Step A (it named the default rather than deferring to
-        # any context), so it is refused like any other unknown name - the inverse of
-        # the assertion that used to stand here.
+        self.assertEqual(parse_grid("Chord:Charleston"), _chord(GRID_CHARLESTON))
+        self.assertEqual(
+            parse_grid(f"melody:every_note,bass:{GRID_WALK}"),
+            f"bass:{GRID_WALK},{GRID_DEFAULT}",
+        )
+        # `auto` was withdrawn when the axis was named (it named the default rather
+        # than deferring to any context), so it is refused like any other unknown name.
         with self.assertRaises(ValueError):
             parse_grid("auto")
+        with self.assertRaises(ValueError):
+            parse_grid(GRID_FREDDIE)
+        with self.assertRaises(ValueError):
+            parse_grid(_chord(GRID_WALK))
         with self.assertRaises(ValueError):
             parse_grid("half-time")
 
     def test_an_unknown_grid_is_a_question_not_a_guess(self):
         """A spelling nobody recognises raises, and names the real vocabulary.
 
-        Falling back would return a part that comps somewhere the caller did not ask
-        for, which is worse than the error and worse than silence.
+        Falling back would comp a part somewhere the caller did not ask for, which is
+        worse than the error and worse than silence.
         """
         with self.assertRaises(ValueError) as caught:
-            parse_grid("half-time")
+            parse_grid(_chord("half-time"))
         self.assertIn("joe_pass", str(caught.exception))
 
 
@@ -171,7 +240,8 @@ class TestPositionsAreBarRelative(unittest.TestCase):
         for beats in (2, 3, 4):
             with self.subTest(metre=f"{beats}/4"):
                 self.assertEqual(
-                    grid_positions(GRID_FINAL_AND, beats), ((beats, (beats + 0.5,)),)
+                    grid_positions(_chord(GRID_FINAL_AND), beats),
+                    ((beats, (beats + 0.5,)),),
                 )
 
     def test_the_final_upbeat_is_not_the_first_upbeat(self):
@@ -184,8 +254,8 @@ class TestPositionsAreBarRelative(unittest.TestCase):
         """
         for beats in (2, 3, 4):
             with self.subTest(metre=f"{beats}/4"):
-                self.assertTrue(on_grid(beats + 0.5, GRID_FINAL_AND, beats))
-                self.assertFalse(on_grid(1.5, GRID_FINAL_AND, beats))
+                self.assertTrue(on_grid(beats + 0.5, _chord(GRID_FINAL_AND), beats))
+                self.assertFalse(on_grid(1.5, _chord(GRID_FINAL_AND), beats))
 
     def test_freddie_is_every_beat_the_metre_has(self):
         """Two notes in 2/2, three in 3/4, four in 4/4.
@@ -197,7 +267,7 @@ class TestPositionsAreBarRelative(unittest.TestCase):
         for beats in (2, 3, 4):
             with self.subTest(metre=f"{beats}/4"):
                 self.assertEqual(
-                    [number for number, _ in grid_positions(GRID_FREDDIE, beats)],
+                    [number for number, _ in grid_positions(_chord(GRID_FREDDIE), beats)],
                     list(range(1, beats + 1)),
                 )
 
@@ -206,7 +276,7 @@ class TestPositionsAreBarRelative(unittest.TestCase):
         for beats in (2, 3, 4):
             with self.subTest(metre=f"{beats}/4"):
                 self.assertEqual(
-                    grid_positions(GRID_JOE_PASS, beats),
+                    grid_positions(_chord(GRID_JOE_PASS), beats),
                     tuple((n, (n + 0.5,)) for n in range(1, beats + 1)),
                 )
 
@@ -221,13 +291,13 @@ class TestTheDefaultIsInert(unittest.TestCase):
         so the default names `every_note` outright - matching `arrange_progression`'s
         keyword default, which is what makes the two spellings comparable.
         """
-        self.assertEqual(ArrangeOptions().grid, GRID_EVERY_NOTE)
+        self.assertEqual(ArrangeOptions().grid, GRID_DEFAULT)
 
     def test_every_note_is_on_the_grid_at_every_beat(self):
         """So a caller that names no grid places exactly the chords it always did."""
         for beat in (1.0, 1.5, 2.0, 2.5, 3.3333, 4.75):
             with self.subTest(beat=beat):
-                self.assertTrue(on_grid(beat, GRID_EVERY_NOTE, 4))
+                self.assertTrue(on_grid(beat, GRID_DEFAULT, 4))
 
     def test_an_unlocated_slot_is_on_the_grid(self):
         """`beat=None` has no position to be off.
@@ -258,7 +328,7 @@ class TestTheDefaultIsInert(unittest.TestCase):
         self.assertEqual(
             format_progression(
                 VoiceLeadingEngine.arrange_progression(
-                    list(PROGRESSION), grid=GRID_FINAL_AND
+                    list(PROGRESSION), grid=_chord(GRID_FINAL_AND)
                 )
             ),
             format_progression(default),
@@ -275,7 +345,7 @@ class TestTheRefusalIsOneDirectional(unittest.TestCase):
 
     def test_a_bar_relative_pattern_is_allowed_in_every_metre(self):
         """`LAST` and `ALL` both resolve, so these can never be a mismatch."""
-        for style in (GRID_FREDDIE, GRID_FINAL_AND, GRID_EVERY_NOTE):
+        for style in (_chord(GRID_FREDDIE), _chord(GRID_FINAL_AND), GRID_DEFAULT):
             for beats in (2, 3, 4, 5, 6):
                 with self.subTest(style=style, metre=beats):
                     allowed, reason = grid_allowed(style, beats)
@@ -312,7 +382,7 @@ class TestTheRefusalIsOneDirectional(unittest.TestCase):
         """
         pattern = GridPattern(positions=((4, 0), (4, SUB)), bar_relative=False)
         with _temporary_pattern(GRID_OUT_OF_METRE, pattern):
-            text = refusal_text(lambda: resolve_grid(GRID_OUT_OF_METRE, 3))
+            text = refusal_text(lambda: resolve_grid(_chord(GRID_OUT_OF_METRE), 3))
         self.assertIn(GRID_OUT_OF_METRE, text)
         self.assertIn("bar-relative", text)
 
@@ -325,7 +395,7 @@ class TestTheRefusalIsOneDirectional(unittest.TestCase):
         """
         pattern = GridPattern(positions=((7, 0),), bar_relative=True)
         with _temporary_pattern(GRID_OUT_OF_METRE, pattern):
-            allowed, reason = grid_allowed(GRID_OUT_OF_METRE, 3)
+            allowed, reason = grid_allowed(_chord(GRID_OUT_OF_METRE), 3)
         self.assertFalse(allowed)
         self.assertIn("defect in the pattern", reason)
 
@@ -338,10 +408,12 @@ class TestTheRefusalIsOneDirectional(unittest.TestCase):
         choosing a sparse pattern. Resolving the grid consults only the metre, never
         the material, so this holds before a single note is read.
         """
-        self.assertEqual(resolve_grid(GRID_FINAL_AND, 2), GRID_FINAL_AND)
+        self.assertEqual(
+            resolve_grid(_chord(GRID_FINAL_AND), 2), _chord(GRID_FINAL_AND)
+        )
 
     def test_the_default_grid_is_never_refused(self):
         """`every_note` places everywhere, so the default resolves in every metre."""
         for beats in (1, 2, 3, 4, 7):
             with self.subTest(metre=beats):
-                self.assertEqual(resolve_grid(GRID_EVERY_NOTE, beats), GRID_EVERY_NOTE)
+                self.assertEqual(resolve_grid(GRID_DEFAULT, beats), GRID_DEFAULT)

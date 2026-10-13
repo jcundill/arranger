@@ -35,7 +35,10 @@ from arranger import (
     BASS_STYLE_NONE,
     BASS_STYLE_WALK,
     NO_CHORD,
+    PART_NAMES,
     PITCH_CLASS_NAMES,
+    ROLE_FILL,
+    ROLE_TARGET,
     TEXTURE_STYLES,
     _bass_harmony,
     _comping_no_room_reason,
@@ -558,7 +561,7 @@ class TestThumbCapacityAndRefusal(unittest.TestCase):
     """A thumb line needs a string, and the capacity is derived not listed."""
 
     def test_capacity_is_read_from_the_grip_tables(self):
-        """No texture can fill every thumb string any more: the set that could is gone.
+        """No texture can fill every thumb string: the set that could is gone.
 
         `uniform` used to answer **0** here, because `drop24`'s `(4,2,1,0)` set spanned the
         low E, the A and the D at once. That was one of the four inner-skip `drop24` sets
@@ -566,18 +569,23 @@ class TestThumbCapacityAndRefusal(unittest.TestCase):
         derived from the tables rather than listed, so it followed on its own: one string is
         the worst case now - which is the rule's threshold, not a special case.
         """
-        self.assertEqual(thumb_capacity("uniform", "target"), 1)
-        targets_capacity = thumb_capacity("targets", "target")
+        self.assertEqual(thumb_capacity("uniform", ROLE_TARGET), 1)
+        targets_capacity = thumb_capacity("targets", ROLE_TARGET)
         assert targets_capacity is not None, "a grip palette cannot be unbounded"
         self.assertGreaterEqual(targets_capacity, 1)
-        # An empty palette means the left hand plays nothing: every string is free.
-        self.assertIsNone(thumb_capacity("walking_bass", "fill"))
+        # A palette that states nothing the left hand frets leaves every string free.
+        # `chord1`'s fill is the melody alone, and the `melody` family has no string set
+        # of its own - so the answer is `None`, which the caller reads as unbounded
+        # rather than as zero.
+        self.assertIsNone(thumb_capacity("chord1", ROLE_FILL))
         # A melody-only *selection* is not in the grip tables at all: its upper
         # shapes are single frets, so all three thumb strings are free whatever
         # the texture's palette says, and the capacity is answered where the
         # route is known - `bass_allowed`'s `melody_only`, unbounded by
         # construction rather than measured.
-        allowed, _why = bass_allowed("uniform", BASS_STYLE_WALK, melody_only=True)
+        allowed, _why = bass_allowed(
+            PART_NAMES, "uniform", BASS_STYLE_WALK, melody_only=True
+        )
         self.assertTrue(allowed, "a single-fret upper shape leaves every string free")
 
     def test_no_texture_refuses_a_policy_now_that_uniform_leaves_a_string(self):
@@ -598,19 +606,19 @@ class TestThumbCapacityAndRefusal(unittest.TestCase):
         """
         for texture in TEXTURE_STYLES:
             for style in SHIPPED_STYLES:
-                allowed, reason = bass_allowed(texture, style)
+                allowed, reason = bass_allowed(PART_NAMES, texture, style)
                 self.assertTrue(allowed, f"{texture} + {style}: {reason}")
                 self.assertEqual(reason, "", f"{texture} + {style} carries a reason")
 
     def test_the_textures_that_leave_a_string_are_allowed(self):
         for texture in TEXTURE_STYLES:
             for style in (BASS_STYLE_NONE, *SHIPPED_STYLES):
-                allowed, _why = bass_allowed(texture, style)
+                allowed, _why = bass_allowed(PART_NAMES, texture, style)
                 self.assertTrue(allowed, f"{texture} + {style}")
 
     def test_none_is_always_allowed(self):
         for texture in TEXTURE_STYLES:
-            allowed, _why = bass_allowed(texture, "none")
+            allowed, _why = bass_allowed(PART_NAMES, texture, "none")
             self.assertTrue(allowed, texture)
 
 
@@ -624,7 +632,7 @@ class TestCompingCapacity(unittest.TestCase):
     warning telling the player to change a setting that could not affect the result.
 
     Measured on `tests/data/but_not_for_me.mxl` before the fix, with
-    `melody="alto,tenor", bass="root,5th,approach,nearest"`:
+    `parts="chord", bass="root,5th,approach,nearest"`:
 
         texture=uniform    80 steps, **0 thumb notes**, warning "uniform leaves no
                            bass string free for a target"
@@ -679,7 +687,7 @@ class TestCompingCapacity(unittest.TestCase):
         """
         for texture in TEXTURE_STYLES:
             for style in SHIPPED_STYLES:
-                allowed, reason = bass_allowed(texture, style, notes=2)
+                allowed, reason = bass_allowed(PART_NAMES, texture, style, notes=2)
                 self.assertTrue(
                     allowed,
                     f"texture={texture} + {style} refused the comping route: {reason}",
@@ -689,11 +697,11 @@ class TestCompingCapacity(unittest.TestCase):
         """There is no texture to try instead, so the sentence must not offer one.
 
         `_no_room_reason` names a texture because a palette is what failed. On the comping
-        route the route itself was chosen by the voice selection, and the original bug
+        route the route itself was chosen by the parts selection, and the original bug
         produced a warning that pointed at `texture=` - a setting that could not change
         the outcome. Since no arity currently refuses, this asserts the sentence's shape
         directly against the function rather than through `bass_allowed`.
         """
         reason = _comping_no_room_reason(2, False)
         self.assertNotIn("texture=", reason)
-        self.assertIn("voices", reason)
+        self.assertIn("parts", reason)

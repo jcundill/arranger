@@ -416,6 +416,10 @@ under it is five, whatever the frets. Counting what each step actually plucks
 | `--texture uniform --bass-style root,5th,approach,nearest` | 643 | 0 | 0 | 0 — the axis is refused (`bass_allowed`) |
 | `_place_bass` over the generated corpus, all 12 bass pitch classes | 86,315 placements | — | — | 8 |
 
+**Two rows name `walking_bass`, which was the walk's own texture then.** It is `--texture
+targets` with a bass style now, because the walk is a property of the bass *part*; those rows
+are the measurements taken at the time rather than commands that still run.
+
 The two budgets overlap rather than nest, and both are real. `7-9-x-8-12-10`, a `Bmaj`
 target in "Tenor Madness", needs five distinct frets and fails both hands;
 `8-9-x-8-12-10` shares fret 8 between two strings — a barre she can hold and the right hand
@@ -756,12 +760,12 @@ and §4.4), which is why step 1 had to exist before any of the measurements coul
      reason. There is a host for nearly every refusal a selector could reach, but **none** sounds
      the chosen shape's own notes (the ten that did were the removed `drop24` sets), so every
      recovery now changes the harmony and pays the span bucket. The **walk's own pitch** is the
-     fourth lever and costs the tuple nothing: **93 of the 161** refusals are recoverable by
-     another pitch, **64** by a chord tone, **68** by none. Recorded as
-     [open-issues.md](open-issues.md) item 2, not built.
+     fourth lever and costs the tuple nothing. Its figures are
+     [open-issues.md](open-issues.md) item 2's, re-taken there by `tests/test_open_issues.py`
+     and deliberately not restated here — one fact, one home.
    - **The movement comparison came back nearly empty, and the two numbers that did not
-     argue against a tuple slot.** Over 1,330 struck transitions (six heads × `uniform`
-     and `walking_bass`):
+     argue against a tuple slot.** Over 1,330 struck transitions (six heads × two textures,
+     `uniform` and the walk):
      - `assign_fingers` is undefined on **0** of them: a candidate at selection time always
        sounds at most four strings, so a per-finger criterion would be safe by construction;
      - **4** transitions are the anchor leap of §1.2 — `largest >= 3` while

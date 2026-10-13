@@ -271,9 +271,7 @@ class TestRoundTrip(GuitarProTestCase):
             with self.subTest(head=name):
                 buffer = io.StringIO()
                 with contextlib.redirect_stdout(buffer):
-                    steps, head, _notes = arrange_xml_head(
-                        f"tests/data/{name}", grips=("shell",)
-                    )
+                    steps, head, _notes = arrange_xml_head(f"tests/data/{name}")
                 self.assertEqual(
                     head.key_fifths, fifths, f"{name}: the fixture's own key"
                 )
@@ -1262,7 +1260,8 @@ class TestWalkingBass(GuitarProTestCase):
         self.walk_steps = VoiceLeadingEngine.arrange_progression(
             [("F5", "maj7", "Fmaj7")],
             timings=[(0, 1.0, None)],
-            texture="walking_bass",
+            texture="targets", bass="root,5th,approach,nearest",
+            grid="melody:every_note,bass:walk",
         )
         self.walk_song = _parse(io.BytesIO(format_gp5(self.walk_steps)))
         self.walk_beats = [
@@ -1368,7 +1367,8 @@ class TestWalkingBass(GuitarProTestCase):
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
             steps, _, _ = arrange_xml_head(
-                BUT_NOT_FOR_ME, grips=("shell",), texture="walking_bass"
+                BUT_NOT_FOR_ME, texture="targets",
+                bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk",
             )
         song = _parse(
             io.BytesIO(format_gp5(steps, beats_per_bar=2, beat_type=2))
@@ -1428,7 +1428,8 @@ class TestWalkingBass(GuitarProTestCase):
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
             steps, _, _ = arrange_xml_head(
-                BUT_NOT_FOR_ME, grips=("shell",), texture="walking_bass"
+                BUT_NOT_FOR_ME, texture="targets",
+                bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk",
             )
 
         ringing = None

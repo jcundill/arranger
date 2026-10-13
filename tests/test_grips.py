@@ -13,6 +13,7 @@ from dataclasses import replace
 
 from musthe import Note
 
+import arranger as package
 from arranger import (
     BASS_DEGREES_6432,
     GRIP_MAX_SPAN,
@@ -27,7 +28,6 @@ from arranger import (
     VoiceLeadingEngine,
     Voicing,
     format_progression,
-    parse_grips,
     supported_string_sets,
 )
 from arranger.grips import (
@@ -1397,22 +1397,29 @@ class TestSelectionDeterminism(unittest.TestCase):
         second = VoiceLeadingEngine.arrange_progression(progression)
         self.assertEqual([s.tab_line() for s in first], [s.tab_line() for s in second])
 
-    def test_pinning_the_grips_reproduces_a_fixed_arrangement(self):
-        """
-        grips=("drop2",) with the old soprano set is this library's original behaviour,
-        so a caller who needs a known arrangement rather than the best one can ask for
-        it - which is also what lets the renderer tests pin their fixture.
+    def test_pinning_a_family_is_no_longer_possible(self):
+        """The family is the engine's search space, so there is nothing to pin.
+
+        `grips=("drop2",)` with the old soprano set used to reproduce this library's
+        original output, and that is exactly what `docs/parts.md` §4 deletes: a caller
+        chooses the *arity* (`texture=`) and the parts, and `TONE_PRIORITY` plus the
+        neck window decide which family states those notes. The arrangement here is
+        therefore the engine's own - and where it disagrees with the old pinned tabs it
+        is because the wider palette found a **purer** shape: `G7` under B4 on the high
+        E string is `x-8-x-7-8-7` (root, 3rd, 5th, b7) rather than `x-x-5-7-6-7`, which
+        sounds an F# the chord does not contain.
         """
         steps = VoiceLeadingEngine.arrange_progression(
             [("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7")],
             top_strings=(5,),
-            grips=("drop2",),
         )
-        self.assertTrue(all(s.grip == "drop2" for s in steps))
         self.assertEqual(
             [s.tab_line() for s in steps],
-            ["x-x-10-10-10-10", "x-x-5-7-6-7", "x-x-9-9-8-8"],
+            ["x-x-10-10-10-10", "x-8-x-7-8-7", "x-x-9-9-8-8"],
         )
+        # Every one of them is four strings with the melody on top, which is what the
+        # pinned `grips=("drop2",)` arrangement was chosen to show.
+        self.assertTrue(all(len(s.voicing.active_frets()) == 4 for s in steps))
 
 
 class TestPartialHarmonisation(unittest.TestCase):
@@ -1487,7 +1494,7 @@ class TestPartialHarmonisation(unittest.TestCase):
 
     def test_a_full_four_note_step_is_not_flagged(self):
         step = VoiceLeadingEngine.arrange_progression(
-            [("D5", "m7", "Dm7")], top_strings=(5,), grips=("drop2",)
+            [("D5", "m7", "Dm7")], top_strings=(5,)
         )[0]
         self.assertFalse(step.partial)
         self.assertEqual(step.grip, "drop2")
@@ -1887,32 +1894,24 @@ class TestClosePosition(unittest.TestCase):
         position and the drop-2 & 4 reading tie on every element of the cost tuple -
         including bass function, because one states the root underneath and the other the
         5th, and `BASS_DEGREES_6432` scores those the same - so the position of `closed`
-        in `GRIP_PREFERENCE` is what picks between them. That is what makes a caller's own
-        `grips=` order part of the rule, and asserting it in **both** directions is the
-        point: with the shipped order `closed` wins, and with the same set reversed the
-        drop-2 & 4 reading does.
+        in `GRIP_PREFERENCE` is what picks between them. **That order is the engine's
+        now**: it is the internal search space rather than a caller's preference list
+        (`docs/parts.md` §4), so there is no second spelling to assert and the claim is
+        one-directional - the shipped order decides, and `closed` holds its place because
+        it is generated before `drop2_6432`.
         """
         self.assertEqual(GRIP_PREFERENCE.index("closed"), 1)
-        for melody, closed_tab, dropped_tab in (
-            ("C4", "x-3-2-0-1-x", "3-x-2-0-1-x"),
-            ("G4", "x-10-10-9-8-x", "8-x-10-9-8-x"),
-        ):
-            chosen = VoiceLeadingEngine.arrange_progression(
-                [(melody, "maj", "Cmaj")], top_strings=(4,)
-            )[0]
-            self.assertEqual(
-                (chosen.grip, chosen.voicing.tab_string()), ("closed", closed_tab), melody
-            )
-            reversed_order = VoiceLeadingEngine.arrange_progression(
-                [(melody, "maj", "Cmaj")],
-                top_strings=(4,),
-                grips=tuple(reversed(GRIP_PREFERENCE)),
-            )[0]
-            self.assertEqual(
-                (reversed_order.grip, reversed_order.voicing.tab_string()),
-                ("drop2_6432", dropped_tab),
-                melody,
-            )
+        self.assertLess(
+            GRIP_PREFERENCE.index("closed"), GRIP_PREFERENCE.index("drop2_6432")
+        )
+        for melody, closed_tab in (("C4", "x-3-2-0-1-x"), ("G4", "x-10-10-9-8-x")):
+            with self.subTest(melody=melody):
+                chosen = VoiceLeadingEngine.arrange_progression(
+                    [(melody, "maj", "Cmaj")], top_strings=(4,)
+                )[0]
+                self.assertEqual(
+                    (chosen.grip, chosen.voicing.tab_string()), ("closed", closed_tab)
+                )
 
 
 class TestKnownTableGaps(unittest.TestCase):
@@ -2016,63 +2015,34 @@ class TestKnownTableGaps(unittest.TestCase):
                     )
 
 
-class TestTheGripSpelling(unittest.TestCase):
-    """`parse_grips` - the one spelling a caller types for a list of grip families.
+class TestTheFamilyIsNotASpelling(unittest.TestCase):
+    """There is no `--grips` and no `parse_grips`: a family is not a choice.
 
-    The CLI's `--grips` is this function, and a library caller can use it too;
-    `GRIP_PREFERENCE` is the vocabulary. It is asserted here rather than only through
-    the parser because the *order* the families are named in is the promise the flag
-    makes - "most preferred first" - and that is a property of this function.
+    The families are the chord part's *internal search space* (`docs/parts.md` §4):
+    `parts=` says which parts sound, `texture=` says how many notes the chord part
+    states, and `TONE_PRIORITY` plus the neck window decide which family states
+    them. So the spelling this class used to test - a comma-separated list of
+    families, in the order the caller ranked them - is deleted rather than
+    deprecated, and what is asserted here is that it stays deleted.
     """
 
-    def test_the_default_spelling_parses_back_to_the_palette(self):
-        """The palette spelled the way a user would spell it is the palette.
+    def test_the_flag_and_the_parser_are_both_gone(self):
+        """A surviving alias would keep the collision addressable (`§8`)."""
+        self.assertFalse(hasattr(package, "parse_grips"))
+        for module in (package, package.cli):
+            with self.subTest(module=module.__name__):
+                self.assertNotIn("parse_grips", getattr(module, "__all__", []))
 
-        The CLI's default for `--grips` is exactly this string, so an unflagged run
-        is the request it always was - and a family added to `GRIP_PREFERENCE`
-        reaches both the default and the help with no second list to edit.
+    def test_the_palette_is_still_the_generation_order(self):
+        """`GRIP_PREFERENCE` survives as the order candidates are generated in.
+
+        It is no longer a caller's preference list, but an exact tie between two
+        candidates still goes to the family generated first - so the tuple is the
+        ranking and `cost._best_voicing` is its argmin.
         """
-        self.assertEqual(parse_grips(",".join(GRIP_PREFERENCE)), GRIP_PREFERENCE)
-
-    def test_the_order_is_the_request_and_not_a_canonical_form(self):
-        """`"shell,drop2"` is not `"drop2,shell"`.
-
-        An exact tie between two candidates goes to the family generated first, so
-        the typed order **is** the preference. Deliberately the opposite of
-        `textures.parse_voices`, which re-sorts into `VOICE_NAMES` order because a
-        voice list has no order; copying that shape here would silently delete the
-        caller's preference and two arrangements would become one.
-        """
-        self.assertEqual(parse_grips("shell,drop2"), ("shell", "drop2"))
-        self.assertEqual(parse_grips("drop2,shell"), ("drop2", "shell"))
-        self.assertNotEqual(parse_grips("shell,drop2"), parse_grips("drop2,shell"))
-
-    def test_whitespace_and_case_are_tolerated(self):
-        """`" Closed , SHELL "` is one request, spelled the way a shell word arrives."""
-        self.assertEqual(parse_grips(" Closed , SHELL "), ("closed", "shell"))
-
-    def test_a_repeat_is_dropped_keeping_its_first_place(self):
-        """A family named twice is one family, ranked where it was named first."""
-        self.assertEqual(parse_grips("shell,drop2,shell"), ("shell", "drop2"))
-
-    def test_an_unknown_name_is_refused_by_name(self):
-        """A spelling nobody recognises is a question, not a family to drop.
-
-        Answering it by ignoring the name would hand back an arrangement missing
-        something nobody asked it to drop - which is why the message names both the
-        offending word and the palette, as `parse_voices` does for a voice.
-        """
-        with self.assertRaises(ValueError) as caught:
-            parse_grips("closed,nope")
-        message = str(caught.exception)
-        self.assertIn("nope", message)
-        self.assertIn("shell", message)
-
-    def test_an_empty_request_is_refused(self):
-        """`--grips ''` names no family, which is not the same as naming all of them."""
-        for empty in ("", "   "):
-            with self.subTest(empty=empty), self.assertRaises(ValueError):
-                parse_grips(empty)
+        self.assertEqual(
+            tuple(sorted(GRIP_PREFERENCE, key=GRIP_PREFERENCE.index)), GRIP_PREFERENCE
+        )
 
 
 class TestVoicingCost(unittest.TestCase):
@@ -2270,15 +2240,20 @@ class TestVoicingCost(unittest.TestCase):
         )
 
         # End-to-end: the G4 keeps the hand at frets 6-8 instead of jumping to 3.
-        # `grips=("shell",)` is the original report; the full palette also holds
-        # position (`6-x-6-7-6-x`, `8-8-x-7-8-x`, `6-x-6-7-6-x`).
+        # The `x-x-6-7-6-x` three-note shells were the original report, taken with
+        # `grips=("shell",)`; with the palette the arity rule derives, the engine holds
+        # the same position and states a fourth voice (A string 6 = F3, the b7), which
+        # the tuple prefers on criterion 2 - so the claim this test makes is the one it
+        # always made: the hand does not jump.
         steps = VoiceLeadingEngine.arrange_progression(
-            [("F4", "7", "Bb7"), ("G4", "7", "Bb7"), ("F4", "7", "Bb7")],
-            grips=("shell",),
+            [("F4", "7", "Bb7"), ("G4", "7", "Bb7"), ("F4", "7", "Bb7")]
         )
         self.assertEqual(
             [s.voicing.tab_string() for s in steps],
-            ["x-x-6-7-6-x", "x-x-8-7-8-x", "x-x-6-7-6-x"],
+            ["6-x-6-7-6-x", "6-x-6-7-8-x", "6-x-6-7-6-x"],
+        )
+        self.assertEqual(
+            [s.grip for s in steps], ["drop2_6432", "drop2_6432", "drop2_6432"]
         )
 
     def test_span_is_only_promoted_over_position_not_over_correctness(self):

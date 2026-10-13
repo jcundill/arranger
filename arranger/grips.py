@@ -77,34 +77,6 @@ GRIP_PREFERENCE: Tuple[str, ...] = (
 )
 
 
-def parse_grips(argument: str) -> Tuple[str, ...]:
-    """The grip families named in `argument`, in the order they are named.
-
-    The spelling: comma-separated family names, matched case-insensitively, with
-    whitespace around the commas ignored, so `"closed,shell"` and `" Closed , SHELL "`
-    are one request. **The order is part of the request**, not formatting: this is a
-    preference list and an exact tie is broken by generation order, so
-    `"shell,drop2"` and `"drop2,shell"` are two arrangements. A repeat is dropped
-    keeping its first occurrence, and nothing is re-sorted - deliberately *not* what
-    `textures.parse_voices` does to `VOICE_NAMES`, whose order is not a preference.
-
-    Raises `ValueError` on an empty request, or on a name outside `GRIP_PREFERENCE`,
-    naming the palette. The rule is the library's: a spelling nobody recognises is a
-    question, and answering it by dropping a family would hand back an arrangement
-    missing something nobody asked it to drop.
-    """
-    text = argument.strip().lower()
-    if not text:
-        raise ValueError(f"grips is empty; expected any of {GRIP_PREFERENCE}")
-    chosen: List[str] = []
-    for part in text.split(","):
-        name = part.strip().lower()
-        if name not in GRIP_PREFERENCE:
-            raise ValueError(f"Unknown grip {name!r}; expected any of {GRIP_PREFERENCE}")
-        if name not in chosen:
-            chosen.append(name)
-    return tuple(chosen)
-
 # The maximum distance, in frets, from the lowest to the highest active fret. Five for
 # every four-note shape and every three-note shell; a duo and an interval are only ever
 # two fingers, so they are held to a tighter four.

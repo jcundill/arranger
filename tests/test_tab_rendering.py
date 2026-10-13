@@ -118,12 +118,13 @@ class TestFormatProgression(unittest.TestCase):
 
     def setUp(self):
         self.engine = VoiceLeadingEngine()
-        # Pinned to drop-2 on the high E block, so the expected tabs below describe a
-        # known arrangement rather than whatever the selector currently prefers.
+        # Dm7 -> G7 -> Cmaj7, pinned to the high E block. These tests are about the
+        # *renderer*, so the string set is fixed and the grip is left to the
+        # selector - the arity rule offers the whole family set, and this fixture is
+        # whatever the tuple prefers inside it.
         self.major = self.engine.arrange_progression(
             [("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7")],
             top_strings=(5,),
-            grips=("drop2",),
         )
         self.all_of_me = self.engine.arrange_progression(
             [("C5", "maj7", "Cmaj7"), ("D5", "maj7", "Cmaj7"), ("C5", "maj7", "Cmaj7")]
@@ -307,13 +308,11 @@ class TestStaffTab(unittest.TestCase):
 
     def setUp(self):
         self.engine = VoiceLeadingEngine()
-        # Dm7 -> G7 -> Cmaj7, pinned to drop-2 on the high E block. These tests are
-        # about the *renderer*, so the arrangement is fixed rather than left to the
-        # selector, which would otherwise choose a different string set or a shell.
+        # Dm7 -> G7 -> Cmaj7 on the high E block, for the reason `TestFormatProgression`
+        # gives: this fixture is a *renderer* subject, so only the string set is fixed.
         self.steps = self.engine.arrange_progression(
             [("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7")],
             top_strings=(5,),
-            grips=("drop2",),
         )
 
     def staff_lines(self, steps, **kwargs):
@@ -1324,7 +1323,6 @@ class TestHtmlTab(unittest.TestCase):
         self.steps = self.engine.arrange_progression(
             [("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7")],
             top_strings=(5,),
-            grips=("drop2",),
         )
         self.html = format_tab_html(self.steps, title="Test", subtitle="A subtitle")
 

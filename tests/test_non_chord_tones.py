@@ -193,16 +193,23 @@ class TestThePaletteRescue(unittest.TestCase):
     "this is the tune and nothing under it", so it is recorded on the step
     (`chord_unvoiced`) and reported by the renderers rather than inferred from the
     shape, which a deliberate melody-alone **fill** shares.
+
+    **The thin palette is `texture="chord1"` now.** It asks the chord part for a
+    single note, and the one family that states one note under a melody is `duo` -
+    which is a *pair* of specific degrees, so a melody it cannot pair with leaves the
+    chord unstated. That is the shipped spelling of the case; the `grips=` argument
+    that used to pin it is gone (`docs/parts.md` §6 item 6), because a grip family is
+    the search space rather than a choice.
     """
 
     def test_the_step_survives_the_chord_it_cannot_voice(self):
         steps = VoiceLeadingEngine.arrange_progression(
-            [("Bb4", "dim7", "F#dim7")], grips=("shell",)
+            [("Eb5", "maj", "Cmaj")], texture="chord1"
         )
         self.assertEqual(len(steps), 1, "the note went missing with the chord")
         step = steps[0]
-        self.assertEqual(step.chord, "F#dim7")
-        self.assertEqual(step.melody, "Bb4")
+        self.assertEqual(step.chord, "Cmaj")
+        self.assertEqual(step.melody, "Eb5")
         self.assertTrue(step.chord_unvoiced)
         # Not the `NC` case: there *is* a chord here, it just is not sounding.
         self.assertFalse(step.melody_only)
@@ -211,7 +218,7 @@ class TestThePaletteRescue(unittest.TestCase):
     def test_the_renderer_says_the_chord_is_not_sounding(self):
         """A bare note under a chord symbol is the thing this label exists to prevent."""
         steps = VoiceLeadingEngine.arrange_progression(
-            [("Bb4", "dim7", "F#dim7")], grips=("shell",)
+            [("Eb5", "maj", "Cmaj")], texture="chord1"
         )
         self.assertEqual(
             _step_annotation(steps[0]), " (melody alone - no voicing for this chord)"
@@ -220,19 +227,19 @@ class TestThePaletteRescue(unittest.TestCase):
     def test_a_step_that_is_also_transposed_reports_both_facts(self):
         """The rescue drops a high note an octave *and* leaves the chord unstated.
 
-        G5 is fret 15 on the high E string, past `HIGH_FRET_LIMIT`, so the melody-alone
-        shape sounds G4 - and both facts have to reach the reader. Measured on "The
+        Gb5 is fret 14 on the high E string, past `HIGH_FRET_LIMIT`, so the melody-alone
+        shape sounds F#4 - and both facts have to reach the reader. Measured on "The
         Jitterbug Waltz" bars 1 and 9; this is the unit form of it.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("G5", "6", "Eb6")], grips=("shell",)
+            [("Gb5", "6", "Eb6")], texture="chord1"
         )
         self.assertEqual(len(steps), 1)
         step = steps[0]
         self.assertTrue(step.chord_unvoiced)
-        self.assertEqual(step.original_melody, "G5")
-        self.assertEqual(step.melody, "G4")
-        self.assertIn("transposed down an octave from G5", _step_annotation(step))
+        self.assertEqual(step.original_melody, "Gb5")
+        self.assertEqual(step.melody, "F#4")
+        self.assertIn("transposed down an octave from Gb5", _step_annotation(step))
         self.assertIn("no voicing for this chord", _step_annotation(step))
 
 

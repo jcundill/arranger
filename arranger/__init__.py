@@ -100,7 +100,6 @@ from .grips import (
     SHELL_DEGREES,
     _interval_offsets,
     get_comping_voicings,
-    parse_grips,
     supported_string_sets,
 )
 from .render import _print_step, _step_annotation, format_progression
@@ -108,55 +107,60 @@ from .slots import arrange_slots, parse_bar_range, unresolved_steps
 from .steps import StepPreparation, VoiceLeadingEngine
 from .textures import (
     ALL,
+    GRID_ANCHORS,
     GRID_CHARLESTON,
-    GRID_DEFERS_TO_MELODY,
+    GRID_DEFAULT,
     GRID_EVERY_NOTE,
     GRID_FINAL_AND,
     GRID_FREDDIE,
     GRID_JOE_PASS,
+    GRID_PART_PATTERNS,
     GRID_PATTERNS,
     GRID_STYLES,
+    GRID_TIMELINE_PATTERNS,
+    GRID_WALK,
     HARMONY_AUTO,
-    HARMONY_BUILT,
+    HARMONY_AUTO_POLICIES,
     HARMONY_FULL,
     HARMONY_GUIDE,
-    HARMONY_POLICIES,
-    HARMONY_ROOT,
+    HARMONY_LENGTH,
     HARMONY_SHELL_ROOT,
     HARMONY_STYLES,
     LAST,
-    MELODY_ALTO,
-    MELODY_AUTO,
-    MELODY_BASS,
-    MELODY_POLICIES,
-    MELODY_SOPRANO,
-    MELODY_TENOR,
+    PART_BASS,
+    PART_CHORD,
+    PART_MELODY,
+    PART_NAMES,
+    PARTS_AUTO,
     ROLE_FILL,
     ROLE_TARGET,
     SUB,
     TARGET_BEATS,
-    TEXTURE_GRIPS,
+    TEXTURE_ARITY,
     TEXTURE_STYLES,
-    THUMB_TEXTURES,
-    VOICE_NAMES,
-    VOICES_ALL,
-    VOICES_NONE,
     GridPattern,
     _metric_weight,
     _roles_for_slot,
+    comping_arity,
+    derived_arity,
+    families_for_arity,
     grid_allowed,
     grid_defers_to_melody,
     grid_positions,
     harmony_allowed,
-    melody_only_selection,
     on_grid,
     parse_grid,
     parse_harmony,
-    parse_voices,
+    parse_parts,
+    parts_has_melody_only,
+    parts_have_bass,
+    parts_have_chord,
+    parts_have_melody,
     resolve_grid,
     resolve_harmony,
-    resolve_voices,
-    voices_have_soprano,
+    resolve_parts,
+    texture_arity,
+    texture_palette,
 )
 from .tuning import (
     _MUTED_CELL,  # re-exported: `tabstaff` imports it from here
@@ -254,7 +258,7 @@ def main() -> None:
     Falling through to the demo for an unrecognised command would answer a request for
     a head with three arrangements and exit 0 - the exit code would say it worked.
 
-    The test is `argv[1]` being a bare word, so an option (`--grips shell`) still
+    The test is `argv[1]` being a bare word, so an option (`--texture targets`) still
     reaches the demo rather than being rejected, and `--help` is handled by the
     caller's own flag handling below.
     """
@@ -302,10 +306,9 @@ def main() -> None:
     for step in result_major:
         _print_step(step)
 
-    # Example 3: The same low melody arranged two ways. Pinning grips=("drop2",) with
-    # the two traditional soprano strings reproduces the library's original
-    # four-string-only output, which is what a caller wants when they need a known
-    # arrangement rather than the best one.
+    # Example 3: The same low melody, played where the neck allows it. Every grip
+    # family is offered, and the last chord drops to a three-note shell rather than
+    # reaching back up for a four-string shape.
     #
     # The difference is the Cmaj7. D4 and C4 sit at the very bottom of the B string's
     # range, where the original engine put the whole phrase up at frets 2-3 on strings
@@ -316,13 +319,9 @@ def main() -> None:
         ("D4", "7", "G7"),
         ("C4", "maj7", "Cmaj7")
     ]
-    for label, kwargs in (
-        ("every grip, frets 2-13", {}),
-        ("drop-2 only, high E and B strings", {"top_strings": (5, 4), "grips": ("drop2",)}),
-    ):
-        print(f"\n--- LOW-REGISTER CADENCE, {label} (Dm7 -> G7 -> Cmaj7) ---")
-        for step in engine.arrange_progression(low_progression, **kwargs):
-            _print_step(step)
+    print("\n--- LOW-REGISTER CADENCE, frets 2-13 (Dm7 -> G7 -> Cmaj7) ---")
+    for step in engine.arrange_progression(low_progression):
+        _print_step(step)
 
     # Example 4: Texture. The same four melody notes under Fmaj7, arranged twice.
     # Without timings every slot is a principal note and all four are full chords.
@@ -451,14 +450,18 @@ __all__ = [
     "DUO_DEGREES",
     "GRIP_MAX_SPAN",
     "ALL",
+    "GRID_ANCHORS",
     "GRID_CHARLESTON",
-    "GRID_DEFERS_TO_MELODY",
+    "GRID_DEFAULT",
     "GRID_EVERY_NOTE",
     "GRID_FINAL_AND",
     "GRID_FREDDIE",
     "GRID_JOE_PASS",
     "GRID_PATTERNS",
+    "GRID_PART_PATTERNS",
     "GRID_STYLES",
+    "GRID_TIMELINE_PATTERNS",
+    "GRID_WALK",
     "GridPattern",
     "LAST",
     "SUB",
@@ -470,31 +473,17 @@ __all__ = [
     "parse_grid",
     "resolve_grid",
     "HARMONY_AUTO",
-    "HARMONY_BUILT",
+    "HARMONY_AUTO_POLICIES",
+    "HARMONY_LENGTH",
     "HARMONY_FULL",
     "HARMONY_GUIDE",
-    "HARMONY_POLICIES",
-    "HARMONY_ROOT",
     "HARMONY_SHELL_ROOT",
     "HARMONY_STYLES",
-    "MELODY_ALTO",
-    "MELODY_AUTO",
-    "MELODY_BASS",
-    "MELODY_POLICIES",
-    "MELODY_SOPRANO",
-    "MELODY_TENOR",
-    "VOICES_ALL",
-    "VOICES_NONE",
-    "VOICE_NAMES",
-    "parse_voices",
-    "resolve_voices",
     "harmony_allowed",
     "parse_harmony",
     "resolve_harmony",
-    "voices_have_soprano",
     "GRIP_PREFERENCE",
     "GRIP_STRING_SETS",
-    "parse_grips",
     "HIGH_FRET_LIMIT",
     "MELODY_STRING_CHOICES",
     "MELODY_STRING_CHOICES_FULL",
@@ -513,9 +502,24 @@ __all__ = [
     "STANDARD_TUNING",
     "STRING_NAMES",
     "TARGET_BEATS",
-    "TEXTURE_GRIPS",
+    "PART_BASS",
+    "PART_CHORD",
+    "PART_MELODY",
+    "PART_NAMES",
+    "PARTS_AUTO",
+    "TEXTURE_ARITY",
     "TEXTURE_STYLES",
-    "THUMB_TEXTURES",
+    "comping_arity",
+    "derived_arity",
+    "families_for_arity",
+    "parse_parts",
+    "parts_has_melody_only",
+    "parts_have_bass",
+    "parts_have_chord",
+    "parts_have_melody",
+    "resolve_parts",
+    "texture_arity",
+    "texture_palette",
     "ArrangementStep",
     "arrange_slots",
     "ChordParser",
@@ -544,7 +548,6 @@ __all__ = [
     "grips",
     "main",
     "normalised_harmony",
-    "melody_only_selection",
     "movement",
     "options",
     "render",

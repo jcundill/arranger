@@ -1,6 +1,10 @@
 # `voices=` — a third axis: which voices the guitar plays
 
-**Status: implemented and committed, awaiting QA.** The code is complete and the gate is
+**Status: superseded by `parts=`** ([docs/parts.md](parts.md)): the axis below
+shipped as `voices=`, and this document is the record of that spelling and of the QA it
+owed. What follows was true of `voices=`.
+
+**Implemented and committed, awaiting QA.** The code is complete and the gate is
 green; nobody has yet read a rendered part and asked whether it is *good*. That is the job
 this document exists to hand over. Stage 1's QA landed three fixes off the §4 checklist,
 and Stage 2 moved the melody-only claim onto this axis — `soprano` alone is the tune and

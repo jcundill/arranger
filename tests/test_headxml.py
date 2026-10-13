@@ -1116,6 +1116,12 @@ class TestChordSlots(unittest.TestCase):
         return {(s[1], round(s[2], 6)) for s in head_skeleton(head)}
 
     def _chord_positions(self, head, grid):
+        """The `(bar, beat)` set the **chord part's** row places.
+
+        `grid` is a row spelling (`chord:freddie`), not a bare pattern name: `chord_slots`
+        parses its argument, so an unspelled name is a `ValueError` rather than a silent
+        fallback to the default grid.
+        """
         return {(s[3], round(s[4], 6)) for s in chord_slots(head, grid=grid)}
 
     def test_a_bar_with_no_notes_now_gets_its_chords(self):
@@ -1127,7 +1133,7 @@ class TestChordSlots(unittest.TestCase):
         self.assertEqual([n.bar for n in self.rainy.notes if n.bar == 32], [])
         positions = sorted(
             (beat, chord) for _m, _q, chord, bar, beat, _d in
-            chord_slots(self.rainy, grid="freddie") if bar == 32
+            chord_slots(self.rainy, grid="chord:freddie") if bar == 32
         )
         self.assertEqual(positions, [(1.0, "Am7"), (2.0, "D9")])
 
@@ -1230,20 +1236,20 @@ class TestChordSlots(unittest.TestCase):
         **Bars 32 and 35 still get no thumb note, and that is a different issue.**
         `_place_bass` refuses them for the reason `docs/open-issues.md` **item 2** measures
         as dominant - no octave of the walk's pitch below the shape - and it refuses them
-        identically under `freddie`, before and after this change. Asserting a thumb note
+        identically under `chord:freddie`, before and after this change. Asserting a thumb note
         in bar 32 would be asserting item 2's fix, which is deliberately not built. So the
         claim is about which bars the walk *visits*, not which it can place a note in.
         """
         def walked(grid):
             steps, _head, _notes = arrange_xml_head(
-                RAINY_DAY, bass="root,5th,approach,nearest", texture="walking_bass", grid=grid
+                RAINY_DAY, texture="chord2", bass="root,5th,approach,nearest", grid=grid
             )
             return {s.bar for s in steps}
 
         head = load_musicxml(RAINY_DAY)
         melody_bars = {n.bar for n in head.notes}
-        every = walked("every_note")
-        named = walked("freddie")
+        every = walked("chord:every_note")
+        named = walked("chord:freddie")
         self.assertEqual(every, named, "the default withholds a bar the named grid walks")
         for bar in every - melody_bars:
             self.assertNotIn(bar, melody_bars)
@@ -1257,7 +1263,7 @@ class TestChordSlots(unittest.TestCase):
         measures the two separately and checks the arithmetic rather than trusting either.
         """
         melody = self._melody_positions(self.iwas)
-        chords = self._chord_positions(self.iwas, "freddie")
+        chords = self._chord_positions(self.iwas, "chord:freddie")
         added = chords - melody
         self.assertGreater(
             len(added), 0,
@@ -1269,16 +1275,15 @@ class TestChordSlots(unittest.TestCase):
         self.assertEqual(len(melody | chords), len(melody) + len(added))
 
     def test_every_named_grid_places_something(self):
-        """`joe_pass` and `charleston` were silent on all three fixtures before this.
+        """Every named pattern places at least one chord in this head's own metre.
 
-        Stage D of `docs/comping-styles.md` records `charleston` coming out silent on a
-        2/2 head and attributes it to the figure being 4/4. That was a misdiagnosis: the
-        grid could only filter melody slots, so a position with no note was unreachable
-        whatever the pattern said. Measured now, on a 2/2 head:
-
-            every_note  63   charleston  63   joe_pass  64   final_and  32
+        The point of the grid is that a position the melody never enters is still
+        reachable: a figure with no note to hang on must place its chord anyway, and a
+        pattern that places **nothing anywhere** is refused by `grid_allowed` rather than
+        quietly returning an empty part - so what is left here is the patterns that fit.
         """
-        for grid in ("every_note", "freddie", "charleston", "joe_pass", "final_and"):
+        for grid in ("chord:every_note", "chord:freddie", "chord:charleston",
+                     "chord:joe_pass", "chord:final_and"):
             with self.subTest(grid=grid):
                 self.assertTrue(
                     self._chord_positions(self.rainy, grid),
@@ -1288,17 +1293,17 @@ class TestChordSlots(unittest.TestCase):
     def test_a_stab_is_never_a_whole_note(self):
         """The duration is the grid's, not the melody note's — which is the point.
 
-        Under `every_note` and `freddie` every duration on a 2/2 fixture is 0.5 — one
+        Under `chord:every_note` and `chord:freddie` every duration on a 2/2 fixture is 0.5 — one
         notated beat. A stab that inherited the melody's length would be a whole note on a
         bar the melody holds, which is the confusion item 1 records.
 
-        `joe_pass` is 0.25 or 0.5 because it names the *ands*, so the distance to the next
+        `chord:joe_pass` is 0.25 or 0.5 because it names the *ands*, so the distance to the next
         position is half a beat — asserted here because it is the same rule producing a
         different number, which is what makes "the grid decides" a claim rather than a
         coincidence.
         """
-        for grid, expected in (("every_note", {0.5}), ("freddie", {0.5}),
-                               ("joe_pass", {0.25, 0.5})):
+        for grid, expected in (("chord:every_note", {0.5}), ("chord:freddie", {0.5}),
+                               ("chord:joe_pass", {0.25, 0.5})):
             with self.subTest(grid=grid):
                 durations = {round(s[5], 6) for s in chord_slots(self.rainy, grid=grid)}
                 self.assertEqual(durations, expected, f"grid={grid}")
@@ -1314,18 +1319,18 @@ class TestChordSlots(unittest.TestCase):
         """
         head = load_musicxml(BUT_NOT_FOR_ME)
         self.assertIsNone(chord_at(head.chords, 1, 1.0))
-        first = min(beat for bar, beat in self._chord_positions(head, "freddie")
+        first = min(beat for bar, beat in self._chord_positions(head, "chord:freddie")
                     if bar == 1)
         self.assertGreater(first, 1.0, "a position with no harmony was filled in")
 
     def test_the_singing_route_is_not_touched(self):
-        """`melody=auto` unions nothing, and no invented note reaches a singing part.
+        """`parts=auto` unions nothing, and no invented note reaches a singing part.
 
         The regression that makes this necessary, and it was measured rather than
-        predicted: `parse_voices("auto")` returns the **sentinel** `("auto",)`, which has
+        predicted: `parse_parts("auto")` returns the **sentinel** `("auto",)`, which has
         no soprano, so testing the route on the parsed value alone classified the *default*
         arrangement as the comping route. Fourteen steps of a singing `grid=freddie`
-        arrangement carried the placeholder melody before `resolve_voices` was added.
+        arrangement carried the placeholder melody before `resolve_parts` was added.
         """
         body = harmony("C", "major") + note("C", 5)
         path = write_score(score(body, divisions=4, beats=4))
@@ -1344,7 +1349,7 @@ class TestChordSlots(unittest.TestCase):
         30 real `C4` slots across the fixtures sat on genuinely written C4s, which is why
         equality against a sentinel could pass for the wrong reason (§9.3 step B).
         """
-        slots = [s for s in chord_slots(self.rainy, grid="freddie") if s[3] == 32]
+        slots = [s for s in chord_slots(self.rainy, grid="chord:freddie") if s[3] == 32]
         self.assertTrue(slots, "bar 32 must place its chords")
         for melody, _quality, _name, _bar, _beat, _duration in slots:
             self.assertIsNone(melody)
@@ -1424,7 +1429,7 @@ class TestSilentSlotsCarryNoMelody(unittest.TestCase):
 
     def _arrange(self):
         """The comping union over `heres_that_rainy_day`, whose melody ends before bar 32."""
-        return arrange_xml_head(RAINY_DAY, melody="alto,tenor", grid="freddie")
+        return arrange_xml_head(RAINY_DAY, parts="chord", grid="chord:freddie")
 
     def test_a_slot_where_the_melody_stopped_carries_none(self):
         """Bar 32 sits under a chord and over no note; the step says so plainly."""
@@ -1487,7 +1492,7 @@ class TestSilentSlotsCarryNoMelody(unittest.TestCase):
         steps, _rescued, _notes = arrange_slots(
             [(None, "m7", "Dm7"), ("C5", "maj7", "Cmaj7")],
             [(1, 1.0, 0.5), (1, 2.0, 0.5)],
-            melody="auto",
+            parts="auto",
         )
         self.assertEqual([s.chord for s in steps], ["Dm7", "Cmaj7"])
         self.assertIsNone(steps[0].melody)
@@ -1517,13 +1522,13 @@ class TestAnUnknownGridIsRefused(unittest.TestCase):
     def test_an_unknown_grid_raises_on_the_comping_route(self):
         """The path that used to coerce now refuses, naming the real vocabulary."""
         with self.assertRaises(ValueError) as caught:
-            arrange_xml_head(RAINY_DAY, melody="alto,tenor", grid="half-time")
+            arrange_xml_head(RAINY_DAY, parts="chord", grid="half-time")
         self.assertIn("joe_pass", str(caught.exception))
 
     def test_auto_is_no_longer_a_grid_a_library_caller_can_pass(self):
         """`auto` was withdrawn, so the library refuses it too - not just the CLI."""
         with self.assertRaises(ValueError):
-            arrange_xml_head(RAINY_DAY, melody="alto,tenor", grid="auto")
+            arrange_xml_head(RAINY_DAY, parts="chord", grid="auto")
 
 
 class TestChordsOnlyHead(unittest.TestCase):
@@ -1573,7 +1578,7 @@ class TestChordsOnlyHead(unittest.TestCase):
         claim: a melody-only selection has nothing to *play* here, which is not the same
         as a grid having nowhere to *place* a chord.
         """
-        steps, _head, _notes = arrange_xml_head(CHORDS_ONLY, melody="alto,tenor")
+        steps, _head, _notes = arrange_xml_head(CHORDS_ONLY, parts="chord")
         self.assertEqual(len(steps), 16, "four bars, four beats each")
         self.assertEqual((steps[0].bar, steps[0].beat), (1, 1.0))
         self.assertTrue(
@@ -1588,31 +1593,31 @@ class TestChordsOnlyHead(unittest.TestCase):
         deference.** `every_note` used to be silent here too, and that was the defect; a
         melody-only selection is silent because it *plays the tune and nothing else*, so a
         bar with no tune has nothing for it to play. A grid can place a chord there and a
-        soprano cannot voice one without a top note. `melody_only_selection` gates the
+        soprano cannot voice one without a top note. `parts_has_melody_only` gates the
         union in `arrange_xml_head`, which is why this still returns nothing while
         `alto,tenor` above now returns all four bars.
         """
-        steps, _head, _notes = arrange_xml_head(CHORDS_ONLY, melody="soprano")
+        steps, _head, _notes = arrange_xml_head(CHORDS_ONLY, parts="melody")
         self.assertEqual(steps, [])
 
     def test_a_named_grid_places_the_chords(self):
-        """`freddie`, `joe_pass` and `final_and` each produce a part — the payoff.
+        """`chord:freddie`, `chord:joe_pass` and `chord:final_and` each produce a part — the payoff.
 
         Exactly the rhythm each pattern names on a 4/4 bar: `freddie` a chord on every
         beat (16 = 4 bars x 4), `joe_pass` on the *ands* (first at bar 1 beat 1.5), and
         `final_and` on the final beat's upbeat (first at bar 1 beat 4.5). Every slot
-        carries `melody=None`, because the file has no tune — the honest absence step B
+        carries `parts=None`, because the file has no tune — the honest absence step B
         made expressible, not the deleted placeholder.
         """
         expected = {
-            "freddie": ((1.0, "Dm7"), 16),
-            "joe_pass": ((1.5, "Dm7"), 16),
-            "final_and": ((4.5, "Dm7"), 4),
+            "chord:freddie": ((1.0, "Dm7"), 16),
+            "chord:joe_pass": ((1.5, "Dm7"), 16),
+            "chord:final_and": ((4.5, "Dm7"), 4),
         }
         for grid, (first, count) in expected.items():
             with self.subTest(grid=grid):
                 steps, _head, _notes = arrange_xml_head(
-                    CHORDS_ONLY, melody="alto,tenor", grid=grid
+                    CHORDS_ONLY, parts="chord", grid=grid
                 )
                 self.assertEqual(len(steps), count, f"grid={grid}")
                 self.assertEqual((steps[0].beat, steps[0].chord), first)
@@ -2486,63 +2491,64 @@ class TestHeadTexture(unittest.TestCase):
 
 
 class TestANarrowPaletteNeverLosesTheTune(unittest.TestCase):
-    """A grip a chord cannot be voiced with must not take the melody note with it.
+    """A palette with no room to state a chord must not take the melody note with it.
 
-    `--grips shell` is the caller naming one family for the whole arrangement, and
-    the family that has the least room to give: a shell states the chord's 3rd and
-    7th and may sound **nothing** outside the chord, so a melody the non-chord-tone
-    table cannot reharmonise has no candidate at all - where the four-note families
-    keep a quality-only fallback to thin. "But Not For Me" bar 2 beat 2 is the
-    smallest case: F4 over Ebmaj, the 9th over a plain triad.
+    `texture=chord1` is the narrowest thing the texture axis can express: a chord-melody
+    is the tune plus **one** chord tone, where the default states four. A palette that
+    narrow answers no candidate at all for a melody the non-chord-tone table cannot
+    reharmonise, unless it reaches the non-grip `duo` - so this is where a dropped note
+    would show up first. "But Not For Me" bar 2 beat 2 is the smallest case: F4 over
+    Ebmaj, the 9th over a plain triad.
     """
 
     def test_the_ninth_over_a_triad_is_voiced_rather_than_dropped(self):
-        """The `maj` row reaches the shell family, so the step exists again.
+        """The `maj` row reaches the narrowest two-note shape, so the step exists.
 
-        Before the row, this step had no candidate and `arrange_progression`
-        dropped it with a warning - 76 steps out of 80 notes. The other three
-        losses on this head are bars 18 and 22 (the same chord and note) and bar
-        28, which is a different degree over a different quality.
+        The row is what makes F a chord tone at all - the quality is reharmonised to
+        Ebadd9 rather than the plain triad being stated - and the two strings `duo` means
+        sound the melody with the 3rd under it. G is the chord tone the thinnest palette
+        can put there, which is what makes this a claim about the row rather than about
+        which family happened to win.
         """
-        steps, _head, _notes = arrange_xml_head(BUT_NOT_FOR_ME, grips=("shell",))
+        steps, _head, _notes = arrange_xml_head(BUT_NOT_FOR_ME, texture="chord1")
         bar2 = [s for s in steps if s.bar == 2 and abs((s.beat or 0) - 2.0) < 1e-6]
-        self.assertEqual(len(bar2), 1, "bar 2 beat 2 is missing again")
+        self.assertEqual(len(bar2), 1, "bar 2 beat 2 is missing")
         step = bar2[0]
         self.assertEqual(step.melody, "F4")
         self.assertEqual(step.chord, "Ebmaj")
         self.assertEqual(step.harmonized_as, "Ebadd9")
         self.assertEqual(step.strategy, "extension")
-        self.assertEqual(step.grip, "shell")
-        # The 3rd, the 5th and the 9th: G Bb F, the shape a shell of Ebadd9 is.
-        self.assertEqual({m % 12 for m in step.voicing.midi_notes()}, {5, 7, 10})
+        self.assertEqual(step.grip, "duo")
+        # G under F, on the two strings the grip names.
+        self.assertEqual(step.voicing.frets, [-1, 10, -1, 10, -1, -1])
+        self.assertEqual({m % 12 for m in step.voicing.midi_notes()}, {5, 7})
 
-    def test_no_melody_note_is_dropped_by_a_palette_that_cannot_voice_it(self):
-        """80 steps for 80 notes under `--grips shell`; it was 76.
+    def test_no_melody_note_is_dropped_by_the_narrowest_palette(self):
+        """80 steps for 80 notes at one chord tone a step, and the same at four.
 
-        The four losses were bars 2, 18 and 22 (F4 over Ebmaj, the table row above)
-        and bar 28 (Bb4 over F#dim7, which no dim7 shell can carry and which now
-        sounds alone). The **count** is the assertion because a lost note is an
-        absence: nothing in an arrangement says one should have been there.
+        The **count** is the assertion because a lost note is an absence: nothing in an
+        arrangement says one should have been there.
         """
-        steps, head, _notes = arrange_xml_head(BUT_NOT_FOR_ME, grips=("shell",))
-        self.assertEqual(len(steps), len(head.notes))
+        for texture in ("chord1", "uniform"):
+            with self.subTest(texture=texture):
+                steps, head, _notes = arrange_xml_head(BUT_NOT_FOR_ME, texture=texture)
+                self.assertEqual(len(steps), len(head.notes))
 
-    def test_the_rescued_step_says_the_chord_is_not_sounding(self):
-        """One step on this head has a chord and no voicing of it: bar 28.
+    def test_every_step_states_its_chord_at_either_arity(self):
+        """`chord_unvoiced` is False throughout: every chord has a shape under it.
 
-        Reported rather than silently thin, because a bare note under a chord symbol
-        reads as the chord being played quietly - see `ArrangementStep.chord_unvoiced`.
+        A melody note under a chord symbol with nothing under it reads as the chord being
+        played quietly, and `ArrangementStep.chord_unvoiced` is the field that says
+        otherwise. The positive case is `test_non_chord_tones`; what this pins is that
+        thinning the part does not quietly start thinning the *harmony*.
         """
-        steps, _head, _notes = arrange_xml_head(BUT_NOT_FOR_ME, grips=("shell",))
-        rescued = [s for s in steps if s.chord_unvoiced]
-        self.assertEqual(len(rescued), 1)
-        step = rescued[0]
-        self.assertEqual((step.bar, step.beat), (28, 2.0))
-        self.assertEqual(step.chord, "F#dim7")
-        self.assertEqual(step.melody, "Bb4")
-        self.assertEqual(step.grip, "melody")
-        self.assertFalse(step.melody_only)
-        self.assertIn("no voicing for this chord", arranger._step_annotation(step))
+        for texture in ("chord1", "uniform"):
+            with self.subTest(texture=texture):
+                steps, _head, _notes = arrange_xml_head(BUT_NOT_FOR_ME, texture=texture)
+                self.assertEqual(
+                    [s.bar for s in steps if s.chord_unvoiced], [],
+                    f"texture={texture} left a chord unstated",
+                )
 
 
 class TestHeadCli(unittest.TestCase):
@@ -2821,73 +2827,99 @@ class TestHeadCli(unittest.TestCase):
         self.assertIn("Dm7", output)
         self.assertIn("jazz-arranger[xml]", output)
 
-    def test_the_grips_flag_is_a_comma_separated_list(self):
-        """`--grips shell,duo` is one argument naming two families.
+    def test_the_grips_flag_is_gone_and_a_list_flag_is_one_argument(self):
+        """The deleted spelling is a usage error, and the surviving list is one string.
 
-        The flag spelled a list with spaces (`nargs="+"`) while `--voices`, in the
-        same parser, spelled one with commas - so the obvious spelling was refused
-        with `invalid choice: 'shell,duo'`, and the run header printed the request
-        back *comma-separated*, which is the spelling the flag did not accept.
+        `--grips` named a family list, and the family axis is deleted, so the flag is gone
+        rather than deprecated: a spelling quietly ignored would arrange something other
+        than what the run header reported. What survives of its lesson is `--parts`, the
+        same shape of option - a list, spelled the way the flags beside it spell one - and
+        it is one argument, never `nargs="+"`.
         """
-        output = self.run_cli(RAINY_DAY, "--bars", "1-3", "--grips", "closed,shell,duo")
+        import io
+        from contextlib import redirect_stderr
+
+        from arranger.options import ArrangeOptions
+
+        errors = io.StringIO()
+        with redirect_stderr(errors), self.assertRaises(SystemExit):
+            self.run_cli(RAINY_DAY, "--grips", "shell,duo")
+        self.assertIn("--grips", errors.getvalue())
+        # And the library's spelling went with the flag, both halves of it.
+        self.assertFalse(hasattr(arranger, "parse_grips"))
+        self.assertFalse(hasattr(ArrangeOptions(), "grips"))
+
+        output = self.run_cli(RAINY_DAY, "--bars", "1-3", "--parts", "melody,chord")
         self.assertEqual(self.code, 0)
-        self.assertIn("grips: closed, shell, duo", output)
+        self.assertIn("parts: melody,chord", output)
 
-    def test_a_grip_named_before_the_file_still_arranges_that_file(self):
-        """`head --grips shell,duo FILE` finds the file.
+    def test_a_flag_named_before_the_file_still_arranges_that_file(self):
+        """`head --parts melody,chord FILE` finds the file.
 
-        The second half of the same defect, and the quieter half: a `nargs="+"`
-        option consumes the positional written after it, so `--grips` used to have to
-        come *last* - `head --grips shell FILE` failed with
-        `invalid choice: 'tests/data/...'`, reporting the filename as a grip.
+        The quieter half of the old `nargs="+"` trap: an option that takes a list with
+        spaces consumes the positional written after it, so it could only ever come last.
+        One comma-separated string has no such order, and this is the round trip saying so.
         """
-        output = self.run_cli("--bars", "1-3", "--grips", "shell,duo", RAINY_DAY)
+        output = self.run_cli("--bars", "1-3", "--parts", "melody,chord", RAINY_DAY)
         self.assertEqual(self.code, 0)
-        self.assertIn("grips: shell, duo", output)
+        self.assertIn("parts: melody,chord", output)
 
     def test_the_request_reaches_the_engine(self):
-        """The flag is a spelling of `grips=`, so both reach the same arrangement.
+        """The flag is a spelling of `texture=`, so both reach the same arrangement.
 
-        Asserted against the library call rather than against a recorded tab, which
-        is what makes it a claim about the *wiring*: a flag that parsed correctly and
-        then arranged the default would pass a snapshot and fail this.
+        Asserted against the library call rather than against a recorded tab, which is what
+        makes it a claim about the *wiring*: a flag that parsed correctly and then arranged
+        the default would pass a snapshot and fail this.
         """
         path = self.score_path()
-        output = self.run_cli(path, "--grips", "duo,shell")
+        output = self.run_cli(path, "--texture", "chord1")
         self.assertEqual(self.code, 0)
-        steps, _head, _notes = arrange_xml_head(path, grips=("duo", "shell"))
+        steps, _head, _notes = arrange_xml_head(path, texture="chord1")
         self.assertIn(format_progression(steps), output)
 
-    def test_the_banner_echoes_a_legal_grips_argument(self):
-        """The `grips:` list in the run header can be pasted back onto the flag.
+    def test_the_banner_spelling_is_accepted_back_on_the_flag(self):
+        """The run header's own `parts:` row can be pasted back onto `--parts`.
 
-        The header is how a reader reproduces a run, and it joins the families with
-        commas. That was true before the flag took commas, so the line a reader
-        copied was the one spelling that did not work - hence the assertion is a
-        round trip through `parse_grips` rather than a string comparison.
+        The header is how a reader reproduces a run, so a spelling it prints that the flag
+        refuses is a trap: the line a reader copies is the one that does not work.
+        Asserted as a round trip through the CLI rather than as a string comparison.
         """
-        output = self.run_cli(RAINY_DAY, "--bars", "1-3", "--grips", "shell,duo")
-        row = next(line for line in output.splitlines() if "grips: " in line)
-        self.assertEqual(
-            arranger.parse_grips(row.split("grips: ", 1)[1].strip()),
-            ("shell", "duo"),
-        )
+        output = self.run_cli(RAINY_DAY, "--bars", "1-3", "--parts", "melody,chord")
+        row = next(line for line in output.splitlines() if "parts: " in line)
+        printed = row.split("parts: ", 1)[1].strip()
+        again = self.run_cli(RAINY_DAY, "--bars", "1-3", "--parts", printed)
+        self.assertEqual(self.code, 0, again)
+        self.assertIn(f"parts: {printed}", again)
 
-    def test_an_unknown_grip_is_a_usage_error_naming_the_palette(self):
-        """A name outside the palette is refused with the palette, not dropped.
+    def test_a_name_outside_a_vocabulary_is_a_usage_error_naming_it(self):
+        """A name the axis does not know is refused with the vocabulary it has.
 
-        This is what `choices=GRIP_PREFERENCE` used to do at parse time; the check
-        moved into `parse_grips` so the palette is written down once, and it must
-        still fail loudly rather than quietly arranging without the family asked for.
+        Three, because the second and third are the ones a reader gets wrong: `alto` is a
+        *voice* name from before the parts axis, and the answer is not a mapping - the
+        inner voices live in the chord part - so the refusal has to name the parts; and a
+        bare `freddie` is the pattern name without the part it belongs to, so the refusal
+        has to name the row spellings.
         """
         import io
         from contextlib import redirect_stderr
 
         errors = io.StringIO()
         with redirect_stderr(errors), self.assertRaises(SystemExit):
-            self.run_cli(self.score_path(), "--grips", "drop2,nope")
-        self.assertIn("nope", errors.getvalue())
-        self.assertIn("duo", errors.getvalue())
+            self.run_cli(self.score_path(), "--texture", "shell")
+        self.assertIn("shell", errors.getvalue())
+        self.assertIn("uniform", errors.getvalue())
+
+        errors = io.StringIO()
+        with redirect_stderr(errors), self.assertRaises(SystemExit):
+            self.run_cli(self.score_path(), "--parts", "alto")
+        for part in arranger.PART_NAMES:
+            self.assertIn(part, errors.getvalue())
+
+        errors = io.StringIO()
+        with redirect_stderr(errors), self.assertRaises(SystemExit):
+            self.run_cli(self.score_path(), "--grid", "freddie")
+        self.assertIn("melody:every_note", errors.getvalue())
+
 
 
 

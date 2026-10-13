@@ -97,7 +97,7 @@ class TestTheRecordedPalette(unittest.TestCase):
         makes no such claim: its arity follows the voices the caller named, and the line
         says which degrees sound instead (`render._comping_clause`).
         """
-        steps = VoiceLeadingEngine.arrange_progression(COMPLETE, melody="none")
+        steps = VoiceLeadingEngine.arrange_progression(COMPLETE, parts="chord")
         self.assertEqual(len(steps), 3)
         for step in steps:
             self.assertFalse(step.melody_voiced)
@@ -111,7 +111,7 @@ class TestTheRecordedPalette(unittest.TestCase):
         is why the count is recorded rather than left to read like a decision between
         shapes.
         """
-        steps = VoiceLeadingEngine.arrange_progression(COMPLETE, melody="soprano")
+        steps = VoiceLeadingEngine.arrange_progression(COMPLETE, parts="melody")
         self.assertEqual(len(steps), 3)
         for step in steps:
             palette = step.palette
@@ -235,7 +235,7 @@ class TestTheShapeClause(unittest.TestCase):
         fallback dressed up - which is the difference between "the library had nothing
         else" and "this selection asked for one voice".
         """
-        steps = VoiceLeadingEngine.arrange_progression(COMPLETE, melody="soprano")
+        steps = VoiceLeadingEngine.arrange_progression(COMPLETE, parts="melody")
         self.assertEqual(
             [_step_annotation(step) for step in steps],
             [
@@ -280,7 +280,7 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
 
         steps, _head, _notes = arrange_xml_head(
             "tests/data/heres_that_rainy_day.musicxml",
-            section=(1, 2), grid="freddie", melody="none",
+            section=(1, 2), grid="chord:freddie", parts="chord",
         )
         silent = [step for step in steps if not step.voicing.active_frets()]
         self.assertTrue(silent, "the grid stopped leaving the guitar out")
@@ -291,33 +291,48 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
             )
 
     def test_a_comping_step_names_the_degrees_it_states(self):
-        """The arity and the family are read off the shape, not off the grip label.
+        """The arity and the degrees are read off the shape, not off the grip label.
 
-        The label it replaces said `shell - 3rd & 7th` for all three of these: wrong for a
-        single bass note, and wrong in spelling as well - a dominant's seventh is a `b7`.
+        The label it replaces said `shell - 3rd & 7th` for a single bass note as well, and
+        was wrong in spelling too: a dominant's seventh is a `b7`.
+
+        **Naming the bass part beside the chord part adds a note below rather than widening
+        the chord**, because the chord part's arity is the texture's and not the number of
+        parts named - so the two three-note rows state the same degrees and differ only in
+        the thumb.
         """
         from headxml import arrange_xml_head
 
         head = "tests/data/heres_that_rainy_day.musicxml"
+        comping = "; the guitar does not play the tune)"
         expected = {
-            "bass": " (comping - 5; the guitar does not play the tune)",
-            "alto,tenor": " (comping - 3 & 7; the guitar does not play the tune)",
-            "alto,tenor,bass": " (comping - 3, 5 & 7; the guitar does not play the tune)",
+            "bass": f" (comping - 5{comping}",
+            "chord": f" (comping - 3, 5 & 7{comping}",
+            "bass,chord": f" (comping - 3, 5 & 7{comping}",
         }
-        for voices, text in expected.items():
+        for parts, text in expected.items():
             steps, _head, _notes = arrange_xml_head(
-                head, section=(1, 2), melody=voices, bass="none"
+                head, section=(1, 2), parts=parts, bass="none"
             )
-            self.assertEqual(_step_annotation(steps[0]), text, voices)
+            self.assertEqual(_step_annotation(steps[0]), text, parts)
             self.assertFalse(steps[0].melody_voiced)
+        # A lone bass part is one note, and one note is what the line says.
+        lone, _head, _notes = arrange_xml_head(
+            head, section=(1, 2), parts="bass", bass="none"
+        )
+        self.assertEqual(len(lone[0].voicing.upper_midi_notes()), 1)
 
     def test_a_held_step_says_the_shape_above_it_is_held(self):
-        """`bass_only` is a claim about the left hand, and the tab cannot show it."""
+        """`bass_only` is a claim about the left hand, and the tab cannot show it.
+
+        `texture=targets` rather than a fixed arity, because a fixed-arity row makes *every*
+        slot a target and so leaves no step whose shape the guitar holds through.
+        """
         from headxml import arrange_xml_head
 
         steps, _head, _notes = arrange_xml_head(
             "tests/data/heres_that_rainy_day.musicxml", section=(1, 3),
-            texture="walking_bass",
+            texture="targets", bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk",
         )
         held = [step for step in steps if step.bass_only and step.palette]
         self.assertTrue(held, "no held step under the thumb in this section")
@@ -350,23 +365,31 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         are consulted after correctness (0) and before voice count (2) - so an in-window
         shape that lost to an out-of-position one must have sounded a wrong note, and when
         no shape sits inside the window at all, the palette is why.
+
+        Which reading a head exhibits depends on the arity it was asked for, so each one is
+        measured under the texture that shows it: the thinnest palette strands a shape, and
+        the metre-reading one is beaten by a shape out of position.
         """
         from headxml import arrange_xml_head
 
         head = "tests/data/All_the_Things_You_Are.musicxml"
-        steps, _head, _notes = arrange_xml_head(head, texture="targets")
+
+        def arranged(texture):
+            steps, _head, _notes = arrange_xml_head(head, texture=texture)
+            return steps
+
         stranded = [
-            step for step in steps
+            step for step in arranged("chord1")
             if step.palette is not None and not step.palette.inside_window
             and not step.repeated
         ]
-        self.assertTrue(stranded, "no out-of-position shape in this head")
+        self.assertTrue(stranded, "no out-of-position shape at one chord tone")
         self.assertIn(
             "nothing in this palette sits inside the window",
             _step_annotation(stranded[0]),
         )
         beaten = [
-            step for step in steps
+            step for step in arranged("targets")
             if step.palette is not None and step.palette.inside_window
             and "reaches outside" in _step_annotation(step)
         ]
@@ -447,8 +470,8 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         from headxml import arrange_xml_head
 
         steps, _head, _notes = arrange_xml_head(
-            "tests/data/All_the_Things_You_Are.musicxml", section=(7, 9), grid="freddie",
-            melody="none",
+            "tests/data/All_the_Things_You_Are.musicxml", section=(7, 9), grid="chord:freddie",
+            parts="chord",
         )
         silent_slots = [step for step in steps if step.melody is None]
         self.assertTrue(silent_slots, "the grid stopped stabbing where the tune is silent")

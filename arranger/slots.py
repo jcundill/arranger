@@ -25,10 +25,9 @@ from typing import Container, Dict, List, Optional, Sequence, Tuple
 
 from musthe import Note
 
-from arranger.grips import GRIP_PREFERENCE
 from arranger.options import ArrangeOptions
 from arranger.steps import VoiceLeadingEngine
-from arranger.textures import TEXTURE_STYLES
+from arranger.textures import GRID_DEFAULT, PARTS_AUTO, TEXTURE_STYLES
 from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES, ArrangementStep
 
 __all__ = [
@@ -236,12 +235,11 @@ def arrange_slots(
     timings: Sequence[Tuple[Optional[int], Optional[float], Optional[float]]] = (),
     non_chord_tone: str = "extension",
     fallback: Optional[str] = None,
-    grips: Tuple[str, ...] = GRIP_PREFERENCE,
     texture: str = "uniform",
     bass: str = "auto",
-    melody: str = "auto",
+    parts: str = PARTS_AUTO,
     harmony: str = "auto",
-    grid: str = "every_note",
+    grid: str = GRID_DEFAULT,
     beats_per_bar: int = 4,
     beat_type: int = 4,
     onsets: Optional[Container[int]] = None,
@@ -281,10 +279,11 @@ def arrange_slots(
     it is off unless asked for; the count of steps it *would* rescue is always
     returned in the notes.
 
-    `texture` is the arranging guide's target-note rule, applied by the engine's own
-    `_metric_weight` and `_roles_for_slot`, so every caller is textured identically. "targets" states a full
-    chord on beats 1 and 3 and fills the notes between with a shell, a 3rd/6th
-    interval or the melody alone; "uniform" (the default) voices every slot in full.
+    `texture` is the chord part's **arity policy**, applied by the engine's own
+    `_metric_weight` and `_roles_for_slot`, so every caller is textured identically: a
+    `targets` slot states the most notes the arithmetic allows on a strong beat and
+    a thinner shape between them, `chord1`/`chord2`/`chord3` state that many
+    everywhere, and `uniform` (the default) states the maximum everywhere.
     `beats_per_bar` is the metre that rule reads, and a head in cut time must pass
     its own - a count without a denominator is not a metre.
 
@@ -329,12 +328,12 @@ def arrange_slots(
         )
         for index in sorted(retry):
             # Named `note`, not `melody`: this loop variable would otherwise shadow the
-            # `melody` **policy** parameter for the rest of the function, and
-            # `_corpus_options(melody=...)` below would be handed whatever note this
-            # loop last visited - `ValueError: Unknown melody policy 'D4'`, raised only
-            # when a diminished retry had something to rescue, so it looked like a
-            # corpus bug rather than a shadowing one. The same trap `_corpus_options`
-            # dodges for `bass`, documented beside its own loop.
+            # **part** this module asks for under that name, and the request built below
+            # would be handed whatever note this loop last visited - `ValueError:
+            # Unknown part 'D4'`, raised only when a diminished retry had something to
+            # rescue, so it looked like a corpus bug rather than a shadowing one. The
+            # same trap `_slot_options` dodges for `bass`, documented beside its own
+            # loop.
             note, quality, name = triples[index]
             if note is None:
                 # Not produced by `unresolved_steps`, which skips a slot with no
@@ -353,10 +352,9 @@ def arrange_slots(
         triples=working,
         timings=timings,
         non_chord_tone=non_chord_tone,
-        grips=grips,
         texture=texture,
         bass=bass,
-        melody=melody,
+        parts=parts,
         harmony=harmony,
         grid=grid,
         beats_per_bar=beats_per_bar,
@@ -373,14 +371,13 @@ def _slot_options(
     triples: Sequence[Tuple[Optional[str], str, str]],
     timings: Sequence[Tuple[Optional[int], Optional[float], Optional[float]]],
     non_chord_tone: str,
-    grips: Tuple[str, ...],
     texture: str,
     beats_per_bar: int,
     beat_type: int = 4,
     bass: str = "auto",
-    melody: str = "auto",
+    parts: str = PARTS_AUTO,
     harmony: str = "auto",
-    grid: str = "every_note",
+    grid: str = GRID_DEFAULT,
     melody_onsets: Optional[Container[int]] = None,
 ) -> ArrangeOptions:
     """The request `arrange_slots` makes of the engine, as one value.
@@ -428,7 +425,7 @@ def _slot_options(
     # --- the slash bass, as data -------------------------------------------------
     bass_pcs: Dict[int, Optional[int]] = {}
     for index, (_melody, _quality, name) in enumerate(triples):
-        # Named `slash`, not `bass`: this function now takes a `bass` **policy**
+        # Named `slash`, not `bass`: this function takes a `bass` **policy**
         # parameter, and a loop local of that name would silently shadow it and pass a
         # pitch class where the policy belongs.
         slash = _slash_bass(name)
@@ -437,10 +434,9 @@ def _slot_options(
 
     return ArrangeOptions(
         non_chord_tone=non_chord_tone,
-        grips=grips,
         texture=texture,
         bass=bass,
-        melody=melody,
+        parts=parts,
         harmony=harmony,
         grid=grid,
         beats_per_bar=beats_per_bar,

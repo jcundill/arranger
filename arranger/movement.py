@@ -16,7 +16,7 @@ hand-built one still run one loop rather than two.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Container, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Callable, Container, List, Mapping, Optional, Sequence, Tuple
 
 from musthe import Note
 
@@ -57,31 +57,33 @@ from .decisions import (
     should_promote_fill,
 )
 from .grips import (
+    GRIP_MAX_SPAN,
     GRIP_PREFERENCE,
     MELODY_STRING_CHOICES_FULL,
 )
 from .options import ArrangeOptions
 from .textures import (
-    GRID_EVERY_NOTE,
+    GRID_DEFAULT,
     HARMONY_AUTO,
     HARMONY_SHELL_ROOT,
-    MELODY_AUTO,
-    MELODY_BASS,
-    MELODY_SOPRANO,
-    TEXTURE_GRIPS,
+    PART_BASS,
+    PARTS_AUTO,
     TEXTURE_STYLES,
-    THUMB_TEXTURES,
     _metric_weight,
     _roles_for_slot,
-    melody_only_selection,
+    comping_arity,
+    derived_arity,
     on_grid,
     parse_grid,
     parse_harmony,
-    parse_voices,
+    parse_parts,
+    parts_has_melody_only,
+    parts_have_bass,
+    parts_have_melody,
     resolve_grid,
     resolve_harmony,
-    resolve_voices,
-    voices_have_soprano,
+    resolve_parts,
+    texture_palette,
 )
 from .tuning import (
     NECK_FRET_MAX,
@@ -140,7 +142,7 @@ class StepPreparation:
 def _resolve_bass(
     texture: str,
     bass: str,
-    voices: Tuple[str, ...],
+    parts: Tuple[str, ...],
 ) -> str:
     """The style to actually run: `BASS_STYLE_AUTO` resolved or validated.
 
@@ -184,27 +186,32 @@ def _resolve_bass(
     `has_thumb` is read, because that flag gates whether the walked-beat union is built
     at all.
     """
-    melody_voiced = voices_have_soprano(voices)
-    melody_only = melody_only_selection(voices)
+    melody_voiced = parts_have_melody(parts)
+    melody_only = parts_has_melody_only(parts)
     if bass == BASS_STYLE_AUTO:
+        # A thumb line is a **combination**, not the default (docs/parts.md §9): the
+        # shipped answer is no line, and a caller who wants one names a style or a
+        # `bass:walk` grid row. The one sentinel case that still writes one is a
+        # melody-only selection that names the bass part - the tune with a thumb under
+        # it, which is what `parts=melody,bass` means.
         bass = (
             BASS_STYLE_WALK
-            if texture in THUMB_TEXTURES
-            or (melody_only and MELODY_BASS in voices)
+            if melody_only and parts_have_bass(parts)
             else BASS_STYLE_NONE
         )
     if bass == BASS_STYLE_NONE:
         return bass
     parse_bass_style(bass)  # raises on an unknown rule; the style is validated here
     allowed, reason = bass_allowed(
+        parts,
         texture,
         bass,
         # `None` for the melody-bearing route, so `bass_allowed` asks the route's
         # own capacity - the melody-only route's, or the texture's palette.
-        # `len(voices)` on the comping one, which is the arity the comping
+        # The chord part's arity on the comping one, which is the shape the comping
         # generator will actually build.
-        None if melody_voiced else len(voices),
-        voices == (MELODY_BASS,),
+        None if melody_voiced else derived_arity(texture, parts),
+        parts == (PART_BASS,),
         melody_only=melody_only,
     )
     if not allowed:
@@ -212,23 +219,24 @@ def _resolve_bass(
     return bass
 
 
-def _resolve_melody(voices: str) -> Tuple[str, ...]:
-    """The voices to actually play: `auto` resolved, parsed, validated.
+def _resolve_parts(parts: str) -> Tuple[str, ...]:
+    """The parts to actually take: `auto` resolved, parsed, validated.
 
-    Two steps and they are not the same step. **Parsing** turns the caller's string into a
-    canonical tuple of voice names, so `tenor,alto` and `alto,tenor` are one request -
-    `textures.parse_voices` owns the vocabulary and the ordering. **Resolution** is what
-    `textures.resolve_voices` owns: `auto` becomes every voice.
+    Two steps and they are not the same step. **Parsing** turns the caller's string into
+    a canonical tuple of part names, so `bass,melody` and `melody,bass` are one request -
+    `textures.parse_parts` owns the vocabulary and the canonical order. **Resolution** is
+    what `textures.resolve_parts` owns: `auto` becomes every part.
 
-    An unknown voice name raises from `parse_voices`, before any voicing work, on the
+    An unknown part name raises from `parse_parts`, before any voicing work, on the
     library's standing rule: a spelling nobody recognises is a question, and answering it
-    by dropping the voice would hand back a part missing something nobody asked it to drop.
+    by dropping the part would hand back an arrangement missing something nobody asked it
+    to drop.
     """
-    return resolve_voices(parse_voices(voices))
+    return resolve_parts(parse_parts(parts))
 
 
 def _resolve_harmony(
-    harmony: str, voices: Tuple[str, ...]
+    harmony: str, parts: Tuple[str, ...]
 ) -> str:
     """The degree family to actually voice: `auto` resolved, parsed, validated.
 
@@ -244,7 +252,7 @@ def _resolve_harmony(
     Resolved **once per arrangement**, next to `_resolve_melody` and for the reason
     stated there: the band does not change halfway through a tune.
     """
-    return resolve_harmony(parse_harmony(harmony), voices)
+    return resolve_harmony(parse_harmony(harmony), parts)
 
 
 def _resolve_grid(grid: str, beats_per_bar: int) -> str:
@@ -417,8 +425,7 @@ def prepare_step(
                     sounding_melody,
                     substitute_quality,
                     chord_name=substitute_name,
-                    top_strings=top_strings,
-                    grips=grips,
+                    top_strings=top_strings, grips=grips,
                 )
                 if substituted:
                     candidates = substituted
@@ -460,7 +467,7 @@ class _Knobs:
 
     `arrange_progression` takes thirteen knobs twice over - once as keywords and
     once as `ArrangeOptions` fields - and has to decide between them, validate
-    them and derive one more (`texture_grips`)
+    them and validate them
     before the loop can start. That prologue is this function's job; the loop then
     unpacks the result straight back into the names it has always used, so the
     extraction changed nothing downstream of it.
@@ -470,10 +477,9 @@ class _Knobs:
     non_chord_tone: str
     fret_min: int
     fret_max: int
-    grips: Tuple[str, ...]
     texture: str
     bass: str
-    melody: str
+    parts: str
     harmony: str
     grid: str
     beats_per_bar: int
@@ -482,7 +488,6 @@ class _Knobs:
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]]
     bass_pcs: Optional[Mapping[int, Optional[int]]]
     slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]]
-    texture_grips: Dict[str, Tuple[str, ...]]
 
 
 def _resolve_knobs(
@@ -492,10 +497,9 @@ def _resolve_knobs(
     non_chord_tone: str,
     fret_min: int,
     fret_max: int,
-    grips: Tuple[str, ...],
     texture: str,
     bass: str,
-    melody: str,
+    parts: str,
     harmony: str,
     grid: str,
     beats_per_bar: int,
@@ -526,7 +530,6 @@ def _resolve_knobs(
                 ("non_chord_tone", non_chord_tone),
                 ("fret_min", fret_min),
                 ("fret_max", fret_max),
-                ("grips", grips),
                 ("texture", texture),
                 # `bass` is compared here like every other knob, and for the comparison
                 # to mean anything the two spellings must be equal when a caller names
@@ -536,7 +539,7 @@ def _resolve_knobs(
                 # resolved field back out of `options` would make the keyword look like a
                 # caller who had passed both.
                 ("bass", bass),
-                ("melody", melody),
+                ("parts", parts),
                 ("harmony", harmony),
                 ("grid", grid),
                 ("beats_per_bar", beats_per_bar),
@@ -554,10 +557,9 @@ def _resolve_knobs(
         non_chord_tone = options.non_chord_tone
         fret_min = options.fret_min
         fret_max = options.fret_max
-        grips = options.grips
         texture = options.texture
         bass = options.bass
-        melody = options.melody
+        parts = options.parts
         harmony = options.harmony
         grid = options.grid
         beats_per_bar = options.beats_per_bar
@@ -573,8 +575,7 @@ def _resolve_knobs(
             f"Unknown non_chord_tone strategy {non_chord_tone!r}; "
             f"expected one of {NON_CHORD_TONE_STRATEGIES}"
         )
-    texture_grips = TEXTURE_GRIPS.get(texture)
-    if texture_grips is None:
+    if texture not in TEXTURE_STYLES:
         raise ValueError(
             f"Unknown texture {texture!r}; expected one of {TEXTURE_STYLES}"
         )
@@ -588,10 +589,9 @@ def _resolve_knobs(
         non_chord_tone=non_chord_tone,
         fret_min=fret_min,
         fret_max=fret_max,
-        grips=grips,
         texture=texture,
         bass=bass,
-        melody=melody,
+        parts=parts,
         harmony=harmony,
         grid=grid,
         beats_per_bar=beats_per_bar,
@@ -600,7 +600,6 @@ def _resolve_knobs(
         timings=timings,
         bass_pcs=bass_pcs,
         slash_bass_cost=slash_bass_cost,
-        texture_grips=texture_grips,
     )
 
 
@@ -608,14 +607,14 @@ def _resolve_knobs(
 class _Policies:
     """The axes and the walked-beat union, resolved once per arrangement.
 
-    `voices`/`melody_voiced`/`melody_only` come off the melody axis, `bass` and
+    `parts`/`melody_voiced`/`melody_only` come off the parts axis, `bass` and
     `has_thumb` off the bass policy, `harmony_family` and `grid_pattern` off the
     two comping axes, and `slots` is the walked-beat union when a thumb line is
     running. Resolved up front because the band does not change halfway through a
     tune, and unpacked straight back into the names the loop has always used.
     """
 
-    voices: Tuple[str, ...]
+    parts: Tuple[str, ...]
     melody_voiced: bool
     melody_only: bool
     bass: str
@@ -628,7 +627,7 @@ class _Policies:
 def _resolve_policies(
     progression: Sequence[Tuple[Optional[str], str, str]],
     *,
-    melody: str,
+    parts_arg: str,
     texture: str,
     bass: str,
     harmony: str,
@@ -656,14 +655,14 @@ def _resolve_policies(
     carries no other meaning; what matters is that both finish before `has_thumb`
     is read, because that flag gates whether the walked-beat union is built.
     """
-    voices = _resolve_melody(melody)
-    melody_voiced = voices_have_soprano(voices)
+    parts = _resolve_parts(parts_arg)
+    melody_voiced = parts_have_melody(parts)
     # The melody-only selection, decided once here and read by the bass policy,
     # the grip resolution and the promotion rule below: `(soprano,)` is the
     # tune alone and `(soprano, bass)` the tune with a thumb under it,
     # whatever `texture=` says - the texture is inert on that route, the same
     # way it is on the comping one.
-    melody_only = melody_only_selection(voices)
+    melody_only = parts_has_melody_only(parts)
 
     # The bass policy. `auto` means "whatever this texture and this selection
     # mean", so `walking_bass` keeps walking and a melody-only selection that
@@ -676,7 +675,7 @@ def _resolve_policies(
     bass = _resolve_bass(
         texture,
         bass,
-        voices,
+        parts,
     )
     has_thumb = bass != BASS_STYLE_NONE
 
@@ -685,7 +684,7 @@ def _resolve_policies(
     # `if not melody_voiced` is deliberate: a spelling nobody recognises must be
     # reported **once, up front**, rather than never at all on an arrangement where
     # the guitar happens to be singing - the same argument as `_resolve_melody`'s.
-    harmony_family = _resolve_harmony(harmony, voices)
+    harmony_family = _resolve_harmony(harmony, parts)
     # The grid axis, resolved here for the same reason and read by **both** routes
     # below rather than only the comping one - unlike `harmony=`, which the guitar
     # singing makes unreachable. A grid says where a chord lands, and that is a
@@ -707,7 +706,7 @@ def _resolve_policies(
         )
 
     return _Policies(
-        voices=voices,
+        parts=parts,
         melody_voiced=melody_voiced,
         melody_only=melody_only,
         bass=bass,
@@ -921,7 +920,9 @@ def _comping_step(
     note_str: Optional[str],
     melody_note: Optional[Note],
     melody_onsets: Optional[Container[int]],
-    voices: Tuple[str, ...],
+    parts: Tuple[str, ...],
+    texture: str,
+    has_thumb: bool,
     harmony_family: str,
     non_chord_tone: str,
     fret_min: int,
@@ -1011,21 +1012,26 @@ def _comping_step(
             # A guitarist handed `Cmaj7 -> Bdim7` with no melody on their own
             # part cannot see why the chord moved; the note that forced it is
             # the horn's, so it has to be named here or the part reads wrong.
-    # How many chord voices the guitar states here. **A voice is a *role*
-    # in the stack, not a count of parts played twice** - `--voices
-    # alto,tenor` is two notes, and padding it to three would put a voice
-    # in the part that belongs to the bassist.
+    # How many chord voices the guitar states here: the chord part's arity, which
+    # `texture=` owns. **A voice is a *role* in the stack, not a count of parts played
+    # twice**, so it is the arity rather than the number of parts named.
     #
-    # **A named soprano that is not singing is not one of the sounding
-    # voices** (§9.3 step D). On the comping route the selection has no
-    # soprano and this is `len(voices)`, exactly as before. On a *singing*
-    # selection reaching this branch - a grid position the tune is silent
-    # at - the soprano has no note to sing, so the shape is built from the
-    # voices that do sound: `soprano,alto,tenor,bass` states a three-voice
-    # shell on the offbeats, not a four-voice shape with a redundant root.
-    # (That four-note comping shape is `docs/comping-styles.md` §9.4, and it
-    # needs new string sets - deliberately not this step.)
-    comp_notes = len([voice for voice in voices if voice != MELODY_SOPRANO])
+    # **A grid position the tune is silent at is not the melody's voice** (§9.3 step
+    # D): the melody part has no note to sing there, and the arity already excludes it
+    # - `derived_arity` counts the melody only when the selection takes it.
+    # `comping_arity`, not `derived_arity`: this position has no note of the tune for
+    # the soprano string to carry - the tune belongs to the horn or is held across
+    # this beat - so the string is free for the chord part. Measured on the committed
+    # heads under a thumb line: reserving it anyway cost the chord its 5th on 72 steps.
+    #
+    # **A lone bass part states one note**, whatever the arity says: the bass part is
+    # the [part the thumb realises](../docs/parts.md), and a triad with the root at the
+    # bottom is the chord part rather than a bass line. Before the parts axis this fell
+    # out of the arity being the *number of voice names*; the arity is the texture's
+    # now, so the rule has to be stated here - and it is the same fact `bass_voice`
+    # carries, read once.
+    standalone_bass = parts == (PART_BASS,)
+    comp_notes = 1 if standalone_bass else comping_arity(texture, parts, has_thumb)
     candidates = _grips.get_comping_voicings(
         comp_chord_type,
         chord_name=comp_name,
@@ -1033,12 +1039,12 @@ def _comping_step(
         fret_max=fret_max,
         notes=comp_notes,
         # **Whether this selection is the bass voice and nothing else**,
-        # which arity cannot say: `alto`, `tenor` and `bass` all ask for one
+        # which arity cannot say: an inner voice and the bass both ask for one
         # note, and only the bass voice has a register that is part of what it
-        # *is*. Derived from the resolved voices rather than
+        # *is*. Derived from the resolved parts rather than
         # an extra CLI flag, so the two spellings of one request cannot
         # disagree.
-        bass_voice=voices == (MELODY_BASS,),
+        bass_voice=standalone_bass,
         # Whether this part states both guide tones **and** a root or 5th
         # under them. The one degree family neither `notes` nor
         # `bass_voice` can express, and derived from the resolved family
@@ -1212,7 +1218,6 @@ def _promoted_fill(
     non_chord_tone: str,
     fret_min: int,
     fret_max: int,
-    grips: Tuple[str, ...],
     slot_grips: Tuple[str, ...],
     texture: str,
     role: str,
@@ -1226,15 +1231,14 @@ def _promoted_fill(
     harmony. Same argument as `NECK_FRET_MIN` being a penalty and not a filter.
     `decisions.should_promote_fill` decides whether this step gets the retry.
 
-    The retry is prepared against `grips`, the **whole** palette, not the
-    narrowed `slot_grips` the fill was given: the narrow palette is what failed.
+    The retry is prepared against the **whole** search space, not the
 
     Returns the promoted preparation, or **None** when the texture does not ask
     for the retry or the retry found nothing either - the two cases the caller
     answers the same way, by reporting the step as skipped.
     """
     if not should_promote_fill(
-        texture, role, True, slot_grips, grips,
+        texture, role, True, slot_grips,
         has_thumb=has_thumb,
         melody_only=melody_only,
     ):
@@ -1250,7 +1254,6 @@ def _promoted_fill(
         non_chord_tone=non_chord_tone,
         fret_min=fret_min,
         fret_max=fret_max,
-        grips=grips,
     )
 
 def _lost_to_the_bass_partition(
@@ -1338,6 +1341,24 @@ def _palette_facts(
 
 
 
+def _bass_group(
+    voicing: Voicing,
+    bass_pc: Optional[int],
+    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]],
+) -> Optional[int]:
+    """How well `voicing` honours a written slash bass, or `None` without one.
+
+    `decisions.select_step_voicing` partitions its candidates on exactly this number
+    before it consults `voicing_cost` at all, so a caller comparing two shapes "on the
+    tuple" has to compare them in the same group first - otherwise it can prefer a
+    shape that drops the written bass for one that sounds it, which is a re-ranking
+    across the rule that outranks the whole tuple.
+    """
+    if bass_pc is None or slash_bass_cost is None:
+        return None
+    return slash_bass_cost(voicing.midi_notes(), bass_pc)
+
+
 def _demoted_to_melody_alone(
     arrangements: List[ArrangementStep],
     slot: _Slot,
@@ -1404,7 +1425,6 @@ def _harmonised_step(
     non_chord_tone: str,
     fret_min: int,
     fret_max: int,
-    grips: Tuple[str, ...],
     slot_grips: Tuple[str, ...],
     texture: str,
     has_thumb: bool,
@@ -1462,7 +1482,7 @@ def _harmonised_step(
             arrangements=arrangements, top_strings=top_strings,
             non_chord_tone=non_chord_tone,
             fret_min=fret_min, fret_max=fret_max,
-            grips=grips, slot_grips=slot_grips, texture=texture,
+            slot_grips=slot_grips, texture=texture,
             role=role, has_thumb=has_thumb, melody_only=melody_only,
         )
         if prepared is None:
@@ -1585,26 +1605,118 @@ def _harmonised_step(
     # cannot fire. Written as an assertion rather than left to Optional
     # narrowing at every use below.
     assert best_voicing is not None
-    # What the palette had besides the shape it chose, recorded on the step so a
-    # renderer can answer "why is this a shell?" without re-deriving anything.
-    palette = _palette_facts(
-        candidates,
-        best_voicing,
-        previous=prev_voicing,
-        fret_min=fret_min,
-        fret_max=fret_max,
-        allowed_tones=allowed_tones,
-        root_pc=root_pc,
-        melody_pc=melody_pc,
-        bass_pc=bass_pc,
-        slash_bass_cost=slash_bass_cost_for,
-    )
+    def palette_facts_for(chosen: Voicing) -> Palette:
+        """`_palette_facts` with this slot's context bound: what was on offer besides
+        `chosen`, and the criterion that ranked it below the better one.
+
+        A nested function because it is asked twice - once for the shape the selector
+        picked, and again if a rule below replaces it - and the second answer has to be
+        about the shape the step carries. A record about a shape the step does not
+        carry is a second source for one fact, and the wrong one.
+        """
+        return _palette_facts(
+            candidates,
+            chosen,
+            previous=prev_voicing,
+            fret_min=fret_min,
+            fret_max=fret_max,
+            allowed_tones=allowed_tones,
+            root_pc=root_pc,
+            melody_pc=melody_pc,
+            bass_pc=bass_pc,
+            slash_bass_cost=slash_bass_cost_for,
+        )
+
+    palette = palette_facts_for(best_voicing)
 
     # A complete chord at the very top of the span budget is demoted to
     # the melody alone. Why that is a fallback rather than a re-ranking is
     # documented once in decisions.should_demote_to_melody_alone.
+    #
+    # **Only when nothing narrower was generated *that the demoted shape did not
+    # outrank*.** The rule's premise is that the *palette* offered nothing inside the
+    # budget - the shape it names spans the whole thing because no alternative was a
+    # candidate to be ranked against. That premise is now checkable, because a palette
+    # derived from the arity offers more families than the hand-written lists did:
+    # where a four-note shape inside the budget was also generated, demoting threw the
+    # whole chord away.
+    #
+    # **The narrower shape must tie with the demoted one on every criterion that
+    # outranks span** - that is what makes this a fallback rather than a re-ranking,
+    # and the comparison is the tuple's own prefix rather than a hand-written list.
+    # Without it the filter silently *re-ranks*: on `Am7` under D5 the palette also
+    # holds a span-0 shape sounding F4, which the tuple puts below the span-5 shape on
+    # criterion 0 (a note outside the chord) - so re-selecting within the budget
+    # would trade a pure five-fret reach for an impure chord, exactly the trade
+    # `should_demote_to_melody_alone` says the tuple would never make. Measured on the
+    # committed heads: without the span tie, 23 `uniform` steps move; with it,
+    # `uniform` is byte-identical and only the textures whose palette grew move.
+    #
+    # **Inside the neck window as well**, and both halves are load-bearing. A candidate
+    # that is merely tighter while sitting at fret 14 is not the alternative the rule
+    # was written for: the demotion demotes a shape that is *unplayable*, and trading it
+    # for one out of position is a different bad trade. Measured on the committed heads,
+    # both halves earn their place: without the span test 30 `targets` steps lose three
+    # notes each, and without the window test the A-7 of `MAJOR_CADENCE` trades its
+    # pinned melody-alone step for a shape at fret 14 (`docs/fingering.md` §4.4's ban is
+    # why nothing else fits there).
     if should_demote_to_melody_alone(best_voicing, role):
-        if _demoted_to_melody_alone(
+        turned_away = _cost.voicing_cost(
+            best_voicing, prev_voicing, fret_min, fret_max,
+            allowed_tones=allowed_tones, root_pc=root_pc, melody_pc=melody_pc,
+        )
+        # The comparison is the tuple **with the span element removed**, which is the
+        # honest form of "the tuple would have chosen it anyway": everything the
+        # ranking says except the one criterion the demotion exists for. Keeping the
+        # element in would let the re-selection trade position, inner-voice movement
+        # or the written bass for span - a re-ranking after all, and measured at two
+        # `heres_that_rainy_day` steps whose `Bb7/F` slots would come back at a worse
+        # fret for a tighter hand.
+        span = _cost.SPAN_CRITERION
+        # The **partition** is not part of the tuple and it outranks all of it: the
+        # selector groups the candidates by how well they honour a written slash bass
+        # and only then ranks within the best group. So a narrower shape may only
+        # replace the demoted one from the **same group** - a shape that drops the
+        # written bass for a tighter hand is the same bad trade as dropping it for
+        # position, and this is the test that catches it.
+        turned_away_bass = _bass_group(
+            best_voicing, bass_pc, slash_bass_cost_for
+        )
+
+        def would_the_tuple_have_chosen_it(candidate: Voicing) -> bool:
+            if _bass_group(candidate, bass_pc, slash_bass_cost_for) != turned_away_bass:
+                return False
+            cost = _cost.voicing_cost(
+                candidate, prev_voicing, fret_min, fret_max,
+                allowed_tones=allowed_tones, root_pc=root_pc, melody_pc=melody_pc,
+            )
+            return cost[:span] + cost[span + 1:] <= turned_away[:span] + turned_away[span + 1:]
+
+        inside_budget = [
+            candidate for candidate in candidates
+            if candidate.fret_span() < GRIP_MAX_SPAN[best_voicing.grip]
+            and all(fret_min <= fret <= fret_max
+                    for fret in candidate.active_frets())
+            and would_the_tuple_have_chosen_it(candidate)
+        ]
+        narrower = (
+            select_step_voicing(
+                inside_budget,
+                prev_voicing,
+                fret_min,
+                fret_max,
+                allowed_tones=allowed_tones,
+                root_pc=root_pc,
+                melody_pc=melody_pc,
+                bass_pc=bass_pc,
+                slash_bass_cost=slash_bass_cost_for,
+            )
+            if inside_budget else None
+        )
+        if narrower is not None:
+            best_voicing = narrower
+            palette = palette_facts_for(best_voicing)
+        elif _demoted_to_melody_alone(
             arrangements, slot,
             name=name, note_str=note_str, melody_note=melody_note,
             top_strings=top_strings, best_voicing=best_voicing,
@@ -1710,8 +1822,7 @@ def _slot_state(
     *,
     progression: Sequence[Tuple[Optional[str], str, str]],
     texture: str,
-    texture_grips: Dict[str, Tuple[str, ...]],
-    grips: Tuple[str, ...],
+    parts: Tuple[str, ...],
     has_thumb: bool,
     melody_only: bool,
     melody_voiced: bool,
@@ -1851,12 +1962,13 @@ def _slot_state(
     # empty palette straight through - the same declaration `TEXTURE_GRIPS`
     # makes with an empty tuple, and the one channel `melody_alone_case`
     # reads. Skipping the resolution is what
-    # makes `texture=` and `grips=` silently inert here rather than noisily so.
+    # makes `texture=` silently inert here rather than noisily so.
     slot_grips = (
         ()
         if melody_only
         else resolve_texture_grips(
-            role, texture, texture_grips, grips,
+            role,
+            texture_palette(role, texture, parts, has_thumb),
             # The right hand's budget, and a fact about *this slot* rather than
             # about the arrangement: a target may sound three strings only where
             # a bass note is actually being placed under it, which is what
@@ -1911,7 +2023,6 @@ def arrange_progression(
     non_chord_tone: str = "extension",
     fret_min: int = NECK_FRET_MIN,
     fret_max: int = NECK_FRET_MAX,
-    grips: Tuple[str, ...] = GRIP_PREFERENCE,
     # `Sequence` and Optional *bar* and *beat*, not `List[Tuple[int, float, ...]]`:
     # a slot a caller could not place is `(None, None, None)`, so an entry point may
     # hold either shape. `float(beat)` below must therefore not assume a non-None
@@ -1919,9 +2030,9 @@ def arrange_progression(
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]] = None,
     texture: str = "uniform",
     bass: str = BASS_STYLE_AUTO,
-    melody: str = MELODY_AUTO,
+    parts: str = PARTS_AUTO,
     harmony: str = HARMONY_AUTO,
-    grid: str = GRID_EVERY_NOTE,
+    grid: str = GRID_DEFAULT,
     beats_per_bar: int = 4,
     # The metre's denominator, read by the walking bass's melody timeline alone: a
     # slot's `duration` is in whole notes and one whole note is `beat_type` beats
@@ -1952,8 +2063,6 @@ def arrange_progression(
     with no voicing inside the window is still played, just outside it, because
     losing a chord of the tune is worse than being a fret out of position.
 
-    grips limits which grip families may be used, in the order they break a tie
-    (see GRIP_PREFERENCE). The default offers all of them. `grips=("drop2",)` with
     `top_strings=MELODY_STRING_CHOICES` reproduces this library's original,
     four-string-drop-2-only output exactly, which is what a caller wants when they
     need a known arrangement rather than the best one.
@@ -2059,10 +2168,9 @@ def arrange_progression(
         non_chord_tone=non_chord_tone,
         fret_min=fret_min,
         fret_max=fret_max,
-        grips=grips,
         texture=texture,
         bass=bass,
-        melody=melody,
+        parts=parts,
         harmony=harmony,
         grid=grid,
         beats_per_bar=beats_per_bar,
@@ -2076,10 +2184,8 @@ def arrange_progression(
     non_chord_tone = _k.non_chord_tone
     fret_min = _k.fret_min
     fret_max = _k.fret_max
-    grips = _k.grips
     texture = _k.texture
     bass = _k.bass
-    melody = _k.melody
     harmony = _k.harmony
     grid = _k.grid
     beats_per_bar = _k.beats_per_bar
@@ -2088,7 +2194,6 @@ def arrange_progression(
     timings = _k.timings
     bass_pcs = _k.bass_pcs
     slash_bass_cost_for = _k.slash_bass_cost
-    texture_grips = _k.texture_grips
 
     arrangements: List[ArrangementStep] = []
 
@@ -2100,7 +2205,13 @@ def arrange_progression(
 
     _p = _resolve_policies(
         progression,
-        melody=melody,
+        # `_k.parts` rather than the keyword `parts`, and that is not a style choice:
+        # `_resolve_knobs` is what reads `options.parts`, so passing the raw keyword
+        # here handed the engine the *default* whenever a caller used
+        # `options=ArrangeOptions(parts=...)` - a silent drop of the whole selection,
+        # the same defect `options.bass` had. The two spellings are compared by
+        # `test_comping.TestTheCompingArrangement`, which is where it was caught.
+        parts_arg=_k.parts,
         texture=texture,
         bass=bass,
         harmony=harmony,
@@ -2111,7 +2222,7 @@ def arrange_progression(
     )
     # Unpacked into the names the loop below has always used, so the extraction
     # above changes nothing downstream of it.
-    voices = _p.voices
+    chosen_parts = _p.parts
     melody_voiced = _p.melody_voiced
     melody_only = _p.melody_only
     bass = _p.bass
@@ -2158,8 +2269,7 @@ def arrange_progression(
             carried, slot,
             progression=progression,
             texture=texture,
-            texture_grips=texture_grips,
-            grips=grips,
+            parts=chosen_parts,
             has_thumb=has_thumb,
             melody_only=melody_only,
             melody_voiced=melody_voiced,
@@ -2210,7 +2320,8 @@ def arrange_progression(
                 chord_type=plan.chord_type, name=plan.name,
                 note_str=plan.note_str, melody_note=plan.melody_note,
                 melody_onsets=melody_onsets,
-                voices=voices, harmony_family=harmony_family,
+                parts=chosen_parts, texture=texture, has_thumb=has_thumb,
+                harmony_family=harmony_family,
                 non_chord_tone=non_chord_tone,
                 fret_min=fret_min, fret_max=fret_max,
                 bass_pcs=bass_pcs, slash_bass_cost_for=slash_bass_cost_for,
@@ -2227,7 +2338,7 @@ def arrange_progression(
             progression=progression, index=plan.index,
             top_strings=top_strings, non_chord_tone=non_chord_tone,
             fret_min=fret_min, fret_max=fret_max,
-            grips=grips, slot_grips=plan.slot_grips, texture=texture,
+            slot_grips=plan.slot_grips, texture=texture,
             has_thumb=has_thumb, melody_only=melody_only,
             name=plan.name, note_str=plan.note_str,
             melody_note=plan.melody_note,

@@ -38,9 +38,9 @@ from .textures import (
     _BEAT_EPSILON,
     ROLE_FILL,
     ROLE_TARGET,
-    TEXTURE_GRIPS,
     TEXTURE_STYLES,
     _metric_weight,
+    parts_have_bass,
 )
 from .tuning import NO_CHORD, STANDARD_TUNING, ArrangementStep, Voicing
 
@@ -1126,53 +1126,49 @@ def bass_line_for(
     return [note for note in line if note.role in admitted]
 
 
-def thumb_capacity(texture: str, role: str) -> Optional[int]:
+def thumb_capacity(
+    texture: str,
+    role: str,
+    parts: Tuple[str, ...] = (),
+    has_thumb: bool = False,
+) -> Optional[int]:
     """How many of the three thumb strings the left hand leaves free, worst case.
 
     **The number a bass policy is checked against.** `_place_bass` skips whichever
     thumb strings the upper shape already speaks on, per note, so a thumb line is a
-    question of *capacity* rather than of conflict - and the capacity is whatever
-    `TEXTURE_GRIPS` says that role may play.
+    question of *capacity* rather than of conflict - and the capacity is whatever the
+    texture's palette for this role may play, read from `textures.texture_palette` and
+    the string tables rather than listed here.
 
     Returns `None` for a palette that is empty, which means "the left hand plays
     nothing here" and so leaves every thumb string free; the caller reads that as
     unbounded rather than as zero.
 
-    Derived from the tables rather than listed, so a texture added to `TEXTURE_STYLES`
-    cannot join the thumb-line route without its capacity being measured too. Across
-    this tree:
-
-        a walking_bass fill                        all three free
-        targets, a walking_bass target             one
-        uniform                                     one
-
-    Nothing in the tree is refused, and that follows from the grip tables rather
-    than from this rule: the worst case anywhere is one free string, which is the
-    threshold. A
-    melody-only **selection** is not in this table at all: its upper shapes are
-    single frets, and its capacity is answered in `bass_allowed`, where the route
-    is known.
+    Derived rather than listed, so a texture added to `TEXTURE_STYLES` cannot join the
+    thumb-line route without its capacity being measured too. A
+    melody-only **selection** is not answered here: its upper shapes are single frets,
+    and its capacity is unbounded by construction - see `bass_allowed`.
     """
     # Imported here rather than at module scope: `grips` sits above `bass` in the
     # package order, so a top-level import would be legal but would make `bass` read as
     # depending on the grip tables for its own sake - it does not, and only this one
     # capacity question does.
     from .grips import GRIP_STRING_SETS
+    from .textures import PART_NAMES, texture_palette
 
-    table = TEXTURE_GRIPS.get(texture)
-    if table is None:
+    families = texture_palette(
+        role, texture, parts or PART_NAMES, has_thumb
+    )
+    if not families:
         return None
-    grips = table.get(role, ())
-    if not grips:
+    sets = [
+        strings
+        for family in families
+        for strings, _soprano in GRIP_STRING_SETS.get(family, ())
+    ]
+    if not sets:
         return None
-    worst: Optional[int] = None
-    for grip in grips:
-        if grip == "melody":
-            continue
-        for strings, _soprano in GRIP_STRING_SETS.get(grip, ()):
-            free = len(set(BASS_STRING_INDICES) - set(strings))
-            worst = free if worst is None else min(worst, free)
-    return worst
+    return _worst_free_capacity(sets)
 
 
 def _worst_free_capacity(string_sets: Sequence[Tuple[int, ...]]) -> int:
@@ -1239,6 +1235,7 @@ def comping_capacity(notes: int, bass_voice: bool = False) -> int:
 
 
 def bass_allowed(
+    parts: Tuple[str, ...],
     texture: str,
     bass: str,
     notes: Optional[int] = None,
@@ -1291,6 +1288,16 @@ def bass_allowed(
     """
     if bass == BASS_STYLE_NONE:
         return True, ""
+    if not parts_have_bass(parts):
+        # **A style named for a part the selection leaves out is refused**, naming the
+        # part that would work (docs/parts.md §9). A bass line is a claim about the
+        # bass part; a selection that does not take it has nothing for the line to
+        # state, and writing one anyway would put a note in the part a bassist owns.
+        return False, (
+            f"a bass line is a claim about the bass part, and "
+            f"parts={','.join(parts)} does not take it - add 'bass' to parts, or "
+            f"drop the bass style"
+        )
     if melody_only and notes is None:
         return True, ""
     if notes is not None:
@@ -1302,7 +1309,7 @@ def bass_allowed(
             return False, _comping_no_room_reason(notes, bass_voice)
         return True, ""
     for role in (ROLE_TARGET, ROLE_FILL):
-        free = thumb_capacity(texture, role)
+        free = thumb_capacity(texture, role, parts)
         if free is None:
             continue                      # the left hand plays nothing: all three free
         if free < 1:
@@ -1324,7 +1331,7 @@ def _comping_no_room_reason(notes: int, bass_voice: bool) -> str:
         f"{tuple(BASS_STRING_INDICES)}"
         + (" with bass_voice" if bass_voice else "")
         + ", leaving the thumb nowhere to go. Every bass policy needs the same string. "
-        "Try naming fewer voices for the guitar, or drop the bass."
+        "Try naming fewer parts for the guitar, or drop the bass."
     )
 
 

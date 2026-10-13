@@ -40,6 +40,7 @@ import unittest
 from typing import List, Optional, Tuple
 
 from arranger import VoiceLeadingEngine, slots
+from arranger.bass import BASS_STYLE_WALK
 
 # (melody, quality, name) triples chosen to cover the decision points rather than to
 # be a tune: a chord tone, a 9th the extension strategy absorbs, a note with no route
@@ -56,7 +57,7 @@ TRIPLES: List[Tuple[str, str, str]] = [
     ("B4", "NC", "NC"),        # no harmony at all
 ]
 
-TEXTURES = ("uniform", "targets", "walking_bass")
+TEXTURES = ("uniform", "targets", "chord2")
 
 # The decisions the step loop makes: one implementation each, all of them called from
 # `arranger.movement` rather than re-derived there.
@@ -183,30 +184,35 @@ class TestTheTwoLoopsAgree(unittest.TestCase):
             f"{texture}: the two entry points refuse one request differently",
         )
 
-    def test_a_grip_the_texture_never_uses_agrees(self):
-        """Both loops refuse a grip the texture never uses, with one message."""
-        for texture in ("targets", "walking_bass"):
-            with self.subTest(texture=texture):
-                self.assert_same_refusal(TRIPLES[:4], texture, grips=("duo",))
+    def test_a_request_the_axes_refuse_agrees(self):
+        """Both loops refuse one request with one message.
 
-    def test_a_grip_the_role_does_use_agrees(self):
-        """The narrowing path, which is not the empty-intersection refusal.
-
-        **`targets` was dropped from this loop.** It used to be in it with
-        `grips=("shell",)`, and that was never the narrowing path at all: a `targets`
-        target is offered `("drop2", "drop3")`, so shell intersected to *nothing* and
-        the case passed only because the empty intersection used to fall back with a
-        warning. Now that the refusal raises, the case belongs to
-        `test_a_grip_the_texture_never_uses_agrees` above, and keeping it here would
-        have this test asserting the opposite of what its name says.
-
-        What remains is the two textures where shell really is a narrowing:
-        `uniform`, whose palette has seven entries, and `walking_bass`, whose target
-        palette is shell and whose fills are empty by design.
+        **Rewritten from `test_a_grip_the_texture_never_uses_agrees`.** The request used to
+        be a `grips=` narrowing; the family axis is deleted, so what is compared here is the
+        parts refusal - a bass *style* with a selection that does not take the bass part.
+        One entry point silently accepting what the other refuses is what this catches.
         """
-        for texture in ("uniform", "walking_bass"):
+        for parts in ("chord", "melody"):
+            with self.subTest(parts=parts):
+                self.assert_same_refusal(
+                    TRIPLES[:4], "targets", parts=parts, bass=BASS_STYLE_WALK
+                )
+
+    def test_a_narrowed_palette_agrees(self):
+        """A narrowed palette is the texture's now, and the thumb line is where it bites.
+
+        **Rewritten from `test_a_grip_the_role_does_use_agrees`.** What a caller narrowed
+        was a `grips=` list, and the family axis is deleted; the texture owns the arity, so
+        `test_every_texture_over_the_shared_fixtures` above sweeps every narrowing there
+        is. What is left here is the path a walk needs - a style that merges a thumb note
+        into a shape the hand is holding, which no other test in this file asks for.
+        """
+        for texture in ("targets", "uniform"):
             with self.subTest(texture=texture):
-                self.assert_same_arrangement(TRIPLES[:4], texture, grips=("shell",))
+                self.assert_same_arrangement(
+                    TRIPLES[:4], texture,
+                    bass=BASS_STYLE_WALK, grid="melody:every_note,bass:walk",
+                )
 
 
 class TestTheDecisionsAreActuallyShared(unittest.TestCase):

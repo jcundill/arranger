@@ -50,14 +50,16 @@ HEADS: List[str] = (
     + sorted(glob.glob(str(ROOT / "tests" / "data" / "*.mxl")))
 )
 
-#: The rows that place a thumb note under a texture that has one. `uniform` carries a thumb
-#: line now too, but item 2's chain of counts — 53 at `d9403e5`, 39 at `246ff69` — was taken
-#: over these four, so staying on them is what keeps the figures comparable with it.
+#: The rows that place a thumb note under a texture that has one. `targets` and `uniform` are
+#: the two textures that carry a thumb line; the walk itself is the bass part's grid row rather
+#: than a texture, and the row is inert on the slots either way - the walked-beat union comes from
+#: the bass part, so a `bass:walk` row adds nothing here. The two rule sets are the minimal one and
+#: the whole chain, unchanged from the set item 2's earlier points were taken on.
 THUMB_ROWS: Tuple[Tuple[str, str], ...] = (
     ("targets", "root"),
     ("targets", "root,5th,approach,nearest"),
-    ("walking_bass", "root"),
-    ("walking_bass", "root,5th,approach,nearest"),
+    ("uniform", "root"),
+    ("uniform", "root,5th,approach,nearest"),
 )
 
 
@@ -75,7 +77,7 @@ def _union_added() -> Dict[str, int]:
         added[Path(path).name] = len(
             [
                 slot
-                for slot in headxml.chord_slots(head, None, "every_note")
+                for slot in headxml.chord_slots(head, None, "chord:every_note")
                 if slot[3] not in melody_bars
             ]
         )
@@ -223,15 +225,15 @@ class TestTheStatedNumbersAreTheMeasuredOnes(unittest.TestCase):
             self.assertIn(stem, _doc())
 
     def test_item_two_states_the_measured_refusal_count_and_causes(self) -> None:
-        """161 refusals on the four thumb rows, split 0 / 160 / 1 down `_place_bass`'s three."""
+        """215 refusals on the four thumb rows, split 0 / 215 / 0 down `_place_bass`'s three."""
         counted = Counter(_cause(upper, pc, held) for upper, pc, held, _c in self.refusals)
         split = {
             name: counted.get(name, 0)
             for name in ("no free string", "no octave below", "fifth fret")
         }
-        self.assertEqual(len(self.refusals), 161)
+        self.assertEqual(len(self.refusals), 215)
         self.assertEqual(
-            split, {"no free string": 0, "no octave below": 160, "fifth fret": 1}
+            split, {"no free string": 0, "no octave below": 215, "fifth fret": 0}
         )
         text = _doc()
         self.assertIn(f"refusals number **{len(self.refusals)}** today", text)
@@ -249,7 +251,7 @@ class TestTheStatedNumbersAreTheMeasuredOnes(unittest.TestCase):
             "doubling" if min(upper.midi_notes()) % 12 == pc else "absent"
             for upper, pc, _held, _c in self.refusals
         )
-        self.assertEqual(dict(doubling), {"doubling": 92, "absent": 69})
+        self.assertEqual(dict(doubling), {"doubling": 107, "absent": 108})
         self.assertIn(f"{doubling['doubling']} of the {len(self.refusals)} are a", _doc())
 
     def test_item_two_states_the_measured_walk_pitch_lever(self) -> None:
@@ -276,7 +278,7 @@ class TestTheStatedNumbersAreTheMeasuredOnes(unittest.TestCase):
                 by_any += 1
                 if any(pitch in tones for pitch in placeable):
                     by_tone += 1
-        self.assertEqual((by_any, by_tone, by_none), (93, 64, 68))
+        self.assertEqual((by_any, by_tone, by_none), (136, 99, 79))
         text = _doc()
         self.assertIn(f"reaches **{by_any} of the {len(self.refusals)}**", text)
         self.assertIn(f"only **{by_tone}** of those", text)
@@ -298,7 +300,7 @@ def _generated_positions() -> Tuple[int, int, int]:
         occupied = {
             (bar, round(beat, 6)) for _triple, bar, beat, _dur in headxml.head_skeleton(head, None)
         }
-        for slot in headxml.chord_slots(head, None, "every_note"):
+        for slot in headxml.chord_slots(head, None, "chord:every_note"):
             if (slot[3], round(slot[4], 6)) in occupied:
                 continue
             total += 1
@@ -329,13 +331,18 @@ class TestTheGeneratedSlotsRemainder(unittest.TestCase):
         # and the three arrangements below are what these four assertions read from.
         cls.arranged: Dict[Tuple[str, str], List[Any]] = {}
 
-    def _bar(self, grid: str, melody: str, bar: int) -> List[Any]:
-        key = (grid, melody)
+    def _bar(self, grid: str, parts: str, bar: int) -> List[Any]:
+        """One bar of an arrangement, keyed by the grid row and the parts selection.
+
+        `grid` is a row spelling, and `parts` is the selection - `auto` for a head whose
+        tune the guitar takes, `chord` for the melody-less route another instrument plays.
+        """
+        key = (grid, parts)
         if key not in self.arranged:
             steps, _head, _notes = headxml.arrange_xml_head(
                 str(ROOT / "tests" / "data" / "All_the_Things_You_Are.musicxml"),
                 grid=grid,
-                melody=melody,
+                parts=parts,
             )
             self.arranged[key] = steps
         return [s for s in self.arranged[key] if s.bar == bar]
@@ -347,10 +354,10 @@ class TestTheGeneratedSlotsRemainder(unittest.TestCase):
         is the case the stale prose said was silent. It yields 8 steps under `joe_pass` on
         both routes, and bar 4's skipped beats 1.5, 2.5 and 3.5 sound too.
         """
-        for melody in ("auto", "none"):
-            bar3 = self._bar("joe_pass", melody, 3)
+        for parts in ("auto", "chord"):
+            bar3 = self._bar("chord:joe_pass", parts, 3)
             self.assertEqual(len(bar3), 8, [(s.beat, s.silence) for s in bar3])
-        bar4 = self._bar("joe_pass", "auto", 4)
+        bar4 = self._bar("chord:joe_pass", "auto", 4)
         sounded = {round(s.beat, 2) for s in bar4}
         self.assertEqual(len(bar4), 7)
         for skipped in (1.5, 2.5, 3.5):
@@ -361,7 +368,7 @@ class TestTheGeneratedSlotsRemainder(unittest.TestCase):
 
     def test_the_default_grid_is_the_one_that_remains_silent(self) -> None:
         """`every_note`'s exception is the bar, so beat 3 of bar 4 is still absent."""
-        bar4 = self._bar("every_note", "auto", 4)
+        bar4 = self._bar("chord:every_note", "auto", 4)
         self.assertEqual(len(bar4), 3)
         self.assertEqual(sorted(round(s.beat, 2) for s in bar4), [1.0, 2.0, 4.0])
         self.assertNotIn(3.0, {round(s.beat, 2) for s in bar4})
@@ -401,6 +408,7 @@ class TestTheReproductionSnippetsRun(unittest.TestCase):
         "total added: 87",
         "bar 2 present: False",
         "bars walked: [1, 3]",
+        "inert rows: 8 of 8 heads identical",
     )
 
     @classmethod
@@ -422,9 +430,40 @@ class TestTheReproductionSnippetsRun(unittest.TestCase):
             cls.outputs.append(completed.stdout)
 
     def test_the_block_still_holds_every_snippet(self) -> None:
-        self.assertEqual(len(self.snippets), 6)
+        self.assertEqual(len(self.snippets), 7)
 
     def test_each_snippet_prints_what_its_comment_claims(self) -> None:
         joined = "\n".join(self.outputs)
         for expected in self.EXPECTED:
             self.assertIn(expected, joined, joined)
+
+
+class TestTheInertBassGridRow(unittest.TestCase):
+    """Item 4: a `bass:` row is accepted, validated, and changes no note.
+
+    The claim is an **equality**, so it is measured as one: the same arrangement under the
+    default row and under each of the three `bass:` spellings, compared byte for byte.
+    When it starts failing, the row has been wired and the item is ready to be removed.
+    """
+
+    def test_every_bass_row_is_the_default_row(self) -> None:
+        rows = ("melody:every_note", "bass:every_note", "bass:walk", "bass:anchors")
+        for path in HEADS:
+            with self.subTest(head=Path(path).name):
+                tabs = set()
+                for grid in rows:
+                    steps, _head, _notes = headxml.arrange_xml_head(
+                        path,
+                        texture="targets",
+                        bass=bass.BASS_STYLE_WALK,
+                        grid=grid,
+                    )
+                    tabs.add(tuple(step.tab_line() for step in steps))
+                self.assertEqual(len(tabs), 1, f"{Path(path).name}: a bass row changed a step")
+
+    def test_the_document_states_the_measured_equality(self) -> None:
+        """The figure the document states is the one the tree produces."""
+        text = _doc()
+        self.assertIn(
+            "# inert rows: %d of %d heads identical" % (len(HEADS), len(HEADS)), text
+        )

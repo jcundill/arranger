@@ -4,7 +4,8 @@
 (`step.bass`), `12fd804` (the melody-only signal) — each gated on a green `make check`;
 this document's own update is commit 4, and the version bump is commit 5. The body below
 is the plan as written before implementation; §5 records where the landing differed, and
-that is the only part that supersedes it.
+that is the only part that supersedes it. The axis the melody-only signal landed on is
+`parts=` now ([docs/parts.md](parts.md)) - `voices=` is the spelling this plan wrote.
 
 It was committed before implementation because the Stage-1 plan lived only in a
 conversation and had to be reconstructed from the tree — a plan that exists only in a

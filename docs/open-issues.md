@@ -102,33 +102,36 @@ left room for the thumb in the first place.
 phrases it on the tab line, so the omission is reported on the part rather than in a collector.
 
 **The problem.** Over the eight committed heads × the four rows that place a thumb note under a
-texture that has one (`targets`/`walking_bass` × `root`/`root,5th,approach,nearest`; 2,624 `_place_bass` calls)
-refusals number **161** today. The chain, every step re-measured on that same row set: **53** at
-`d9403e5` (seven heads, 1,500 calls), **39** at `246ff69`, **131** at `5f4a5e1` (the eighth
-fixture arrives), and **161** from `574d666` on — playing the repeats (`6cdcbaa`) lengthened the
-heads, which is where most of the last jump comes from. Attributed by cause:
+texture that has one (`targets`/`uniform` × `root`/`root,5th,approach,nearest`; 2,624
+`_place_bass` calls) refusals number **215** today. `targets` and `uniform` are the two textures
+that carry a thumb line; the walk itself is the bass part's grid row rather than a texture, which
+is why the rows are two textures × two rule sets rather than the old `targets`/`walking_bass` pair.
+The chain's earlier points were taken over that old pair, so they are not comparable with today's
+figure: **53** at `d9403e5` (seven heads, 1,500 calls), **39** at `246ff69`, **131** at `5f4a5e1`
+(the eighth fixture arrives), and **161** from `574d666` on — playing the repeats (`6cdcbaa`)
+lengthened the heads, which is where most of that jump came from. Attributed by cause:
 
 | cause | refusals |
 |---|---|
 | no free string | **0** |
-| **no octave of the walk's pitch below the shape** | **160** |
-| five frets for four fingers | **1** |
+| **no octave of the walk's pitch below the shape** | **215** |
+| five frets for four fingers | **0** |
 
 The middle row is the common case, and it is the one the clause names — but note it is a
 *replica* of `_place_bass`'s three filters that names it, not the engine, because the field
-carries the wanted pitch and not the reason it could not be placed. 92 of the 161 are a
+carries the wanted pitch and not the reason it could not be placed. 107 of the 215 are a
 *doubling*: the walk's pitch class is the shape's own bottom class an octave up, so the thumb
-would restate what the chord already sounds. The other 69 are a pitch the shape has no octave of
+would restate what the chord already sounds. The other 108 are a pitch the shape has no octave of
 beneath it.
 
 **Why the levers do not pay.** All three filters are right, and dropping the note is deliberate
 policy — a step is never dropped because the thumb could not reach it.
 
 - **the walk's own pitch** is the fourth lever and costs the tuple nothing — it re-states the
-  bass under the shape already chosen — but reaches **93 of the 161**, and only **64** of those
-  by a chord tone (`Cm7` 22, `Dm7` 20, `Db9` 12, `D7` 4, `G7` 2, `Eb7` 2, `C7` 2 — seven chords
-  across six heads, not the one chord and one bar this used to say). **68 of the 161** cannot be
-  helped by any pitch at all.
+  bass under the shape already chosen — but reaches **136 of the 215**, and only **99** of those
+  by a chord tone (`Cm7` 26, `Dm7` 20, `Eb7` 14, `Db9` 14, `Am7` 6, `Abmaj7` 5, `D7` 4, `Eb6` 4,
+  `Gm7` 4, `G7` 1, `C7` 1 — eleven chords across seven heads, not the one chord and one bar this
+  used to say). **79 of the 215** cannot be helped by any pitch at all.
 - **the shape-level retries** (re-select over hosting shapes, identical notes or any) are the
   other lever, and their numbers — 0 of 34 for the identical-notes retry, 10 of 53 on the tree
   it was first asked on, 48 of 53 for the bare one — are **not re-measured here**: the script
@@ -175,6 +178,35 @@ not among them.
 
 ---
 
+## 4. A `bass:` grid row is accepted and changes nothing
+
+**Status: open, diagnosed.** The row spelling is validated; the row itself has no reader.
+
+**The issue.** `grid=` is `PART:PATTERN` rows, and `GRID_PART_PATTERNS` offers three for the bass
+part: `bass:every_note`, `bass:walk` and `bass:anchors`. All three parse, all three are allowed
+by `grid_allowed`, and none of them changes a note. `grid_bass_pattern` is the function written to
+read the row and **nothing calls it**: the walk's beats come from the bass *part* — `bass.py`'s
+own timeline and the style's rules, unioned when a thumb line sounds — which is why the walk the
+help text attributes to `bass:walk` already happens without it.
+
+**The problem.** Measured over all eight committed heads, `texture=targets` with
+`--bass-style root,5th,approach,nearest`: the default row and each of the three `bass:` rows give
+**byte-identical steps**, same count and same tab lines on every head — 150, 297, 90, 206, 16,
+256, 102, 246. So a caller who writes `--grid bass:walk` is handed exactly what a caller who wrote
+nothing got, and nothing on the line says so. That is the failure this document exists for: a
+spelling stating a choice the library did not make.
+
+**Why it exists / not fixed.** The rows are part of the axis's vocabulary —
+[docs/parts.md](parts.md) §7 step 5 fixes `grid=` as positions × parts — and `parse_grid`
+validates them, so refusing them would be the axis rejecting a spelling it documents. What is
+missing is the *reader*: building it moves the walk's positions off `bass.py`'s timeline and onto
+the row, which changes the walked-beat union that item 2's figures are taken over. That is a
+measured cost rather than an oversight, so the row is documented as inert
+([README.md](../README.md)) and pinned here instead:
+`tests/test_open_issues.py::TestTheInertBassGridRow` re-takes the equality from the tree.
+
+---
+
 ## Reproducing
 
 ```bash
@@ -202,7 +234,7 @@ print('steps:', len(steps))   # 16 - four bars, four beats each
 # and the one route still silent, which is a different claim:
 .venv/bin/python -c "
 from headxml import arrange_xml_head
-steps, _head, _notes = arrange_xml_head('tests/data/lead_sheet_chords_only.musicxml', melody='soprano')
+steps, _head, _notes = arrange_xml_head('tests/data/lead_sheet_chords_only.musicxml', parts='melody')
 print('steps:', len(steps))   # 0 - a melody-only selection has no tune to play
 "
 
@@ -216,7 +248,7 @@ total = 0
 for path in sorted(glob.glob('tests/data/*.musicxml')) + sorted(glob.glob('tests/data/*.mxl')):
     head = H.load_musicxml(path, None)
     melody_bars = {bar for _t, bar, _b, _d in H.head_skeleton(head, None)}
-    added = [s for s in H.chord_slots(head, None, 'every_note') if s[3] not in melody_bars]
+    added = [s for s in H.chord_slots(head, None, 'chord:every_note') if s[3] not in melody_bars]
     total += len(added)
     print('%-32s added=%d' % (os.path.basename(path), len(added)))
 print('total added:', total)
@@ -233,7 +265,7 @@ from arranger import VoiceLeadingEngine
 prog = [('D5','m7','Dm7'), ('C5','maj7','Cmaj7'), ('E4','7','A7')]
 timings = [(1,1.0,1.0), (1,2.0,1.0), (3,1.0,1.0), (3,2.0,1.0)]   # no slot in bar 2
 steps = VoiceLeadingEngine.arrange_progression(
-    prog, timings=timings, melody='alto,tenor', grid='freddie',
+    prog, timings=timings, parts='chord', grid='chord:freddie',
     )
 print('bar 2 present:', any(s.bar == 2 for s in steps))
 print('Cmaj7 duration:', [s.duration for s in steps if s.chord == 'Cmaj7'])
@@ -252,13 +284,32 @@ print('bars walked:', sorted({n.bar for n in line}))
 "
 # bars walked: [1, 3]   <- on the head path the union supplies bar 2, so this is the
 #                            library function called directly with hand-built timings.
+
+# 4. a bass: grid row is inert: every head comes out byte-identical to the default row
+.venv/bin/python -c "
+import glob
+import headxml as H
+rows = ['melody:every_note', 'bass:every_note', 'bass:walk', 'bass:anchors']
+heads = sorted(glob.glob('tests/data/*.musicxml')) + sorted(glob.glob('tests/data/*.mxl'))
+same = 0
+for path in heads:
+    tabs = set()
+    for grid in rows:
+        steps, _h, _n = H.arrange_xml_head(
+            path, texture='targets', bass='root,5th,approach,nearest', grid=grid)
+        tabs.add(tuple(s.tab_line() for s in steps))
+    same += len(tabs) == 1
+print('inert rows: %d of %d heads identical' % (same, len(heads)))
+"
+# inert rows: 8 of 8 heads identical - and all four spellings give 150, 297, 90, 206, 16,
+# 256, 102, 246 steps, so the row is a no-op rather than an accident of one head.
 ```
 
 
 Item 2's counts are re-measured the same way (no committed script — `AGENTS.md` trap 8): wrap
 `bass._place_bass` and `movement._attach_bass`, load each `tests/data/` head over the four rows
-that place a thumb note under a texture that has one (`texture` in `targets`/`walking_bass` ×
-`bass` in `anchors`/`walk`), and count a refusal wherever `_place_bass` returns `None`.
+that place a thumb note under a texture that has one (`texture` in `targets`/`uniform` ×
+`bass` in `root`/`root,5th,approach,nearest`), and count a refusal wherever `_place_bass` returns `None`.
 
 Naming the *cause* needs a replica of `_place_bass`'s three filters rather than a reading of the
 step, and that is a limitation worth stating: `ArrangementStep.bass_refused` carries the wanted
@@ -266,6 +317,6 @@ pitch class, not the reason it could not be placed. Rebuild the free-string set,
 the wanted pitch below the shape's own lowest note, and the `fingers.can_fret` four-fret budget,
 in that order, and the first of the three that comes back empty is the cause. The replica is
 validated by agreement rather than by inspection — over all 2,624 calls it agrees with the real
-`_place_bass` on every outcome, which is what makes the `0 / 160 / 1` split a measurement and not
+`_place_bass` on every outcome, which is what makes the `0 / 215 / 0` split a measurement and not
 a description of the code. Recording the cause on the field would remove the replica; that is a
 change to the engine, not to this document.

@@ -258,11 +258,10 @@ you whether a change is an improvement or a different library.
     movement, then bass function. Lexicographic, not a weighted sum, because these
     priorities must not be traded against each other. **No element names a grip family**,
     so a tie that runs off the end of the tuple is broken by generation order:
-    `top_strings` first, then `GRIP_PREFERENCE` within one string. That makes a caller's
-    own `grips=` order part of the rule rather than an accident of the loop.
-    `parse_grips` is that order as one spelling the front end can take -
-    comma-separated, and deliberately not re-sorted, so `--grips shell,duo` and
-    `grips=("shell", "duo")` are one request and `--grips duo,shell` is another.
+    `top_strings` first, then `GRIP_PREFERENCE` within one string. The generators still
+    take a `grips=` preference list - that is how the order is written down - but no
+    arrangement route reaches it: the axis that let a caller give one is deleted, so the
+    family a step is voiced with is `GRIP_PREFERENCE`'s order and nothing else.
     `_best_voicing` is its argmin and is stable, so the engine is deterministic.
   - `get_octave_down_candidates(melody_note, chord_type, chord_name=None,
     top_strings=MELODY_STRING_CHOICES)` — the same for the melody an octave lower,
@@ -470,7 +469,8 @@ through a result.
 so a zero-span barre and a one-fret reach tie and the decision falls through to neck
 position. One fret of stretch is not a stretch worth moving the hand for, and the
 case that showed it was a player reading the tab rather than a corpus measurement:
-`Bb7` under `F4 → G4 → F4` with `--grips shell` was voiced `x-x-6-7-6-x`,
+`Bb7` under `F4 → G4 → F4` with a three-note palette (`--texture chord2`)
+was voiced `x-x-6-7-6-x`,
 `x-x-x-3-3-3`, `x-x-6-7-6-x` — down to a fret-3 barre for one note and straight back,
 because the barre spans zero and the natural shape at frets 7–8 spans one. The
 bucket keeps the hand at 6–8 (`x-x-8-7-8-x`). The bucket is applied to the *value*
@@ -733,19 +733,21 @@ Five decisions are load-bearing:
   false for the same reason from the other side: a complete shape **did** exist here and
   was refused for its reach, so "no voicing for this chord" would be claiming something
   that is not true.
-- **`grips` is an intersection, not an override.** A caller's `grips` used to be
-  discarded outright by any non-uniform texture (`slot_grips = texture_grips[role]`), so
-  `--grips shell --texture targets` asked for shell-only and silently got a four-note
-  drop-2 on every strong beat. It is now the intersection of the caller's restriction and
-  the role's palette, in the caller's order; `GRIP_PREFERENCE` intersects to the full
-  palette, so the default is untouched. An **empty** intersection is a caller asking for
-  a grip the texture never uses: the step still sounds, and says so on stdout.
+- **`grips` was an intersection, not an override — and the axis is now gone.** A
+  caller's `grips` used to be discarded outright by any non-uniform texture
+  (`slot_grips = texture_grips[role]`), so `--grips shell --texture targets` asked for
+  shell-only and silently got a four-note drop-2 on every strong beat. It then became the
+  intersection of the caller's restriction and the role's palette, in the caller's order —
+  `GRIP_PREFERENCE` intersected to the full palette, so the default was untouched, and an
+  empty intersection was a caller asking for a grip the texture never uses. The family axis
+  has since been deleted: the role's palette is the whole story, `--texture` is what
+  narrows it, and a family the texture never uses can no longer be asked for at all.
 
   Both entry points need this — `arrange_progression` and
   `arranger.slots.arrange_slots` — because a head read from a file takes the second
   and a hand-built progression the first. They are no longer two loops, so this is
   a request built in two places rather than a policy applied twice: fixing only one
-  would leave the same flag behaving two different ways depending on the entry point.
+  would leave the same request behaving two different ways depending on the entry point.
 - **An `interval` is a texture; a duo is a harmony.** Both are two notes under the melody,
   and they are now offered under any melody degree, so the degree no longer distinguishes
   them. What does is the rule that builds them. An interval is not claiming the chord, so
@@ -794,10 +796,11 @@ so the candidates are filtered to the string the melody is on *before* the selec
 them — `decisions.hold_the_melody_string`. That is a filter over a list rather than a new
 cost criterion, for the reason the walking bass's finger budget is: ranking a hold above
 a jump cannot stop the jump, because both are legal shapes, and `span` deliberately
-outranks neck position in the tuple. Measured over the seven committed heads and the
-three textures: **21** of 2,399 steps change, every one of them under `targets` — 18 are a
-different shape and 3 are only the flag — while `uniform` and `walking_bass` are
-untouched. The narrowing **cannot starve a step**: a thin palette with nothing on the
+outranks neck position in the tuple. Measured when this landed, over the seven heads
+then in the tree and the three textures then shipped: **21** of 2,399 steps change, every
+one of them under `targets` — 18 a different shape and 3 only the flag — while
+`uniform` and the walk (its own texture then, `--texture targets` with a bass style now)
+are untouched. The narrowing **cannot starve a step**: a thin palette with nothing on the
 held string keeps its candidates unchanged, and such a step is then simply not marked
 `repeated`.
 
@@ -846,8 +849,8 @@ string from the caller's `top_strings`, so a repeat reaching one of them keeps t
 behaviour — re-stated rather than held, and never marked `repeated`, because
 `is_repeated_step` refuses a step whose predecessor sounds a single note. Counted over the
 committed heads: **67** steps that sound one note re-state the previous step's pitch under
-an unchanged harmony, and **one** of them records a different string — a `walking_bass`
-fill, whose one-note upper shape is bookkeeping rather than a strike, since a fill under a
+an unchanged harmony, and **one** of them records a different string — a fill under the
+walk, whose one-note upper shape is bookkeeping rather than a strike, since a fill under a
 walk is `bass_only` and the previous shape is what is still ringing.
 
 Every string the step does not play is marked muted (**`x`**), so the line states
@@ -967,7 +970,8 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
 - **A palette that cannot voice a chord leaves the tune alone** rather than dropping it.
   `shell`, `duo` and `interval` are built from the chord's own degrees, so they have no
   quality-only fallback to thin to — where the four-note families always have something.
-  Under `--grips shell` a note with no mapping and no shell therefore had **no** candidate
+  Under a shell-only palette (`--grips shell`, since deleted) a note with no mapping and no
+shell therefore had **no** candidate
   and the step was dropped with the melody in it: measured over the committed heads,
   **216** notes (157 of them on `tenor_madness`), 214 of them non-chord tones the table
   cannot route and 2 chord tones the shell's geometry cannot place. Every one now sounds,
@@ -1020,14 +1024,14 @@ deliberate: no step is ever left unplayable, at the cost of one melodic interval
     not added: nothing in the pipeline supplies a key, and inferring one from the
     chord progression would be a guess.
 
-### Melody alone: `voices=soprano` and `voices=soprano,bass`
+### Melody alone: `parts="melody"` and `parts="melody,bass"`
 
-Two selections that answer "lead sheet in, the tune out". `melody="soprano"` plays the
-melody and nothing else, and `melody="soprano,bass"` plays the same line with a walking
+Two selections that answer "lead sheet in, the tune out". `parts="melody"` plays the
+melody and nothing else, and `parts="melody,bass"` plays the same line with a walking
 thumb under it and still nothing harmonising it. Neither is a *grip*, for the reason
-above: what they change is which voices sound at all, and a grip would have to win a
-cost comparison it should not be in. They were the `melody` and `melody_bass` textures
-until the fact moved to the voices axis — the question `voices=` answers — which is
+above: what they change is which parts sound at all, and a grip would have to win a cost
+comparison it should not be in. They were the `melody` and `melody_bass` textures until
+the fact moved to the selection — the question `parts=` answers — which is
 `docs/one-fact.md`'s own subject.
 
 The declaration is the empty palette on **both** roles — the same word

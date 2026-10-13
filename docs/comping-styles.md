@@ -28,8 +28,11 @@ dependency order. Steps 0, B, A, A', C, D and E have landed; §9.4's four-note c
 chord is the remaining item, and it is still a proposal.
 
 It is deliberately **not** in `docs/history/`, which is for completed plans and is never
-extended. The shipped `voices=` axis is described in [voices-axis.md](voices-axis.md); this
-document is about the **other two axes**, and about the fact that all three overlap.
+extended. The shipped selection axis is `parts=` ([parts.md](parts.md)); this document is
+about the **chord part's two axes** (`harmony=` and `grid=`), and about the fact that the
+three overlap. Where it writes `voices=` or `melody=` it is naming the spelling that axis
+shipped as, and the mapping is direct: `voices=none` is `parts=chord`, `voices=soprano` is
+`parts=melody`, and `melody=alto,tenor` is also `parts=chord`.
 
 Measurements are over `tests/data/but_not_for_me.mxl` (2/2, Eb major, 80 melody notes),
 `texture=targets`, all 80 steps, unless stated otherwise.
@@ -470,11 +473,11 @@ replacement flag born with the emptiness option (1) was chosen to avoid.
 
 Two live facts in the tree that this section did not know about, both settled in Stage C:
 
-- `ArrangeOptions` carries **`melody: str = MELODY_AUTO`** (`options.py`), and
-  `arrange_progression` takes a **`melody=`** keyword that is fed straight into
-  `parse_voices`. A keyword named `melody` that takes `soprano,alto` reads as the melody
-  *note* and is actively misleading; the rename is the moment to fix the name rather than
-  inherit it.
+- `ArrangeOptions` carried **`melody: str = MELODY_AUTO`** (`options.py`), and
+  `arrange_progression` took a **`melody=`** keyword fed straight into `parse_voices`. A
+  keyword named `melody` that takes `soprano,alto` reads as the melody *note* and is
+  actively misleading. **Settled by the rename**: the field is `parts` and the keyword is
+  `parts=`, which is what `parse_parts` reads.
 - `options.py` cites **`MELODY_STYLES`** in `textures.py`. **No such table exists.** The
   real one is `MELODY_POLICIES`, keyed `auto` / `none` only. A live documentation error,
   independent of anything else in this document.
@@ -669,11 +672,13 @@ through `arrange_progression`, `ArrangeOptions`, `arrange_slots`, `_corpus_optio
 both CLIs. Inert twice over — `auto` resolves to the shipped `guide`, and the axis is read
 only by the comping route — and all six published arrangements are byte-identical.
 
-**Not done: the rename, and §6 Q2 is now settled as (C)** — `harmony=` covers the
-melody-free comping route and `--grips shell` stays a separate grip choice. That settles
-*why* the rename did not happen: `harmony=` cannot express `soprano`, so under (C) it is a
-strictly weaker `--voices` and renaming would drop the axis's headline case. `--voices` is
-still `--voices`, and `melody=` still carries a voice list.
+**§6 Q2 was settled as (C)** — `harmony=` covers the melody-free comping route, and the
+shell chord-melody stayed a separate grip choice. That settles *why* the rename waited:
+`harmony=` cannot express "the tune and nothing else", so under (C) it was a strictly
+weaker `voices=`, and renaming would have dropped that axis's headline case. **The rename
+has since landed on its own terms**: the axis is `parts=`, named for the parts in a band
+rather than the voices in a stack, and the grip-family axis went with it — so which
+*grip* a chord-melody is voiced with is the selector's business, not a caller's.
 
 The follow-up is §6 Q2 option (A) as **one commit**: route `harmony=guide` + `sings=yes`
 through the shell grip, deprecate `--grips shell`, rename. Its output is byte-identical to
@@ -721,7 +726,7 @@ Three things the implementation settled that this section did not say:
   and 41 become rests.
 
 **What the grid did *not* turn out to touch: the bass line.** Measured on
-`texture=targets, melody=alto,tenor, bass=walk`, `bass` is `[51, None, 52, None]` both
+`texture=targets, parts=chord, bass=walk`, `bass` is `[51, None, 52, None]` both
 at `grid=auto` and under `grid=freddie`. The walk visits whole beats only and a grid
 only removes *chords*, so the two axes are orthogonal — which is the orthogonality
 claim of §4 tested rather than asserted. An earlier reading of that measurement as a
@@ -904,9 +909,9 @@ Measured on this document's own example, a passing D over Cmaj7:
 
 | | `--non-chord-tone extension` | `diminished` |
 |---|---|---|
-| `voices=auto` | `harmonized_as=Cmaj9` | `harmonized_as=Bdim7` |
-| `voices=alto,tenor` | `None` | `None` |
-| `voices=alto,tenor,bass` | `None` | `None` |
+| `parts=auto` | `harmonized_as=Cmaj9` | `harmonized_as=Bdim7` |
+| `parts=chord` | `None` | `None` |
+| `parts=bass,chord` | `None` | `None` |
 
 The cause is structural rather than a policy decision: all three strategies live in
 `prepare_step`, and `prepare_step` is called only from the melody-bearing branch. The

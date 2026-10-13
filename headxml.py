@@ -42,19 +42,18 @@ from typing import Dict, List, Optional, Sequence, Tuple, Union
 from xml.etree import ElementTree
 
 from arranger import (
-    GRIP_PREFERENCE,
+    GRID_DEFAULT,
     NO_CHORD,
     PITCH_CLASS_NAMES,
     ArrangementStep,
     ChordParser,
     grid_defers_to_melody,
     grid_positions,
-    melody_only_selection,
     parse_grid,
-    parse_grips,
-    parse_voices,
+    parse_parts,
+    parts_has_melody_only,
     resolve_grid,
-    resolve_voices,
+    resolve_parts,
 )
 from arranger.slots import (
     arrange_slots,
@@ -1685,7 +1684,7 @@ def melody_state(notes: Sequence[HeadNote], bar: int, beat: float) -> str:
 def chord_slots(
     head: Head,
     section: Optional[Tuple[int, int]] = None,
-    grid: str = "every_note",
+    grid: str = GRID_DEFAULT,
 ) -> List[Tuple[Optional[str], str, str, int, float, float]]:
     """Every position `grid` names, as slots, **including positions no melody note has**.
 
@@ -1722,6 +1721,14 @@ def chord_slots(
     """
     lo, hi = section if section is not None else head.bars
     beats_per_bar = head.beats_per_bar
+    # **Parsed here, because this function is public and takes a spelling.** Every
+    # reader below (`grid_defers_to_melody`, `grid_positions`) resolves *rows* and
+    # falls back to `every_note` for a row it does not recognise, which is right for a
+    # canonical policy and wrong for an argument: `chord_slots(head, grid="freddie")`
+    # would comp every beat of every bar without a word, which is exactly what
+    # `parse_grid` refuses to do. A resolved policy is itself a legal spelling, so the
+    # second caller (`_merge_chord_slots`) parses to itself.
+    grid = parse_grid(grid)
     # The other half of the same conversion, used the other way round: a *length* in
     # beats becomes whole notes by dividing by `beat_type`, because one whole note is
     # `beat_type` beats (four quarters at `4 / beat_type` quarters to the beat). Dividing
@@ -1859,12 +1866,11 @@ def arrange_xml_head(
     non_chord_tone: str = "extension",
     fallback: Optional[str] = None,
     section: Optional[Tuple[int, int]] = None,
-    grips: Tuple[str, ...] = GRIP_PREFERENCE,
     texture: str = "uniform",
     bass: str = "auto",
-    melody: str = "auto",
+    parts: str = "auto",
     harmony: str = "auto",
-    grid: str = "every_note",
+    grid: str = GRID_DEFAULT,
 ) -> Tuple[List[ArrangementStep], Head, List[str]]:
     """Loads a MusicXML head, reduces it and arranges it, end to end.
 
@@ -1879,8 +1885,9 @@ def arrange_xml_head(
     `fallback` may be "diminished"; it replaces the written chord, so it is off
     unless asked for.
 
-    `texture` is the arranging guide's target-note rule, forwarded the same way. It
-    is passed `head.beats_per_bar` because **this** module is where the metre trap
+    `bass` is the note rules the thumb states, `texture` the chord part's arity policy,
+    and `grid` when each part falls; all three are forwarded the same way.
+    `beats_per_bar` is passed because **this** module is where the metre trap
     bites hardest: three of the four committed scores are in cut time, whose beat is
     a half note, so a rule that assumed four beats to the bar would put a full chord
     on a beat that does not exist in a 2/2 head. A count without a denominator is
@@ -1894,32 +1901,32 @@ def arrange_xml_head(
     head = load_musicxml(path, part)
     slots = head_skeleton(head, section)
     # **The comping union is gated on whether the guitar comps at all, not on the
-    # route.** `melody=none` is the ensemble answer: the guitar states the chord while
+    # route.** `parts=chord` is the ensemble answer: the guitar states the chord while
     # somebody else sings, so a position with no melody note is a position the chord of
-    # the tune still occupies. `melody=auto` is the same claim *and* the guitar sings
+    # the tune still occupies. `parts=auto` is the same claim *and* the guitar sings
     # the tune — the grid still places chords where the tune is silent, which is
     # `docs/comping-styles.md` §9.3 **step D**: the soprano is per slot, not per route.
-    # A *melody-only* selection (`soprano`, `soprano,bass`) is the one case that is not
+    # A *melody-only* selection (`parts=melody`, `melody,bass`) is the one case that is not
     # merged: it plays the tune and nothing else, so a position with no tune has nothing
     # for it to play. `_merge_chord_slots` unions the whole bar only for a melody-anchored
     # grid, so the default (`every_note`, no flags) is a no-op on every note-bearing bar —
     # which is what `docs/comping-styles.md` §8's acceptance criterion asks for — while a
     # bar the melody never enters now gets its chords.
     #
-    # **Both `parse_voices` and `resolve_voices`, and the second one is not optional.**
-    # `parse_voices("auto")` returns the **sentinel** `("auto",)`, which contains no
-    # soprano — so testing the route on the parsed value alone classifies the *default*
+    # **Both `parse_parts` and `resolve_parts`, and the second one is not optional.**
+    # `parse_parts("auto")` returns the **sentinel** `("auto",)`, which names no
+    # melody — so testing the route on the parsed value alone classifies the *default*
     # arrangement as the comping route and unions grid positions into it, and every
-    # unioned slot then carries the placeholder melody. `resolve_voices` is what turns the
-    # sentinel into all four voices. `docs/open-issues.md` item 1 holds the
+    # unioned slot then carries the placeholder melody. `resolve_parts` is what turns the
+    # sentinel into the three parts. `docs/open-issues.md` item 1 holds the
     # measurement.
     #
     # This is trap 12 arriving from a new direction — a *resolution* step skipped, so a
     # policy reads as something it is not. The predicate itself is the engine's own
     # (`VoiceLeadingEngine.arrange_progression` routes each slot through the same
     # question), which is why it is imported rather than re-tested.
-    resolved_voices = resolve_voices(parse_voices(melody))
-    if not melody_only_selection(resolved_voices):
+    resolved_parts = resolve_parts(parse_parts(parts))
+    if not parts_has_melody_only(resolved_parts):
         slots = _merge_chord_slots(slots, head, section, grid) or slots
     triples = [slot[0] for slot in slots]
     timings = [(slot[1], slot[2], slot[3]) for slot in slots]
@@ -1936,7 +1943,7 @@ def arrange_xml_head(
     }
     steps, _rescued, notes = arrange_slots(
         triples, timings, non_chord_tone=non_chord_tone, fallback=fallback,
-        grips=grips, texture=texture, bass=bass, melody=melody,
+        texture=texture, bass=bass, parts=parts,
         harmony=harmony, grid=grid,
         beats_per_bar=head.beats_per_bar,
         # Both halves of the metre, because they answer different questions: the count
@@ -2084,13 +2091,6 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     if not Path(args.file).is_file():
         parser.error(f"no such file: {args.file}")
 
-    try:
-        grips = parse_grips(args.grips)
-    except ValueError as error:
-        # An unknown family is a usage error, on the same route as a bad `--bars`
-        # range - and refused here, before the score is read.
-        parser.error(str(error))
-
     section: Optional[Tuple[int, int]] = None
     if args.bars:
         try:
@@ -2116,10 +2116,9 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
             non_chord_tone=args.non_chord_tone,
             fallback=args.fallback,
             section=section,
-            grips=grips,
             texture=args.texture,
             bass=args.bass_style,
-            melody=args.voices,
+            parts=args.parts,
             harmony=args.harmony,
             grid=args.grid,
         )
@@ -2133,7 +2132,7 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     print(
         f"  {head.beats_per_bar}/{head.beat_type}, {_key_label(head)}, {len(head)} "
         f"melody note(s), bars {head.bars[0]}-{head.bars[1] - 1}; neck window: "
-        f"frets {args.fret_min}-{args.fret_max}; grips: {', '.join(grips)}"
+        f"frets {args.fret_min}-{args.fret_max}; parts: {args.parts}"
     )
     if head.markers:
         # The arrangement is the bars played; a score is written with repeats. Saying

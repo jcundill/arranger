@@ -44,9 +44,9 @@ from .movement import (
 )
 from .options import ArrangeOptions
 from .textures import (
-    GRID_EVERY_NOTE,
+    GRID_DEFAULT,
     HARMONY_AUTO,
-    MELODY_AUTO,
+    PARTS_AUTO,
 )
 from .tuning import (
     NECK_FRET_MAX,
@@ -358,16 +358,15 @@ class VoiceLeadingEngine:
         non_chord_tone: str = "extension",
         fret_min: int = NECK_FRET_MIN,
         fret_max: int = NECK_FRET_MAX,
-        grips: Tuple[str, ...] = GRIP_PREFERENCE,
         # `Sequence` and Optional *bar* and *beat*, not `List[Tuple[int, float, ...]]`:
         # a slot a caller could not place is `(None, None, None)`, so an entry point may
         # hold either shape. See `movement.arrange_progression` for the same note.
         timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]] = None,
         texture: str = "uniform",
         bass: str = BASS_STYLE_AUTO,
-        melody: str = MELODY_AUTO,
+        parts: str = PARTS_AUTO,
         harmony: str = HARMONY_AUTO,
-        grid: str = GRID_EVERY_NOTE,
+        grid: str = GRID_DEFAULT,
         beats_per_bar: int = 4,
         # The metre's denominator, read by the walking bass's melody timeline alone: a
         # slot's `duration` is in whole notes and one whole note is `beat_type` beats
@@ -378,7 +377,7 @@ class VoiceLeadingEngine:
         # The progression indexes whose melody note articulates, for the §9.2
         # reharmonise rule on the comping route (§9.3 step C). `None` means every slot
         # is an onset - the correct answer for a hand-built progression with no
-        # timeline, and what keeps a bare `arrange_progression(..., melody="alto,tenor")`
+        # timeline, and what keeps a bare `arrange_progression(..., parts="chord")`
         # honouring `--non-chord-tone`. See `ArrangeOptions.melody_onsets`.
         melody_onsets: Optional[Container[int]] = None,
         options: Optional[ArrangeOptions] = None,
@@ -386,19 +385,18 @@ class VoiceLeadingEngine:
         """See `movement.arrange_progression` - the full docstring is there."""
         return arrange_progression(
             progression,
-            top_strings,
-            non_chord_tone,
-            fret_min,
-            fret_max,
-            grips,
-            timings,
-            texture,
-            bass,
-            melody,
-            harmony,
-            grid,
-            beats_per_bar,
-            beat_type,
-            melody_onsets,
+            top_strings=top_strings,
+            non_chord_tone=non_chord_tone,
+            fret_min=fret_min,
+            fret_max=fret_max,
+            timings=timings,
+            texture=texture,
+            bass=bass,
+            parts=parts,
+            harmony=harmony,
+            grid=grid,
+            beats_per_bar=beats_per_bar,
+            beat_type=beat_type,
+            melody_onsets=melody_onsets,
             options=options,
         )

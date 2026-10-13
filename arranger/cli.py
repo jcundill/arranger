@@ -16,7 +16,7 @@ would execute the package `__init__` through `arranger.tuning`, so the import st
 function body - which is also what leaves `headxml`'s `load_musicxml` cheap.
 
 This module sits **last** in `tests/test_package_dag.py`'s `ORDER`: it reads
-`NECK_FRET_MIN`/`MAX` from `tuning`, `GRIP_PREFERENCE` from `grips`,
+`NECK_FRET_MIN`/`MAX` from `tuning`,
 `NON_CHORD_TONE_STRATEGIES` from `chords`, `TEXTURE_STYLES` from `textures` and
 `format_progression` from `render`, and is imported by nothing below it. It needs
 no `ALLOWED_EDGES` entry, which is the test that a new module was placed by its
@@ -30,14 +30,12 @@ from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, 
 
 from .bass import BASS_STYLE_AUTO
 from .chords import NON_CHORD_TONE_STRATEGIES
-from .grips import GRIP_PREFERENCE
 from .render import format_progression
 from .textures import (
-    GRID_EVERY_NOTE,
-    GRID_STYLES,
+    GRID_DEFAULT,
     HARMONY_AUTO,
     HARMONY_STYLES,
-    MELODY_AUTO,
+    PARTS_AUTO,
     TEXTURE_STYLES,
 )
 from .tuning import NECK_FRET_MAX, NECK_FRET_MIN, ArrangementStep
@@ -58,7 +56,7 @@ class CommonHelp:
 
     One field per flag whose help is *written* rather than derived. A flag absent
     from this dataclass has its help written once in `add_common_arguments`, because
-    the text is the same wherever it is read - `fallback`, `grips`, `non_chord_tone`
+    the text is the same wherever it is read - `fallback`, `non_chord_tone`, `grid`
     and `bass` are those four.
 
     **A table rather than inline strings.** A flag's
@@ -131,7 +129,7 @@ def add_common_arguments(
     `--skeleton` and `--pick` are **not** offered, and the reason is a policy
     rather than an omission: the MusicXML path does not reduce - every written note of a
     score gets its own slot. Where chords fall is the `grid=` axis, and which notes the
-    guitar plays is the `voices=` axis.
+    guitar plays is the `parts=` axis.
 
     The order the flags are added in is the order they appear in `--help`.
     """
@@ -161,25 +159,25 @@ def add_common_arguments(
             "resolution order, any of root, 5th, approach, nearest. The full "
             "'root,5th,approach,nearest' puts a note on every beat, which is what makes "
             "the line a walk; 'root' alone sounds only where the harmony anchors. "
-            "'none' (the default with --texture uniform or targets) is no line at all. "
-            "'auto' follows the texture and the voice selection, so --texture "
-            "walking_bass walks, as does --voices soprano,bass, unless you say "
-            "otherwise. Refused outright where the left hand leaves the thumb no string "
-            "at all; a single note it cannot reach is dropped from that step and named "
-            "on it"
+            "'none' is no line at all, and 'auto' - the default - follows the parts "
+            "selection: a selection that takes the bass part writes the full list, and "
+            "one that leaves it out writes no line. Refused outright where the "
+            "selection does not take the bass part; a single note the left hand cannot "
+            "reach is dropped from that step and named on it"
         ),
     )
     parser.add_argument(
-        "--voices",
-        default=MELODY_AUTO,
+        "--parts",
+        default=PARTS_AUTO,
         help=(
-            "which voices the guitar plays, from the SATB quartet: comma-separated "
-            "any of soprano, alto, tenor, bass (default: auto = all four, the "
-            "historical chord-melody). 'none' is shorthand for 'alto,tenor' - the "
-            "ensemble answer, with a horn on the tune and a bassist on the root. "
-            "Dropping soprano hands the melody to another instrument and leaves a "
-            "guide-tone comping part; soprano alone is the melody and nothing else "
-            "(the tune, with a thumb under it when bass is named too)"
+            "which of melody, bass and chord the guitar takes, comma-separated "
+            "(default: auto = all three). 'melody' is the tune on top, 'bass' the "
+            "bottom the thumb realises, 'chord' the harmonisation between them, "
+            "whose arity --texture states and whose degree order --harmony states. "
+            "Leaving the melody out hands the tune to another instrument and leaves "
+            "a comping part; melody alone is the tune and nothing else (with a thumb "
+            "under it when bass is named too). A policy named for a part the "
+            "selection leaves out is refused, naming the part that would work"
         ),
     )
     parser.add_argument(
@@ -187,26 +185,27 @@ def add_common_arguments(
         choices=list(HARMONY_STYLES) + [HARMONY_AUTO],
         default=HARMONY_AUTO,
         help=(
-            "which degrees the guitar states when it is NOT singing: 'guide' (the "
-            "default) is the 3rd and the 7th, 'shell_root' adds a root or 5th under "
-            "them, 'root' is a bass note alone, 'full' is the whole chord. Read only "
-            "when the guitar has no melody of its own, so it composes with --voices "
-            "rather than replacing it. Refused where the voice "
-            "selection leaves no room for it"
+            "the order the chord part states its degrees in: 'auto' (the default) is "
+            "the full chord when the guitar sings and the guide pair (3rd and 7th) "
+            "when it comps, 'guide' is the pair, 'shell_root' adds a root or 5th under "
+            "them, 'full' is the whole tone set. --texture takes the first n of the "
+            "order, so a thinner part gives up the tail. Refused where the selection "
+            "does not take the chord part"
         ),
     )
     parser.add_argument(
         "--grid",
-        choices=list(GRID_STYLES),
-        default=GRID_EVERY_NOTE,
+        default=GRID_DEFAULT,
         help=(
-            "where a chord falls in the bar: 'every_note' (the default) states one "
-            "under every written melody note, 'freddie' on every beat of the notated "
-            "bar, 'charleston' on beat 1 and the upbeat of beat 2, 'joe_pass' on the "
-            "upbeat of every beat, 'final_and' on the upbeat of the bar's LAST beat. "
-            "Positions are bar-relative, so 'final_and' is the same musical idea in "
-            "2/2, 3/4 and 4/4. Where the guitar is singing, a note with no chord on "
-            "it sounds alone; where it is comping, the guitar rests"
+            "when each part sounds, as comma-separated PART:PATTERN rows. The "
+            "default is melody:every_note - the chord under every written melody "
+            "note - and a row overrides one part: chord:every_note|freddie|joe_pass|"
+            "final_and|charleston, bass:every_note|walk|anchors. So "
+            "'melody:every_note,bass:walk' is a chord under the tune with the thumb "
+            "walking every beat, and 'bass:anchors' walks only where the harmony "
+            "changes. Positions are bar-relative, so final_and is the same musical "
+            "idea in 2/2, 3/4 and 4/4. Where the guitar is singing, a note with no "
+            "chord on it sounds alone; where it is comping, the guitar rests"
         ),
     )
     parser.add_argument(
@@ -220,16 +219,6 @@ def add_common_arguments(
         type=int,
         default=NECK_FRET_MAX,
         help=help_text.fret_max,
-    )
-    parser.add_argument(
-        "--grips",
-        default=",".join(GRIP_PREFERENCE),
-        metavar="GRIP[,GRIP...]",
-        help=(
-            "grip families to use, comma-separated and most preferred first - the "
-            "order decides an exact tie, so 'shell,drop2' is not 'drop2,shell' "
-            "(default: all of them)"
-        ),
     )
     parser.add_argument(
         "--tab",
