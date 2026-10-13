@@ -329,14 +329,29 @@ class TestGridAndHarmonyEdges(unittest.TestCase):
         walked = line([("G", "7", "G7")], [(1, 1.0)])
         self.assertEqual([entry[1] for entry in walked], [1.0, 2.0, 3.0, 4.0])
 
-    def test_an_nc_bar_continues_the_last_known_harmony(self):
-        """Never a guessed one - the same rule the loaders follow."""
+    def test_an_nc_bar_yields_no_notes_rather_than_continuing_the_harmony(self):
+        """A chordless bar states no bass part - and the assertion inverts with the rule.
+
+        This asserted the opposite until `docs/parts.md` §4 derived the other answer: a
+        part whose notes are chosen from a chord cannot state anything where there is no
+        chord, so continuing the last known harmony across the gap is the *guess* here —
+        it is the right pitch class for the wrong music. Per AGENTS.md trap 5 the test is
+        inverted rather than deleted, because the rule it protects is the same one.
+
+        It sits beside the unspeakable-quality case on purpose: that one also yields no
+        notes, but for the opposite reason. An `NC` bar has no chord to state; an
+        untranslatable symbol has a chord this library cannot voice, and its harmony
+        stays in force for the bar after it.
+        """
         chords = [("C", "maj7", "Cmaj7"), (None, None, NO_CHORD), ("G", "7", "G7")]
         walked = line(chords, [(1, 1.0), (2, 1.0), (3, 1.0)])
-        bar_two = [entry for entry in walked if entry[0] == 2]
-        self.assertTrue(bar_two)
-        anchors = [entry for entry in bar_two if entry[3] == BASS_ROLE_ANCHOR]
-        self.assertEqual([entry[2] for entry in anchors], ["C"])
+        # Every beat of bars 1 and 3 is walked; bar 2 contributes nothing at all. The
+        # anchors are still C then G - the walk re-enters on the next chord that sounds.
+        bars = [entry[0] for entry in walked]
+        self.assertNotIn(2, bars)
+        self.assertEqual(set(bars), {1, 3})
+        anchors = [entry for entry in walked if entry[3] == BASS_ROLE_ANCHOR]
+        self.assertEqual([entry[2] for entry in anchors], ["C", "G"])
 
     def test_an_unspeakable_quality_yields_no_notes_and_is_never_guessed(self):
         """

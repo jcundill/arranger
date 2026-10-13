@@ -1112,6 +1112,17 @@ The shipped resolution order is `root, 5th, approach, nearest`. `approach` sits 
 ordering is what makes the full list byte-identical to the old `walk`
 ([parts.md](parts.md) §9 records why it is not §4's literal order).
 
+**A style is a set of note rules, so it cannot state anything where there is no chord.**
+The harmony the walk reads is a forward fill, and an `NC` slot **ends** that fill rather
+than continuing the previous chord across it — a part whose notes are chosen from a chord
+has no event where there is no chord ([parts.md](parts.md) §4). The emission already
+skipped a beat with no harmony in force, so this is the whole of the rule. Two
+consequences a caller meets: a chordless bar between two chords contributes **no** thumb
+notes at all, and the walk's approach into it now targets the next chord that *sounds*
+rather than the phantom root the gap used to carry. Note that "no chord here" is not "a
+chord this library cannot voice" — an untranslatable symbol leaves the harmony in force,
+because the chord is still the music's and only its spelling is past this library.
+
 `anchors`-style sparseness is deliberately **not a second generator**. The harmonic
 reasoning about what a bass note is *for* is written once, and every style inherits it;
 they cannot drift apart because one is a subset of another by construction. A rule that

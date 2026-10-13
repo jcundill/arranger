@@ -42,7 +42,7 @@ from .textures import (
     TEXTURE_STYLES,
     _metric_weight,
 )
-from .tuning import STANDARD_TUNING, ArrangementStep, Voicing
+from .tuning import NO_CHORD, STANDARD_TUNING, ArrangementStep, Voicing
 
 # --- Walking bass ---
 #
@@ -953,9 +953,18 @@ def _walking_bass_line(
 
     # The harmony in force at each walked beat, by forward fill on the (bar, beat)
     # tuple - the same rule the corpus loader and the MusicXML importer apply, and
-    # the same one the left hand reads. An `NC` bar continues the last known harmony
-    # rather than being given a guessed one, and a bar with no harmony behind it yet
-    # gets no notes at all.
+    # the same one the left hand reads. An `NC` slot **ends** the harmony rather than
+    # continuing it, and a bar with no harmony behind it yet gets no notes at all.
+    #
+    # The end is a derivation, not a rule about chordless bars: a part whose notes are
+    # chosen from a chord cannot state anything where there is no chord
+    # (docs/parts.md §4). So `carried` is cleared rather than left standing, which is
+    # what keeps the *bass* part out of an `NC` bar: the forward fill below is the only
+    # thing that would otherwise hand it the previous chord's root, and the emission
+    # then skips every beat whose harmony is None. "No chord here" and "a chord this
+    # library cannot voice" are different facts, and only the first ends the harmony -
+    # an untranslatable symbol, counted in `Head.unmapped`, leaves the chord in force,
+    # because its harmony is still the music's.
     onsets_sorted = sorted(located)
     harmonies: List[Optional[Tuple[int, Tuple[int, ...]]]] = []
     keys: List[Optional[Tuple[Optional[str], Optional[str]]]] = []
@@ -967,12 +976,18 @@ def _walking_bass_line(
             cursor < len(onsets_sorted)
             and (onsets_sorted[cursor][0], onsets_sorted[cursor][1]) <= (bar, beat)
         ):
-            root, quality, _name = chords[min(onsets_sorted[cursor][2], len(chords) - 1)]
+            root, quality, name = chords[min(onsets_sorted[cursor][2], len(chords) - 1)]
+            if name == NO_CHORD:
+                carried = None
+                carried_key = None
+                cursor += 1
+                continue
             parsed = _bass_harmony(root, quality)
             if parsed is not None:
                 carried = parsed
                 carried_key = normalised_harmony(f"{root}{quality}")
-            # Otherwise the slot is NC or unspeakable, and `carried` holds unchanged.
+            # Otherwise the slot is unspeakable, and `carried` holds unchanged: the
+            # chord is in force even where this library cannot voice it.
             cursor += 1
         harmonies.append(carried)
         keys.append(carried_key)

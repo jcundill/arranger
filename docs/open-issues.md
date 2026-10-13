@@ -50,10 +50,19 @@ melody slots — can only *keep* or *drop* a slot and can never *create* one.
 - ~~The case is structurally inexpressible~~ — **the field half was already done** before this
   item was last measured: `(None, quality, name)` is a legal triple, and `chord_slots` emits
   exactly that shape.
-- **Still open: a beat the melody skips *inside* a bar it occupies.** A grid could only filter
-  melody slots there, so `joe_pass` on a head whose notes all sit on the beat is silent — which
-  is what the union excludes `every_note` for (it names every beat, and merging would *thin* a
-  part whose melody runs at sixteenths). Closing this needs **generated slots**.
+- **Still open: a beat the melody skips *inside* a bar it occupies — under `every_note`
+  only.** The union's exception is the **bar**, so a *named* grid already generates
+  inside a bar the tune occupies: `All_the_Things_You_Are` bar 4 (onsets 1, 2, 4) yields
+  7 steps under `joe_pass`, sounding 1.5, 2.5 and 3.5 — none of them written onsets — and
+  bar 3 (onsets 1, 2, 3, 4) yields 8 under the same grid on both routes. What is still
+  owed is the **default**, whose exception excludes every position of a melody-bearing
+  bar: the same bar 4 yields 3 steps under `every_note` and beat 3 is absent. Closing it
+  needs **generated slots**. The size of the change is measured rather than guessed: the
+  positions `every_note` names inside melody bars across the eight heads total **347**,
+  of which **192** fall where a note is still *held* — and §9.2 forbids reharmonising
+  under a hold, because the note was already harmonised where it began — leaving **155**
+  silent positions that generating would actually add. That 155 is the number the
+  fifth `melody_alone_case` kind has to be designed against.
 - **Still open: a stab's duration on the comping route.** `chord_slots` computes a length from
   the following grid position and `head_skeleton` from the melody note, but no axis decides
   which a *comping* step obeys. It is `docs/comping-styles.md` §9.4's business, and it is the

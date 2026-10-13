@@ -283,6 +283,106 @@ class TestTheStatedNumbersAreTheMeasuredOnes(unittest.TestCase):
         self.assertIn(f"**{by_none} of the {len(self.refusals)}** cannot be", text)
 
 
+def _generated_positions() -> Tuple[int, int, int]:
+    """`(total, held, silent)` positions `every_note` names inside melody-bearing bars.
+
+    The remainder item 1 still owes, split the way §9.2 forces the split: a position
+    where a note is still **held** must not become a slot, because the note was already
+    harmonised where it began, so only the **silent** ones are positions generating
+    would actually add. Read from the tree rather than written down, so a change to the
+    union or to the grid moves the number instead of leaving the prose behind.
+    """
+    total = held = silent = 0
+    for path in HEADS:
+        head = headxml.load_musicxml(path, None)
+        occupied = {
+            (bar, round(beat, 6)) for _triple, bar, beat, _dur in headxml.head_skeleton(head, None)
+        }
+        for slot in headxml.chord_slots(head, None, "every_note"):
+            if (slot[3], round(slot[4], 6)) in occupied:
+                continue
+            total += 1
+            state = headxml.melody_state(head.notes, slot[3], slot[4])
+            if state == "held":
+                held += 1
+            else:
+                silent += 1
+    return total, held, silent
+
+
+class TestTheGeneratedSlotsRemainder(unittest.TestCase):
+    """The figures item 1's "still open" bullet now carries, and the correction behind them.
+
+    That bullet used to claim a named grid was *silent* inside a bar the melody occupies.
+    It is not: the union's exception is the **bar**, so a named grid already generates
+    there, and only `every_note` is restricted. Both halves are measured here — the step
+    counts that disprove the old claim, and the 347 / 192 / 155 split that sizes the
+    remaining one — because a stale figure in that document has already misled once.
+    """
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.head = headxml.load_musicxml(
+            str(ROOT / "tests" / "data" / "All_the_Things_You_Are.musicxml"), None
+        )
+        # Cached by `(grid, melody)`: `arrange_xml_head` reloads the file on every call,
+        # and the three arrangements below are what these four assertions read from.
+        cls.arranged: Dict[Tuple[str, str], List[Any]] = {}
+
+    def _bar(self, grid: str, melody: str, bar: int) -> List[Any]:
+        key = (grid, melody)
+        if key not in self.arranged:
+            steps, _head, _notes = headxml.arrange_xml_head(
+                str(ROOT / "tests" / "data" / "All_the_Things_You_Are.musicxml"),
+                grid=grid,
+                melody=melody,
+            )
+            self.arranged[key] = steps
+        return [s for s in self.arranged[key] if s.bar == bar]
+
+    def test_a_named_grid_already_generates_inside_a_melody_bar(self) -> None:
+        """`joe_pass` sounds the beats the tune skips — so the old claim could not stand.
+
+        Bar 3's onsets are exactly 1, 2, 3, 4: every written note sits on the beat, which
+        is the case the stale prose said was silent. It yields 8 steps under `joe_pass` on
+        both routes, and bar 4's skipped beats 1.5, 2.5 and 3.5 sound too.
+        """
+        for melody in ("auto", "none"):
+            bar3 = self._bar("joe_pass", melody, 3)
+            self.assertEqual(len(bar3), 8, [(s.beat, s.silence) for s in bar3])
+        bar4 = self._bar("joe_pass", "auto", 4)
+        sounded = {round(s.beat, 2) for s in bar4}
+        self.assertEqual(len(bar4), 7)
+        for skipped in (1.5, 2.5, 3.5):
+            self.assertIn(skipped, sounded)
+        # None of them is a written onset, which is the whole of the claim.
+        written = {round(n.beat, 2) for n in self.head.notes if n.bar == 4}
+        self.assertTrue({1.5, 2.5, 3.5}.isdisjoint(written), written)
+
+    def test_the_default_grid_is_the_one_that_remains_silent(self) -> None:
+        """`every_note`'s exception is the bar, so beat 3 of bar 4 is still absent."""
+        bar4 = self._bar("every_note", "auto", 4)
+        self.assertEqual(len(bar4), 3)
+        self.assertEqual(sorted(round(s.beat, 2) for s in bar4), [1.0, 2.0, 4.0])
+        self.assertNotIn(3.0, {round(s.beat, 2) for s in bar4})
+
+    def test_the_document_states_the_measured_remainder(self) -> None:
+        """347 positions named, 192 held, and so 155 that generating would add."""
+        total, held, silent = _generated_positions()
+        self.assertEqual((total, held, silent), (347, 192, 155))
+        text = _doc()
+        self.assertIn(f"total **{total}**", text)
+        self.assertIn(f"**{held}** fall where a note is still *held*", text)
+        self.assertIn(f"leaving **{silent}**", text)
+
+    def test_the_document_states_the_step_counts_it_was_corrected_against(self) -> None:
+        """The three figures that disprove the old claim are the ones written down."""
+        text = _doc()
+        self.assertIn("yields\n  7 steps under `joe_pass`", text)
+        self.assertIn("yields 8 under the same grid on both routes", text)
+        self.assertIn("yields 3 steps under `every_note`", text)
+
+
 class TestTheReproductionSnippetsRun(unittest.TestCase):
     """Every snippet in the `Reproducing` block runs, and prints what it says it prints.
 

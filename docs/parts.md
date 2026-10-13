@@ -1,9 +1,13 @@
 # Parts: melody, bass, chord — redesign of the harmonisation axes
 
-**Status: partly built. Step 1 (§7) has landed** — `bass_style` as a note-rule table,
-replacing the `walk`/`anchors` policies, byte-identical over the committed heads. Steps 2
-onwards are still proposal, and the parts model itself (`parts=`) is not built. Counts live
-in the documents named here, not restated.
+**Status: partly built. Steps 1 and the `NC` half of 2 (§7) have landed** — `bass_style`
+as a note-rule table replacing the `walk`/`anchors` policies, and the rule that a
+chordless bar has no bass part, both over the committed heads. The beat-level timeline
+step 2 also needs is already built (`Head.chords`, `chord_at`, `chord_slots`); what it
+still owes is **generated slots** under the default grid, measured in
+[open-issues.md](open-issues.md) item 1. Steps 3 onwards are still proposal, and the
+parts model itself (`parts=`) is not built. Counts live in the documents named here, not
+restated.
 
 ## 1. Why
 
@@ -196,13 +200,22 @@ a rest.
 10. The step model does not change. `melody_voiced`, `bass_only`, `bass_role`,
     `chord_unvoiced` and `silence` are already part facts — see
     [one-fact.md](one-fact.md).
-11. **An `NC` bar sounds the melody and nothing else, on every route.** Today the bass part
-    is settled by the route instead: a chordless bar between two chords is walked when the
-    guitar sings, and every beat of it is refused when it comps, because the walk anchors on
-    the previous chord's root and only the singing route has an upper shape to merge it into.
-    Measured over the committed heads this change moves **0 steps** — `NC` occurs in one
-    head, as a first bar, where there is nothing to anchor on — so its acceptance gate is a
-    **new** test for a chordless bar between two chords, not a moved count.
+11. **An `NC` bar sounds the melody and nothing else, on every route** — **built**. The
+    bass part used to be settled by the route: a chordless bar between two chords was
+    walked when the guitar sang, because the walk anchored on the *previous* chord's root,
+    and only the singing route had an upper shape to merge it into. The forward fill in
+    `bass._walking_bass_line` now **ends** the harmony at an `NC` slot instead of carrying
+    it, which is the whole of the fix — the walk already skipped a beat with no harmony in
+    force, so nothing else had to change. The prediction held: **0 steps** moved over the
+    committed heads, because `NC` occurs in one head as a *first* bar where there is
+    nothing to carry. The gate is therefore the **new** test it asked for —
+    `tests/test_walking_bass.py::TestAChordlessBarHasNoBassPart`, a synthetic chordless bar
+    *between* two chords, three of whose four assertions fail without the fix.
+
+    One consequence is pinned alongside, because it is the same rule rather than a second
+    one: the walk's last beat is chosen backwards from the next anchor, so ending the
+    harmony changes the note **before** the gap too. It now approaches `G7`, the next
+    chord that sounds, where it used to approach the phantom root the gap carried.
 
 ## 6. What it costs
 
@@ -229,10 +242,20 @@ a rest.
    (not §4's literal order — see §9), and it is byte-identical to the old `walk` and
    `anchors` over all 3,696 committed-head steps. The *rhythm* half of `bass=` still waits
    for step 5, so the shipped styles keep it for now.
-2. A chord timeline at beat level ([open-issues.md](open-issues.md) item 1's remainder).
-   Needed before `grid=` can own "when": today a grid can only filter melody slots inside a
-   bar the tune occupies. It is also what makes a chordless bar *between* two chords
-   expressible, which is where the `NC` rule in §4 bites.
+2. ~~A chord timeline at beat level~~ — **the timeline is built, and so is the `NC` half of
+   what it was for.** `Head.chords` / `HeadChange` record the harmony as the file is
+   walked, `chord_at` queries it by forward fill on `(bar, beat)`, and `chord_slots` emits
+   one slot per position a grid names — including positions no note occupies. The `NC`
+   rule in §4 is therefore expressible and is built (§5 item 11).
+
+   What is still owed is **generated slots**: a beat the melody skips *inside* a bar it
+   occupies, under the **default** grid. The premise this step was written on — "a grid can
+   only filter melody slots inside a bar the tune occupies" — is true of `every_note` and
+   false of a named one, and [open-issues.md](open-issues.md) item 1 now says which: a
+   named grid already generates there, so the remainder is the default only, and its size
+   is **155** silent positions against 192 that a hold forbids. Closing it owes the fifth
+   `melody_alone_case` kind, which is why it waits for the parts model rather than being
+   designed twice.
 3. `parts=`, replacing `voices=` and the empty-palette route to "the left hand plays nothing".
 4. `texture=` reshaped as the arity policy, which is where `TEXTURE_GRIPS` loses its grip
    lists and `walking_bass` leaves `TEXTURE_STYLES`.
@@ -304,6 +327,21 @@ than `none`: naming the part is a request for it to sound.
   `shell_root` below three voices is refused, which is why §5 item 7 deletes the refusal
   rather than relocating it.
 - **An `NC` bar has no chord part and no bass part**, on every route, and the melody is
-  unaffected. The rule is derived: a part whose notes come from a chord cannot sound where
-  there is no chord, and the thumb refusal the comping route reports today is retired with
-  it. An off-grid rest keeps its thumb, so the two kinds of silence stay separate.
+  unaffected — **built**. The rule is derived: a part whose notes come from a chord cannot
+  sound where there is no chord, and the thumb refusal the comping route reported is
+  retired with it. An off-grid rest keeps its thumb, so the two kinds of silence stay
+  separate.
+
+  Two facts about the implementation, and both are decisions rather than details. The rule
+  lands in **one place** — the walk's forward fill in `bass._walking_bass_line` ends the
+  harmony at an `NC` slot instead of carrying the previous one across it, and the emission
+  already skipped a beat with no harmony in force, so no second mechanism was needed. And
+  **"no chord here" is not "a chord this library cannot voice"**: only a slot whose *name*
+  is `NO_CHORD` ends the harmony, while an untranslatable symbol leaves it in force,
+  because the chord is still the music's and only its spelling is past this library. That
+  distinction is why the fix reads the name rather than asking whether the root parsed —
+  the two cases return the same `(None, None)` and would otherwise be one fact.
+
+  It also moves the note **before** the gap, which is the same rule seen from the other
+  side: the walk's last beat is chosen backwards from the next anchor, so once the gap
+  carries no anchor the approach walks on to the next chord that actually sounds.

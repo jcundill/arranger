@@ -35,10 +35,12 @@ from musthe import Note
 import arranger
 from arranger import (
     BASS_ROLE_ANCHOR,
+    BASS_ROLE_APPROACH,
     BASS_STRING_INDICES,
     BASS_STYLE_ANCHORS,
     BASS_STYLE_WALK,
     GRIP_MAX_SPAN,
+    NO_CHORD,
     PITCH_CLASS_NAMES,
     ROLE_FILL,
     ROLE_TARGET,
@@ -2257,3 +2259,98 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
     def test_an_unknown_policy_raises(self):
         with self.assertRaises(ValueError):
             self.arrange(texture="targets", bass="stride")
+
+
+class TestAChordlessBarHasNoBassPart(unittest.TestCase):
+    """A part whose notes come from a chord cannot state anything where there is none.
+
+    This is `docs/parts.md` §4's rule, derived rather than a rule about chordless bars:
+    the chord part has no event and the bass part has no event either, while the melody
+    part is unaffected. It is deliberately *not* the claim an off-grid rest makes - a grid
+    thins the chords and not the bass line, so a rest keeps its thumb and "no chord here"
+    and "silent here" stay separate facts.
+
+    **The gate is synthetic, and that is the point.** Measured over the committed heads
+    this moves 0 steps: `NC` occurs in one head (`Trouble_in_Mind_Blues`) as its *first*
+    bar, where no harmony has sounded yet, so the forward fill had nothing to carry and
+    the defect was invisible. No fixture has a chordless bar **between** two chords, which
+    is the only place the old behaviour - continuing the previous harmony across the gap -
+    could show itself. So the reproduction below is written rather than found.
+    """
+
+    # Bar 2 is chordless and sits between Dm7 and G7, so there is a harmony to anchor on
+    # either side of it. That is what makes the old forward fill wrong here and not in
+    # the corpus.
+    PROGRESSION = [
+        ("D4", "m7", "Dm7"),
+        ("E4", NO_CHORD, NO_CHORD),
+        ("C5", "7", "G7"),
+    ]
+    TIMINGS: List[Tuple[int, float, float]] = [
+        (1, 1.0, 1.0),
+        (2, 1.0, 1.0),
+        (3, 1.0, 1.0),
+    ]
+
+    def arrange(self, **kwargs) -> List[arranger.ArrangementStep]:
+        return VoiceLeadingEngine.arrange_progression(
+            self.PROGRESSION, timings=self.TIMINGS, **kwargs
+        )
+
+    def test_the_walked_bar_carries_no_thumb_note(self) -> None:
+        """Under a texture that puts a note on every beat, the chordless bar has none."""
+        steps = self.arrange(texture="walking_bass", bass="auto")
+        walked = [s for s in steps if s.bar == 2]
+        # One step, not four: with no chord there is no beat for the walk to be written
+        # on, so the bar the grid would have invented collapses to its melody slot.
+        self.assertEqual(len(walked), 1, [(s.bar, s.beat, s.chord) for s in steps])
+        self.assertEqual(walked[0].chord, NO_CHORD)
+        self.assertIsNone(walked[0].bass)
+        self.assertIsNone(walked[0].bass_role)
+        # The bars either side still walk, which is what proves the refusal is about the
+        # missing chord rather than about the thumb being switched off.
+        for bar in (1, 3):
+            basses = [s.bass for s in steps if s.bar == bar]
+            self.assertTrue(
+                all(note is not None for note in basses),
+                f"bar {bar} lost its thumb line: {basses}",
+            )
+
+    def test_the_melody_is_unaffected(self) -> None:
+        """The third part is the one part an `NC` bar still states."""
+        nc = [s for s in self.arrange(texture="walking_bass") if s.chord == NO_CHORD]
+        self.assertEqual(len(nc), 1)
+        self.assertEqual(nc[0].melody, "E4")
+        self.assertTrue(nc[0].melody_voiced)
+
+    def test_the_comping_route_rests_with_its_own_reason(self) -> None:
+        """`"no chord here"` is a rest with a reason, not a chordless thumb line."""
+        nc = [
+            s
+            for s in self.arrange(texture="uniform", melody="none")
+            if s.chord == NO_CHORD or s.silence == "nc_comping"
+        ]
+        self.assertTrue(nc, "the comping route has nothing to state over an NC bar")
+        self.assertEqual(nc[0].silence, "nc_comping")
+        self.assertIsNone(nc[0].bass)
+
+    def test_the_bar_before_approaches_the_next_chord_that_sounds(self) -> None:
+        """The consequence of the gap, and the reason it is one rule rather than two.
+
+        The walk's last beat is chosen *backwards* from the next anchor. With the
+        chordless bar continuing Dm7's harmony, that lookahead saw a phantom Dm7 anchor
+        inside bar 2 and approached **D**; with the harmony ended at the `NC` slot it
+        walks on to `G7`, which is the next chord that actually sounds. An `NC` bar
+        therefore changes the note *before* it as well as its own, and this pins the
+        direction: a half step from G, not a half step from D.
+        """
+        steps = self.arrange(texture="walking_bass", bass="auto")
+        last = [s for s in steps if s.bar == 1][-1]
+        self.assertEqual(last.bass_role, BASS_ROLE_APPROACH)
+        note = last.bass
+        if note is None:
+            self.fail("the bar before the gap lost its own thumb note")
+        pitch = note % 12
+        distance = min(abs(pitch - 7), 12 - abs(pitch - 7))
+        self.assertEqual(distance, 1, f"approached {note}, G's root is pitch class 7")
+        self.assertNotEqual(pitch, 2, "still approaching D, the previous root")
