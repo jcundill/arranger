@@ -1045,7 +1045,7 @@ Three decisions are load-bearing:
   `melody_only_selection` reads the resolved voices — soprano present, alto and tenor
   absent — and every site that decides "does this slot become a single note" reads it
   through the same channel: the empty palette the loop hands the step loop,
-  `BASS_AUTO`'s rule, `should_promote_fill`'s `melody_only=`. A site naming a texture as
+  `BASS_STYLE_AUTO`'s rule, `should_promote_fill`'s `melody_only=`. A site naming a texture as
   a literal is how a spelling joins the melody-alone route in one place and misses it
   in another.
 - **The empty tuple is the declaration; it is never absent.** `()` and a missing key
@@ -1063,49 +1063,66 @@ Three decisions are load-bearing:
 
 The two selections differ in exactly one thing — the thumb line — which is what makes
 them one selection plus a `bass=` answer rather than two spellings: `soprano,bass` is
-`soprano` with the thumb named, and `BASS_AUTO` reads the selection (the table below).
+`soprano` with the thumb named, and `BASS_STYLE_AUTO` reads the selection (the table below).
 
-### The bass policy: `bass=` as its own axis
+### The bass style: `bass=` as its own axis
 
 The thumb line used to be part of a texture's *name*: `walking_bass` meant both "a
 shell on the strong beats" and "a note on every beat below". Two separable decisions
 wearing one identifier. It is now `texture=` (the left hand) crossed with `bass=` (the
-thumb), with `BASS_AUTO` resolving from the texture and the voice selection so nothing
-has to be rewritten:
+thumb), with `BASS_STYLE_AUTO` resolving from the texture and the voice selection so
+nothing has to be rewritten:
 
 | texture | default bass | equivalent to |
 |---|---|---|
-| `walking_bass` | `walk` | `texture="walking_bass", bass="walk"` |
+| `walking_bass` | `root,5th,approach,nearest` | `texture="walking_bass", bass="root,5th,approach,nearest"` |
 | everything else | `none` | `texture=..., bass="none"` |
 
-and on the voices axis, a melody-only selection that names the bass voice walks too:
-`melody="soprano,bass"` and `melody="soprano", bass="walk"` are the same arrangement
-— the old `melody_bass` texture under its new spelling — while `melody="soprano"`
-alone keeps no thumb. A lone `melody="bass"` selection keeps none either: that part
-already is the bass line, and a thumb under it would double it.
+and on the voices axis, a melody-only selection that names the bass voice writes the
+full line too: `melody="soprano,bass"` and `melody="soprano",
+bass="root,5th,approach,nearest"` are the same arrangement — the old `melody_bass`
+texture under its new spelling — while `melody="soprano"` alone keeps no thumb. A lone
+`melody="bass"` selection keeps none either: that part already is the bass line, and a
+thumb under it would double it.
 
 All the equivalences are asserted byte-for-byte against the rendered tab, which is
 what makes the axis safe to add: every published walking-bass output is pinned against
 the `auto` default, so nothing moved.
 
-**The policies are a registry, not a flag**, because the set of patterns is open and is
-meant to stay that way. `BASS_POLICY_ROLES` maps a policy name to the `BASS_ROLE_*`
-values it keeps, and `bass_line_for` applies it as a *filter over the roles
-`_walking_bass_line` already assigns*. So:
+**The style names note rules, and the set of rules is a registry, not a flag**, because
+it is open and is meant to stay that way. `BASS_RULE_ROLES` maps each rule to the
+`BASS_ROLE_*` values it admits, and `bass_line_for` resolves a style's rule list into
+the roles it keeps and applies that as *a filter over the roles `_walking_bass_line`
+already assigns*. So:
 
-- `walk` keeps every role — a note on every beat.
-- `anchors` keeps only `BASS_ROLE_ANCHOR` — a root where the harmony changes.
+- `root,5th,approach,nearest` (the whole vocabulary) keeps every role — a note on every
+  beat. This is the walk.
+- `root` keeps only `BASS_ROLE_ANCHOR` — a root where the harmony anchors. This is what
+  `anchors` became.
 
-`anchors` is deliberately **not a second generator**. The harmonic reasoning about what
-a bass note is *for* is written once, and both policies inherit it; they cannot drift
-apart because one of them is a subset of the other by construction. A pattern that
+The four rules are `root` (the chord's root, on anchor beats), `5th` (root then 5th, the
+`BASS_DEGREES_6432` order — the walking anchor is always the root, so it shares `root`'s
+beats), `approach` (a note reaching the next anchor — the last-beat approach and the
+penultimate enclosure, one rule at two beats), and `nearest` (the connective vocabulary
+— a chord tone, an extension, or passing motion). `hold` is deliberately **not** a rule:
+it is the fallback of "first reachable wins", ranked last whatever the style says.
+
+The shipped resolution order is `root, 5th, approach, nearest`. `approach` sits before
+`nearest` because on the last beat the approach outranks the connective note — that
+ordering is what makes the full list byte-identical to the old `walk`
+([parts.md](parts.md) §9 records why it is not §4's literal order).
+
+`anchors`-style sparseness is deliberately **not a second generator**. The harmonic
+reasoning about what a bass note is *for* is written once, and every style inherits it;
+they cannot drift apart because one is a subset of another by construction. A rule that
 needs new reasoning gets its own generator beside `_walking_bass_line` and a row in the
-table; a pattern that is a rhythm of an existing one is a row.
+table; a rule that is a different reading of an existing note is a row.
 
-`BASS_AUTO` is deliberately **not** in `BASS_STYLES`. It is a default for an argument,
-not a pattern, so keeping it out means `arrange_progression` validates `bass` against
-the policies and never has to special-case a sentinel. An unknown spelling raises
-rather than defaulting to a walk.
+`BASS_STYLE_AUTO` is deliberately **not** a rule. It is a default for an argument, not a
+note a caller can ask for, so keeping it out means `arrange_progression` validates a
+style against the rules and never has to special-case a sentinel. `parse_bass_style`
+refuses `auto` and `none` as rule names, and an unknown rule raises rather than
+defaulting to a walk.
 
 **One refusal rule, derived rather than listed: a thumb line needs one free bass
 string.** `thumb_capacity` computes it from `TEXTURE_GRIPS` and `GRIP_STRING_SETS` — the
@@ -1126,7 +1143,7 @@ frets, so all three thumb strings are free whatever the texture's palette says, 
 **Nothing in the tree is refused any more, and that is a consequence of the grip tables
 rather than of this rule.** `uniform` used to be the one that failed: its palette held
 `drop24`'s `(4,2,1,0)`, the one reachable set that spanned all three thumb strings, so
-`bass="walk"` under the default texture was refused, naming a texture that
+`bass="root,5th,approach,nearest"` under the default texture was refused, naming a texture that
 would work. Removing the four inner-skip `drop24` sets for the right-hand reason in
 [fingering.md](fingering.md) §4.4 removed that set with them, so the worst case anywhere
 is now one free string — the rule's threshold — and `uniform` carries every policy. The
@@ -1159,7 +1176,7 @@ sound four strings and never five. `thumb_capacity` only ever answered the first
 `targets` has a free thumb string, so `bass_allowed` let the axis through, and then a
 **four-note** target had a bass note merged under it — five plucks at once. Measured over
 the six committed heads before this was fixed, `--texture targets` sounded five strings on
-**151** steps under `--bass walk` and **130** under `--bass anchors`; `walking_bass` and
+**151** steps under `--bass-style root,5th,approach,nearest` and **130** under `--bass-style root`; `walking_bass` and
 `uniform` sounded none, the first because its targets are shells and the second because
 the axis is refused there.
 
@@ -1172,8 +1189,8 @@ underneath it may use all four strings. Measured effect on the same heads:
 
 | row | before | after |
 |---|---|---|
-| `targets --bass walk` | 151 five-string steps | **0**, and byte-identical to `walking_bass --bass walk` |
-| `targets --bass anchors` | 130 | **0**, with 9 drop-2 and 19 drop-3 targets kept where the thumb plays nothing |
+| `targets --bass-style root,5th,approach,nearest` | 151 five-string steps | **0**, and byte-identical to `walking_bass --bass-style root,5th,approach,nearest` |
+| `targets --bass-style root` | 130 | **0**, with 9 drop-2 and 19 drop-3 targets kept where the thumb plays nothing |
 | `walking_bass`, `uniform`, `targets --voices none` | 0 | **0** — unchanged |
 
 `walking_bass` does not move because the texture had already made this decision; its
@@ -1221,12 +1238,12 @@ nobody asked it to drop.
 **`MELODY_AUTO` resolves to `VOICES_ALL`, so the axis is inert until asked for.** Every
 pre-existing test passes unchanged and no published arrangement moves.
 
-**One asymmetry with `BASS_AUTO`, stated rather than implied.** `BASS_AUTO` reads the
+**One asymmetry with `BASS_STYLE_AUTO`, stated rather than implied.** `BASS_STYLE_AUTO` reads the
 texture, because `walking_bass` *means* a thumb line. **No texture means "somebody else
 sings"** — that is a fact about the band, not about the texture — so `MELODY_AUTO` resolves
 to the historical behaviour unconditionally, and no texture implies it.
 
-**`MELODY_POLICIES` is a registry, not a flag**, for the reason `BASS_POLICY_ROLES` is: the
+**`MELODY_POLICIES` is a registry, not a flag**, for the reason `BASS_RULE_ROLES` is: the
 set of patterns is open and meant to stay open. A named comping pattern — Freddie Green,
 Charleston — is a **row**, not another branch at each of the call sites that decide which
 voices sound. Each row states the voices it keeps using the same four names a caller
@@ -1338,7 +1355,7 @@ than listed, so a spelling that cannot be voiced cannot miss it either.
 answer it gives reaches `get_melody_only_voicing`, so under `voices="none"` it must not
 answer `MELODY_ALONE_TEXTURE` — or a texture *fill* would put the tune straight back on the
 guitar, and the axis would be honoured only on targets. Measured: before the guard, every
-fill under `--texture targets --bass walk` came back `x-7-x-x-x-8`, a bare melody note.
+fill under `--texture targets --bass-style root,5th,approach,nearest` came back `x-7-x-x-x-8`, a bare melody note.
 
 **An `NC` bar is emitted silent, with the reason on the step.** There is no chord, so
 there are no guide tones, and the guitar is genuinely silent while the horn is not. The

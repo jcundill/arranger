@@ -28,7 +28,7 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from .bass import BASS_AUTO, BASS_STYLES
+from .bass import BASS_STYLE_AUTO
 from .chords import NON_CHORD_TONE_STRATEGIES
 from .grips import GRIP_PREFERENCE
 from .render import format_progression
@@ -154,17 +154,19 @@ def add_common_arguments(
         help=help_text.texture,
     )
     parser.add_argument(
-        "--bass",
-        choices=list(BASS_STYLES),
-        default=BASS_AUTO,
+        "--bass-style",
+        default=BASS_STYLE_AUTO,
         help=(
-            "which pattern the thumb line is written on: 'walk' puts a note on every "
-            "beat, 'anchors' only where the harmony changes, 'none' (the default with "
-            "--texture uniform or targets) no line at all. 'auto' follows the texture "
-            "and the voice selection, so --texture walking_bass walks, as does "
-            "--voices soprano,bass, unless you say otherwise. Refused outright where "
-            "the left hand leaves the thumb no string at all; a single note it cannot "
-            "reach is dropped from that step and named on it"
+            "which note rules the thumb line may state, comma-separated and in "
+            "resolution order, any of root, 5th, approach, nearest. The full "
+            "'root,5th,approach,nearest' puts a note on every beat, which is what makes "
+            "the line a walk; 'root' alone sounds only where the harmony anchors. "
+            "'none' (the default with --texture uniform or targets) is no line at all. "
+            "'auto' follows the texture and the voice selection, so --texture "
+            "walking_bass walks, as does --voices soprano,bass, unless you say "
+            "otherwise. Refused outright where the left hand leaves the thumb no string "
+            "at all; a single note it cannot reach is dropped from that step and named "
+            "on it"
         ),
     )
     parser.add_argument(

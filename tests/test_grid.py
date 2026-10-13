@@ -9,7 +9,7 @@ What is verified, in order:
 
 - **the table**: every name in `GRID_STYLES` has a row in `GRID_PATTERNS`, so a
   pattern cannot be listed without a rule or given one without a name - the same
-  coupling `BASS_POLICY_ROLES` asserts over the bass axis;
+  coupling `BASS_RULE_ROLES` asserts over the bass axis;
 - **the metre**: positions are **bar-relative**, so `final_and` is the upbeat of the
   bar's last beat in 2/2, 3/4 and 4/4 alike. This is the claim
   `docs/comping-styles.md` section 4.2 makes about `LAST`, and it is a table of three

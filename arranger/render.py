@@ -592,7 +592,7 @@ def _bass_annotation(step: ArrangementStep, existing: str = "") -> str:
     if step.bass is None:
         return existing
     spelled = _note_name(step.bass)
-    role = step.bass_role or "walk"
+    role = step.bass_role or "bass"
     return f"{existing} (bass: {spelled}, {role})"
 
 

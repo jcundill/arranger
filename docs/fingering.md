@@ -252,7 +252,7 @@ the exempt gap never arises on a shape the thumb cannot reach.
 
 **The trap, and it is the reason this section exists rather than a sentence.** The
 obvious metric — "are the plucked strings contiguous?" — **over-reports by an order of
-magnitude**. Counting *any* gap made 275 of the 307 gap-carrying `--bass walk` steps look
+magnitude**. Counting *any* gap made 275 of the 307 gap-carrying `--bass-style root,5th,approach,nearest` steps look
 like defects the post-selection bass merge had *created*; counting only the fingers' gaps
 makes the true figure **2**. A bass note merged under a shape lands directly beneath it,
 so the gap it opens is precisely the exempt one — the same "assert the rule on the whole"
@@ -410,10 +410,10 @@ under it is five, whatever the frets. Counting what each step actually plucks
 
 | arrangement | steps | pluck five strings | five distinct frets | …counting the held shape |
 |---|---|---|---|---|
-| `--texture targets --bass walk` | 839 | **151** | 10 | 15 |
-| `--texture targets --bass anchors` | 688 | **130** | 9 | 10 |
-| `--texture walking_bass --bass walk` | 839 | 0 | 0 | 0 |
-| `--texture uniform --bass walk` | 643 | 0 | 0 | 0 — the axis is refused (`bass_allowed`) |
+| `--texture targets --bass-style root,5th,approach,nearest` | 839 | **151** | 10 | 15 |
+| `--texture targets --bass-style root` | 688 | **130** | 9 | 10 |
+| `--texture walking_bass --bass-style root,5th,approach,nearest` | 839 | 0 | 0 | 0 |
+| `--texture uniform --bass-style root,5th,approach,nearest` | 643 | 0 | 0 | 0 — the axis is refused (`bass_allowed`) |
 | `_place_bass` over the generated corpus, all 12 bass pitch classes | 86,315 placements | — | — | 8 |
 
 The two budgets overlap rather than nest, and both are real. `7-9-x-8-12-10`, a `Bmaj`
@@ -428,7 +428,7 @@ carries a bass note, and falls back to the widest statement that leaves a finger
 `("drop2", "drop3")` becomes `("shell",)`. `decisions.resolve_texture_grips` applies it per
 slot (`movement.py` passes `slot.bass is not None`), so a target on a beat the thumb leaves
 bare keeps all four strings. Measured after: **0** five-string steps anywhere; `--texture
-targets --bass walk` is byte-identical to `--texture walking_bass --bass walk`; the other
+targets --bass-style root,5th,approach,nearest` is byte-identical to `--texture walking_bass --bass-style root,5th,approach,nearest`; the other
 rows do not move. `arranger/fingers.py` was not needed for any of it, and that is the result
 this document records: the first real playability defect in this area was a *string* budget,
 not a finger assignment. Full measurement, the cost, and the rejected alternatives are in §4.3.
@@ -436,7 +436,7 @@ not a finger assignment. Full measurement, the cost, and the rejected alternativ
 **The left-hand half closed too, one release later, and the answer was the one this section
 rejected as a fix for the other half.** Measured on the tree the string fix left behind — the
 seven committed heads × five `texture`/`bass` rows, 3,697 steps — exactly **one** step
-violated the fret budget: "Tenor Madness" bar 40 under `--texture targets --bass anchors`,
+violated the fret budget: "Tenor Madness" bar 40 under `--texture targets --bass-style root`,
 where the hand holds `x-9-x-8-12-10` and the walk's `B` has a single candidate, the low E at
 fret 7. The A string is spoken for by the held shape, and a `B` on the D at fret 9 would
 sound above the shape's F#3, which `_place_bass` forbids. Five frets from four fingers, and
@@ -549,12 +549,12 @@ steps), steps carrying a finger skip, either side of the removal:
 | row | steps | before | after |
 |---|---|---|---|
 | `uniform` (the default) | 643 | **223 (34.7%)** | **1** |
-| `targets --bass walk` | 837 | 19 (2.3%) | 19 (2.3%) |
-| `targets --bass anchors` | 688 | 16 (2.3%) | 16 (2.3%) |
-| `walking_bass --bass walk` | 837 | 19 (2.3%) | 19 (2.3%) |
-| `walking_bass --bass anchors` | 688 | 19 (2.8%) | 19 (2.8%) |
-| `uniform --bass walk` | 839 | refused outright | 95 (11.3%) |
-| `uniform --bass anchors` | 688 | refused outright | 27 (3.9%) |
+| `targets --bass-style root,5th,approach,nearest` | 837 | 19 (2.3%) | 19 (2.3%) |
+| `targets --bass-style root` | 688 | 16 (2.3%) | 16 (2.3%) |
+| `walking_bass --bass-style root,5th,approach,nearest` | 837 | 19 (2.3%) | 19 (2.3%) |
+| `walking_bass --bass-style root` | 688 | 19 (2.8%) | 19 (2.8%) |
+| `uniform --bass-style root,5th,approach,nearest` | 839 | refused outright | 95 (11.3%) |
+| `uniform --bass-style root` | 688 | refused outright | 27 (3.9%) |
 
 The bass textures are nearly clean because their target palettes are shells — the one set
 the ban left — so **they do not move at all**; the default `uniform` arrangement carried the
@@ -619,14 +619,14 @@ than lucky:
 | row | steps | …bottom note above the G | …carrying a gap at all | skips, exemption as documented | …narrowed to the thumb's reach |
 |---|---|---|---|---|---|
 | `uniform` (the default) | 643 | 80 (12.4%) | 0 | **223** | **223** |
-| `targets --bass walk` | 839 | 288 (34.3%) | 0 | 19 | **19** |
-| `targets --bass anchors` | 688 | 446 (64.8%) | 0 | 16 | **16** |
-| `walking_bass --bass walk` | 839 | 288 (34.3%) | 0 | 19 | **19** |
-| `walking_bass --bass anchors` | 688 | 466 (67.7%) | 0 | 19 | **19** |
+| `targets --bass-style root,5th,approach,nearest` | 839 | 288 (34.3%) | 0 | 19 | **19** |
+| `targets --bass-style root` | 688 | 446 (64.8%) | 0 | 16 | **16** |
+| `walking_bass --bass-style root,5th,approach,nearest` | 839 | 288 (34.3%) | 0 | 19 | **19** |
+| `walking_bass --bass-style root` | 688 | 466 (67.7%) | 0 | 19 | **19** |
 
 The last two columns are identical on every row, which is the narrowing being free rather than
 being argued to be. The sub-count column is 0 because every off-reach step is a
-**single** note — a lone voice on the high E (212 of the 288 on `targets --bass walk`, 365 of
+**single** note — a lone voice on the high E (212 of the 288 on `targets --bass-style root,5th,approach,nearest`, 365 of
 the 446 under `anchors`) or on the B (76 and 81), with `uniform` the one row that also reaches a
 pair, once, on 1-2 — and one pluck has no gap in it.
 

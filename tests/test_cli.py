@@ -145,7 +145,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         self.assertEqual(
             sorted(self.parser()),
             [
-                "bars", "bars_per_line", "bass", "fallback", "file", "fret_max",
+                "bars", "bars_per_line", "bass_style", "fallback", "file", "fret_max",
                 "fret_min", "gp5", "grid", "grips", "harmony", "html",
                 "melody", "musicxml", "mutes", "non_chord_tone", "part", "tab",
                 "texture", "voices",
@@ -221,7 +221,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         self.assertEqual(
             sorted(flags),
             [
-                "bars", "bars_per_line", "bass", "fallback", "file", "fret_max",
+                "bars", "bars_per_line", "bass_style", "fallback", "file", "fret_max",
                 "fret_min", "gp5", "grid", "grips", "harmony", "html",
                 "melody", "musicxml", "mutes", "non_chord_tone", "part", "tab",
                 "texture", "voices",
@@ -244,7 +244,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         # And nothing claims to come from the table without declaring it.
         self.assertEqual(
             sorted(flags),
-            sorted(declared | {"bass", "fallback", "file", "grid", "grips",
+            sorted(declared | {"bass_style", "fallback", "file", "grid", "grips",
                                "harmony", "non_chord_tone", "part", "voices"}),
         )
 

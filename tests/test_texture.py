@@ -540,7 +540,7 @@ class TestTheRightHandBudget(unittest.TestCase):
     `--texture targets` voiced a four-note target on its strong beats and then placed a
     bass note under it, which is five simultaneous plucks - one more hand than a player
     has. Measured over the six committed heads before this rule existed, **151** steps
-    under `--bass walk` and **130** under `--bass anchors` sounded five strings;
+    under `--bass-style root,5th,approach,nearest` and **130** under `--bass-style root` sounded five strings;
     `walking_bass` and `uniform` sounded none, the first because its targets are shells
     and the second because `bass_allowed` refuses the whole axis.
 
@@ -662,7 +662,7 @@ class TestTheRightHandBudget(unittest.TestCase):
         timings = [(bar, 1.0 + 0.5 * n, None) for bar in range(4) for n in range(4)]
         with contextlib.redirect_stdout(io.StringIO()):
             steps = VoiceLeadingEngine.arrange_progression(
-                progression, timings=timings, texture="targets", bass="walk"
+                progression, timings=timings, texture="targets", bass="root,5th,approach,nearest"
             )
         checked = 0
         for step in steps:
@@ -1516,8 +1516,8 @@ class TestARepeatedMelodyHoldsItsString(unittest.TestCase):
         configs = (
             ("uniform", "auto"),
             ("targets", "auto"),
-            ("targets", "walk"),
-            ("targets", "anchors"),
+            ("targets", "root,5th,approach,nearest"),
+            ("targets", "root"),
             ("walking_bass", "auto"),
         )
         checked = 0

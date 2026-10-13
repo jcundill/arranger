@@ -22,7 +22,7 @@ Stage 1 was three QA fixes off the checklist in [docs/voices-axis.md §4](voices
 each gated on a green `make check`:
 
 - `4fdde0d` — the `--bass` plumbing: the `ArrangeOptions.bass` field defaulted to the
-  resolved `"none"` while `arrange_progression`'s keyword defaulted to the `BASS_AUTO`
+  resolved `"none"` while `arrange_progression`'s keyword defaulted to the `BASS_STYLE_AUTO`
   sentinel, so the two spellings of one request could never be compared, and the flag was
   silently inert on `arranger head`.
 - `ee2c7f1` — `tabstaff._carries_melody` derived "this string carries the melody" from the
@@ -92,7 +92,7 @@ that fact lives on the texture axis, `MELODY_ONLY_TEXTURES = ("melody", "melody_
   `resolve_texture_grips`, so `texture=` and `grips=` are inert and silent there, and the
   guard ordering the plan worried about (trap 12) is untouched by construction — asserted
   anyway, with new tests for the `NC` and off-grid cases under `voices=soprano`.
-- The thumb: `BASS_AUTO` resolves to walk when `texture == "walking_bass"` **or** the
+- The thumb: `BASS_STYLE_AUTO` resolves to walk when `texture == "walking_bass"` **or** the
   selection is melody-only with the bass voice named. `--voices soprano,bass` is today's
   `texture="melody_bass"`; `--voices soprano` alone is today's `texture="melody"` (no
   thumb). **Not** for a lone `voices=bass` comping selection: no soprano means not

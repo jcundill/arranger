@@ -474,7 +474,7 @@ class TestTheFourFretBudget(unittest.TestCase):
     def test_the_merged_hand_the_engine_had_to_refuse(self) -> None:
         """The one hand in the committed heads that needed five frets, as the engine sees it.
 
-        "Tenor Madness" bar 40 under `--texture targets --bass anchors` holds a drop-3
+        "Tenor Madness" bar 40 under `--texture targets --bass-style root` holds a drop-3
         `x-9-x-8-12-10` - four frets - and the walk's B lands on the low E at fret 7, off it.
         The low E is the *only* candidate: the A string is spoken for by the held shape and a
         B on the D string at fret 9 would sound above the shape's F#3, which `_place_bass`

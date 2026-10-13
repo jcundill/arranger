@@ -24,7 +24,7 @@ from . import chords as _chords
 from . import cost as _cost
 from . import grips as _grips
 from .bass import (
-    BASS_AUTO,
+    BASS_STYLE_AUTO,
     BassNote,
 )
 from .chords import (
@@ -364,7 +364,7 @@ class VoiceLeadingEngine:
         # hold either shape. See `movement.arrange_progression` for the same note.
         timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]] = None,
         texture: str = "uniform",
-        bass: str = BASS_AUTO,
+        bass: str = BASS_STYLE_AUTO,
         melody: str = MELODY_AUTO,
         harmony: str = HARMONY_AUTO,
         grid: str = GRID_EVERY_NOTE,

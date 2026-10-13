@@ -24,10 +24,9 @@ from . import chords as _chords
 from . import cost as _cost
 from . import grips as _grips
 from .bass import (
-    BASS_AUTO,
-    BASS_NONE,
-    BASS_STYLES,
-    BASS_WALK,
+    BASS_STYLE_AUTO,
+    BASS_STYLE_NONE,
+    BASS_STYLE_WALK,
     BassNote,
     _held_shape,
     _place_bass,
@@ -35,6 +34,7 @@ from .bass import (
     _Slot,
     _walking_slots,
     bass_allowed,
+    parse_bass_style,
 )
 from .chords import (
     NON_CHORD_TONE_STRATEGIES,
@@ -142,23 +142,24 @@ def _resolve_bass(
     bass: str,
     voices: Tuple[str, ...],
 ) -> str:
-    """The policy to actually run: `BASS_AUTO` resolved or validated.
+    """The style to actually run: `BASS_STYLE_AUTO` resolved or validated.
 
     Three outcomes, in the order they are decided:
 
     - `auto` resolves from the texture and the selection. `texture="walking_bass"`
-      walks; so does a melody-only selection that names the bass voice -
-      `melody="soprano,bass"` is the tune with a thumb under it, the part the
-      `melody_bass` texture spells. A lone `bass` selection is **not**
+      writes the full note-rule list; so does a melody-only selection that names the
+      bass voice - `melody="soprano,bass"` is the tune with a thumb under it, the part
+      the `melody_bass` texture spells. A lone `bass` selection is **not**
       melody-only (it has no soprano) and keeps no thumb: that part already is the
       bass line, and a thumb under it would double it.
-    - an unknown spelling raises. The same rule as everywhere else in the library: a
-      policy nobody recognises is a question, and answering it by defaulting to a walk
-      would put a bass line under an arrangement that did not ask for one.
+    - an unknown rule raises. The same rule as everywhere else in the library: a
+      spelling nobody recognises is a question, and answering it by defaulting to a
+      walk would put a bass line under an arrangement that did not ask for one.
+      `parse_bass_style` owns the vocabulary and the message.
     - a combination the left hand cannot accommodate **raises**. It used to fall back
-      to `BASS_NONE` with a warning, and that was the wrong shape for the same reason
+      to `none` with a warning, and that was the wrong shape for the same reason
       `resolve_harmony` now raises: `none` is what a caller gets by asking for `none`,
-      so handing it back for a `walk` the texture cannot carry is a silent
+      so handing it back for a walk the texture cannot carry is a silent
       substitution. A walking line with gaps in it is worse than no line, so the
       choice between them is the caller's, and the message names a texture that would
       work. Losing the *bass* still costs less than losing the tune - that trade is
@@ -185,18 +186,16 @@ def _resolve_bass(
     """
     melody_voiced = voices_have_soprano(voices)
     melody_only = melody_only_selection(voices)
-    if bass == BASS_AUTO:
+    if bass == BASS_STYLE_AUTO:
         bass = (
-            BASS_WALK
+            BASS_STYLE_WALK
             if texture in THUMB_TEXTURES
             or (melody_only and MELODY_BASS in voices)
-            else BASS_NONE
+            else BASS_STYLE_NONE
         )
-    if bass not in BASS_STYLES:
-        raise ValueError(
-            f"Unknown bass policy {bass!r}; expected one of {BASS_STYLES}, "
-            f"or 'auto'"
-        )
+    if bass == BASS_STYLE_NONE:
+        return bass
+    parse_bass_style(bass)  # raises on an unknown rule; the style is validated here
     allowed, reason = bass_allowed(
         texture,
         bass,
@@ -532,10 +531,10 @@ def _resolve_knobs(
                 # `bass` is compared here like every other knob, and for the comparison
                 # to mean anything the two spellings must be equal when a caller names
                 # neither: `ArrangeOptions.bass` and the keyword both default to the
-                # `BASS_AUTO` sentinel. A field defaulting to the resolved "none" would
-                # compare unequal to the sentinel on every call, and reading that resolved
-                # field back out of `options` would make the keyword look like a caller
-                # who had passed both.
+                # `BASS_STYLE_AUTO` sentinel. A field defaulting to the resolved "none"
+                # would compare unequal to the sentinel on every call, and reading that
+                # resolved field back out of `options` would make the keyword look like a
+                # caller who had passed both.
                 ("bass", bass),
                 ("melody", melody),
                 ("harmony", harmony),
@@ -679,7 +678,7 @@ def _resolve_policies(
         bass,
         voices,
     )
-    has_thumb = bass != BASS_NONE
+    has_thumb = bass != BASS_STYLE_NONE
 
     # The harmony axis, resolved here for the same reason and read only by the
     # comping route below. Resolving it unconditionally rather than inside
@@ -1862,7 +1861,7 @@ def _slot_state(
             # about the arrangement: a target may sound three strings only where
             # a bass note is actually being placed under it, which is what
             # `slot.bass` says. `has_thumb` alone would thin chords the thumb
-            # never plays under - `--bass anchors` leaves most slots bare.
+            # never plays under - `--bass-style root` leaves most slots bare.
             has_thumb=has_thumb and slot.bass is not None,
         )
     )
@@ -1919,7 +1918,7 @@ def arrange_progression(
     # beat.
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]] = None,
     texture: str = "uniform",
-    bass: str = BASS_AUTO,
+    bass: str = BASS_STYLE_AUTO,
     melody: str = MELODY_AUTO,
     harmony: str = HARMONY_AUTO,
     grid: str = GRID_EVERY_NOTE,
@@ -1982,20 +1981,21 @@ def arrange_progression(
     then every slot is a principal note and this function behaves exactly as it
     always has.
 
-    `bass` selects the **policy** the thumb line is written on, from BASS_STYLES:
-    `"none"` (the default, no thumb line), `"anchors"` (a note only where the
-    harmony changes, carrying that chord's root), or `"walk"` (a note on every beat,
-    which is what makes the line a walk). It is an argument of its own rather than a
-    property of the texture, because the pattern is the composer's choice and the set
-    of patterns is open - a new one is a row in `BASS_POLICY_ROLES`.
+    `bass` selects the **style** the thumb line is written on, as a comma-separated list
+    of note rules from `BASS_RULES`: `"none"` (the default, no thumb line),
+    `"root"` (a note only where the harmony anchors, carrying that chord's root), or the
+    full `"root,5th,approach,nearest"` (a note on every beat, which is what makes the
+    line a walk). It is an argument of its own rather than a property of the texture,
+    because the note rules are the composer's choice and the set is open - a new one is a
+    row in `BASS_RULE_ROLES`.
 
-    `BASS_AUTO`, the default here, resolves from the texture and the selection, and a
-    combination the left hand cannot accommodate is refused rather
+    `BASS_STYLE_AUTO`, the default here, resolves from the texture and the selection, and
+    a combination the left hand cannot accommodate is refused rather
     than degraded. **Both rules, and the measurement behind the second, are stated
     once** - in `_resolve_bass` and `bass.bass_allowed` - rather than repeated here.
     Two consequences a caller is most likely to meet: `texture="walking_bass"` and
-    `texture="walking_bass", bass="walk"` are the same arrangement, and
-    `bass="none"` on a walking bass gives the same strong-beat shells with the thumb
+    `texture="walking_bass", bass="root,5th,approach,nearest"` are the same arrangement,
+    and `bass="none"` on a walking bass gives the same strong-beat shells with the thumb
     dropped - a coherent texture in its own right.
 
     `texture="targets"` uses the timing to arrange the way the guide describes:

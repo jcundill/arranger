@@ -28,7 +28,7 @@ That is **one flag**:
 
 ```bash
 python -m arranger head tests/data/heres_that_rainy_day.musicxml \
-    --bars 1-3 --voices alto,tenor --bass none --texture targets
+    --bars 1-3 --voices alto,tenor --bass-style none --texture targets
 ```
 
 ```text
@@ -98,7 +98,7 @@ Each row is a command worth running. The first three are the claim; the rest are
 | 7 | `--voices auto,alto` | usage error |
 | 8 | `--voices alto,tenor` under any texture | comps — the old `--texture melody` refusal dissolved when the melody-only claim moved onto the selection |
 | 9 | `--voices alto,tenor --tab staff --melody` | staff draws; no soprano string marked |
-| 10 | `--voices alto,tenor --bass walk` | thumb walks *under* a 2-note shape, or refuses |
+| 10 | `--voices alto,tenor --bass-style root,5th,approach,nearest` | thumb walks *under* a 2-note shape, or refuses |
 | 11 | a head containing an `NC` bar | comps nothing: a rest step carrying `silence="nc_comping"` |
 | 12 | `--voices alto,tenor --html out.html` | page renders, no melody on the tab |
 | 13 | `--voices alto,tenor --musicxml x.musicxml --gp5 y.gp5` | both write without error |

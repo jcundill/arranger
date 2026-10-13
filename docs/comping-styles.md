@@ -815,14 +815,14 @@ a comping baseline of `--voices alto,tenor`. "—" means not separately measured
 | `--non-chord-tone` | **inert** — see §9 | changes |
 | `--fallback` | changes | changes |
 | `--fret-min` / `--fret-max` | changes | — |
-| `--bass none` | inert (already the default) | — |
+| `--bass-style none` | inert (already the default) | — |
 | `--bars`, `--part` | input scope | input scope |
 | `--tab`, `--melody`, `--mutes`, `--bars-per-line` | render only | render only |
 | `--html`, `--musicxml`, `--gp5` | output format | output format |
 
 Only `--non-chord-tone` goes inert on the comping route for a reason a user could act on,
 and §9 is that reason: it is not inert by policy but because the code path that implements
-the three strategies is only reached from the melody-bearing branch. `--bass none` is inert
+the three strategies is only reached from the melody-bearing branch. `--bass-style none` is inert
 because it names the default, not because of the route. Everything else is either live and
 orthogonal, or already spoken for by a stage above.
 

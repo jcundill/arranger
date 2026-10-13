@@ -363,7 +363,7 @@ class TestTheCompingArrangement(unittest.TestCase):
         """A texture fill is thin, but it is thin *with a chord*.
 
         Measured: before `melody_alone_case` learned about the axis, every fill under
-        `--texture targets --bass walk` came back as a bare melody note - the guitar
+        `--texture targets --bass-style root,5th,approach,nearest` came back as a bare melody note - the guitar
         playing the tune it had been told to give away, on the weak beats only. The
         assertion is on the *shape*, not on the melody's pitch class, which a comping
         shape may legitimately share; see `test_the_generator_never_reads_the_melody`.
@@ -382,7 +382,7 @@ class TestTheCompingArrangement(unittest.TestCase):
         This is the band setting as a whole: both axes named, and neither inferred
         from the other.
         """
-        walked = self.comped(texture="targets", bass="walk", timings=self.timings)
+        walked = self.comped(texture="targets", bass="root,5th,approach,nearest", timings=self.timings)
         self.assertTrue(any(step.bass is not None for step in walked))
         silent = self.comped(texture="targets", bass="none", timings=self.timings)
         self.assertTrue(all(step.bass is None for step in silent))
@@ -398,11 +398,11 @@ class TestTheCompingArrangement(unittest.TestCase):
         is how the slot layer hands over every request, `arranger head` among them -
         was silently dropped while the keyword test above stayed green.
         """
-        by_keyword = self.comped(texture="targets", bass="walk", timings=self.timings)
+        by_keyword = self.comped(texture="targets", bass="root,5th,approach,nearest", timings=self.timings)
         by_option = self.engine.arrange_progression(
             PROGRESSION,
             options=ArrangeOptions(
-                melody=VOICES_ARG, texture="targets", bass="walk",
+                melody=VOICES_ARG, texture="targets", bass="root,5th,approach,nearest",
                 timings=self.timings,
             ),
         )
@@ -413,11 +413,11 @@ class TestTheCompingArrangement(unittest.TestCase):
         """As for every other knob: two spellings of one value is a bug, not a merge."""
         with self.assertRaises(ValueError):
             self.engine.arrange_progression(
-                PROGRESSION, bass="walk", options=ArrangeOptions(melody=VOICES_ARG)
+                PROGRESSION, bass="root,5th,approach,nearest", options=ArrangeOptions(melody=VOICES_ARG)
             )
 
     def test_the_bass_axis_survives_the_slot_layer(self):
-        """The head command's own path: `--bass` becomes an `ArrangeOptions` here.
+        """The head command's own path: `--bass-style` becomes an `ArrangeOptions` here.
 
         `arrange_slots` is the layer that builds the options and calls the engine,
         so this is the route `arranger head` actually takes and the one the unread
@@ -428,7 +428,7 @@ class TestTheCompingArrangement(unittest.TestCase):
         from arranger.slots import arrange_slots
 
         steps, _rescued, _notes = arrange_slots(
-            PROGRESSION, self.timings, melody=VOICES_ARG, bass="walk",
+            PROGRESSION, self.timings, melody=VOICES_ARG, bass="root,5th,approach,nearest",
         )
         self.assertTrue(steps, "an arrangement with no steps at all is a defect")
         self.assertTrue(any(step.bass is not None for step in steps))
@@ -806,7 +806,7 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
     name - measured on `tests/data/but_not_for_me.mxl`, all 80 comping shapes are
     byte-identical under `texture=uniform` and `texture=targets`.
 
-    So `melody="alto,tenor", bass="walk"` under the **default** texture was refused with
+    So `melody="alto,tenor", bass="root,5th,approach,nearest"` under the **default** texture was refused with
     "uniform leaves no bass string free for a target" and emitted no thumb at all, while
     the same request under `texture=targets` emitted 127. The warning named a setting
     that could not change the outcome.
@@ -839,7 +839,7 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
         Asserted on the *thumb notes* rather than on the warning, because a fix that
         merely quieted the warning while still dropping the line would pass otherwise.
         """
-        steps = self.comped(bass="walk")
+        steps = self.comped(bass="root,5th,approach,nearest")
         self.assertTrue(
             any(step.bass is not None for step in steps),
             "the comping route emitted no thumb notes at all",
@@ -855,7 +855,7 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
         """
         baseline = None
         for texture in TEXTURE_STYLES:
-            steps = self.comped(bass="walk", texture=texture)
+            steps = self.comped(bass="root,5th,approach,nearest", texture=texture)
             frets = [step.voicing.frets for step in steps]
             if baseline is None:
                 baseline = (texture, frets)
@@ -890,7 +890,7 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
         the decision. A test asserting the texture *changes* the step count here would
         have pinned the bug.
         """
-        walked = self.comped(bass="walk")
+        walked = self.comped(bass="root,5th,approach,nearest")
         silent = self.comped(bass="none")
         # Four written notes, and the walk adds the two beats the melody skips.
         self.assertEqual(len(silent), 4, "the head is four notes in one bar")

@@ -102,7 +102,7 @@ python -m arranger head tests/data/i_was_doing_all_right.mxl --bars 1-3 --html h
 | `--non-chord-tone` | `extension` | how to harmonise melody note outside chord |
 | `--fallback` | off | `diminished` — see [non-chord melody notes](#non-chord-melody-notes) |
 | `--texture` | `uniform` | `uniform`, `targets`, `walking_bass` — see [texture](#texture) |
-| `--bass` | follows `--texture` | `none`, `anchors`, `walk` — see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
+| `--bass-style` | follows `--texture` | comma-separated note rules: `none`, `root`, or the full `root,5th,approach,nearest` — see [who plays which voice](#who-plays-which-voice-bass-and-voices) |
 | `--voices` | `auto` (all four) | any subset of `soprano,alto,tenor,bass` |
 | `--harmony` | `auto` (= `guide`) | `full`, `guide`, `shell_root`, `root` |
 | `--grid` | `every_note` | `every_note`, `freddie`, `charleston`, `joe_pass`, `final_and` — see [the grid](#where-a-chord-falls-the-grid-axis) |
@@ -113,7 +113,7 @@ python -m arranger head tests/data/i_was_doing_all_right.mxl --bars 1-3 --html h
 | `--bars-per-line` | `4` | with `--tab staff`: bars per staff line |
 | `--html` / `--musicxml` / `--gp5` | off | also write head to file — see [rendering](#rendering) |
 
-Five of those flags are the library's own axes — `--texture`, `--bass`, `--voices`, `--harmony` and `--grid` — described once in [the five axes](#the-five-axes).
+Five of those flags are the library's own axes — `--texture`, `--bass-style`, `--voices`, `--harmony` and `--grid` — described once in [the five axes](#the-five-axes).
 
 **Every written note sounds.** No reduction: `arranger head` plays tune as written, one step per note, each on written beat. Where *chords* fall is separate — the `grid=` axis — a note never quantised onto grid and dropped for sharing a slot.
 
@@ -282,12 +282,12 @@ Every run on committed score in `tests/data/`, each one flag changed. Output sho
 
 ## The five axes
 
-`texture=`, `bass=`, `voices=`, `harmony=` and `grid=` answer five different questions, **orthogonal** — a band setting is a combination, not a mode: `--bass none --voices none` is a bassist on the root, a horn on the melody, guitar comping guide tones between them.
+`texture=`, `bass=`, `voices=`, `harmony=` and `grid=` answer five different questions, **orthogonal** — a band setting is a combination, not a mode: `--bass-style none --voices none` is a bassist on the root, a horn on the melody, guitar comping guide tones between them.
 
 | axis | the question it answers | values |
 |---|---|---|
 | `texture=` | where notes fall — how thick the left hand is | `uniform`, `targets`, `walking_bass` |
-| `bass=` | who plays the bottom | `none`, `anchors`, `walk` |
+| `bass=` | which note rules the bottom may state | `none`, `root`, `root,5th,approach,nearest` |
 | `voices=` | which voices the guitar plays | any subset of `soprano`, `alto`, `tenor`, `bass` |
 | `harmony=` | which **degrees** a part states when not singing | `full`, `guide`, `shell_root`, `root` |
 | `grid=` | where in bar a chord falls | `every_note`, `freddie`, `charleston`, `joe_pass`, `final_and` |
@@ -360,7 +360,7 @@ Step with unplayable bass note keeps upper voicing and says so rather than writi
 
 `texture` and `bass` answer separate questions — *where notes fall* and *who plays bottom*; `voices` adds third: **who plays tune**.
 
-`bass` has `none`, `anchors` (root or 5th on strong beats), `walk` (note on every beat). Default follows request: `walking_bass` walks, melody-only selection naming bass voice walks (`--voices soprano,bass`), everything else none. Unknown spelling raises; a combination the left hand cannot accommodate at all **refused outright** (`ValueError`); a single note the thumb cannot reach dropped and named on its own step (`bass_refused`), arrangement proceeding without it — walking line with gaps worse than none, losing bass costs less than losing tune.
+`--bass-style` names **note rules**, comma-separated and in resolution order: `root` (the chord's root, on the anchor beats), `5th` (root then 5th), `approach` (a note reaching the next anchor), `nearest` (the connective movement). The full `root,5th,approach,nearest` is a note on every beat; `root` alone sounds only where the harmony anchors. `none` is no line. Default follows request: `walking_bass` writes the full list, melody-only selection naming bass voice too (`--voices soprano,bass`), everything else none. Unknown rule raises; a combination the left hand cannot accommodate at all **refused outright** (`ValueError`); a single note the thumb cannot reach dropped and named on its own step (`bass_refused`), arrangement proceeding without it — walking line with gaps worse than none, losing bass costs less than losing tune.
 
 ### Which degrees a non-singing part states: `harmony=`
 
@@ -375,7 +375,7 @@ Step with unplayable bass note keeps upper voicing and says so rather than writi
 
 `--harmony shell_root --voices alto,tenor,bass` = horn on tune, guitar stating quality *and* root underneath; needs three notes, asking with two **refused outright** (`ValueError`), not quietly thinned. Where guitar *is* singing, `--harmony` does nothing — shell chord-melody is `--grips shell`, a grip choice not degree family, melody stays pinned to top string.
 
-`--bass none` + `--voices alto,tenor` together are the ensemble: bassist on root, sax on melody, guitar comping two middle voices. Chosen separately because separate decisions — "next to a bass player, none of the 1s and 5s, no walking motion" is `bass=none`; "melody isn't mine either" drops `soprano` from `voices`.
+`--bass-style none` + `--voices alto,tenor` together are the ensemble: bassist on root, sax on melody, guitar comping two middle voices. Chosen separately because separate decisions — "next to a bass player, none of the 1s and 5s, no walking motion" is `bass=none`; "melody isn't mine either" drops `soprano` from `voices`.
 
 ### Which voices the guitar plays
 
@@ -415,7 +415,7 @@ Guitar stops singing, states chord instead. Shape is **shell**: 3rd and 7th, plu
 
 ```bash
 python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-2 \
-    --texture targets --voices alto,tenor --bass none
+    --texture targets --voices alto,tenor --bass-style none
 ```
 
 ```text
@@ -467,7 +467,7 @@ Chord name still printed above each step as context; nothing under it voiced. `N
 - **guitar singing** — note of tune still sounds, alone. No note dropped: chord-melody under `--grid joe_pass` plays melody throughout, places chords only on ands.
 - **guitar comping** (`--voices alto,tenor`) — guitar **silent** that beat: melody belongs to horn, nothing for guitar to add. Step still emitted, so part keeps position and lines up against tune; draws as empty column.
 
-**Grid places chords, not thumb.** Walked-beat grid thumb reads is own, so thumb sounds on beats where guitar strikes no chord at all — `bass_only` steps above are exactly that. Grid *does* change shape thumb is placed against: different chord above can move note or refuse it — measured on `but_not_for_me` with `--texture targets --bass walk`, `--grid freddie` walks three more beats than `--grid every_note`, all downbeats melody skips.
+**Grid places chords, not thumb.** Walked-beat grid thumb reads is own, so thumb sounds on beats where guitar strikes no chord at all — `bass_only` steps above are exactly that. Grid *does* change shape thumb is placed against: different chord above can move note or refuse it — measured on `but_not_for_me` with `--texture targets --bass-style root,5th,approach,nearest`, `--grid freddie` walks three more beats than `--grid every_note`, all downbeats melody skips.
 
 **Free-form grid** — naming positions directly, not choosing a row — not built yet. [docs/comping-styles.md §4.2](docs/comping-styles.md) has design.
 

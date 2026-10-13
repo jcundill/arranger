@@ -36,6 +36,8 @@ import arranger
 from arranger import (
     BASS_ROLE_ANCHOR,
     BASS_STRING_INDICES,
+    BASS_STYLE_ANCHORS,
+    BASS_STYLE_WALK,
     GRIP_MAX_SPAN,
     PITCH_CLASS_NAMES,
     ROLE_FILL,
@@ -518,7 +520,7 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
                 progression,
                 timings=timings,
                 texture="walking_bass",
-                bass="walk",
+                bass=BASS_STYLE_WALK,
                 beats_per_bar=3,
                 beat_type=beat_type,
             )
@@ -536,7 +538,7 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
                 progression,
                 timings=timings,
                 texture="walking_bass",
-                bass="walk",
+                bass=BASS_STYLE_WALK,
                 beats_per_bar=3,
             )
         ]
@@ -1246,7 +1248,7 @@ class TestBassPlacement(unittest.TestCase):
         """
         The other reason a note is refused, and it is the one `sounding_frets` cannot see.
 
-        "Tenor Madness" bar 40 under `--texture targets --bass anchors`: the hand is holding
+        "Tenor Madness" bar 40 under `--texture targets --bass-style root`: the hand is holding
         `x-9-x-8-12-10`, and the walk's `B` has exactly one candidate - the low E at fret 7,
         because the A string is spoken for by the held shape and a `B` on the D at fret 9
         would sound above the shape's F#3. Fret 7 is a fret the hand is not on, so the shape
@@ -1414,8 +1416,8 @@ class TestTheInvariant(unittest.TestCase):
     has digits. Stating the rule over the upper voices was correct for the texture it was
     written for - a `walking_bass` target is a shell - and silently wrong for `targets`,
     whose targets were four-note drop-2s. Measured before the fix, over the six committed
-    heads: `--texture targets --bass walk` sounded five strings on **151** steps,
-    `--bass anchors` on **130**, while `walking_bass` and `uniform` sounded none. The
+    heads: `--texture targets --bass-style root,5th,approach,nearest` sounded five strings on **151** steps,
+    `--bass-style root` on **130**, while `walking_bass` and `uniform` sounded none. The
     budget is now `grips.thumb_safe_grips`.
     """
 
@@ -1482,10 +1484,10 @@ class TestTheInvariant(unittest.TestCase):
         checked = 0
         for path in paths:
             for texture, bass in (
-                ("targets", "walk"),
-                ("targets", "anchors"),
-                ("walking_bass", "walk"),
-                ("walking_bass", "anchors"),
+                ("targets", BASS_STYLE_WALK),
+                ("targets", BASS_STYLE_ANCHORS),
+                ("walking_bass", BASS_STYLE_WALK),
+                ("walking_bass", BASS_STYLE_ANCHORS),
             ):
                 with self.subTest(head=path, texture=texture, bass=bass):
                     steps, _head, _notes = arrange_xml_head(
@@ -1527,7 +1529,7 @@ class TestTheInvariant(unittest.TestCase):
 
         Measured both ways, because a sweep that has only ever seen a clean tree proves
         nothing: **1** step violates this on the commit before the fix - "Tenor Madness"
-        bar 40 under `targets`/`anchors`, pinned also in
+        bar 40 under `targets`/`--bass-style root`, pinned also in
         `test_fingers.TestTheFourFretBudget` - and **0** after it.
         """
         from headxml import arrange_xml_head
@@ -1539,10 +1541,10 @@ class TestTheInvariant(unittest.TestCase):
         checked = 0
         for path in paths:
             for texture, bass in (
-                ("targets", "walk"),
-                ("targets", "anchors"),
-                ("walking_bass", "walk"),
-                ("walking_bass", "anchors"),
+                ("targets", BASS_STYLE_WALK),
+                ("targets", BASS_STYLE_ANCHORS),
+                ("walking_bass", BASS_STYLE_WALK),
+                ("walking_bass", BASS_STYLE_ANCHORS),
             ):
                 with self.subTest(head=path, texture=texture, bass=bass):
                     steps, _head, _notes = arrange_xml_head(
@@ -2163,12 +2165,12 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
         )
         self.assertEqual(
             self.tabs(self.arrange(texture="walking_bass")),
-            self.tabs(self.arrange(texture="walking_bass", bass="walk")),
+            self.tabs(self.arrange(texture="walking_bass", bass=BASS_STYLE_WALK)),
         )
 
     def test_auto_follows_the_selection_under_a_melody_only_part(self):
         """
-        `BASS_AUTO` reads the voice selection, not just the texture.
+        `BASS_STYLE_AUTO` reads the voice selection, not just the texture.
 
         `(soprano, bass)` walks - it is the old `melody_bass` texture under the
         new spelling, measured byte for byte in `docs/one-fact.md`'s build
@@ -2210,7 +2212,7 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
     def test_anchors_writes_fewer_notes_than_a_walk(self):
         """Same texture, two policies, and the line is measurably sparser."""
         walked = self.arrange(texture="walking_bass")
-        anchored = self.arrange(texture="walking_bass", bass="anchors")
+        anchored = self.arrange(texture="walking_bass", bass=BASS_STYLE_ANCHORS)
         walked_notes = sum(1 for s in walked if s.bass is not None)
         anchored_notes = sum(1 for s in anchored if s.bass is not None)
         self.assertGreater(walked_notes, anchored_notes)
@@ -2224,7 +2226,7 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
     def test_a_texture_that_never_had_a_thumb_can_carry_one(self):
         """`targets` harmonises in full, and a thumb line under it is now expressible."""
         plain = self.arrange(texture="targets")
-        walked = self.arrange(texture="targets", bass="walk")
+        walked = self.arrange(texture="targets", bass=BASS_STYLE_WALK)
         self.assertEqual([s.bass for s in plain], [None] * len(plain))
         self.assertTrue(any(s.bass is not None for s in walked))
 
@@ -2244,7 +2246,7 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
         the arrangement still sounds, one step per melody note - so a silently dropped
         chord cannot pass for a working bass line.
         """
-        steps = self.arrange(texture="uniform", bass="walk")
+        steps = self.arrange(texture="uniform", bass=BASS_STYLE_WALK)
         self.assertTrue(
             any(s.bass is not None for s in steps), "the walk wrote no note at all"
         )

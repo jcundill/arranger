@@ -28,7 +28,7 @@ not the walk would look plausible and be wrong.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, FrozenSet, List, Optional, Sequence, Tuple
 
 from musthe import Note
 
@@ -83,47 +83,114 @@ BASS_ROLE_ENCLOSURE = "enclosure"
 BASS_ROLE_HOLD = "hold"
 
 
-# --- The bass policy: which pattern, if any, the thumb line is written on ---------
+# --- The bass style: which note rules the thumb line is written on -----------------
 #
-# A **policy**, not a flag, because the set of bass patterns is open and the user asked
-# for it to stay that way: adding a pattern should be one entry in `BASS_POLICY_ROLES`
-# plus, at most, one generator beside `_walking_bass_line` - never another branch at
-# each of the four call sites that decide whether a thumb line exists.
+# A **style**, not a flag, and it names *note rules* rather than a rhythm: how many beats
+# carry a note is `grid=`'s business ([docs/parts.md](docs/parts.md) §4), and the rule list
+# says only what a note that does sound is *for*.
 #
-# `BASS_NONE` is the default and changes nothing that worked before it. The other two
-# differ only in *how many beats carry a note*:
+# The four rules, and the `BASS_ROLE_*` values each admits:
 #
-#   walk     a note on every beat of every bar the melody touches. That is what makes
-#            the line a walk, and it is also what costs the most room underneath the
-#            left hand.
-#   anchors  a note only where the harmony changes, the root of that chord. It is a
-#            bass *voice* rather than a walking line: it marks the changes and leaves
-#            the rest of the bar to whatever is sounding above.
+#   root      the chord's root, on the beats that anchor - beat 1, and any strong beat
+#             where the harmony changes. Admits `anchor`.
+#   5th       the root, then the 5th: the `BASS_DEGREES_6432` order. The walking anchor is
+#             always the root, so this admits the same `anchor` beats; the 5th is the
+#             fallback `_shell_voicing` already reads from that table.
+#   approach  a note reaching the *next* anchor - the half step below it on the last beat,
+#             the half step above on the penultimate. Admits `approach` and `enclosure`,
+#             which are one rule read at two beats.
+#   nearest   the connective vocabulary - a chord tone, a nameable extension, or passing
+#             motion nearest the previous note. Admits `connect`.
 #
-# Both are expressed as a filter over the roles `_walking_bass_line` already assigns,
-# so the harmonic reasoning - what a walking note is *for* - is written once and both
-# policies inherit it. `anchors` is not a second generator that could disagree with
-# `walk` about what an anchor is; it is `walk` with the connective roles dropped.
-BASS_NONE = "none"
-BASS_ANCHORS = "anchors"
-BASS_WALK = "walk"
+# `hold` is deliberately **not** a rule: it is the fallback of "first reachable wins" - the
+# previous note when no rule above is reachable - and it is ranked last whatever the style
+# says. Naming it would let a caller ask for a line that only repeats, which is not a bass
+# line.
+#
+# The shipped resolution order is `root, 5th, approach, nearest`. `approach` sits *before*
+# `nearest` because on the last beat the approach outranks the connective note - that
+# ordering is what makes the full list the library's walk. [docs/parts.md](docs/parts.md) §9
+# records why it is not §4's literal `root, 5th, nearest, approach`.
+BASS_RULE_ROOT = "root"
+BASS_RULE_5TH = "5th"
+BASS_RULE_APPROACH = "approach"
+BASS_RULE_NEAREST = "nearest"
 
-# Which `BASS_ROLE_*` values each policy keeps, or None for "every role". Keyed by
-# policy so a new pattern is a row here, and asserted against `BASS_STYLES` below so a
-# policy cannot be named without a rule or given a rule without a name.
-BASS_POLICY_ROLES: Dict[str, Optional[Tuple[str, ...]]] = {
-    BASS_WALK: None,
-    BASS_ANCHORS: (BASS_ROLE_ANCHOR,),
+# The full vocabulary, in the shipped resolution order. A style is an ordered subset of
+# this; the order is preserved on parse (it is a preference, like `grips`) but the roles
+# are pre-ranked by `_walking_bass_line`, so the shipped order is the byte-identical one.
+BASS_RULES: Tuple[str, ...] = (
+    BASS_RULE_ROOT,
+    BASS_RULE_5TH,
+    BASS_RULE_APPROACH,
+    BASS_RULE_NEAREST,
+)
+
+# Which `BASS_ROLE_*` values each rule admits. Keyed by rule so a new one is a row here,
+# and asserted against `BASS_RULES` in the tests so a rule cannot be named without the
+# roles it governs. `5th` shares `root`'s anchor beats (the walking anchor is always the
+# root, so the 5th is the fallback, not a second beat); `approach` governs both the
+# last-beat approach and the penultimate enclosure, because they are one rule read at two
+# beats.
+BASS_RULE_ROLES: Dict[str, FrozenSet[str]] = {
+    BASS_RULE_ROOT: frozenset({BASS_ROLE_ANCHOR}),
+    BASS_RULE_5TH: frozenset({BASS_ROLE_ANCHOR}),
+    BASS_RULE_APPROACH: frozenset({BASS_ROLE_APPROACH, BASS_ROLE_ENCLOSURE}),
+    BASS_RULE_NEAREST: frozenset({BASS_ROLE_CONNECT}),
 }
 
-BASS_STYLES: Tuple[str, ...] = (BASS_NONE, BASS_ANCHORS, BASS_WALK)
+# The two shipped styles, as rule lists, derived from `BASS_RULES` rather than listed so
+# the table above stays the one source. `walk` is the whole vocabulary; `anchors` is the
+# root rule alone. These are the spellings `--bass-style` takes.
+BASS_STYLE_WALK = ",".join(BASS_RULES)
+BASS_STYLE_ANCHORS = BASS_RULE_ROOT
 
-# "whatever this texture means", resolved before the arrangement runs. It is **not** in
-# `BASS_STYLES` - a caller cannot ask for it explicitly as a policy, only as the default
-# for an argument - and that is the reason the two lists differ in length. Keeping it out
-# means `arrange_progression` validates `bass` against the policies and never has to
-# special-case a sentinel after the fact.
-BASS_AUTO = "auto"
+# "no thumb line" and "whatever this texture means". Neither is a rule. `none` is the
+# absence of a style - the caller asked for no bass - and `auto` is the default resolved
+# from the texture and the selection before the arrangement runs. Keeping `auto` out of
+# the rule vocabulary is what lets the engine validate a style without special-casing a
+# sentinel, the same reason it was kept out of the old `BASS_STYLES`.
+BASS_STYLE_NONE = "none"
+BASS_STYLE_AUTO = "auto"
+
+
+def parse_bass_style(argument: str) -> Tuple[str, ...]:
+    """A `--bass-style` argument as the ordered tuple of note rules it names.
+
+    The spelling: comma-separated rule names, matched case-insensitively, whitespace
+    around the commas ignored, so `"root,approach"` and `" Root , APPROACH "` are one
+    request. **The order is part of the request**, not formatting - it is the resolution
+    order, so `"approach,root"` and `"root,approach"` are two styles even though they
+    admit the same roles. A repeat is dropped keeping its first occurrence, and nothing
+    is re-sorted, for the same reason `grips.parse_grips` keeps its order and
+    `textures.parse_voices` does not.
+
+    `none` and `auto` are **not** rules and are refused here: `none` is the absence of a
+    style and `auto` is a default, both resolved before this runs. Refusing them keeps
+    the rule vocabulary to things that name a note, so a style can never be a rhythm
+    word in disguise.
+
+    Raises `ValueError` on an empty request, or on a name outside `BASS_RULES`, naming
+    the vocabulary. The rule is the library's: a spelling nobody recognises is a
+    question, and answering it by dropping a rule would hand back a bass line missing
+    something nobody asked it to drop.
+    """
+    text = argument.strip().lower()
+    if text in (BASS_STYLE_NONE, BASS_STYLE_AUTO):
+        raise ValueError(
+            f"{argument!r} is not a note rule; expected a comma-separated list of "
+            f"{BASS_RULES}"
+        )
+    if not text:
+        raise ValueError(f"bass_style is empty; expected any of {BASS_RULES}")
+    chosen: List[str] = []
+    for part in text.split(","):
+        name = part.strip().lower()
+        if name not in BASS_RULES:
+            raise ValueError(f"Unknown bass rule {name!r}; expected any of {BASS_RULES}")
+        if name not in chosen:
+            chosen.append(name)
+    return tuple(chosen)
 
 
 @dataclass
@@ -538,16 +605,16 @@ def _walking_slots(
     # while the melody *timeline* those beats are attributed through converts each slot's
     # whole-note `duration` to beats, which needs this. See `_melody_timeline`.
     beat_type: int = 4,
-    bass: str = BASS_WALK,
+    bass: str = BASS_STYLE_WALK,
 ) -> List[_Slot]:
     """
     The walking-bass slot union: the melody grid plus the walked beats.
 
-    `bass` names the policy from `BASS_STYLES`. `BASS_WALK` writes a note on every
-    beat, which is what makes the line a *walk*; `BASS_ANCHORS` keeps only the beats
-    that already carry a root, which needs far less room under the left hand and so
-    works under textures `walk` is refused for. The union is built the same way either
-    way - the grid is the grid - so a sparser line is sparser and nothing else.
+    `bass` names the style from the note-rule vocabulary. The full `root,5th,approach,nearest`
+    writes a note on every beat, which is what makes the line a *walk*; `root` alone keeps
+    only the beats that already carry an anchor, which needs far less room under the left
+    hand and so works under textures the walk is refused for. The union is built the same
+    way either way - the grid is the grid - so a sparser style is sparser and nothing else.
 
     **The one place the union is built.** The step loop reaches it -
     `VoiceLeadingEngine.arrange_progression` - because a
@@ -1011,25 +1078,37 @@ def bass_line_for(
     onsets: Optional[Sequence[Optional[Tuple[int, float]]]],
     beats_per_bar: int = 4,
 ) -> List[BassNote]:
-    """The bass line for one policy: `_walking_bass_line`, filtered by its roles.
+    """The bass line for one style: `_walking_bass_line`, filtered by the roles its rules admit.
 
-    This is the seam a new pattern goes through. `BASS_NONE` returns nothing and is
-    never called with a grid to build - `arrange_progression` skips the union entirely
-    - so it is answered here too rather than by a caller-side `if`, which keeps the
-    "which policies produce a line" question in one place.
+    This is the seam a new note rule goes through. `none` returns nothing and is never
+    called with a grid to build - `arrange_progression` skips the union entirely - so it
+    is answered here too rather than by a caller-side `if`, which keeps the "which styles
+    produce a line" question in one place.
 
-    A policy with no entry in `BASS_POLICY_ROLES` raises rather than defaulting, on the
-    same rule the rest of the library follows: a spelling nobody recognises is a
-    question, and answering it by guessing is how a wrong note gets in. The check lives
-    in `tests/test_bass.py`, which asserts the two tables agree.
+    A style names an ordered list of note rules (`parse_bass_style` owns the vocabulary);
+    the roles those rules admit come from `BASS_RULE_ROLES`, and the walked line keeps a
+    note when its role is admitted by **any** named rule. So `root` alone is the old
+    `anchors` (the anchor beats only), and the full `root,5th,approach,nearest` is the old
+    `walk` (every beat). The harmonic reasoning - what a walking note is *for* - is
+    written once in `_walking_bass_line` and every style inherits it; a sparser style is
+    sparser and nothing else.
+
+    A style naming a rule with no entry in `BASS_RULE_ROLES` raises rather than
+    defaulting, on the same rule the rest of the library follows: a spelling nobody
+    recognises is a question, and answering it by guessing is how a wrong note gets in.
     """
-    if bass == BASS_NONE:
+    if bass == BASS_STYLE_NONE:
         return []
-    roles = BASS_POLICY_ROLES[bass]
+    admitted: FrozenSet[str] = frozenset()
+    for rule in parse_bass_style(bass):
+        try:
+            admitted |= BASS_RULE_ROLES[rule]
+        except KeyError:  # pragma: no cover - the parser refuses unknown rules first
+            raise ValueError(
+                f"Unknown bass rule {rule!r}; expected any of {BASS_RULES}"
+            ) from None
     line = _walking_bass_line(chords, onsets, beats_per_bar)
-    if roles is None:
-        return line
-    return [note for note in line if note.role in roles]
+    return [note for note in line if note.role in admitted]
 
 
 def thumb_capacity(texture: str, role: str) -> Optional[int]:
@@ -1106,8 +1185,8 @@ def comping_capacity(notes: int, bass_voice: bool = False) -> int:
     shapes on `tests/data/but_not_for_me.mxl` are byte-identical under
     `texture=uniform` and `texture=targets`. Asking `thumb_capacity` therefore refuses a
     combination that is perfectly playable, on the strength of a palette the comping
-    route never uses - `bass_allowed("uniform", "walk")` refuses
-    `melody="alto,tenor", bass="walk"` under the default texture.
+    route never uses - `bass_allowed("uniform", "root,5th,approach,nearest")` refuses
+    `melody="alto,tenor", bass="root,5th,approach,nearest"` under the default texture.
 
     Every comping shape on that head sounds on strings `(2, 3, 4, 5)` and never once on
     the low E or the A, so the refusal was false on the facts too.
@@ -1195,7 +1274,7 @@ def bass_allowed(
     say-so of grips that route never generates. The texture is inert on that route for
     the same reason it is on the comping one.
     """
-    if bass == BASS_NONE:
+    if bass == BASS_STYLE_NONE:
         return True, ""
     if melody_only and notes is None:
         return True, ""

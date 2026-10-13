@@ -21,7 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Container, Mapping, Optional, Sequence, Tuple
 
-from .bass import BASS_AUTO
+from .bass import BASS_STYLE_AUTO
 from .grips import GRIP_PREFERENCE
 from .textures import GRID_EVERY_NOTE, HARMONY_AUTO, MELODY_AUTO
 from .tuning import MELODY_STRING_CHOICES_FULL, NECK_FRET_MAX, NECK_FRET_MIN
@@ -43,20 +43,21 @@ class ArrangeOptions:
     fret_max: int = NECK_FRET_MAX
     grips: Tuple[str, ...] = GRIP_PREFERENCE
     texture: str = "uniform"
-    # Which bass **policy** the thumb line is written on: "none", "anchors" or "walk".
-    # An axis of its own rather than a property of the texture, because the pattern is
-    # the composer's choice and the set of patterns is open - see `BASS_STYLES` in
-    # `bass.py`, where a new one is a row in a table.
+    # Which bass **style** the thumb line is written on, as a comma-separated list of
+    # note rules: "none", "root", or the full "root,5th,approach,nearest". An axis of its
+    # own rather than a property of the texture, because the note rules are the
+    # composer's choice and the set is open - see `BASS_RULE_ROLES` in `bass.py`, where a
+    # new one is a row in a table.
     #
-    # The default is the **sentinel** `BASS_AUTO` ("auto"), not the resolved "none",
+    # The default is the **sentinel** `BASS_STYLE_AUTO` ("auto"), not the resolved "none",
     # for the same reason `melody`'s and `harmony`'s defaults are sentinels: it matches
     # `arrange_progression`'s keyword default, so the two spellings can be compared
     # field-by-field, and a default that disagreed with the keyword's would make every
     # slot-path call look like a caller who had passed both. The sentinel resolves from
     # the texture, so a bare options value leaves the thumb line where the keyword
-    # default leaves it. `steps.py` reads the field back, which is what keeps `--bass`
-    # live on the `arranger head` path.
-    bass: str = BASS_AUTO
+    # default leaves it. `steps.py` reads the field back, which is what keeps
+    # `--bass-style` live on the `arranger head` path.
+    bass: str = BASS_STYLE_AUTO
     # Which voices the guitar plays, from `MELODY_POLICIES` in `textures.py` (which
     # resolves the `auto` sentinel). `soprano` keeps the melody pinned to the soprano
     # string - the default - and dropping it gives the

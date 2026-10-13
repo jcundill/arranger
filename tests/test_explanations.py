@@ -57,7 +57,7 @@ CONFIGS: List[Dict[str, Any]] = [
     {},
     {"texture": "targets"},
     {"texture": "walking_bass"},
-    {"bass": "walk"},
+    {"bass": "root,5th,approach,nearest"},
     {"melody": "none"},
     {"melody": "soprano"},
     {"melody": "alto,tenor"},

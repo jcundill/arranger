@@ -93,7 +93,7 @@ left room for the thumb in the first place.
 phrases it on the tab line, so the omission is reported on the part rather than in a collector.
 
 **The problem.** Over the eight committed heads × the four rows that place a thumb note under a
-texture that has one (`targets`/`walking_bass` × `anchors`/`walk`; 2,624 `_place_bass` calls)
+texture that has one (`targets`/`walking_bass` × `root`/`root,5th,approach,nearest`; 2,624 `_place_bass` calls)
 refusals number **161** today. The chain, every step re-measured on that same row set: **53** at
 `d9403e5` (seven heads, 1,500 calls), **39** at `246ff69`, **131** at `5f4a5e1` (the eighth
 fixture arrives), and **161** from `574d666` on — playing the repeats (`6cdcbaa`) lengthened the
@@ -238,7 +238,7 @@ from arranger.bass import bass_line_for
 from arranger.chords import ChordParser
 chords = [(ChordParser.parse_chord_name(n)[0], ChordParser.parse_chord_name(n)[1] or '', n)
           for _m, _q, n in [('D5','m7','Dm7'), ('C5','maj7','Cmaj7'), ('E4','7','A7')]]
-line = bass_line_for('walk', chords, [(1,1.0), (1,2.0), (3,1.0), (3,2.0)], 4)
+line = bass_line_for('root,5th,approach,nearest', chords, [(1,1.0), (1,2.0), (3,1.0), (3,2.0)], 4)
 print('bars walked:', sorted({n.bar for n in line}))
 "
 # bars walked: [1, 3]   <- on the head path the union supplies bar 2, so this is the

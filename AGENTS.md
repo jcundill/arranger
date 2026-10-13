@@ -31,6 +31,7 @@ gate and the conventions — not the explanation.
 | an open bug, with its measurement | [docs/open-issues.md](docs/open-issues.md) | `tests/test_open_issues.py` re-takes every figure that document states, and runs its reproduction snippets, so a number cannot rot quietly — which it did three times before that file existed |
 | which finger frets which string, or a per-finger cost criterion; which strings the right hand's `p-i-m-a` pluck, the gaps between them, and how far the thumb reaches | [docs/fingering.md](docs/fingering.md) | `arranger/fingers.py` (not inert any more: `bass` reads `can_fret` for the four-fret budget — `tests/test_fingers.py` holds the caller set to exactly `{bass}`; no per-finger cost yet). Its §4.3 measurement landed a *right-hand* rule first (`grips.thumb_safe_grips`, read by `decisions.resolve_texture_grips`) and then a *left-hand* one (`fingers.can_fret`, read by `bass._place_bass`); its **§4.4 finger-skip half is now built**, not recorded: the four `drop24` sets that carried the skip were removed from `GRIP_STRING_SETS` (`grips.finger_skip_count` is the rule and `tests/test_grips.py` holds the tables to it), at a price counted in chords, and the three rejected forms of the same lever are in §4.4 rather than here. Its thumb's-reach half still changes no count (`tests/test_texture.py::TestTheThumbReach` pins the reach), and §4.3's follow-on (should the *selector* leave room for the thumb?) is measured and unbuilt, and its numbers are in §4.3 and [docs/open-issues.md](docs/open-issues.md) item 2 rather than here: `tests/test_open_issues.py` re-takes them from the tree, so a figure repeated in this table would be a second source for one fact. Its **fourth lever — the walk's own pitch — costs the tuple nothing** and is the cheapest of the four |
 | `voices=`, which voices the guitar plays | [docs/voices-axis.md](docs/voices-axis.md) | `arranger/textures.py` |
+| the harmonisation axes (`grid=`, `harmony=`, `voices=`, `bass=`, `texture=`, `grips=`) — the proposal that replaces them with three parts | [docs/parts.md](docs/parts.md) | `arranger/textures.py`, `arranger/bass.py`, `arranger/grips.py` |
 | the comping axes (`harmony=`, `grid=`, the rhythm grid) | [docs/comping-styles.md](docs/comping-styles.md) | `arranger/textures.py` |
 | the step/voicing mirrored fields (`step.grip`, `step.bass`), or which voice selection is melody-only | [docs/one-fact.md](docs/one-fact.md) | `arranger/tuning.py`, `arranger/movement.py` |
 | how something was decided, historically | [docs/history/](docs/history/) | — |
@@ -50,23 +51,24 @@ frozen like the rest — it is not a home for an open plan.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1094 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **1096 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 15 of those 1094, and it is the one that fails if this
+(`tests/test_docs.py` is 15 of those 1096, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree. It also fails if a document
 exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
 new file cannot be added without being registered.)
 
-**Five axes, not one.** `texture=` (where notes fall), `bass=` (who plays the bottom,
-`BASS_STYLES`), `voices=` (which voices the guitar plays, `VOICE_NAMES`), `harmony=`
+**Five axes, not one.** `texture=` (where notes fall), `bass=` (the note rules the
+thumb states, `BASS_RULES`), `voices=` (which voices the guitar plays, `VOICE_NAMES`), `harmony=`
 (which *degrees* the part states when it is not singing, `HARMONY_STYLES`) and `grid=`
 (*where a chord falls* in the bar, `GRID_STYLES`) are **orthogonal**, and
 a band setting is a combination rather than a mode: `bass="none", voices="none"` is a
 bassist on the root, a horn on the melody and the guitar comping guide tones between them.
-Adding an axis means a new `*_STYLES` / `*_POLICIES` pair and a `*_AUTO` sentinel that
-is deliberately **not** in the styles list, plus a `*_allowed` refusal function derived from
-a table rather than listed — never another branch at the call sites. The trap: a loop
+Adding an axis means a new vocabulary (`*_STYLES` / `*_POLICIES`, or a note-rule
+`*_RULES` table like `bass`'s per [docs/parts.md](docs/parts.md) §7 step 1) and a `*_AUTO`
+sentinel that is deliberately **not** in the vocabulary, plus a `*_allowed` refusal function
+derived from a table rather than listed — never another branch at the call sites. The trap: a loop
 variable shadowing a policy parameter (`melody`, in the since-removed `wjazzd.arrange_slots`,
 did exactly this, and it only raised when a diminished retry had something to rescue).
 
@@ -616,7 +618,7 @@ Each of these cost real time, or nearly shipped a defect.
     cost tuple by construction" — and every `supported_string_sets()` assertion in the
     suite is on a generated *voicing*. So a four-note target plus a thumb note was five
     strings, four fingers be damned, on **281 steps** of the committed heads under
-    `--texture targets --bass walk|anchors`, and no test could see it.
+    `--texture targets --bass-style root,5th,approach,nearest|root`, and no test could see it.
     `tests/test_walking_bass.py::TestTheInvariant` *had* amended the rule for a
     bass-carrying step, and amended it correctly for the texture it was written for (a
     `walking_bass` target is a shell, so three strings plus a thumb is four) — the
@@ -702,6 +704,7 @@ Each of these cost real time, or nearly shipped a defect.
 | [docs/voices-axis.md](docs/voices-axis.md) | **in progress** - the `voices=` axis, awaiting QA |
 | [docs/comping-styles.md](docs/comping-styles.md) | the comping axes (`harmony=`, the rhythm grid): **partly built** - Stage C shipped `harmony=`, Stage D shipped the named `grid=` rows, and §9 steps 0, B, A, A', C, D and E have landed (E, `--voices soprano` = the melody and nothing else, landed earlier as Stage 2 — `docs/one-fact.md`; A' makes a **chords-only lead sheet** loadable, `Head.bars` a fact about the file; C makes `--non-chord-tone` reach the comping route at harmony level, onset-guarded by `melody_onsets`; D makes the soprano **per slot**, so a soprano-named selection comps the grid positions its tune does not articulate at); §9.4's four-note comping chord, and §6's open questions, are still proposal |
 | [docs/one-fact.md](docs/one-fact.md) | the Stage-2 collapse, **landed**: one field per fact (`step.grip`, `step.bass` as derived views), and the melody-only signal moved from `texture=` to `voices=` |
+| [docs/parts.md](docs/parts.md) | **proposal** - the harmonisation axes replaced by three parts (melody, bass, chord): the four-string budget they add up to, the ownership map, and the order the change lands in |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | what CI runs, and which tests it does *not* run |
 
 `common_grips.md` is generated from the engine's own tables by `grip_chart.py` and

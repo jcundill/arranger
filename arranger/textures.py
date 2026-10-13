@@ -99,7 +99,7 @@ TEXTURE_STYLES: Tuple[str, ...] = (
 # grid before the step loop, so a bar whose melody is one whole note still carries four
 # bass notes. `walking_bass` is the one texture that *means* a thumb and harmonises on
 # its strong beats; a melody-only selection that names the bass voice - `(soprano,
-# bass)` - means a thumb too, and that half of `BASS_AUTO`'s rule is read from the
+# bass)` - means a thumb too, and that half of `BASS_STYLE_AUTO`'s rule is read from the
 # selection rather than from here, because it is a fact about the band rather than
 # about where notes fall.
 THUMB_TEXTURES: Tuple[str, ...] = ("walking_bass",)
@@ -113,7 +113,7 @@ THUMB_TEXTURES: Tuple[str, ...] = ("walking_bass",)
 #   bass=      the bass voice - none / anchors / walk
 #   voices=    WHICH voices the guitar sounds - soprano, alto, tenor, bass
 #
-# A band setting is then a *combination* of axes, not a mode: `--bass none --voices
+# A band setting is then a *combination* of axes, not a mode: `--bass-style none --voices
 # alto,tenor` is a bassist on the root and a sax on the tune with the guitar comping the
 # two middle voices. "I am sitting next to a bass player, so I want none of the 1s and 5s
 # and none of the walking motion" is `bass="none"`; "and the melody is not mine either"
@@ -249,7 +249,7 @@ def resolve_voices(voices: Tuple[str, ...]) -> Tuple[str, ...]:
     """The voices to actually play: `auto` resolved, everything else as parsed.
 
     `auto` resolves to `VOICES_ALL`, which is what keeps the axis inert. Note
-    the one asymmetry with `bass`: `BASS_AUTO` reads the texture because
+    the one asymmetry with `bass`: `BASS_STYLE_AUTO` reads the texture because
     `walking_bass` *means* a thumb line, whereas **no texture means "somebody
     else sings"** - a fact about the band rather than about the texture.
 
@@ -263,7 +263,7 @@ def resolve_voices(voices: Tuple[str, ...]) -> Tuple[str, ...]:
 
 
 # The policies a named selection resolves to. A **registry** rather than a flag, for the
-# reason `BASS_POLICY_ROLES` is one: the set of patterns is open and meant to stay open,
+# reason `BASS_RULE_ROLES` is one: the set of patterns is open and meant to stay open,
 # and a named comping pattern - Freddie Green, Charleston - is a row here rather than
 # another branch at each of the call sites that decide which voices sound. The voices a
 # row keeps are stated with the same four names a caller passes, so the table and the

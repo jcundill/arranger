@@ -1236,7 +1236,7 @@ class TestChordSlots(unittest.TestCase):
         """
         def walked(grid):
             steps, _head, _notes = arrange_xml_head(
-                RAINY_DAY, bass="walk", texture="walking_bass", grid=grid
+                RAINY_DAY, bass="root,5th,approach,nearest", texture="walking_bass", grid=grid
             )
             return {s.bar for s in steps}
 

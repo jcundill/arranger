@@ -64,6 +64,7 @@ DOCUMENTS = [
     "docs/one-fact.md",
     "docs/fingering.md",
     "docs/generated-grips.md",
+    "docs/parts.md",
 ]
 
 #: Matches a version as stated in prose: `0.9.0`, `` `0.9.0` ``, "currently 0.9.0".

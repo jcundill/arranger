@@ -59,7 +59,7 @@ def resolve_texture_grips(
     tables; a target palette of four-note grips (`targets`' `drop2`/`drop3`) resolves to
     the widest statement that leaves a finger free, which is the `("shell",)` palette
     `walking_bass` already names. Applied *before* `requested` narrows, so
-    `--grips drop2 --texture targets --bass walk` reads as "that grip is not available
+    `--grips drop2 --texture targets --bass-style root,5th,approach,nearest` reads as "that grip is not available
     here" below.
 
     **`has_thumb` is a fact about *this slot*, not about the arrangement**, and the
@@ -167,9 +167,9 @@ def melody_alone_case(
     `get_melody_only_voicing`, which is the melody on its own - so this function cannot
     be allowed to answer `MELODY_ALONE_TEXTURE` for a slot the guitar is not singing, or
     a fill would put the tune straight back on the guitar and the axis would be honoured
-    only on targets: under `--texture targets --bass walk` a fill that answers the
+    only on targets: under `--texture targets --bass-style root,5th,approach,nearest` a fill that answers the
     texture case comes back a bare melody note, which is exactly the part that belongs
-    to somebody else - see the `--texture targets --bass walk` example in
+    to somebody else - see the `--texture targets --bass-style root,5th,approach,nearest` example in
     `docs/engine.md`. The per-slot reading is what keeps that true for a note-less
     grid position a *singing* selection receives: the guitar has no note there, so it
     must not answer the texture case.

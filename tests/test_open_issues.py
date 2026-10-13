@@ -54,10 +54,10 @@ HEADS: List[str] = (
 #: line now too, but item 2's chain of counts — 53 at `d9403e5`, 39 at `246ff69` — was taken
 #: over these four, so staying on them is what keeps the figures comparable with it.
 THUMB_ROWS: Tuple[Tuple[str, str], ...] = (
-    ("targets", "anchors"),
-    ("targets", "walk"),
-    ("walking_bass", "anchors"),
-    ("walking_bass", "walk"),
+    ("targets", "root"),
+    ("targets", "root,5th,approach,nearest"),
+    ("walking_bass", "root"),
+    ("walking_bass", "root,5th,approach,nearest"),
 )
 
 
