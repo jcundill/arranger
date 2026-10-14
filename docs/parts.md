@@ -247,14 +247,17 @@ a rest.
    one slot per position a grid names — including positions no note occupies. The `NC`
    rule in §4 is therefore expressible and is built (§5 item 11).
 
-   What is still owed is **generated slots**: a beat the melody skips *inside* a bar it
-   occupies, under the **default** grid. The premise this step was written on — "a grid can
-   only filter melody slots inside a bar the tune occupies" — is true of `every_note` and
-   false of a named one, and [open-issues.md](open-issues.md) item 1 now says which: a
-   named grid already generates there, so the remainder is the default only, and its size
-   is **155** silent positions against 192 that a hold forbids. Closing it owes the fifth
-   `melody_alone_case` kind, which is why it waits for the parts model rather than being
-   designed twice.
+   What was owed — and **has landed** — is a beat the melody skips *inside* a bar it occupies
+   under the **default** grid. The premise this step was written on — "a grid can only filter
+   melody slots inside a bar the tune occupies" — is true of `every_note` and false of a named
+   one, and [open-issues.md](open-issues.md) item 1 says which. The size it was written with —
+   **155** silent positions against 192 a hold forbids — was taken over *every* bar, so it
+   counted the 87 a named grid already adds; restricted to melody-bearing bars it is **68**
+   against the same 192. The default now generates at each bar's own subdivision and the union
+   takes those positions wherever the tune is silent: **88** steps across the eight heads. The
+   fifth `melody_alone_case` kind it predicted turned out **not to be owed** — §9.3 step D had
+   already made a note-less grid position on a singing selection a real case, and the comping
+   branch answers it.
 3. `parts=`, replacing `voices=` and the empty-palette route to "the left hand plays nothing".
 4. `texture=` reshaped as the arity policy, which is where `TEXTURE_GRIPS` loses its grip
    lists and `walking_bass` leaves `TEXTURE_STYLES`.

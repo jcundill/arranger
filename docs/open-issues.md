@@ -57,44 +57,59 @@ melody slots — can only *keep* or *drop* a slot and can never *create* one.
 - ~~The case is structurally inexpressible~~ — **the field half was already done** before this
   item was last measured: `(None, quality, name)` is a legal triple, and `chord_slots` emits
   exactly that shape.
-- **Still open: a beat the melody skips *inside* a bar it occupies — under `every_note`
-  only.** The union's exception is the **bar**, so a *named* grid already generates
-  inside a bar the tune occupies: `All_the_Things_You_Are` bar 4 (onsets 1, 2, 4) yields
+- **Landed: a beat the melody skips *inside* a bar it occupies.** The union's exception used
+  to be the **bar**, so a *named* grid already generated inside a bar the tune occupies:
+  `All_the_Things_You_Are` bar 4 (onsets 1, 2, 4) yields
   7 steps under `joe_pass`, sounding 1.5, 2.5 and 3.5 — none of them written onsets — and
-  bar 3 (onsets 1, 2, 3, 4) yields 8 under the same grid on both routes. What is still
-  owed is the **default**, whose exception excludes every position of a melody-bearing
-  bar: the same bar 4 yields 3 steps under `every_note` and beat 3 is absent. Closing it
-  needs **generated slots**. The size of the change is measured rather than guessed: the
-  positions `every_note` names inside melody bars across the eight heads total **347**,
-  of which **192** fall where a note is still *held* — and §9.2 forbids reharmonising
-  under a hold, because the note was already harmonised where it began — leaving **155**
-  silent positions that generating would actually add. That 155 is the number the
-  fifth `melody_alone_case` kind has to be designed against.
+  bar 3 (onsets 1, 2, 3, 4) yields 8 under the same grid on both routes. What the default
+  lacked was positions of its own, and it has them now: **each bar is generated at its own
+  subdivision** (`textures.grid_resolutions`, converted through the metre so no bar is
+  generated finer than the sixteenth this library floors at), and the union takes those
+  positions wherever the tune is **silent**. §9.2 still refuses a position the tune is
+  *holding*, and that is why bar 4 of that head is unchanged under `every_note`: its beat 3
+  is a held `C5` rather than a gap, so the absence there is a different claim from the one
+  this item made. **bar 16** of the same head is the case the old exception excluded and the
+  new rule fills — the tune enters on beat 2, so its downbeat is silent and now carries a
+  chord.
+  The change is measured rather than guessed: **88 steps** across the eight heads
+  (`All_the_Things_You_Are` +4, `The_Jitterbug_Waltz` +11, `Trouble_in_Mind_Blues` +31,
+  `tenor_madness` +28, `but_not_for_me` +14, and nothing on `heres_that_rainy_day`,
+  `i_was_doing_all_right` or `lead_sheet_chords_only`, whose tunes are continuous and so
+  hold every position inside their own bars). The sizing this bullet used to carry read
+  **347** positions named / **192** held / **155** owed; restricted to the melody-bearing
+  bars its own sentence claimed it is **260** / **192** / **68**, and the difference is the
+  87 positions the bar-level fix above had *already* added — counted a second time.
 - **Still open: a stab's duration on the comping route.** `chord_slots` computes a length from
   the following grid position and `head_skeleton` from the melody note, but no axis decides
-  which a *comping* step obeys. It is `docs/comping-styles.md` §9.4's business, and it is the
-  fifth `melody_alone_case` kind that item predicts.
+  which a *comping* step obeys. It is `docs/comping-styles.md` §9.4's business.
 
 **Why the rest exists.** Closing it means slots a grid position can *create*, which changes
 three things: `head_skeleton` (rests become time rather than skipped elements, and it must emit
 chord slots as well as note slots), `ArrangementStep.melody` (`None` where no note sounds — the
 field half is done), and `decisions.melody_alone_case` (an invented slot has no note to be alone
-*with*, so its `kind` vocabulary needs a fifth value). That is a different order of change: a
-harmonisation engine whose input is a **chord timeline**, not a list of melody notes.
+*with*, so its `kind` vocabulary was expected to need a fifth value). **The fifth kind turned out
+not to be owed**, and that is worth recording rather than deleting: §9.3 step D had already made
+"a note-less grid position a *singing* selection receives" a real case, and the comping branch
+answers it with `MELODY_ALONE_NONE` — the grid decides whether the guitar is silent *about a chord
+it could state*, and here it can. The alternative was a different order of change: a harmonisation
+engine whose input is a **chord timeline**, not a list of melody notes.
 
 **Landed.** `Head.chords` / `HeadChange` record the timeline as the document is walked;
 `headxml.chord_at` queries it by forward fill; `headxml.chord_slots` yields one slot per position
 the grid names; and `arrange_xml_head` unions them with `head_skeleton`'s for any selection that
 voices chords (`comps+freddie`: `but_not_for_me` 80 → 102, `heres_that_rainy_day` 180 → 206,
 `i_was_doing_all_right` 224 → 246 — the first is the figure this paragraph has always carried,
-and the other two lengthened when the repeats started being played), **plus the bar-level
-`every_note` exception** that closes the silence. A stab's duration is now the grid's, capped at
-the barline. Still owed: generated slots, and the `melody_alone_case` kind.
+and the other two lengthened when the repeats started being played), plus the bar-level
+`every_note` exception that closes the silence, **plus generated positions inside a bar the tune
+occupies** (`headxml._generated_beats` and the position-level union in `_merge_chord_slots`). A
+stab's duration is now the grid's, capped at the barline. Nothing is owed here any more.
 
 **The rule it suggests.** A rhythm needs a source of its own. Where a grid's positions are
 filtered out of the melody rather than generated from the metre, they vanish silently and no
-warning can be issued, because the question was never asked. The bar is the largest unit for
-which that silence was a defect; below it, deferring to the melody is the documented decision.
+warning can be issued, because the question was never asked. The position is the smallest unit at
+which that silence was a defect; below it, deferring to the melody is the documented decision —
+a held position belongs to the note that began there (§9.2), and that is now the *only* thing the
+default grid declines.
 
 ---
 
@@ -110,36 +125,38 @@ phrases it on the tab line, so the omission is reported on the part rather than 
 
 **The problem.** Over the eight committed heads × the four rows that place a thumb note under a
 texture that has one (`targets`/`uniform` × `root`/`root,5th,approach,nearest`; 2,624
-`_place_bass` calls) refusals number **222** today. `targets` and `uniform` are the two textures
+`_place_bass` calls) refusals number **220** today. `targets` and `uniform` are the two textures
 that carry a thumb line; the walk itself is the bass part's grid row rather than a texture, which
 is why the rows are two textures × two rule sets rather than the old `targets`/`walking_bass` pair.
 The chain's earlier points were taken over that old pair, so they are not comparable with today's
 figure: **53** at `d9403e5` (seven heads, 1,500 calls), **39** at `246ff69`, **131** at `5f4a5e1`
-(the eighth fixture arrives), and **161** from `574d666` on — playing the repeats (`6cdcbaa`)
+(the eighth fixture arrives), **161** from `574d666` on — playing the repeats (`6cdcbaa`)
 lengthened the heads, which is where most of that jump came from — and **222** once the lone-note
-placement landed (below), which moved every shape a lone note sits under. Attributed by cause:
+placement landed (below), which moved every shape a lone note sits under. **220** is the current
+figure, and item 1's generated positions moved it: they add steps, which changes which shape a
+lone note sits under again. Attributed by cause:
 
 | cause | refusals |
 |---|---|
 | no free string | **0** |
-| **no octave of the walk's pitch below the shape** | **222** |
+| **no octave of the walk's pitch below the shape** | **220** |
 | five frets for four fingers | **0** |
 
 The middle row is the common case, and it is the one the clause names — but note it is a
 *replica* of `_place_bass`'s three filters that names it, not the engine, because the field
-carries the wanted pitch and not the reason it could not be placed. 115 of the 222 are a
+carries the wanted pitch and not the reason it could not be placed. 98 of the 220 are a
 *doubling*: the walk's pitch class is the shape's own bottom class an octave up, so the thumb
-would restate what the chord already sounds. The other 107 are a pitch the shape has no octave of
+would restate what the chord already sounds. The other 122 are a pitch the shape has no octave of
 beneath it.
 
 **Why the levers do not pay.** All three filters are right, and dropping the note is deliberate
 policy — a step is never dropped because the thumb could not reach it.
 
 - **the walk's own pitch** is the fourth lever and costs the tuple nothing — it re-states the
-  bass under the shape already chosen — but reaches **156 of the 222**, and only **117** of those
-  by a chord tone (`Cm7` 28, `Eb7` 22, `Dm7` 20, `Db9` 14, `Abmaj7` 9, `Am7` 6, `D7` 4,
-  `Eb6` 4, `Gm7` 4, `Ebmaj7` 4, `Cmaj7` 2 — eleven chords, not the one chord and one bar this
-  used to say). **66 of the 222** cannot be helped by any pitch at all.
+  bass under the shape already chosen — but reaches **144 of the 220**, and only **105** of those
+  by a chord tone (`Eb7` 22, `Cm7` 20, `Dm7` 20, `Abmaj7` 9, `D7` 6, `Am7` 6, `Eb6` 4,
+  `Gm7` 4, `G7` 4, `Ebmaj7` 4, `Cmaj7` 2, `Bb7` 2, `Db9` 2 — thirteen chords, not the one chord
+  and one bar this used to say). **76 of the 220** cannot be helped by any pitch at all.
 - **the shape-level retries** (re-select over hosting shapes, identical notes or any) are the
   other lever, and their numbers — 0 of 34 for the identical-notes retry, 10 of 53 on the tree
   it was first asked on, 48 of 53 for the bare one — are **not re-measured here**: the script
@@ -172,7 +189,7 @@ the route that does, and it is now the **only** value on this axis that does eit
 `root` and `shell_root` **raise** `ValueError` when the voice selection has no room for them, so
 a refusal on this axis is loud everywhere except here. Measured on
 `[("D5","m7","Dm7"), ("C5","maj7","Cmaj7"), ("A4","7","A7"), ("G4","maj7","Gmaj7")]`,
-`harmony=full` under `melody=alto,tenor` gives guide tones — byte-identical to the same
+`harmony=full` under `parts=chord` gives guide tones — byte-identical to the same
 arrangement with no `harmony=` at all. It is the one value refused by nothing that resolves to
 something other than itself, which is the failure `resolve_harmony`'s own docstring names.
 
@@ -181,8 +198,9 @@ which weakens `harmony_allowed`'s "derived from arity" property (it would be the
 derived), or **build it**, which is [docs/comping-styles.md](comping-styles.md) §9.4's four-note
 comping chord — new string sets, deliberately not done. Recorded rather than fixed because it is
 a behaviour change on an axis whose document still lists four-note comping as a proposal. The
-*record* is now correct: `HARMONY_BUILT` names `guide`, `shell_root` and `root`, and `full` is
-not among them.
+*record* is now correct: `HARMONY_LENGTH` in `textures.py` names the two families with a fixed
+arity — `guide` (2) and `shell_root` (3) — and `full` is absent from it because its length is the
+chord's own tone set, which varies by quality and lives in `TONE_PRIORITY`.
 
 ---
 
@@ -228,8 +246,9 @@ to take.
 
 **The problem.** Measured over the eight committed heads × the walk row (`texture=targets`,
 `bass=root,5th,approach,nearest`, `grid=melody:every_note,bass:walk`): the worst reach is **7**
-(`i_was_doing_all_right`) and **4** steps exceed **4** frets — 2 in `i_was_doing_all_right`, 1 in
-`All_the_Things_You_Are`, 1 in `but_not_for_me` — and **every one of those four is placed as near the hand as its own note allows**, which is what
+(`i_was_doing_all_right`) and **6** steps exceed **4** frets — 2 in `i_was_doing_all_right`,
+2 in `The_Jitterbug_Waltz`, 1 in `All_the_Things_You_Are`, 1 in `but_not_for_me` — and
+**every one of those six is placed as near the hand as its own note allows**, which is what
 `tests/test_walking_bass.py::TestTheThumbReachesTheHandHoldingTheShape.test_the_thumb_stays_within_reach_of_the_fingers`
 now asserts instead of excusing. The wide reach is therefore the **walk's register**: the note the
 line decided to play has no position nearer the held shape, and the placement took the nearest one
@@ -375,6 +394,6 @@ pitch class, not the reason it could not be placed. Rebuild the free-string set,
 the wanted pitch below the shape's own lowest note, and the `fingers.can_fret` four-fret budget,
 in that order, and the first of the three that comes back empty is the cause. The replica is
 validated by agreement rather than by inspection — over all 2,624 calls it agrees with the real
-`_place_bass` on every outcome, which is what makes the `0 / 215 / 0` split a measurement and not
+`_place_bass` on every outcome, which is what makes the `0 / 220 / 0` split a measurement and not
 a description of the code. Recording the cause on the field would remove the replica; that is a
 change to the engine, not to this document.

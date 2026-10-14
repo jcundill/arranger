@@ -571,9 +571,12 @@ purpose"*. The integer won by implementation and the question was never revisite
    sings + thumb*. Under the proposal it becomes `harmony=guide`, sings=yes, `bass=walk` —
    and **its shipped output must stay byte-identical**, which is the acceptance test for
    the whole refactor.
-8. **Is the subdivision an integer count of eighths, or a float?** Proposed: **integer
-   eighths**, because it avoids float comparison for a notated position — the same
-   reasoning `_BEAT_EPSILON` exists for. Unresolved.
+8. **Is the subdivision an integer count of eighths, or a float?** **Settled: an integer
+   count of twenty-fourths of a beat** (`textures.TICKS_PER_BEAT`, with `SUB` = 12 = half a
+   beat). Integer, as proposed and for the proposed reason. Eighths was the grain when this was
+   written; the sixteenth and the eighth-note triplet a generated bar is subdivided at need a
+   twelfth, and the cut-time heads — where a sixteenth is an eighth of a *beat* — need a
+   twenty-fourth, so that is the coarsest unit holding every position the corpus writes.
 
 ---
 
@@ -587,7 +590,11 @@ purpose"*. The integer won by implementation and the question was never revisite
   see [generated-grips.md](generated-grips.md) §3), and no touching the 54 hardcoded tab
   strings.
 - **No default change.** Every existing arrangement must come out byte-identical, which is
-  the acceptance criterion for any part of this that gets built.
+  the acceptance criterion for any part of this that gets built. **Except the one that says
+  otherwise:** `docs/open-issues.md` item 1's position-level half *is* a default change, made
+  deliberately, by a later decision than this section — the default grid now generates a chord
+  at each bar's own subdivision, +88 steps over the eight heads. Every stage below was built
+  to this criterion, and the record of which gate it held at is in §9.
 
 ---
 
@@ -1185,7 +1192,9 @@ Gate: a committed chords-only fixture, and the six existing fixtures byte-identi
 **The gate's second half is re-read, not waived** (AGENTS.md trap 5): "byte-identical" is now
 *every note-bearing bar* of every fixture. Six of the eight heads gained **87** steps between
 them, all in bars the melody never enters; `tenor_madness` and `but_not_for_me` have no such
-bar and are untouched.
+bar and are untouched. **That gate is itself superseded by item 1's position-level half**, which
+adds 88 steps *inside* melody-bearing bars as well — the record is §9.3 step B's re-scoped
+bullet, and the surviving criterion is the pair of invariants asserted in `TestChordSlots`.
 
 **Landed.** `Head` carries a `measure_range`, set by `_read_notes` from the measures it
 walks, and `bars` reports it — falling back to the note span only for a `Head` built by
@@ -1205,7 +1214,9 @@ file's extent is not free. Three fixtures — `Trouble_in_Mind_Blues`,
 `heres_that_rainy_day`, `i_was_doing_all_right` — have changes that outlast their last note,
 so on the **comping route with a named grid** their parts now run to the file's end:
 `freddie` 79→87, 103→109, 124→126 and `joe_pass` 83→91, 114→120, 159→161. The other three
-fixtures, and **every default arrangement**, are byte-identical. So "the six fixtures
+fixtures are untouched by *that* change, and **every default arrangement** was byte-identical
+**then** — item 1's position-level half has since moved the defaults deliberately, so what
+holds now is the pair of invariants rather than the equality. So "the six fixtures
 byte-identical" holds for the acceptance criterion §8 actually states — *an arrangement
 with no flags passed* — and the comping-route counts are **re-baselined rather than kept**,
 because the change *is* the fix: a chord still in force in a trailing bar was being dropped.
@@ -1305,13 +1316,17 @@ did not say, each measured on `but_not_for_me`:
   `soprano,bass` play the tune and nothing else, so a grid position with no tune has nothing
   for them to play; they are left unmerged and unchanged. This is why the union is gated on
   `melody_only_selection` and not on `voices_have_soprano`.
-- ~~**The default is still inert.**~~ **Re-scoped when open-issues item 1's bar-level half
-  landed.** `every_note` names no positions of its own, so `_merge_chord_slots` merges nothing
-  a named grid would have merged inside a bar the melody occupies — and every no-flags
-  arrangement is byte-identical **over those bars**, which is the acceptance criterion of §7
-  and the property that makes the change safe to ship. What it now adds is the **bar the
-  melody never enters**, which used to produce no part at all: 87 steps across six heads,
-  zero on `tenor_madness` and `but_not_for_me`.
+- ~~**The default is still inert.**~~ **Re-scoped twice.** When item 1's **bar-level** half
+  landed, `every_note` merged nothing inside a bar the melody occupies and added only the **bar
+  the melody never enters** — 87 steps across six heads, zero on `tenor_madness` and
+  `but_not_for_me`. When item 1's **position-level** half landed, the default began generating at
+  each bar's own subdivision (`textures.grid_resolutions`), adding **88** steps across the eight
+  heads — inside bars the tune occupies as well as the ones it never enters — so **no no-flags
+  arrangement is byte-identical to its skeleton any more.** What survives is the property that
+  acceptance criterion was a proxy for, and it is asserted directly in `TestChordSlots`: **no
+  written note is lost**, and **no chord is added under a note the tune is still holding**
+  (§9.2). The second is what leaves `All_the_Things_You_Are` bar 4 at three steps — its beat 3
+  is a held `C5` — while bar 16 of the same head gains the downbeat it used to skip.
 
 The one behaviour change beyond the axis itself is at the library surface: a hand-built
 `None` melody under a *singing* selection used to be refused and its slot skipped, and is now
