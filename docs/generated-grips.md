@@ -321,7 +321,7 @@ Read from the step's own fields: the tones of the chord the part **states**
 (`harmonized_as` where a substitute was found, so it composes with the substitution clause)
 against the pitches of the **whole** step (`midi_notes()`, so a thumb that lands on the root
 counts as stating it), named through `chords.melody_degree_name` — the vocabulary
-`_comping_clause` names the degrees a shape *states* with.
+`_comping_clause` names the voices a shape *states* with.
 
 Measured on the default sweep: **185** of the 1,016 steps that carry a melody and a sounding
 shape are a four-voice shape leaving a chord tone out — 162 leaving one, 23 leaving two, so 208

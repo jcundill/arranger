@@ -210,6 +210,51 @@ def _voices_named_on_the_line(step: ArrangementStep) -> List[str]:
     return [pair.strip() for pair in tail.split(", ") if pair.strip()]
 
 
+def _comping_names(step: ArrangementStep) -> List[str]:
+    """Every voice a **comping** shape states, as `note degree`, from the step's fields.
+
+    A comping step has no melody column, so the clause is the only place a reader can learn
+    which note of the chord the shape put where - and the tab gives frets. Read from the
+    step's own pitches against the chord the part **states**, one entry per degree (two
+    octaves of one degree is one entry, which is the shape's own claim), and compared as a
+    sorted list by the witness below, because the clause orders the voices by the interval
+    from the root and that order is not the question.
+
+    The routes are the ones `_step_annotation` reaches `_comping_clause` by, in the same
+    order - a no-chord bar, a chord no shape could state, and a silent step are all answered
+    before it - so the clause speaking where it should not is caught as well as its silence.
+    """
+    if step.melody_only or step.chord_unvoiced or step.melody_voiced:
+        return []
+    if not step.voicing.active_frets():
+        return []
+    harmony = step.harmonized_as or step.chord
+    named: Dict[str, str] = {}
+    for pitch in step.voicing.upper_midi_notes():
+        name = PITCH_CLASS_NAMES[pitch % 12]
+        degree = melody_degree_name(Note(name + "4"), harmony)
+        if not degree or degree in named:
+            continue
+        named[degree] = f"{name} {degree}"
+    return list(named.values())
+
+
+def _comping_names_on_the_line(step: ArrangementStep) -> List[str]:
+    """The voices the line's comping clause names, read from the clause's own marker.
+
+    The list ends where the clause does - at the `;` that introduces what the part is not
+    doing with the tune - because that tail is prose rather than a voice list.
+    """
+    line = _line(step)
+    marker = "comping - "
+    if marker not in line:
+        return []
+    tail = line.split(marker, 1)[1].split(";", 1)[0]
+    return [
+        name.strip() for name in tail.replace(" & ", ", ").split(",") if name.strip()
+    ]
+
+
 WITNESSES: List[Witness] = [
     (
         "a substitute chord was stated, so the chord column is not what sounds",
@@ -258,6 +303,13 @@ WITNESSES: List[Witness] = [
         "the tune is silent at this position, so nothing is being declined",
         lambda step: not step.melody_voiced and step.melody is None,
         lambda step: "the tune is silent here" in _line(step),
+    ),
+    (
+        "the guitar comps, so the voices it states are the only harmony a reader can see",
+        lambda step: bool(_comping_names(step) or _comping_names_on_the_line(step)),
+        lambda step: (
+            sorted(_comping_names_on_the_line(step)) == sorted(_comping_names(step))
+        ),
     ),
     (
         "the shape states fewer voices than the palette offered",
@@ -369,6 +421,7 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         checked = 0
         omitted = 0
         named = 0
+        comping = 0
         for head in HEADS:
             for config in CONFIGS:
                 steps, _head, _notes = arrange_xml_head(head, section=(1, 8), **config)
@@ -376,6 +429,7 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
                     checked += 1
                     omitted += bool(_missing_degree_names(step))
                     named += bool(_sounding_pairs(step))
+                    comping += bool(_comping_names(step))
                     for label, when, witness in WITNESSES:
                         if when(step) and not witness(step):
                             missing.append(
@@ -396,6 +450,11 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         # upper voices on a route that sings the tune - so a change that thinned the
         # default palette, or that stopped the clause firing, moves this number.
         self.assertEqual(named, 712, "the number of steps naming their voices moved")
+        # And for the comping part, whose voices are the only harmony the line can show:
+        # measured over this sweep, **762** of the steps it arranges state a comping shape
+        # and name each of its voices, so the reading of a thin line cannot quietly become
+        # a list of degrees again.
+        self.assertEqual(comping, 762, "the number of comping lines naming a voice moved")
 
     def test_the_slash_bass_clause_is_not_a_tautology(self):
         """The one decision the witness table cannot hold, pinned in both directions.

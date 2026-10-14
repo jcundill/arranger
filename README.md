@@ -404,12 +404,12 @@ python -m arranger head tests/data/but_not_for_me.mxl --parts bass
 ```
 
 ```text
-Bb7      F4  5    x-x-3-x-x-x        (comping - 5; the guitar does not play the tune)
-Bb7      G4  13   x-x-3-x-x-x        (comping - 5; the guitar does not play the tune - non-chord tone -> Bb13 via extension)
-Bb7      F4  5    x-x-3-x-x-x        (comping - 5; the guitar does not play the tune)
+Bb7      F4  5    x-x-3-x-x-x        (comping - F 5; the guitar does not play the tune)
+Bb7      G4  13   x-x-3-x-x-x        (comping - F 5; the guitar does not play the tune - non-chord tone -> Bb13 via extension)
+Bb7      F4  5    x-x-3-x-x-x        (comping - F 5; the guitar does not play the tune)
 ```
 
-One note per step, on low E, A or D: **lowest voice of shape**, taken from whatever reaches it — root where convenient (`Bb7` gives `Bb`, not `D` a guide-tone shape would), 5th where not (every `Ebmaj` above). Annotation names degrees sounding, so line reads for itself. Melody column is *written* melody, which guitar not playing (`melody_voiced` False); still on step so band lines up against it.
+One note per step, on low E, A or D: **lowest voice of shape**, taken from whatever reaches it — root where convenient (`Bb7` gives `Bb`, not `D` a guide-tone shape would), 5th where not (every `Ebmaj` above). Annotation names each sounding voice as **its note and its degree** (`F 5`, `Bb Root`), so line reads for itself. Melody column is *written* melody, which guitar not playing (`melody_voiced` False); still on step so band lines up against it.
 
 Guitar comps under *written* melody, so melody note outside chord makes part restate its chord rather than ignore it; each such chord reported **on the tab line**, one `comping Bb7 as Bb13 (extension) to accommodate the melody note G4`-style clause per substituted chord.
 
@@ -425,9 +425,9 @@ python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-2 \
 ```
 
 ```text
-Gmaj9    D4  5    x-x-x-x-7-7        (comping - 3 & 7; the guitar does not play the tune)
-Gmaj9    D4  5    x-x-x-x-7-7        (comping - 3 & 7; the guitar does not play the tune)
-Gmaj9/F# D4  5    x-x-x-x-7-7        (comping - 3 & 7; the guitar does not play the tune)
+Gmaj9    D4  5    x-x-x-x-7-7        (comping - B 3 & F# 7; the guitar does not play the tune)
+Gmaj9    D4  5    x-x-x-x-7-7        (comping - B 3 & F# 7; the guitar does not play the tune)
+Gmaj9/F# D4  5    x-x-x-x-7-7        (comping - B 3 & F# 7; the guitar does not play the tune)
 ```
 
 Expect **the texture's arity** per step — two here, three under `--texture chord3` and one under `chord1` — not a count of parts named: `parts` says *which* parts sound and the texture says how many notes the chord part states. `step.melody` still carries horn's note, `step.melody_voiced` False — first is written tune, second is who sounds it.

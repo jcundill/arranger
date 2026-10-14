@@ -299,15 +299,18 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
                 " (the guitar rests here - the grid places no chord)",
             )
 
-    def test_a_comping_step_names_the_degrees_it_states(self):
-        """The arity and the degrees are read off the shape, not off the grip label.
+    def test_a_comping_step_names_the_voices_it_states(self):
+        """The arity and the voices are read off the shape, not off the grip label.
 
         The label it replaces said `shell - 3rd & 7th` for a single bass note as well, and
-        was wrong in spelling too: a dominant's seventh is a `b7`.
+        was wrong in spelling too: a dominant's seventh is a `b7`. Each voice is named as
+        its **note and its degree** - `B 3` - because there is no melody column to read the
+        pitch off, so a degree alone would leave the reader to work out which note of the
+        chord the shape put where.
 
         **Naming the bass part beside the chord part adds a note below rather than widening
         the chord**, because the chord part's arity is the texture's and not the number of
-        parts named - so the two three-note rows state the same degrees and differ only in
+        parts named - so the two three-note rows state the same voices and differ only in
         the thumb.
         """
         from headxml import arrange_xml_head
@@ -315,9 +318,9 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         head = "tests/data/heres_that_rainy_day.musicxml"
         comping = "; the guitar does not play the tune)"
         expected = {
-            "bass": f" (comping - 5{comping}",
-            "chord": f" (comping - 3, 5 & 7{comping}",
-            "bass,chord": f" (comping - 3, 5 & 7{comping}",
+            "bass": f" (comping - D 5{comping}",
+            "chord": f" (comping - B 3, D 5 & F# 7{comping}",
+            "bass,chord": f" (comping - B 3, D 5 & F# 7{comping}",
         }
         for parts, text in expected.items():
             steps, _head, _notes = arrange_xml_head(

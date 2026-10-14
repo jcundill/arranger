@@ -141,8 +141,9 @@ you whether a change is an improvement or a different library.
   reason after the dash is now `step.silence`'s own, of five: the grid, an `NC` bar with
   nothing to comp, no shape for the chord or the tune, no string reaching the melody, or a
   melody-only selection with no tune here), a **comping**
-  step (`comping - 3 & 7; the guitar does not play the tune` — the degrees read off the shape,
-  because the old grip label called a single bass note "shell - 3rd & 7th"), a step that exists
+  step (`comping - B 3, D 5 & F# 7; the guitar does not play the tune` — each voice read off
+  the shape as its note and its degree, because the old grip label called a single bass note
+  "shell - 3rd & 7th"), a step that exists
   for the thumb (`the shape above is held`), and a shape that had to leave the preferred frets
   (`reaches outside the preferred frets 2-13`, with what was inside them from
   `Palette.inside_window`). A palette that is thin because the *texture* asked reads

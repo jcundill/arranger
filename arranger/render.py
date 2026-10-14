@@ -21,7 +21,7 @@ there too.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from musthe import Note
 
@@ -97,7 +97,8 @@ def _step_annotation(step: ArrangementStep) -> str:
     Three routes are *answered* rather than described, because each is a case where the
     obvious annotation would be false or silent. A step with **nothing sounding** is the
     grid declining to place a chord, and says so rather than naming a degree the guitar is
-    not playing. A **comping** step (`melody_voiced` False) names the degrees it states and
+    not playing. A **comping** step (`melody_voiced` False) names every voice it states, each
+    as its note and its degree, and
     says the tune is not the guitar's, since its thinness is the caller's selection rather
     than a palette limit (`_comping_clause`). And a melody whose chord symbol no table can
     read says *that*, instead of leaving the degree column blank with no reason. Two losses
@@ -336,14 +337,19 @@ def _criterion_phrase(decided_by: Optional[int], fuller: Voicing) -> str:
 
 
 def _comping_clause(step: ArrangementStep) -> str:
-    """What the comping guitar states, in the degrees it sounds.
+    """What the comping guitar states, by note and degree.
 
     A comping step is thin because the *selection* asked for that many voices - one per
-    voice named - so the voice count is not the question a reader has. Which degrees sound
+    voice named - so the voice count is not the question a reader has. Which voices sound
     is, and they are the family as well: `harmony=guide` states the 3rd and the 7th,
     `shell_root` puts a root or a 5th under them, and a one-voice bass selection states
     the root alone. They are read off the shape against the harmony it states, which is
     `harmonized_as` where the horn's note was accommodated with a substitute.
+
+    Named as `note degree` pairs - `Bb Root, D 3 & G 6` - and not as degrees alone: the
+    guitar has no melody here, so a degree with no note leaves the reader to work out which
+    note of the chord the shape put where, and the tab gives frets rather than names. The
+    spelling is `_voice_name`, the one the melody-bearing routes' `sounding:` clause uses.
 
     The `partial` label it replaces says "shell - 3rd & 7th" whatever the shape is, which
     is wrong rather than merely unsaid for every selection but the three-voice guide one:
@@ -351,23 +357,23 @@ def _comping_clause(step: ArrangementStep) -> str:
     """
     harmony = step.harmonized_as or step.chord
     root_str, _quality = ChordParser.parse_chord_name(harmony)
-    # Keyed by degree *name*, so two octaves of one degree read once, and sorted by the
-    # interval from the root, so a shape reads "3, 5 & 7" rather than in string order -
-    # which is pitch order, and would say "5, 7 & 3".
-    degrees: Dict[str, int] = {}
+    # Keyed by degree *name*, so two octaves of one degree read once - at the note of the
+    # first voice to state it, which is the lower one - and sorted by the interval from the
+    # root, so a shape reads "Bb Root, D 3 & G 6" rather than in string order, which is
+    # pitch order and would say "G 6, Bb Root & D 3".
+    named: Dict[str, Tuple[int, str]] = {}
     for pitch in step.voicing.upper_midi_notes():
         note = Note(_note_name(pitch))
         degree = melody_degree_name(note, harmony)
-        if not degree or degree in degrees:
+        if not degree or degree in named:
             continue
-        degrees[degree] = (
-            ChordParser.get_melody_degree(root_str, note) if root_str else len(degrees)
-        )
-    if not degrees:
+        interval = ChordParser.get_melody_degree(root_str, note) if root_str else 0
+        named[degree] = (interval, _voice_name(pitch, degree))
+    if not named:
         # A comping shape against a chord no table can read: the arity is all there is.
         return f"comping - {_comping_tail(step)}"
-    ordered = sorted(degrees, key=lambda named: degrees[named])
-    return f"comping - {_and_list(ordered)}; {_comping_tail(step)}"
+    ordered = sorted(named, key=lambda degree: named[degree][0])
+    return f"comping - {_and_list([named[degree][1] for degree in ordered])}; {_comping_tail(step)}"
 
 
 def _comping_tail(step: ArrangementStep) -> str:
@@ -585,25 +591,39 @@ def _omission_clause(step: ArrangementStep) -> str:
     return f"the chord tones it leaves out are {_and_list(names)}"
 
 
-def _sounding_names(step: ArrangementStep) -> str:
-    """Every voice of the shape as its note and its degree, in the order the tab reads.
+def _voice_name(pitch: int, degree: str) -> str:
+    """One voice as `note degree` - `Bb 5`, `Eb Root`.
 
-    The pitches are `Voicing.upper_midi_notes()` - the thumb is not one of them - and
-    the order is the tab's, lowest string first, which is ascending pitch for a grip.
-    The degree comes from `melody_degree_name`, the vocabulary the degree column and
-    `_omission_clause` already use, so one line cannot name a degree two ways. A note
-    and its degree are one string per voice, so a name is a *pair* rather than a bare
-    note: `Bb 5` says the note and what it is to the chord.
+    The spelling every clause shares: a bare degree cannot be checked against the tab, and
+    a bare note name does not say what the note is to the chord.
+    """
+    return f"{PITCH_CLASS_NAMES[pitch % 12]} {degree}"
+
+
+def _voice_pairs(step: ArrangementStep) -> List[str]:
+    """Every upper voice as `note degree`, in the order the tab reads.
+
+    The pitches are `Voicing.upper_midi_notes()` - the thumb is not one of them - and the
+    order is the tab's, lowest string first, which is ascending pitch for a grip. The
+    degree comes from `melody_degree_name`, the vocabulary the degree column and the
+    omission clause already use, measured against the chord the part **states**
+    (`harmonized_as` where a substitute was found), so one line cannot name a degree two
+    ways or against a chord the guitar is not playing.
+    """
+    harmony = step.harmonized_as or step.chord
+    return [
+        _voice_name(pitch, melody_degree_name(Note(_note_name(pitch)), harmony))
+        for pitch in step.voicing.upper_midi_notes()
+    ]
+
+
+def _sounding_names(step: ArrangementStep) -> str:
+    """Every voice of the shape as its note and its degree, or `""` if unnameable.
 
     Returns the empty string when the harmony cannot be read, so a caller prints
     nothing rather than a column of bare note names.
     """
-    harmony = step.harmonized_as or step.chord
-    names = [
-        f"{PITCH_CLASS_NAMES[pitch % 12]} "
-        f"{melody_degree_name(Note(_note_name(pitch)), harmony)}"
-        for pitch in step.voicing.upper_midi_notes()
-    ]
+    names = _voice_pairs(step)
     if not all(name.split(" ", 1)[-1] for name in names):
         return ""
     return ", ".join(names)

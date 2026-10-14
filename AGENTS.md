@@ -379,10 +379,10 @@ renderer**, never re-derived at a call site:
   the whole fact — the
   routed chord's tones against the pitches sounding — is already on the step, and a field
   beside it would be a second source for one fact;
-- a **route that chose no shape** states its own (`_comping_clause` names the degrees it
-  states; "the tune is silent here"; "the guitar rests here"; "the shape above is held"; "the
-  most a fill's palette offers" — the last is the difference between *the library ran out* and
-  *the caller asked for fewer*).
+- a **route that chose no shape** states its own (`_comping_clause` names the voices it
+  states, each by note and degree; "the tune is silent here"; "the guitar rests here"; "the
+  shape above is held"; "the most a fill's palette offers" — the last is the difference
+  between *the library ran out* and *the caller asked for fewer*).
 
 `tests/test_explanations.py` is the standing check: a table of (decision, when this step is
 one of those, what the line must say), swept over every committed head and working from the
