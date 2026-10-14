@@ -614,8 +614,10 @@ class TestTheSopranoIsPerSlotNotPerRoute(unittest.TestCase):
     half is per slot. A soprano-named selection still **comps** the grid positions its
     tune is silent at, or merely sustains through, so `grid=joe_pass --voices
     soprano,...` places chords on the offbeats instead of ignoring the grid. The written
-    onsets are untouched - that is the acceptance criterion, and the default (no grid)
-    is byte-identical because `every_note` names no positions of its own.
+    onsets are untouched - that is the acceptance criterion, and **the default grid
+    generates positions of its own** too (`every_note`, at each bar's own subdivision),
+    so the default is no longer inert but still invents no melody - see
+    `test_the_default_grid_invents_no_melody`.
 
     "Does the guitar sing this slot?" reuses §9.2's onset signal rather than re-deriving
     it: a position the melody only *holds* through is not an onset, so the guitar states
@@ -681,13 +683,31 @@ class TestTheSopranoIsPerSlotNotPerRoute(unittest.TestCase):
             self.assertIn((bar, beat), at, f"{note} at bar {bar} beat {beat} went missing")
             self.assertEqual(at[(bar, beat)].melody, note)
 
-    def test_the_default_grid_adds_nothing(self):
-        """No grid means every slot is a written note: the axis is inert by default."""
-        from headxml import head_skeleton
+    def test_the_default_grid_invents_no_melody(self):
+        """The default grid adds positions; it never adds a *note* of the tune.
+
+        `every_note` generates a chord at each bar's own subdivision now (open-issues
+        item 1's remaining half), so the step count is no longer the skeleton's - what
+        must still hold is that **no invented pitch reaches a singing part**. Every step
+        either carries a written note at its written position, or carries none at all;
+        and the ones that carry none are positions the tune is *silent* at rather than
+        positions it wrote.
+        """
+        from headxml import head_skeleton, melody_state
 
         steps, head, _notes = self._arrange(grid="melody:every_note")
-        self.assertTrue(all(step.melody_voiced for step in steps))
-        self.assertEqual(len(steps), len(head_skeleton(head, None)))
+        written = {(bar, round(beat, 6)) for _t, bar, beat, _d in head_skeleton(head, None)}
+        self.assertTrue(steps)
+        for step in steps:
+            bar, beat = step.bar or 0, step.beat or 0.0
+            if (bar, round(beat, 6)) in written:
+                continue
+            self.assertIsNone(step.melody, step.tab_line())
+            self.assertEqual(
+                melody_state(head.notes, bar, beat),
+                "silent",
+                step.tab_line(),
+            )
 
     def test_a_parts_has_melody_only_adds_nothing(self):
         """`soprano` plays the tune and nothing else, so it never comps a grid position."""

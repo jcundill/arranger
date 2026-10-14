@@ -25,7 +25,12 @@ What is verified, in order:
 - **the refusal**: a metre-relative figure asked of a metre it was not written for
   raises and names the pattern, and the test is **one-directional** - a bar with no
   note on a grid position is not a refusal, because that is the answer rather than an
-  error.
+  error;
+- **the lattice**: the unit a position is counted in (`TICKS_PER_BEAT`, a
+  twenty-fourth of a beat) and the note values a **generated** bar may be subdivided
+  at (`grid_resolutions`, read through the metre) - the unit is `headxml._tick_key`'s,
+  and the vocabulary is `headxml._generated_beats`', so a metre's table moving is a
+  generated bar of the wrong density.
 
 The last one is the subtle half and it is why the last class below exists at all: a
 grid that refused whenever it placed nothing in a bar would refuse on almost every bar
@@ -33,10 +38,15 @@ of real material, and a refusal that fires on the normal case teaches a reader t
 ignore refusals.
 """
 
+import glob
 import unittest
 from contextlib import contextmanager
-from typing import Tuple
+from functools import reduce
+from math import gcd
+from pathlib import Path
+from typing import Dict, List, Tuple
 
+import headxml
 from arranger import (
     GRID_ANCHORS,
     GRID_CHARLESTON,
@@ -53,15 +63,26 @@ from arranger import (
     PART_BASS,
     PART_CHORD,
     SUB,
+    TICKS_PER_BEAT,
     GridPattern,
     grid_allowed,
     grid_defers_to_melody,
     grid_positions,
+    grid_resolutions,
     on_grid,
     parse_grid,
     resolve_grid,
 )
 from arranger.options import ArrangeOptions
+
+ROOT = Path(__file__).resolve().parents[1]
+
+#: The committed heads, which the lattice tests read: the same set the importer's figures
+#: are taken over, so the unit is measured on the material the engine is measured on.
+HEADS: List[str] = sorted(
+    glob.glob(str(ROOT / "tests" / "data" / "*.musicxml"))
+) + sorted(glob.glob(str(ROOT / "tests" / "data" / "*.mxl")))
+
 
 PROGRESSION: Tuple[Tuple[str, str, str], ...] = (
     ("D5", "m7", "Dm7"),
@@ -417,3 +438,118 @@ class TestTheRefusalIsOneDirectional(unittest.TestCase):
         for beats in (1, 2, 3, 4, 7):
             with self.subTest(metre=beats):
                 self.assertEqual(resolve_grid(GRID_DEFAULT, beats), GRID_DEFAULT)
+
+
+class TestTheLatticeAndItsResolutions(unittest.TestCase):
+    """One unit for both halves of a bar: `TICKS_PER_BEAT`, and what a generated bar takes.
+
+    `headxml._generated_beats` subdivides a generated bar in these, and `headxml._tick_key`
+    rounds a position to one to decide whether the melody and the grid mean the same
+    instant - so this is where `docs/open-issues.md` item 1's two halves meet. Three things
+    follow, and each is asserted rather than assumed:
+
+    - **the unit holds every onset of every committed head already**, which is what the
+      round trip through `_tick_key` needs: an onset *between* two ticks would be split in
+      two rather than matched to one;
+    - **the vocabulary is a table read through the metre**, because a resolution is a note
+      value and a note value is a fraction of a quarter note - cut time reads a quarter note
+      as half a *beat*, so a table read as beats would generate a 2/2 bar at the wrong
+      density;
+    - **every entry divides the beat, and none is finer than the metre's sixteenth**, which
+      is the one property the caller depends on: a grid missing its own downbeat would leave
+      a bar's strongest position silent.
+    """
+
+    def test_the_beat_is_twenty_four_ticks_and_its_upbeat_is_half_of_one(self):
+        """The unit is a twenty-fourth of a beat, and `SUB` is the upbeat in those units.
+
+        `SUB` is a position *within* a beat rather than a note value, so it moves with the
+        unit: it was one eighth when a beat was counted in eighths and is twelve ticks now.
+        `GRID_CHARLESTON` and `GRID_JOE_PASS` name it as their position, so a change here
+        moves every named figure that plays an upbeat - hence pinning both.
+        """
+        self.assertEqual(TICKS_PER_BEAT, 24)
+        self.assertEqual(SUB, TICKS_PER_BEAT // 2)
+
+    def test_the_vocabulary_is_a_note_value_table_read_through_the_metre(self):
+        """Common, cut, eighth-note and sixteenth-note beats, each with its own densities.
+
+        The tuples are the ones `grid_resolutions` states, pinned because a metre's table
+        moving is a generated bar of the wrong density. The cut-time row is the one a
+        beat-relative reading gets wrong: a quarter note there is *half* a beat, and its two
+        finest entries - an eighth-note triplet and a sixteenth - have no beat-relative
+        reading at all, which is why this takes `beat_type` rather than a count of beats.
+        """
+        self.assertEqual(grid_resolutions(4), (24, 12, 8, 6))
+        self.assertEqual(grid_resolutions(2), (24, 12, 8, 6, 4, 3))
+        self.assertEqual(grid_resolutions(8), (24, 12))
+
+    def test_every_resolution_divides_the_beat_and_the_beat_is_always_offered(self):
+        """The one property the caller depends on, over every metre the library accepts."""
+        for beat_type in (2, 4, 8, 16):
+            with self.subTest(beat_type=beat_type):
+                resolutions = grid_resolutions(beat_type)
+                self.assertEqual(resolutions[0], TICKS_PER_BEAT, "the beat is not offered")
+                self.assertEqual(len(set(resolutions)), len(resolutions), "a duplicate")
+                self.assertEqual(
+                    tuple(sorted(resolutions, reverse=True)),
+                    resolutions,
+                    "not coarsest first",
+                )
+                for resolution in resolutions:
+                    self.assertEqual(TICKS_PER_BEAT % resolution, 0)
+
+    def test_a_bar_is_never_generated_finer_than_its_metres_sixteenth(self):
+        """The floor is a sixteenth note of the metre, not a tick count.
+
+        A sixteenth is a quarter of a beat in common time, an eighth of one in cut time and
+        half of one where the beat is an eighth note - so the smallest entry is measured
+        against the metre rather than against a number, which is the difference between a
+        claim about music and a claim about arithmetic.
+        """
+        for beat_type in (2, 4, 8, 16):
+            with self.subTest(beat_type=beat_type):
+                quarter = 6 * beat_type
+                sixteenth = quarter // 4
+                self.assertGreaterEqual(min(grid_resolutions(beat_type)), sixteenth)
+
+    def test_every_onset_of_every_committed_head_is_on_the_lattice(self):
+        """The premise the union rounds on, taken over all the heads rather than argued.
+
+        `_tick_key` decides whether the melody and the grid mean one instant by rounding
+        both to a tick, so this is what makes that comparison sound: every written onset is
+        within a millionth of a tick, and the rounding therefore merges positions that are
+        equal and splits none that are not.
+        """
+        self.assertTrue(HEADS, "no head was found, so nothing was measured")
+        for path in HEADS:
+            head = headxml.load_musicxml(path, None)
+            with self.subTest(head=Path(path).stem):
+                for note in head.notes:
+                    ticks = (note.beat - 1.0) * TICKS_PER_BEAT
+                    self.assertAlmostEqual(
+                        ticks,
+                        round(ticks),
+                        places=6,
+                        msg=f"bar {note.bar} beat {note.beat} sits between two ticks",
+                    )
+
+    def test_one_committed_head_needs_the_whole_lattice(self):
+        """Why the unit is a twenty-fourth and not a twelfth: `i_was_doing_all_right`.
+
+        The coarsest unit holding a head's onsets is the greatest common divisor of its
+        onsets in ticks, and this head's is **one tick** - so no coarser unit holds it, and
+        the head is what fixes the size of the lattice. Measured rather than reasoned, and
+        it is the cut-time head: a sixteenth note there is an eighth of a half-note beat and
+        an eighth-note triplet a sixth of one.
+        """
+        coarsest: Dict[str, int] = {}
+        for path in HEADS:
+            head = headxml.load_musicxml(path, None)
+            onsets = [round((note.beat - 1.0) * TICKS_PER_BEAT) for note in head.notes]
+            coarsest[Path(path).stem] = reduce(gcd, onsets, 0)
+        self.assertEqual(coarsest["i_was_doing_all_right"], 1, "the cut-time head moved")
+        self.assertEqual(min(value for value in coarsest.values() if value), 1)
+
+        self.assertEqual(grid_resolutions(16), (24,))
+

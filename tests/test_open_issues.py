@@ -37,6 +37,13 @@ from typing import Any, Dict, List, Tuple
 import arranger.bass as bass
 import arranger.movement as movement
 import headxml
+from arranger import (
+    HARMONY_FULL,
+    HARMONY_GUIDE,
+    HARMONY_LENGTH,
+    HARMONY_SHELL_ROOT,
+    VoiceLeadingEngine,
+)
 from arranger.chords import ChordParser
 from arranger.fingers import can_fret
 from arranger.tuning import STANDARD_TUNING
@@ -62,6 +69,15 @@ THUMB_ROWS: Tuple[Tuple[str, str], ...] = (
     ("uniform", "root"),
     ("uniform", "root,5th,approach,nearest"),
 )
+
+#: Item 3's progression, spelled as the document says it was measured on, arranged through
+#: `parts="chord"` - the comping route, which is the one that reads `harmony=`.
+ITEM_THREE_PROGRESSION: List[Tuple[str, str, str]] = [
+    ("D5", "m7", "Dm7"),
+    ("C5", "maj7", "Cmaj7"),
+    ("A4", "7", "A7"),
+    ("G4", "maj7", "Gmaj7"),
+]
 
 
 def _union_added() -> Dict[str, int]:
@@ -280,15 +296,15 @@ class TestTheStatedNumbersAreTheMeasuredOnes(unittest.TestCase):
             self.assertIn(stem, _doc())
 
     def test_item_two_states_the_measured_refusal_count_and_causes(self) -> None:
-        """222 refusals on the four thumb rows, split 0 / 222 / 0 down `_place_bass`'s three."""
+        """220 refusals on the four thumb rows, split 0 / 220 / 0 down `_place_bass`'s three."""
         counted = Counter(_cause(upper, pc, held) for upper, pc, held, _c in self.refusals)
         split = {
             name: counted.get(name, 0)
             for name in ("no free string", "no octave below", "fifth fret")
         }
-        self.assertEqual(len(self.refusals), 222)
+        self.assertEqual(len(self.refusals), 220)
         self.assertEqual(
-            split, {"no free string": 0, "no octave below": 222, "fifth fret": 0}
+            split, {"no free string": 0, "no octave below": 220, "fifth fret": 0}
         )
         text = _doc()
         self.assertIn(f"refusals number **{len(self.refusals)}** today", text)
@@ -306,7 +322,7 @@ class TestTheStatedNumbersAreTheMeasuredOnes(unittest.TestCase):
             "doubling" if min(upper.midi_notes()) % 12 == pc else "absent"
             for upper, pc, _held, _c in self.refusals
         )
-        self.assertEqual(dict(doubling), {"doubling": 115, "absent": 107})
+        self.assertEqual(dict(doubling), {"doubling": 98, "absent": 122})
         self.assertIn(f"{doubling['doubling']} of the {len(self.refusals)} are a", _doc())
 
     def test_item_two_states_the_measured_walk_pitch_lever(self) -> None:
@@ -333,11 +349,24 @@ class TestTheStatedNumbersAreTheMeasuredOnes(unittest.TestCase):
                 by_any += 1
                 if any(pitch in tones for pitch in placeable):
                     by_tone += 1
-        self.assertEqual((by_any, by_tone, by_none), (156, 117, 66))
+        self.assertEqual((by_any, by_tone, by_none), (144, 105, 76))
         text = _doc()
         self.assertIn(f"reaches **{by_any} of the {len(self.refusals)}**", text)
         self.assertIn(f"only **{by_tone}** of those", text)
         self.assertIn(f"**{by_none} of the {len(self.refusals)}** cannot be", text)
+
+    def test_the_reproducing_tail_states_the_measured_split_too(self) -> None:
+        """The 220 is written twice, so the `Reproducing` tail's copy is checked as well.
+
+        It said `0 / 215 / 0` while the item itself and the table said 222, and only the table
+        was pinned — so the document contradicted itself in the very place a reader goes to
+        re-take the number.
+        """
+        total = len(self.refusals)
+        self.assertEqual(total, 220)
+        text = _doc()
+        self.assertIn(f"`0 / {total} / 0`", text)
+        self.assertNotIn("0 / 215 / 0", text)
 
 
 class TestItemFiveStatesTheMeasuredReach(unittest.TestCase):
@@ -355,21 +384,27 @@ class TestItemFiveStatesTheMeasuredReach(unittest.TestCase):
         self.assertIn(f"the worst reach is **{self.worst}**", text)
         holders = sorted(name for name, count in self.over.items() if count)
         self.assertEqual(
-            holders, ["All_the_Things_You_Are", "but_not_for_me", "i_was_doing_all_right"]
+            holders,
+            [
+                "All_the_Things_You_Are",
+                "The_Jitterbug_Waltz",
+                "but_not_for_me",
+                "i_was_doing_all_right",
+            ],
         )
         for stem in holders:
             self.assertIn(f"`{stem}`", text)
 
     def test_item_five_states_how_many_steps_exceed_the_bound(self) -> None:
-        """"**4** steps exceed **4** frets", split 2 / 1 / 1 by head."""
+        """"**6** steps exceed **4** frets", split 1 / 2 / 1 / 2 by head."""
         total = sum(self.over.values())
-        self.assertEqual((total, self.over["i_was_doing_all_right"]), (4, 2))
+        self.assertEqual((total, self.over["i_was_doing_all_right"]), (6, 2))
         text = _doc()
         self.assertIn(f"and **{total}** steps exceed **4** frets", text)
 
     def test_item_five_states_that_every_wide_reach_was_placed_as_near_as_it_could_be(self) -> None:
-        """"every one of those four is placed as near the hand as its own note allows"."""
-        self.assertEqual(len(self.forced), 4)
+        """"every one of those six is placed as near the hand as its own note allows"."""
+        self.assertEqual(len(self.forced), 6)
         for reach, chosen, nearest in self.forced:
             self.assertEqual(
                 nearest,
@@ -377,44 +412,58 @@ class TestItemFiveStatesTheMeasuredReach(unittest.TestCase):
                 f"a reach of {reach} sits {chosen} frets from the hand while its own note "
                 f"had a position {nearest} frets away",
             )
-        self.assertIn("**every one of those four is placed as near the hand", _doc())
+        self.assertIn("**every one of those six is placed as near the hand", _doc())
 
 
-def _generated_positions() -> Tuple[int, int, int]:
-    """`(total, held, silent)` positions `every_note` names inside melody-bearing bars.
+def _generated_but_silent() -> List[Tuple[str, int, float]]:
+    """Positions the default grid generates that the arrangement does **not** sound.
 
-    The remainder item 1 still owes, split the way §9.2 forces the split: a position
-    where a note is still **held** must not become a slot, because the note was already
-    harmonised where it began, so only the **silent** ones are positions generating
-    would actually add. Read from the tree rather than written down, so a change to the
-    union or to the grid moves the number instead of leaving the prose behind.
+    Item 1's remaining half used to be measured as a *remainder* - positions the grid named
+    and nothing played. It is closed, so the same pass now measures the complement, and the
+    complement must be empty: a position the grid names that is not a written note, and not
+    one the tune is still **holding** (§9.2 - the note was harmonised where it began), has to
+    be a step. `[]` is the assertion, which is why this returns the offenders rather than a
+    count: a count would have to be re-pinned by whoever broke it.
+
+    Read from the tree, like every figure in this file, so it cannot be satisfied by prose.
     """
-    total = held = silent = 0
+    missing: List[Tuple[str, int, float]] = []
     for path in HEADS:
         head = headxml.load_musicxml(path, None)
-        occupied = {
-            (bar, round(beat, 6)) for _triple, bar, beat, _dur in headxml.head_skeleton(head, None)
+        written = {
+            (bar, round(beat, 6))
+            for _triple, bar, beat, _dur in headxml.head_skeleton(head, None)
+        }
+        sounded = {
+            (step.bar or 0, round(step.beat or 0.0, 6))
+            for step in headxml.arrange_xml_head(path)[0]
         }
         for slot in headxml.chord_slots(head, None, "chord:every_note"):
-            if (slot[3], round(slot[4], 6)) in occupied:
+            bar, beat = slot[3], slot[4]
+            key = (bar, round(beat, 6))
+            if key in written or key in sounded:
                 continue
-            total += 1
-            state = headxml.melody_state(head.notes, slot[3], slot[4])
-            if state == "held":
-                held += 1
-            else:
-                silent += 1
-    return total, held, silent
+            if headxml.melody_state(head.notes, bar, beat) != "silent":
+                continue
+            missing.append((Path(path).stem, bar, beat))
+    return missing
 
 
 class TestTheGeneratedSlotsRemainder(unittest.TestCase):
-    """The figures item 1's "still open" bullet now carries, and the correction behind them.
+    """Item 1's default-grid half, **closed**, and the two corrections behind the figures.
 
-    That bullet used to claim a named grid was *silent* inside a bar the melody occupies.
-    It is not: the union's exception is the **bar**, so a named grid already generates
-    there, and only `every_note` is restricted. Both halves are measured here — the step
-    counts that disprove the old claim, and the 347 / 192 / 155 split that sizes the
-    remaining one — because a stale figure in that document has already misled once.
+    The bullet used to claim that a beat the tune skips inside a bar it occupies was still
+    silent under `every_note`, and sized the change at 347 positions named / 192 held / 155
+    owed. Two things about that are worth keeping rather than deleting:
+
+    - **it is a diagnosis of the right shape.** The split is §9.2's: a position a note still
+      holds must not become a slot, so only the *silent* ones are positions generating
+      would add. That is exactly the rule the union now follows, and the closure below
+      measures it the same way;
+    - **the 347 double-counted.** It was taken over *every* bar, so it included the 87
+      positions the earlier bar-level fix already added - the same 87 item 1's landed
+      paragraph records. Restricted to the bars its own prose claimed, the split was
+      260 / 192 / **68**, which is the size the change actually had.
     """
 
     @classmethod
@@ -461,28 +510,47 @@ class TestTheGeneratedSlotsRemainder(unittest.TestCase):
         written = {round(n.beat, 2) for n in self.head.notes if n.bar == 4}
         self.assertTrue({1.5, 2.5, 3.5}.isdisjoint(written), written)
 
-    def test_the_default_grid_is_the_one_that_remains_silent(self) -> None:
-        """`every_note`'s exception is the bar, so beat 3 of bar 4 is still absent."""
-        bar4 = self._bar("chord:every_note", "auto", 4)
-        self.assertEqual(len(bar4), 3)
-        self.assertEqual(sorted(round(s.beat, 2) for s in bar4), [1.0, 2.0, 4.0])
-        self.assertNotIn(3.0, {round(s.beat, 2) for s in bar4})
+    def test_the_default_grid_sounds_a_beat_the_tune_skips_in_a_bar_it_enters(self) -> None:
+        """Bar 16 enters on beat 2, so its downbeat was silent — and is now a step.
 
-    def test_the_document_states_the_measured_remainder(self) -> None:
-        """347 positions named, 192 held, and so 155 that generating would add."""
-        total, held, silent = _generated_positions()
-        self.assertEqual((total, held, silent), (347, 192, 155))
+        This is the closure in one bar of the fixture the rest of this class uses: the tune
+        occupies bar 16 (onsets 2, 3 and 4) and skips beat 1, which the old bar-level
+        exception excluded along with the rest of the bar and the union now fills.
+        """
+        self.assertEqual(
+            sorted(n.beat for n in self.head.notes if n.bar == 16), [2.0, 3.0, 4.0]
+        )
+        bar16 = self._bar("chord:every_note", "auto", 16)
+        self.assertEqual(sorted(round(s.beat, 2) for s in bar16), [1.0, 2.0, 3.0, 4.0])
+        downbeat = next(s for s in bar16 if round(s.beat, 2) == 1.0)
+        self.assertIsNone(downbeat.melody, "the tune is silent on beat 1 of bar 16")
+        self.assertTrue(downbeat.voicing.active_frets(), downbeat.tab_line())
+
+    def test_a_position_the_tune_is_holding_is_still_not_a_slot(self) -> None:
+        """Bar 4's beat 3 is a held `C5`, so it stays absent — §9.2, not the old exception.
+
+        The two refusals are different claims and this is the second one: the tune *does*
+        occupy bar 4, and beat 3 is inside the note that began on beat 2. Re-stating a chord
+        under it would re-decide a harmony already chosen under that very note.
+        """
+        bar4 = self._bar("chord:every_note", "auto", 4)
+        self.assertEqual(sorted(round(s.beat, 2) for s in bar4), [1.0, 2.0, 4.0])
+        self.assertEqual(headxml.melody_state(self.head.notes, 4, 3.0), "held")
+
+    def test_the_document_states_the_closure_and_the_correction(self) -> None:
+        """No position is generated-but-unsounded, and the document carries the figures."""
+        self.assertEqual(_generated_but_silent(), [])
         text = _doc()
-        self.assertIn(f"total **{total}**", text)
-        self.assertIn(f"**{held}** fall where a note is still *held*", text)
-        self.assertIn(f"leaving **{silent}**", text)
+        self.assertIn("**68**", text)
+        self.assertIn("**260**", text)
+        self.assertIn("**88 steps**", text)
 
     def test_the_document_states_the_step_counts_it_was_corrected_against(self) -> None:
-        """The three figures that disprove the old claim are the ones written down."""
+        """The figures that disprove the old claim are the ones written down."""
         text = _doc()
         self.assertIn("yields\n  7 steps under `joe_pass`", text)
         self.assertIn("yields 8 under the same grid on both routes", text)
-        self.assertIn("yields 3 steps under `every_note`", text)
+        self.assertIn("bar 16", text)
 
 
 class TestTheReproductionSnippetsRun(unittest.TestCase):
@@ -562,3 +630,46 @@ class TestTheInertBassGridRow(unittest.TestCase):
         self.assertIn(
             "# inert rows: %d of %d heads identical" % (len(HEADS), len(HEADS)), text
         )
+
+
+class TestTheHarmonyFullNoOp(unittest.TestCase):
+    """Item 3: `harmony=full` on the comping route is accepted and answered with guide tones.
+
+    The document's claim is an **equality** — the arrangement with `harmony=full` is
+    byte-identical to the one with no `harmony=` at all — so it is measured as one, on the
+    progression the document names and through the selection a caller actually types. When
+    this starts failing, `full` has been given an implementation on the comping route and the
+    item is ready to be removed.
+    """
+
+    def _tabs(self, **kwargs: Any) -> Tuple[str, ...]:
+        """Every step's tab line, which is how "byte-identical" is spelled here."""
+        steps = VoiceLeadingEngine.arrange_progression(ITEM_THREE_PROGRESSION, **kwargs)
+        return tuple(step.tab_line() for step in steps)
+
+    def test_full_is_the_default_arrangement_on_the_comping_route(self) -> None:
+        """`parts=chord` is the route that reads `harmony=`, and `full` changes nothing on it."""
+        default = self._tabs(parts="chord")
+        self.assertTrue(default)
+        self.assertEqual(self._tabs(parts="chord", harmony=HARMONY_FULL), default)
+        # `guide` is what the route ships, so the three spellings are one arrangement.
+        self.assertEqual(self._tabs(parts="chord", harmony=HARMONY_GUIDE), default)
+
+    def test_the_document_names_the_table_the_tree_has(self) -> None:
+        """The record names `HARMONY_LENGTH`, which lists `guide` and `shell_root`, not `full`.
+
+        Item 3 named a symbol (`HARMONY_BUILT`) that never existed in the tree, and nothing
+        caught it because this was the one item with no re-measurement. So the sentence is
+        pinned against the table itself: the families it names are compared with the
+        vocabulary rather than with the document's own wording.
+        """
+        self.assertEqual(set(HARMONY_LENGTH), {HARMONY_GUIDE, HARMONY_SHELL_ROOT})
+        self.assertNotIn(HARMONY_FULL, HARMONY_LENGTH)
+        text = _doc()
+        self.assertIn("`HARMONY_LENGTH`", text)
+        self.assertNotIn("HARMONY_BUILT", text)
+        # The comping route is spelled with the axis that exists: `melody=alto,tenor` was the
+        # retired voices spelling, and a document that reproduces its claim with a selection
+        # the parser refuses is a claim a reader cannot run.
+        self.assertIn("`parts=chord`", text)
+        self.assertNotIn("melody=alto,tenor", text)

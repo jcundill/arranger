@@ -45,10 +45,12 @@ from arranger import (
     GRID_DEFAULT,
     NO_CHORD,
     PITCH_CLASS_NAMES,
+    TICKS_PER_BEAT,
     ArrangementStep,
     ChordParser,
     grid_defers_to_melody,
     grid_positions,
+    grid_resolutions,
     parse_grid,
     parse_parts,
     parts_has_melody_only,
@@ -1681,6 +1683,66 @@ def melody_state(notes: Sequence[HeadNote], bar: int, beat: float) -> str:
     return "onset" if any(note.key == position for note in notes) else "held"
 
 
+def _tick_key(bar: int, beat: float) -> Tuple[int, int]:
+    """A position as a **grouping key**: its bar and its beat rounded to the nearest tick.
+
+    The union of the melody's slots with the grid's needs to ask whether two producers mean
+    the same instant, and that is the only question this answers. A beat is a float in
+    practice - an eighth-note triplet's members land on 1.3333333333333333 and
+    1.6666666666666665 - so comparing them directly is the comparison `_BEAT_EPSILON` and
+    `head_skeleton`'s own rounding both exist to avoid. Rounding to a `1/24` beat makes it
+    integer equality, and every position either producer emits is already on that lattice.
+
+    **A grouping key, never a position** - the same distinction `head_skeleton` draws: the
+    slot still carries the note's own float beat, and only the *lookup* is rounded.
+    """
+    return (bar, round(beat * TICKS_PER_BEAT))
+
+
+def _bar_resolution(head: Head, bar: int, beat_type: int) -> int:
+    """The coarsest subdivision of a beat that holds every note this bar's melody writes.
+
+    The bar's own rhythm is the grid it is generated on, which is what makes a generated
+    chord land where the tune is: a bar of sixteenths is subdivided at sixteenths, an
+    eighth-note-triplet bar at triplets, and a bar whose tune is all on the beat at beats.
+    `grid_resolutions` is the vocabulary, converted through the metre - so no bar is ever
+    generated finer than a sixteenth note however busy its tune reads.
+
+    **The fallback is the beat, and it is a real answer rather than a failure.** A bar
+    mixing a sixteenth with a triplet has no single resolution that divides both, and
+    generating on its beats is what a player does under a line that busy. A bar with no
+    melody at all has nothing to fit and so takes the beat too, which is the rule
+    `chord_slots` has always followed for a bar the tune never enters.
+    """
+    onsets = [
+        round((note.beat - 1.0) * TICKS_PER_BEAT)
+        for note in head.notes
+        if note.bar == bar
+    ]
+    resolutions = grid_resolutions(beat_type)
+    return next(
+        (
+            resolution
+            for resolution in resolutions
+            if all(onset % resolution == 0 for onset in onsets)
+        ),
+        resolutions[0],
+    )
+
+
+def _generated_beats(head: Head, bar: int, beat_type: int) -> Tuple[float, ...]:
+    """Every position the default grid generates in one bar, at that bar's own resolution.
+
+    Positioned from beat 1 so the first is the downbeat in any metre, and stepping by the
+    resolution `_bar_resolution` chose. **Every one of these is a candidate, not a decision**:
+    `_merge_chord_slots` drops the ones the melody already occupies and the ones it is still
+    holding, and `chord_slots` drops the ones with no chord in force.
+    """
+    span = head.beats_per_bar * TICKS_PER_BEAT
+    stride = _bar_resolution(head, bar, beat_type)
+    return tuple(1.0 + tick / TICKS_PER_BEAT for tick in range(0, span, stride))
+
+
 def chord_slots(
     head: Head,
     section: Optional[Tuple[int, int]] = None,
@@ -1696,6 +1758,13 @@ def chord_slots(
     note is a position the chord of the tune still occupies — and open-issues item 1
     measures what dropping those costs: **8 to 29 positions per fixture**, which is where
     a quarter of a named grid's positions went.
+
+    **A melody-anchored grid (`every_note`) places a position at every subdivision of the
+    bar's own rhythm**, from `_generated_beats`: a bar of sixteenths is generated at
+    sixteenths, a triplet bar at eighth-note triplets, and a bar whose tune is all on the
+    beat is generated at beats. So a position the tune *skips* inside a bar it occupies is
+    a position this function reports, which is what closes `docs/open-issues.md` item 1's
+    remaining half. A **named** grid places its own figure's positions as before.
 
     Returns `(melody, quality, chord, bar, beat, duration)`, and **`melody` is the note in
     force at that position, not a written one** — the rule `bass._bass_slots` already uses
@@ -1748,14 +1817,15 @@ def chord_slots(
     # `GRID_PATTERNS` row is `positions=()` — "the absence of a pattern", which is why
     # `on_grid` short-circuits on it and why reading "does it place anything?" off
     # `grid_positions` correctly answers *nothing*. But "place a chord on every note" is
-    # precisely this function's job, so here a melody-anchored grid means every beat of
-    # the bar. That is the same distinction `on_grid` documents: *places nothing* and
-    # *has no positions to place* are different claims, and only the first is true of
-    # this row. `grid_defers_to_melody` is that distinction as a table read.
+    # precisely this function's job, so here a melody-anchored grid generates a position
+    # set of its own: **the bar's own subdivision**, from `_generated_beats`. That is the
+    # same distinction `on_grid` documents: *places nothing* and *has no positions to
+    # place* are different claims, and only the first is true of this row.
+    # `grid_defers_to_melody` is that distinction as a table read.
     positions: List[Tuple[int, float]] = []
     for bar in range(lo, hi):
         if grid_defers_to_melody(grid):
-            positions.extend((bar, float(beat)) for beat in range(1, beats_per_bar + 1))
+            positions.extend((bar, beat) for beat in _generated_beats(head, bar, beat_type))
             continue
         for _marker, beats in grid_positions(grid, beats_per_bar):
             for beat in beats:
@@ -1971,17 +2041,21 @@ def _merge_chord_slots(
     the better description of that instant. The grid's contribution is the positions where
     there is no note, which is the only thing this function adds.
 
-    **A melody-anchored grid (`every_note`) adds whole bars and nothing else**, which is
-    what keeps the default byte-identical *where it matters*: it names every beat of the
-    bar, so a full union with the notes would include positions the note path already
-    covers and *drop* positions it does not — the melody runs at sixteenths and the grid
-    at beats, so the union would thin the part. The unit of exception is therefore the
-    **bar**: a bar the melody never enters is added beat for beat, and a bar it does
-    enter is left to the melody exactly as before. That closes `docs/open-issues.md`
-    item 1's remaining defect — a melody-less bar produced **no part at all**, not quiet,
-    absent — while leaving every note-bearing bar of every fixture byte-identical. It is a
-    bar-level rule rather than a beat-level one for that reason, and it is checked rather
-    than assumed.
+    **A melody-anchored grid (`every_note`) contributes every position its bar's rhythm
+    allows, inside a melody bar included** — this is `docs/open-issues.md` item 1's
+    remaining half, and the two rules that say which of them become slots are what make it
+    a fix rather than a rewrite:
+
+    - **the note path wins**, so a position the tune writes is left exactly as it was, with
+      the note's own duration and pitch (`_tick_key` groups the two producers' spellings of
+      one instant, so a triplet does not become two slots);
+    - **a position the tune is still *holding* is not a slot at all** (§9.2). The note was
+      harmonised where it began, under the very note that motivated the chord, so
+      re-stating a chord beneath it would re-decide a decision already made. Measured on
+      the committed heads, that holds back far more positions than it admits.
+
+    A **named** grid contributes its figure's positions in every bar, and the melody-less
+    bar it may add is the case `chord_slots` has always covered.
 
     **Order is `(bar, beat)`, which is what both producers already emit.** Sorting is
     done here rather than trusted from either, because the step loop indexes the melody
@@ -1992,21 +2066,27 @@ def _merge_chord_slots(
 
     extra = chord_slots(head, section, grid_policy)
     if grid_defers_to_melody(grid_policy):
-        # **The bar-level exception, and the whole of the melody-anchored case.** Merging
-        # every position would thin a part whose melody runs finer than the grid, so the
-        # exception is the bar a melody never enters — added beat for beat — and a bar it
-        # does enter is untouched. `chord_slots` has already skipped the positions with no
-        # chord in force, so a silent bar with no `<harmony>` behind it still adds nothing
-        # and is never guessed a chord.
-        melody_bars = {bar for _triple, bar, _beat, _dur in slots}
-        extra = [slot for slot in extra if slot[3] not in melody_bars]
+        # **§9.2, and the whole of what the melody-anchored case holds back.** The
+        # positions `_generated_beats` produced are candidates for slots, and the tune's
+        # own written positions are already in `slots` - so all that is left to refuse is a
+        # position where a note is still *held*. It is refused here rather than in
+        # `chord_slots` because this is the union: `chord_slots` reports the geometry of
+        # the grid, and which of those positions become steps is this function's question.
+        # `chord_slots` has already skipped the positions with no chord in force, so a
+        # silent position with no `<harmony>` behind it still adds nothing and is never
+        # guessed a chord.
+        extra = [
+            slot
+            for slot in extra
+            if melody_state(head.notes, slot[3], slot[4]) != "held"
+        ]
     if not extra:
         return slots
 
-    existing = {(bar, round(beat, 6)) for _triple, bar, beat, _dur in slots}
+    existing = {_tick_key(bar, beat) for _triple, bar, beat, _dur in slots}
     merged: List[Tuple[Tuple[Optional[str], str, str], int, float, float]] = list(slots)
     for melody, quality, name, bar, beat, length in extra:
-        if (bar, round(beat, 6)) in existing:
+        if _tick_key(bar, beat) in existing:
             continue
         merged.append(((melody, quality, name), bar, beat, length))
     merged.sort(key=lambda slot: (slot[1], slot[2]))

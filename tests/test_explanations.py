@@ -439,22 +439,22 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         self.assertGreater(checked, 500, "the sweep stopped arranging anything")
         self.assertEqual(missing[:10], [], f"{len(missing)} unexplained steps")
         # A count, because a clause that stops firing is silent: measured over this sweep,
-        # **82** of the steps it arranges give up a chord tone, and every one of them is
+        # **83** of the steps it arranges give up a chord tone, and every one of them is
         # asked about above. A corpus, grip table or rule that stops reaching the clause
         # would otherwise leave every assertion here passing on its absence.
         self.assertEqual(
-            omitted, 82, "the number of steps owing an omitted-tone clause moved"
+            omitted, 83, "the number of steps owing an omitted-tone clause moved"
         )
         # The same reasoning for the voice list, which is the clause most steps carry:
-        # measured over this sweep, **712** of the steps it arranges sound two or more
+        # measured over this sweep, **710** of the steps it arranges sound two or more
         # upper voices on a route that sings the tune - so a change that thinned the
         # default palette, or that stopped the clause firing, moves this number.
-        self.assertEqual(named, 712, "the number of steps naming their voices moved")
+        self.assertEqual(named, 710, "the number of steps naming their voices moved")
         # And for the comping part, whose voices are the only harmony the line can show:
-        # measured over this sweep, **762** of the steps it arranges state a comping shape
+        # measured over this sweep, **938** of the steps it arranges state a comping shape
         # and name each of its voices, so the reading of a thin line cannot quietly become
         # a list of degrees again.
-        self.assertEqual(comping, 762, "the number of comping lines naming a voice moved")
+        self.assertEqual(comping, 938, "the number of comping lines naming a voice moved")
 
     def test_the_slash_bass_clause_is_not_a_tautology(self):
         """The one decision the witness table cannot hold, pinned in both directions.

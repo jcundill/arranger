@@ -574,17 +574,17 @@ class TestTheGripDistribution(unittest.TestCase):
                 grip = step.voicing.grip
                 counts[grip] = counts.get(grip, 0) + 1
 
-        self.assertEqual(total, 1103)
+        self.assertEqual(total, 1191)
         self.assertEqual(
             counts,
             {
-                "drop3": 289,
+                "drop3": 290,
                 "drop2_6432": 209,
-                "drop2": 185,
-                "shell": 179,
+                "drop2": 184,
+                "shell": 268,
                 "closed": 129,
                 "melody": 49,
-                "drop24": 34,
+                "drop24": 33,
                 "duo": 29,
             },
         )

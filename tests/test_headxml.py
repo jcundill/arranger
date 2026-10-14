@@ -1104,8 +1104,16 @@ class TestChordSlots(unittest.TestCase):
     Still only the comping route with a named grid, and still only the fixtures whose
     chord timeline runs past their last note (`Trouble_in_Mind_Blues`,
     `heres_that_rainy_day`, `i_was_doing_all_right`) — the other three, and every
-    default arrangement, are unchanged. §8's acceptance criterion holds: an arrangement
-    with no flags passed is byte-identical, `grid=` on the singing route included.
+    default arrangement, are unchanged by *that* phase.
+
+    **The default grid now generates too, and that is the phase after it.** `every_note`
+    places a chord at each bar's own subdivision, so an arrangement with no flags passed
+    is no longer byte-identical to the skeleton: measured over the eight heads it adds 88
+    steps, inside bars the melody *does* enter as well as the ones it never touches. The
+    step count therefore stops being the acceptance criterion; what replaces it is the
+    pair of invariants in `test_every_added_position_is_one_the_tune_is_silent_at` and
+    `TestANarrowPaletteNeverLosesTheTune` — no written note lost, and no chord added under
+    a note that is still sounding.
     """
 
     def setUp(self):
@@ -1138,13 +1146,12 @@ class TestChordSlots(unittest.TestCase):
         self.assertEqual(positions, [(1.0, "Am7"), (2.0, "D9")])
 
     def test_the_default_grid_adds_a_bar_the_melody_never_enters(self):
-        """**The bar-level rule, and the fix for open-issues item 1's remaining defect.**
+        """**The melody-less bar, and the first half of open-issues item 1's fix.**
 
-        `every_note` is melody-anchored, so merging *every* position it names would thin a
-        part whose melody runs at sixteenths against a grid at beats - the reason the
-        union excluded it outright. The unit of exception is therefore the **bar**: a bar
-        the melody never enters is added beat for beat, and a bar it does enter is left to
-        the melody exactly as before.
+        A bar the melody never enters contributes no melody slot, so every slot in one is
+        the union's - and `every_note` is melody-anchored, meaning it names no positions
+        of its own to copy from. The unit of generation for such a bar is therefore the
+        beat (`_bar_resolution` has no onsets to fit), which is the rule this test pins.
 
         Bar 32 is the case the old behaviour got wrong: no notes at all, two changes, and
         **no part produced** - not quiet, absent - on every export path. Under the default
@@ -1161,16 +1168,13 @@ class TestChordSlots(unittest.TestCase):
             self.assertFalse(step.melody_voiced, step.tab_line())
 
     def test_a_bar_the_melody_does_enter_is_untouched_by_the_default_grid(self):
-        """The deference survives where it was load-bearing: inside a bar the tune has.
+        """The old bar-level claim, kept as a *fixture* fact rather than as the rule.
 
-        This is the other half of the bar-level rule and the reason it is a bar-level rule
-        rather than a merge. A note-bearing bar keeps exactly the slots `head_skeleton`
-        produced - so `docs/comping-styles.md` §8's acceptance criterion (an arrangement
-        with no flags passed is byte-identical) holds over every note-bearing bar of every
-        fixture, which a beat-level merge could not do.
-
-        Stated as an arithmetic claim over the whole head: the union adds only positions
-        in bars `head_skeleton` never touched.
+        `heres_that_rainy_day`'s tune is continuous, so the positions the default grid
+        generates inside its note-bearing bars are all ones a note is still *holding* -
+        and a held position is not a slot (§9.2). That is why this fixture adds positions
+        in its melody-less bars only. The rule itself is position-level now, and
+        `test_every_added_position_is_one_the_tune_is_silent_at` is where it is stated.
         """
         skeleton = head_skeleton(self.rainy, None)
         melody_bars = {bar for _triple, bar, _beat, _duration in skeleton}
@@ -1181,6 +1185,42 @@ class TestChordSlots(unittest.TestCase):
         self.assertTrue(added, "the fixture must have a bar the melody never enters")
         for bar, _beat in added:
             self.assertNotIn(bar, melody_bars, f"bar {bar} has notes and was added to")
+
+    def test_every_added_position_is_one_the_tune_is_silent_at(self):
+        """The rule the union follows **inside** a melody bar: only where the tune is silent.
+
+        The bar-level exception was the whole of the old rule, and it was the bar because a
+        beat-level union could not tell a position the tune *skips* from one it merely
+        *holds*. The default grid now generates at each bar's own subdivision, so the unit
+        is the position and both refusals are stated rather than implied: a position the
+        tune writes is left to the note, and a position it is still holding is not a slot
+        at all (§9.2).
+
+        Swept over the committed heads rather than argued, so a change that let a generated
+        chord land under a sounding note fails here instead of moving a count.
+        """
+        checked = 0
+        for path in (BUT_NOT_FOR_ME, I_WAS_DOING_ALL_RIGHT, RAINY_DAY,
+                     TENOR_MADNESS, TROUBLE_IN_MIND, WALTZ):
+            with self.subTest(head=os.path.basename(path)):
+                head = load_musicxml(path)
+                written = {
+                    (bar, round(beat, 6))
+                    for _t, bar, beat, _d in head_skeleton(head, None)
+                }
+                steps, _head, _notes = arrange_xml_head(path)
+                for step in steps:
+                    bar, beat = step.bar or 0, step.beat or 0.0
+                    if (bar, round(beat, 6)) in written:
+                        continue
+                    checked += 1
+                    self.assertEqual(
+                        melody_state(head.notes, bar, beat),
+                        "silent",
+                        f"bar {bar} beat {beat} was added under a "
+                        f"sounding note: {step.tab_line()}",
+                    )
+        self.assertGreater(checked, 0, "no position was added anywhere")
 
     def test_a_melody_less_bar_with_no_harmony_behind_it_adds_nothing(self):
         """The bar-level rule never guesses a chord, which is the invariant that matters most.
@@ -1208,20 +1248,24 @@ class TestChordSlots(unittest.TestCase):
         steps, _head, _notes = arrange_xml_head(path)
         self.assertEqual([s.bar for s in steps], [1], "a bar with no harmony was guessed")
 
-    def test_the_default_grid_moves_no_count_on_a_head_with_no_gap_bar(self):
-        """`but_not_for_me` and `tenor_madness` have no melody-less bar, so nothing moves.
+    def test_the_default_grid_adds_no_bar_a_head_does_not_have(self):
+        """`but_not_for_me` and `tenor_madness` have no melody-less bar, so no bar is added.
 
-        The byte-identical claim, measured rather than asserted by inspection: these two
-        fixtures' default arrangements are the same length as their skeletons, because
-        there is no bar to add. That is what makes the change a fix rather than a
-        behaviour change on the whole corpus - 57 added steps across five heads, zero on
-        the other two.
+        **The bar half of the default grid's change, and the count is no longer the claim.**
+        A bar the melody never enters is still the only thing the union adds *wholesale*;
+        the positions it adds inside a bar the tune occupies come from the bar's own
+        subdivision, so the step count is no longer the skeleton's. What these two fixtures
+        pin is that every bar that appears is one the file wrote, and that every written
+        note is still a step at its own position.
         """
         for path in (BUT_NOT_FOR_ME, TENOR_MADNESS):
             with self.subTest(head=os.path.basename(path)):
                 head = load_musicxml(path)
                 steps, _head, _notes = arrange_xml_head(path)
-                self.assertEqual(len(steps), len(head_skeleton(head, None)))
+                self.assertTrue({s.bar for s in steps} <= set(range(*head.bars)))
+                at = {(s.bar or 0, round(s.beat or 0.0, 6)) for s in steps}
+                for _triple, bar, beat, _duration in head_skeleton(head, None):
+                    self.assertIn((bar, round(beat, 6)), at)
 
     def test_the_walking_bass_inherits_the_added_bar(self):
         """The default grid now walks the bars the melody never entered.
@@ -1293,16 +1337,19 @@ class TestChordSlots(unittest.TestCase):
     def test_a_stab_is_never_a_whole_note(self):
         """The duration is the grid's, not the melody note's — which is the point.
 
-        Under `chord:every_note` and `chord:freddie` every duration on a 2/2 fixture is 0.5 — one
-        notated beat. A stab that inherited the melody's length would be a whole note on a
-        bar the melody holds, which is the confusion item 1 records.
+        `chord:freddie` is 0.5 throughout — one notated beat on this 2/2 fixture. A stab
+        that inherited the melody's length would be a whole note on a bar the melody
+        holds, which is the confusion item 1 records.
 
-        `chord:joe_pass` is 0.25 or 0.5 because it names the *ands*, so the distance to the next
-        position is half a beat — asserted here because it is the same rule producing a
-        different number, which is what makes "the grid decides" a claim rather than a
-        coincidence.
+        **The finer sets are the grid's own spacing and not a second rule.** `every_note`
+        generates at each bar's own subdivision now, so a bar of eighths spaces its stabs
+        a quarter of a whole note apart and a bar of sixteenths an eighth —
+        `{0.5, 0.25, 0.125}` on this head; and `chord:joe_pass` names the *ands*, so the
+        distance to the next position is half a beat, `{0.25, 0.5}`. One rule producing
+        three numbers is what makes "the grid decides" a claim rather than a coincidence.
         """
-        for grid, expected in (("chord:every_note", {0.5}), ("chord:freddie", {0.5}),
+        for grid, expected in (("chord:every_note", {0.5, 0.25, 0.125}),
+                               ("chord:freddie", {0.5}),
                                ("chord:joe_pass", {0.25, 0.5})):
             with self.subTest(grid=grid):
                 durations = {round(s[5], 6) for s in chord_slots(self.rainy, grid=grid)}
@@ -1324,20 +1371,23 @@ class TestChordSlots(unittest.TestCase):
         self.assertGreater(first, 1.0, "a position with no harmony was filled in")
 
     def test_the_singing_route_is_not_touched(self):
-        """`parts=auto` unions nothing, and no invented note reaches a singing part.
+        """`parts=auto` invents no melody: a note-less position carries `None`.
 
         The regression that makes this necessary, and it was measured rather than
         predicted: `parse_parts("auto")` returns the **sentinel** `("auto",)`, which has
         no soprano, so testing the route on the parsed value alone classified the *default*
         arrangement as the comping route. Fourteen steps of a singing `grid=freddie`
         arrangement carried the placeholder melody before `resolve_parts` was added.
+
+        **What is asserted is the absence of an invented pitch, not the step count.** The
+        default grid now generates note-less positions of its own, and the honest report
+        for one is `melody is None` — never the sentinel's `C4`.
         """
         body = harmony("C", "major") + note("C", 5)
         path = write_score(score(body, divisions=4, beats=4))
         self.addCleanup(os.unlink, path)
         singing, _head, _notes = arrange_xml_head(path)
-        self.assertEqual([s.melody for s in singing], ["C5"])
-        self.assertNotIn(None, [s.melody for s in singing])
+        self.assertEqual([s.melody for s in singing if s.melody is not None], ["C5"])
 
     def test_a_slot_whose_melody_has_stopped_carries_no_melody(self):
         """Where no note is sounding, the slot carries `None` rather than an invention.
@@ -2107,15 +2157,21 @@ class TestReductionAndArranging(unittest.TestCase):
         The candidate whose lowest pitch is nearest the bass is preferred, exactly
         as the corpus path does - which is the point of sharing `arrange_slots`
         rather than reimplementing it here.
+
+        The melody-bearing step is the one the claim is about; the note-less positions
+        the default grid generates in the same bar are comps of the same chord, so they
+        are held to the same preference rather than excepted from it.
         """
         steps, _head, _notes = arrange_xml_head(
             self.path(harmony("D", "dominant", bass="C") + note("F", octave=4)),
         )
-        self.assertEqual(len(steps), 1)
-        self.assertEqual(steps[0].chord, "D7/C")
-        # The shape's bottom note is the C, or within a tone of it.
-        bottom = min(steps[0].voicing.midi_notes()) % 12
-        self.assertIn(bottom, (0, 1, 11))
+        sung = [s for s in steps if s.melody]
+        self.assertEqual(len(sung), 1)
+        for step in steps:
+            self.assertEqual(step.chord, "D7/C")
+            # The shape's bottom note is the C, or within a tone of it.
+            bottom = min(step.voicing.midi_notes()) % 12
+            self.assertIn(bottom, (0, 1, 11), step.tab_line())
 
     def test_melody_under_no_chord_becomes_a_melody_only_step(self):
         """A note with no harmony is voiced alone, not under an invented chord."""
@@ -2364,8 +2420,8 @@ class TestTheMetreHasADenominator(unittest.TestCase):
         already round-tripped **22 and 27** extra beats on this head before this change,
         `every_note` **5**. The claim that actually matters is the one the assertion was a
         proxy for - every written beat comes back at the same beat - and that still holds
-        exactly. What is asserted instead is that the extras are *only* the melody-less
-        bars, so a round trip cannot silently add a beat inside a bar the tune has.
+        exactly. What is asserted instead is that **every extra is a position the tune is
+        silent at**, which is now also true inside a bar the tune occupies.
         """
         try:
             import music21  # noqa: F401
@@ -2393,17 +2449,21 @@ class TestTheMetreHasADenominator(unittest.TestCase):
         self.assertEqual((again.beats_per_bar, again.beat_type), (3, 4))
         written = [n for n in head.notes if n.bar >= 2]
         reread = [n for n in again.notes if n.bar >= 2]
-        # Every beat the file wrote comes back at the same beat - the claim.
+        # Every beat the file wrote comes back at the same beat - the claim. A set
+        # containment rather than a pairwise walk: the copy now carries the default grid's
+        # generated positions too, so zipping the two lists in order would compare a written
+        # note against a comping step and call the *extra* a moved note.
         original = {(n.bar, round(n.beat, 6)) for n in written}
         surviving = {(n.bar, round(n.beat, 6)) for n in reread}
         self.assertTrue(original <= surviving, sorted(original - surviving)[:5])
-        # And the extras are confined to the bars the melody never entered.
-        melody_bars = {n.bar for n in head.notes}
-        for bar, _beat in surviving - original:
-            self.assertNotIn(bar, melody_bars, f"bar {bar} has notes and gained a beat")
-        for original_note, copy in zip(written, (n for n in reread
-                                                if n.bar in melody_bars)):
-            self.assertAlmostEqual(original_note.beat, copy.beat, places=6, msg=str(copy))
+        # And every extra is a position the tune is silent at - the rule the default grid
+        # generates by, restated through a round trip.
+        self.assertTrue(surviving - original, "the default grid reached no extra position")
+        for bar, beat in sorted(surviving - original):
+            self.assertIsNone(
+                melody_at(head.notes, bar, beat),
+                f"bar {bar} beat {beat} gained a beat under a sounding note",
+            )
 
 
 class TestHeadTexture(unittest.TestCase):
@@ -2474,6 +2534,12 @@ class TestHeadTexture(unittest.TestCase):
                 self.assertEqual(len(step.voicing.active_frets()), 1, step.tab_line())
                 self.assertTrue(step.chord, "a demoted target still names its harmony")
                 continue
+            if step.melody is None:
+                # A generated position the tune is silent at: the guitar *comps* it, and
+                # a comping part's arity is `comping_arity` - three, because the soprano
+                # string carries nothing here and so is free for the chord.
+                self.assertEqual(len(step.voicing.active_frets()), 3, step.tab_line())
+                continue
             self.assertEqual(len(step.voicing.active_frets()), 4, step.tab_line())
             # The whole point of the fallback: a complete chord survives only while it
             # stays inside the reach.
@@ -2524,15 +2590,22 @@ class TestANarrowPaletteNeverLosesTheTune(unittest.TestCase):
         self.assertEqual({m % 12 for m in step.voicing.midi_notes()}, {5, 7})
 
     def test_no_melody_note_is_dropped_by_the_narrowest_palette(self):
-        """80 steps for 80 notes at one chord tone a step, and the same at four.
+        """Every one of the 80 notes is a step, at one chord tone a step and at four.
 
-        The **count** is the assertion because a lost note is an absence: nothing in an
-        arrangement says one should have been there.
+        **Membership rather than a count.** The count stopped being the claim when the
+        default grid began generating positions of its own: 80 notes are 94 steps here, and
+        an equality would report the *additions* as a loss. A lost note is an absence, so
+        what is asserted is that no written position is missing - which is the property the
+        count was a proxy for, stated directly.
         """
         for texture in ("chord1", "uniform"):
             with self.subTest(texture=texture):
                 steps, head, _notes = arrange_xml_head(BUT_NOT_FOR_ME, texture=texture)
-                self.assertEqual(len(steps), len(head.notes))
+                at = {(s.bar or 0, round(s.beat or 0.0, 6)) for s in steps}
+                for note in head.notes:
+                    self.assertIn(
+                        (note.bar, round(note.beat, 6)), at, f"{note.note_name} went missing"
+                    )
 
     def test_every_step_states_its_chord_at_either_arity(self):
         """`chord_unvoiced` is False throughout: every chord has a shape under it.

@@ -74,9 +74,11 @@ __all__ = [
     "HARMONY_SHELL_ROOT",
     "HARMONY_STYLES",
     "SUB",
+    "TICKS_PER_BEAT",
     "grid_allowed",
     "grid_defers_to_melody",
     "grid_positions",
+    "grid_resolutions",
     "on_grid",
     "parse_grid",
     "resolve_grid",
@@ -639,10 +641,19 @@ def texture_palette(
 # three. This is the `TARGET_BEATS` lesson applied to a rhythm: name *the position*,
 # never a literal beat number.
 #
-# Subdivision is an **integer count of eighths**, not a float, for the same reason
-# `_BEAT_EPSILON` exists: a notated position is a float in practice (a 3/4 bar's second
-# beat is 1.666...) and comparing floats for equality to decide whether a chord lands is
-# a comparison that will eventually be false for the wrong reason.
+# Subdivision is an **integer count of twenty-fourths of a beat**, not a float, for the
+# same reason `_BEAT_EPSILON` exists: a notated position is a float in practice (a 3/4
+# bar's second beat is 1.666...) and comparing floats for equality to decide whether a
+# chord lands is a comparison that will eventually be false for the wrong reason.
+#
+# **Twenty-fourths rather than halves, because the finest position is a note value.** A
+# sixteenth note and an eighth-note triplet are the smallest subdivisions this library
+# represents - a quarter and a third of a *quarter* note - and the coarsest beat-relative
+# unit holding both is a twelfth of a beat. The cut-time heads need it too, where a
+# sixteenth note is an eighth of a *half-note* beat, so the unit is `1/24`. Which of its
+# multiples a bar may actually be generated at is `grid_resolutions`; measured over the
+# committed heads, every onset of every one of them is already on this lattice and no
+# finer one is needed.
 GRID_EVERY_NOTE = "every_note"
 GRID_FREDDIE = "freddie"
 GRID_CHARLESTON = "charleston"
@@ -651,8 +662,11 @@ GRID_FINAL_AND = "final_and"
 GRID_WALK = "walk"
 GRID_ANCHORS = "anchors"
 
-# The subdivision of a beat, in whole eighths. Integer on purpose - see above.
-SUB = 1
+# The subdivision of a beat, in whole twenty-fourths. Integer on purpose - see above.
+TICKS_PER_BEAT = 24
+
+#: Half a beat, which is the upbeat every named figure is built from.
+SUB = 12
 
 # Beat sentinels, so a pattern can name a position rather than a beat number.
 LAST = 0   # the metre's FINAL beat, resolved against `beats_per_bar`
@@ -663,9 +677,9 @@ ALL = -1   # every beat the metre has; composes with a subdivision (`(ALL, SUB)`
 class GridPattern:
     """One rhythm grid: the within-bar positions a part may sound on.
 
-    `positions` is a tuple of `(beat, eighths)` pairs, where `beat` is a beat number,
-    `LAST` or `ALL`, and `eighths` is an integer count of eighths from that beat (`0`
-    is the beat, `SUB` is its upbeat).
+    `positions` is a tuple of `(beat, ticks)` pairs, where `beat` is a beat number,
+    `LAST` or `ALL`, and `ticks` is an integer count of twenty-fourths of a beat from
+    that beat (`0` is the beat, `SUB` is its upbeat).
 
     **`bar_relative` is a property of the pattern, not a comment**, and it earns its
     place by saying whether a *silence* is the arranger's mistake. A bar-relative
@@ -817,7 +831,7 @@ def grid_positions(
     if row is None:
         return ()
     beats: Dict[int, List[float]] = {}
-    for beat, eighths in row.positions:
+    for beat, ticks in row.positions:
         if beat == ALL:
             numbers: Tuple[int, ...] = tuple(range(1, beats_per_bar + 1))
         elif beat == LAST:
@@ -836,10 +850,61 @@ def grid_positions(
             # the upbeat of the *first* beat - measured, not reasoned: the whole
             # point of the `LAST` sentinel is that the same pattern lands on the
             # bar's final beat in every metre.
-            beats.setdefault(number, []).append(number + eighths * 0.5)
+            beats.setdefault(number, []).append(number + ticks / TICKS_PER_BEAT)
     return tuple(
         (number, tuple(sorted(set(positions))))
         for number, positions in sorted(beats.items())
+    )
+
+
+def grid_resolutions(beat_type: int) -> Tuple[int, ...]:
+    """The densities a **generated** bar may take, coarsest first, in ticks of a beat.
+
+    A bar the default grid generates inside is subdivided at the coarsest of these that
+    holds every note its own melody writes, so this is the vocabulary of rhythms a bar can
+    be read as having. **It is note values, read against the quarter note**: the half note,
+    the quarter note, the quarter-note triplet, the eighth note, the eighth-note triplet
+    and the sixteenth note, with the metre's own beat added to them. A sixteenth note and
+    an eighth-note triplet are the finest note values this library represents, so a bar is
+    never generated at a thirty-second or at a sixteenth-note triplet however busy its tune
+    reads.
+
+    **The intermediate values are not decorative, and leaving one out is a real defect.**
+    With only the beat, an eighth note, an eighth-note triplet and a sixteenth, a 2/2 bar
+    whose tune moves in quarter notes has no resolution to fit - a quarter note is *half* a
+    beat there - so the rule falls through to the **sixteenth** and generates eight chords
+    in a bar whose melody writes three. Measured on `but_not_for_me`: that reading added 28
+    steps where the correct one adds 14.
+
+    **Every value is converted through the metre, which is why this takes `beat_type`.** A
+    beat is `4 / beat_type` quarters, so a quarter note is `6 * beat_type` ticks of `1/24`
+    beat and the rest are multiples and fractions of it. Common time gives `(24, 12, 8, 6)`;
+    cut time `(24, 12, 8, 6, 4, 3)`, where a quarter note is *half* a beat and a sixteenth an
+    eighth of one; an eighth-note beat, in 6/8, `(24, 12)`. Reading a beat as a quarter would
+    generate a 2/2 or a 6/8 bar at the wrong density, which is `AGENTS.md` trap 9 arriving in
+    the grid.
+
+    **Every entry divides the beat**, so the beat is always on a generated bar's grid. That
+    is the one property the caller depends on: a note value that does not divide the beat
+    evenly - a quarter-note triplet in 6/8, say - is dropped rather than used, because a
+    grid missing its own downbeat would leave a bar's strongest position silent. A metre
+    whose beat is not a quarter note therefore offers fewer of them, and that is reported as
+    the fewer it is rather than padded.
+    """
+    quarter = 6 * beat_type
+    candidates = {
+        TICKS_PER_BEAT,           # the beat
+        2 * quarter,              # a half note: the beat itself in cut time
+        quarter,                  # a quarter note: half a beat in cut time
+        (2 * quarter) // 3,       # a quarter-note triplet
+        quarter // 2,             # an eighth note
+        quarter // 3,             # an eighth-note triplet - the floor
+        quarter // 4,             # a sixteenth note - the floor
+    }
+    return tuple(
+        resolution
+        for resolution in sorted(candidates, reverse=True)
+        if resolution > 0 and TICKS_PER_BEAT % resolution == 0
     )
 
 

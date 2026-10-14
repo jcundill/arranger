@@ -917,14 +917,20 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
             f"{min(held_frets)}-{max(held_frets)}",
         )
 
-    def test_the_walk_loses_no_anchor_the_fix_did_not_already_lose(self):
+    def test_no_anchor_is_left_without_its_thumb_note(self):
         """
-        The cost of the fix, asserted so it cannot be paid silently.
+        The cost of the fix, asserted so it cannot be paid silently — and it is now **zero**.
 
         Telling the thumb about the held shape removes candidate strings, so a naive
-        version of this change loses thumb notes - and a walking bass with a gap in it
-        is not a walking bass. So the assertion is an exact set rather than an empty
-        one, and a new entry here means this change cost a note.
+        version of the reach fix loses thumb notes - and a walking bass with a gap in it is
+        not a walking bass. The set was `[(3, 1.0), (19, 1.0), (23, 1.0)]` when it was
+        written, and item 1's generated positions dissolved it: those downbeats read the
+        melody in force as `Ebmaj` over `F4`, so the anchor's note *was* the lowest note of
+        the shell and there was no free string below it for the thumb. The tune is **silent**
+        at them now, so the guitar comps them at `comping_arity` - a shape whose bottom note
+        sits higher - and the thumb has room. So the assertion stays an **exact set** rather
+        than a property, and the empty one is the claim: a new entry here means this change
+        cost a note.
 
         The anchors are selected by `bass_role` alone, and deliberately **not** by
         `bass_only` as well. They used to be filtered by both, and that was wrong: a
@@ -933,22 +939,6 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
         and the filter quietly dropped it from this assertion, turning the test into
         one that could not fail. An anchor is an anchor whether or not the left hand
         holds across it, which is what makes `bass_role` the honest population.
-
-        **The melody-in-force rule changed this set, and the change is not free.** It went from one gap to
-        three, and it fixed one as well as costing two:
-
-        | anchor | before | after | why |
-        |---|---|---|---|
-        | bar 15 | no thumb | **thumb placed** | the melody there is `Eb5`, not `Ab4`, so the shell no longer sounds the anchor note |
-        | bars 3, 19, 23 | thumb placed | **no thumb** | now `Cm7`, whose root C3 the shell already sounds on the low E |
-
-        The two new gaps are the documented blast radius of the item-5 fix rather than
-        a separate regression: reading the melody in force changed those downbeats
-        from `Ebmaj` over `F4` to `Cm7` over `Eb4`, and under the corrected chord the
-        anchor note *is* the lowest note of the shell, so there is no free string below
-        it for the thumb. The same reason as the original bar-15 gap, reached by a
-        different route - so the test asserts the set and the test below asserts **why**
-        each entry is in it, which is what stops this being paid silently.
         """
         steps = self._arrangement()
         anchors = [
@@ -959,45 +949,52 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
         self.assertGreater(len(anchors), 0)
         missing = [(step.bar, step.beat) for step in anchors if step.bass is None]
         self.assertEqual(
-            [(3, 1.0), (19, 1.0), (23, 1.0)],
+            [],
             missing,
             "the set of anchors with no thumb note changed",
         )
 
-    def test_an_anchor_without_a_thumb_note_is_one_the_shell_already_covers(self):
+    def test_every_anchor_carries_a_thumb_note_below_its_upper_shape(self):
         """
-        Why each anchor in the set above has no thumb note, so that set is a diagnosis
-        rather than a number that happens to be stable.
+        Why the gap set above is empty, asserted over the **whole** population instead.
 
-        A thumb note must sound strictly below the structure it supports, so an anchor
-        can only fail to place when **the structure already sounds that pitch class**
-        and every string below it is occupied. The first half is what this asserts: for
-        every anchor with no thumb note, the written chord's root is among the pitches
-        the shell is already sounding.
+        A thumb note must sound strictly below the structure it supports, so an anchor can
+        only fail to place when **the structure already sounds that pitch class** and every
+        string below it is occupied. That is the diagnosis the gap set used to need, and the
+        gaps are gone, so stating it over the gaps would be a loop over nothing - a test that
+        cannot fail. It is stated over all 31 anchors for that reason, and a future gap
+        therefore has to explain itself here rather than only being absorbed into a list.
 
-        That is a property of the arrangement rather than of this head, so a future
-        anchor gap has to explain itself here instead of only being absorbed into the
-        set above - and an anchor that *could* have been played will fail this test
-        rather than quietly joining the list.
+        The chord's root is asserted too, because it is the pitch the thumb was reaching for
+        and it is what the step has to state: `ChordParser` resolves the name rather than the
+        test slicing characters out of it.
         """
         steps = self._arrangement()
-        checked = 0
-        for step in steps:
-            if step.bass_role != arranger.BASS_ROLE_ANCHOR or step.bass is not None:
-                continue
-            checked += 1
+        anchors = [step for step in steps if step.bass_role == arranger.BASS_ROLE_ANCHOR]
+        self.assertGreater(len(anchors), 0, "no anchors were checked")
+        for step in anchors:
+            bass = step.bass
+            self.assertIsNotNone(bass, f"bar {step.bar}: the anchor has no thumb note")
+            assert bass is not None
             sounding = {
                 STANDARD_TUNING[index].midi_note() + fret
                 for index, fret in enumerate(step.voicing.frets)
                 if fret >= 0
             }
-            self.assertTrue(
-                sounding, f"bar {step.beat}: an anchor sounds nothing at all"
+            self.assertTrue(sounding, f"bar {step.bar}: an anchor sounds nothing at all")
+            # The thumb is the bottom voice, so everything above it starts higher.
+            upper = sorted(
+                STANDARD_TUNING[index].midi_note() + fret
+                for index, fret in enumerate(step.voicing.frets)
+                if fret >= 0 and index != step.voicing.bass_string
             )
-            # The chord named on the step is the harmony the anchor roots, so its root
-            # is the pitch the thumb was reaching for. `ChordParser` resolves the name
-            # rather than the test slicing characters out of it, and the octave is
-            # irrelevant because only the pitch class is compared.
+            self.assertTrue(upper, f"bar {step.bar}: the anchor states no upper voices")
+            self.assertLess(
+                bass,
+                upper[0],
+                f"bar {step.bar} beat {step.beat}: the thumb sounds {bass} and the upper "
+                f"shape starts at {upper[0]}",
+            )
             root_name = ChordParser.parse_chord_name(step.chord)[0]
             root = (
                 None if root_name is None else Note(root_name + "4").midi_note() % 12
@@ -1009,7 +1006,6 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
                 f"bar {step.bar} beat {step.beat}: the anchor note {root} is not "
                 "already sounding, so the thumb had somewhere to play it",
             )
-        self.assertGreater(checked, 0, "no anchor gaps were checked")
 
 
 class TestABassOnlyStepIsNeverATarget(unittest.TestCase):
@@ -1062,25 +1058,24 @@ class TestABassOnlyStepIsNeverATarget(unittest.TestCase):
         one. Under decision C a fill is the melody alone and the melody it carries is
         the one already sounding, so holding it is correct and must survive.
 
-        **Fourteen, not thirteen**, and the extra one is the point.
-        Bar 7 beat 1.0 used to be a *target* stating
-        `F4` - a note the score does not reach until beat 1.5, so the arrangement
-        stated it a quarter early. With the melody in force read off the melody
-        timeline it carries `Eb4`, which really is still ringing from bar 6 beat 2.5,
-        so the melody does not move onto that downbeat and the slot is correctly a
-        fill. The count went **up** because a wrong note was being promoted, and a
-        fix that had left it at 13 would have kept that.
+        **The population moved when the default grid began generating positions of its
+        own, and the movement is that change seen from here.** It was 14, and six of the
+        fourteen sat on a bar's **first** beat where the tune was *silent* - `x-6-x-x-8-x`,
+        the thumb alone with the upper voices held from the bar before. Those beats state a
+        chord of their own now (`x-6-8-8-8-x`), so they are comps rather than fills, and the
+        14 → 8 is the item-1 fix arriving from this direction rather than a loss. The eight
+        that remain are held fills still, and each one still carries the note it is holding:
+        that is the property, and it is asserted because the count has already moved once.
         """
         steps = self._walking_arrangement()
         fills = [step for step in steps if step.bass_only and step.role == ROLE_FILL]
-        self.assertEqual(len(fills), 14, "the held fills changed")
-        # Named rather than left to the count: bar 7 beat 1.0 is the fill the item-5
-        # fix created, and the only one whose melody is held across a *barline*.
-        self.assertIn(
-            (7, 1.0, "Eb4"),
-            [(step.bar, step.beat, step.melody) for step in fills],
-            "bar 7 beat 1.0 no longer fills with the Eb4 that is sounding",
-        )
+        self.assertEqual(len(fills), 8, "the held fills changed")
+        for step in fills:
+            self.assertIsNotNone(
+                step.melody,
+                f"bar {step.bar} beat {step.beat}: a fill with no melody is not the tune "
+                f"alone: {step.tab_line()}",
+            )
 
     def test_every_target_states_its_chord_in_every_renderer(self):
         """
