@@ -68,20 +68,21 @@ Tab runs low E → high E, `x` = muted — `x-x-12-13-13-13` is a voicing on D-G
 `arranger head` does the same job from **written melody + chord symbols** — a lead sheet, a melody-only score, anything MusicXML:
 
 ```bash
-python -m arranger head tests/data/but_not_for_me.mxl --bars 1-5
+python -m arranger head tests/data/but_not_for_me.mxl --bars 1-3
 ```
 
 ```text
 But Not For Me - George Gershwin
   part: Voice
-  2/2, Eb major, 80 melody note(s), bars 1-32; neck window: frets 2-13; grips: drop2, closed, drop3, drop24, drop2_6432, shell, duo
+  2/2, Eb major, 80 melody note(s), bars 1-32; neck window: frets 2-13; parts: auto
   note: 15 rests and unpitched notes
 
-Bb7      F4  5    6-x-6-7-6-x        (harmony under 5 - 4 voices)
-Bb7      G4  13   6-x-6-7-8-x        (non-chord tone -> Bb13 via extension - 4 voices - the chord tones it leaves out are 9 & 5)
-Bb7      F4  5    6-x-6-7-6-x        (harmony under 5 - 4 voices)
-Ebmaj    G4  3    6-x-8-8-8-x        (harmony under 3 - 4 voices)
-Ebmaj    F4  9    6-x-8-8-6-x        (non-chord tone -> Ebadd9 via extension - 4 voices - the chord tone it leaves out is 3)
+Bb7      F4  5    6-x-6-7-6-x        (harmony under 5 - 4 voices - sounding: Bb Root, Ab b7, D 3, F 5)
+Bb7      G4  13   6-x-6-7-8-x        (non-chord tone -> Bb13 via extension - 4 voices - sounding: Bb Root, Ab b7, D 3, G 13 - the chord tones it leaves out are 9 & 5)
+Bb7      F4  5    6-x-6-7-6-x        (harmony under 5 - 4 voices - sounding: Bb Root, Ab b7, D 3, F 5)
+Ebmaj    G4  3    6-x-8-8-8-x        (harmony under 3 - 4 voices - sounding: Bb 5, Bb 5, Eb Root, G 3)
+Ebmaj    F4  9    6-x-8-8-6-x        (non-chord tone -> Ebadd9 via extension - 4 voices - sounding: Bb 5, Bb 5, Eb Root, F 9 - the chord tone it leaves out is 3)
+Cm7      Eb4 b3   6-x-5-5-4-x        (harmony under b3 - 4 voices - sounding: Bb b7, G 5, C Root, Eb b3)
 ```
 
 Both forms read: bare `.musicxml` and zipped `.mxl`.
@@ -163,14 +164,14 @@ print(format_progression(steps))
 ```
 
 ```text
-Dm7      D5  Root x-x-10-10-10-10    (harmony under Root - 4 voices)
-G7       B4  3    13-x-12-12-12-x    (harmony under 3 - 4 voices)
-Cmaj7    C5  Root x-x-9-9-8-8        (harmony under Root - 4 voices)
+Dm7      D5  Root x-x-10-10-10-10    (harmony under Root - 4 voices - sounding: C b7, F b3, A 5, D Root)
+G7       B4  3    13-x-12-12-12-x    (harmony under 3 - 4 voices - sounding: F b7, D 5, G Root, B 3)
+Cmaj7    C5  Root x-x-9-9-8-8        (harmony under Root - 4 voices - sounding: B 7, E 3, G 5, C Root)
 ```
 
 Compact one-line analysis form; only shape `format_progression` has. For real six-line tab with chords on real beats, use `format_tab_staff` below.
 
-Every step annotated: chord-tone melody names its degree (`(harmony under b7)`), a non-chord tone names the substitution applied, etc.
+Every step annotated: chord-tone melody names its degree (`(harmony under b7)`), a non-chord tone names the substitution applied, a shape names the voices it sounds (`sounding: Bb 5, Eb Root, G 3, C 6`) — note and degree each — etc.
 
 `format_progression` gives one line *per chord*. `format_tab_staff` lays a whole part along a single six-line staff, in reading order — here first bar of a committed score, metre passed by caller:
 
@@ -348,7 +349,7 @@ python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-2 \
 ```
 
 ```text
-Gmaj9    D4  5    3-x-4-4-3-x        (shell - 3rd & 7th, partial - 3 voices, the most this palette offers) (bass: G2, anchor)
+Gmaj9    D4  5    3-x-4-4-3-x        (shell - 3rd & 7th, partial - 3 voices, the most this palette offers - sounding: F# 7, B 3, D 5) (bass: G2, anchor)
 Gmaj9    D4  5    x-x-x-x-3-x        (harmony under 5 - melody alone, the most a fill's palette offers)
 Gmaj9    D4  5    2-x-x-x-x-x        (harmony under 5 - melody alone, the most a fill's palette offers - the shape above is held) (bass: F#2, connect)
 Gmaj9/F# D4  5    x-x-x-x-3-x        (harmony under 5 - melody alone, the most a fill's palette offers - the written bass F# is not sounded - the lowest voice (D4) is 4 semitones from it)
@@ -405,7 +406,7 @@ python -m arranger head tests/data/but_not_for_me.mxl --parts bass
 ```text
 Bb7      F4  5    x-x-3-x-x-x        (comping - 5; the guitar does not play the tune)
 Bb7      G4  13   x-x-3-x-x-x        (comping - 5; the guitar does not play the tune - non-chord tone -> Bb13 via extension)
-Ebmaj    G4  3    6-x-x-x-x-x        (comping - 5; the guitar does not play the tune)
+Bb7      F4  5    x-x-3-x-x-x        (comping - 5; the guitar does not play the tune)
 ```
 
 One note per step, on low E, A or D: **lowest voice of shape**, taken from whatever reaches it — root where convenient (`Bb7` gives `Bb`, not `D` a guide-tone shape would), 5th where not (every `Ebmaj` above). Annotation names degrees sounding, so line reads for itself. Melody column is *written* melody, which guitar not playing (`melody_voiced` False); still on step so band lines up against it.
@@ -446,9 +447,9 @@ python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 1-2 --pa
 ```
 
 ```text
-Gmaj9    D4  5    x-x-x-x-3-x        (harmony under 5 - melody alone, the most this palette offers)
-Gmaj9    D4  5    x-x-x-x-3-x        (harmony under 5 - melody alone, the most this palette offers)
-Gmaj9/F# D4  5    x-x-x-x-3-x        (harmony under 5 - melody alone, the most this palette offers - the written bass F# is not sounded - the lowest voice (D4) is 4 semitones from it)
+Gmaj9    D4  5    x-x-x-7-x-x        (harmony under 5 - melody alone, the most this palette offers)
+Gmaj9    D4  5    x-x-x-7-x-x        (harmony under 5 - melody alone, the most this palette offers)
+Gmaj9/F# D4  5    x-x-x-7-x-x        (harmony under 5 - melody alone, the most this palette offers - the written bass F# is not sounded - the lowest voice (D4) is 4 semitones from it)
 ```
 
 Chord name still printed above each step as context; nothing under it voiced. `NC` bar under comping selection printed as empty bar (`silence="nc_comping"`), not dropped: no chord, so no guide tones, guitar genuinely silent while horn is not. Tab keeps bar count, lines up against tune.
@@ -586,7 +587,7 @@ Dm7 A4 10-x-10-10-10-x from A5
 Step's `melody` is pitch that sounds, `original_melody` keeps written one; `format_progression` annotates:
 
 ```text
-Dm7      A4  5    10-x-10-10-10-x    (harmony under 5 - transposed down an octave from A5 - 4 voices)
+Dm7      A4  5    10-x-10-10-10-x    (harmony under 5 - transposed down an octave from A5 - 4 voices - sounding: D Root, C b7, F b3, A 5)
 ```
 
 Two deliberate limits:
@@ -627,8 +628,8 @@ python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 4-6
 ```
 
 ```text
-Eb6      C5  6    x-x-8-8-8-8        (harmony under 6 - 4 voices)
-Am7      D4  11   x-3-x-7-x-x        (non-chord tone - the extension strategy found no voicing; the written chord stands - 2 voices: the 4-voice voicing x-3-3-2-3-x sounds a note outside the chord)
+Eb6      C5  6    x-x-8-8-8-8        (harmony under 6 - 4 voices - sounding: Bb 5, Eb Root, G 3, C 6)
+Am7      D4  11   x-3-x-7-x-x        (non-chord tone - the extension strategy found no voicing; the written chord stands - 2 voices: the 4-voice voicing x-3-3-2-3-x sounds a note outside the chord - sounding: C b3, D 11)
 Am7      D4  11   x-x-x-7-x-x        (melody repeated - single note - non-chord tone - the extension strategy found no voicing; the written chord stands)
 Am7      D4  11   x-x-x-7-x-x        (melody repeated - single note - non-chord tone - the extension strategy found no voicing; the written chord stands)
 ```
@@ -640,8 +641,8 @@ python -m arranger head tests/data/heres_that_rainy_day.musicxml --bars 4-6 --fa
 ```text
   note: diminished fallback replaced the written chord on 3 step(s)
 
-Eb6      C5  6    x-x-8-8-8-8        (harmony under 6 - 4 voices)
-Bdim7    D4  b3   4-x-3-4-3-x        (harmony under b3 - 4 voices)
+Eb6      C5  6    x-x-8-8-8-8        (harmony under 6 - 4 voices - sounding: Bb 5, Eb Root, G 3, C 6)
+Bdim7    D4  b3   4-x-3-4-3-x        (harmony under b3 - 4 voices - sounding: Ab 13, F b5, B Root, D b3)
 Bdim7    D4  b3   x-x-x-x-3-x        (melody repeated - single note)
 Bdim7    D4  b3   x-x-x-x-3-x        (melody repeated - single note)
 ```

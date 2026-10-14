@@ -181,13 +181,15 @@ class TestTheShapeClause(unittest.TestCase):
         self.assertEqual([_step_annotation(step) for step in steps], [
             " (harmony under 11 - melody alone: the 4-voice voicing"
             " x-7-7-11-12-x needs a 5-fret stretch)",
-            " (harmony under b3 - 4 voices)",
+            " (harmony under b3 - 4 voices - sounding: E b7, Db 5, F# Root, A b3)",
             " (melody repeated - single note)",
             " (non-chord tone - the extension strategy found no voicing;"
-            " the written chord stands - 2 voices, the most this palette offers)",
+            " the written chord stands - 2 voices, the most this palette offers"
+            " - sounding: Eb 3, Bb 7)",
             " (shell - 3rd & 7th, partial - 3 voices: the 4-voice voicing"
-            " 2-x-1-2-0-x lies outside the neck window)",
-            " (harmony under b7 - 4 voices)",
+            " 2-x-1-2-0-x lies outside the neck window"
+            " - sounding: Eb 3, A b7, B Root)",
+            " (harmony under b7 - 4 voices - sounding: F# 5, B Root, Eb 3, A b7)",
         ])
 
     def test_the_written_bass_is_named_when_it_removed_the_shape(self):
@@ -208,18 +210,25 @@ class TestTheShapeClause(unittest.TestCase):
         self.assertEqual(
             _step_annotation(slash[-1]),
             " (shell - 3rd & 7th, partial - 3 voices: the 4-voice voicing"
-            " 3-x-4-4-3-x does not sound the written bass)",
+            " 3-x-4-4-3-x does not sound the written bass"
+            " - sounding: F# 7, B 3, D 5)",
         )
         palette = slash[-1].palette
         assert palette is not None
         self.assertEqual(palette.decided_by, PARTITION_CRITERION)
 
-    def test_a_complete_shape_states_its_count_and_nothing_else(self):
-        """Four is every string the right hand has, so there is nothing to explain."""
+    def test_a_complete_shape_states_its_count_and_no_reason(self):
+        """Four is every string the right hand has, so the count is the whole *why*.
+
+        The count is not the whole clause any more - `_sounding_clause` follows it and
+        names the voices - so what this pins is what the count clause itself adds: no
+        fuller voicing named as the one that lost.
+        """
         steps = VoiceLeadingEngine.arrange_progression(COMPLETE)
         for step in steps:
             annotation = _step_annotation(step)
-            self.assertTrue(annotation.endswith(" - 4 voices)"), annotation)
+            self.assertIn(" - 4 voices - sounding: ", annotation)
+            self.assertNotIn("the 4-voice voicing", annotation)
 
     def test_a_hold_carries_no_shape_clause(self):
         """A hold is annotated by what is *struck*, not by the shape still ringing."""

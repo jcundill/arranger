@@ -34,6 +34,7 @@ from .tuning import (
     _STAFF_CELL_WIDTH,
     NECK_FRET_MAX,
     NECK_FRET_MIN,
+    PITCH_CLASS_NAMES,
     ROLE_FILL,
     SILENCE_GRID,
     SILENCE_NC_COMPING,
@@ -81,8 +82,9 @@ def _step_annotation(step: ArrangementStep) -> str:
     read. Every one of those paths also carries the clauses read from the step itself where
     one applies - the octave a sounding melody was moved to, the chord a substitution
     produced, how many voices the shape states and which criterion turned a fuller one away,
-    the neck window, a slash bass that is not sounded, and the held shape above a moving
-    thumb (`_annotate`) - so "why is this shape like this, and why does this line not match
+    the voices it sounds and the degree each of them states, the neck window, a slash bass
+    that is not sounded, and the held shape above a moving thumb (`_annotate`) - so "why is
+    this shape like this, and why does this line not match
     the score?" is answered by the line. Shared by format_progression and the demonstration
     so the two renderings cannot drift apart.
     The bass annotation is appended by `_bass_annotation` on **every** path out of
@@ -236,16 +238,17 @@ def _substitution_clause(step: ArrangementStep) -> str:
 def _annotate(step: ArrangementStep, *clauses: str) -> str:
     """Wrap a step's clauses - with the clauses read from the step itself - into the line.
 
-    Seven clauses are derived here rather than passed in, so that every path out of
+    Eight clauses are derived here rather than passed in, so that every path out of
     `_step_annotation` that can have one carries it. Two correct a **column** and so are
     restated on every line that suffers them - the **octave** the sounding melody is at
     (`_transposition_clause`) and the chord the part actually **states**
-    (`_substitution_clause`). Five explain the shape itself, and a hold is the one step that
+    (`_substitution_clause`). Six explain the shape itself, and a hold is the one step that
     suppresses them: the shape **count** (`_shape_clause`, which stays silent on a hold
-    because it was explained where the shape was chosen), the chord **tone** it leaves out
+    because it was explained where the shape was chosen), the **voices** it sounds and the
+    degree each states (`_sounding_clause`), the chord **tone** it leaves out
     (`_omission_clause`), the **window** it had to leave
     (`_window_clause`), the **written bass** it does not sound (`_slash_bass_clause`) and the
-    **held** shape above a moving thumb (`_held_clause`). The eighth is the thumb that could
+    **held** shape above a moving thumb (`_held_clause`). The ninth is the thumb that could
     not be placed at all (`_bass_refusal_clause`). The alternative is a dozen return
     sites each remembering to append them, which is how a fact comes to be printed on one
     route and silently dropped on another - and `_bass_annotation` is threaded the same way,
@@ -259,6 +262,7 @@ def _annotate(step: ArrangementStep, *clauses: str) -> str:
         _transposition_clause(step),
         _substitution_clause(step),
         _shape_clause(step),
+        _sounding_clause(step),
         _omission_clause(step),
         _window_clause(step),
         _slash_bass_clause(step),
@@ -285,7 +289,8 @@ def _shape_clause(step: ArrangementStep) -> str:
     whose voicing follows the caller's selection rather than a palette of its own - and
     never on a hold, which is annotated by what is *struck* while the shape itself is
     still ringing from the step before. Four voices is every string the right hand has,
-    so a complete shape gets the count and nothing else.
+    so a complete shape gets the count and no reason (the voices themselves are named by
+    `_sounding_clause`).
 
     The routes that state the count in their **own** clause keep the count to themselves:
     an `NC` bar reads "(no chord - melody alone)" and a melody no shape could voice reads
@@ -578,6 +583,65 @@ def _omission_clause(step: ArrangementStep) -> str:
     if len(names) == 1:
         return f"the chord tone it leaves out is {names[0]}"
     return f"the chord tones it leaves out are {_and_list(names)}"
+
+
+def _sounding_names(step: ArrangementStep) -> str:
+    """Every voice of the shape as its note and its degree, in the order the tab reads.
+
+    The pitches are `Voicing.upper_midi_notes()` - the thumb is not one of them - and
+    the order is the tab's, lowest string first, which is ascending pitch for a grip.
+    The degree comes from `melody_degree_name`, the vocabulary the degree column and
+    `_omission_clause` already use, so one line cannot name a degree two ways. A note
+    and its degree are one string per voice, so a name is a *pair* rather than a bare
+    note: `Bb 5` says the note and what it is to the chord.
+
+    Returns the empty string when the harmony cannot be read, so a caller prints
+    nothing rather than a column of bare note names.
+    """
+    harmony = step.harmonized_as or step.chord
+    names = [
+        f"{PITCH_CLASS_NAMES[pitch % 12]} "
+        f"{melody_degree_name(Note(_note_name(pitch)), harmony)}"
+        for pitch in step.voicing.upper_midi_notes()
+    ]
+    if not all(name.split(" ", 1)[-1] for name in names):
+        return ""
+    return ", ".join(names)
+
+
+def _sounding_clause(step: ArrangementStep) -> str:
+    """Names every voice the shape sounds, and the degree each of them states.
+
+    The chord name above a step describes the harmony rather than the notes under the
+    melody, and the tab gives frets rather than names, so the line says which notes
+    make up the shape and how each stands against the chord.
+
+    Every shape that sounds **two or more** upper voices answers, on any route the
+    guitar sings the tune: a drop-2 chord-melody, a substituted one, a duo, an
+    interval fill, a thin shell. Four routes stay silent, and each has its answer
+    elsewhere on the same line:
+
+    - a **repeated** melody is a soprano-only re-strike, whose other strings are
+      stopped rather than held, so there is no shape sounding to list;
+    - a **`chord_unvoiced`** step states no chord tone by construction, which is the
+      fact its own clause reports;
+    - the **thumb** is not in the list at all: `upper_midi_notes()` excludes it, and
+      it has its own `bass:` clause, because it is a line under the shape rather than
+      a voice of the harmony;
+    - a **comping** step (`melody_voiced` False) is named by `_comping_clause` in the
+      degrees it states, so listing them here would say the same word twice.
+
+    A note may appear twice - a triad's fourth voice is its root doubled an octave
+    below - and that is the shape rather than a defect, so duplicates are kept.
+    """
+    if not step.melody_voiced or step.repeated or step.chord_unvoiced:
+        return ""
+    if len(step.voicing.upper_midi_notes()) < 2:
+        return ""
+    names = _sounding_names(step)
+    if not names:
+        return ""
+    return f"sounding: {names}"
 
 
 def _bass_annotation(step: ArrangementStep, existing: str = "") -> str:

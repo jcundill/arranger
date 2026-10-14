@@ -374,7 +374,9 @@ renderer**, never re-derived at a call site:
 - a **choice the shape embodies** that no field records is derived from the step's own fields
   too, but is suppressed on a hold like the `palette` clauses, because it accounts for the
   shape rather than for a column: `_omission_clause` names the chord tone a four-voice shape
-  gives up (`TONE_PRIORITY`'s tail). Derived rather than recorded because the whole fact — the
+  gives up (`TONE_PRIORITY`'s tail), and `_sounding_clause` names the voices a shape with two
+  or more of them sounds, each with the degree it states. Derived rather than recorded because
+  the whole fact — the
   routed chord's tones against the pitches sounding — is already on the step, and a field
   beside it would be a second source for one fact;
 - a **route that chose no shape** states its own (`_comping_clause` names the degrees it

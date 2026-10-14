@@ -117,6 +117,12 @@ you whether a change is an improvement or a different library.
   shared `_step_annotation()` helper, which `_print_step()` also uses so the two
   renderings cannot drift: a chord tone names the degree it is (`(harmony under b7)`), a
   non-chord tone names its substitution, and a partial shape names what it leaves out.
+  Where the shape sounds **two or more voices**, the annotation also names them and the
+  degree each states (`sounding: Bb 5, Eb Root, G 3, C 6`) — the chord column describes the
+  harmony, and the tab gives frets, so which notes make up the shape is the third fact the
+  line has to carry. Read from the step's own pitches (`upper_midi_notes()`, so the thumb is
+  not among them: it has its own `bass:` clause) and named through
+  `chords.melody_degree_name`, the vocabulary the degree column already uses.
   Where the melody-bearing route *chose* the shape, the annotation carries a **shape
   clause** as well: how many voices the step states and, where a fuller shape existed,
   which criterion turned it away — `(shell - 3rd & 7th, partial - 3 voices: the 4-voice

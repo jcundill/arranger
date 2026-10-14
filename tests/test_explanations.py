@@ -159,6 +159,57 @@ def _names_left_out_on_the_line(step: ArrangementStep) -> List[str]:
     return [name.strip() for name in tail.replace(" & ", ", ").split(",") if name.strip()]
 
 
+def _sounding_pairs(step: ArrangementStep) -> List[str]:
+    """The `note degree` pair every upper voice states, from the step's **fields**.
+
+    The decision as stated, worked from the other side of the clause: a shape that sounds
+    two or more upper voices on a route that sings the tune names each of them. The pitches
+    are the step's own - the thumb is not among them - in the tab's order, and the degree is
+    read through `chords.melody_degree_name`, the vocabulary the degree column uses, against
+    the chord the part **states** (`harmonized_as` where a substitute was found). A witness
+    built this way cannot be satisfied by a clause that names a note the shape does not
+    sound, measures it against a chord the part is not playing, or stops one voice short.
+
+    The routes the clause is silent on come back empty here too - a hold, a chord no shape
+    could state, a comping part, and a harmony no table can read - which is what lets the
+    witness catch a clause that speaks where it should not as well as one that stays quiet
+    where it should speak.
+    """
+    if not step.melody_voiced or step.repeated or step.chord_unvoiced:
+        return []
+    harmony = step.harmonized_as or step.chord
+    pitches = step.voicing.upper_midi_notes()
+    if len(pitches) < 2:
+        return []
+    pairs = []
+    for pitch in pitches:
+        name = PITCH_CLASS_NAMES[pitch % 12]
+        pairs.append(f"{name} {melody_degree_name(Note(name + '4'), harmony)}")
+    if not all(pair.split(" ", 1)[-1] for pair in pairs):
+        return []
+    return pairs
+
+
+def _voices_named_on_the_line(step: ArrangementStep) -> List[str]:
+    """The voices a line says the shape sounds, read from the clause's own marker.
+
+    **Not** a search of the whole line: the tab is frets, so a note name has to come from
+    the clause or not at all. The list ends where the clause does - at the next ` - ` in
+    `render._annotate`'s chain, or at the parenthetical's close - because clauses that
+    follow it carry names of their own (`the chord tone it leaves out is Root`).
+    """
+    line = _line(step)
+    marker = "sounding: "
+    if marker not in line:
+        return []
+    tail = line.split(marker, 1)[1]
+    for end in (" - ", ")"):
+        cut = tail.find(end)
+        if cut != -1:
+            tail = tail[:cut]
+    return [pair.strip() for pair in tail.split(", ") if pair.strip()]
+
+
 WITNESSES: List[Witness] = [
     (
         "a substitute chord was stated, so the chord column is not what sounds",
@@ -243,6 +294,11 @@ WITNESSES: List[Witness] = [
         ),
     ),
     (
+        "the shape sounds two or more voices, which the frets do not name",
+        lambda step: bool(_sounding_pairs(step) or _voices_named_on_the_line(step)),
+        lambda step: _voices_named_on_the_line(step) == _sounding_pairs(step),
+    ),
+    (
         "the sounding melody is an octave below the written one",
         lambda step: step.original_melody is not None,
         lambda step: "transposed down an octave" in _line(step),
@@ -312,12 +368,14 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         missing: List[str] = []
         checked = 0
         omitted = 0
+        named = 0
         for head in HEADS:
             for config in CONFIGS:
                 steps, _head, _notes = arrange_xml_head(head, section=(1, 8), **config)
                 for step in steps:
                     checked += 1
                     omitted += bool(_missing_degree_names(step))
+                    named += bool(_sounding_pairs(step))
                     for label, when, witness in WITNESSES:
                         if when(step) and not witness(step):
                             missing.append(
@@ -333,6 +391,11 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         self.assertEqual(
             omitted, 82, "the number of steps owing an omitted-tone clause moved"
         )
+        # The same reasoning for the voice list, which is the clause most steps carry:
+        # measured over this sweep, **712** of the steps it arranges sound two or more
+        # upper voices on a route that sings the tune - so a change that thinned the
+        # default palette, or that stopped the clause firing, moves this number.
+        self.assertEqual(named, 712, "the number of steps naming their voices moved")
 
     def test_the_slash_bass_clause_is_not_a_tautology(self):
         """The one decision the witness table cannot hold, pinned in both directions.
@@ -499,7 +562,7 @@ class TestTheLoneNoteKeepsTheWindowHonest(unittest.TestCase):
 class TestNewClausesMustBeRegistered(unittest.TestCase):
     """A gate that enumerates its inputs by hand skips whatever was added last.
 
-    The set below is read **off the module** rather than typed as the answer, so a seventh
+    The set below is read **off the module** rather than typed as the answer, so another
     clause cannot be added without landing in this test - and so without meeting
     `WITNESSES` above, or recording here why it needs no witness.
     """
@@ -515,6 +578,7 @@ class TestNewClausesMustBeRegistered(unittest.TestCase):
             "_shape_clause",
             "_silence_clause",
             "_slash_bass_clause",
+            "_sounding_clause",
             "_substitution_clause",
             "_transposition_clause",
             "_window_clause",
