@@ -284,3 +284,70 @@ def pc(name: str) -> int:
 def upper_shape(frets: List[int], grip: str = "shell") -> Voicing:
     """A hand-built upper shape, which is what the placement rules are stated against."""
     return make_voicing(frets, grip=grip)
+
+
+def nearest_reach_for_note(
+    held_frets: List[int], held_thumb: Optional[int], midi: int
+) -> Optional[int]:
+    """How near the hand the walk could have placed *this note*, or None if nowhere.
+
+    The answer to "was this wide reach the placement's doing, or the note's?" - and a
+    **replica**, deliberately: it writes out `bass._place_bass`'s filters - the string must
+    be free in what the hand is holding, the note must sound below all of it, and the merged
+    step must fit the four-fret budget (`fingers.can_fret`) - and then returns the
+    proximity the engine ranks on, so a test can ask the question without asking the engine
+    that produced the answer. `test_open_issues._cause` is the same kind of helper for the
+    refusal filters, and says so in the same words.
+
+    `held_frets` is the shape still ringing and `held_thumb` its bass string, because the
+    walking line reuses its own string: that string is fretted but does **not** reserve the
+    string for the next note (`bass._place_bass` spells the same rule out), while
+    `can_fret` is asked about the whole ringing hand, which is what the engine does.
+
+    The **note**, not the pitch class: this asks where the engine could have put the note it
+    decided to play, not whether another octave would have been nearer. Which octave the
+    walk wants is its register decision - documented in `bass`, measured in
+    `docs/open-issues.md` item 5 - and re-deciding it here would be the replica choosing
+    for the engine.
+
+    Returns the smallest `abs(fret - hand_fret)` over those candidates, where `hand_fret` is
+    the lowest active fret of `held_frets` - the reference `_place_bass` itself uses. None
+    means the note has no position the filters allow, which cannot happen for a note the
+    engine placed; a test asserts that it did not.
+    """
+    from arranger.fingers import can_fret
+    from arranger.tuning import STANDARD_TUNING
+
+    active = [fret for fret in held_frets if fret >= 0]
+    if not active:
+        return None
+    hand_fret = float(min(active))
+    structure = [
+        -1 if index == held_thumb else fret
+        for index, fret in enumerate(held_frets)
+    ]
+    structure_midis = [
+        STANDARD_TUNING[index].midi_note() + fret
+        for index, fret in enumerate(structure)
+        if fret >= 0
+    ]
+    if not structure_midis:
+        return None
+    lowest_note = min(structure_midis)
+    if midi >= lowest_note:
+        return None
+    best: Optional[int] = None
+    for index, fret in enumerate(structure):
+        if fret >= 0:
+            continue
+        candidate_fret = midi - STANDARD_TUNING[index].midi_note()
+        if not 0 <= candidate_fret <= 18:
+            continue
+        hand = list(held_frets)
+        hand[index] = candidate_fret
+        if not can_fret(hand):
+            continue
+        proximity = abs(float(candidate_fret) - hand_fret)
+        if best is None or proximity < best:
+            best = int(proximity)
+    return best

@@ -303,9 +303,18 @@ you whether a change is an improvement or a different library.
     `pyproject.toml` reads as the dynamic project version. No document may state a
     different one: `tests/test_docs.py` fails the suite if one does.
 - `NO_CHORD` — the string `"NC"`, a bar carrying melody with no harmony.
-- `VoiceLeadingEngine.get_melody_only_voicing(melody_note, prefer=...)` — a
-  **single-fret** `Voicing` for an NC step, or `None` if unreachable. It is
-  explicitly *not* a harmonised voicing and is exempt from the string-set invariant.
+- `VoiceLeadingEngine.get_melody_only_voicings(melody_note, prefer=...)` — **the palette a
+  lone note is placed from**: one **single-fret** `Voicing` per eligible string, at the
+  written pitch, in preference order. A note no string in `prefer` can carry is rescued on
+  the strings below it, and a note playable only above `HIGH_FRET_LIMIT` is retried an
+  octave down; the first group that yields anything is the palette, so a caller's named
+  strings are never widened while they can carry the note. These are explicitly *not*
+  harmonised voicings and are exempt from the string-set invariant.
+- `VoiceLeadingEngine.get_melody_only_voicing(melody_note, prefer=...)` — the first of that
+  palette, or `None` if it is empty: the convenience a caller wants when it has no previous
+  shape to weigh the alternatives against. Every lone-note route in the engine asks for the
+  list instead and lets `cost.voicing_cost` choose, so a lone note is placed by the same
+  neck-window and hand-travel criteria a chord is (see `movement._melody_alone_shape`).
 - `ArrangementStep.melody_only` — defaulted flag set on NC steps.
 - `ArrangementStep.chord_unvoiced` — defaulted flag set when the palette could not
   voice the step's chord **at all**, so the melody sounds alone. Distinct from
@@ -1038,7 +1047,10 @@ The declaration is the empty palette on **both** roles — the same word
 `TEXTURE_GRIPS` already used to mean "the left hand plays nothing here", handed to the
 step loop directly for a melody-only selection (`melody_only_selection` in
 `textures.py`) so the declaration arrives at `melody_alone_case` through the one channel
-it always had. The route is `get_melody_only_voicing`, and the step it builds keeps
+it always had. The route is `get_melody_only_voicings`, whose palette is one position per
+eligible string, and the selection among them is `cost.voicing_cost`'s - so the note a
+melody-only selection states lands by the same window and hand-travel criteria a chord
+does. The step it builds keeps
 `melody_only=False` — the harmony still exists and the chord name is still printed as
 context, so the flag that would annotate "(no chord - melody alone)" would be claiming
 something false.

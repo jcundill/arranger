@@ -1925,20 +1925,78 @@ def _lower_soprano_strings(top_strings: Tuple[int, ...]) -> Tuple[int, ...]:
     return lower or tuple(top_strings)
 
 
-def _melody_only_string_order(prefer: Tuple[int, ...]) -> List[int]:
+def _melody_only_string_groups(
+    prefer: Tuple[int, ...],
+) -> List[Tuple[Tuple[int, ...], int]]:
     """
-    String indices to try for a melody-only voicing: those in `prefer` first (in
-    the order given), then every other string from the highest sounding one down.
+    The (strings, octave shift) groups a melody-only voicing is searched in, in order.
 
-    Duplicates and out-of-range indices in `prefer` are ignored, so a caller
-    cannot make the search repeat a string or index past the fretboard.
+    **The first group that can carry the note is the whole palette** - the choice among
+    its members is `cost.voicing_cost`'s, exactly as it is for a chord - so a group is a
+    claim about which strings the caller allowed rather than about tone, and it is the
+    same claim `top_strings` makes everywhere else:
+
+    1. the strings in `prefer`, in the order given, at the written pitch. A caller that
+       names one soprano string gets candidates on that string alone while it can carry
+       the note: the fallback below is a rescue for a note the named set cannot reach,
+       never a licence to widen a named set;
+    2. every other string from the highest sounding one down, at the written pitch, so a
+       low melody such as G3 still sounds on the open G string rather than being refused;
+    3. and 4. the same two an octave down, so a melody that is playable but only above
+       HIGH_FRET_LIMIT is played in a comfortable position rather than dropped. The high
+       E returns in group 4 whenever it was named, which is where a note high enough to
+       need the transposition lands once it is an octave lower.
+
+    Duplicates and out-of-range indices in `prefer` are ignored, so a caller cannot make
+    the search repeat a string or index past the fretboard.
     """
-    order: List[int] = []
     top = len(STANDARD_TUNING) - 1
-    for string_index in list(prefer) + list(range(top, -1, -1)):
-        if 0 <= string_index <= top and string_index not in order:
-            order.append(string_index)
-    return order
+    named: Tuple[int, ...] = ()
+    for string_index in prefer:
+        if 0 <= string_index <= top and string_index not in named:
+            named += (string_index,)
+    lower = _lower_soprano_strings(named)
+
+    def rest(excluded: Tuple[int, ...]) -> Tuple[int, ...]:
+        """Every string not in `excluded`, from the highest sounding one down."""
+        return tuple(s for s in range(top, -1, -1) if s not in excluded)
+
+    return [
+        (named, 0),
+        (rest(named), 0),
+        (lower, -12),
+        (rest(lower), -12),
+    ]
+
+
+def _melody_only_voicings_on(
+    melody_note: Note,
+    strings: Tuple[int, ...],
+    octave_shift: int,
+) -> List[Voicing]:
+    """
+    One single-fret Voicing per string in `strings` that can carry `melody_note`, in the
+    order given. The shift is applied to the *note*, not to the fret, so an octave-down
+    attempt asks the fretboard the same question it would ask of the written pitch.
+    """
+    shifted = Note(_note_name(melody_note.midi_note() + octave_shift))
+    candidates: List[Voicing] = []
+    for string_index in strings:
+        fret = GuitarFretboard.note_to_fret(string_index, shifted)
+        if 0 <= fret <= HIGH_FRET_LIMIT:
+            frets = [-1] * len(STANDARD_TUNING)
+            frets[string_index] = fret
+            # `grip` is set rather than left at its "drop2" default: this is a
+            # single-fret shape, and a caller reading `voicing.grip` would otherwise
+            # conclude a four-note drop-2 had been chosen. The playability invariant
+            # keys off this field.
+            candidates.append(Voicing(
+                frets=frets,
+                top_fret=fret,
+                avg_fret=float(fret),
+                grip="melody",
+            ))
+    return candidates
 
 
 def get_octave_down_candidates(
@@ -2041,32 +2099,30 @@ def get_all_drop2_voicings(
     )
 
 
-def get_melody_only_voicing(
+def get_melody_only_voicings(
     melody_note: Note,
     prefer: Tuple[int, ...] = MELODY_STRING_CHOICES,
-) -> Optional[Voicing]:
+) -> List[Voicing]:
     """
-    Returns a single-fret Voicing that plays melody_note alone, or None.
+    Every single-fret Voicing that plays melody_note alone, in preference order.
 
-    This is the voicing used for a NO_CHORD ("NC") step: a bar of melody with
-    no harmony behind it, which is voiced as written rather than harmonised or
-    reharmonised. It is deliberately NOT a drop-2 voicing and so does not obey
-    the four-contiguous-strings playability invariant - there is exactly one
-    active fret, and fret_span() is 0.
+    This is the **palette a lone note is chosen from**: an `NC` bar, a slot the texture
+    thins to a fill, a melody no shape under it could carry, and the span demotion all
+    reach these shapes. Which strings are on the table is
+    `_melody_only_string_groups`' business - the caller's strings while they can carry
+    the note, then every other string, then the octave-down retry for a note whose only
+    position is above HIGH_FRET_LIMIT - and the choice among them is
+    `cost.voicing_cost`'s, so a lone note is placed by the same window and the same
+    distance from the shape the hand is holding as a chord is.
 
-    The strings in `prefer` (high E, then B) are tried in order; when none of
-    them can reach the note - or the preferred ones are exhausted - the
-    remaining strings are tried from the high E downwards, so a low melody
-    such as G3 still sounds on the open G string.
+    These are deliberately NOT drop-2 voicings and so do not obey the
+    four-contiguous-strings playability invariant - a candidate has exactly one active
+    fret, and `fret_span()` is 0.
 
-    A melody that is playable but only above HIGH_FRET_LIMIT is retried an octave
-    down on the strings below the high E, so a high note is played in a
-    comfortable position.
-
-    A melody that is unreachable at the written pitch at all still returns None
-    rather than being respelled: None is the documented signal that a note cannot
-    sound (B5 is fret 19, C6 is fret 20 - both past the end of the board), and
-    quietly playing it an octave down would hide that from the caller.
+    A melody that is unreachable at the written pitch at all returns an empty list
+    rather than being respelled: emptiness is the documented signal that a note cannot
+    sound (B5 is fret 19, C6 is fret 20 - both past the end of the board), and quietly
+    playing it an octave down would hide that from the caller.
     """
     # Reachability at the written pitch, across every string, decides whether the
     # octave-down attempt is legitimate at all. Without this a genuinely
@@ -2075,30 +2131,29 @@ def get_melody_only_voicing(
         0 <= GuitarFretboard.note_to_fret(s, melody_note) <= 18
         for s in range(len(STANDARD_TUNING))
     ):
-        return None
+        return []
 
-    attempts: List[Tuple[Tuple[int, ...], int]] = [
-        (prefer, 0),
-        (_lower_soprano_strings(prefer), -12),
-    ]
-    for strings, octave_shift in attempts:
-        for string_index in _melody_only_string_order(strings):
-            shifted = Note(_note_name(melody_note.midi_note() + octave_shift))
-            fret = GuitarFretboard.note_to_fret(string_index, shifted)
-            if 0 <= fret <= HIGH_FRET_LIMIT:
-                frets = [-1] * len(STANDARD_TUNING)
-                frets[string_index] = fret
-                # `grip` is set rather than left at its "drop2" default: this is a
-                # single-fret shape, and a caller reading `voicing.grip` would
-                # otherwise conclude a four-note drop-2 had been chosen. The
-                # playability invariant keys off this field.
-                return Voicing(
-                    frets=frets,
-                    top_fret=fret,
-                    avg_fret=float(fret),
-                    grip="melody",
-                )
-    return None
+    for strings, octave_shift in _melody_only_string_groups(prefer):
+        candidates = _melody_only_voicings_on(melody_note, strings, octave_shift)
+        if candidates:
+            return candidates
+    return []
+
+
+def get_melody_only_voicing(
+    melody_note: Note,
+    prefer: Tuple[int, ...] = MELODY_STRING_CHOICES,
+) -> Optional[Voicing]:
+    """
+    The first candidate `get_melody_only_voicings` offers, or None when it offers none.
+
+    A caller that just wants *a* fingering for the tune alone takes the earliest string
+    in the preference order that can carry the note, which is the high E whenever it can.
+    A route that can weigh the alternatives against where the hand is asks for the list
+    and lets `cost.voicing_cost` choose.
+    """
+    candidates = get_melody_only_voicings(melody_note, prefer)
+    return candidates[0] if candidates else None
 
 
 def sustain_inner_voices(previous_voicing: Voicing | dict, melody_note: Note) -> Optional[Voicing]:

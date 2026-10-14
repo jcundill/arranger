@@ -1,6 +1,7 @@
 import contextlib
 import io
 import unittest
+from typing import Optional, Tuple
 
 from musthe import Note
 
@@ -15,6 +16,7 @@ from arranger import (
     format_progression,
 )
 from arranger.grips import _drop2_template_for
+from arranger.movement import _melody_alone_shape
 
 
 class TestMelodyOnlyVoicing(unittest.TestCase):
@@ -86,6 +88,122 @@ class TestMelodyOnlyVoicing(unittest.TestCase):
         self.assertIsNotNone(voicing)
         assert voicing is not None
         self.assertEqual(voicing.soprano_string(), 5)
+
+
+class TestMelodyOnlyPalette(unittest.TestCase):
+    """get_melody_only_voicings is the palette a lone note is placed from.
+
+    A lone note - a fill, an `NC` bar, a rescued melody, a span demotion - is chosen by
+    `cost.voicing_cost` from one position per eligible string, so the *group* of strings
+    the caller allowed is the generator's business and the position within it is the
+    selector's. The singular keeps its old meaning: the first candidate, which is the
+    high E whenever it can carry the note.
+    """
+
+    def setUp(self):
+        self.engine = VoiceLeadingEngine()
+
+    def test_one_candidate_per_eligible_string_in_preference_order(self):
+        """The default two melody strings offer F4 at frets 1 and 6, in that order."""
+        candidates = self.engine.get_melody_only_voicings(Note("F4"))
+        self.assertEqual(
+            [candidate.tab_string() for candidate in candidates],
+            ["x-x-x-x-x-1", "x-x-x-x-6-x"],
+        )
+        for candidate in candidates:
+            self.assertEqual(len(candidate.active_frets()), 1)
+            self.assertEqual(candidate.grip, "melody")
+            self.assertEqual(candidate.midi_notes(), [65])
+
+    def test_a_wider_named_set_widens_the_palette(self):
+        """Naming the G string too offers its own position - the palette is the caller's."""
+        candidates = self.engine.get_melody_only_voicings(Note("F4"), prefer=(5, 4, 3))
+        self.assertEqual(
+            [candidate.tab_string() for candidate in candidates],
+            ["x-x-x-x-x-1", "x-x-x-x-6-x", "x-x-x-10-x-x"],
+        )
+
+    def test_the_singular_is_the_first_of_the_palette(self):
+        """`get_melody_only_voicing` stays the preference-order answer it always was."""
+        for name in ("F4", "Eb4", "G3", "Bb4", "Eb5"):
+            note = Note(name)
+            first = self.engine.get_melody_only_voicing(note)
+            candidates = self.engine.get_melody_only_voicings(note)
+            self.assertIsNotNone(first, name)
+            self.assertEqual(first, candidates[0], name)
+
+    def test_a_named_set_is_never_widened_while_it_can_carry_the_note(self):
+        """`prefer=(5,)` offers the high E alone - the fallback below it is a rescue."""
+        candidates = self.engine.get_melody_only_voicings(Note("F4"), prefer=(5,))
+        self.assertEqual([c.tab_string() for c in candidates], ["x-x-x-x-x-1"])
+
+    def test_the_fallback_below_a_named_set_still_happens(self):
+        """A note the named string cannot carry is rescued below it, as before."""
+        candidates = self.engine.get_melody_only_voicings(Note("Eb4"), prefer=(5,))
+        self.assertTrue(candidates)
+        self.assertNotIn(5, [c.soprano_string() for c in candidates])
+
+    def test_unreachable_note_returns_an_empty_palette(self):
+        """D2 is below the low E open, so there is nothing to choose from."""
+        self.assertEqual(self.engine.get_melody_only_voicings(Note("D2")), [])
+
+
+class TestTheLoneNoteIsPlacedLikeAChord(unittest.TestCase):
+    """The lone note's position is the cost tuple's, not the highest string's.
+
+    `movement._melody_alone_shape` is the seam every lone-note route goes through, and it
+    scores the palette against the shape the hand is holding. Without that, F4 after a
+    chord at frets 6-8 came back on the high E at fret 1 - below the preferred window and
+    six frets away from the hand - because the generator's preference order put it there.
+    """
+
+    #: `6-x-6-7-8-x`: the shape the committed heads hold when the melody is on the B string.
+    AT_SEVEN = Voicing(frets=[6, -1, 6, 7, 8, -1], top_fret=8, avg_fret=6.75)
+    #: The same chord up the neck, so the two choices cannot be confused.
+    AT_TWELVE = Voicing(frets=[-1, -1, 12, 12, 12, 12], top_fret=12, avg_fret=12.0)
+
+    def _chosen(self, previous: Voicing) -> Tuple[Optional[Voicing], bool]:
+        return _melody_alone_shape(
+            Note("F4"), previous=previous, top_strings=(5, 4, 3)
+        )
+
+    def test_the_note_lands_where_the_hand_is(self):
+        """F4 sits on the B string at fret 6, inside the window and a fret from the hand."""
+        chosen, inside_window = self._chosen(self.AT_SEVEN)
+        self.assertIsNotNone(chosen)
+        assert chosen is not None
+        self.assertEqual(chosen.tab_string(), "x-x-x-x-6-x")
+        self.assertTrue(inside_window)
+
+    def test_the_same_note_follows_the_hand_up_the_neck(self):
+        """The choice is the hand's, so the identical note lands somewhere else at fret 12."""
+        chosen, _inside_window = self._chosen(self.AT_TWELVE)
+        self.assertIsNotNone(chosen)
+        assert chosen is not None
+        self.assertEqual(chosen.tab_string(), "x-x-x-10-x-x")
+
+    def test_a_lone_note_out_of_position_reports_an_empty_window(self):
+        """The window fact is measured over the palette, which is what the clause reads.
+
+        A named set that cannot reach inside the preferred frets is the live case: the
+        high E string's F4 is fret 1, below `NECK_FRET_MIN`, and it is the whole palette
+        because the caller named that string alone.
+        """
+        chosen, inside_window = _melody_alone_shape(
+            Note("F4"), previous=None, top_strings=(5,)
+        )
+        self.assertIsNotNone(chosen)
+        assert chosen is not None
+        self.assertEqual(chosen.tab_string(), "x-x-x-x-x-1")
+        self.assertFalse(inside_window)
+
+    def test_an_in_window_lone_note_reports_a_populated_window(self):
+        """The same note with the B string available is placed inside the frets asked for."""
+        chosen, inside_window = _melody_alone_shape(
+            Note("F4"), previous=None, top_strings=(5, 4)
+        )
+        self.assertIsNotNone(chosen)
+        self.assertTrue(inside_window)
 
 
 class TestNonChordToneDetection(unittest.TestCase):
@@ -529,7 +647,11 @@ class TestNoChordSteps(unittest.TestCase):
         self.assertFalse(step.non_chord_tone)
         self.assertIsNone(step.harmonized_as)
         self.assertIsNone(step.strategy)
-        self.assertEqual(step.tab_line(), "x-x-x-x-x-1")
+        # The note is placed by the same cost tuple a chord is: with no previous shape the
+        # rule is "start near the middle of the neck", which for F4 is the G string's
+        # fret 10 rather than the high E string's fret 1. Where the tune stands alone the
+        # window and the hand still decide it - see `TestTheLoneNoteIsPlacedLikeAChord`.
+        self.assertEqual(step.tab_line(), "x-x-x-10-x-x")
 
     def test_nc_step_grip_mirrors_the_voicing(self):
         """`step.grip` says what `voicing.grip` says, not the "drop2" default.

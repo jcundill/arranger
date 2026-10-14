@@ -40,6 +40,7 @@ import headxml
 from arranger.chords import ChordParser
 from arranger.fingers import can_fret
 from arranger.tuning import STANDARD_TUNING
+from tests.support import nearest_reach_for_note
 
 ROOT = Path(__file__).resolve().parent.parent
 DOC = ROOT / "docs" / "open-issues.md"
@@ -197,6 +198,60 @@ def _doc() -> str:
     return DOC.read_text(encoding="utf-8")
 
 
+def _walk_reaches() -> Tuple[int, Dict[str, int], List[Tuple[int, int, int]]]:
+    """Item 5's figures: the worst reach, the per-head count over 4, and the placement's part.
+
+    The reach is measured the way `test_walking_bass` states it — a `bass_only` step's thumb
+    fret against the fret range of the last shape the hand was holding. Each wide step
+    contributes `(reach, chosen proximity)`, where the proximity is how near the hand the
+    engine put the note; `tests.support.nearest_reach_for_note` is the replica that says
+    whether that was as near as the note allowed.
+    """
+    worst = 0
+    over: Dict[str, int] = {}
+    forced: List[Tuple[int, int, int]] = []
+    for path in HEADS:
+        with (
+            contextlib.redirect_stdout(io.StringIO()),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            steps, _head, _notes = headxml.arrange_xml_head(
+                path,
+                texture="targets",
+                bass="root,5th,approach,nearest",
+                grid="melody:every_note,bass:walk",
+            )
+        held: Any = None
+        count = 0
+        for step in steps:
+            if step.bass_only and held is not None and step.bass is not None:
+                held_frets, held_thumb = held
+                thumb = step.voicing.bass_string
+                if thumb is not None:
+                    thumb_fret = step.voicing.frets[thumb]
+                    fingers = [fret for fret in held_frets if fret >= 0]
+                    if fingers:
+                        low, high = min(fingers), max(fingers)
+                        reach = (
+                            low - thumb_fret if thumb_fret <= low else thumb_fret - high
+                        )
+                        worst = max(worst, reach)
+                        if reach > 4:
+                            count += 1
+                            nearest = nearest_reach_for_note(
+                                list(held_frets), held_thumb, step.bass
+                            )
+                            forced.append((
+                                reach,
+                                abs(thumb_fret - min(fingers)),
+                                -1 if nearest is None else nearest,
+                            ))
+            if not step.bass_only and not step.repeated:
+                held = (list(step.voicing.frets), step.voicing.bass_string)
+        over[Path(path).stem] = count
+    return worst, over, forced
+
+
 class TestTheStatedNumbersAreTheMeasuredOnes(unittest.TestCase):
     """Item 1's and item 2's figures, re-taken and compared with what the document says."""
 
@@ -225,15 +280,15 @@ class TestTheStatedNumbersAreTheMeasuredOnes(unittest.TestCase):
             self.assertIn(stem, _doc())
 
     def test_item_two_states_the_measured_refusal_count_and_causes(self) -> None:
-        """215 refusals on the four thumb rows, split 0 / 215 / 0 down `_place_bass`'s three."""
+        """222 refusals on the four thumb rows, split 0 / 222 / 0 down `_place_bass`'s three."""
         counted = Counter(_cause(upper, pc, held) for upper, pc, held, _c in self.refusals)
         split = {
             name: counted.get(name, 0)
             for name in ("no free string", "no octave below", "fifth fret")
         }
-        self.assertEqual(len(self.refusals), 215)
+        self.assertEqual(len(self.refusals), 222)
         self.assertEqual(
-            split, {"no free string": 0, "no octave below": 215, "fifth fret": 0}
+            split, {"no free string": 0, "no octave below": 222, "fifth fret": 0}
         )
         text = _doc()
         self.assertIn(f"refusals number **{len(self.refusals)}** today", text)
@@ -251,7 +306,7 @@ class TestTheStatedNumbersAreTheMeasuredOnes(unittest.TestCase):
             "doubling" if min(upper.midi_notes()) % 12 == pc else "absent"
             for upper, pc, _held, _c in self.refusals
         )
-        self.assertEqual(dict(doubling), {"doubling": 107, "absent": 108})
+        self.assertEqual(dict(doubling), {"doubling": 115, "absent": 107})
         self.assertIn(f"{doubling['doubling']} of the {len(self.refusals)} are a", _doc())
 
     def test_item_two_states_the_measured_walk_pitch_lever(self) -> None:
@@ -278,11 +333,51 @@ class TestTheStatedNumbersAreTheMeasuredOnes(unittest.TestCase):
                 by_any += 1
                 if any(pitch in tones for pitch in placeable):
                     by_tone += 1
-        self.assertEqual((by_any, by_tone, by_none), (136, 99, 79))
+        self.assertEqual((by_any, by_tone, by_none), (156, 117, 66))
         text = _doc()
         self.assertIn(f"reaches **{by_any} of the {len(self.refusals)}**", text)
         self.assertIn(f"only **{by_tone}** of those", text)
         self.assertIn(f"**{by_none} of the {len(self.refusals)}** cannot be", text)
+
+
+class TestItemFiveStatesTheMeasuredReach(unittest.TestCase):
+    """Item 5's figures: how far the walk lands from the hand, and whether it had a choice."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        # Once: a pass over every head for the walk row.
+        cls.worst, cls.over, cls.forced = _walk_reaches()
+
+    def test_item_five_states_the_measured_worst_and_the_heads(self) -> None:
+        """"the worst reach is 7 (`i_was_doing_all_right`)"."""
+        self.assertEqual(self.worst, 7)
+        text = _doc()
+        self.assertIn(f"the worst reach is **{self.worst}**", text)
+        holders = sorted(name for name, count in self.over.items() if count)
+        self.assertEqual(
+            holders, ["All_the_Things_You_Are", "but_not_for_me", "i_was_doing_all_right"]
+        )
+        for stem in holders:
+            self.assertIn(f"`{stem}`", text)
+
+    def test_item_five_states_how_many_steps_exceed_the_bound(self) -> None:
+        """"**4** steps exceed **4** frets", split 2 / 1 / 1 by head."""
+        total = sum(self.over.values())
+        self.assertEqual((total, self.over["i_was_doing_all_right"]), (4, 2))
+        text = _doc()
+        self.assertIn(f"and **{total}** steps exceed **4** frets", text)
+
+    def test_item_five_states_that_every_wide_reach_was_placed_as_near_as_it_could_be(self) -> None:
+        """"every one of those four is placed as near the hand as its own note allows"."""
+        self.assertEqual(len(self.forced), 4)
+        for reach, chosen, nearest in self.forced:
+            self.assertEqual(
+                nearest,
+                chosen,
+                f"a reach of {reach} sits {chosen} frets from the hand while its own note "
+                f"had a position {nearest} frets away",
+            )
+        self.assertIn("**every one of those four is placed as near the hand", _doc())
 
 
 def _generated_positions() -> Tuple[int, int, int]:

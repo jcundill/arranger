@@ -19,6 +19,7 @@ gate and the conventions — not the explanation.
 |---|---|---|
 | the drop-2 rule, a grip, `GRIP_MAX_SPAN`, `voicing_cost` | [docs/engine.md](docs/engine.md) | `arranger/grips.py`, `arranger/cost.py` |
 | how a shape is placed on its strings — a family that *searches* versus one that computes a layout, `_Placement`, `_candidate`, the placement memo (`_search_shape` / `_searched_shape` / `_place_shape`) | [docs/generated-grips.md](docs/generated-grips.md) §4 | `arranger/grips.py`, `tests/test_placement.py` |
+| where a **lone note** is fretted — a fill, an `NC` bar, a rescued melody, a span demotion (`get_melody_only_voicings`, `_melody_alone_shape`) | [docs/engine.md](docs/engine.md) | `arranger/grips.py`, `arranger/movement.py`, `tests/test_non_chord_tones.py` |
 | which chord tones a shape states — `TONE_PRIORITY`, the tone a four-voice shape gives up, the palette a melody with no degree to match is offered, or the order that was not taken | [docs/generated-grips.md](docs/generated-grips.md) | `arranger/grips.py` (`TONE_PRIORITY`, `stated_tones`, `_drop2_template_for`, `_drop2_palette`), `tests/test_generated_grips.py`, `tests/support.py` (`WITNESS`) |
 | the trailing annotation a step carries, why a shape is thin, or what **must** be explained when a choice is added (`ArrangementStep.palette`, `cost.VOICING_COST_CRITERIA`, `tests/test_explanations.py`) | [docs/engine.md](docs/engine.md) | `arranger/render.py`, `arranger/movement.py` |
 | `texture=`, target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/textures.py`, `arranger/bass.py`, `arranger/decisions.py` |
@@ -29,7 +30,7 @@ gate and the conventions — not the explanation.
 | the slot layer: triples to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
 | the MusicXML **importer's chord timeline**, or a bar the melody skips | [docs/open-issues.md](docs/open-issues.md) item 1 | `headxml.py` (`chord_at`, `chord_slots`, `_merge_chord_slots`) — the bar-level half is **built**: a melody-anchored grid adds a bar the melody never enters and nothing below it, so `every_note` is byte-identical over every note-bearing bar and a chords-only head arranges all four bars. **Generated slots** (a beat the melody skips *inside* a bar it occupies) and the fifth `melody_alone_case` kind are still owed |
 | an open bug, with its measurement | [docs/open-issues.md](docs/open-issues.md) | `tests/test_open_issues.py` re-takes every figure that document states, and runs its reproduction snippets, so a number cannot rot quietly — which it did three times before that file existed |
-| which finger frets which string, or a per-finger cost criterion; which strings the right hand's `p-i-m-a` pluck, the gaps between them, and how far the thumb reaches | [docs/fingering.md](docs/fingering.md) | `arranger/fingers.py` (not inert any more: `bass` reads `can_fret` for the four-fret budget — `tests/test_fingers.py` holds the caller set to exactly `{bass}`; no per-finger cost yet). Its §4.3 measurement landed a *right-hand* rule first (`grips.thumb_safe_grips`, read by `decisions.resolve_texture_grips`) and then a *left-hand* one (`fingers.can_fret`, read by `bass._place_bass`); its **§4.4 finger-skip half is now built**, not recorded: the four `drop24` sets that carried the skip were removed from `GRIP_STRING_SETS` (`grips.finger_skip_count` is the rule and `tests/test_grips.py` holds the tables to it), at a price counted in chords, and the three rejected forms of the same lever are in §4.4 rather than here. Its thumb's-reach half still changes no count (`tests/test_texture.py::TestTheThumbReach` pins the reach), and §4.3's follow-on (should the *selector* leave room for the thumb?) is measured and unbuilt, and its numbers are in §4.3 and [docs/open-issues.md](docs/open-issues.md) item 2 rather than here: `tests/test_open_issues.py` re-takes them from the tree, so a figure repeated in this table would be a second source for one fact. Its **fourth lever — the walk's own pitch — costs the tuple nothing** and is the cheapest of the four |
+| which finger frets which string, or a per-finger cost criterion; which strings the right hand's `p-i-m-a` pluck, the gaps between them, and how far the thumb reaches | [docs/fingering.md](docs/fingering.md) | `arranger/fingers.py` (not inert any more: `bass` reads `can_fret` for the four-fret budget — `tests/test_fingers.py` holds the caller set to exactly `{bass}`; no per-finger cost yet). Its §4.3 measurement landed a *right-hand* rule first (`grips.thumb_safe_grips`, read by `decisions.resolve_texture_grips`) and then a *left-hand* one (`fingers.can_fret`, read by `bass._place_bass`); its **§4.4 finger-skip half is now built**, not recorded: the four `drop24` sets that carried the skip were removed from `GRIP_STRING_SETS` (`grips.finger_skip_count` is the rule and `tests/test_grips.py` holds the tables to it), at a price counted in chords, and the three rejected forms of the same lever are in §4.4 rather than here. Its thumb's-reach half still changes no count (`tests/test_texture.py::TestTheThumbReach` pins the reach), and §4.3's follow-on (should the *selector* leave room for the thumb?) is measured and unbuilt, and its numbers are in §4.3 and [docs/open-issues.md](docs/open-issues.md) item 2 rather than here: `tests/test_open_issues.py` re-takes them from the tree, so a figure repeated in this table would be a second source for one fact. Its **fourth lever — the walk's own pitch — costs the tuple nothing** and is the cheapest of the four; **item 5** of that document is the same §4.3 question asked from the lone-note end, where the walk's register is what leaves the hand's reach |
 | `parts=`, which of melody / bass / chord the guitar plays | [docs/parts.md](docs/parts.md) | `arranger/textures.py` (`PART_NAMES`, `parse_parts`, `parts_have_melody`) |
 | the harmonisation axes (`parts=`, `texture=`, `bass=`, `harmony=`, `grid=`) - what replaced `voices=` and the grip-family axis | [docs/parts.md](docs/parts.md) | `arranger/textures.py`, `arranger/bass.py`, `arranger/grips.py` |
 | the retired `voices=` axis | [docs/voices-axis.md](docs/voices-axis.md) - the record of the collapse into `parts=` | `arranger/textures.py` |
@@ -52,10 +53,10 @@ frozen like the rest — it is not a home for an open plan.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1098 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **1113 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 15 of those 1104, and it is the one that fails if this
+(`tests/test_docs.py` is 15 of those 1113, and it is the one that fails if this
 document — or the CI workflow — stops describing the tree. It also fails if a document
 exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
 new file cannot be added without being registered.)
@@ -388,13 +389,15 @@ step's **fields** rather than from the wording, so it cannot be satisfied by phr
 `*_clause` helper fails a companion test until it is registered there — the enumeration is
 read off the module, so a clause cannot be added and forgotten.
 
-Three exemptions are deliberate and are named in that file rather than left implicit, because
+Two exemptions are deliberate and are named in that file rather than left implicit, because
 a rule with unnamed exceptions is a rule the next editor deletes: a **hold** does not restate
 the shape count (it was explained where the shape was chosen) though it does restate what
-corrects a column; a **melody-alone shape with no palette** gets no window clause, its fret
-being where the melody is rather than a choice; and the **slash bass** is pinned by its own
-test, because a witness that recomputed whether the bass sounds would be the clause agreeing
-with itself.
+corrects a column; and the **slash bass** is pinned by its own test, because a witness that
+recomputed whether the bass sounds would be the clause agreeing with itself. The third —
+"a melody-alone shape with no palette" — went with the reason for it: a lone note is now
+chosen from a palette of single-note shapes (one position per eligible string) by the same
+cost tuple a chord goes through, so its fret **is** a choice and the window clause has a
+measured `Palette.inside_window` to state rather than a defaulted one to guess with.
 
 What the invariant does **not** cover, and should not pretend to: a *phrase* (nothing groups
 steps) and the **fingerings** (`fingers.py` assigns them and no renderer prints them — a barre is

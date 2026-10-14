@@ -317,11 +317,13 @@ split:
   under both); only `<normal-type>` distinguishes them.
 - **A melody note with no chord position on it sounds alone.** The machinery is already
   built and already correct for this: `melody_alone_case` returns `MELODY_ALONE_TEXTURE`,
-  which routes through `get_melody_only_voicing` and leaves `melody_only=False`. It is
+  which routes through `grips.get_melody_only_voicings` and leaves `melody_only=False`. It is
   deliberately **not** the `NC` case, because the step *does* have a harmony — it is
   simply not spelled out under that note, and the flag would make the annotation read
   "(no chord - melody alone)" and claim a lie. That is AGENTS.md trap 6's shape, already
-  handled by returning a *kind* rather than a bool.
+  handled by returning a *kind* rather than a bool. Which *position* the note sounds at is
+  `cost.voicing_cost`'s, from the one-per-string palette, so the grid thins the harmony
+  without moving the hand.
 - **The grid selection is a chord placement, not a melody reduction.** It has four rows:
 
 | grid selection | a chord lands on |

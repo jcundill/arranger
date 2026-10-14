@@ -208,6 +208,15 @@ class VoiceLeadingEngine:
         )
 
     @classmethod
+    def get_melody_only_voicings(
+        cls,
+        melody_note: Note,
+        prefer: Tuple[int, ...] = MELODY_STRING_CHOICES,
+    ) -> List[Voicing]:
+        """See `grips.get_melody_only_voicings`."""
+        return _grips.get_melody_only_voicings(melody_note, prefer)
+
+    @classmethod
     def get_melody_only_voicing(
         cls,
         melody_note: Note,

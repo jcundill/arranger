@@ -6,17 +6,28 @@ fields**, never from the wording, so the check cannot be satisfied by phrasing: 
 below is a decision the engine can make, a predicate for "this step is one of those", and a
 witness the line must carry.
 
-Three decisions are deliberately exempt, and they are named here rather than left implicit,
+Two decisions are deliberately exempt, and they are named here rather than left implicit,
 because a rule with unnamed exceptions is a rule the next editor deletes:
 
 - a **hold** restates what corrects a *column* (its octave, the chord a substitution
-  stated) but not the shape count, which was explained on the step that chose the shape;
-- a **melody-alone shape with no palette** gets no neck-window clause: its fret is where the
-  melody has to be, not a shape the engine picked from alternatives;
+  stated) but not the shape count, which was explained on the step that chose the shape -
+  and the same holds for the two routes whose **own** clause already states the count, an
+  `NC` bar and a melody no shape could voice: `render._shape_clause` stays silent for them
+  rather than repeating "melody alone" twice. Their palette is still read by the window
+  clause, so retiring that exemption cost them no explanation;
 - the **written slash bass** is excluded from the table because its witness cannot be
   written as a predicate over the step alone - whether it sounds *is* the clause's own
   question, and a witness that recomputed it would be the clause agreeing with itself.
   `TestEveryChoiceIsExplained.test_the_slash_bass_clause_is_not_a_tautology` pins it directly.
+
+A third exemption - a melody-alone shape getting no neck-window clause, on the grounds that
+its fret is where the melody has to be rather than a choice - is **gone**, because its premise
+is gone: a lone note is chosen from a palette of single-note shapes (one position per eligible
+string) by the same `cost.voicing_cost` a chord goes through, so its fret *is* a shape the
+engine picked from alternatives, and the window clause has a measured `Palette.inside_window`
+to state. `TestTheLoneNoteKeepsTheWindowHonest` holds that down from both ends: the clause
+appears where the note is out of position, and the palette it reports on is the one the note
+was actually chosen from.
 
 Adding a decision to the engine means adding its witness here, in the same commit.
 """
@@ -41,6 +52,7 @@ from arranger.tuning import (
     SILENCE_OUT_OF_REACH,
     SILENCE_TUNE_SILENT,
     ArrangementStep,
+    Palette,
 )
 from headxml import arrange_xml_head
 from tests.support import make_step
@@ -212,6 +224,11 @@ WITNESSES: List[Witness] = [
             and step.palette.alternative is None
             and _thin(step)
             and not step.repeated
+            # The routes whose own clause states the count - an `NC` bar and a melody no
+            # shape could voice - keep it to themselves, the way a hold does. See
+            # `render._shape_clause`: the *window* fact they carry is still witnessed.
+            and not step.melody_only
+            and not step.chord_unvoiced
         ),
         lambda step: "palette offers" in _line(step),
     ),
@@ -276,6 +293,11 @@ WITNESSES: List[Witness] = [
             and step.palette.alternative is None
             and _thin(step)
             and not step.repeated
+            # As above: an `NC` fill-role slot states its own count ("no chord - melody
+            # alone"), and it is the no-harmony fact that explains the thinness, not the
+            # texture. The palette's window fact is still witnessed.
+            and not step.melody_only
+            and not step.chord_unvoiced
         ),
         lambda step: "a fill's" in _line(step),
     ),
@@ -395,6 +417,83 @@ class TestTheToneAFourVoiceShapeGivesUp(unittest.TestCase):
         """`harmonized_as` is the routed chord, which is what the rest of the line names."""
         step = make_step(_DROPS_THE_ROOT, chord="Czz", melody="D5", harmonized_as="Eb6")
         self.assertEqual(_omission_clause(step), "the chord tone it leaves out is Root")
+
+
+class TestTheLoneNoteKeepsTheWindowHonest(unittest.TestCase):
+    """A lone note is chosen from a palette, so its window fact is measured, not defaulted.
+
+    This is the exemption that went. A melody-alone shape used to carry no palette, which
+    meant `render._window_clause` could say nothing about it - and a step that *did* carry
+    one (a fill) recorded `inside_window` at its `False` default, so the clause read as an
+    engine judgement nobody had made. Every lone note now records the palette it was chosen
+    from, and the two halves of the fact can be asserted together: the clause appears where
+    the note is out of position, and the palette behind it has nothing inside the window.
+    """
+
+    #: The configs that thin the guitar to a lone note at all: the off-grid rows, the walk's
+    #: fills, and the melody-only selection.
+    CONFIGS: List[Dict[str, Any]] = [
+        {},
+        {"grid": "chord:freddie"},
+        {"bass": "root,5th,approach,nearest", "grid": "melody:every_note,bass:walk"},
+        {"parts": "melody"},
+    ]
+
+    def test_every_lone_shape_reports_the_palette_it_came_from(self):
+        """A lone step always has a palette - the exemption's premise is gone."""
+        checked = 0
+        for head in HEADS:
+            for config in self.CONFIGS:
+                steps, _head, _notes = arrange_xml_head(head, section=(1, 8), **config)
+                for step in steps:
+                    if step.grip != "melody":
+                        continue
+                    # A lone *upper* shape: the walk may have merged a thumb into it, which
+                    # is a second active fret and a different question (`bass_only`).
+                    if len(step.voicing.upper_midi_notes()) != 1:
+                        continue
+                    checked += 1
+                    self.assertIsNotNone(
+                        step.palette, f"{head.split('/')[-1]} {config} {step.tab_line()}"
+                    )
+                    assert step.palette is not None
+                    # The walk may have merged a thumb into this step, which is a second
+                    # active fret and a different question - hence the filter on the upper
+                    # notes rather than on `active_frets()`.
+                    self.assertEqual(len(step.voicing.upper_midi_notes()), 1)
+                    # Either the lone note's own palette, or the demotion's record of the
+                    # shape it turned away - which is a different question and says so.
+                    self.assertTrue(
+                        step.palette.available == 1
+                        or step.palette.alternative is not None
+                    )
+        self.assertGreater(checked, 50, "the sweep stopped thinning anything")
+
+    def test_the_window_clause_reports_the_lone_note_palette(self):
+        """The clause reads the palette, in both directions, on the step it is given.
+
+        F4 on the high E string is fret 1 - below `NECK_FRET_MIN` - and the same note is
+        fret 6 on the B string, inside it. Same note, same one-note palette; only what the
+        caller's strings offered differs. The third case is the contrast a chord palette
+        can make and a lone one cannot: an inside-the-window shape losing on correctness.
+        """
+        outside = make_step(
+            [-1, -1, -1, -1, -1, 1],
+            melody="F4",
+            palette=Palette(available=1, inside_window=False),
+        )
+        inside = make_step(
+            [-1, -1, -1, -1, 6, -1],
+            melody="F4",
+            palette=Palette(available=1, inside_window=True),
+        )
+        chord = make_step(
+            [-1, -1, 15, 14, -1, -1],
+            palette=Palette(available=4, inside_window=True),
+        )
+        self.assertIn("nothing in this palette sits inside the window", _line(outside))
+        self.assertNotIn("preferred frets", _line(inside))
+        self.assertIn("sound a note outside the chord", _line(chord))
 
 
 class TestNewClausesMustBeRegistered(unittest.TestCase):

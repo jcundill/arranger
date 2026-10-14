@@ -273,7 +273,7 @@ def _resolve_grid(grid: str, beats_per_bar: int) -> str:
 def _sounding_melody(voicing: Voicing, written: str) -> Tuple[str, Optional[str]]:
     """The pitch a melody-alone step *sounds*, and the written one when they differ.
 
-    `get_melody_only_voicing` retries a note an octave down when no string reaches it
+    `get_melody_only_voicings` retries a note an octave down when no string reaches it
     inside `HIGH_FRET_LIMIT` (13 - G5 is fret 15 on the high E string), so a shape
     built for the tune can sound a whole octave away from the pitch the progression
     asked for. `melody` has to be what **sounds** - the tab is the contract - and
@@ -736,6 +736,17 @@ def _last_sounding_step(
     return None
 
 
+def _previous_shape(arrangements: List[ArrangementStep]) -> Optional[Voicing]:
+    """The voicing of the last sounding step, or None - what a shape is scored against.
+
+    The same answer `_last_sounding_step` gives, in the form the selector wants, so a
+    lone note and a chord lead from one shape rather than two lookbacks that could
+    disagree about which step the hand was holding.
+    """
+    previous = _last_sounding_step(arrangements)
+    return previous.voicing if previous is not None else None
+
+
 def _rest_step(
     arrangements: List[ArrangementStep],
     slot: _Slot,
@@ -791,6 +802,51 @@ def _rest_step(
     )
 
 
+def _melody_alone_shape(
+    melody_note: Note,
+    *,
+    previous: Optional[Voicing],
+    top_strings: Tuple[int, ...],
+    named_only: bool = False,
+) -> Tuple[Optional[Voicing], bool]:
+    """The lone-note shape for `melody_note`, with whether its palette was in the window.
+
+    The tune on its own is a **palette like any other** - one position per eligible
+    string - so the choice among its members is `cost.voicing_cost`'s: element 1 (frets
+    outside the neck window) and element 4 (distance in neck position from the shape the
+    hand is holding) place a lone note where a chord would be placed, instead of wherever
+    the highest string happens to put it. That is what stops a single note jumping six
+    frets away from the chord either side of it.
+
+    `named_only` drops the candidates on strings the caller did not name, which is what
+    `_rescue_melody_alone` promises: the generator rescues a note the named set cannot
+    carry by searching below it, and that rescue does not widen the caller's soprano set
+    - however much better the position on a string it did not ask for.
+
+    Returns `(None, False)` when no candidate exists at all. The window fact is computed
+    over the **palette** rather than the chosen shape, because that is what
+    `Palette.inside_window` means: whether there was anything inside to play instead.
+    """
+    candidates = _grips.get_melody_only_voicings(melody_note, prefer=top_strings)
+    if named_only:
+        candidates = [
+            candidate for candidate in candidates
+            if candidate.soprano_string() in top_strings
+        ]
+    if not candidates:
+        return None, False
+    chosen = _cost._best_voicing(candidates, previous)
+    assert chosen is not None
+    # The same pair `render._window_clause` measures a step against, so the phrase a
+    # reader sees and the fact recorded here cannot disagree.
+    inside_window = any(
+        all(_cost.NECK_FRET_MIN <= fret <= _cost.NECK_FRET_MAX
+            for fret in candidate.active_frets())
+        for candidate in candidates
+    )
+    return chosen, inside_window
+
+
 def _texture_fill_step(
     arrangements: List[ArrangementStep],
     slot: _Slot,
@@ -799,6 +855,7 @@ def _texture_fill_step(
     note_str: Optional[str],
     melody_note: Optional[Note],
     top_strings: Tuple[int, ...],
+    previous: Optional[Voicing],
     bar: Optional[int],
     beat: Optional[float],
     duration: Optional[float],
@@ -818,8 +875,8 @@ def _texture_fill_step(
     # needs the same statement: `note_str` is only narrowed inside the
     # branch that built `melody_note`, and this route needs both.
     assert melody_note is not None and note_str is not None
-    solo_voicing = _grips.get_melody_only_voicing(
-        melody_note, prefer=top_strings
+    solo_voicing, inside_window = _melody_alone_shape(
+        melody_note, previous=previous, top_strings=top_strings
     )
     if solo_voicing is not None:
         sounding, written_original = _sounding_melody(solo_voicing, note_str)
@@ -830,8 +887,10 @@ def _texture_fill_step(
             # The tune alone *is* this slot's palette - the texture thinned the slot, or the
             # selection asked for the soprano on its own - so the count it states is the
             # palette's own limit rather than a choice between shapes. Recording it is what
-            # lets the line answer "one note, why?" instead of leaving it open.
-            palette=Palette(available=1),
+            # lets the line answer "one note, why?" instead of leaving it open, and
+            # `inside_window` says whether anything inside the preferred frets was on the
+            # table at all.
+            palette=Palette(available=1, inside_window=inside_window),
             original_melody=written_original,
             partial=False,
             bar=bar,
@@ -855,6 +914,7 @@ def _no_chord_step(
     note_str: Optional[str],
     melody_note: Optional[Note],
     top_strings: Tuple[int, ...],
+    previous: Optional[Voicing],
     bar: Optional[int],
     beat: Optional[float],
     duration: Optional[float],
@@ -871,7 +931,9 @@ def _no_chord_step(
     # As the texture branch above: this kind means the guitar sings, and
     # that guard already refused a singing slot with no note.
     assert melody_note is not None and note_str is not None
-    solo_voicing = _grips.get_melody_only_voicing(melody_note, prefer=top_strings)
+    solo_voicing, inside_window = _melody_alone_shape(
+        melody_note, previous=previous, top_strings=top_strings
+    )
     if solo_voicing is None:
         _rest_step(
             arrangements, slot,
@@ -881,7 +943,7 @@ def _no_chord_step(
             sings_here=False, silence=SILENCE_OUT_OF_REACH,
         )
         return
-    # get_melody_only_voicing may have dropped the note an octave to stay
+    # get_melody_only_voicings may have dropped the note an octave to stay
     # below HIGH_FRET_LIMIT, so the step reports the pitch that sounds and
     # keeps the written one for the renderer. See `_sounding_melody`.
     sounding, written_original = _sounding_melody(solo_voicing, note_str)
@@ -891,6 +953,10 @@ def _no_chord_step(
         voicing=solo_voicing,
         original_melody=written_original,
         melody_only=True,
+        # A bar of melody with no harmony has a palette like any other lone note - the
+        # positions the eligible strings offer - so it says what that palette held rather
+        # than leaving the window clause to guess. See `_melody_alone_shape`.
+        palette=Palette(available=1, inside_window=inside_window),
         # `step.grip` is a derived view of `voicing.grip`, so nothing is
         # passed here: the voicing says "melody" and the step cannot
         # disagree with it. The property is what keeps the two spellings
@@ -1147,6 +1213,7 @@ def _rescue_melody_alone(
     note_str: str,
     melody_note: Note,
     top_strings: Tuple[int, ...],
+    previous: Optional[Voicing],
     bar: Optional[int],
     beat: Optional[float],
     duration: Optional[float],
@@ -1171,17 +1238,18 @@ def _rescue_melody_alone(
     reach the note at all - below the library's G3 floor, or past the end of the
     board - and the caller reports the step as skipped.
     """
-    # **The string must be one the caller named.** `get_melody_only_voicing`
+    # **The string must be one the caller named.** `get_melody_only_voicings`
     # keeps searching *below* the set it is given, so a note the named set
     # cannot carry - D4 under `top_strings=(5,)`, below the high E string's
     # open pitch - comes back on the B string. That is the documented
     # behaviour of a restricted soprano set and not this rescue's to
     # override: the rescue answers a palette that cannot voice a chord, not
-    # a caller asking for a string that cannot carry the tune.
-    solo_voicing = _grips.get_melody_only_voicing(
-        melody_note, prefer=top_strings
+    # a caller asking for a string that cannot carry the tune. `named_only`
+    # is where that promise is kept.
+    solo_voicing, inside_window = _melody_alone_shape(
+        melody_note, previous=previous, top_strings=top_strings, named_only=True
     )
-    if solo_voicing is not None and solo_voicing.soprano_string() in top_strings:
+    if solo_voicing is not None:
         # The note may have been dropped an octave to stay inside
         # HIGH_FRET_LIMIT, so the step reports what sounds and keeps the
         # written pitch - the same seam every melody-alone route uses.
@@ -1192,6 +1260,10 @@ def _rescue_melody_alone(
             voicing=solo_voicing,
             original_melody=written_original,
             partial=False,
+            # The palette is the lone note's own - the positions the caller's strings
+            # offer - so the line can say whether anything inside the window was on the
+            # table. See `_melody_alone_shape`.
+            palette=Palette(available=1, inside_window=inside_window),
             # The harmony is stated nowhere in this step. A fill reaches
             # the same shape deliberately and does not carry this; see
             # `ArrangementStep.chord_unvoiced`.
@@ -1367,6 +1439,7 @@ def _demoted_to_melody_alone(
     note_str: str,
     melody_note: Note,
     top_strings: Tuple[int, ...],
+    previous: Optional[Voicing],
     best_voicing: Voicing,
     palette: Palette,
     bar: Optional[int],
@@ -1385,8 +1458,8 @@ def _demoted_to_melody_alone(
     stops. **False** when the melody alone would be the wider reach of the two,
     which leaves the chosen shape in place for the caller to play.
     """
-    solo = _grips.get_melody_only_voicing(
-        melody_note, prefer=top_strings
+    solo, inside_window = _melody_alone_shape(
+        melody_note, previous=previous, top_strings=top_strings
     )
     if solo is not None and solo.fret_span() < best_voicing.fret_span():
         arrangements.append(ArrangementStep(
@@ -1396,12 +1469,14 @@ def _demoted_to_melody_alone(
             partial=False,
             # The shape the demotion turned away, and the criterion it did it for: the
             # span is the whole reason, which is what
-            # `decisions.should_demote_to_melody_alone` asks about.
+            # `decisions.should_demote_to_melody_alone` asks about. `inside_window` is the
+            # **lone** note's palette rather than the one the turned-away shape came from:
+            # the window clause describes the shape that is actually sounding.
             palette=Palette(
                 available=palette.available,
                 alternative=best_voicing,
                 decided_by=_cost.SPAN_CRITERION,
-                inside_window=palette.inside_window,
+                inside_window=inside_window,
             ),
             bar=bar,
             beat=beat,
@@ -1473,7 +1548,8 @@ def _harmonised_step(
         if _rescue_melody_alone(
             arrangements, slot,
             name=name, note_str=note_str, melody_note=melody_note,
-            top_strings=top_strings, bar=bar, beat=beat, duration=duration,
+            top_strings=top_strings, previous=_previous_shape(arrangements),
+            bar=bar, beat=beat, duration=duration,
             role=role, weight=weight,
         ):
             return
@@ -1509,9 +1585,9 @@ def _harmonised_step(
                 sings_here=False,
                 silence=(
                     SILENCE_OUT_OF_REACH
-                    if _grips.get_melody_only_voicing(
+                    if not _grips.get_melody_only_voicings(
                         melody_note, prefer=top_strings
-                    ) is None
+                    )
                     else SILENCE_NO_SHAPE
                 ),
             )
@@ -1719,7 +1795,8 @@ def _harmonised_step(
         elif _demoted_to_melody_alone(
             arrangements, slot,
             name=name, note_str=note_str, melody_note=melody_note,
-            top_strings=top_strings, best_voicing=best_voicing,
+            top_strings=top_strings, previous=prev_voicing,
+            best_voicing=best_voicing,
             palette=palette,
             bar=bar, beat=beat, duration=duration,
             role=role, weight=weight,
@@ -2294,6 +2371,7 @@ def arrange_progression(
                 arrangements, slot,
                 name=plan.name, note_str=plan.note_str,
                 melody_note=plan.melody_note, top_strings=top_strings,
+                previous=_previous_shape(arrangements),
                 bar=plan.bar, beat=plan.beat, duration=plan.duration,
                 role=plan.role, weight=plan.weight,
             ):
@@ -2304,6 +2382,7 @@ def arrange_progression(
                 arrangements, slot,
                 name=plan.name, note_str=plan.note_str,
                 melody_note=plan.melody_note, top_strings=top_strings,
+                previous=_previous_shape(arrangements),
                 bar=plan.bar, beat=plan.beat, duration=plan.duration,
                 role=plan.role, weight=plan.weight,
             )

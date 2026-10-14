@@ -35,10 +35,11 @@ reason the span cap does not already catch.
 **Next step: step 3 of §5, and nothing measured so far argues for it.** Step 2's *§4.3*
 half found a real defect and fixed it (the five-finger check; see §4.3 and §5 step 2), and its
 follow-on — whether the *selector* should have left room for the thumb — came back small: **161**
-refusals over the committed heads and the four thumb rows today, **53** where it was first measured
+refusals over the committed heads and the four thumb rows **when §4.3 measured them**, **53** where
+it was first measured
 and **39** at `246ff69`, of which the harmless recovery is now **none** rather than ten, always at
 the span bucket (`docs/open-issues.md` item 2, whose figures `tests/test_open_issues.py` re-takes
-rather than quotes). Its **fourth lever — the walk's own pitch —** is the one that does *not* pay
+rather than quotes — they have moved since, and that document is where the current ones live). Its **fourth lever — the walk's own pitch —** is the one that does *not* pay
 the bucket: **93 of the 161** refusals are recoverable by stating a different pitch and **64** of
 those by a chord tone, spread over seven chords in six heads; **68** cannot be helped by any pitch.
 Recorded, not built. Its
@@ -455,8 +456,9 @@ After: **0**. The two counting decisions below are the rest of the record.
 small — and its numbers have been re-measured once already.** The question behind it was whether the **selector** should have left room for the thumb in the
 first place — the palette narrowing above, but at *candidate* level, where `_place_bass` runs only
 after `_best_voicing` has chosen. Measured over the same heads and rows, `_place_bass` returned
-None **53** times on the tree the question was asked on, **39** at `246ff69` and **161** today —
-playing the repeats and one more fixture moved it, neither aimed at this. The dominant cause is
+None **53** times on the tree the question was asked on, **39** at `246ff69` and **161** when this was
+measured — playing the repeats and one more fixture moved it, neither aimed at this, and
+`docs/open-issues.md` item 2 holds the figure since. The dominant cause is
 unchanged and is the third one the clause names — **160 of the 161** are "no octave of the walk's
 pitch below the shape" (the chord's own bottom note is already that low), **1** is the five-frets
 case, and **0** are "no free string". A replica of the function's own three filters is what names
@@ -472,7 +474,10 @@ chords across six heads, not the one figure this used to say), and **68**
 cannot be helped by any pitch at all. It needs no pipeline change — the walk does not have to see the
 shapes — which is the opposite of what the question implied. So nothing was built, a third time for
 the same reason. [docs/open-issues.md](open-issues.md) item 2 has the counts, the attribution, the
-step-3 ceiling table, the aliasing trap this instrumentation hit, and the four alternatives.
+step-3 ceiling table, the aliasing trap this instrumentation hit, and the four alternatives — and
+**item 5** is the same question asked from the other end: a lone note the hand holds can leave the
+walk's own register out of its reach, which is the *selector's* room to leave again and is measured
+there rather than built.
 
 **One of those counting decisions moves the number by a factor of ten**, and both are about
 which hand the check is stated over:
@@ -753,7 +758,9 @@ and §4.4), which is why step 1 had to exist before any of the measurements coul
      **0**, and no pinned tab in the suite moved.
    - **The follow-on — would the *selector* leaving room for the thumb pay? — came back small, and
      its numbers have been re-measured since.** `_place_bass` returns None **53** times on the tree
-     the question was asked on, **39** at `246ff69` and **161** today. The dominant cause is a third
+     the question was asked on, **39** at `246ff69` and **161** when this was measured — and
+     `docs/open-issues.md` item 2, which `tests/test_open_issues.py` re-takes, is where the current
+     figure lives. The dominant cause is a third
      one (no octave of the walk's pitch below the shape, because the chord's own bottom note is
      already that low), not the fret budget — **160 of the 161** now, and a replica of the
      function's own filters is what names it, because the step records the wanted pitch and not the

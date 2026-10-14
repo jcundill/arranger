@@ -281,13 +281,20 @@ def _shape_clause(step: ArrangementStep) -> str:
     from one that was chosen over a complete chord. `step.palette` is that answer: the
     most voices the palette offered, and the fuller shape it did not take.
 
-    Read only where the route *chose* the shape - `palette` is None on a comping shape, a
-    fill and a rescued melody - and never on a hold, which is annotated by what is
-    *struck* while the shape itself is still ringing from the step before. Four voices is
-    every string the right hand has, so a complete shape gets the count and nothing else.
+    Read only where the route *chose* the shape - `palette` is None on a comping shape,
+    whose voicing follows the caller's selection rather than a palette of its own - and
+    never on a hold, which is annotated by what is *struck* while the shape itself is
+    still ringing from the step before. Four voices is every string the right hand has,
+    so a complete shape gets the count and nothing else.
+
+    The routes that state the count in their **own** clause keep the count to themselves:
+    an `NC` bar reads "(no chord - melody alone)" and a melody no shape could voice reads
+    "(melody alone - no voicing for this chord)", so restating it here would say the same
+    word twice. That is the hold's rule on a second route, and it is about the *count*
+    only - the palette a lone note came from is still what `_window_clause` reads.
     """
     palette = step.palette
-    if palette is None or step.repeated:
+    if palette is None or step.repeated or step.melody_only or step.chord_unvoiced:
         return ""
     voices = len(step.voicing.upper_midi_notes())
     count = "melody alone" if voices == 1 else f"{voices} voices"
@@ -416,17 +423,18 @@ def _window_clause(step: ArrangementStep) -> str:
     directions: window penalties (element 1) are consulted before voice count (2) but
     after correctness (0), so a wholly in-window shape can only lose to an out-of-position
     one by sounding a note outside the chord.
+
+    A **lone note** carries a palette of its own - one position per eligible string - and
+    therefore ever gets only the second answer: every candidate sounds the same pitch
+    class, so element 0 ties and element 1 decides, which means a palette with anything
+    inside the window cannot have produced a shape outside it. "Nothing in this palette
+    sat inside" is thus a fact about the palette rather than an excuse for the shape.
     """
     frets = step.voicing.active_frets()
     if not frets or all(NECK_FRET_MIN <= fret <= NECK_FRET_MAX for fret in frets):
         return ""
-    palette = step.palette
-    if palette is None and len(step.voicing.upper_midi_notes()) < 2:
-        # The tune alone with no palette consulted - an NC step, or a melody nothing could
-        # voice. There was no shape to choose, so the melody's own fret is the melody's
-        # business and not a decision to explain.
-        return ""
     where = f"reaches outside the preferred frets {NECK_FRET_MIN}-{NECK_FRET_MAX}"
+    palette = step.palette
     if palette is None:
         # A comping shape: the window is the caller's selection's business, and there is no
         # palette to report on.

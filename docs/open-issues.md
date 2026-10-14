@@ -2,17 +2,24 @@
 
 Each item states the **issue**, the **problem it produces**, and **why it exists**, with the
 measurement behind it. A fixed issue is **removed** from this file rather than kept as history —
-its record lives in the commit that fixed it and in the document it belongs to. Three are open,
-one of them partly fixed:
+its record lives in the commit that fixed it and in the document it belongs to. Five are open,
+the first of them partly fixed — and each figure is stated **once**, in its own item: a summary
+here would be a second source for it, which is how the numbers in this paragraph rotted before
+`tests/test_open_issues.py` re-took them.
 
 1. **A chord in force is stored per melody note, so a bar the melody skips is silent** — the
    **bar-level** half is fixed and only generated slots are owed, at the level below the bar.
 2. **A refused thumb note is usually not the shape being unplayable** — measured, decision left
    open: the selector's lever recovers nothing harmlessly any more, and the walk's own pitch,
-   which costs the tuple nothing, reaches 93 of the 161 refusals but only 64 of them by a chord
-   tone.
+   which costs the tuple nothing, reaches most of the refusals but only a fraction of them by a
+   chord tone.
 3. **`harmony=full` is accepted on the comping route and answered with a different family** — the
    one axis value refused by nothing that resolves to something other than itself.
+4. **A `bass:` grid row is accepted and changes nothing** — the walk's beats come from the bass
+   part, so the row is inert rather than wrong.
+5. **A lone note the hand holds can leave the walk below the shape's reach** — the reach is as
+   near as the walk's own note allows, so it is the register and not the placement; measured,
+   with the selector-side lever left unbuilt.
 
 Reproduce the measurements with the commands in [Reproducing](#reproducing).
 
@@ -103,35 +110,36 @@ phrases it on the tab line, so the omission is reported on the part rather than 
 
 **The problem.** Over the eight committed heads × the four rows that place a thumb note under a
 texture that has one (`targets`/`uniform` × `root`/`root,5th,approach,nearest`; 2,624
-`_place_bass` calls) refusals number **215** today. `targets` and `uniform` are the two textures
+`_place_bass` calls) refusals number **222** today. `targets` and `uniform` are the two textures
 that carry a thumb line; the walk itself is the bass part's grid row rather than a texture, which
 is why the rows are two textures × two rule sets rather than the old `targets`/`walking_bass` pair.
 The chain's earlier points were taken over that old pair, so they are not comparable with today's
 figure: **53** at `d9403e5` (seven heads, 1,500 calls), **39** at `246ff69`, **131** at `5f4a5e1`
 (the eighth fixture arrives), and **161** from `574d666` on — playing the repeats (`6cdcbaa`)
-lengthened the heads, which is where most of that jump came from. Attributed by cause:
+lengthened the heads, which is where most of that jump came from — and **222** once the lone-note
+placement landed (below), which moved every shape a lone note sits under. Attributed by cause:
 
 | cause | refusals |
 |---|---|
 | no free string | **0** |
-| **no octave of the walk's pitch below the shape** | **215** |
+| **no octave of the walk's pitch below the shape** | **222** |
 | five frets for four fingers | **0** |
 
 The middle row is the common case, and it is the one the clause names — but note it is a
 *replica* of `_place_bass`'s three filters that names it, not the engine, because the field
-carries the wanted pitch and not the reason it could not be placed. 107 of the 215 are a
+carries the wanted pitch and not the reason it could not be placed. 115 of the 222 are a
 *doubling*: the walk's pitch class is the shape's own bottom class an octave up, so the thumb
-would restate what the chord already sounds. The other 108 are a pitch the shape has no octave of
+would restate what the chord already sounds. The other 107 are a pitch the shape has no octave of
 beneath it.
 
 **Why the levers do not pay.** All three filters are right, and dropping the note is deliberate
 policy — a step is never dropped because the thumb could not reach it.
 
 - **the walk's own pitch** is the fourth lever and costs the tuple nothing — it re-states the
-  bass under the shape already chosen — but reaches **136 of the 215**, and only **99** of those
-  by a chord tone (`Cm7` 26, `Dm7` 20, `Eb7` 14, `Db9` 14, `Am7` 6, `Abmaj7` 5, `D7` 4, `Eb6` 4,
-  `Gm7` 4, `G7` 1, `C7` 1 — eleven chords across seven heads, not the one chord and one bar this
-  used to say). **79 of the 215** cannot be helped by any pitch at all.
+  bass under the shape already chosen — but reaches **156 of the 222**, and only **117** of those
+  by a chord tone (`Cm7` 28, `Eb7` 22, `Dm7` 20, `Db9` 14, `Abmaj7` 9, `Am7` 6, `D7` 4,
+  `Eb6` 4, `Gm7` 4, `Ebmaj7` 4, `Cmaj7` 2 — eleven chords, not the one chord and one bar this
+  used to say). **66 of the 222** cannot be helped by any pitch at all.
 - **the shape-level retries** (re-select over hosting shapes, identical notes or any) are the
   other lever, and their numbers — 0 of 34 for the identical-notes retry, 10 of 53 on the tree
   it was first asked on, 48 of 53 for the bare one — are **not re-measured here**: the script
@@ -204,6 +212,56 @@ the row, which changes the walked-beat union that item 2's figures are taken ove
 measured cost rather than an oversight, so the row is documented as inert
 ([README.md](../README.md)) and pinned here instead:
 `tests/test_open_issues.py::TestTheInertBassGridRow` re-takes the equality from the tree.
+
+---
+
+## 5. A lone note the hand holds can leave the walk below the shape's reach
+
+**Status: diagnosed, not fixed — the lever is [docs/fingering.md](fingering.md) §4.3's question**,
+and it is the same question item 2 leaves open, seen from the other side.
+
+**The issue.** `_place_bass` ranks the thumb's candidates by proximity to the hand but never
+*bounds* the reach: a pitch with no position inside the hand's span is still played, because "a
+step is never dropped because the thumb could not reach it". A `bass_only` step can therefore
+sound a bass note several frets away from the shape the fingers are holding, with no nearer option
+to take.
+
+**The problem.** Measured over the eight committed heads × the walk row (`texture=targets`,
+`bass=root,5th,approach,nearest`, `grid=melody:every_note,bass:walk`): the worst reach is **7**
+(`i_was_doing_all_right`) and **4** steps exceed **4** frets — 2 in `i_was_doing_all_right`, 1 in
+`All_the_Things_You_Are`, 1 in `but_not_for_me` — and **every one of those four is placed as near the hand as its own note allows**, which is what
+`tests/test_walking_bass.py::TestTheThumbReachesTheHandHoldingTheShape.test_the_thumb_stays_within_reach_of_the_fingers`
+now asserts instead of excusing. The wide reach is therefore the **walk's register**: the note the
+line decided to play has no position nearer the held shape, and the placement took the nearest one
+there is (`tests.support.nearest_reach_for_note` is the replica that says so, and the engine's own
+choice must equal it). The note itself is chosen by the walk's own ordering — proximity first, then
+continuity with the previous bass note, then the lower pitch (`bass._place_bass` spells the three
+out) — so a register the hand can reach is not something the placement can fix.
+
+The same sweep over `c5dde40` — before the lone-note placement landed, so with the tune's single
+notes wherever the highest string put them — had a worst of **3** and none over 4. The reach did
+not get worse on its own account: it got **visible** when a lone note started sitting where the
+hand already is, because the walk's "below the shape" filter then leaves only a low octave. The
+case is `but_not_for_me` bar 30: the tune holds frets 11-13 and the walk wants an A2 whose only
+free string is the low E at fret 5, six frets below. The trade is stated in the same commit's
+measurement: hand travel over the same row falls **3070 → 1728** frets.
+
+**Why the levers do not pay** — the first is the *selector's* business and the second the
+*walk's*, and neither is built:
+
+- **leaving room for the thumb** is item 2's lever: re-select the upper shape so the bass can
+  reach it. It changes what the step states for the walk's benefit, which is why it needed
+  measuring rather than adopting (item 2's counts).
+- **the walk's register** — playing the same pitch class an octave up, where the hand is — is the
+  one lever that needs nothing from the selector, but it fights the line's own continuity: the
+  third key of `_place_bass`'s ordering only breaks a proximity tie, precisely so a walking bass
+  does not leap octaves for no reason. Measured on the four cases above, every one of them is a
+  register the hand would have to travel to.
+- **refusing the note** would bound the reach at the cost of the note — the 4 steps above — and
+  unlike the three existing filters it is not a playability *fact*: a bass note five frets below a
+  held shape is playable, and it is the hand's span that suffers. Refusing it would legislate a
+  stretch the library deliberately declines to define, which is the sentence that used to be the
+  whole of this test's docstring.
 
 ---
 

@@ -472,7 +472,7 @@ Chord name still printed above each step as context; nothing under it voiced. `N
 
 **What happens to a note with no chord on it depends who sings** — the one place axis needs two answers:
 
-- **guitar singing** — note of tune still sounds, alone. No note dropped: chord-melody under `--grid chord:joe_pass` plays melody throughout, places chords only on ands.
+- **guitar singing** — note of tune still sounds, alone. No note dropped: chord-melody under `--grid chord:joe_pass` plays melody throughout, places chords only on ands. The lone note is placed by the same position-aware selector a chord is, from the positions its strings offer, so it lands where the hand already is rather than at the high E string's nearest fret.
 - **guitar comping** (`--parts chord`) — guitar **silent** that beat: melody belongs to horn, nothing for guitar to add. Step still emitted, so part keeps position and lines up against tune; draws as empty column.
 
 **Grid places chords, not thumb.** The thumb line's own beats come from the bass part and the bass style, so thumb sounds on beats where guitar strikes no chord at all — `bass_only` steps above are exactly that. The grid *does* change the shape thumb is placed against: a different chord above can move note or refuse it — measured on `but_not_for_me` with `--texture targets --bass-style root,5th,approach,nearest`, `chord:freddie` walks three more beats than the default row, all downbeats melody skips.
