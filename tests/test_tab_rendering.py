@@ -1,3 +1,4 @@
+import glob
 import io
 import os
 import re
@@ -9,6 +10,7 @@ from typing import List
 
 import arranger
 from arranger import (
+    NO_CHORD,
     ArrangementStep,
     VoiceLeadingEngine,
     _step_annotation,
@@ -26,11 +28,39 @@ from tests.support import make_voicing
 # from a `split()` that the padded cells make ambiguous.
 _DEGREE_FIELD = slice(13, 17)
 _TAB_FIELD = slice(18, 35)
+# The four fields end at 35, one space follows, and the step's explanation begins. A step
+# whose explanation does not fit the line continues below it, indented to this column -
+# so a continuation line is one that has nothing but spaces in the fields above.
+_ANNOTATION_FIELD = slice(36, None)
+
+#: The committed heads, which between them carry every quality, metre and texture the
+#: suite sweeps. `tests/data` is the only corpus there is.
+HEADS: List[str] = sorted(
+    glob.glob("tests/data/*.mxl") + glob.glob("tests/data/*.musicxml")
+)
 
 
 def _tab_cells(line: str) -> List[str]:
     """The six tab cells of a `format_progression` line, trimmed of their padding."""
     return [cell.strip() for cell in line[_TAB_FIELD].split("-")]
+
+
+def _blocks(rendered: str) -> List[List[str]]:
+    """A `format_progression` rendering as one list of lines per step.
+
+    A step starts on the line its chord column is written on; the continuation lines
+    carry the explanation alone and so begin with spaces. That is the whole difference
+    the wrapping makes, and grouping this way is what lets a test index *steps* rather
+    than lines - which is what every test here did before a step could be more than one
+    line.
+    """
+    blocks: List[List[str]] = []
+    for line in rendered.split("\n") if rendered else []:
+        if line.startswith(" ") and blocks:
+            blocks[-1].append(line)
+        else:
+            blocks.append([line])
+    return blocks
 
 
 class TestVoicingTabBlock(unittest.TestCase):
@@ -130,15 +160,44 @@ class TestFormatProgression(unittest.TestCase):
             [("C5", "maj7", "Cmaj7"), ("D5", "maj7", "Cmaj7"), ("C5", "maj7", "Cmaj7")]
         )
 
-    def test_one_line_per_step_by_default(self):
-        """Default rendering gives one line per step, carrying chord, melody and tab."""
-        rendered = format_progression(self.major)
+    def test_a_short_explanation_is_one_line_per_step(self):
+        """A step whose explanation fits the width is one line, as it always was.
+
+        The renderer is no longer "one line per step" for *every* step - a long
+        explanation continues below its step - but nothing about the short case changed:
+        the four columns are on the one line, with the annotation trailing them.
+        """
+        steps = self.engine.arrange_progression([("F4", NO_CHORD, NO_CHORD)])
+        lines = format_progression(steps).split("\n")
+        self.assertEqual(len(lines), 1)
+        self.assertIn("F4", lines[0])
+        self.assertIn("(no chord - melody alone)", lines[0])
+
+    def test_a_long_explanation_continues_below_its_step(self):
+        """The explanation wraps rather than running off the page, one step still a block.
+
+        Each continuation line carries the explanation alone: the four columns are on the
+        step's first line, so the table is still read down the page.
+        """
+        blocks = _blocks(format_progression(self.major))
+        self.assertEqual(len(blocks), len(self.major))
+        self.assertGreater(
+            sum(len(block) for block in blocks), len(self.major), "nothing wrapped"
+        )
+        for block in blocks:
+            self.assertRegex(block[0][_TAB_FIELD].strip(), r"^[x0-9]+(-[x0-9]+){5}$")
+            for continuation in block[1:]:
+                self.assertEqual(continuation[:_ANNOTATION_FIELD.start], " " * 36)
+                self.assertTrue(continuation[_ANNOTATION_FIELD.start:].strip())
+
+    def test_width_none_is_one_line_per_step(self):
+        """The escape hatch: the caller who wants a line per step still gets one."""
+        rendered = format_progression(self.major, width=None)
         lines = rendered.split("\n")
         self.assertEqual(len(lines), len(self.major))
-        self.assertIn("Dm7", lines[0])
-        self.assertIn("D5", lines[0])
-        self.assertIn("x-x-10-10-10-10", lines[0])
-        self.assertIn("x-x-9-9-8-8", lines[2])
+        for line, step in zip(lines, self.major):
+            self.assertIn(_step_annotation(step).strip(), line)
+            self.assertIn(step.chord, line)
 
     def test_vertical_is_no_longer_an_argument(self):
         """`format_progression` no longer takes `vertical`, and says so by raising.
@@ -1657,14 +1716,14 @@ class TestRepeatedMelody(unittest.TestCase):
             )
             for index, chord in enumerate(chords[1:])
         ]
-        lines = format_progression(steps).split("\n")
+        blocks = _blocks(format_progression(steps))
         # The two chord changes are sounded in full, so the renderers show the shape.
-        for line, chord in zip(lines[:2], chords[1:3]):
-            self.assertNotIn("melody repeated", line, chord)
+        for block, chord in zip(blocks[:2], chords[1:3]):
+            self.assertNotIn("melody repeated", block[0], chord)
         # Only the last is a hold: the Eb7 repeating under the Eb7.
-        self.assertIn("melody repeated", lines[-1])
+        self.assertIn("melody repeated", blocks[-1][0])
         # The shape has collapsed to the soprano, so the strings it does not strike are x.
-        self.assertEqual(_tab_cells(lines[-1]), ["x", "x", "x", "x", "1", "x"])
+        self.assertEqual(_tab_cells(blocks[-1][0]), ["x", "x", "x", "x", "1", "x"])
 
     def test_voicing_is_unchanged_so_the_shape_is_still_available(self):
         """The flag is presentational: the step keeps its full drop-2 voicing."""
@@ -1672,13 +1731,13 @@ class TestRepeatedMelody(unittest.TestCase):
 
     def test_one_line_tab_plays_a_single_note(self):
         """Only the melody string carries a fret; every other string is muted."""
-        line = format_progression(self.steps).split("\n")[1]
-        self.assertEqual(_tab_cells(line), ["x", "x", "x", "x", "1", "x"])
+        block = _blocks(format_progression(self.steps))[1]
+        self.assertEqual(_tab_cells(block[0]), ["x", "x", "x", "x", "1", "x"])
 
     def test_annotation_says_the_note_repeats(self):
         """The chord label alone would imply a full shape, so the line is annotated."""
         self.assertIn(
-            "melody repeated", format_progression(self.steps).split("\n")[1]
+            "melody repeated", _blocks(format_progression(self.steps))[1][0]
         )
 
     def test_staff_shows_the_soprano_only(self):
@@ -1966,6 +2025,98 @@ class TestStaffBarlineAlignment(unittest.TestCase):
                 self.assertEqual(row, positions[2])
 
 
+class TestTheExplanationWraps(unittest.TestCase):
+    """A long explanation is the same text over more lines, and it stays in its column.
+
+    Three invariants make a continuation line safe to read: **nothing is lost** (the layout
+    inserts a newline in place of a space and changes nothing else), **no line runs past the
+    width** except for a single word wider than the room it has, and the four columns are on
+    the step's own line rather than repeated above the prose. Swept over the committed heads,
+    because a break falls differently for every clause the sweep meets - a walk's bass
+    phrase, a comping grid, a substitution, a thin fill.
+    """
+
+    #: Where the explanation begins, and so where a continuation line is indented to.
+    COLUMN = 36
+
+    #: The renderer's own default, named here so a change to it fails this class.
+    WIDTH = 100
+
+    def rendered_steps(self):
+        """(head, step) for the committed heads under four clause-bearing configs."""
+        from headxml import arrange_xml_head
+
+        for head in HEADS:
+            for config in (
+                {},
+                {"parts": "bass,chord"},
+                {"grid": "chord:freddie"},
+                {"texture": "targets"},
+            ):
+                steps, _head, _notes = arrange_xml_head(head, section=(1, 4), **config)
+                for step in steps:
+                    yield head, step
+
+    def test_the_wrapped_lines_are_the_annotation_and_nothing_else(self):
+        """Every word of the annotation is printed once, in order - and no other word is."""
+        from arranger.render import _format_step
+
+        checked = 0
+        for head, step in self.rendered_steps():
+            annotation = _step_annotation(step).strip()
+            lines = _format_step(step, self.WIDTH)
+            if not annotation:
+                self.assertEqual(len(lines), 1, f"{head} {step.chord}")
+                continue
+            checked += 1
+            self.assertEqual(
+                " ".join(line[self.COLUMN:] for line in lines).split(),
+                annotation.split(),
+                f"{head} {step.chord} {step.tab_line()}",
+            )
+        self.assertGreater(checked, 300, "the sweep stopped rendering anything")
+
+    def test_no_line_runs_past_the_width_unless_a_word_does(self):
+        """The width is a preference: a clause is wrapped, a word is never cut in half."""
+        from arranger.render import _format_step
+
+        for head, step in self.rendered_steps():
+            for line in _format_step(step, self.WIDTH):
+                if len(line) <= self.WIDTH:
+                    continue
+                room = self.WIDTH - self.COLUMN
+                self.assertTrue(
+                    any(len(word) > room for word in line[self.COLUMN:].split()),
+                    f"{head} {step.chord}: {len(line)} columns in {line!r}",
+                )
+
+    def test_the_columns_are_on_the_step_line_and_nowhere_else(self):
+        """A continuation line carries the explanation alone, so its fields are blank."""
+        from arranger.render import _format_step
+
+        for head, step in self.rendered_steps():
+            for line in _format_step(step, self.WIDTH)[1:]:
+                self.assertEqual(
+                    line[: self.COLUMN],
+                    " " * self.COLUMN,
+                    f"{head} {step.chord} {step.tab_line()}",
+                )
+
+    def test_the_number_of_steps_that_wrap(self):
+        """A count, because a step that stops wrapping is silent.
+
+        Measured over this sweep: **193** of the steps it renders carry an explanation too
+        long for the width, so each of them continues below the step. A clause that stopped
+        being printed, or a width that stopped being honoured, would move this number.
+        """
+        from arranger.render import _format_step
+
+        wrapped = sum(
+            len(_format_step(step, self.WIDTH)) > 1 for _head, step in self.rendered_steps()
+        )
+        self.assertEqual(wrapped, 193, "the number of steps that wrap moved")
+
+
 class TestOneLineColumns(unittest.TestCase):
     """The compact line's four columns: chord, melody, degree, tab - then annotation.
 
@@ -1984,13 +2135,14 @@ class TestOneLineColumns(unittest.TestCase):
 
         The cells stay hyphen-joined and ragged - `x-11-x` is wider than `x-x-x` - so
         it is the *field* that is fixed: the tab begins at column 18 on every line,
-        whatever width the shape itself is.
+        whatever width the shape itself is. The step's **first** line is the one checked,
+        since a continuation line carries the explanation alone.
         """
         rendered = self.build(
             [("D4", "7", "D7"), ("Eb4", "7", "D7"), ("D4", "7", "D7")]
         )
-        for line in rendered.splitlines():
-            self.assertRegex(line[_TAB_FIELD].strip(), r"^[x0-9]+(-[x0-9]+){5}$")
+        for block in _blocks(rendered):
+            self.assertRegex(block[0][_TAB_FIELD].strip(), r"^[x0-9]+(-[x0-9]+){5}$")
 
     def test_every_annotation_starts_in_the_same_column(self):
         """The explanation trails a padded field, so it begins in one column.
@@ -2000,7 +2152,7 @@ class TestOneLineColumns(unittest.TestCase):
         """
         from arranger.render import _format_step
 
-        lines = [
+        blocks = [
             _format_step(
                 ArrangementStep(
                     chord="Dm7", melody="A4", original_melody="A5",
@@ -2009,30 +2161,30 @@ class TestOneLineColumns(unittest.TestCase):
             )
             for frets in ([-1, -1, -1, 9, 10, 8], [-1, -1, 11, 9, 11, 11])
         ]
-        for line in lines:
-            self.assertIn("transposed down an octave from A5", line)
-        self.assertEqual(len({line.index("(") for line in lines}), 1, lines)
+        for block in blocks:
+            self.assertIn("transposed down an octave from A5", block[0])
+        self.assertEqual(len({block[0].index("(") for block in blocks}), 1, blocks)
 
     def test_the_degree_column_names_the_melody_note(self):
         rendered = self.build([("G4", "maj7", "Ebmaj7"), ("D4", "maj7", "Ebmaj7")])
-        lines = rendered.splitlines()
-        self.assertEqual(lines[0][_DEGREE_FIELD].strip(), "3")
-        self.assertEqual(lines[1][_DEGREE_FIELD].strip(), "7")
+        blocks = _blocks(rendered)
+        self.assertEqual(blocks[0][0][_DEGREE_FIELD].strip(), "3")
+        self.assertEqual(blocks[1][0][_DEGREE_FIELD].strip(), "7")
 
     def test_a_tension_is_named_in_the_degree_column(self):
         """`Eb` over `D7` is the b9 the reharmonisation below it names."""
         rendered = self.build([("Eb4", "7", "D7")])
-        self.assertEqual(rendered.splitlines()[0][_DEGREE_FIELD].strip(), "b9")
+        self.assertEqual(_blocks(rendered)[0][0][_DEGREE_FIELD].strip(), "b9")
 
     def test_the_annotation_trails_the_tab(self):
         """The explanation is appended after the shape, not between the melody and it."""
-        line = self.build([("Eb4", "7", "D7")]).splitlines()[0]
-        self.assertLess(_TAB_FIELD.stop, line.index("("))
+        block = _blocks(self.build([("Eb4", "7", "D7")]))[0]
+        self.assertLess(_TAB_FIELD.stop, block[0].index("("))
 
     def test_a_slot_with_no_melody_leaves_the_degree_column_blank(self):
         """A comping slot at a position the tune is silent at has nothing to name."""
         step = ArrangementStep(
             chord="Gmaj9", melody=None, voicing=make_voicing([-1, -1, -1, -1, 7, 7])
         )
-        line = format_progression([step])
-        self.assertEqual(line[_DEGREE_FIELD], "    ")
+        block = _blocks(format_progression([step]))[0]
+        self.assertEqual(block[0][_DEGREE_FIELD], "    ")

@@ -109,11 +109,15 @@ you whether a change is an improvement or a different library.
   selection. See
   [Repeated melodies hold the shape](#repeated-melodies-hold-the-shape).
 - `format_progression(steps)` — module-level renderer for a whole
-  arrangement: one line per step, in four fixed columns — chord, melody, the melody's
+  arrangement: one **block** per step, whose first line is four fixed columns — chord,
+  melody, the melody's
   **degree above that chord** (`chords.melody_degree_name`, blank when there is no melody
   or no readable chord), and the tab — so every shape starts in the same column. Any
   annotation is **appended after the tab** rather than printed inline, which is what keeps
-  the tab column fixed however long the text is. Every step is annotated through the
+  the tab column fixed however long the text is; an explanation too long for the width
+  (100 columns, or whatever `width=` asks for) continues on the lines below the step,
+  indented to the column the explanation starts in, and `width=None` gives one line per
+  step at any length. Every step is annotated through the
   shared `_step_annotation()` helper, which `_print_step()` also uses so the two
   renderings cannot drift: a chord tone names the degree it is (`(harmony under b7)`), a
   non-chord tone names its substitution, and a partial shape names what it leaves out.
@@ -160,7 +164,7 @@ you whether a change is an improvement or a different library.
   then the natural 5th (`TONE_PRIORITY`, [generated-grips.md](generated-grips.md)) — and four
   strings that count as a complete shape read as a complete chord. So the line says which tone
   went (`the chord tone it leaves out is Root`), named through the same
-  `chords.melody_degree_name` vocabulary `_comping_clause` names the degrees it *states* with,
+  `chords.melody_degree_name` vocabulary `_comping_clause` names the voices it *states* with,
   against the chord the part **states** (`harmonized_as` where a substitute was found) and the
   pitches of the **whole** step, so a thumb that lands on the root counts as stating it. Only
   the four-voice shape is asked about: fewer voices is a different decision, already answered

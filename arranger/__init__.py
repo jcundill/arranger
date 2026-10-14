@@ -365,10 +365,11 @@ def main() -> None:
 
     # Example 8: Tab rendering. format_progression() returns the tab as a string
     # and prints nothing itself, so callers choose what to do with it. It is the
-    # compact form - one line per chord. (It also rendered a six-line block per
+    # compact form - one block per chord, whose explanation wraps onto the lines
+    # below when it is too long for one. (It also rendered a six-line block per
     # chord behind `vertical=True`, reachable from the CLI as --vertical; both
     # were removed, because the staff below is what a player actually reads.)
-    print("\n--- TAB RENDERING: format_progression(), one line per chord ---")
+    print("\n--- TAB RENDERING: format_progression(), one block per chord ---")
     print(format_progression(result_major))
 
     # Example 8: The whole progression on one six-line staff. format_tab_staff()

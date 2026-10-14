@@ -620,7 +620,8 @@ def format_tab_staff(
     """
     Renders a whole progression as a standard six-line guitar staff.
 
-    format_progression() gives one line, or one six-line block, *per chord*. This
+    format_progression() gives one block *per chord*, its explanation wrapped onto the
+    lines below the step when it is too long for one. This
     instead lays every step along a single staff in reading order - high E on top
     down to low E - which is how printed tab is read, with a barline closing every
     measure.

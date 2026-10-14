@@ -13,15 +13,17 @@ reintroduces a bug that was found the hard way.
 `format_tab_staff`, `format_tab_html` and `write_tab_html` are the renderers that
 lay an arrangement along **one staff in reading order**, and they live outside the
 `arranger` package so the engine can be read without them. `format_progression`
-(one line *per chord*) stays in `arranger/render.py`, and the vertical
+(one block *per chord*) stays in `arranger/render.py`, and the vertical
 `tab_block()` in `arranger/tuning.py`: they are a different shape of output, and
 `Voicing.tab_block()` is called from the dataclass itself.
 
 `format_progression` also rendered a six-line block per chord, behind a `vertical`
 argument that `--vertical` existed only to reach. Both were removed: a staff with
 the chords on their real beats is what a player reads, and this module renders one.
-`format_progression` is now the compact one-line summary and nothing else, and the
-vertical form survives only as `Voicing.tab_block()` for a single voicing.
+`format_progression` now prints the four columns on the step's own line and lays the
+**explanation** out over as many lines as it needs, each indented to the column the
+explanation starts in (`render._PROGRESSION_WIDTH`, and `width=None` for one line per
+step). The vertical form survives only as `Voicing.tab_block()` for a single voicing.
 
 **They are split together, never separately**, because the two renderings share
 `_staff_columns` — which places each step on an absolute beat and decides what is a

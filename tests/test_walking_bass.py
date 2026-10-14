@@ -1448,7 +1448,10 @@ class TestTheRefusal(unittest.TestCase):
         for step, name, arrangements in cases:
             refused = self._refusal(step, name, arrangements)
             self.assertEqual(refused, name, step.tab_line())
-            line = format_progression([step])
+            # `width=None` asks for the one-line form, which is what this asserts on: the
+            # clause is longer than a line of the wrapped layout, and the question here is
+            # what it *says*, not how it is laid out (`test_tab_rendering` holds that).
+            line = format_progression([step], width=None)
             self.assertIn(f"bass {name}", line)
             self.assertIn("no free string below the melody", line)
             self.assertIn("no octave of that pitch below the shape", line)

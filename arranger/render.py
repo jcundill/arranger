@@ -1,10 +1,15 @@
-"""Per-step rendering: one compact line per chord.
+"""Per-step rendering: one compact block per chord.
 
 `format_progression` is the compact renderer, and it is **pure** - it returns a
 string and prints nothing, so the caller stays in control of the output. The
 whole-progression staff renderers are a different shape of output and live in
 `tabstaff`; a six-line vertical block for a *single* voicing is
 `Voicing.tab_block()`, which is not the same surface.
+
+A step is four fixed columns and, after them, its explanation. A short explanation
+stays on the step's own line, and a long one is laid out over as many lines as it
+needs, indented to the column the explanation starts in, so the columns stay a table
+and the prose stays readable.
 
 `_step_annotation` is shared by `format_progression` and the demonstration, so the
 two renderings cannot drift apart. A step can be several things at once - a
@@ -48,6 +53,19 @@ from .tuning import (
 )
 
 __all__ = ["_MUTED_CELL", "_STAFF_CELL_WIDTH", "format_progression"]
+
+
+#: The width `format_progression` lays a step's explanation out to. A line breaks only
+#: when its annotation would otherwise run past this, so a short explanation is printed
+#: on the step's own line exactly as it always was. It is a **preference and never a
+#: truncation**: a clause wider than the room it has is wrapped at its own spaces, and a
+#: single word wider than that overflows rather than being cut.
+_PROGRESSION_WIDTH = 100
+
+#: The narrowest column the wrapped explanation may be laid out in, for a caller who asks
+#: for a width the four fixed columns already fill. Below this the text wraps word by word,
+#: which is not a layout anybody wants to read.
+_MIN_ANNOTATION_ROOM = 20
 
 
 # How a duo's **second voice** is named in a printed annotation, keyed by the interval it
@@ -768,8 +786,97 @@ def _melody_degree_label(step: ArrangementStep) -> str:
     return melody_degree_name(Note(step.melody), step.chord)
 
 
-def _format_step(step: ArrangementStep) -> str:
-    """One compact line: chord, melody, degree column, tab, then any annotation.
+def _annotation_units(body: str) -> List[Tuple[str, str]]:
+    """An annotation's clauses as (joiner, text) pairs, in the order they print.
+
+    The joiner is what precedes each clause - the empty string for the first, ` - ` for
+    the next clause of the same parenthetical, and ` (` for the **bass** parenthetical,
+    which `_bass_annotation` appends after the first one closes. Reading the boundaries
+    out of the finished text rather than rebuilding the clause list is deliberate: the
+    precedence between the routes is `_step_annotation`'s, and a second copy of it here
+    would be a second answer to one question.
+    """
+    units: List[Tuple[str, str]] = []
+    joiner = ""
+    for piece in body.split(" - "):
+        head, marker, tail = piece.partition(") (")
+        if marker:
+            units.append((joiner, f"{head})"))
+            units.append((" (", tail))
+        else:
+            units.append((joiner, piece))
+        joiner = " - "
+    return units
+
+
+def _word_chunks(text: str, room: int) -> List[str]:
+    """`text` split at its own spaces into chunks that fit `room` columns.
+
+    A chunk is a run of whole words, and joining the chunks with a space gives `text`
+    back. A single word wider than `room` is a chunk of its own and overflows, because
+    cutting a word would put a syllable on one line and the rest on the next.
+    """
+    chunks: List[str] = []
+    current = ""
+    for word in text.split(" "):
+        if not current:
+            current = word
+        elif len(current) + 1 + len(word) <= room:
+            current = f"{current} {word}"
+        else:
+            chunks.append(current)
+            current = word
+    if current:
+        chunks.append(current)
+    return chunks
+
+
+def _annotation_lines(body: str, room: int) -> List[str]:
+    """One annotation laid out over as many lines of at most `room` columns.
+
+    The **clause boundaries are the break points**, so a line ends where a clause does
+    rather than mid-phrase - which is what stops a line ending on the last word of a
+    list (`… Ab 3, D` / `b7)`). A clause too wide for a line of its own is wrapped at its
+    own spaces, and a single word wider than `room` overflows rather than being cut.
+
+    Every character is printed, in order: a break stands in for the space it removes, so
+    a line may end on a ` - ` and the next begin with the `(` of the bass parenthetical.
+    """
+    lines: List[str] = []
+    current = ""
+    for joiner, text in _annotation_units(body):
+        chunks = _word_chunks(text, room)
+        if current and len(current) + len(joiner) + len(text) > room:
+            # A break stands in for a space, never for a character: the ` - ` separator
+            # ends the line it was on, and the ` (` that opens the bass parenthetical
+            # starts the next one, the `)` that closed the first having ended the line
+            # before it.
+            if joiner == " (":
+                lines.append(current)
+                current = "(" + chunks[0]
+            elif len(current) + 2 <= room:
+                lines.append(f"{current} -")
+                current = chunks[0]
+            else:
+                # The line already reaches the margin, so the `-` opens the next line
+                # instead of ending this one: the same three characters, one newline
+                # later, and no line past the width.
+                lines.append(current)
+                current = f"- {chunks[0]}"
+        else:
+            current += joiner + chunks[0]
+        for chunk in chunks[1:]:
+            lines.append(current)
+            current = chunk
+    if current:
+        lines.append(current)
+    return lines
+
+
+def _format_step(
+    step: ArrangementStep, width: Optional[int] = _PROGRESSION_WIDTH
+) -> List[str]:
+    """One compact block: chord, melody, degree column, tab, then the annotation.
 
     The first three columns are fixed width, and the annotation - whose text length
     varies - is **appended after the tab** rather than printed between the melody and
@@ -780,35 +887,48 @@ def _format_step(step: ArrangementStep) -> str:
     Each tab is **hyphen-joined and ragged** - `x-11-x` is wider than `x-x-x` - so a
     shape's own width varies. The field holding it is padded to the widest a six-cell
     tab can be, which is what starts every annotation in the same column.
+
+    A step whose annotation fits `width` is **one line**, so a short explanation reads
+    exactly as it always has. A longer one continues on the lines below, each indented
+    to the column the explanation starts in - the four fields and the space between the
+    tab field and the prose - so the columns stay a table. `width=None` asks for one line
+    per step however long it runs.
     """
     cells = _step_cells(step)
     tab = "-".join(cells)
     # Two characters per cell - a fret reaches 18 - plus one hyphen between each pair.
-    width = len(cells) * _STAFF_CELL_WIDTH + len(cells) - 1
+    field = len(cells) * _STAFF_CELL_WIDTH + len(cells) - 1
     line = (
         f"{step.chord:<8} {(step.melody or ''):<3} "
-        f"{_melody_degree_label(step):<4} {tab:<{width}}"
+        f"{_melody_degree_label(step):<4} {tab:<{field}}"
     )
-    annotation = _step_annotation(step)
+    annotation = _step_annotation(step).strip()
     if not annotation:
         # No explanation, so no column to hold open: drop the field's padding rather
         # than leave a run of trailing spaces.
-        return line.rstrip()
-    return f"{line} {annotation}"
+        return [line.rstrip()]
+    indent = " " * (len(line) + 1)
+    if width is None:
+        return [f"{line} {annotation}"]
+    room = max(width - len(indent), _MIN_ANNOTATION_ROOM)
+    laid_out = _annotation_lines(annotation, room)
+    return [f"{line} {laid_out[0]}"] + [indent + part for part in laid_out[1:]]
 
 
-def format_progression(steps: List[ArrangementStep]) -> str:
+def format_progression(
+    steps: List[ArrangementStep], width: Optional[int] = _PROGRESSION_WIDTH
+) -> str:
     """
     Renders an arranged progression as tab and returns it as a string.
 
     This is a pure renderer: it prints nothing and writes nothing to stdout, so
-    the caller stays in control of the output. Each step is one line in four fixed
+    the caller stays in control of the output. Each step is one **block** in four fixed
     columns - chord, melody, the melody's degree above the chord, and the tab - so
     every shape starts in the same column:
 
-        Dm7      D5  Root x-x-10-10-10-10    (harmony under Root - 4 voices)
-        G7       B4  3    13-x-12-12-12-x    (harmony under 3 - 4 voices)
-        Cmaj7    C5  Root x-x-9-9-8-8        (harmony under Root - 4 voices)
+        Dm7      D5  Root x-x-10-10-10-10    (harmony under Root - 4 voices - sounding: C b7, F b3, A 5, D Root)
+        G7       B4  3    13-x-12-12-12-x    (harmony under 3 - 4 voices - sounding: F b7, D 5, G Root, B 3)
+        Cmaj7    C5  Root x-x-9-9-8-8        (harmony under Root - 4 voices - sounding: B 7, E 3, G 5, C Root)
 
     Each tab is hyphen-joined and ragged, so shapes differ in width; the **field** is
     padded to the widest a six-cell tab can be, which starts every **annotation**
@@ -822,23 +942,40 @@ def format_progression(steps: List[ArrangementStep]) -> str:
     The **annotation** (`_step_annotation`) is appended after the tab rather than
     inline, which is what keeps the tab column fixed: an inline annotation is as wide
     as its own text, so an annotated step's tab would start further right than an
-    unannotated one's.
+    unannotated one's. An explanation longer than `width` continues on the lines below
+    its step, each indented to the column the explanation starts in, so the four
+    columns stay a table to read down and the prose stays on lines of a readable length:
+
+        Ebmaj7   B4  b13  x-10-x-8-11-7     (non-chord tone -
+                                            the extension strategy found no voicing; the written chord
+                                            stands - 4 voices - sounding: G 3, Eb Root, Bb 5, B b13 -
+                                            the chord tone it leaves out is 7)
+
+    The width is a **preference and never a truncation** - nothing is dropped, and a
+    single word wider than the room it has overflows rather than being cut. `width=None`
+    asks for one line per step however long it runs, which is what the renderer returned
+    before the continuation lines existed.
 
     The six-line vertical form is not this renderer's: a whole-progression staff is what
     a player reads, and `format_tab_staff` in `tabstaff` renders one, with the chords on
-    their real beats. **This renderer is the compact one-line summary and nothing else**,
-    which is the shape the demo and `make demo` print.
+    their real beats. **This renderer is the compact summary and nothing else**, which is
+    the shape the demo and `make demo` print.
 
     A single voicing still renders vertically through `Voicing.tab_block()` / `.tab()` and
     `ArrangementStep.tab_block()`, which is where `_tab_block_from_cells` lives.
 
     Args:
         steps: arrangement steps, typically from VoiceLeadingEngine.arrange_progression.
+        width: the line width the explanations are laid out to, or None for one line per
+            step. A step whose annotation fits is one line either way.
 
     Returns:
-        The rendered tab, with steps separated by newlines.
+        The rendered tab, with steps separated by newlines and a long explanation
+        continued on the lines below its step.
     """
-    return "\n".join(_format_step(step) for step in steps)
+    return "\n".join(
+        line for step in steps for line in _format_step(step, width)
+    )
 
 
 def _print_step(step: ArrangementStep) -> None:
