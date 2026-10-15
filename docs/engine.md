@@ -433,9 +433,39 @@ what stops the grip families and the octave-down rescue from having to know abou
 other, and it is asserted in `tests/test_grips.py`.
 
 The searched families' one search is answered from a memo that builds a fresh shape per call,
-so generation stays pure in the observable sense: it changes the time and nothing else. What
-the memo is keyed on, why its answer is snapshotted, and what it was measured to save are in
-[generated-grips.md §4](generated-grips.md#4-what-step-2-landed-and-what-is-still-owed).
+so generation stays pure in the observable sense: it changes the time and nothing else.
+`_search_shape` enumerates, `_searched_shape` (an `lru_cache`) remembers one request's
+answer, and `_place_shape` - the name the generators call - rebuilds a fresh `Voicing` from
+the snapshot. Three things make it safe rather than merely fast, and
+`tests/test_placement.py` holds each to a witness:
+
+- **The key is the whole request.** `_Placement` is a frozen dataclass of strings, tuples,
+  ints and frozensets, so equal requests share an entry and different ones cannot, and
+  nothing needs invalidating. The tables it reads besides the request (`GRIP_MAX_SPAN`,
+  `STANDARD_TUNING`, `supported_string_sets()`) are fixed when the module is imported, so
+  **reassigning one at runtime is the single thing that would leave a stale answer behind.**
+- **A caller cannot write through it.** The fret vector is stored as a tuple and a fresh
+  `Voicing` is built per call, because `movement._attach_bass` writes the walked thumb *into*
+  the chosen shape. A memo handing out the stored object would let one step's thumb line
+  rewrite the shape the next step is handed - silently, and only in the tab.
+- **It is read.** A hit and a miss are counted, so a memo nothing reaches cannot pass by
+  leaving the other checks green.
+
+The **comping palette is the same memo for the same reason**
+(`_search_comping_voicings`, `_comping_palette`, and `get_comping_voicings` rebuilding fresh
+`Voicing`s), because `decisions.select_step_voicing` hands one of the palette's own objects
+back and `_attach_bass` writes the thumb into it. It buys time only: the search is still
+exhaustive over the span window, so `_frets_in_span`'s cost is the floor for a request
+nobody has asked before.
+
+**Three levers the placement has made possible, all measured and none taken.** Each would
+let the search find a shape no grip family names, and each was priced on its own: **admit
+crossings** (47 of 794 melody-bearing steps would win, and the shape would need a name),
+**offer 6-5-4-3** to a G-string melody (104 of 967 steps would gain two to four shapes, so
+that exclusion is load-bearing rather than academic), and **one shape per set for a
+non-chord melody** (268 of 1,103 steps take the whole-palette route today - the largest
+lever and the least understood). [generated-grips.md](generated-grips.md) §4 holds the
+measurements; none of the three changes `voicing_cost`.
 
 **A shape sounding a foreign note is refused before any preference is consulted.**
 `allowed_tones` is the caller's tone set, and criterion 0 of the cost tuple counts the
@@ -1236,6 +1266,27 @@ The fourth string is **capacity, not a part**. `melody + bass + chord <= 4`
 fit is refused before anything is generated, and `grips.thumb_safe_grips` and
 `supported_string_sets()` are where the engine enforces it.
 
+**The right hand is `p-i-m-a`, and it assigns *strings*, not voices.** Take the strings a
+step plucks, sorted low to high, and hand them out in that order - thumb, index, middle,
+ring - **provided the lowest of them lies on the low four strings (E A D G)**: a shape whose
+bottom note sits on the B or the high E has **no thumb in it at all**, and the lowest pluck
+is the index (`grips.THUMB_REACH_STRINGS` is that reach). The consequence worth stating is
+that the thumb takes the bottom string whether or not a bass *part* is sounding - the merged
+bass note is written into the fret vector only *after* selection, so no right-hand reading
+ever sees it - which is why **the bass part is not the thumb**, and a shape with no bass
+line still has its bottom note taken by the thumb.
+
+Two gaps are not equal. A gap between the **thumb and the index** is free while the thumb is
+the bottom digit: it strokes across a muted string, which is what the bass-skipping string
+sets are built on. A gap crossed by the **middle or ring** finger is a real reach.
+`grips.finger_skip_count` is that metric, and the string tables are held to it by test
+rather than by the selector - the four `drop24` sets that carried a skip were removed.
+
+The left hand's budget is **four frets**, and unlike the four-string rule it is stated over a
+*step*: `fingers.can_fret` is the check and `bass._place_bass` is its only engine caller, so
+a bass note that would need a fifth fret is refused there rather than inside a shape.
+`AGENTS.md`'s playability invariants hold both.
+
 | axis | owns | values |
 |---|---|---|
 | `parts=` | which of melody / bass / chord the guitar takes | any subset of `melody`, `bass`, `chord`; `auto` *(default)* is all three |
@@ -1260,6 +1311,41 @@ out is refused**, naming the part that would work. Two axes are inert rather tha
 `harmony=` is read only by the comping route, and `texture=` says nothing on a melody-only
 selection, whose shapes are single frets.
 
+### `harmony=`: which degrees the chord part states
+
+`texture=` says **how many** notes the chord part states; `harmony=` says **which**. The
+order is `TONE_PRIORITY`'s row for the quality, read at the chord part's own degrees, so the
+arity `texture=` takes is a **prefix** of that row and a reduced shape gives up its **tail**.
+For `Cmaj7` (`3rd, 7th, root, 5th`): at three voices the 5th goes, at two the shape is the
+guide pair, and at one it is the 3rd alone.
+
+Two facts sit beside the row, and both are already in the tables rather than new here:
+
+- a tone the **melody** states is not a candidate for dropping — the tune is one of the
+  chord's voices — so the melody's presence can change *which other* tone is given up
+  (`stated_tones` excludes the melody's own degree);
+- an **altered 5th** — `Bbm7b5`'s `b5`, a `#11`, a `b13` — is kept over the root, so a
+  reduced shape gives the **root** up before it.
+
+`HARMONY_STYLES` is `auto`, `full`, `guide` and `shell_root`, and `HARMONY_AUTO` is the one
+sentinel on any axis that **decides** rather than naming its own default: it resolves to the
+**full order** when the melody is the guitar's and to the **guide pair** when it is not,
+because the two shipped defaults are different shapes and one value cannot be both.
+`shell_root` is the guide pair **plus a register note**, so it is one degree order rather
+than a conjunction of two tables welded together inside `_shell_voicing`.
+
+The refusals are derived from the rows rather than listed: `HARMONY_LENGTH` names the two
+families with a fixed arity — `guide` (2) and `shell_root` (3) — so a selection without room
+for that many notes is refused from the row's own length, naming the part that would work.
+`full` is absent from that table because its length is the chord's own tone set, and its
+consequence is [open-issues.md](open-issues.md) item 3: on the comping route `full` is
+accepted and answered with a different family.
+
+**The axis is read only by the comping route.** A grip is a claim about a chord's 3rd and
+7th and takes its arity from `texture=`, so `harmony=` cannot reach an arrangement the
+guitar sings; a policy named for a part the selection leaves out is refused before anything
+is generated.
+
 ### `get_comping_voicings`: a chord with no melody on top
 
 The generator behind a `parts="chord"` selection. **It is the same exhaustive search with
@@ -1278,7 +1364,14 @@ melody-free one cannot drift apart on what counts as a shell.
 **It takes no melody argument, and that is the invariant rather than an accident.** Asking
 it for `D5` and for `G3` under the same chord returns the **identical candidate set** — a
 generator that read the melody could not do that. `tests/test_comping.py` asserts exactly
-this, over eight melody notes and three chords.
+this, over eight melody notes and three chords. What the tune *does* decide on this route is
+whether the slot is **reharmonised**, and that needs three states rather than two:
+`headxml.melody_state` returns **onset** (the tune articulates here — reharmonise: the
+anticipation a comping player makes), **held** (a note already sounding — no: it was decided
+at its onset) and **silent** (nothing sounding — the chord symbol stands). In the measurement
+that produced the rule, **274 of 1,146** grid positions carry a held note rather than an
+articulation — a quarter, so the middle state is not an edge case; `melody_at` keeps its
+two-way answer for callers that only need "is a note sounding".
 
 **The arity is the length of the selection, and it is honoured.** `notes` says how many
 voices the guitar was asked for, and a two-voice request is **two notes**. The first
@@ -1292,6 +1385,13 @@ two strings looks free and is not: it yields pairs the library has never measure
 they had been designed for the job. A two-note shape is a `duo`, the family this library
 has always offered for exactly that, so two voices take the `duo` sets and three take the
 `shell` sets unchanged.
+
+**On a position the guitar does not sing, the soprano's string is free.**
+`textures.comping_arity` drops the melody part from the arithmetic for that one slot,
+because nothing is sounding on the string the tune would use — on a walked beat the note is
+held rather than re-struck, and on a comping slot it belongs to the horn. It is a fact about
+the *position*, not a rewrite of the selection: `parts_have_melody` still says whether the
+guitar sings at all.
 
 **One voice is a weaker claim, and the rule says so rather than refusing.** Two notes can
 sound both guide tones, which is what states the chord; one note cannot, so a single note
@@ -1397,7 +1497,9 @@ position* rather than a beat number — `final_and` is 2.5 in 2/2, 3.5 in 3/4 an
 4/4 from one row. `eighths` is an **integer count of eighths**, not a float, because a
 notated position is a float in practice (a 3/4 bar's second beat is 1.666...) and
 comparing floats for equality is a comparison that will eventually be false for the wrong
-reason — the same argument as `_BEAT_EPSILON`.
+reason — the same argument as `_BEAT_EPSILON`. The subdivision is
+`textures.TICKS_PER_BEAT = 24` — a beat in whole twenty-fourths, integer on purpose — so a
+position is a tick number and never a rounding of one.
 
 | pattern | positions | kind |
 |---|---|---|
