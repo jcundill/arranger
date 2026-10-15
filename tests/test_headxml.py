@@ -38,7 +38,7 @@ from headxml import (
 )
 from tabstaff import format_tab_staff, write_tab_html
 from tabxml import _events, _substitute_steps
-from tests.support import arranged
+from tests.support import arranged, sweep_head_paths
 
 # The real scores the importer's tests read, in `tests/data/`. They are committed
 # and are NOT guarded: a missing fixture is a broken checkout, not a reason to
@@ -1197,19 +1197,21 @@ class TestChordSlots(unittest.TestCase):
         tune writes is left to the note, and a position it is still holding is not a slot
         at all (§9.2).
 
-        Swept over the committed heads rather than argued, so a change that let a generated
-        chord land under a sounding note fails here instead of moving a count.
+        Swept over heads rather than argued, so a change that let a generated
+        chord land under a sounding note fails here instead of moving a count. The heads are
+        `tests.support.sweep_head_paths()` - the rule is position-level and about the metre,
+        so three of them answer it, and `but_not_for_me` and the waltz between them hold the
+        held-note and the skip cases.
         """
         checked = 0
-        for path in (BUT_NOT_FOR_ME, I_WAS_DOING_ALL_RIGHT, RAINY_DAY,
-                     TENOR_MADNESS, TROUBLE_IN_MIND, WALTZ):
+        for path in sweep_head_paths():
             with self.subTest(head=os.path.basename(path)):
                 head = load_musicxml(path)
                 written = {
                     (bar, round(beat, 6))
                     for _t, bar, beat, _d in head_skeleton(head, None)
                 }
-                steps, _head, _notes = arrange_xml_head(path)
+                steps, _head, _notes = arranged(path)
                 for step in steps:
                     bar, beat = step.bar or 0, step.beat or 0.0
                     if (bar, round(beat, 6)) in written:

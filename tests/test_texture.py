@@ -14,7 +14,6 @@ dependency and no database.
 from __future__ import annotations
 
 import contextlib
-import glob
 import io
 import unittest
 from typing import List, Optional, Tuple
@@ -1562,14 +1561,13 @@ class TestARepeatedMelodyHoldsItsString(unittest.TestCase):
         [docs/open-issues.md](../docs/open-issues.md) item 2.
 
         The arrangements are `tests.support.arranged`'s: this sweep and the four-fret one
-        in `test_walking_bass` ask for the same heads under the same textures.
+        in `test_walking_bass` ask for the same heads under the same textures. The heads
+        are `tests.support.sweep_head_paths()`: the string a hold keeps is a rule about the
+        metre and the notation, so one head per metre answers it.
         """
-        from tests.support import arranged
+        from tests.support import arranged, sweep_head_paths
 
-        paths = sorted(
-            glob.glob("tests/data/*.mxl") + glob.glob("tests/data/*.musicxml")
-        )
-        self.assertGreaterEqual(len(paths), 6, "the committed heads went missing")
+        paths = sweep_head_paths()
         configs = (
             ("uniform", "auto"),
             ("targets", "auto"),

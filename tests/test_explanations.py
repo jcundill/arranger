@@ -412,7 +412,13 @@ WITNESSES: List[Witness] = [
 
 
 class TestEveryChoiceIsExplained(unittest.TestCase):
-    """The invariant, swept over the committed heads rather than argued."""
+    """The invariant, swept over the committed heads rather than argued.
+
+    Every committed head, and not `tests.support.sweep_head_paths()`: the subject here is the
+    behaviour space the witness table claims to cover, and that was measured - over the three
+    sweep heads, seven of the table's eighteen labels are never triggered, so a narrower
+    sweep would retire witnesses rather than save time.
+    """
 
     def test_every_decision_has_a_witness_in_its_line(self):
         """No step may make a decision its own annotation does not account for.

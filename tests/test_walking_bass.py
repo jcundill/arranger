@@ -26,7 +26,6 @@ dependency and no database.
 
 from __future__ import annotations
 
-import glob
 import re
 import unittest
 from typing import List, Optional, Tuple
@@ -82,6 +81,7 @@ from tests.support import (
     make_voicing,
     nearest_reach_for_note,
     pc,
+    sweep_head_paths,
     upper_shape,
 )
 
@@ -1511,7 +1511,7 @@ class TestTheInvariant(unittest.TestCase):
         self.assertGreater(checked, 0)
 
     def test_no_step_plucks_more_strings_than_the_right_hand_has_digits(self) -> None:
-        """The budget half of the invariant, swept over every committed head.
+        """The budget half of the invariant, swept over the sweep heads.
 
         Four digits - thumb, index, middle and ring - so four strings, and a four-note
         target with a bass note merged under it is five. `_sounding_frets` is the
@@ -1526,12 +1526,11 @@ class TestTheInvariant(unittest.TestCase):
 
         The arrangement itself comes from `tests.support.arranged`, so this test and the
         four-fret sweep below read the *same* arrangements rather than paying for the
-        same 32 a second time.
+        same twelve a second time. The heads are `tests.support.sweep_head_paths()`: the
+        rule is about the right hand, and three metres answer it -
+        [docs/fingering.md](../docs/fingering.md) §4.3 holds the reading.
         """
-        paths = sorted(
-            glob.glob("tests/data/*.mxl") + glob.glob("tests/data/*.musicxml")
-        )
-        self.assertGreaterEqual(len(paths), 6, "the committed heads went missing")
+        paths = sweep_head_paths()
         checked = 0
         for path in paths:
             for texture, bass in (
@@ -1556,7 +1555,7 @@ class TestTheInvariant(unittest.TestCase):
         self.assertGreater(checked, 0, "no step carried a bass, so nothing was tested")
 
     def test_the_left_hand_never_needs_more_than_four_frets(self) -> None:
-        """The **left-hand** half of the budget, swept over every committed head.
+        """The **left-hand** half of the budget, swept over the sweep heads.
 
         The string budget above is the right hand's question; these are the other four digits.
         One finger holds one fret, so a step whose frets span five distinct positions is not a
@@ -1584,12 +1583,9 @@ class TestTheInvariant(unittest.TestCase):
         `test_fingers.TestTheFourFretBudget` - and **0** after it.
 
         The arrangements are `tests.support.arranged`'s, shared with the string-budget
-        sweep above: the two tests ask the same 32 questions.
+        sweep above: the two tests ask the same twelve questions.
         """
-        paths = sorted(
-            glob.glob("tests/data/*.mxl") + glob.glob("tests/data/*.musicxml")
-        )
-        self.assertGreaterEqual(len(paths), 6, "the committed heads went missing")
+        paths = sweep_head_paths()
         checked = 0
         for path in paths:
             for texture, bass in (

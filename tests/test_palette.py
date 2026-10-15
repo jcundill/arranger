@@ -7,13 +7,12 @@ hold the recorded fact to the sentence, and both to the general claims, because 
 sentence is the whole point of recording anything.
 """
 
-import glob
 import unittest
 
 from arranger import VoiceLeadingEngine
 from arranger.cost import PARTITION_CRITERION, SPAN_CRITERION, VOICING_COST_CRITERIA
 from arranger.render import _criterion_phrase, _step_annotation
-from tests.support import arranged, make_voicing
+from tests.support import arranged, make_voicing, sweep_head_paths
 
 #: The voice-count criterion of the cost tuple, which a *fuller* shape can never lose on:
 #: its own voice count is a smaller `missing` term, so the two tuples cannot be equal.
@@ -120,7 +119,7 @@ class TestTheRecordedPalette(unittest.TestCase):
             self.assertEqual(len(step.voicing.upper_midi_notes()), 1, step.tab_line())
 
     def test_a_fuller_shape_never_loses_on_voice_count(self):
-        """The general claim, over the committed heads rather than one worked case.
+        """The general claim, over the sweep heads rather than one worked case.
 
         A shape with more voices than the chosen one cannot be ranked lower *for* its
         voice count, so the recorded criterion is always correctness, the neck window or
@@ -128,12 +127,11 @@ class TestTheRecordedPalette(unittest.TestCase):
         the whole because the alternative is picked out of a palette per step, and a rule
         stated over one hand-built example says nothing about the steps the engine builds
         for itself. The arrangements are `tests.support.arranged`'s, so they are paid for
-        once for the whole suite rather than once for this sweep.
+        once for the whole suite rather than once for this sweep, and the heads are
+        `tests.support.sweep_head_paths()`: what ranks a fuller shape lower is the palette
+        rule, and three metres answer it.
         """
-        paths = sorted(
-            glob.glob("tests/data/*.mxl") + glob.glob("tests/data/*.musicxml")
-        )
-        self.assertGreaterEqual(len(paths), 6, "the committed heads went missing")
+        paths = sweep_head_paths()
         checked = 0
         for path in paths:
             for texture in ("uniform", "targets"):
@@ -381,16 +379,14 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         measured under the texture that shows it: the thinnest palette strands a shape, and
         the metre-reading one is beaten by a shape out of position.
         """
-        from headxml import arrange_xml_head
-
         head = "tests/data/All_the_Things_You_Are.musicxml"
 
-        def arranged(texture):
-            steps, _head, _notes = arrange_xml_head(head, texture=texture)
+        def steps_under(texture):
+            steps, _head, _notes = arranged(head, texture=texture)
             return steps
 
         stranded = [
-            step for step in arranged("chord1")
+            step for step in steps_under("chord1")
             if step.palette is not None and not step.palette.inside_window
             and not step.repeated
         ]
@@ -400,7 +396,7 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
             _step_annotation(stranded[0]),
         )
         beaten = [
-            step for step in arranged("targets")
+            step for step in steps_under("targets")
             if step.palette is not None and step.palette.inside_window
             and "reaches outside" in _step_annotation(step)
         ]

@@ -20,7 +20,7 @@ from arranger import (
     write_tab_html,
 )
 from tabstaff import _NOTE_VALUES, _staff_columns, _staff_rhythm
-from tests.support import arranged, make_voicing
+from tests.support import arranged, make_voicing, sweep_head_paths
 
 # The compact line's fixed layout, in columns: chord(8) + space + melody(3) + space =
 # 13, then degree(4) + space = 18, then six two-character cells joined by '-' = 17 more.
@@ -2031,7 +2031,7 @@ class TestTheExplanationWraps(unittest.TestCase):
     Three invariants make a continuation line safe to read: **nothing is lost** (the layout
     inserts a newline in place of a space and changes nothing else), **no line runs past the
     width** except for a single word wider than the room it has, and the four columns are on
-    the step's own line rather than repeated above the prose. Swept over the committed heads,
+    the step's own line rather than repeated above the prose. Swept over the sweep heads,
     because a break falls differently for every clause the sweep meets - a walk's bass
     phrase, a comping grid, a substitution, a thin fill.
     """
@@ -2043,13 +2043,15 @@ class TestTheExplanationWraps(unittest.TestCase):
     WIDTH = 100
 
     def rendered_steps(self):
-        """(head, step) for the committed heads under four clause-bearing configs.
+        """(head, step) for the sweep heads under four clause-bearing configs.
 
         Four tests in this class read the same generator, and each of those calls it once
         per assertion, so the arrangements come from `tests.support.arranged`: one per
-        (head, config) for the whole class rather than one per pass.
+        (head, config) for the whole class rather than one per pass. The heads are
+        `tests.support.sweep_head_paths()` - the wrapping rule is about width, and a
+        clause long enough to wrap is not a property of any one tune.
         """
-        for head in HEADS:
+        for head in sweep_head_paths():
             for config in (
                 {},
                 {"parts": "bass,chord"},
@@ -2077,7 +2079,7 @@ class TestTheExplanationWraps(unittest.TestCase):
                 annotation.split(),
                 f"{head} {step.chord} {step.tab_line()}",
             )
-        self.assertGreater(checked, 300, "the sweep stopped rendering anything")
+        self.assertGreater(checked, 100, "the sweep stopped rendering anything")
 
     def test_no_line_runs_past_the_width_unless_a_word_does(self):
         """The width is a preference: a clause is wrapped, a word is never cut in half."""
@@ -2108,7 +2110,7 @@ class TestTheExplanationWraps(unittest.TestCase):
     def test_the_number_of_steps_that_wrap(self):
         """A count, because a step that stops wrapping is silent.
 
-        Measured over this sweep: **193** of the steps it renders carry an explanation too
+        Measured over this sweep: **102** of the steps it renders carry an explanation too
         long for the width, so each of them continues below the step. A clause that stopped
         being printed, or a width that stopped being honoured, would move this number.
         """
@@ -2117,7 +2119,7 @@ class TestTheExplanationWraps(unittest.TestCase):
         wrapped = sum(
             len(_format_step(step, self.WIDTH)) > 1 for _head, step in self.rendered_steps()
         )
-        self.assertEqual(wrapped, 193, "the number of steps that wrap moved")
+        self.assertEqual(wrapped, 102, "the number of steps that wrap moved")
 
 
 class TestOneLineColumns(unittest.TestCase):

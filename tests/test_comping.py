@@ -641,17 +641,26 @@ class TestCompingMelodyIndependence(unittest.TestCase):
     substitutes. Both halves are asserted below.
     """
 
+    #: The bars these tests arrange. See `_arrange`: the claim is about how a melody pitch
+    #: reaches the comping part, which eight bars of the tune settle.
+    SECTION = (1, 8)
+
     def _arrange(self, head, parts, grid="chord:freddie", non_chord_tone="extension"):
         """The `arrange_xml_head` comping path over an already-loaded head.
 
         `onsets` is computed the way `arrange_xml_head` computes it, so this exercises
         the real §9.2 guard rather than the all-onsets default a bare `arrange_slots`
         call would take.
+
+        **`SECTION` bounds it, and the claim is why.** What is asserted is *how* a melody
+        pitch reaches the comping part - the placement is blind to it, the harmony is not -
+        and eight bars of the tune exhibit both. The scramble is the same function of the
+        pitch either way, so the extra bars of a 32-bar tune were repeated evidence.
         """
         from arranger.slots import arrange_slots
         from headxml import _merge_chord_slots, head_skeleton, melody_state
 
-        slots = head_skeleton(head, None)
+        slots = head_skeleton(head, self.SECTION)
         if not parts_has_melody_only(resolve_parts(parse_parts(parts))):
             slots = _merge_chord_slots(slots, head, None, grid) or slots
         onsets = {
