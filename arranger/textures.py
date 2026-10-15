@@ -430,7 +430,7 @@ TARGET_BEATS: Tuple[int, ...] = (1, 3)
 # `get_interval_voicing` / `get_melody_only_voicing`, reached through the palette the
 # same way a family is, and the **empty** palette is the declaration "the left hand
 # plays nothing" - which is how a melody-only selection arrives at
-# `decisions.melody_alone_case`. See `docs/one-fact.md`.
+# `decisions.melody_alone_case`. See `docs/history/one-fact.md`.
 #: How many notes a **fill** states fewer than a target. One, because that is the whole
 #: claim the role makes: a fill is heard *between* two chords and is thinner than the
 #: one it sits under. It is a property of the role rather than a per-texture row - the

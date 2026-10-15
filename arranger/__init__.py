@@ -207,7 +207,7 @@ from .tuning import (
 # axis - `voices=soprano` is the melody and nothing else, and the `melody` and
 # `melody_bass` textures are removed (a breaking change to the public surface,
 # same rule as 0.10.0). Measured byte-identical against the old spellings on
-# both committed heads and the engine's own fixture - see `docs/one-fact.md`.
+# both committed heads and the engine's own fixture - see `docs/history/one-fact.md`.
 __version__ = "0.12.0"
 
 

@@ -1,5 +1,11 @@
 # One fact, one home — the Stage-2 collapse plan
 
+**Retired into `docs/history/` — the record of a completed plan.** Stage 2 landed: `step.grip`,
+`step.bass` and the melody-only signal are one fact each, and the axis the last of them landed
+on is `parts=` ([docs/parts.md](../parts.md)). The live statement of those rules is
+[docs/engine.md](../engine.md). What this document is still for is the *why* — which fact was
+in two places, and what the duplication cost — because that reasoning is not in the code.
+
 **Status: landed.** Commits 1–3 are on `comping` — `d3fb13a` (`step.grip`), `1f0ed54`
 (`step.bass`), `12fd804` (the melody-only signal) — each gated on a green `make check`;
 this document's own update is commit 4, and the version bump is commit 5. The body below

@@ -66,7 +66,7 @@ musical fact. It is not. `get_comping_voicings` builds `midis = sorted(...)` and
 without pinning the melody — and the flag meant to select voices is not what selects it.
 It selects *how many* chord tones.
 
-That defect is fixed and documented in [voices-axis.md](voices-axis.md); what follows is
+That defect is fixed and documented in [voices-axis.md](history/voices-axis.md); what follows is
 the larger thing it exposed.
 
 ---
@@ -87,7 +87,7 @@ The overlap is not theoretical. It produces three observable oddities:
 1. **`--voices soprano` was a no-op.** It was byte-identical to `--voices auto`, because
    the soprano's only remaining job was to switch the engine onto the melody-bearing
    route: `melody_voiced = voices_have_soprano(voices)` in `movement.py`. **Stage 2 closed
-   this**: soprano alone is the melody and nothing else now — see `docs/one-fact.md`.
+   this**: soprano alone is the melody and nothing else now — see `docs/history/one-fact.md`.
 2. **The flags could contradict, so one had to be refused.** `melody_allowed` refused
    `--texture melody --voices alto` with a warning, because `melody` *already* meant
    "nothing but the tune". **That refusal was the seam showing, and Stage 2 closed it**:
@@ -123,7 +123,7 @@ questions**: what is stated × does the guitar sing.
 
 (The table also carried `melody` and `melody_bass` rows — empty on both roles — until
 Stage 2 keyed "the tune and nothing else" on the voice selection and deleted the two
-textures; see `docs/one-fact.md`.)
+textures; see `docs/history/one-fact.md`.)
 
 **`walking_bass` is a comping style that also keeps the melody on top**, and the table says
 so directly: its only target grip is `shell`, with no melody-bearing grip involved. Yet
@@ -370,7 +370,7 @@ on the **and** of beats".
 | **`_walking_slots`** | already **unions a rhythm grid with the melody grid** before the step loop, for exactly this reason: "a bar whose melody is one whole note still carries four bass notes" |
 
 A comping style is therefore **a degree family + a grid**, which is precisely the pair
-`_walking_slots` already demonstrates. [voices-axis.md §7](voices-axis.md) reserved this:
+`_walking_slots` already demonstrates. [voices-axis.md §7](history/voices-axis.md) reserved this:
 "a row in `MELODY_POLICIES` … the table and the seam exist, the rows do not."
 
 **Corrected 2026-10-04 — that inference overreaches, and by a measured margin.** The
@@ -496,7 +496,7 @@ rather than pruned because the reasoning behind each answer is the useful part.
 | Q1 grid vs `--skeleton`'s lattice | **moot.** `--skeleton` is gone (§4.2), and stage 3 of open-issues item 1 settled the substance: the grid *generates* positions rather than selecting from a lattice. |
 | Q2 `harmony=guide` under `sings=yes` | settled as **(C)** — `harmony=` is scoped to the melody-free comping route. |
 | Q3 rename `--voices` to `harmony=` | still deferred, and **§9.4 argues it should stay deferred longer than planned.** |
-| Q4 does `--texture` survive? | **partly answered by Stage 2**: it lost `melody` and `melody_bass` to the voices axis (`docs/one-fact.md`), and §9.6 still argues against removing the rest. |
+| Q4 does `--texture` survive? | **partly answered by Stage 2**: it lost `melody` and `melody_bass` to the voices axis (`docs/history/one-fact.md`), and §9.6 still argues against removing the rest. |
 | Q5 where does the style table live? | open; gated on the DAG test. |
 | Q6 free-form grid spelling | open, and still the main tension in the proposal. |
 | Q7 `walking_bass`'s fate | open. |
@@ -863,7 +863,7 @@ predicted.
   `--non-chord-tone` reach the comping route at harmony level with the §9.2 onset guard,
   and step D made the soprano **per slot** so a soprano-named selection comps the grid
   positions its tune does not articulate at, and step E — `--voices soprano` giving the
-  melody and nothing else — landed ahead of the others as Stage 2 (`docs/one-fact.md`).
+  melody and nothing else — landed ahead of the others as Stage 2 (`docs/history/one-fact.md`).
   §9.4 is the one item still a proposal; each description below carries its own **Landed**
   marker where it has one.
 - **Every decision in §9 is settled.** The questions that shaped it — what `every_note` means
@@ -1342,7 +1342,7 @@ NoMelody`'s assertion was inverted rather than deleted (AGENTS.md trap 5).
 The plan made this the last step, on the assumption that soprano alone still arranged like
 `auto`: `notes=len(voices)` is passed *only* when `melody_voiced` is False, and the
 melody-bearing route has no arity concept, so the soprano's only remaining job was to switch
-the engine onto that route. **Stage 2 (`docs/one-fact.md`) closed it first**, by keying "the
+the engine onto that route. **Stage 2 (`docs/history/one-fact.md`) closed it first**, by keying "the
 tune and nothing else" on the voice selection — `melody_only_selection` in `textures.py` —
 rather than on a texture. That also deleted the `melody` and `melody_bass` textures the plan
 referred to, so the "measure `texture=melody`" step no longer exists to run.
@@ -1352,7 +1352,7 @@ note per step** — the written melody, no left hand under it — while `--voice
 voices) still gives **four**. They are no longer the same arrangement, which is the whole of
 this step.
 
-**Landed as Stage 2 and released with the one-fact collapse** (`docs/one-fact.md`), not with
+**Landed as Stage 2 and released with the one-fact collapse** (`docs/history/one-fact.md`), not with
 the later §9 steps. The plan had bundled this with two other breaking changes — `melody`
 becoming `Optional[str]` (step B) and the loader accepting a chords-only file (step A') —
 under "the next minor release"; the soprano change shipped earlier, and B and A' followed it
@@ -1572,7 +1572,7 @@ means "full on strong beats, thin between", and a grid position carrying a conte
 a merge. **One of the two things that used to stop it moved off the axis entirely:**
 the `melody` and `melody_bass` textures — **empty grip tuples on both roles**,
 "harmonise nothing, ever" — were not a rhythm, and Stage 2 keyed that fact on the voice
-selection (`docs/one-fact.md`), so nothing of it sits on the texture axis any more.
+selection (`docs/history/one-fact.md`), so nothing of it sits on the texture axis any more.
 What still stops the merge is that `metric_roles` decides targets by
 harmonic and melodic *change*, not only position: a slot is a target only when it is metrically
 strong **and** something new happens there, because a passing slot is exactly where the

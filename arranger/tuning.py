@@ -494,7 +494,7 @@ class ArrangementStep:
         A **derived view** of `voicing.grip` rather than a second stored field,
         deliberately: the two were one fact stated twice, and on a no-chord step
         they disagreed - the step said "drop2" while the voicing said "melody"
-        - which is the bug class `docs/one-fact.md` exists to remove. The
+        - which is the bug class `docs/history/one-fact.md` exists to remove. The
         voicing owns the fact, because it is set at construction by whichever
         generator produced the shape and read by `voicing_cost`; the step
         answers in its own spelling and cannot be written apart from the
@@ -511,7 +511,7 @@ class ArrangementStep:
         A **derived view** of `voicing.bass_midi`, for the same reason `grip` is a
         view of `voicing.grip`: the two were one fact stated twice, written
         together in `_attach_bass`, and a stored copy was another field that
-        could disagree - see `docs/one-fact.md`, commit 2. The voicing owns the
+        could disagree - see `docs/history/one-fact.md`, commit 2. The voicing owns the
         fact, because the thumb is merged into its fret vector and its string
         recorded beside the pitch; deriving the step's spelling from it is also
         what makes a copy taken *before* the merge impossible, which is the

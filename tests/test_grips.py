@@ -1513,7 +1513,7 @@ class TestPartialHarmonisation(unittest.TestCase):
 
         It used to be a stored mirror, and on a no-chord step the two disagreed
         - the step said "drop2" while the voicing said "melody" - which is the
-        defect `docs/one-fact.md` commit 1 exists to make impossible. The
+        defect `docs/history/one-fact.md` commit 1 exists to make impossible. The
         proof is the assignment: a view that cannot be written cannot disagree
         with the fact it reads, and assigning to it raises.
         """

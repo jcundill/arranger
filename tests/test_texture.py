@@ -1008,7 +1008,7 @@ class TestMelodyOnlySelections(unittest.TestCase):
     would have to win a cost comparison it should not be in, and
     `GRIP_PREFERENCE` deliberately leaves `melody` out for exactly that reason.
     They were the `melody` and `melody_bass` textures, then the `voices=` axis,
-    and they are the `parts=` axis now - see `docs/one-fact.md` and
+    and they are the `parts=` axis now - see `docs/history/one-fact.md` and
     `docs/parts.md`.
     """
 

@@ -23,12 +23,12 @@ Six flags. Four questions. Each flag answers one to three of them.
 Five consequences on record:
 
 - `texture=`'s empty palette and `voices=` **both** used to mean "the guitar does not sing",
-  which is the overlap [comping-styles.md](comping-styles.md) §2 records. [one-fact.md](one-fact.md)
+  which is the overlap [comping-styles.md](comping-styles.md) §2 records. [one-fact.md](history/one-fact.md)
   Stage 2 moved the claim onto `voices=`, so what remains is one fact on each side rather than
   two spellings of one: an empty **palette** says the left hand plays nothing here (a thickness
   fact), and only a soprano-less **selection** says the tune is somebody else's.
 - `texture=` is a 2-D space enumerated as a list — §3 of that document.
-- `--voices soprano,alto` arranges the same as `auto` — [voices-axis.md](voices-axis.md)
+- `--voices soprano,alto` arranges the same as `auto` — [voices-axis.md](history/voices-axis.md)
   §7 item 6.
 - `harmony=full` is accepted and answered with a different family —
   [open-issues.md](open-issues.md) item 3.
@@ -176,7 +176,7 @@ a rest.
    note rules (`parts` and `bass_style`) and a thick-on-the-strong-beat arity (the policy).
 3. `shell_root` is no longer a conjunction of two degree tables welded inside
    `_shell_voicing`. It is one degree order with a bass-register note at the bottom.
-4. The lone-bass branch in [voices-axis.md](voices-axis.md) §8a goes. That register fact
+4. The lone-bass branch in [voices-axis.md](history/voices-axis.md) §8a goes. That register fact
    was about a part, not a name.
 5. §7 item 6 of that document goes. A part is taken or not taken, `voices=none` has no
    equivalent, and there is no inner voice to name.
@@ -197,7 +197,7 @@ a rest.
    states it instead of implying it.
 10. The step model does not change. `melody_voiced`, `bass_only`, `bass_role`,
     `chord_unvoiced` and `silence` are already part facts — see
-    [one-fact.md](one-fact.md).
+    [one-fact.md](history/one-fact.md).
 11. **An `NC` bar sounds the melody and nothing else, on every route** — **built**. The
     bass part used to be settled by the route: a chordless bar between two chords was
     walked when the guitar sang, because the walk anchored on the *previous* chord's root,

@@ -1341,7 +1341,7 @@ class TestBassPlacement(unittest.TestCase):
         `step.bass` is a derived view of `voicing.bass_midi`, not a second field.
 
         The two were written together in `_attach_bass`, and a stored copy was
-        another field that could disagree - the bug class `docs/one-fact.md`
+        another field that could disagree - the bug class `docs/history/one-fact.md`
         exists to remove. The proof is the assignment: a view that cannot be
         written cannot disagree with the fact it reads.
         """
@@ -2221,7 +2221,7 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
         `BASS_STYLE_AUTO` reads the voice selection, not just the texture.
 
         `(soprano, bass)` walks - it is the old `melody_bass` texture under the
-        new spelling, measured byte for byte in `docs/one-fact.md`'s build
+        new spelling, measured byte for byte in `docs/history/one-fact.md`'s build
         notes. `(soprano,)` alone keeps no thumb, and a lone `bass` selection
         keeps none either: that part already is the bass line, and a thumb
         under it would double it.

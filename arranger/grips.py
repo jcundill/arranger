@@ -389,7 +389,7 @@ SINGLE_NOTE_STRING_SETS: Tuple[Tuple[int, ...], ...] = tuple((s,) for s in range
 # pair is where a player puts one. A bass stated alone is not a guide tone at all: it is
 # the bottom of the band, and on a guitar that means the bottom of the neck. The
 # measurement behind the table, and the three defects it fixed, are in
-# `docs/voices-axis.md` §8a.
+# `docs/history/voices-axis.md` §8a.
 #
 # Six strings would technically reach further down, but the root of any chord is
 # reachable on these three well inside the neck window, so the wider choice would only
@@ -1594,7 +1594,7 @@ def _comping_string_sets(
 
     This is why the flag is a parameter and not a fourth arity: `alto`, `tenor` and `bass`
     all request **one note** and all reach this function, so arity alone cannot tell them
-    apart. See `docs/voices-axis.md` §8a for what that cost.
+    apart. See `docs/history/voices-axis.md` §8a for what that cost.
 
     It applies only at arity one, because that is the only arity where the selection
     names nothing but the bass: at two or more voices the shape is a pair or a shell

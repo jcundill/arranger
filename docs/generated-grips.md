@@ -12,7 +12,7 @@ altered-5th rank it since adopted. The
 label the placement would derive, and the levers that price it, are **not** built.
 
 This document exists because the reasoning behind the change did not fit in a docstring
-and would otherwise live only in a conversation. `docs/one-fact.md` records why that is a
+and would otherwise live only in a conversation. `docs/history/one-fact.md` records why that is a
 failure mode rather than a style point: a plan off disk is not a plan the next session
 can read.
 

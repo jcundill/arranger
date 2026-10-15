@@ -1140,7 +1140,7 @@ class TestMelodyOnlySelections(unittest.TestCase):
         Every slot is the melody alone, and no step is flagged `melody_only` -
         the chord name is context, not a claim that there is no chord. The
         byte-for-byte equivalence against the old `texture="melody"` output is
-        asserted in `docs/one-fact.md`'s build notes; this is the invariant
+        asserted in `docs/history/one-fact.md`'s build notes; this is the invariant
         statement of it.
         """
         steps = VoiceLeadingEngine().arrange_progression(
@@ -1177,7 +1177,7 @@ class TestMelodyOnlySelections(unittest.TestCase):
         truthfully. This is trap 12's rule applied to the re-keyed route - ask
         what each guard is load-bearing *for*, then assert it - and the guard's
         answer is byte-identical to the old texture's, which the engine capture
-        in `docs/one-fact.md`'s build notes shows.
+        in `docs/history/one-fact.md`'s build notes shows.
         """
         steps = VoiceLeadingEngine().arrange_progression(
             [("F4", "NC", "NC"), ("E4", "7", "G7")], parts="melody"

@@ -42,17 +42,18 @@ ROOT = Path(__file__).resolve().parent.parent
 #: asserted because it was wrong in one of these, not because it is worth asserting
 #: in the abstract.
 #:
-#: `comping-styles.md` and `voices-axis.md` are here because of a measured omission,
-#: not a principle: both were added while this list was not updated, and the
-#: link-resolution and reachability checks below then passed *vacuously* over both.
-#: `docs/comping-styles.md` was found on disk with its body duplicated, its last
-#: section spliced mid-word and 37 U+FFFD replacement characters in it, while
-#: `make check` reported 938 tests OK, pyright 0 errors and ruff clean. The gate was
-#: green because it was not looking - a check that enumerates its inputs by hand
-#: silently skips whatever was added last, which is AGENTS.md trap 1 applied to
-#: documentation. **A new document must be added here in the same commit that
-#: creates it**, and the routing table in `AGENTS.md` must link it, or the next
-#: agent inherits an unverified file.
+#: `comping-styles.md` is here because of a measured omission, not a principle: it was
+#: added while this list was not updated, and the link-resolution and reachability checks
+#: below then passed *vacuously* over it. `docs/comping-styles.md` was found on disk with its
+#: body duplicated, its last section spliced mid-word and 37 U+FFFD replacement characters in
+#: it, while `make check` reported 938 tests OK, pyright 0 errors and ruff clean. The gate was
+#: green because it was not looking - a check that enumerates its inputs by hand silently
+#: skips whatever was added last, which is AGENTS.md trap 1 applied to documentation.
+#: (`voices-axis.md` was the other half of that measurement and has since moved to
+#: `docs/history/`, which `_topic_documents_on_disk` excludes - a retired document is frozen
+#: rather than checked.) **A new document must be added here in the same commit that creates
+#: it**, and the routing table in `AGENTS.md` must link it, or the next agent inherits an
+#: unverified file.
 DOCUMENTS = [
     "AGENTS.md",
     "README.md",
@@ -60,8 +61,6 @@ DOCUMENTS = [
     "docs/renderers.md",
     "docs/open-issues.md",
     "docs/comping-styles.md",
-    "docs/voices-axis.md",
-    "docs/one-fact.md",
     "docs/fingering.md",
     "docs/generated-grips.md",
     "docs/parts.md",

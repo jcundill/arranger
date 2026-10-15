@@ -1,5 +1,10 @@
 # `voices=` — a third axis: which voices the guitar plays
 
+**Retired into `docs/history/` — the record of a superseded spelling.** `voices=` is gone:
+`parts=` replaced it ([docs/parts.md](../parts.md)), and the live statement of that axis is
+[docs/engine.md](../engine.md). What follows was true of `voices=`, and the QA this document
+handed over is answered by the collapse it records.
+
 **Status: superseded by `parts=`** ([docs/parts.md](parts.md)): the axis below
 shipped as `voices=`, and this document is the record of that spelling and of the QA it
 owed. What follows was true of `voices=`.
@@ -11,9 +16,10 @@ and Stage 2 moved the melody-only claim onto this axis — `soprano` alone is th
 nothing else, and the `melody`/`melody_bass` textures are gone — see
 [docs/one-fact.md](one-fact.md).
 
-Deliberately **not** in `docs/history/` — that directory is for completed plans and is not
-extended. This one is open, and the "Known limitations" section is the part most likely to
-change after someone plays it.
+It was kept out of `docs/history/` while it was open — that directory is for completed plans and
+is not extended. It is here now because the collapse finished: `voices=` has no spelling in the
+tree any more, so the "Known limitations" section below is a record of a spelling rather than a
+live list.
 
 Measured state at the time of writing: **938 tests OK (skipped=2)**, ruff 0 errors, pyright
 **0 errors 0 warnings**. Baseline before this work was **883** — all 883 pass unchanged.

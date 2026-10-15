@@ -960,7 +960,7 @@ def _no_chord_step(
         # `step.grip` is a derived view of `voicing.grip`, so nothing is
         # passed here: the voicing says "melody" and the step cannot
         # disagree with it. The property is what keeps the two spellings
-        # one fact with one home - see `docs/one-fact.md`, commit 1.
+        # one fact with one home - see `docs/history/one-fact.md`, commit 1.
         bar=bar,
         beat=beat,
         duration=duration,
