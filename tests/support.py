@@ -16,10 +16,16 @@ What is **not** here, deliberately:
 Every fixture here builds a value by hand rather than by running the engine, which
 is the point: a test that arranges a progression and then asserts on the result is
 testing the engine against itself.
+
+The one exception is `arranged`, which runs the engine and hands back what it produced.
+It is not an expectation, it is a **cache of evidence**: several tests assert different
+things about one arrangement, and the arrangement is the expensive half of a sweep. A
+fixture built by the engine is a defect; a share of the engine's own output is not.
 """
 
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, List, Optional
 
 from arranger import PITCH_CLASS_NAMES, ArrangementStep, Voicing
@@ -351,3 +357,78 @@ def nearest_reach_for_note(
         if best is None or proximity < best:
             best = int(proximity)
     return best
+
+
+#: The heads a **sweep** should use. A sweep is about a *rule*, and a rule is a claim about
+#: every metre the engine branches on rather than about the corpus, so three heads answer
+#: it: cut time, common time, and the only odd denominator. Between them they also carry
+#: the notation axes a rule can trip on - ties across a barline, a `/`-slash chord, and a
+#: melody that stops before the last bar.
+#:
+#: A fact about *one* head keeps that head (`tenor_madness`'s TAB staff, the triplets in
+#: `i_was_doing_all_right`), and the tables that are *about the corpus* keep all eight
+#: (`test_placement`'s grip distribution, the GP5 files).
+SWEEP_HEADS: List[str] = [
+    "but_not_for_me.mxl",  # 2/2 cut time, ties over barlines, lyrics
+    "heres_that_rainy_day.musicxml",  # 4/4, `/`-slash chords, repeats, 66 played bars
+    "The_Jitterbug_Waltz.musicxml",  # 3/4 - the only odd beat_type in the corpus
+]
+
+#: The one committed head with chords and no melody at all, for the chords-only route.
+CHORDS_ONLY_HEAD = "lead_sheet_chords_only.musicxml"
+
+
+def sweep_head_paths() -> List[str]:
+    """`SWEEP_HEADS` as paths under `tests/data`, in the order they are declared.
+
+    Checked against the working copy rather than trusted, so a renamed fixture fails here
+    naming the file instead of failing an assertion about a rule three modules away.
+    """
+    paths = [os.path.join("tests", "data", name) for name in SWEEP_HEADS]
+    missing = [path for path in paths if not os.path.exists(path)]
+    if missing:
+        raise AssertionError(f"sweep heads missing from tests/data: {missing}")
+    return paths
+
+
+#: One arrangement per `(path, kwargs)` for the life of the process: the suite asks for the
+#: same head under the same config from several tests, and inside one test per assertion.
+_ARRANGEMENTS: Dict[Any, Any] = {}
+
+
+def arranged(path: str, **kwargs: Any) -> Any:
+    """`headxml.arrange_xml_head` remembered: one request arranged once per process.
+
+    The whole point is that a *sweep* asserts several things about one arrangement, so the
+    arranging - which is the expensive half - is paid for once. The returned value is the
+    engine's own `(steps, head, notes)` triple, not a fixture built here: a cached
+    arrangement is evidence, not an expectation.
+
+    Three things a caller has to know:
+
+    - **the steps are shared**, so a test must not write into a step or its voicing. Nothing
+      does, because `movement._attach_bass` writes the walking bass during the arrangement
+      rather than after it;
+    - a test that **monkeypatches an engine seam** must call `headxml.arrange_xml_head`
+      itself or `clear_arrangements()` first - an entry made before the patch was made with
+      the unpatched function, so reading it would measure nothing;
+    - `section=` is part of the key, so a test that reads only the first bars pays only for
+      those.
+
+    `headxml` is imported **inside** the call: this module is imported by pure unit-test
+    modules that never arrange a head, and music21 behind that import is the one import
+    worth not paying for eight times.
+    """
+    key = (str(path), tuple(sorted(kwargs.items())))
+    found = _ARRANGEMENTS.get(key)
+    if found is None:
+        from headxml import arrange_xml_head
+
+        found = arrange_xml_head(path, **kwargs)
+        _ARRANGEMENTS[key] = found
+    return found
+
+
+def clear_arrangements() -> None:
+    """Forget every remembered arrangement - the seam a patched-seam test needs."""
+    _ARRANGEMENTS.clear()

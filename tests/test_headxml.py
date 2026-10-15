@@ -38,6 +38,7 @@ from headxml import (
 )
 from tabstaff import format_tab_staff, write_tab_html
 from tabxml import _events, _substitute_steps
+from tests.support import arranged
 
 # The real scores the importer's tests read, in `tests/data/`. They are committed
 # and are NOT guarded: a missing fixture is a broken checkout, not a reason to
@@ -1159,7 +1160,7 @@ class TestChordSlots(unittest.TestCase):
         steps and not four, which is also the count-with-a-denominator rule of AGENTS.md
         trap 9.
         """
-        steps, _head, _notes = arrange_xml_head(RAINY_DAY)
+        steps, _head, _notes = arranged(RAINY_DAY)
         silent = [s for s in steps if s.bar == 32]
         silent.sort(key=lambda step: (step.bar or 0, step.beat or 0.0))
         self.assertEqual([(s.beat, s.chord) for s in silent], [(1.0, "Am7"), (2.0, "D9")])
@@ -1178,7 +1179,7 @@ class TestChordSlots(unittest.TestCase):
         """
         skeleton = head_skeleton(self.rainy, None)
         melody_bars = {bar for _triple, bar, _beat, _duration in skeleton}
-        steps, _head, _notes = arrange_xml_head(RAINY_DAY)
+        steps, _head, _notes = arranged(RAINY_DAY)
         added = {(s.bar, s.beat) for s in steps} - {
             (bar, round(beat, 6)) for _t, bar, beat, _d in skeleton
         }
@@ -1479,7 +1480,7 @@ class TestSilentSlotsCarryNoMelody(unittest.TestCase):
 
     def _arrange(self):
         """The comping union over `heres_that_rainy_day`, whose melody ends before bar 32."""
-        return arrange_xml_head(RAINY_DAY, parts="chord", grid="chord:freddie")
+        return arranged(RAINY_DAY, parts="chord", grid="chord:freddie")
 
     def test_a_slot_where_the_melody_stopped_carries_none(self):
         """Bar 32 sits under a chord and over no note; the step says so plainly."""
@@ -3198,7 +3199,7 @@ class TestRepeats(unittest.TestCase):
         """
         from arranger.cli import _as_written
 
-        steps, head, _ = arrange_xml_head(RAINY_DAY)
+        steps, head, _ = arranged(RAINY_DAY)
         self.assertEqual(head.bars, (1, 67))
         written_steps, written_markers = _as_written(
             steps, head.markers, head.written_bars
@@ -3223,7 +3224,7 @@ class TestRepeats(unittest.TestCase):
         """No markers and no map: `_as_written` is the identity on the arrangement."""
         from arranger.cli import _as_written
 
-        steps, head, _ = arrange_xml_head(BUT_NOT_FOR_ME)
+        steps, head, _ = arranged(BUT_NOT_FOR_ME)
         self.assertEqual(head.markers, [])
         self.assertEqual(head.written_bars, {})
         written_steps, written_markers = _as_written(

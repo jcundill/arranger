@@ -13,7 +13,7 @@ import unittest
 from arranger import VoiceLeadingEngine
 from arranger.cost import PARTITION_CRITERION, SPAN_CRITERION, VOICING_COST_CRITERIA
 from arranger.render import _criterion_phrase, _step_annotation
-from tests.support import make_voicing
+from tests.support import arranged, make_voicing
 
 #: The voice-count criterion of the cost tuple, which a *fuller* shape can never lose on:
 #: its own voice count is a smaller `missing` term, so the two tuples cannot be equal.
@@ -127,10 +127,9 @@ class TestTheRecordedPalette(unittest.TestCase):
         the hand's travel - which is what makes the sentence worth printing. Asserted on
         the whole because the alternative is picked out of a palette per step, and a rule
         stated over one hand-built example says nothing about the steps the engine builds
-        for itself.
+        for itself. The arrangements are `tests.support.arranged`'s, so they are paid for
+        once for the whole suite rather than once for this sweep.
         """
-        from headxml import arrange_xml_head
-
         paths = sorted(
             glob.glob("tests/data/*.mxl") + glob.glob("tests/data/*.musicxml")
         )
@@ -138,7 +137,7 @@ class TestTheRecordedPalette(unittest.TestCase):
         checked = 0
         for path in paths:
             for texture in ("uniform", "targets"):
-                steps, _head, _notes = arrange_xml_head(path, texture=texture)
+                steps, _head, _notes = arranged(path, texture=texture)
                 for step in steps:
                     palette = step.palette
                     if palette is None or palette.alternative is None:

@@ -20,7 +20,7 @@ from arranger import (
     write_tab_html,
 )
 from tabstaff import _NOTE_VALUES, _staff_columns, _staff_rhythm
-from tests.support import make_voicing
+from tests.support import arranged, make_voicing
 
 # The compact line's fixed layout, in columns: chord(8) + space + melody(3) + space =
 # 13, then degree(4) + space = 18, then six two-character cells joined by '-' = 17 more.
@@ -2043,9 +2043,12 @@ class TestTheExplanationWraps(unittest.TestCase):
     WIDTH = 100
 
     def rendered_steps(self):
-        """(head, step) for the committed heads under four clause-bearing configs."""
-        from headxml import arrange_xml_head
+        """(head, step) for the committed heads under four clause-bearing configs.
 
+        Four tests in this class read the same generator, and each of those calls it once
+        per assertion, so the arrangements come from `tests.support.arranged`: one per
+        (head, config) for the whole class rather than one per pass.
+        """
         for head in HEADS:
             for config in (
                 {},
@@ -2053,7 +2056,7 @@ class TestTheExplanationWraps(unittest.TestCase):
                 {"grid": "chord:freddie"},
                 {"texture": "targets"},
             ):
-                steps, _head, _notes = arrange_xml_head(head, section=(1, 4), **config)
+                steps, _head, _notes = arranged(head, section=(1, 4), **config)
                 for step in steps:
                     yield head, step
 

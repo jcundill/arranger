@@ -1560,8 +1560,11 @@ class TestARepeatedMelodyHoldsItsString(unittest.TestCase):
         `repeated`; they are swept so that a change which makes one is caught rather
         than assumed away. The counts are in
         [docs/open-issues.md](../docs/open-issues.md) item 2.
+
+        The arrangements are `tests.support.arranged`'s: this sweep and the four-fret one
+        in `test_walking_bass` ask for the same heads under the same textures.
         """
-        from headxml import arrange_xml_head
+        from tests.support import arranged
 
         paths = sorted(
             glob.glob("tests/data/*.mxl") + glob.glob("tests/data/*.musicxml")
@@ -1577,7 +1580,7 @@ class TestARepeatedMelodyHoldsItsString(unittest.TestCase):
         checked = 0
         for path in paths:
             for texture, bass in configs:
-                steps, _head, _notes = arrange_xml_head(path, texture=texture, bass=bass)
+                steps, _head, _notes = arranged(path, texture=texture, bass=bass)
                 for previous, step in zip(steps, steps[1:]):
                     if not step.repeated:
                         continue

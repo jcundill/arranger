@@ -76,6 +76,7 @@ from arranger.textures import PART_NAMES, texture_palette
 from tabgp import _sounding_frets
 from tabstaff import _strikes_here
 from tests.support import (
+    arranged,
     bass_string,
     make_step,
     make_voicing,
@@ -784,17 +785,14 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
 
     def _arrangement(self):
         """The committed head that produced the defect, as a walking bass."""
-        import contextlib
-        import io
-
-        from headxml import arrange_xml_head
         from tests.test_headxml import BUT_NOT_FOR_ME
 
-        buffer = io.StringIO()
-        with contextlib.redirect_stdout(buffer):
-            steps, _, _ = arrange_xml_head(
-                BUT_NOT_FOR_ME, texture="targets", bass=BASS_STYLE_WALK, grid="melody:every_note,bass:walk"
-            )
+        steps, _, _ = arranged(
+            BUT_NOT_FOR_ME,
+            texture="targets",
+            bass=BASS_STYLE_WALK,
+            grid="melody:every_note,bass:walk",
+        )
         return steps
 
     def test_the_thumb_never_shares_a_string_with_a_finger(self):
@@ -1027,17 +1025,14 @@ class TestABassOnlyStepIsNeverATarget(unittest.TestCase):
 
     def _walking_arrangement(self):
         """The committed head that produced the defect, as a walking bass."""
-        import contextlib
-        import io
-
-        from headxml import arrange_xml_head
         from tests.test_headxml import BUT_NOT_FOR_ME
 
-        buffer = io.StringIO()
-        with contextlib.redirect_stdout(buffer):
-            steps, _, _ = arrange_xml_head(
-                BUT_NOT_FOR_ME, texture="targets", bass=BASS_STYLE_WALK, grid="melody:every_note,bass:walk"
-            )
+        steps, _, _ = arranged(
+            BUT_NOT_FOR_ME,
+            texture="targets",
+            bass=BASS_STYLE_WALK,
+            grid="melody:every_note,bass:walk",
+        )
         return steps
 
     def test_no_step_is_both_bass_only_and_a_target(self):
@@ -1528,9 +1523,11 @@ class TestTheInvariant(unittest.TestCase):
 
         `targets` is in the sweep because it *was* the defect. `uniform` is not, because
         its `walk` is refused outright (`bass_allowed`) and so has no thumb to budget.
-        """
-        from headxml import arrange_xml_head
 
+        The arrangement itself comes from `tests.support.arranged`, so this test and the
+        four-fret sweep below read the *same* arrangements rather than paying for the
+        same 32 a second time.
+        """
         paths = sorted(
             glob.glob("tests/data/*.mxl") + glob.glob("tests/data/*.musicxml")
         )
@@ -1544,7 +1541,7 @@ class TestTheInvariant(unittest.TestCase):
                 ("chord2", BASS_STYLE_ANCHORS),
             ):
                 with self.subTest(head=path, texture=texture, bass=bass):
-                    steps, _head, _notes = arrange_xml_head(
+                    steps, _head, _notes = arranged(
                         path, texture=texture, bass=bass
                     )
                     for step in steps:
@@ -1585,9 +1582,10 @@ class TestTheInvariant(unittest.TestCase):
         nothing: **1** step violates this on the commit before the fix - "Tenor Madness"
         bar 40 under `targets`/`--bass-style root`, pinned also in
         `test_fingers.TestTheFourFretBudget` - and **0** after it.
-        """
-        from headxml import arrange_xml_head
 
+        The arrangements are `tests.support.arranged`'s, shared with the string-budget
+        sweep above: the two tests ask the same 32 questions.
+        """
         paths = sorted(
             glob.glob("tests/data/*.mxl") + glob.glob("tests/data/*.musicxml")
         )
@@ -1601,7 +1599,7 @@ class TestTheInvariant(unittest.TestCase):
                 ("chord2", BASS_STYLE_ANCHORS),
             ):
                 with self.subTest(head=path, texture=texture, bass=bass):
-                    steps, _head, _notes = arrange_xml_head(
+                    steps, _head, _notes = arranged(
                         path, texture=texture, bass=bass
                     )
                     held = None
@@ -1755,17 +1753,14 @@ class TestASingleNoteStepHasNothingToHold(unittest.TestCase):
         `Cm7` while voicing a bare `Eb`. Asserted on the pitch rather than the fret so
         the string is free to change if a better voicing appears.
         """
-        import contextlib
-        import io
-
-        from headxml import arrange_xml_head
         from tests.test_headxml import BUT_NOT_FOR_ME
 
-        buffer = io.StringIO()
-        with contextlib.redirect_stdout(buffer):
-            steps, _head, _notes = arrange_xml_head(
-                BUT_NOT_FOR_ME, texture="targets", bass=BASS_STYLE_WALK, grid="melody:every_note,bass:walk"
-            )
+        steps, _head, _notes = arranged(
+            BUT_NOT_FOR_ME,
+            texture="targets",
+            bass=BASS_STYLE_WALK,
+            grid="melody:every_note,bass:walk",
+        )
         target = [s for s in steps if s.bar == 3 and s.beat == 1.0][0]
         self.assertEqual(target.chord, "Cm7")
         pitches = target.voicing.midi_notes()

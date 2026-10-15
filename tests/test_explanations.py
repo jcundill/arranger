@@ -54,8 +54,7 @@ from arranger.tuning import (
     ArrangementStep,
     Palette,
 )
-from headxml import arrange_xml_head
-from tests.support import make_step
+from tests.support import arranged, make_step
 
 #: The committed heads, which between them carry every quality, metre and texture the
 #: library can be asked for. `tests/data` is the only corpus there is.
@@ -416,7 +415,11 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
     """The invariant, swept over the committed heads rather than argued."""
 
     def test_every_decision_has_a_witness_in_its_line(self):
-        """No step may make a decision its own annotation does not account for."""
+        """No step may make a decision its own annotation does not account for.
+
+        The arrangements are `tests.support.arranged`'s, so the other sweep in this file
+        that shares a config reads the same steps rather than paying for them again.
+        """
         missing: List[str] = []
         checked = 0
         omitted = 0
@@ -424,7 +427,7 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         comping = 0
         for head in HEADS:
             for config in CONFIGS:
-                steps, _head, _notes = arrange_xml_head(head, section=(1, 8), **config)
+                steps, _head, _notes = arranged(head, section=(1, 8), **config)
                 for step in steps:
                     checked += 1
                     omitted += bool(_missing_degree_names(step))
@@ -464,7 +467,7 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         the head that exercises it instead: `Am7/D` loses its D and must say so, `Gmaj/D`
         sounds its F# and must stay quiet about it.
         """
-        steps, _head, _notes = arrange_xml_head(
+        steps, _head, _notes = arranged(
             "tests/data/Trouble_in_Mind_Blues.musicxml"
         )
         lost = [
@@ -566,7 +569,7 @@ class TestTheLoneNoteKeepsTheWindowHonest(unittest.TestCase):
         checked = 0
         for head in HEADS:
             for config in self.CONFIGS:
-                steps, _head, _notes = arrange_xml_head(head, section=(1, 8), **config)
+                steps, _head, _notes = arranged(head, section=(1, 8), **config)
                 for step in steps:
                     if step.grip != "melody":
                         continue
