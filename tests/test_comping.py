@@ -41,6 +41,8 @@ from arranger import (
     HARMONY_GUIDE,
     HARMONY_SHELL_ROOT,
     HARMONY_STYLES,
+    NECK_FRET_MAX,
+    NECK_FRET_MIN,
     PART_BASS,
     PART_CHORD,
     PART_MELODY,
@@ -60,7 +62,12 @@ from arranger import (
     resolve_parts,
     supported_string_sets,
 )
-from arranger.grips import _comping_string_sets
+from arranger.grips import (
+    _comping_palette,
+    _comping_string_sets,
+    _search_comping_voicings,
+    _snapshot,
+)
 from arranger.options import ArrangeOptions
 from arranger.render import _step_cells
 from arranger.tuning import _MUTED_CELL
@@ -209,6 +216,132 @@ class TestCompingGenerator(unittest.TestCase):
         narrow = get_comping_voicings("maj7", "Cmaj7", fret_min=0, fret_max=0)
         self.assertTrue(wide)
         self.assertTrue(narrow, "a zero-width window must still voice the chord")
+
+
+class TestTheCompingPaletteIsRemembered(unittest.TestCase):
+    """`_search_comping_voicings` is answered through `_comping_palette`; the answer may not move.
+
+    An invisible memo stops being invisible in the same three ways the placement memo
+    does (`tests/test_placement.py` holds that one to them), and each has an assertion
+    here: an answer that differs from the enumeration's, a caller's write reaching the
+    next caller, and a memo that is never read - which would leave every other test in
+    this file passing while the engine paid for a cache it never used.
+    """
+
+    #: Representative requests rather than the whole parameter space, because the
+    #: *enumeration* is the expensive half and this is the one test that has to run it
+    #: bypassing the memo. Every other test in this file, and every pinned corpus tab in
+    #: the suite, reads the memo.
+    CASES: List[Tuple[str, str]] = [
+        ("maj7", "Cmaj7"),
+        ("m7", "Dm7"),
+        ("7", "A7"),
+        ("9", "C9"),
+        ("m7b5", "Bm7b5"),
+        ("dim7", "Bdim7"),
+    ]
+
+    def setUp(self):
+        # These assertions are about the *entry point*, so the memo starts empty and no
+        # test here inherits another's entries.
+        _comping_palette.cache_clear()
+
+    def test_the_memo_answers_what_the_enumeration_answers(self):
+        """One request asked both ways: what the memo stores *is* the search's answer.
+
+        Compared as snapshots rather than as tabs, so a rebuilt `Voicing` cannot hide a
+        field the memo dropped - `top_fret`, `avg_fret`, `role` and the bass fields all
+        come out of it.
+        """
+        checked = 0
+        for quality, name in self.CASES:
+            for notes in (1, 3):
+                for bass_voice in (False, True):
+                    for shell_root in (False, True):
+                        searched = _search_comping_voicings(
+                            quality,
+                            name,
+                            notes=notes,
+                            bass_voice=bass_voice,
+                            shell_root=shell_root,
+                        )
+                        remembered = _comping_palette(
+                            quality,
+                            name,
+                            NECK_FRET_MIN,
+                            NECK_FRET_MAX,
+                            notes,
+                            bass_voice,
+                            shell_root,
+                        )
+                        self.assertEqual(
+                            [_snapshot(voicing) for voicing in searched],
+                            list(remembered),
+                            f"{name} notes={notes} bass_voice={bass_voice} "
+                            f"shell_root={shell_root}",
+                        )
+                        checked += 1
+        self.assertGreater(checked, 20, "the memo was compared over almost nothing")
+
+    def test_a_caller_writing_into_its_shape_does_not_reach_the_next_caller(self):
+        """The memo may not hand one object out twice, because the engine writes into it.
+
+        The comping route is where this bites hardest: `decisions.select_step_voicing`
+        returns one of the palette's **own objects**, and `movement._attach_bass` then
+        merges the walked thumb into its fret vector and `bass_pc`. A shared object would
+        let one step's bass line become the next step's palette, silently and only in the
+        tab, so the identity assertion is the witness: it is the *sharing* that is
+        forbidden, not the equality of the two answers.
+        """
+        first = get_comping_voicings("maj7", "Cmaj7")
+        second = get_comping_voicings("maj7", "Cmaj7")
+        self.assertTrue(first)
+        self.assertIsNot(first, second, "the memo handed one list out twice")
+        self.assertIsNot(first[0], second[0], "the memo handed one object out twice")
+        pristine_tab = first[0].tab_string()
+        pristine_bass = first[0].bass_pc
+        # Exactly what `_attach_bass` does, down to the string: the thumb takes a string
+        # the shape left muted and writes its fret there.
+        muted = [index for index, fret in enumerate(first[0].frets) if fret < 0]
+        self.assertTrue(muted, "no muted string for the thumb note to be written onto")
+        first[0].frets[muted[0]] = 7
+        first[0].bass_pc = None if pristine_bass is None else (pristine_bass + 1) % 12
+
+        third = get_comping_voicings("maj7", "Cmaj7")
+        self.assertEqual(third[0].tab_string(), pristine_tab)
+        self.assertEqual(third[0].bass_pc, pristine_bass)
+
+    def test_the_memo_is_read_rather_than_bypassed(self):
+        """A memo nothing hits is a claim with no effect - an invisible knob.
+
+        Pinned as a *count* rather than as a timing, because the second call being fast
+        is exactly what a reader cannot see from the code.
+        """
+        before = _comping_palette.cache_info()
+        get_comping_voicings("m7", "Dm7")
+        after_first = _comping_palette.cache_info()
+        get_comping_voicings("m7", "Dm7")
+        after_second = _comping_palette.cache_info()
+        self.assertEqual(after_first.misses - before.misses, 1)
+        self.assertEqual(after_first.hits - before.hits, 0)
+        self.assertEqual(after_second.misses - after_first.misses, 0)
+        self.assertEqual(after_second.hits - after_first.hits, 1)
+
+    def test_clearing_the_memo_runs_the_enumeration_again(self):
+        """The seam the checks above need, and the one a changed table would need.
+
+        After `cache_clear` the enumeration runs and the same shapes come back, which is
+        what makes "the search is still the thing under test" a fact about this file
+        rather than a hope.
+        """
+        first = get_comping_voicings("7", "A7")
+        self.assertGreater(_comping_palette.cache_info().currsize, 0)
+        _comping_palette.cache_clear()
+        self.assertEqual(_comping_palette.cache_info().currsize, 0)
+        self.assertEqual(
+            [voicing.tab_string() for voicing in get_comping_voicings("7", "A7")],
+            [voicing.tab_string() for voicing in first],
+        )
 
 
 class TestTheAxisIsInertByDefault(unittest.TestCase):
@@ -473,11 +606,11 @@ class TestTheCompingArrangement(unittest.TestCase):
         under every one of those selections, and every position in it is silent
         with the same reason.
         """
-        from headxml import arrange_xml_head
+        from tests.support import arranged
 
         path = "tests/data/Trouble_in_Mind_Blues.musicxml"
         for parts in (PART_BASS, PART_CHORD, "bass,chord"):
-            steps, head, _notes = arrange_xml_head(path, parts=parts)
+            steps, head, _notes = arranged(path, parts=parts)
             bars = sorted(
                 bar for bar in {step.bar for step in steps} if bar is not None
             )
@@ -632,9 +765,9 @@ class TestTheSopranoIsPerSlotNotPerRoute(unittest.TestCase):
         )
 
     def _arrange(self, parts=PART_NAMES_ARG, grid="chord:joe_pass"):
-        from headxml import arrange_xml_head
+        from tests.support import arranged
 
-        return arrange_xml_head(self._path(), parts=parts, grid=grid)
+        return arranged(self._path(), parts=parts, grid=grid)
 
     def test_a_singing_selection_comps_the_grid_positions_it_does_not_sing(self):
         """The grid is no longer ignored when the guitar has the tune."""

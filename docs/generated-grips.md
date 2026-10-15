@@ -238,6 +238,17 @@ a witness:
 What it does **not** do is make the search cheaper. It is still exhaustive over the span window,
 so `_frets_in_span`'s cost is the floor for any request nobody has asked before.
 
+**The comping palette is the same memo, for the same reason.** `_search_comping_voicings`
+enumerates the guide-tone shapes; `_comping_palette` (an `lru_cache`) remembers one request's
+answer as the same snapshot; `get_comping_voicings` — the published name, and the one
+`movement._comping_step` and `steps.VoiceLeadingEngine` call — rebuilds fresh `Voicing`s for it,
+because `decisions.select_step_voicing` hands one of the palette's own objects back and
+`_attach_bass` writes the walked thumb into it. The repetition is *worse* there than in the
+placement search: the comping route asks one request per slot per bar with no melody pinned at
+the top, so on a full-corpus sweep the enumeration is the majority of the time. Its numbers are
+in [docs/comping-styles.md](comping-styles.md) §9.7, and `tests/test_comping.py` holds it to the
+same three witnesses `tests/test_placement.py` holds this one to.
+
 **Owed, and not built.** What follows is a decision the placement has *made possible* rather
 than one it has taken: the label the one search would derive, and the three levers that price
 a derived label (**the derived label needs one more step, and the numbers say which** below).

@@ -1597,3 +1597,33 @@ designing one without settling it would mean designing the grammar twice. The fi
 *with*, so unreachable by the existing four — turned out **not to be owed**: §9.3 step D had
 already made a note-less grid position on a singing selection a real case, and the comping
 branch answers it.
+
+### 9.7 The palette is remembered
+
+`grips.get_comping_voicings` is the generator the whole comping route runs on, and it was
+uncached: every slot of every bar enumerated its shapes from scratch, and so did every test that
+re-arranged a head another test had already arranged. It is now the *same* memo the placement
+search is answered through (`_search_shape` / `_searched_shape` / `_place_shape`, §4 of
+[generated-grips.md](generated-grips.md)): `_search_comping_voicings` enumerates,
+`_comping_palette` remembers one request as a `_ShapeSnapshot`, `get_comping_voicings` rebuilds
+fresh `Voicing`s — with `_snapshot` / `_voicing_from_snapshot` shared by the two so that "what a
+snapshot is" stays one fact. The reason the rebuild is not optional is this route's own: the
+walking bass writes into the object `select_step_voicing` chose, so a shared palette would let
+one step's bass line rewrite the next step's chord.
+
+Measured: **61 %** of a full-corpus default arrange is inside `get_comping_voicings`; a
+fingerprint of 112 arrangements (8 heads × 14 settings, 17,227 step lines plus 1,856 direct
+generator requests) takes **240s → 25s** across the change, byte-identical; and the whole suite
+runs **360.0s → 122.2s** on the same tree. The witnesses are
+`tests/test_comping.py::TestTheCompingPaletteIsRemembered` — the memo answers what the
+enumeration answers, a caller's write cannot reach the next caller, the memo is read (hits and
+misses counted), and `cache_clear` is the seam — which is the set `tests/test_placement.py` holds
+the placement memo to.
+
+What the memo does **not** do is make a *new* request cheaper: the enumeration is still
+exhaustive over the span window, so `_frets_in_span` remains the floor for a request nobody has
+asked before. The tables it reads besides its seven arguments (`GRIP_STRING_SETS`,
+`BASS_VOICE_STRING_SETS`, `GRIP_MAX_SPAN`, `NECK_FRET_MIN`/`NECK_FRET_MAX`, `STANDARD_TUNING`,
+`ChordParser.CHORD_TONES_FROM_ROOT`) are fixed at import, which is what makes the key sufficient
+and why **reassigning one at runtime** is the single thing that would leave a stale answer
+behind.

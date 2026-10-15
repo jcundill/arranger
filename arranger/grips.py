@@ -1389,7 +1389,7 @@ def _shell_voicing(
     )
 
 
-def get_comping_voicings(
+def _search_comping_voicings(
     chord_type: str,
     chord_name: Optional[str] = None,
     fret_min: int = NECK_FRET_MIN,
@@ -1492,6 +1492,81 @@ def get_comping_voicings(
         if best is not None:
             valid.append(best[1])
     return valid
+
+
+@lru_cache(maxsize=None)
+def _comping_palette(
+    chord_type: str,
+    chord_name: Optional[str],
+    fret_min: int,
+    fret_max: int,
+    notes: int,
+    bass_voice: bool,
+    shell_root: bool,
+) -> Tuple[_ShapeSnapshot, ...]:
+    """
+    `_search_comping_voicings` remembered: one request enumerated once, read back after.
+
+    The enumeration is a **pure function of the request**: the seven arguments above are
+    all it reads, and the rest - `GRIP_STRING_SETS`, `BASS_VOICE_STRING_SETS`,
+    `GRIP_MAX_SPAN`, `NECK_FRET_MIN`, `NECK_FRET_MAX`, `STANDARD_TUNING` and
+    `ChordParser.CHORD_TONES_FROM_ROOT` - is fixed when this module is imported. That is
+    what makes the key sufficient and the memo need no invalidation, and it is why those
+    tables must not be reassigned at runtime. Same argument, and the same snapshot, as
+    `_searched_shape`.
+
+    The same request is asked repeatedly: every slot of a comping bar, every head of a
+    sweep, and every caller that arranges a head another caller has already arranged.
+    The counts are in `docs/comping-styles.md`.
+    """
+    return tuple(
+        _snapshot(voicing)
+        for voicing in _search_comping_voicings(
+            chord_type,
+            chord_name,
+            fret_min,
+            fret_max,
+            notes,
+            bass_voice,
+            shell_root,
+        )
+    )
+
+
+def get_comping_voicings(
+    chord_type: str,
+    chord_name: Optional[str] = None,
+    fret_min: int = NECK_FRET_MIN,
+    fret_max: int = NECK_FRET_MAX,
+    notes: int = 3,
+    bass_voice: bool = False,
+    shell_root: bool = False,
+) -> List[Voicing]:
+    """
+    The comping shapes for one request, answered through the memo.
+
+    **A fresh list of fresh `Voicing`s on every call**, which is why this is a wrapper
+    around the memo rather than the memoised function itself: `decisions.select_step_voicing`
+    hands one of these objects back and `movement._attach_bass` then writes the walked
+    thumb into its fret vector and `bass_pc`. Returning the stored objects would let one
+    step's bass line rewrite the palette the next step is offered.
+
+    The rules - the string sets, the degrees, the window - are
+    `_search_comping_voicings`'s docstring; the memo changes nothing but how often the
+    enumeration runs, which `tests/test_comping.py` holds it to.
+    """
+    return [
+        _voicing_from_snapshot(snapshot)
+        for snapshot in _comping_palette(
+            chord_type,
+            chord_name,
+            fret_min,
+            fret_max,
+            notes,
+            bass_voice,
+            shell_root,
+        )
+    ]
 
 
 def _comping_string_sets(
@@ -1715,13 +1790,42 @@ def _search_shape(
     return best[1] if best else None
 
 
-#: Everything a `Voicing` carries, with the fret vector as a tuple: what the memo below
-#: stores. The search's result is snapshotted rather than stored as a `Voicing` so that no
-#: caller can write through the memo - `movement._attach_bass` merges the walking bass by
-#: writing into the chosen shape's fret vector and `bass_pc`.
+#: Everything a `Voicing` carries, with the fret vector as a tuple: what `_searched_shape`
+#: and `_comping_palette` store. A result is snapshotted rather than stored as a `Voicing`
+#: so that no caller can write through a memo - `movement._attach_bass` merges the walking
+#: bass by writing into the chosen shape's fret vector and `bass_pc`.
 _ShapeSnapshot = Tuple[
     Tuple[int, ...], int, float, str, Optional[int], str, Optional[int], Optional[int]
 ]
+
+
+def _snapshot(voicing: Voicing) -> _ShapeSnapshot:
+    """One `Voicing` as the tuple the memos store, so the object cannot be written to."""
+    return (
+        tuple(voicing.frets),
+        voicing.top_fret,
+        voicing.avg_fret,
+        voicing.grip,
+        voicing.bass_pc,
+        voicing.role,
+        voicing.bass_midi,
+        voicing.bass_string,
+    )
+
+
+def _voicing_from_snapshot(snapshot: _ShapeSnapshot) -> Voicing:
+    """A **fresh** `Voicing` with a **fresh** fret vector, rebuilt from `snapshot`."""
+    frets, top_fret, avg_fret, grip, bass_pc, role, bass_midi, bass_string = snapshot
+    return Voicing(
+        frets=list(frets),
+        top_fret=top_fret,
+        avg_fret=avg_fret,
+        grip=grip,
+        bass_pc=bass_pc,
+        role=role,
+        bass_midi=bass_midi,
+        bass_string=bass_string,
+    )
 
 
 @lru_cache(maxsize=None)
@@ -1744,16 +1848,7 @@ def _searched_shape(
     found = _search_shape(placement, allowed)
     if found is None:
         return None
-    return (
-        tuple(found.frets),
-        found.top_fret,
-        found.avg_fret,
-        found.grip,
-        found.bass_pc,
-        found.role,
-        found.bass_midi,
-        found.bass_string,
-    )
+    return _snapshot(found)
 
 
 def _place_shape(
@@ -1774,17 +1869,7 @@ def _place_shape(
     snapshot = _searched_shape(placement, allowed)
     if snapshot is None:
         return None
-    frets, top_fret, avg_fret, grip, bass_pc, role, bass_midi, bass_string = snapshot
-    return Voicing(
-        frets=list(frets),
-        top_fret=top_fret,
-        avg_fret=avg_fret,
-        grip=grip,
-        bass_pc=bass_pc,
-        role=role,
-        bass_midi=bass_midi,
-        bass_string=bass_string,
-    )
+    return _voicing_from_snapshot(snapshot)
 
 
 def get_grip_voicings(
