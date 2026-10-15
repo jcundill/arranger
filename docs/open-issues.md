@@ -2,13 +2,13 @@
 
 Each item states the **issue**, the **problem it produces**, and **why it exists**, with the
 measurement behind it. A fixed issue is **removed** from this file rather than kept as history —
-its record lives in the commit that fixed it and in the document it belongs to. Five are open,
-the first of them partly fixed — and each figure is stated **once**, in its own item: a summary
-here would be a second source for it, which is how the numbers in this paragraph rotted before
-`tests/test_open_issues.py` re-took them.
+its record lives in the commit that fixed it and in the document it belongs to. Six are open, and
+each figure is stated **once**, in its own item: a summary here would be a second source for it,
+which is how the numbers in this paragraph rotted before `tests/test_open_issues.py` re-took them.
 
-1. **A chord in force is stored per melody note, so a bar the melody skips is silent** — the
-   **bar-level** half is fixed and only generated slots are owed, at the level below the bar.
+1. **The library facade takes its harmony per melody note, so a hand-built timing cannot place a
+   chord where the tune is silent** — the importer's half is fixed in full, at the bar and at the
+   position; what is left is the entry point a caller supplying its own timings reaches.
 2. **A refused thumb note is usually not the shape being unplayable** — measured, decision left
    open: the selector's lever recovers nothing harmlessly any more, and the walk's own pitch,
    which costs the tuple nothing, reaches most of the refusals but only a fraction of them by a
@@ -20,19 +20,23 @@ here would be a second source for it, which is how the numbers in this paragraph
 5. **A lone note the hand holds can leave the walk below the shape's reach** — the reach is as
    near as the walk's own note allows, so it is the register and not the placement; measured,
    with the selector-side lever left unbuilt.
+6. **A position falling on a note's release is not generated** — `melody_at` keeps a note in
+   force through its end instant, so §9.2 declines a position the tune has already stopped
+   holding; measured, and nothing pins the boundary.
 
 Reproduce the measurements with the commands in [Reproducing](#reproducing).
 
 ---
 
-## 1. A chord in force is stored per melody note, so a bar the melody skips is silent
+## 1. The library facade takes its harmony per melody note, so a hand-built timing cannot place a chord where the tune is silent
 
-**Status: the bar-level defect is fixed; the beat-level one is deferred by decision.** A bar
-the melody never enters is now arranged under every route that voices chords, including the
-default grid. What is still owed is **generated slots** — beats *inside* a bar the melody
-does occupy, and rests as time rather than skipped elements.
+**Status: the importer path is fixed in full; the facade's input shape is what is left.** A bar
+the melody never enters, and a beat *inside* a bar it does occupy, are both arranged under every
+route that voices chords, including the default grid. What remains is the **entry point**: a
+caller supplying its own timings gives one harmony *per melody note*, so a position no note
+occupies cannot carry a chord.
 
-**The issue.** Harmony is stored *per melody note*, not per time position. There is no
+**The issue.** Harmony reaches the facade *per melody note*, not per time position. There is no
 chord-in-force structure a position without a note can read, so the step loop — which iterates
 melody slots — can only *keep* or *drop* a slot and can never *create* one.
 
@@ -79,20 +83,28 @@ melody slots — can only *keep* or *drop* a slot and can never *create* one.
   **347** positions named / **192** held / **155** owed; restricted to the melody-bearing
   bars its own sentence claimed it is **260** / **192** / **68**, and the difference is the
   87 positions the bar-level fix above had *already* added — counted a second time.
-- **Still open: a stab's duration on the comping route.** `chord_slots` computes a length from
-  the following grid position and `head_skeleton` from the melody note, but no axis decides
-  which a *comping* step obeys. It is `docs/comping-styles.md` §9.4's business.
+- **Partly open: a stab's duration belongs to the producer that made the step, not to the
+  grid.** `chord_slots` sets a length from the following **grid** position, capped at the
+  barline, and `head_skeleton` from the **melody note**, and the union merges the two — so a
+  *generated* position lasts until the next grid position while a *written* onset keeps the
+  note's own length, shorter than that distance where the tune's own notes overlap and longer
+  where the grid subdivides finer than the note. Measured with `parts=chord` under the default
+  grid: all **16** of `lead_sheet_chords_only`'s steps match their own grid gap, while
+  `heres_that_rainy_day` has **104** steps whose length differs from the distance to the next
+  step, every one of them a written onset. `docs/comping-styles.md` §9.6's "the grid owns the
+  rhythm" would give a written onset the grid's answer; nothing implements that for it, and
+  §9.4 is where the axis that would own it is proposed.
 
-**Why the rest exists.** Closing it means slots a grid position can *create*, which changes
-three things: `head_skeleton` (rests become time rather than skipped elements, and it must emit
-chord slots as well as note slots), `ArrangementStep.melody` (`None` where no note sounds — the
-field half is done), and `decisions.melody_alone_case` (an invented slot has no note to be alone
-*with*, so its `kind` vocabulary was expected to need a fifth value). **The fifth kind turned out
-not to be owed**, and that is worth recording rather than deleting: §9.3 step D had already made
-"a note-less grid position a *singing* selection receives" a real case, and the comping branch
-answers it with `MELODY_ALONE_NONE` — the grid decides whether the guitar is silent *about a chord
-it could state*, and here it can. The alternative was a different order of change: a harmonisation
-engine whose input is a **chord timeline**, not a list of melody notes.
+**Why it exists.** The facade's input is triples plus timings, and the harmony is attached to a
+melody note, so there is no position for a chord to sit on where the tune is silent. Closing it
+means one of two changes, and they are not the same size: the facade accepting a **chord
+timeline** in place of per-note harmony, or the facade generating the positions itself. The
+importer took the second route; the first is the different order of change this item has named
+from the start. That route needed no fifth `decisions.melody_alone_case` kind, which the item
+predicted and §9.3 step D had already made unnecessary: it had made "a note-less grid position a
+*singing* selection receives" a real case, and the comping branch answers it with
+`MELODY_ALONE_NONE` — the grid decides whether the guitar is silent *about a chord it could
+state*, and there it can.
 
 **Landed.** `Head.chords` / `HeadChange` record the timeline as the document is walked;
 `headxml.chord_at` queries it by forward fill; `headxml.chord_slots` yields one slot per position
@@ -101,15 +113,17 @@ voices chords (`comps+freddie`: `but_not_for_me` 80 → 102, `heres_that_rainy_d
 `i_was_doing_all_right` 224 → 246 — the first is the figure this paragraph has always carried,
 and the other two lengthened when the repeats started being played), plus the bar-level
 `every_note` exception that closes the silence, **plus generated positions inside a bar the tune
-occupies** (`headxml._generated_beats` and the position-level union in `_merge_chord_slots`). A
-stab's duration is now the grid's, capped at the barline. Nothing is owed here any more.
+occupies** (`headxml._generated_beats` and the position-level union in `_merge_chord_slots`). The
+importer's route is therefore complete: of the positions the default grid names, only the ones
+§9.2 refuses — a note still holding them — produce nothing, and a stab's own length follows the
+producer that made the step rather than the grid (the bullet above).
 
 **The rule it suggests.** A rhythm needs a source of its own. Where a grid's positions are
 filtered out of the melody rather than generated from the metre, they vanish silently and no
 warning can be issued, because the question was never asked. The position is the smallest unit at
-which that silence was a defect; below it, deferring to the melody is the documented decision —
-a held position belongs to the note that began there (§9.2), and that is now the *only* thing the
-default grid declines.
+which that silence was a defect; the level below it is where the *boundary* of §9.2's hold rule
+decides, and item 6 is what that costs — a position on a note's release is declined along with a
+position inside it.
 
 ---
 
@@ -284,6 +298,39 @@ measurement: hand travel over the same row falls **3070 → 1728** frets.
 
 ---
 
+## 6. A position falling on a note's release is not generated
+
+**Status: open, diagnosed.** §9.2's hold rule is *inclusive* at its edge, so the instant a note
+stops sounding is treated as one it still holds, and the grid declines that position.
+
+**The issue.** `melody_at` keeps a note in force while `position <= onset + duration * 4` — the
+test is `if position > (found.bar, round(end_beat, 6)): return None`, so the **end instant
+itself** still returns the note. `melody_state` then answers `held` there rather than `silent`,
+and §9.2's rule that a held position is not a slot declines it. A position where the tune has
+*stopped* is therefore treated exactly like one where it is still sounding.
+
+**The problem.** Positions the grid names produce nothing. Measured by patching that boundary
+alone — a `held` answer whose exact beat is some note's end becomes `silent` — and re-arranging
+all eight committed heads under the default grid: **57** steps are added, 1191 → 1248. Per head
+`i_was_doing_all_right` **+42**, `heres_that_rainy_day` **+14** and `tenor_madness` **+1**, with
+nothing on the other five. `tenor_madness` bar 1 is the whole shape of it: quarter notes on
+beats 1 and 2, so beat 3 is reported `held` although the second note ended there, and the bar
+yields 3 steps where the grid names 4.
+
+**Why it exists.** Two readings of "sounds here" are both defensible and the code implements one
+without recording which: a note covering `[onset, end]` sounds *through* its release, or it
+sounds over `[onset, end)` and the release is already silence. The first is what is built. The
+distinction is musical rather than clerical, because a comp on the release coincides with the
+note's own release — the chord beneath it was decided where the note began, which is §9.2's own
+reason for declining a hold — while a comping player reading the same bar sees a rest and
+strikes. Changing it is a decision, not a repair, and it is **not** local: `bass._melody_in_force`
+asks the same question of the same timeline, though it falls back to the note that most recently
+started where the score writes silence, so it need not move with it. Nothing pins the boundary
+today — the tests probe a note's *midpoint* rather than its end — which is why the figure and the
+test are what this item lands first.
+
+---
+
 ## Reproducing
 
 ```bash
@@ -334,9 +381,9 @@ print('total added:', total)
 # heads with no melody-less bar. Measured at `5f4a5e1` the same count is 73, because the
 # repeats were not yet played; this figure is about this tree.
 
-# what is still open, at the level below the bar: the LIBRARY entry point takes its
-# harmony per melody note, so a hand-built progression with no slot in bar 2 cannot
-# express one. The importer no longer shares this limit.
+# what is still open, and now the item's whole remaining scope: the LIBRARY entry point
+# takes its harmony per melody note, so a hand-built progression with no slot in bar 2
+# cannot express one. The importer no longer shares this limit.
 .venv/bin/python -c "
 from arranger import VoiceLeadingEngine
 prog = [('D5','m7','Dm7'), ('C5','maj7','Cmaj7'), ('E4','7','A7')]
@@ -380,6 +427,43 @@ print('inert rows: %d of %d heads identical' % (same, len(heads)))
 "
 # inert rows: 8 of 8 heads identical - and all four spellings give 150, 297, 90, 206, 16,
 # 256, 102, 246 steps, so the row is a no-op rather than an accident of one head.
+
+# 6. a position on a note's release is not generated: `melody_at` keeps a note in force
+# through its own end instant, so `melody_state` answers held where the tune has already
+# stopped and §9.2 declines the position. Patch only that boundary and re-arrange every head:
+.venv/bin/python -c "
+import contextlib, glob, io, os
+import headxml as H
+
+original = H.melody_state
+
+def at_release(notes, bar, beat):
+    state = original(notes, bar, beat)
+    if state != 'held':
+        return state
+    for note in notes:
+        if note.bar == bar and abs(note.beat + note.duration * 4 - beat) < 1e-9:
+            return 'silent'
+    return state
+
+def arrange(path):
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        return H.arrange_xml_head(path)[0]
+
+paths = sorted(glob.glob('tests/data/*.musicxml')) + sorted(glob.glob('tests/data/*.mxl'))
+total = 0
+for path in paths:
+    before = arrange(path)
+    H.melody_state = at_release
+    after = arrange(path)
+    H.melody_state = original
+    total += len(after) - len(before)
+    print('%-40s %+d' % (os.path.basename(path), len(after) - len(before)))
+print('added: %d over %d heads' % (total, len(paths)))
+"
+# i_was_doing_all_right +42, heres_that_rainy_day +14, tenor_madness +1 and the other five 0 -
+# and `added: 57 over 8 heads`, which is 1191 steps becoming 1248. The two readings of sounds
+# here are both defensible; what the patch cannot say is which one the library should hold.
 ```
 
 

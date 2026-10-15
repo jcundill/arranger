@@ -572,6 +572,12 @@ class TestTheReproductionSnippetsRun(unittest.TestCase):
         "bar 2 present: False",
         "bars walked: [1, 3]",
         "inert rows: 8 of 8 heads identical",
+        # Item 6's split, spelled the way `'%-40s %+d'` prints it, so the padding is the format
+        # string's rather than a hand-counted run of spaces that can rot.
+        "%-40s %+d" % ("i_was_doing_all_right.mxl", 42),
+        "%-40s %+d" % ("heres_that_rainy_day.musicxml", 14),
+        "%-40s %+d" % ("tenor_madness.musicxml", 1),
+        "added: 57 over 8 heads",
     )
 
     @classmethod
@@ -593,7 +599,8 @@ class TestTheReproductionSnippetsRun(unittest.TestCase):
             cls.outputs.append(completed.stdout)
 
     def test_the_block_still_holds_every_snippet(self) -> None:
-        self.assertEqual(len(self.snippets), 7)
+        """One snippet per item that carries a figure — the eighth is item 6's."""
+        self.assertEqual(len(self.snippets), 8)
 
     def test_each_snippet_prints_what_its_comment_claims(self) -> None:
         joined = "\n".join(self.outputs)
@@ -668,6 +675,68 @@ class TestTheHarmonyFullNoOp(unittest.TestCase):
         text = _doc()
         self.assertIn("`HARMONY_LENGTH`", text)
         self.assertNotIn("HARMONY_BUILT", text)
+
+
+class TestTheReleaseInstantRemainder(unittest.TestCase):
+    """Item 6: §9.2's hold rule is inclusive at its edge, so a release is not a position.
+
+    Two different kinds of claim, checked differently. The **boundary** is a structural fact
+    about one head and is read directly: `tenor_madness` bar 1 writes two quarter notes, and the
+    instant the second ends reports `held` rather than `silent`, which is what §9.2 then
+    declines. The **figure** — 57 positions across the eight heads — is measured by the
+    document's own recipe, which `TestTheReproductionSnippetsRun` runs as a subprocess, so only
+    its anchor is pinned here. That is the same split item 4's tests make between the measured
+    equality and the sentence stating it.
+    """
+
+    #: `tenor_madness` bar 1: quarters on beats 1 and 2, so beat 3 is the second one's own end.
+    BAR = 1
+    ONSET = 2.0
+    RELEASE = 3.0
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.path = next(p for p in HEADS if p.endswith("tenor_madness.musicxml"))
+        cls.head = headxml.load_musicxml(cls.path, None)
+
+    def test_the_fixture_ends_a_note_exactly_on_the_release_beat(self) -> None:
+        """What the item says the bar is, before anything is concluded from it."""
+        notes = [(n.beat, round(n.duration * 4, 6)) for n in self.head.notes if n.bar == self.BAR]
+        self.assertEqual(notes, [(1.0, 1.0), (self.ONSET, 1.0)])
+
+    def test_a_release_instant_is_reported_as_a_hold(self) -> None:
+        """Nothing sounds at the release, and the answer is `held` anyway — the finding."""
+        notes = self.head.notes
+        self.assertEqual(headxml.melody_state(notes, self.BAR, self.ONSET), "onset")
+        self.assertEqual(headxml.melody_state(notes, self.BAR, self.RELEASE), "held")
+        self.assertEqual(headxml.melody_state(notes, self.BAR, 4.0), "silent")
+        # The mechanism rather than a second opinion: the note is returned *at* its own end,
+        # which is the `position > (found.bar, round(end_beat, 6))` test read from outside.
+        self.assertIsNotNone(headxml.melody_at(notes, self.BAR, self.RELEASE))
+
+    def test_the_release_beat_is_a_position_the_default_grid_would_name(self) -> None:
+        """And it costs the bar a step: 3 sound where an inclusive lattice names 4."""
+        with (
+            contextlib.redirect_stdout(io.StringIO()),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            steps, _head, _notes = headxml.arrange_xml_head(self.path)
+        # `ArrangementStep.beat` is `Optional` because a step may carry no timing; every step
+        # arranged from a head has one, and the filter states that rather than asserting it.
+        beats = sorted(
+            round(step.beat, 2)
+            for step in steps
+            if step.bar == self.BAR and step.beat is not None
+        )
+        self.assertEqual(beats, [1.0, self.ONSET, 4.0])
+
+    def test_the_document_states_the_measured_total(self) -> None:
+        """The figure, and the snippet that measures it, both stated where the item is."""
+        text = _doc()
+        self.assertIn("**57**", text)
+        self.assertIn("added: 57 over 8 heads", text)
+        self.assertIn("## 6. A position falling on a note's release is not generated", text)
+
         # The comping route is spelled with the axis that exists: `melody=alto,tenor` was the
         # retired voices spelling, and a document that reproduces its claim with a selection
         # the parser refuses is a claim a reader cannot run.
