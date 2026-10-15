@@ -1487,5 +1487,6 @@ note's duration and every renderer already honours it, so "a held baseline" as a
 would add a second answer to a question the step model already answers. The real gap is
 the inverse one: a stab *outlasting* its note. See
 [comping-styles.md](comping-styles.md) §8 Stage D, and
-[open-issues.md](open-issues.md) item 1 for the larger thing underneath it — that a grid
-can only filter melody slots, so a quarter of the positions it names produce no chord.
+[open-issues.md](open-issues.md) item 1 for the larger thing underneath it — a grid names
+positions the tune does not occupy, and sounding them took a union of the grid's positions
+with the melody's own slots.

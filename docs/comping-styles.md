@@ -11,9 +11,8 @@ of the beat positions a grid names produced no chord at all, because a grid coul
 *filter* melody slots and harmony was stored per melody note. **Its stage 3 landed**: on the
 comping route the grid now *generates* positions rather than filtering them, so the union is
 live and `charleston` and `joe_pass` are no longer silent on a 2/2 head — the silence was
-never the metre, as §4.2 below originally supposed. §6 still holds open questions, and
-`--voices`
-is still `--voices`. This
+never the metre, as §4.2 below originally supposed. §6 still holds open questions, and the
+flag the axis ships under is `--parts`. This
 records a design and the measurements that forced it, so the decision can be reviewed
 rather than re-derived. It follows
 [the retired reharmonisation proposals](history/reharmonisation-proposals.md), which is the
@@ -503,7 +502,7 @@ rather than pruned because the reasoning behind each answer is the useful part.
 | Q7 `walking_bass`'s fate | open. |
 | Q8 integer eighths or float? | **settled by implementation** — `SUB` is an integer and has been all along. |
 | `melody_alone_case`'s fifth kind | **specified in §9.2** and scheduled as part of step B. |
-| stab duration | **open, and not covered by §9.** It is not `hold=` (withdrawn); the claim is that the grid owns the rhythm, so a stab lasts until the next grid position. Worth deciding with Q6, since a free-form spelling would have to say it too. |
+| stab duration | **partly open, and not covered by §9.** It is not `hold=` (withdrawn); the claim is that the grid owns the rhythm, so a stab lasts until the next grid position. A *generated* position already obeys that — `chord_slots` sets the length from the following grid position — while a *written* onset keeps the melody note's own length, so the claim holds for one producer and not the other (`open-issues.md` item 1's bullet carries the measurement). Worth deciding with Q6, since a free-form spelling would have to say it too. |
 | the input's shape | **open, and the thing §9 is about** — a harmonisation engine whose input is a chord timeline rather than a list of melody notes. §9.4 finds it again from the arity side. |
 
 **Q8 deserves a note, because the document still calls it unresolved.** `SUB` is `1` in
@@ -699,7 +698,7 @@ the part that was worth landing first.
 the real one is `MELODY_POLICIES`, keyed `auto` / `none`. **Fixed**: the comment now names
 the table that exists.
 
-### Stage D — The rhythm grid (**partly built**: `grid=`; `hold=` withdrawn; blocked on open-issues item 1)
+### Stage D — The rhythm grid (**landed**: `grid=`, the lattice and the union; `hold=` withdrawn; the free-form spelling is §6 Q6)
 
 The largest genuinely new work, and the only stage that adds a concept rather than
 renaming one. `joe_pass` and `charleston` are the payoff.
@@ -767,16 +766,17 @@ missed only because the refusal went into a collector nobody read.
      what this entry proposed: the chord needs to stop *outlasting* the note, not to
      outlast it.
 
-  The gap is real and it is still in Stage D's scope, but it is not a `hold=` flag: it is
-  the grid owning the rhythm, so a stab's duration is the distance to the next grid
-  position. That change cannot be made until the grid can *place* a stab at all — see
-  [open-issues.md](open-issues.md) item 1, where a quarter of the positions a grid names
-  produce nothing. **Withdrawn rather than deferred**, because as worded it is a no-op and
+  The gap is real, but it is not a `hold=` flag: it is the grid owning the rhythm, so a stab's
+  duration is the distance to the next grid position. The grid can *place* a stab now —
+  [open-issues.md](open-issues.md) item 1's union landed, so a position a grid names is no
+  longer filtered out of the melody — and that leaves the gap where it always was: a *generated*
+  position obeys the grid and a *written* onset obeys the melody note (item 1's bullet carries
+  the measurement). **Withdrawn rather than deferred**, because as worded it is a no-op and
   leaving it in the document invites someone to build it.
 
   §6 Q5's question about where the style table lives survives the withdrawal, and the
-  answer is now a row of `{grid, harmony}` — composition rather than fusion — with stab
-  duration falling out of the grid once item 1 is fixed.
+  answer is now a row of `{grid, harmony}` — composition rather than fusion — with the
+  duration question attached to that row rather than falling out of it.
 
 Two things must be settled **inside** this stage, not discovered by it. The first is now
 settled and the second remains a design decision:
@@ -1035,11 +1035,11 @@ that has none, `ArrangementStep.melody` becomes `Optional[str]`, and `_PLACEHOLD
 **deleted rather than hidden**. It exists only because a harmony-only step needed *a* melody
 string to satisfy `melody: str`, and under §9.2 it has no reason to exist.
 
-It is also the visible half of item 1's deferral: the default line tab prints a comping
-step with the melody column still carrying the horn's note and the shape's degrees trailing
-it (`Cmaj7  C4  Root  ...  (comping - 3 & 7; the guitar does not play the tune)`), 14 times
-on `but_not_for_me` under
-`--voices alto,tenor --grid freddie`, and reads as a claim that the guitar played C4. It did
+It is also the visible half of the union's arrival: where the default line tab used to print a
+comping step with the melody column still carrying the horn's note and the shape's degrees
+trailing it (`Cmaj7  C4  Root  ...  (comping - 3 & 7; the guitar does not play the tune)`), 14
+times on `but_not_for_me` under
+`--parts chord --grid freddie`, it read as a claim that the guitar played C4. It did
 not, and the clause now says so rather than leaving the melody column to imply otherwise.
 The sentinel is indistinguishable from a real note by equality — all 30 `"C4"` slots
 across the fixtures sit on genuinely written C4s — so any test asserting
@@ -1094,9 +1094,10 @@ as the defect: a bar the melody never entered produced **no part at all** on eve
 The union now excepts at the level of the **bar**, so a chords-only file does arrange under the
 default grid, and the withdrawal decision survives on its stronger ground alone: `auto`'s
 context-sensitivity would be invisible to the suite, and `every_note` is already a selectable
-member of `GRID_STYLES` that the CLI help calls the default. What is *still* true below the bar
-— a beat the melody skips inside a bar it occupies is silent, and `every_note` cannot supply it
-— is item 1's remaining half, and it needs generated slots rather than a sentinel.
+member of `GRID_STYLES` that the CLI help calls the default. What was true below the bar when
+this was written — a beat the melody skips inside a bar it occupies is silent, and `every_note`
+cannot supply it — is no longer true: item 1's position-level union landed, so the default grid
+generates at each bar's own subdivision.
 
 So the departure from the house rule that every axis carries a `*_AUTO` sentinel stands, and
 is recorded here so a later reader does not "restore" it. The sentinel's purpose is to let an
@@ -1167,8 +1168,9 @@ Gate: all six fixtures byte-identical, plus the new tests.
    **bar**, so `arranger head leadsheet.musicxml --voices alto,tenor` on a chords-only file
    arranges all four bars. *Decided against a warning* — naming `--grid freddie` was considered
    and rejected, on the grounds that an empty arrangement is the flag's own instruction rather
-   than a hole to report. That reasoning held for the bar and not for the head: below the bar,
-   deferring to the melody is still the documented decision (item 1's remaining half).
+   than a hole to report. That reasoning held for the bar and not for the head, and item 1's
+   position-level union then took the level below the bar with it: what a position still defers
+   to is a note *holding* it, which is §9.2's rule rather than a missing sentinel.
 
    **What "works fine" means for a chords-only file is therefore the whole head, and the
    distinction this step drew still holds one level down.** Such a file used to be *refused* —
@@ -1176,9 +1178,10 @@ Gate: all six fixtures byte-identical, plus the new tests.
    failure a user cannot act on without reading the source. It now **loads, reports its bars and
    metre, and arranges**, and it does so under the default grid too, because a head with no
    melody at all is a head every bar of which the melody never enters. What it still does not do
-   is guess a rhythm *inside* a bar the tune occupies — a `joe_pass` stab on a head whose notes
-   all sit on the beat is still silent, exactly as it is for any head whose melody does not sit
-   on a beat.
+   is place a stab on a position a sounding note is *holding*: a `joe_pass` stab on a beat the
+   tune has left silent is generated now — item 1's position-level union landed after this was
+   written — while one inside a held note stays absent, and §9.2 says it should, because the
+   chord beneath that note was decided where the note began.
 3. **A soprano-only selection on a chords-only head produces nothing**, and this one did *not*
    move — it is a different claim. It falls out of `every_note`-style deference once "the guitar
    sings" is separated from "the guitar has voices": a melody-only selection plays the tune and
@@ -1556,10 +1559,12 @@ for n in (1, 2, 3, 4):
 
 **A melody-less lead sheet is in scope for *loading*, and not for guessing.** It was
 measured and refused — `_choose_part` filters on `_part_note_count(p) > 0` — and step A'
-makes it load and arrange to a named grid. What it does not do is supply a rhythm the user
-did not ask for: with the default grid it is empty, because `every_note` has nothing to defer
-to. That is the decision, and the distinction between *the file is accepted* and *the file
-guesses* is the one worth keeping from this step.
+makes it load and arrange to a named grid. It arranges under the default grid as well,
+because open-issues item 1's union landed after this section was written: a head with no melody
+is a head every bar of which the melody never enters, so each bar is generated on its beats —
+the fallback `_bar_resolution` takes when a bar has no onsets to read a density from. What the
+default grid will not do is guess a rhythm *finer* than that, and the distinction between *the
+file is accepted* and *the file guesses* is the one worth keeping from this step.
 
 **`texture` is not proposed for removal.** Its overlap with `grid` is real — `targets` already
 means "full on strong beats, thin between", and a grid position carrying a content hint
@@ -1579,12 +1584,16 @@ rhythm table. If a grid gains a content hint it defers to the texture; it does n
 entirely (step A), and repointing the default at a real pattern is the comping-first question,
 which belongs after step D, when `grid` means the same thing on both routes.
 
-**Stab duration is not in this plan.** It is a real gap rather than a deferral: nothing
-currently says how long a comp lasts, and the natural answer — that the grid owns the rhythm,
-so a stab sounds until the next grid position — is not implemented anywhere. `chord_slots`
-computes a `length` from the following position and `head_skeleton` from the melody note, but
-no axis decides which of the two a *comping* step obeys. It was not `hold=`, which is
-withdrawn, and it belongs with §6 Q6 rather than here: a free-form grid spelling would have to
-say it as well, so designing one without settling it would mean designing the grammar twice.
-This is the fifth kind `open-issues.md` item 1 predicts for `melody_alone_case`: an invented
-slot has no melody note to be alone *with*, so it cannot be reached by the existing four.
+**Stab duration is not in this plan, and it is stated where it is measured.** It is a real gap
+rather than a deferral: nothing says how long a comp lasts, and the natural answer — that the
+grid owns the rhythm, so a stab sounds until the next grid position — is implemented for one
+producer and not the other. `chord_slots` computes a `length` from the following grid position
+and `head_skeleton` from the melody note, so a *generated* position obeys the grid while a
+*written* onset keeps the note's own length; the figure is `open-issues.md` item 1's bullet,
+stated once there rather than repeated here. It was not `hold=`, which is withdrawn, and it
+belongs with §6 Q6 rather than here: a free-form grid spelling would have to say it as well, so
+designing one without settling it would mean designing the grammar twice. The fifth
+`melody_alone_case` kind item 1 predicted for an invented slot — no melody note to be alone
+*with*, so unreachable by the existing four — turned out **not to be owed**: §9.3 step D had
+already made a note-less grid position on a singing selection a real case, and the comping
+branch answers it.

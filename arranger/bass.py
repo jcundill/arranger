@@ -1190,8 +1190,9 @@ def comping_capacity(notes: int, bass_voice: bool = False) -> int:
     """How many thumb strings a **melody-free comping shape** leaves free, worst case.
 
     **`thumb_capacity` cannot answer this.** That function
-    derives its answer from `TEXTURE_GRIPS`, which describes the shapes the
-    melody-bearing route generates. On the comping route the shapes come from
+    derives its answer from the melody-bearing route's own palette (`texture_palette`) read
+    against the string tables (`GRIP_STRING_SETS`), which describe the shapes that route
+    generates. On the comping route the shapes come from
     `get_comping_voicings` instead, and the texture is *inert* there: all 80 comping
     shapes on `tests/data/but_not_for_me.mxl` are byte-identical under
     `texture=uniform` and `texture=targets`. Asking `thumb_capacity` therefore refuses a
@@ -1246,7 +1247,8 @@ def bass_allowed(
 
     **The refusal rule, and it is one line:** a thumb line needs the left hand to leave
     at least one of the three thumb strings free, and `thumb_capacity` derives that from
-    `TEXTURE_GRIPS` rather than from a list here. Both `walk` and `anchors` need exactly
+    the texture's palette and the string tables rather than from a list here. Both `walk`
+    and `anchors` need exactly
     one - they differ in how many *notes* they write, not in where the thumb can go - so
     the same threshold covers both, and a future policy is refused or allowed on the
     same terms without this function being taught about it.
@@ -1270,7 +1272,7 @@ def bass_allowed(
 
     **`notes` and `bass_voice` are the comping route's half of the question, and they
     are why this function takes them.** On the comping route the left hand's shapes are
-    not described by `TEXTURE_GRIPS` at all - the texture is inert there, so passing one
+    not described by the texture's palette at all - the texture is inert there, so passing one
     here and refusing on it refuses a combination that is perfectly playable.
     `comping_capacity`'s own docstring holds the per-arity
     table. The route is stated by the *caller*

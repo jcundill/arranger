@@ -265,7 +265,7 @@ class TestTheAxisIsInertByDefault(unittest.TestCase):
 
 
 class TestTheCompingArrangement(unittest.TestCase):
-    """`voices=none` through the engine: what the guitarist is handed."""
+    """`parts=bass,chord` through the engine: what the guitarist is handed."""
 
     def setUp(self):
         self.engine = VoiceLeadingEngine()

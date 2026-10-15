@@ -505,9 +505,10 @@ renderers place through (`tabxml.format_musicxml` and `tabgp.format_gp5`), so th
 belongs to it rather than to a guard at each caller — the renderers' own `if not steps`
 guards are their documented contracts (an empty document for no steps), not what keeps
 `_events` safe to call. What that case *means* is a separate question: a **chords-only lead
-sheet** produces zero steps because a part is built from melody notes, so its music is
+sheet** produced zero steps while a part was built from melody notes alone, so its music was
 declined by every export path rather than rendered — [open-issues](open-issues.md) item 1's
-extreme case, not a renderer defect.
+extreme case, and the union that closed it is why such a sheet now arranges. A **melody-only
+selection** is still empty, which is a different claim: it plays the tune, and there is none.
 
 **There is no TAB staff, deliberately.** This was a measured decision, not a
 simplification. music21 cannot write a TAB staff a notation program renders

@@ -1,12 +1,11 @@
 # Parts: melody, bass, chord — redesign of the harmonisation axes
 
-**Status: built.** Steps 3-5 of §7 have landed and §6's deletions with them: `parts=`
-replaced `voices=`, `texture=` is an arity policy over the chord part, `grid=` is
-`PART:PATTERN` rows, and the `grips=` family-list spelling is gone from the library and the
-CLI - the grip *order* a caller used to give is the engine's `GRIP_PREFERENCE` now. Steps 1
-and 2 landed earlier (§7), so what §7 still owes is item 1's **generated slots** under the
-default grid, measured in [open-issues.md](open-issues.md) item 1. Counts live in the
-documents named here, not restated.
+**Status: built, and §7 owes nothing.** Steps 1-5 of §7 have landed and §6's deletions with
+them: `parts=` replaced `voices=`, `texture=` is an arity policy over the chord part, `grid=` is
+`PART:PATTERN` rows, and the `grips=` family-list spelling is gone from the library and the CLI
+- the grip *order* a caller used to give is the engine's `GRIP_PREFERENCE` now. Step 2's last
+piece arrived later: the default grid's **generated slots**, measured in
+[open-issues.md](open-issues.md) item 1. Counts live in the documents named here, not restated.
 
 ## 1. Why
 
@@ -258,17 +257,23 @@ a rest.
    fifth `melody_alone_case` kind it predicted turned out **not to be owed** — §9.3 step D had
    already made a note-less grid position on a singing selection a real case, and the comping
    branch answers it.
-3. `parts=`, replacing `voices=` and the empty-palette route to "the left hand plays nothing".
-4. `texture=` reshaped as the arity policy, which is where `TEXTURE_GRIPS` loses its grip
-   lists and `walking_bass` leaves `TEXTURE_STYLES`.
-5. `grid=` becomes positions crossed with parts, taking the bass rhythm with it.
-6. Deletions: `grips=`, `HARMONY_ROOT`, and the `voices=none` and `voices=auto` spellings.
+3. ~~`parts=`, replacing `voices=` and the empty-palette route to "the left hand plays
+   nothing".~~ — **built**: `PART_NAMES`, `parse_parts` and `parts_have_melody` are the axis and
+   `--parts` is the flag.
+4. ~~`texture=` reshaped as the arity policy, which is where `TEXTURE_GRIPS` loses its grip
+   lists and `walking_bass` leaves `TEXTURE_STYLES`.~~ — **built**: the grip lists are gone,
+   `TEXTURE_ARITY` is what the textures carry, and `walking_bass` is no longer a texture name.
+5. ~~`grid=` becomes positions crossed with parts, taking the bass rhythm with it.~~ — **built**
+   as `PART:PATTERN` rows. The bass *rhythm* half is the one piece still owed a reader:
+   [open-issues.md](open-issues.md) item 4.
+6. ~~Deletions: `grips=`, `HARMONY_ROOT`, and the `voices=none` and `voices=auto`
+   spellings.~~ — **built**.
 
-Steps 3 to 5 are one logical change and land as **one commit**. They cannot be three: the
-house rule is one green `make check` per commit, and a rename that removes a spelling cannot
-be split into green steps — an intermediate state has `parts=` half-wired and `voices=`
-half-gone. §8 rules out the other split (accept both spellings first, drop the old one
-later), because a surviving alias keeps the collision addressable.
+Steps 3 to 5 landed as **one commit** rather than three: the house rule is one green
+`make check` per commit, and a rename that removes a spelling cannot be split into green
+steps — an intermediate state has `parts=` half-wired and `voices=` half-gone. §8 ruled out
+the other split (accept both spellings first, drop the old one later), because a surviving
+alias keeps the collision addressable.
 
 ## 8. Deliberately not built
 
