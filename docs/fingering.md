@@ -38,8 +38,8 @@ follow-on — whether the *selector* should have left room for the thumb — cam
 refusals over the committed heads and the four thumb rows **when §4.3 measured them**, **53** where
 it was first measured
 and **39** at `246ff69`, of which the harmless recovery is now **none** rather than ten, always at
-the span bucket (`docs/open-issues.md` item 2, whose figures `tests/test_open_issues.py` re-takes
-rather than quotes — they have moved since, and that document is where the current ones live). Its **fourth lever — the walk's own pitch —** is the one that does *not* pay
+the span bucket (`docs/open-issues.md` item 2, where the current figures live - re-measured by
+hand from that item's recipe rather than quoted here, since they have moved). Its **fourth lever — the walk's own pitch —** is the one that does *not* pay
 the bucket: **93 of the 161** refusals are recoverable by stating a different pitch and **64** of
 those by a chord tone, spread over seven chords in six heads; **68** cannot be helped by any pitch.
 Recorded, not built. Its
@@ -759,7 +759,7 @@ and §4.4), which is why step 1 had to exist before any of the measurements coul
    - **The follow-on — would the *selector* leaving room for the thumb pay? — came back small, and
      its numbers have been re-measured since.** `_place_bass` returns None **53** times on the tree
      the question was asked on, **39** at `246ff69` and **161** when this was measured — and
-     `docs/open-issues.md` item 2, which `tests/test_open_issues.py` re-takes, is where the current
+     `docs/open-issues.md` item 2, where the current figure lives - re-measured by hand from that
      figure lives. The dominant cause is a third
      one (no octave of the walk's pitch below the shape, because the chord's own bottom note is
      already that low), not the fret budget — **160 of the 161** now, and a replica of the
@@ -768,8 +768,8 @@ and §4.4), which is why step 1 had to exist before any of the measurements coul
      the chosen shape's own notes (the ten that did were the removed `drop24` sets), so every
      recovery now changes the harmony and pays the span bucket. The **walk's own pitch** is the
      fourth lever and costs the tuple nothing. Its figures are
-     [open-issues.md](open-issues.md) item 2's, re-taken there by `tests/test_open_issues.py`
-     and deliberately not restated here — one fact, one home.
+     [open-issues.md](open-issues.md) item 2's, re-measured there by hand and deliberately not
+     restated here — one fact, one home.
    - **The movement comparison came back nearly empty, and the two numbers that did not
      argue against a tuple slot.** Over 1,330 struck transitions (six heads × two textures,
      `uniform` and the walk):

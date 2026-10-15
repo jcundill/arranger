@@ -302,8 +302,8 @@ def nearest_reach_for_note(
     be free in what the hand is holding, the note must sound below all of it, and the merged
     step must fit the four-fret budget (`fingers.can_fret`) - and then returns the
     proximity the engine ranks on, so a test can ask the question without asking the engine
-    that produced the answer. `test_open_issues._cause` is the same kind of helper for the
-    refusal filters, and says so in the same words.
+    that produced the answer. (`test_open_issues`' own `_cause` helper was the same kind of
+    replica, and went with the figures that needed it.)
 
     `held_frets` is the shape still ringing and `held_thumb` its bass string, because the
     walking line reuses its own string: that string is fretted but does **not** reserve the
@@ -364,6 +364,13 @@ def nearest_reach_for_note(
 #: it: cut time, common time, and the only odd denominator. Between them they also carry
 #: the notation axes a rule can trip on - ties across a barline, a `/`-slash chord, and a
 #: melody that stops before the last bar.
+#:
+#: One sweep is deliberately **not** on this list, and it is the one whose subject is not a
+#: rule but the behaviour space itself: `test_explanations`' witness table keeps every
+#: committed head, because that was measured - over these three, **seven of its eighteen
+#: labels** are never triggered (the `NC` bar, the melody no shape can reach, the position
+#: the guitar sounds nothing at), so narrowing it there would retire witnesses rather than
+#: time. Its docstring says so where the sweep is.
 #:
 #: A fact about *one* head keeps that head (`tenor_madness`'s TAB staff, the triplets in
 #: `i_was_doing_all_right`), and the tables that are *about the corpus* keep all eight

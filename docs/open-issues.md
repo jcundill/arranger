@@ -4,7 +4,11 @@ Each item states the **issue**, the **problem it produces**, and **why it exists
 measurement behind it. A fixed issue is **removed** from this file rather than kept as history —
 its record lives in the commit that fixed it and in the document it belongs to. Six are open, and
 each figure is stated **once**, in its own item: a summary here would be a second source for it,
-which is how the numbers in this paragraph rotted before `tests/test_open_issues.py` re-took them.
+which is how the numbers in this paragraph rotted three times before the *recipes* below were
+made explicit. **Every figure in this file is re-measured by hand from the recipe beside it**:
+they are this document's own business, and nothing in the test suite compares them with these
+sentences. What the gate does run is the *behaviour* each item describes, in
+`tests/test_open_issues.py`.
 
 1. **The library facade takes its harmony per melody note, so a hand-built timing cannot place a
    chord where the tune is silent** — the importer's half is fixed in full, at the bar and at the
@@ -242,8 +246,8 @@ validates them, so refusing them would be the axis rejecting a spelling it docum
 missing is the *reader*: building it moves the walk's positions off `bass.py`'s timeline and onto
 the row, which changes the walked-beat union that item 2's figures are taken over. That is a
 measured cost rather than an oversight, so the row is documented as inert
-([README.md](../README.md)) and pinned here instead:
-`tests/test_open_issues.py::TestTheInertBassGridRow` re-takes the equality from the tree.
+([README.md](../README.md)). No test re-takes the equality: item 4 is a **deferral** rather than
+a behaviour worth asserting, and when the reader lands, the item and its row go together.
 
 ---
 
