@@ -1,5 +1,13 @@
 # Generated grips: one rule for the tones, a search for the placement
 
+**Retired into `docs/history/` — the record of a completed plan.** All three steps landed: the
+tone rule is the *source* rather than a generator checked against one, one placement rule and one
+place a fret becomes a shape, and the clause the tab owed for a tone a shape leaves out. The live
+statement of the rule is [docs/engine.md](../engine.md) §"Adding a new chord quality", and the
+placement, the memo and the three levers measured-and-not-taken are in
+[docs/engine.md](../engine.md) §"Grips, and the position-aware selector". What is still here is
+the *measurement*: what each step cost, and the order it turned out not to need.
+
 **Status: all three steps landed.** The tone-priority rule is in `arranger/grips.py`, and it
 is now the *source* rather than a generator checked against one: `_drop2_template_for` builds
 the shape for a degree on demand and `_drop2_palette` is that rule read at every chord tone,
@@ -246,7 +254,7 @@ because `decisions.select_step_voicing` hands one of the palette's own objects b
 `_attach_bass` writes the walked thumb into it. The repetition is *worse* there than in the
 placement search: the comping route asks one request per slot per bar with no melody pinned at
 the top, so on a full-corpus sweep the enumeration is the majority of the time. Its numbers are
-in [docs/comping-styles.md](comping-styles.md) §9.7, and `tests/test_comping.py` holds it to the
+in [docs/comping-styles.md](../comping-styles.md) §9.7, and `tests/test_comping.py` holds it to the
 same three witnesses `tests/test_placement.py` holds this one to.
 
 **Owed, and not built.** What follows is a decision the placement has *made possible* rather

@@ -14,7 +14,7 @@ Takes `(melody note, chord quality, chord name)` triples, builds voicings in sev
 
 > The **distribution** is `jazz-arranger` (PyPI name `arranger` taken by unrelated project). **Import** name is `arranger`.
 
-Why lives in [`docs/`](docs/): [engine.md](docs/engine.md) (selector, texture, cost tuple), [generated-grips.md](docs/generated-grips.md) (which chord tones a shape states), [renderers.md](docs/renderers.md) (tab, MusicXML, GP5), [parts.md](docs/history/parts.md) (the parts model), [comping-styles.md](docs/comping-styles.md) (the comping axes), [fingering.md](docs/fingering.md), [open-issues.md](docs/open-issues.md).
+Why lives in [`docs/`](docs/): [engine.md](docs/engine.md) (selector, texture, cost tuple), [generated-grips.md](docs/history/generated-grips.md) (which chord tones a shape states), [renderers.md](docs/renderers.md) (tab, MusicXML, GP5), [parts.md](docs/history/parts.md) (the parts model), [comping-styles.md](docs/comping-styles.md) (the comping axes), [fingering.md](docs/fingering.md), [open-issues.md](docs/open-issues.md).
 
 ## Installation
 
@@ -520,7 +520,7 @@ Seven of them are `GRIP_PREFERENCE`: the order the families are tried in **and**
 
 `closed` sits **second**, right after `drop2`: tightest shape there is, so where melody can fret it at all it beats other four-note families on a tie. Most melodies cannot — close-position chord under melody is seventh or more of pitch on four strings only 4–5 semitones apart in tuning — usually never generated rather than generated and rejected.
 
-`drop3` and `drop24` derive from close-position stack under melody, keeping every *other* voice chord tone — measured over every quality and every melody, zero wrong notes where drop-2's quality-only fallback produces hundreds. [docs/engine.md](docs/engine.md) has derivation and cost tuple; [docs/generated-grips.md](docs/generated-grips.md) the rule deciding which chord tones a shape states.
+`drop3` and `drop24` derive from close-position stack under melody, keeping every *other* voice chord tone — measured over every quality and every melody, zero wrong notes where drop-2's quality-only fallback produces hundreds. [docs/engine.md](docs/engine.md) has derivation and cost tuple; [docs/history/generated-grips.md](docs/history/generated-grips.md) the rule deciding which chord tones a shape states.
 
 Two arities are thin by design, and the run says so:
 

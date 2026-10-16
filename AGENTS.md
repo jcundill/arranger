@@ -18,9 +18,9 @@ gate and the conventions — not the explanation.
 | If you are changing | Read first | Then |
 |---|---|---|
 | the drop-2 rule, a grip, `GRIP_MAX_SPAN`, `voicing_cost` | [docs/engine.md](docs/engine.md) | `arranger/grips.py`, `arranger/cost.py` |
-| how a shape is placed on its strings — a family that *searches* versus one that computes a layout, `_Placement`, `_candidate`, the placement memo (`_search_shape` / `_searched_shape` / `_place_shape`) | [docs/generated-grips.md](docs/generated-grips.md) §4 | `arranger/grips.py`, `tests/test_placement.py` |
+| how a shape is placed on its strings — a family that *searches* versus one that computes a layout, `_Placement`, `_candidate`, the placement memo (`_search_shape` / `_searched_shape` / `_place_shape`) | [docs/history/generated-grips.md](docs/history/generated-grips.md) §4 | `arranger/grips.py`, `tests/test_placement.py` |
 | where a **lone note** is fretted — a fill, an `NC` bar, a rescued melody, a span demotion (`get_melody_only_voicings`, `_melody_alone_shape`) | [docs/engine.md](docs/engine.md) | `arranger/grips.py`, `arranger/movement.py`, `tests/test_non_chord_tones.py` |
-| which chord tones a shape states — `TONE_PRIORITY`, the tone a four-voice shape gives up, the palette a melody with no degree to match is offered, or the order that was not taken | [docs/generated-grips.md](docs/generated-grips.md) | `arranger/grips.py` (`TONE_PRIORITY`, `stated_tones`, `_drop2_template_for`, `_drop2_palette`), `tests/test_generated_grips.py`, `tests/support.py` (`WITNESS`) |
+| which chord tones a shape states — `TONE_PRIORITY`, the tone a four-voice shape gives up, the palette a melody with no degree to match is offered, or the order that was not taken | [docs/history/generated-grips.md](docs/history/generated-grips.md) | `arranger/grips.py` (`TONE_PRIORITY`, `stated_tones`, `_drop2_template_for`, `_drop2_palette`), `tests/test_generated_grips.py`, `tests/support.py` (`WITNESS`) |
 | the trailing annotation a step carries, why a shape is thin, or what **must** be explained when a choice is added (`ArrangementStep.palette`, `cost.VOICING_COST_CRITERIA`, `tests/test_explanations.py`) | [docs/engine.md](docs/engine.md) | `arranger/render.py`, `arranger/movement.py` |
 | `texture=`, target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/textures.py`, `arranger/bass.py`, `arranger/decisions.py` |
 | non-chord melody notes, a new chord quality | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` |
@@ -478,7 +478,7 @@ gate, and a snapshot mechanism would let a regression pass by regenerating itsel
    without one.
    `tests/test_generated_grips.py` holds the rule to the hand-written 119
    (`tests/support.py::WITNESS`), so **a new quality needs no table row of its own**;
-   see [docs/generated-grips.md](docs/generated-grips.md). A quality with a priority row
+   see [docs/history/generated-grips.md](docs/history/generated-grips.md). A quality with a priority row
    and a tone set needs nothing else, and one with a tone set but no row is offered no
    drop-2 shapes at all rather than a guess.
 3. Add aliases to `ChordParser.QUALITY_ALIASES`.
@@ -714,7 +714,7 @@ Each of these cost real time, or nearly shipped a defect.
 |---|---|
 | [README.md](README.md) | user-facing overview, worked examples, limitations |
 | [docs/engine.md](docs/engine.md) | grips, the selector, texture, the cost tuple, non-chord tones |
-| [docs/generated-grips.md](docs/generated-grips.md) | which chord tones a shape states: the `TONE_PRIORITY` rule, the tone a four-voice shape gives up, and the order that was not taken |
+| [docs/history/generated-grips.md](docs/history/generated-grips.md) | which chord tones a shape states: the `TONE_PRIORITY` rule, the tone a four-voice shape gives up, and the order that was not taken |
 | [docs/renderers.md](docs/renderers.md) | tab staff, MusicXML import/export, GP5, and their traps |
 | [docs/open-issues.md](docs/open-issues.md) | the open bugs, each stated as **issue / problem / why it exists** with its measurement; a fixed one is removed, and its record lives in git |
 | [docs/history/reharmonisation-proposals.md](docs/history/reharmonisation-proposals.md) | **retired** - tritone substitution (shipped) and chromatic approach chords (measured, not built), with the corpus numbers behind each. Its reproduction path went with the Weimar corpus |

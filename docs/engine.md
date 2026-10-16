@@ -164,7 +164,7 @@ you whether a change is an improvement or a different library.
 
   A sixth names the other loss the tab cannot show, and it is the rule's own price: a
   four-voice shape on a chord with more tones than voices *gives one up* — the root first,
-  then the natural 5th (`TONE_PRIORITY`, [generated-grips.md](generated-grips.md)) — and four
+  then the natural 5th (`TONE_PRIORITY`, [generated-grips.md](history/generated-grips.md)) — and four
   strings that count as a complete shape read as a complete chord. So the line says which tone
   went (`the chord tone it leaves out is Root`), named through the same
   `chords.melody_degree_name` vocabulary `_comping_clause` names the voices it *states* with,
@@ -432,6 +432,17 @@ filtering, no transposition) and `_best_voicing` does all the deciding. That spl
 what stops the grip families and the octave-down rescue from having to know about each
 other, and it is asserted in `tests/test_grips.py`.
 
+**Two ways to propose a shape, one way to accept one.** `_candidate` is the only place a set
+of frets becomes a `Voicing`: the melody sounds and is the highest note, every fret is on the
+board and inside `GRIP_MAX_SPAN`, the family's tone claim (`required`) and bass claim
+(`lowest_pc_allowed`) hold, nothing outside the chord sounds where the family makes that claim,
+and the sounding strings are one `supported_string_sets()` entry. The proposers are the
+**search** (`_search_shape`, for the families whose frets have to be found) and the **layouts**
+(`_place_template`, which computes them from an interval template). `_LAYOUT_GRIPS` and
+`_SEARCHED_GRIPS` name the two kinds and must **partition** the families - a family listed in
+neither generates nothing at all, which is what makes adding one a decision rather than a
+silent omission.
+
 The searched families' one search is answered from a memo that builds a fresh shape per call,
 so generation stays pure in the observable sense: it changes the time and nothing else.
 `_search_shape` enumerates, `_searched_shape` (an `lru_cache`) remembers one request's
@@ -464,7 +475,7 @@ crossings** (47 of 794 melody-bearing steps would win, and the shape would need 
 **offer 6-5-4-3** to a G-string melody (104 of 967 steps would gain two to four shapes, so
 that exclusion is load-bearing rather than academic), and **one shape per set for a
 non-chord melody** (268 of 1,103 steps take the whole-palette route today - the largest
-lever and the least understood). [generated-grips.md](generated-grips.md) §4 holds the
+lever and the least understood). [generated-grips.md](history/generated-grips.md) §4 holds the
 measurements; none of the three changes `voicing_cost`.
 
 **A shape sounding a foreign note is refused before any preference is consulted.**
@@ -562,7 +573,7 @@ inclusively would describe a reach the hand does not make, and would make the li
 
 | grip | voices | how it is built |
 |---|---|---|
-| `drop2` | 4 | `TONE_PRIORITY`'s rule at four voices — generated; the hand table it reproduces is the witness ([generated-grips.md](generated-grips.md)) |
+| `drop2` | 4 | `TONE_PRIORITY`'s rule at four voices — generated; the hand table it reproduces is the witness ([generated-grips.md](history/generated-grips.md)) |
 | `drop2_6432` | 4 | 6-4-3-2, found by search — the one default set that reaches the low E |
 | `drop3` | 4 | derived from a close stack; offered through the bass-skipping sets |
 | `drop24` | 4 | **drop-2 & 4** — the second *and* fourth voices lowered an octave; offered through the bass-skipping sets |
@@ -587,7 +598,7 @@ a dominant or a minor 7th, so a shape without them is a different chord rather t
 thinner one. All 119 drop-2 templates — the rule's own output, and held to the hand table
 they came from by `tests/test_generated_grips.py` — keep both in every inversion, and every
 degree of every one of the 29 qualities does too; the hand table was the witness, and step 3
-of [generated-grips.md](generated-grips.md) records what retiring it cost. An
+of [generated-grips.md](history/generated-grips.md) records what retiring it cost. An
 empty result offers nothing rather than borrowing another degree's template.
 
 **Drop-2 & 4** lowers the second and fourth voices of a close stack an octave each — the
@@ -635,7 +646,7 @@ Five decisions in here were each forced by something measurable:
   same chord tones instead gives a *fuller* chord — every tone the rule left out comes back
   — a legitimate but different voicing, which is why those families keep their own rule.
   The measurements, the order that was not taken and what is still open are in
-  [generated-grips.md](generated-grips.md).
+  [generated-grips.md](history/generated-grips.md).
 - **Duos sound the chord's guide tone, under any chord tone.** The second voice is read
   from `SHELL_DEGREES` — the 3rd, or the **4th** on a suspended chord, with the 7th as the
   fallback — rather than from a list written out separately. That table already encodes

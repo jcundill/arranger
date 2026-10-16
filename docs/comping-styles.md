@@ -586,7 +586,7 @@ purpose"*. The integer won by implementation and the question was never revisite
   *generator's* degree rule, not in the selector's cost.
 - **No new grip families.** `shell_root` is reachable on the existing shell sets (11/11).
 - **No change to the drop-2 shapes** (the tables they came from have since been retired —
-  see [generated-grips.md](generated-grips.md) §3), and no touching the 54 hardcoded tab
+  see [generated-grips.md](history/generated-grips.md) §3), and no touching the 54 hardcoded tab
   strings.
 - **No default change.** Every existing arrangement must come out byte-identical, which is
   the acceptance criterion for any part of this that gets built. **Except the one that says
@@ -1604,7 +1604,7 @@ branch answers it.
 uncached: every slot of every bar enumerated its shapes from scratch, and so did every test that
 re-arranged a head another test had already arranged. It is now the *same* memo the placement
 search is answered through (`_search_shape` / `_searched_shape` / `_place_shape`, §4 of
-[generated-grips.md](generated-grips.md)): `_search_comping_voicings` enumerates,
+[generated-grips.md](history/generated-grips.md)): `_search_comping_voicings` enumerates,
 `_comping_palette` remembers one request as a `_ShapeSnapshot`, `get_comping_voicings` rebuilds
 fresh `Voicing`s — with `_snapshot` / `_voicing_from_snapshot` shared by the two so that "what a
 snapshot is" stays one fact. The reason the rebuild is not optional is this route's own: the

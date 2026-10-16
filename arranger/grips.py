@@ -249,7 +249,7 @@ GRIP_STRING_SETS: Dict[str, Tuple[Tuple[Tuple[int, ...], int], ...]] = {
 # as well as the rule: `_drop2_template_for` reads one degree out of a row, and the 119
 # templates the tables held are kept as the witness the rule is asserted against
 # (`tests/support.py`, read by `tests/test_generated_grips.py`). The reasoning, the
-# measurements and the order that was *not* taken are in `docs/generated-grips.md`.
+# measurements and the order that was *not* taken are in `docs/history/generated-grips.md`.
 #
 # What the rows say, read off the templates that reproduce them:
 #
@@ -1843,7 +1843,7 @@ def _searched_shape(
 
     The same request is asked over and over: a repeated melody degree, a repeated bar, and
     the target, fill and retry paths each asking again for what was answered already. The
-    counts are in `docs/generated-grips.md` §4.
+    counts are in `docs/history/generated-grips.md` §4.
     """
     found = _search_shape(placement, allowed)
     if found is None:
