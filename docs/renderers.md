@@ -471,9 +471,9 @@ other caller. A second implementation of the step loop is how this importer came
 disagree with the library once already; the whole point of the extraction is that it
 cannot happen again.
 
-That function *was* `wjazzd.arrange_slots`, and its own docstring described it as
-"the corpus path's own step loop" while MusicXML was most of its callers. The
-database is gone and it is now named for what it does.
+That function *was* the corpus loader's `arrange_slots`, and its own docstring described it as
+"the corpus path's own step loop" while MusicXML was most of its callers. The database and the
+module are gone and it is now named for what it does.
 
 **Imports are lazy where they keep the module cheap** — `argparse` inside
 `head_cli`, and the renderers inside it too, so `load_musicxml` costs nothing.

@@ -32,7 +32,7 @@ import ast
 import re
 import unittest
 from pathlib import Path
-from typing import List, Set, Tuple
+from typing import Dict, List, Set, Tuple
 
 import arranger
 
@@ -61,6 +61,37 @@ DOCUMENTS = [
     "docs/renderers.md",
     "docs/open-issues.md",
 ]
+
+#: Spellings that existed, are still described in `docs/history/`, and must not be read out
+#: of a **live topic document**. Each value says what replaced it.
+#:
+#: A registry rather than a derivation, because there is no rule that generates it: every
+#: entry is a name a reader could act on and be wrong about. This is the check that would
+#: have caught the drift the consolidation fixed - `docs/engine.md` described `TEXTURE_GRIPS`,
+#: the `voices=` axis, `MELODY_POLICIES` and `walking_bass` as a texture while the tree had
+#: renamed or deleted all four, and the routing table sent an agent there first.
+#:
+#: `AGENTS.md` and `README.md` are **exempt on purpose**: naming what a live spelling replaced
+#: is part of routing a reader, and that is the one place the older name has to appear. A
+#: topic document describes the present, so it cannot name a symbol the tree does not have.
+RETIRED_NAMES: Dict[str, str] = {
+    "TEXTURE_GRIPS": "the texture-to-role grip table; `TEXTURE_ARITY` and `texture_palette`",
+    "MELODY_POLICIES": "the `voices=` axis's pattern registry, gone with the axis",
+    "MELODY_AUTO": "that axis's sentinel, gone with it",
+    "VOICES_ALL": "that axis's default, gone with it",
+    "parse_voices": "that axis's parser; `parse_parts` owns the vocabulary now",
+    "--voices": "the flag `--parts` replaced",
+    "--grips": "the grip-family axis's flag, deleted with the axis",
+    "--lift": "the corpus loader's transposition flag, gone with the loader",
+    "--skeleton": "the corpus loader's skeleton flag, gone with the loader",
+    "wjazzd": "the corpus module, deleted with the Weimar database",
+    "melody_bass": "a texture name; the tune plus a thumb is `parts=\"melody,bass\"`",
+    "GRID_AUTO": "no such sentinel exists - the grid's default is `GRID_DEFAULT`",
+    "DROP2_INTERVAL_SETS": "a deleted drop-2 table; `_drop2_template_for` is the rule now",
+    "DEGREE_OFFSETS_FROM_ROOT": "the other half of that deleted pairing",
+    "DROP2_TEMPLATES": "the deleted generated table; `tests/support.py::WITNESS` is the witness",
+    "melody_only_selection": "a deleted predicate; `parts_has_melody_only` answers it",
+}
 
 #: Matches a version as stated in prose: `0.9.0`, `` `0.9.0` ``, "currently 0.9.0".
 _VERSION = re.compile(r"\b(\d+\.\d+\.\d+)\b")
@@ -281,6 +312,44 @@ class TestDocsMatchTheCode(unittest.TestCase):
                         broken.append(f"{path.relative_to(ROOT)} -> {target}")
         self.assertEqual(
             broken, [], "a docstring links to a file that does not exist"
+        )
+
+    def test_a_live_topic_document_names_no_retired_symbol(self):
+        """A topic document describes the present, so it cannot name a deleted spelling.
+
+        The drift this catches is not hypothetical: `docs/engine.md` documented
+        `TEXTURE_GRIPS`, a `voices=` axis, `MELODY_POLICIES` and `walking_bass` as a texture,
+        and every one of the four had been renamed or deleted - while the routing table sent a
+        reader there for the exact rule that had moved. Nothing failed, because a document is
+        not code; the stale spelling reads as fact.
+        """
+        live = [name for name in DOCUMENTS if name.startswith("docs/")]
+        offenders = [
+            f"{name}:{number} names {token!r} ({RETIRED_NAMES[token]})"
+            for name in live
+            for number, line in enumerate(_read(name).splitlines(), 1)
+            for token in RETIRED_NAMES
+            if token in line
+        ]
+        self.assertEqual(
+            offenders, [], "a live document names a symbol the tree does not have"
+        )
+
+    def test_every_retired_name_is_one_the_history_records(self):
+        """The registry cannot go vacuous, and a typo cannot hide in it.
+
+        A name nobody ever used would pass the check above forever, and it would be
+        indistinguishable from a name correctly kept out of the live documents. So each entry
+        must be one the history still carries - which is also what makes the list a record
+        rather than a guess.
+        """
+        history = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in sorted((ROOT / "docs" / "history").glob("*.md"))
+        )
+        missing = [name for name in RETIRED_NAMES if name not in history]
+        self.assertEqual(
+            missing, [], "a name is registered as retired and the history never used it"
         )
 
     def test_every_document_has_balanced_code_fences(self):

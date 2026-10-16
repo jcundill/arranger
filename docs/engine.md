@@ -1519,7 +1519,7 @@ bottom). The vocabulary is `GRID_PART_PATTERNS` + `GRID_STYLES` + `GRID_PATTERNS
 `textures.py`, with `parse_grid` / `resolve_grid` / `grid_allowed` /
 `grid_defers_to_melody` beside the other axes' functions. A row is written **`part:pattern`**
 — `chord:freddie`, `bass:walk` — so the axis is positions crossed with parts, and each part
-may have a row of its own. There is **no `GRID_AUTO`**: `GRID_DEFAULT` is
+may have a row of its own. There is **no `auto` grid value**: `GRID_DEFAULT` is
 `melody:every_note`, so the tune's own slots govern every part, and `grid=auto` is refused
 like any other unknown name (see [comping-styles.md](history/comping-styles.md) §9.3).
 
