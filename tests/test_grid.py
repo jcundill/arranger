@@ -17,7 +17,7 @@ What is verified, in order:
   the bass axis;
 - **the metre**: positions are **bar-relative**, so `final_and` is the upbeat of the
   bar's last beat in 2/2, 3/4 and 4/4 alike. This is the claim
-  `docs/comping-styles.md` section 4.2 makes about `LAST`, and it is a table of three
+  `docs/history/comping-styles.md` section 4.2 makes about `LAST`, and it is a table of three
   metres rather than a comment;
 - **the default**: `melody:every_note` is the default outright (there is no `auto`
   sentinel), and it defers to the melody's own slots at every beat - so the axis is
@@ -251,7 +251,7 @@ class TestTheGridTable(unittest.TestCase):
 class TestPositionsAreBarRelative(unittest.TestCase):
     """`LAST` resolves against the metre, so one pattern is one idea in three metres.
 
-    This is the claim `docs/comping-styles.md` section 4.2 makes and the reason the
+    This is the claim `docs/history/comping-styles.md` section 4.2 makes and the reason the
     positions are named rather than counted: spelled `[(4, SUB)]`, `final_and` would
     look to a 2/2 head like a pattern naming a beat that does not exist.
     """

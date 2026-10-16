@@ -299,7 +299,7 @@ def _resolve_substitute_harmony(
     """The `(quality, name, strategy)` that makes a non-chord melody note a chord tone.
 
     **Extracted from `prepare_step` so the comping route reaches it too**
-    (`docs/comping-styles.md` §9.3 step C). The melody route pins the note and
+    (`docs/history/comping-styles.md` §9.3 step C). The melody route pins the note and
     re-voices a substituted chord around it; the comping route never sounds the note
     but must still *state* the chord the horn's line implies, so the two have to make
     the same decision the same way - otherwise `--non-chord-tone` means one thing on

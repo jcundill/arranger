@@ -14,7 +14,7 @@ Takes `(melody note, chord quality, chord name)` triples, builds voicings in sev
 
 > The **distribution** is `jazz-arranger` (PyPI name `arranger` taken by unrelated project). **Import** name is `arranger`.
 
-Why lives in [`docs/`](docs/): [engine.md](docs/engine.md) (selector, texture, cost tuple), [generated-grips.md](docs/history/generated-grips.md) (which chord tones a shape states), [renderers.md](docs/renderers.md) (tab, MusicXML, GP5), [parts.md](docs/history/parts.md) (the parts model), [comping-styles.md](docs/comping-styles.md) (the comping axes), [fingering.md](docs/fingering.md), [open-issues.md](docs/open-issues.md).
+Why lives in [`docs/`](docs/): [engine.md](docs/engine.md) (selector, texture, cost tuple), [generated-grips.md](docs/history/generated-grips.md) (which chord tones a shape states), [renderers.md](docs/renderers.md) (tab, MusicXML, GP5), [parts.md](docs/history/parts.md) (the parts model), [comping-styles.md](docs/history/comping-styles.md) (the comping axes), [fingering.md](docs/fingering.md), [open-issues.md](docs/open-issues.md).
 
 ## Installation
 
@@ -499,7 +499,7 @@ Chord name still printed above each step as context; nothing under it voiced. `N
 
 **Grid places chords, not thumb.** The thumb line's own beats come from the bass part and the bass style, so thumb sounds on beats where guitar strikes no chord at all — `bass_only` steps above are exactly that. The grid *does* change the shape thumb is placed against: a different chord above can move note or refuse it — measured on `but_not_for_me` with `--texture targets --bass-style root,5th,approach,nearest`, `chord:freddie` walks three more beats than the default row, all downbeats melody skips.
 
-**Free-form grid** — naming positions directly, not choosing a row — not built yet. [docs/comping-styles.md §4.2](docs/comping-styles.md) has design.
+**Free-form grid** — naming positions directly, not choosing a row — not built yet. [docs/history/comping-styles.md §4.2](docs/history/comping-styles.md) has design.
 
 ## Grips
 

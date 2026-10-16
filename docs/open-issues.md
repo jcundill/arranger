@@ -95,7 +95,7 @@ melody slots — can only *keep* or *drop* a slot and can never *create* one.
   where the grid subdivides finer than the note. Measured with `parts=chord` under the default
   grid: all **16** of `lead_sheet_chords_only`'s steps match their own grid gap, while
   `heres_that_rainy_day` has **104** steps whose length differs from the distance to the next
-  step, every one of them a written onset. `docs/comping-styles.md` §9.6's "the grid owns the
+  step, every one of them a written onset. `docs/history/comping-styles.md` §9.6's "the grid owns the
   rhythm" would give a written onset the grid's answer; nothing implements that for it, and
   §9.4 is where the axis that would own it is proposed.
 
@@ -213,7 +213,7 @@ something other than itself, which is the failure `resolve_harmony`'s own docstr
 
 **Why it exists / not fixed.** The fix is undecided and both directions are live: **refuse it**,
 which weakens `harmony_allowed`'s "derived from arity" property (it would be the first entry not
-derived), or **build it**, which is [docs/comping-styles.md](comping-styles.md) §9.4's four-note
+derived), or **build it**, which is [docs/history/comping-styles.md](history/comping-styles.md) §9.4's four-note
 comping chord — new string sets, deliberately not done. Recorded rather than fixed because it is
 a behaviour change on an axis whose document still lists four-note comping as a proposal. The
 *record* is now correct: `HARMONY_LENGTH` in `textures.py` names the two families with a fixed

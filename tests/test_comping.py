@@ -630,7 +630,7 @@ class TestTheCompingArrangement(unittest.TestCase):
 
 
 class TestCompingMelodyIndependence(unittest.TestCase):
-    """Step 0 of `docs/comping-styles.md` §9.3, **re-scoped by step C**.
+    """Step 0 of `docs/history/comping-styles.md` §9.3, **re-scoped by step C**.
 
     Step 0 pinned the comping route as melody-independent: scramble every melody pitch
     and no fret moves. It landed *before* step C deliberately, because C is the first
@@ -1873,7 +1873,7 @@ class TestTheHarmonyAxis(unittest.TestCase):
     def test_shell_root_is_reachable_on_every_chord_the_head_uses(self):
         """11 of 11, measured over the chords in the test progression and its neighbours.
 
-        The claim `docs/comping-styles.md` §4.1 makes about this family, asserted here
+        The claim `docs/history/comping-styles.md` §4.1 makes about this family, asserted here
         so it cannot rot: both guide tones *and* a bass degree underneath, inside
         `GRIP_MAX_SPAN`, needs **no new string set** - which is the single most useful
         fact about the family.
@@ -1932,7 +1932,7 @@ class TestTheHarmonyAxis(unittest.TestCase):
         warned and then produced an arrangement byte-identical to the default
         `guide` one. That behaviour was the defect - the caller asked for one
         degree family and was silently handed another, on an axis whose whole
-        selling point (`docs/comping-styles.md`) is that it is *inert* unless
+        selling point (`docs/history/comping-styles.md`) is that it is *inert* unless
         named. `guide` is what a caller gets by asking for `guide`, so returning
         it for `shell_root` is a substitution wearing the default's clothes.
 

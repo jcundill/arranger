@@ -44,7 +44,7 @@ ROOT = Path(__file__).resolve().parent.parent
 #:
 #: `comping-styles.md` is here because of a measured omission, not a principle: it was
 #: added while this list was not updated, and the link-resolution and reachability checks
-#: below then passed *vacuously* over it. `docs/comping-styles.md` was found on disk with its
+#: below then passed *vacuously* over it. `docs/history/comping-styles.md` was found on disk with its
 #: body duplicated, its last section spliced mid-word and 37 U+FFFD replacement characters in
 #: it, while `make check` reported 938 tests OK, pyright 0 errors and ruff clean. The gate was
 #: green because it was not looking - a check that enumerates its inputs by hand silently
@@ -60,7 +60,6 @@ DOCUMENTS = [
     "docs/engine.md",
     "docs/renderers.md",
     "docs/open-issues.md",
-    "docs/comping-styles.md",
     "docs/fingering.md",
 ]
 
@@ -343,7 +342,7 @@ class TestDocsMatchTheCode(unittest.TestCase):
         Every other check in this class reads `DOCUMENTS`, so a file missing from
         it is a file **no check in this file looks at** - the links in it are never
         resolved and any version it states is never compared. That is not a
-        hypothetical: `docs/comping-styles.md` was added without being listed, and
+        hypothetical: `docs/history/comping-styles.md` was added without being listed, and
         while it was unlisted it carried a duplicated body, a section spliced
         mid-word and 37 U+FFFD replacement characters with `make check` reporting
         938 tests OK, pyright 0 errors and ruff clean. The gate was green because

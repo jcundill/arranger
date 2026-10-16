@@ -1513,7 +1513,7 @@ bottom). The vocabulary is `GRID_PART_PATTERNS` + `GRID_STYLES` + `GRID_PATTERNS
 — `chord:freddie`, `bass:walk` — so the axis is positions crossed with parts, and each part
 may have a row of its own. There is **no `GRID_AUTO`**: `GRID_DEFAULT` is
 `melody:every_note`, so the tune's own slots govern every part, and `grid=auto` is refused
-like any other unknown name (see [comping-styles.md](comping-styles.md) §9.3).
+like any other unknown name (see [comping-styles.md](history/comping-styles.md) §9.3).
 
 **Positions are `(beat, eighths)` pairs, and `beat` may be a sentinel.** `LAST` resolves
 to the metre's final beat and `ALL` to every beat of the bar, so a pattern names *a
@@ -1593,8 +1593,15 @@ The **free-form** spelling (naming positions directly rather than choosing a row
 already lasts as long as the melody note under it, because `step.duration` *is* that
 note's duration and every renderer already honours it, so "a held baseline" as a flag
 would add a second answer to a question the step model already answers. The real gap is
-the inverse one: a stab *outlasting* its note. See
-[comping-styles.md](comping-styles.md) §8 Stage D, and
-[open-issues.md](open-issues.md) item 1 for the larger thing underneath it — a grid names
+the inverse one: a stab *outlasting* its note.
+
+A **four-note comping chord** is the third, and it is a decision about string sets rather than
+about a longer degree order: `derived_arity` caps the chord part at `chord3`, and
+`get_comping_voicings` offers the `shell` family alone, because with no melody to support a
+fourth voice would be the root or the 5th — the two notes that say least about the quality.
+Its consequence for `harmony=` is [open-issues.md](open-issues.md) item 3.
+
+Both withdrawals are [comping-styles.md](history/comping-styles.md) §8 Stage D, and
+[open-issues.md](open-issues.md) item 1 is the larger thing underneath them — a grid names
 positions the tune does not occupy, and sounding them took a union of the grid's positions
 with the melody's own slots.

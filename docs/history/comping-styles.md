@@ -1,12 +1,19 @@
 # Comping styles: a design proposal
 
+**Retired into `docs/history/` — the record of a design that landed in parts.** The live
+statement of the two axes it argues for is [docs/engine.md](../engine.md): the **chord part's
+two axes** (`harmony=` and `grid=`) are sections of that document now, and the selection this
+document calls a voice set is `parts=` ([parts.md](parts.md)). It was kept out of this
+directory while it was open; what closed it is the shipped engine rather than a decision
+recorded here.
+
 **Status: partly built.** Stage C of [§8](#8-staged-approach) has landed the *harmony*
 axis (`harmony=full|guide|shell_root|root`), so `shell_root` exists and the degree-family
 table in §4.1 is no longer a proposal in its entirety. Stage D has landed the **first half
 of the rhythm grid** — `grid=every_note|freddie|charleston|joe_pass|final_and` — so §4.2's
 table is built as a closed set of named rows, with the free-form spelling (§6 Q6) still to
 come. **`hold=` is withdrawn** — see Stage D — and a measured defect stood between the grid
-and the styles it was built for: [open-issues.md](open-issues.md) item 1, where a quarter
+and the styles it was built for: [open-issues.md](../open-issues.md) item 1, where a quarter
 of the beat positions a grid names produced no chord at all, because a grid could only
 *filter* melody slots and harmony was stored per melody note. **Its stage 3 landed**: on the
 comping route the grid now *generates* positions rather than filtering them, so the union is
@@ -15,7 +22,7 @@ never the metre, as §4.2 below originally supposed. §6 still holds open questi
 flag the axis ships under is `--parts`. This
 records a design and the measurements that forced it, so the decision can be reviewed
 rather than re-derived. It follows
-[the retired reharmonisation proposals](history/reharmonisation-proposals.md), which is the
+[the retired reharmonisation proposals](reharmonisation-proposals.md), which is the
 precedent: a proposal that says what was measured, what is proposed and what is deliberately
 not built. That document now lives in `docs/history/` because its corpus went away - read it
 for the genre, not for numbers that can be re-run.
@@ -26,12 +33,11 @@ actual influence on a comping part, the rule that follows from it, and six steps
 dependency order. Steps 0, B, A, A', C, D and E have landed; §9.4's four-note comping
 chord is the remaining item, and it is still a proposal.
 
-It is deliberately **not** in `docs/history/`, which is for completed plans and is never
-extended. The shipped selection axis is `parts=` ([parts.md](history/parts.md)); this document is
-about the **chord part's two axes** (`harmony=` and `grid=`), and about the fact that the
-three overlap. Where it writes `voices=` or `melody=` it is naming the spelling that axis
+Where it writes `voices=` or `melody=` it is naming the spelling that axis
 shipped as, and the mapping is direct: `voices=none` is `parts=chord`, `voices=soprano` is
-`parts=melody`, and `melody=alto,tenor` is also `parts=chord`.
+`parts=melody`, and `melody=alto,tenor` is also `parts=chord`. **§9.4's four-note comping chord
+is the one thing still unbuilt**, and it is [open-issues.md](../open-issues.md) item 3's other
+direction — "build `full`" rather than "refuse it".
 
 Measurements are over `tests/data/but_not_for_me.mxl` (2/2, Eb major, 80 melody notes),
 `texture=targets`, all 80 steps, unless stated otherwise.
@@ -66,7 +72,7 @@ musical fact. It is not. `get_comping_voicings` builds `midis = sorted(...)` and
 without pinning the melody — and the flag meant to select voices is not what selects it.
 It selects *how many* chord tones.
 
-That defect is fixed and documented in [voices-axis.md](history/voices-axis.md); what follows is
+That defect is fixed and documented in [voices-axis.md](voices-axis.md); what follows is
 the larger thing it exposed.
 
 ---
@@ -231,7 +237,7 @@ played in another is not a rhythmic idea, it is a spelling.
 silent on this 2/2 head was **not the metre at all**. This paragraph originally said it was
 "a 4/4 idiom asked of a 2/2 bar… the mismatch is the arranger's, not the library's". That
 was a misdiagnosis, reached from a measurement that was right and an inference that was not,
-and the same failure mode as [open-issues.md](open-issues.md) item 1.
+and the same failure mode as [open-issues.md](../open-issues.md) item 1.
 
 The measurement was correct — `charleston` **was** silent — and the cause was that a grid
 could only *filter* melody slots, so a position with no written note was unreachable
@@ -357,7 +363,7 @@ and it must name the grid that is too coarse. The test is therefore one-directio
 "resolution versus placement" an earlier draft of this section described.
 
 `joe_pass` is not invented here: it is
-[history/Arranging_Guide.md](history/Arranging_Guide.md) §"Joe Pass" Walking Bass & Comp
+[history/Arranging_Guide.md](Arranging_Guide.md) §"Joe Pass" Walking Bass & Comp
 Style, which specifies the bass on beats 1–4 and "the melody and chord pops live primarily
 on the **and** of beats".
 
@@ -370,7 +376,7 @@ on the **and** of beats".
 | **`_walking_slots`** | already **unions a rhythm grid with the melody grid** before the step loop, for exactly this reason: "a bar whose melody is one whole note still carries four bass notes" |
 
 A comping style is therefore **a degree family + a grid**, which is precisely the pair
-`_walking_slots` already demonstrates. [voices-axis.md §7](history/voices-axis.md) reserved this:
+`_walking_slots` already demonstrates. [voices-axis.md §7](voices-axis.md) reserved this:
 "a row in `MELODY_POLICIES` … the table and the seam exist, the rows do not."
 
 **Corrected 2026-10-04 — that inference overreaches, and by a measured margin.** The
@@ -389,7 +395,7 @@ rests in `skipped`, so it contributes no slot and no bar number. A named grid th
 loses **49 of 190 beat positions (25%)** across the three committed fixtures — a quarter
 of the positions it names — and `hold=` cannot be the answer, because the missing thing is
 not a sustain policy but the *chord timeline the grid would be written against*. That is
-[open-issues.md](open-issues.md) item 1, and it is what makes the harmonisation engine
+[open-issues.md](../open-issues.md) item 1, and it is what makes the harmonisation engine
 in this document's place rather than a rename of the flags.
 
 #### The metre trap
@@ -586,7 +592,7 @@ purpose"*. The integer won by implementation and the question was never revisite
   *generator's* degree rule, not in the selector's cost.
 - **No new grip families.** `shell_root` is reachable on the existing shell sets (11/11).
 - **No change to the drop-2 shapes** (the tables they came from have since been retired —
-  see [generated-grips.md](history/generated-grips.md) §3), and no touching the 54 hardcoded tab
+  see [generated-grips.md](generated-grips.md) §3), and no touching the 54 hardcoded tab
   strings.
 - **No default change.** Every existing arrangement must come out byte-identical, which is
   the acceptance criterion for any part of this that gets built. **Except the one that says
@@ -768,7 +774,7 @@ missed only because the refusal went into a collector nobody read.
 
   The gap is real, but it is not a `hold=` flag: it is the grid owning the rhythm, so a stab's
   duration is the distance to the next grid position. The grid can *place* a stab now —
-  [open-issues.md](open-issues.md) item 1's union landed, so a position a grid names is no
+  [open-issues.md](../open-issues.md) item 1's union landed, so a position a grid names is no
   longer filtered out of the melody — and that leaves the gap where it always was: a *generated*
   position obeys the grid and a *written* onset obeys the melody note (item 1's bullet carries
   the measurement). **Withdrawn rather than deferred**, because as worded it is a no-op and
@@ -1604,7 +1610,7 @@ branch answers it.
 uncached: every slot of every bar enumerated its shapes from scratch, and so did every test that
 re-arranged a head another test had already arranged. It is now the *same* memo the placement
 search is answered through (`_search_shape` / `_searched_shape` / `_place_shape`, §4 of
-[generated-grips.md](history/generated-grips.md)): `_search_comping_voicings` enumerates,
+[generated-grips.md](generated-grips.md)): `_search_comping_voicings` enumerates,
 `_comping_palette` remembers one request as a `_ShapeSnapshot`, `get_comping_voicings` rebuilds
 fresh `Voicing`s — with `_snapshot` / `_voicing_from_snapshot` shared by the two so that "what a
 snapshot is" stays one fact. The reason the rebuild is not optional is this route's own: the

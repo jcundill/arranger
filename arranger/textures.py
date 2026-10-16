@@ -117,7 +117,7 @@ __all__ = [
 #   chord3    exactly three
 #
 # `chord4` is not built: four notes under a melody is five strings, which the
-# right hand's four digits cannot pluck. `docs/comping-styles.md` §9.4 holds the
+# right hand's four digits cannot pluck. `docs/history/comping-styles.md` §9.4 holds the
 # comping-route version of that shape, where there is no tune on top.
 TEXTURE_STYLES: Tuple[str, ...] = (
     "uniform", "targets", "chord1", "chord2", "chord3",
@@ -290,7 +290,7 @@ def parts_has_melody_only(parts: Tuple[str, ...]) -> bool:
 # what must sound, `BASS_DEGREES_6432` says what may be the bottom, and a shape needing
 # both is a claim neither table makes alone. It is reachable on the **existing** `(5,4,3)`
 # shell sets, so it needs no new string sets and no new grip family - the measurement is
-# in `docs/comping-styles.md` §4.1. At an arity of two it **is** the guide pair, which is
+# in `docs/history/comping-styles.md` §4.1. At an arity of two it **is** the guide pair, which is
 # why the old "room for three" refusal is gone rather than relocated: a reduced shape
 # gives up the tail of the order rather than needing a different one.
 HARMONY_FULL = "full"
@@ -552,7 +552,7 @@ def derived_arity(
     a line under it, and a named part with no line leaves the string free.
 
     Capped at `chord3`, because a four-note chord part under nothing is
-    `docs/comping-styles.md` §9.4 - unbuilt - and floored at one, so a selection can
+    `docs/history/comping-styles.md` §9.4 - unbuilt - and floored at one, so a selection can
     always state something.
     """
     fixed = texture_arity(texture, parts)

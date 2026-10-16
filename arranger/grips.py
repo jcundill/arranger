@@ -1439,7 +1439,7 @@ def _search_comping_voicings(
     rather than a change of arity, because it is a claim about *which degrees sound* and
     not about how many notes there are - the same reason `HARMONY_STYLES` is a table of
     degree families and not a count. It resolves on the **existing** `(5,4,3)` shell sets,
-    so no new string set is involved - `docs/comping-styles.md` holds the measurement.
+    so no new string set is involved - `docs/history/comping-styles.md` holds the measurement.
 
     Every candidate sounds only chord tones, holds a fret span of at most
     `GRIP_MAX_SPAN["shell"]`, and occupies one string set from `GRIP_STRING_SETS["shell"]`
@@ -1517,7 +1517,7 @@ def _comping_palette(
 
     The same request is asked repeatedly: every slot of a comping bar, every head of a
     sweep, and every caller that arranges a head another caller has already arranged.
-    The counts are in `docs/comping-styles.md`.
+    The counts are in `docs/history/comping-styles.md`.
     """
     return tuple(
         _snapshot(voicing)

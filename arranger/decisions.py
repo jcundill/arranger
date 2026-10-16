@@ -131,7 +131,7 @@ def melody_alone_case(
 
     **`melody_voiced` is the fourth clause, and it is a guard rather than a route -
     and it is asked per *slot*, not once per arrangement.** Under §9.3 step D of
-    `docs/comping-styles.md` the engine passes `sings_here` here, not the arrangement's
+    `docs/history/comping-styles.md` the engine passes `sings_here` here, not the arrangement's
     route: a slot the guitar does not sing is either one whose selection has no soprano
     or one carrying no melody note. Every answer here ends at
     `get_melody_only_voicing`, which is the melody on its own - so this function cannot
@@ -155,7 +155,7 @@ def melody_alone_case(
     nothing rather than one note.** Every other answer ends at
     `get_melody_only_voicing`, which is the tune on its own; there is no such thing
     when the tune is somebody else's, so an off-grid slot on the comping route is a
-    **rest** - `MELODY_ALONE_REST`, a fourth kind. This is `docs/comping-styles.md`
+    **rest** - `MELODY_ALONE_REST`, a fourth kind. This is `docs/history/comping-styles.md`
     §4.2's "a melody note with no chord position on it sounds alone", and it needs two
     different answers rather than one: with the guitar singing, the note still sounds
     (the texture case); with it not singing, the note is the horn's and the guitar has
@@ -167,7 +167,7 @@ def melody_alone_case(
     # The grid is asked *inside* the voice guard rather than after it. Answering the
     # voice guard first makes `grid=` silently inert on the comping route - all
     # four patterns come back byte-identical to the default, which
-    # `docs/comping-styles.md` records. Asking it inside is safe because a grid
+    # `docs/history/comping-styles.md` records. Asking it inside is safe because a grid
     # only ever *removes* chords, so it cannot reintroduce a soprano the voice
     # selection removed.
     if not melody_voiced:
@@ -199,7 +199,7 @@ def melody_alone_case(
         # is the whole reason this cannot be a bool on the texture case:
         #
         # - singing: the note of the tune still sounds, alone. This is
-        #   `docs/comping-styles.md` §4.2's "a melody note with no chord position on
+        #   `docs/history/comping-styles.md` §4.2's "a melody note with no chord position on
         #   it sounds alone", and it is the *texture* case - the step has a harmony,
         #   it is simply not being spelled out here, so `melody_only` must stay False.
         # - not singing: there is no melody on this guitar to play alone, and the
