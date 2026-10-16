@@ -248,7 +248,7 @@ def parts_have_bass(parts: Tuple[str, ...]) -> bool:
     """Whether the guitar takes the bottom - the part the thumb realises.
 
     The part and the digit are different facts: a shape with no bass line still
-    has its lowest note taken by the thumb (`docs/fingering.md` §2.5), so this
+    has its lowest note taken by the thumb (`docs/history/fingering.md` §2.5), so this
     asks about the music and not about the right hand.
     """
     return PART_BASS in parts

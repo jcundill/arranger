@@ -457,7 +457,7 @@ def thumb_safe_grips(palette: Tuple[str, ...]) -> Tuple[str, ...]:
     while a thumb line is running: the fourth string is the bass note. A four-note grip
     plus a thumb is five simultaneous plucks, which no right hand has at any fret - the
     left hand can barre a four-fret shape, and that is exactly why the two budgets are
-    separate questions (see `docs/fingering.md` §4.3).
+    separate questions (see `docs/history/fingering.md` §4.3).
 
     An **empty** palette comes back unchanged, because it is not a palette that fails the
     budget - it is the table saying "the left hand plays nothing here" (`walking_bass`'s
@@ -483,7 +483,7 @@ def thumb_safe_grips(palette: Tuple[str, ...]) -> Tuple[str, ...]:
 # The strings the right hand's **thumb** can reach: the four lowest, E A D G. A gap between
 # two sounding strings is normally the thumb's - the thumb is on the bottom note and the
 # index on the next string up - so the gap only stops being the thumb's where the note under
-# it is above this reach. Measured in `docs/fingering.md` §4.4, where narrowing §2.5's
+# it is above this reach. Measured in `docs/history/fingering.md` §4.4, where narrowing §2.5's
 # exemption to this reach moved no count at all: it is the reach the tables already respect.
 THUMB_REACH_STRINGS = frozenset((0, 1, 2, 3))
 
@@ -496,7 +496,7 @@ def finger_skip_count(voicing: Voicing) -> int:
     finger the next string up. The trouble is a **gap** - a string sounding with a silent
     one between it and the string below - because the digit that would take it has to
     reach over a string it is not using, and that is the middle or the ring finger's cost
-    (`docs/fingering.md` §2.5).
+    (`docs/history/fingering.md` §2.5).
 
     The bottom gap is the exception, and it is checked on the **lowest sounding string**:
     while that string is inside the thumb's reach the thumb is the digit on the bottom

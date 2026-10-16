@@ -14,7 +14,7 @@ Takes `(melody note, chord quality, chord name)` triples, builds voicings in sev
 
 > The **distribution** is `jazz-arranger` (PyPI name `arranger` taken by unrelated project). **Import** name is `arranger`.
 
-Why lives in [`docs/`](docs/): [engine.md](docs/engine.md) (selector, texture, cost tuple), [generated-grips.md](docs/history/generated-grips.md) (which chord tones a shape states), [renderers.md](docs/renderers.md) (tab, MusicXML, GP5), [parts.md](docs/history/parts.md) (the parts model), [comping-styles.md](docs/history/comping-styles.md) (the comping axes), [fingering.md](docs/fingering.md), [open-issues.md](docs/open-issues.md).
+Why lives in [`docs/`](docs/): [engine.md](docs/engine.md) (selector, texture, cost tuple), [generated-grips.md](docs/history/generated-grips.md) (which chord tones a shape states), [renderers.md](docs/renderers.md) (tab, MusicXML, GP5), [parts.md](docs/history/parts.md) (the parts model), [comping-styles.md](docs/history/comping-styles.md) (the comping axes), [fingering.md](docs/history/fingering.md), [open-issues.md](docs/open-issues.md).
 
 ## Installation
 

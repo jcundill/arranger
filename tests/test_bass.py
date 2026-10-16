@@ -565,7 +565,7 @@ class TestThumbCapacityAndRefusal(unittest.TestCase):
 
         `uniform` used to answer **0** here, because `drop24`'s `(4,2,1,0)` set spanned the
         low E, the A and the D at once. That was one of the four inner-skip `drop24` sets
-        removed for a *finger* reason (`docs/fingering.md` §4.4), and this capacity is
+        removed for a *finger* reason (`docs/history/fingering.md` §4.4), and this capacity is
         derived from the tables rather than listed, so it followed on its own: one string is
         the worst case now - which is the rule's threshold, not a special case.
         """
@@ -595,7 +595,7 @@ class TestThumbCapacityAndRefusal(unittest.TestCase):
         `uniform` failed every policy because its palette held `drop24`'s `(4,2,1,0)` - the
         one reachable set that spanned all three thumb strings - so `bass_allowed` refused
         and the caller was told which texture to use instead. Removing the four inner-skip
-        `drop24` sets (`docs/fingering.md` §4.4) left one string free in the worst case,
+        `drop24` sets (`docs/history/fingering.md` §4.4) left one string free in the worst case,
         which is the rule's threshold, so every texture now carries every policy.
 
         **This test was inverted rather than deleted.** It used to assert that `uniform` was

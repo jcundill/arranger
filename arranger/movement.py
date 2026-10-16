@@ -1734,7 +1734,7 @@ def _harmonised_step(
     # for one out of position is a different bad trade. Measured on the committed heads,
     # both halves earn their place: without the span test 30 `targets` steps lose three
     # notes each, and without the window test the A-7 of `MAJOR_CADENCE` trades its
-    # pinned melody-alone step for a shape at fret 14 (`docs/fingering.md` §4.4's ban is
+    # pinned melody-alone step for a shape at fret 14 (`docs/history/fingering.md` §4.4's ban is
     # why nothing else fits there).
     if should_demote_to_melody_alone(best_voicing, role):
         turned_away = _cost.voicing_cost(

@@ -60,7 +60,6 @@ DOCUMENTS = [
     "docs/engine.md",
     "docs/renderers.md",
     "docs/open-issues.md",
-    "docs/fingering.md",
 ]
 
 #: Matches a version as stated in prose: `0.9.0`, `` `0.9.0` ``, "currently 0.9.0".

@@ -58,7 +58,7 @@ you whether a change is an improvement or a different library.
   **No set skips an *inner* string any more except the `(5,3,2)` shell**: the four
   `drop24` sets that did - four of that family's eight, two of them its measured winners -
   were removed because the right hand had to reach over an unplucked string to fret them.
-  [fingering.md](fingering.md) §4.4 holds the measurement and what the removal cost.
+  [fingering.md](history/fingering.md) §4.4 holds the measurement and what the removal cost.
   `supported_string_sets()` is the playability invariant stated in
   one place, and adds the drop-2 blocks for all three sopranos (drop-2 is defined
   generically, so a caller passing their own `top_string` still works).
@@ -277,6 +277,14 @@ you whether a change is an improvement or a different library.
     arrangement route reaches it: the axis that let a caller give one is deleted, so the
     family a step is voiced with is `GRIP_PREFERENCE`'s order and nothing else.
     `_best_voicing` is its argmin and is stable, so the engine is deterministic.
+  - **No element names a finger, and that is measured rather than omitted.** The right
+    hand's own criterion was a candidate and it is settled: measured at every placement it
+    changed **0** picks below `position` and **17** just after `span`, across 94 of 1,204
+    pools — and it was answered by *tables* instead, since the four `drop24` sets that
+    carried a finger skip were removed. The only finger questions the engine asks are
+    **filters** (`RIGHT_HAND_STRINGS` / `thumb_safe_grips`, `fingers.can_fret`), never
+    scores. `docs/history/fingering.md` §4.2 and §4.4 hold the measurements, and §5 step 3
+    is the one still open.
   - `get_octave_down_candidates(melody_note, chord_type, chord_name=None,
     top_strings=MELODY_STRING_CHOICES)` — the same for the melody an octave lower,
     on the strings below the high E. Empty when the transposed melody is unvoiceable,
@@ -617,7 +625,7 @@ fixtures lose their chord the same way (F5 at fret 13 over an F7, and C#5 over a
 The full measurement, including which of the lost shapes were span-0 barres that cost
 the hand nothing, the alternative that keeps every chord, and the open question of
 whether the rule should be per *set* or per *shape*, are in
-[fingering.md](fingering.md) §4.4.
+[fingering.md](history/fingering.md) §4.4.
 
 Note the local names, which cost a wrong answer here: in `_, v1, v2, v3 = stack`, `v1`
 is the **second** voice. So drop-2 & 4 drops `v1` and `v3` and keeps `v2` beside the
@@ -1224,7 +1232,7 @@ rather than of this rule.** `uniform` used to be the one that failed: its palett
 `drop24`'s `(4,2,1,0)`, the one reachable set that spanned all three thumb strings, so
 `bass="root,5th,approach,nearest"` under the default texture was refused, naming a texture that
 would work. Removing the four inner-skip `drop24` sets for the right-hand reason in
-[fingering.md](fingering.md) §4.4 removed that set with them, so the worst case anywhere
+[fingering.md](history/fingering.md) §4.4 removed that set with them, so the worst case anywhere
 is now one free string — the rule's threshold — and `uniform` carries every policy. The
 refusal and its reason string stay, because the question is still the right one: the
 comping route is answered by `comping_capacity`, and a palette added later that reaches

@@ -1528,7 +1528,7 @@ class TestTheInvariant(unittest.TestCase):
         four-fret sweep below read the *same* arrangements rather than paying for the
         same twelve a second time. The heads are `tests.support.sweep_head_paths()`: the
         rule is about the right hand, and three metres answer it -
-        [docs/fingering.md](../docs/fingering.md) §4.3 holds the reading.
+        [docs/history/fingering.md](../docs/history/fingering.md) §4.3 holds the reading.
         """
         paths = sweep_head_paths()
         checked = 0
@@ -2285,7 +2285,7 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
         `uniform`'s palette held `drop24`'s `(4,2,1,0)`, the one reachable shape spanning
         all three thumb strings, so `bass_allowed` refused every policy and the caller was
         told which texture would work instead. The four inner-skip `drop24` sets were
-        removed for a *finger* reason (`docs/fingering.md` §4.4) and that set was among
+        removed for a *finger* reason (`docs/history/fingering.md` §4.4) and that set was among
         them, so the worst case `uniform` can reach now leaves one string free - the rule's
         threshold - and the line is written.
 

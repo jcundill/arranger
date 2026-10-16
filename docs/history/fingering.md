@@ -1,5 +1,14 @@
 # Fingering: research notes
 
+**Retired into `docs/history/` — the record of a measurement programme, not a plan.** The two
+defects it found shipped (`grips.thumb_safe_grips` and `fingers.can_fret`), the finger-skip ban
+is in the string tables, and the two rules a reader needs from it live in
+[docs/engine.md](../engine.md): the four-string budget and the right hand's `p-i-m-a`
+assignment are stated in §"`parts=` as the third axis", and the cost-tuple decision - that no
+element names a finger, and why - is stated with `voicing_cost`. What is still open is §5 step 3,
+and its counts are [open-issues.md](../open-issues.md) item 2 rather than here: they have moved
+since, and that item is where they are re-measured by hand.
+
 **Status: step 1 of §5 is built; step 2's §4.3 measurement has landed on both hands, and it
 gave `arranger/fingers.py` its first engine caller.** §4.3's *string* budget needed the right
 hand (`grips.thumb_safe_grips`) and no code from this module; its *fret* budget needed the
@@ -58,7 +67,7 @@ the state of record.
 
 ## 1. Why: what whole-hand measures cannot see
 
-`voicing_cost` (see [engine.md](engine.md)) ranks candidates with whole-hand
+`voicing_cost` (see [engine.md](../engine.md)) ranks candidates with whole-hand
 measures:
 
 - **`fret_span()`** (criterion 3) — `max(frets) - min(frets)`. Under monotone
@@ -149,7 +158,7 @@ These follow from four fingers, each pressing at one fret position at a time:
 ### 2.3 Numbers and physics (measurement wanted before asserting)
 
 - **Maximum span.** The engine already claims `GRIP_MAX_SPAN = 5` (4 for a
-  duo and an interval) — see [engine.md](engine.md) §"Span outranks neck
+  duo and an interval) — see [engine.md](../engine.md) §"Span outranks neck
   position" for what promoting span over position cost. Independent reference
   implementations land near 4 for an intermediate player (the `mutheors` Rust
   crate's default `max_fret_span` is 4). Worth stating: fret spacing narrows up
@@ -356,7 +365,7 @@ Adding or changing a criterion is **a musical decision, not a refactor** —
 `AGENTS.md` and the `voicing_cost` docstring both say so, and the span bucket
 just demonstrated the protocol: implement, measure what moves, re-pin only what
 the measurement exonerates, record the trade and any rejected alternatives in
-[engine.md](engine.md), update the test count. A finger-level criterion would
+[engine.md](../engine.md), update the test count. A finger-level criterion would
 land in the span/position region of the tuple — the region the `0/1/2` bucket
 measurement showed is the most sensitive in the whole function. Measure first,
 decide placement second. Candidates worth measuring, in likely order:
@@ -473,7 +482,7 @@ and does not pay the bucket, because it re-states the bass under the shape alrea
 chords across six heads, not the one figure this used to say), and **68**
 cannot be helped by any pitch at all. It needs no pipeline change — the walk does not have to see the
 shapes — which is the opposite of what the question implied. So nothing was built, a third time for
-the same reason. [docs/open-issues.md](open-issues.md) item 2 has the counts, the attribution, the
+the same reason. [docs/open-issues.md](../open-issues.md) item 2 has the counts, the attribution, the
 step-3 ceiling table, the aliasing trap this instrumentation hit, and the four alternatives — and
 **item 5** is the same question asked from the other end: a lone note the hand holds can leave the
 walk's own register out of its reach, which is the *selector's* room to leave again and is measured
@@ -669,7 +678,7 @@ candidate in the pool:
   **17**. And the zero-skip alternative loses first at **span 197**, missing 35, position
   17, outside 15, foreign 1 — so the skip is overwhelmingly what the *span* criterion buys.
   Preferring adjacency over span would undo the deliberate promotion of span above neck
-  position (see [engine.md](engine.md) §"Span outranks neck position"), and on the
+  position (see [engine.md](../engine.md) §"Span outranks neck position"), and on the
   committed heads the same placement changes 94 of 1,204 pools. It would also rank the
   `(5,3,2)` shell down, and that shape is the walking bass's three-layer split — so the
   criterion and the shell cannot both be kept as they stand. Measured, not built.
@@ -768,7 +777,7 @@ and §4.4), which is why step 1 had to exist before any of the measurements coul
      the chosen shape's own notes (the ten that did were the removed `drop24` sets), so every
      recovery now changes the harmony and pays the span bucket. The **walk's own pitch** is the
      fourth lever and costs the tuple nothing. Its figures are
-     [open-issues.md](open-issues.md) item 2's, re-measured there by hand and deliberately not
+     [open-issues.md](../open-issues.md) item 2's, re-measured there by hand and deliberately not
      restated here — one fact, one home.
    - **The movement comparison came back nearly empty, and the two numbers that did not
      argue against a tuple slot.** Over 1,330 struck transitions (six heads × two textures,
@@ -815,7 +824,7 @@ and §4.4), which is why step 1 had to exist before any of the measurements coul
    candidate that would touch every step — `finger_movement.total` in `movement`'s place —
    reports "nothing moved" on a quarter of them. If it is taken up anyway, the protocol is
    the span bucket's: implement, measure which pinned tabs move, re-pin only what the
-   measurement exonerates, record the rejected alternatives in [engine.md](engine.md), and
+   measurement exonerates, record the rejected alternatives in [engine.md](../engine.md), and
    update the counts here and in `AGENTS.md`. The **inversion** that protocol named has
    already happened, for §4.3 rather than for a tuple slot: `TestTheModuleIsInert` is now
    `TestTheEngineUsesItForOneQuestion` (`AGENTS.md` trap 5), so a step-3 change inherits a

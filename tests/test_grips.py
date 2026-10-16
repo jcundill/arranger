@@ -962,7 +962,7 @@ class TestStringSetTable(unittest.TestCase):
         """
         Every set a voicing may occupy leaves no finger reaching over a string - but one.
 
-        `docs/fingering.md` §4.4's rule, held against the tables rather than restated: a
+        `docs/history/fingering.md` §4.4's rule, held against the tables rather than restated: a
         gap between two sounding strings is the **thumb's** while the note below it is
         inside `THUMB_REACH_STRINGS`, and any other gap costs the middle or ring finger
         (`finger_skip_count`). Four `drop24` sets used to fail this and were **removed for
@@ -1437,7 +1437,7 @@ class TestPartialHarmonisation(unittest.TestCase):
 
         **That is the ban's cost, and it is asserted rather than re-pinned away.**
         `x-12-13-x-13-13` was one of the four inner-skip `drop24` sets, removed because a
-        finger had to reach over the unplucked G to fret it (`docs/fingering.md` §4.4), and
+        finger had to reach over the unplucked G to fret it (`docs/history/fingering.md` §4.4), and
         F5 at fret 13 leaves nothing else a four-fret hand can hold: the only candidate
         left is the five-fret `x-12-x-8-13-13`, which the budget refuses. So the step plays
         the melody alone and the *diagnostic* says why - note that it is not marked

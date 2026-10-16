@@ -134,7 +134,7 @@ position inside it.
 ## 2. A refused thumb note is usually not the shape being unplayable
 
 **Status: diagnosed, not fixed — the decision is left open.** This is the question
-[docs/fingering.md](fingering.md) §4.3 leaves hanging: whether the **selector** should have
+[docs/history/fingering.md](history/fingering.md) §4.3 leaves hanging: whether the **selector** should have
 left room for the thumb in the first place.
 
 **The issue.** `_place_bass` refuses a candidate and the step keeps its upper voicing.
@@ -184,7 +184,7 @@ policy — a step is never dropped because the thumb could not reach it.
   notes were the four inner-skip `drop24` sets, and §4.4 removed them for the right-hand reason,
   so every remaining recovery changes the harmony and pays the span bucket.
 
-Not built, for the reason [docs/fingering.md](fingering.md) §4.4 reached for the finger skip:
+Not built, for the reason [docs/history/fingering.md](history/fingering.md) §4.4 reached for the finger skip:
 the payoff is small, it changes what a downbeat states, and the current behaviour — drop the
 note, keep the shape, report it — is defensible precisely because the chord already sounds that
 pitch class an octave up.
@@ -253,7 +253,7 @@ a behaviour worth asserting, and when the reader lands, the item and its row go 
 
 ## 5. A lone note the hand holds can leave the walk below the shape's reach
 
-**Status: diagnosed, not fixed — the lever is [docs/fingering.md](fingering.md) §4.3's question**,
+**Status: diagnosed, not fixed — the lever is [docs/history/fingering.md](history/fingering.md) §4.3's question**,
 and it is the same question item 2 leaves open, seen from the other side.
 
 **The issue.** `_place_bass` ranks the thumb's candidates by proximity to the hand but never

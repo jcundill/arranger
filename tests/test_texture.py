@@ -99,7 +99,7 @@ def major_cadence_tabs():
     The A-7 is `x-x-x-x-x-9` - the melody alone, its chord dropped - where it was a
     complete four-note drop-2 & 4 at `x-10-10-x-10-9`. That shape came from one of the
     four inner-skip `drop24` sets, removed because a finger had to reach over the
-    unplucked G to fret it (`docs/fingering.md` §4.4), and C#5 over an Am7 is a non-chord
+    unplucked G to fret it (`docs/history/fingering.md` §4.4), and C#5 over an Am7 is a non-chord
     tone, so the set that could harmonise it was doing the *fallback* work as well: the
     only candidate left needs five frets (`x-10-x-5-10-9`), the four-fret budget refuses
     it, and the step keeps the tune and loses the chord, with a diagnostic naming the
@@ -740,7 +740,7 @@ class TestTheThumbReach(unittest.TestCase):
     merged bass note is written into the fret vector *after* selection. Above the G the thumb
     is out of reach and the fingers take the bottom, which `duo`'s 1-2 pair and the two
     one-note comping shapes are the only reachable sets to ask for. How often it happens is
-    measured in `docs/fingering.md` §4.4.
+    measured in `docs/history/fingering.md` §4.4.
 
     Asserted because of what it *buys*: a string set with nothing below the G can only contain
     the B, the high E, or both - adjacent strings - so the thumb-to-index gap §2.5 exempts
@@ -887,7 +887,7 @@ class TestBackwardCompatibility(unittest.TestCase):
         four pitches are still the four Fmaj7 tones (A3 E4 F4 C5 against E3 A3 F4 C5), but
         the bass is the 5th where it was the root, and the span is 2 where it was 1 - so
         this pin records a *trade*, not an improvement, and it is the same trade the
-        removed sets were kept for (see `docs/fingering.md` §4.4).
+        removed sets were kept for (see `docs/history/fingering.md` §4.4).
 
         The last step moved the other way, and that one is an improvement: `x-5-5-x-5-5`
         (D3 G3 E4 A4 under A4) became `8-x-8-9-10-x` (C3 Bb3 E4 A4), so C7 now sounds its

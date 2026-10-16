@@ -12,7 +12,7 @@ strict dependency order, and nothing above imports anything below it by accident
               steps -> render -> (this module)
 
 `fingers` is a second edge off `tuning`, and the diagram above omits it: it is the
-left-hand fingering module of `docs/fingering.md`, and `bass` is the one engine reader
+left-hand fingering module of `docs/history/fingering.md`, and `bass` is the one engine reader
 that reaches it - it calls `fingers.can_fret` for the four-fret budget of a merged
 `bass_only` step, which is why the facade binds the module. `tests/test_fingers.py` holds
 that caller set. It is in `test_package_dag.ORDER`, because a module missing from that
