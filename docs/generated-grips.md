@@ -165,7 +165,7 @@ worktree (AGENTS.md trap 8):
   shifts. So the cost is nothing like the 65 steps the *first* half would cost.
 
 What the rank buys is a **reduced arity**, which is where the parts model reads it
-(`docs/parts.md` §4 and §9): a chord part at three voices gives up its 5th, at two it is the
+(`docs/history/parts.md` §4 and §9): a chord part at three voices gives up its 5th, at two it is the
 guide pair, and on `Bbm7b5` the root goes before the `b5`.
 
 ## 4. What step 2 landed, and what is still owed

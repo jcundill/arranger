@@ -1,11 +1,19 @@
 # Parts: melody, bass, chord — redesign of the harmonisation axes
 
+**Retired into `docs/history/` — the record of a completed plan.** All six steps of §7 landed,
+and §6's deletions with them: `parts=` is the axis, `texture=` an arity policy, `harmony=` a
+degree order, `bass=` note rules and `grid=` `part:pattern` rows. The live statement of all
+five is [docs/engine.md](../engine.md), and the two ends this document left open are
+[open-issues.md](../open-issues.md) items 1 and 4 rather than anything here. What it is still
+for is the *why*: six flags answering four questions, and which collision each survivor
+removed.
+
 **Status: built, and §7 owes nothing.** Steps 1-5 of §7 have landed and §6's deletions with
 them: `parts=` replaced `voices=`, `texture=` is an arity policy over the chord part, `grid=` is
 `PART:PATTERN` rows, and the `grips=` family-list spelling is gone from the library and the CLI
 - the grip *order* a caller used to give is the engine's `GRIP_PREFERENCE` now. Step 2's last
 piece arrived later: the default grid's **generated slots**, measured in
-[open-issues.md](open-issues.md) item 1. Counts live in the documents named here, not restated.
+[open-issues.md](../open-issues.md) item 1. Counts live in the documents named here, not restated.
 
 ## 1. Why
 
@@ -23,17 +31,17 @@ Six flags. Four questions. Each flag answers one to three of them.
 Five consequences on record:
 
 - `texture=`'s empty palette and `voices=` **both** used to mean "the guitar does not sing",
-  which is the overlap [comping-styles.md](comping-styles.md) §2 records. [one-fact.md](history/one-fact.md)
+  which is the overlap [comping-styles.md](../comping-styles.md) §2 records. [one-fact.md](one-fact.md)
   Stage 2 moved the claim onto `voices=`, so what remains is one fact on each side rather than
   two spellings of one: an empty **palette** says the left hand plays nothing here (a thickness
   fact), and only a soprano-less **selection** says the tune is somebody else's.
 - `texture=` is a 2-D space enumerated as a list — §3 of that document.
-- `--voices soprano,alto` arranges the same as `auto` — [voices-axis.md](history/voices-axis.md)
+- `--voices soprano,alto` arranges the same as `auto` — [voices-axis.md](voices-axis.md)
   §7 item 6.
 - `harmony=full` is accepted and answered with a different family —
-  [open-issues.md](open-issues.md) item 3.
+  [open-issues.md](../open-issues.md) item 3.
 - **Unexplained**: on the comping route `--grips` yields four arrangements and the
-  cause is not established — [comping-styles.md](comping-styles.md) §2 item 3.
+  cause is not established — [comping-styles.md](../comping-styles.md) §2 item 3.
   Explain it before deleting the flag that carries it.
 
 ## 2. Three parts, not four
@@ -49,7 +57,7 @@ not four parts. Three parts:
 The fourth string is **capacity, not a part**.
 
 The bass part is not the thumb, and the thumb is not the bass part.
-[fingering.md](fingering.md) §2.5: the thumb takes the lowest sounding string, then
+[fingering.md](../fingering.md) §2.5: the thumb takes the lowest sounding string, then
 index, middle, ring upward. A shape whose lowest note sits above the thumb's reach has
 **no** thumb in it. A shape with no bass line still has its bottom note taken by the
 thumb. The parts model says what music is there. The digits stay derived in
@@ -80,7 +88,7 @@ narrowed afterwards by a texture's palette.
 | chord (1) | 1 | `voices=alto` or `voices=tenor` |
 | chord (2) | 2 | `voices=alto,tenor` |
 | chord (3) | 3 | comping with `harmony=shell_root` |
-| chord (4) | 4 | [comping-styles.md](comping-styles.md) §9.4, unbuilt |
+| chord (4) | 4 | [comping-styles.md](../comping-styles.md) §9.4, unbuilt |
 
 Every grip family and every `voices` selection lands in a cell of this table. The
 generative space already is this table. Today three flags address it, with aliases and
@@ -171,16 +179,16 @@ a rest.
 
 1. `harmony=full` stops lying, because `full` stops being an arity word at all. It is the
    whole tone set in `TONE_PRIORITY` order, and the texture's arity takes the first n of
-   it. [open-issues.md](open-issues.md) item 3 goes for good.
+   it. [open-issues.md](../open-issues.md) item 3 goes for good.
 2. `texture=walking_bass` dissolves into the two things it always was: a bass part with
    note rules (`parts` and `bass_style`) and a thick-on-the-strong-beat arity (the policy).
 3. `shell_root` is no longer a conjunction of two degree tables welded inside
    `_shell_voicing`. It is one degree order with a bass-register note at the bottom.
-4. The lone-bass branch in [voices-axis.md](history/voices-axis.md) §8a goes. That register fact
+4. The lone-bass branch in [voices-axis.md](voices-axis.md) §8a goes. That register fact
    was about a part, not a name.
 5. §7 item 6 of that document goes. A part is taken or not taken, `voices=none` has no
    equivalent, and there is no inner voice to name.
-6. The overlap in [comping-styles.md](comping-styles.md) §2 goes. "Does the guitar sing?"
+6. The overlap in [comping-styles.md](../comping-styles.md) §2 goes. "Does the guitar sing?"
    is one part's presence.
 7. `harmony_allowed`'s "room for three" refusal goes, and the arithmetic does not inherit it:
    `shell_root` is the guide pair plus a register note, so at arity two it **is** the guide
@@ -197,7 +205,7 @@ a rest.
    states it instead of implying it.
 10. The step model does not change. `melody_voiced`, `bass_only`, `bass_role`,
     `chord_unvoiced` and `silence` are already part facts — see
-    [one-fact.md](history/one-fact.md).
+    [one-fact.md](one-fact.md).
 11. **An `NC` bar sounds the melody and nothing else, on every route** — **built**. The
     bass part used to be settled by the route: a chordless bar between two chords was
     walked when the guitar sang, because the walk anchored on the *previous* chord's root,
@@ -220,12 +228,12 @@ a rest.
 - `harmony=` becomes load-bearing where the guitar sings, which it is not today. The
   `--grips shell` chord-melody must be expressible in the same pass: an arity from the
   texture plus a degree order from `harmony`. That is the deferred option (A) in
-  [comping-styles.md](comping-styles.md) §6 Q2.
+  [comping-styles.md](../comping-styles.md) §6 Q2.
 - `bass.py`'s `_walking_bass_line` and its `BASS_ROLE_*` set become the `bass_style` table,
-  so the walk's own pitch — the lever [open-issues.md](open-issues.md) item 2 measures —
+  so the walk's own pitch — the lever [open-issues.md](../open-issues.md) item 2 measures —
   becomes something a caller can name.
 - The generator's core rule is touched. `TONE_PRIORITY` and `_drop2_template_for` are the
-  drop-2 rule ([generated-grips.md](generated-grips.md)). Re-express it, do not wrap it.
+  drop-2 rule ([generated-grips.md](../generated-grips.md)). Re-express it, do not wrap it.
 - The gate. Fingerprints are re-baselined by construction equivalence
   (`tests/test_step_loop_equivalence.py`, `AGENTS.md` trap 8). Never regenerate snapshots.
 
@@ -249,7 +257,7 @@ a rest.
    What was owed — and **has landed** — is a beat the melody skips *inside* a bar it occupies
    under the **default** grid. The premise this step was written on — "a grid can only filter
    melody slots inside a bar the tune occupies" — is true of `every_note` and false of a named
-   one, and [open-issues.md](open-issues.md) item 1 says which. The size it was written with —
+   one, and [open-issues.md](../open-issues.md) item 1 says which. The size it was written with —
    **155** silent positions against 192 a hold forbids — was taken over *every* bar, so it
    counted the 87 a named grid already adds; restricted to melody-bearing bars it is **68**
    against the same 192. The default now generates at each bar's own subdivision and the union
@@ -265,7 +273,7 @@ a rest.
    `TEXTURE_ARITY` is what the textures carry, and `walking_bass` is no longer a texture name.
 5. ~~`grid=` becomes positions crossed with parts, taking the bass rhythm with it.~~ — **built**
    as `PART:PATTERN` rows. The bass *rhythm* half is the one piece still owed a reader:
-   [open-issues.md](open-issues.md) item 4.
+   [open-issues.md](../open-issues.md) item 4.
 6. ~~Deletions: `grips=`, `HARMONY_ROOT`, and the `voices=none` and `voices=auto`
    spellings.~~ — **built**.
 
@@ -277,7 +285,7 @@ alias keeps the collision addressable.
 
 ## 8. Deliberately not built
 
-No per-finger cost criterion ([fingering.md](fingering.md) §5 step 3). No sixth axis. The
+No per-finger cost criterion ([fingering.md](../fingering.md) §5 step 3). No sixth axis. The
 digits stay derived and unexposed. `voices=` does not survive as an alias: this is pre-1.0,
 and an alias keeps the collision addressable. Two `*_AUTO` sentinels survive: `harmony`'s,
 which resolves from `parts` because the two shipped defaults are different shapes, and

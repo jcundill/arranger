@@ -316,7 +316,7 @@ class TestThePaletteRescue(unittest.TestCase):
     single note, and the one family that states one note under a melody is `duo` -
     which is a *pair* of specific degrees, so a melody it cannot pair with leaves the
     chord unstated. That is the shipped spelling of the case; the `grips=` argument
-    that used to pin it is gone (`docs/parts.md` §6 item 6), because a grip family is
+    that used to pin it is gone (`docs/history/parts.md` §6 item 6), because a grip family is
     the search space rather than a choice.
     """
 

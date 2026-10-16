@@ -27,7 +27,7 @@ dependency order. Steps 0, B, A, A', C, D and E have landed; §9.4's four-note c
 chord is the remaining item, and it is still a proposal.
 
 It is deliberately **not** in `docs/history/`, which is for completed plans and is never
-extended. The shipped selection axis is `parts=` ([parts.md](parts.md)); this document is
+extended. The shipped selection axis is `parts=` ([parts.md](history/parts.md)); this document is
 about the **chord part's two axes** (`harmony=` and `grid=`), and about the fact that the
 three overlap. Where it writes `voices=` or `melody=` it is naming the spelling that axis
 shipped as, and the mapping is direct: `voices=none` is `parts=chord`, `voices=soprano` is

@@ -122,7 +122,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         **19, and it was 20 before `--grips` was withdrawn.** The flag named a grip
         family to pin, and a family is the chord part's *internal search space* rather
         than a choice - `parts=`, `texture=` and the neck window decide it - so the
-        option was deleted rather than deprecated (`docs/parts.md` §6 item 6). The
+        option was deleted rather than deprecated (`docs/history/parts.md` §6 item 6). The
         count moved by exactly one, which is the tripwire working: the earlier step
         that removed `--skeleton` and `--pick` left it at 20, because those were
         `add_common_arguments` parameters gated on a vocabulary the one real caller

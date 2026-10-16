@@ -189,7 +189,7 @@ def _resolve_bass(
     melody_voiced = parts_have_melody(parts)
     melody_only = parts_has_melody_only(parts)
     if bass == BASS_STYLE_AUTO:
-        # A thumb line is a **combination**, not the default (docs/parts.md §9): the
+        # A thumb line is a **combination**, not the default (docs/history/parts.md §9): the
         # shipped answer is no line, and a caller who wants one names a style or a
         # `bass:walk` grid row. The one sentinel case that still writes one is a
         # melody-only selection that names the bass part - the tune with a thumb under
@@ -1091,7 +1091,7 @@ def _comping_step(
     # heads under a thumb line: reserving it anyway cost the chord its 5th on 72 steps.
     #
     # **A lone bass part states one note**, whatever the arity says: the bass part is
-    # the [part the thumb realises](../docs/parts.md), and a triad with the root at the
+    # the [part the thumb realises](../docs/history/parts.md), and a triad with the root at the
     # bottom is the chord part rather than a bass line. Before the parts axis this fell
     # out of the arity being the *number of voice names*; the arity is the texture's
     # now, so the rule has to be stated here - and it is the same fact `bass_voice`

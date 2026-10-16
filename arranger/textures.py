@@ -105,7 +105,7 @@ __all__ = [
 #
 # `texture=` owns **how many notes the chord part states**. It is not a grip list:
 # the grip families are an internal search space over the chord part's degrees
-# and the neck window ([docs/parts.md](../docs/parts.md) §4), keyed by the number
+# and the neck window ([docs/history/parts.md](../docs/history/parts.md) §4), keyed by the number
 # of notes they sound under the melody. What remains a choice is the arity and
 # the metric policy that varies it.
 #
@@ -276,7 +276,7 @@ def parts_has_melody_only(parts: Tuple[str, ...]) -> bool:
 # A **degree order**, and nothing else. It answers "in which order does the chord part
 # state its degrees", not "how many notes are on the guitar": the arity is `texture=`'s,
 # and the order is `TONE_PRIORITY`'s row for the quality, sliced to that arity. A reduced
-# shape therefore gives up the order's **tail** (docs/parts.md §4).
+# shape therefore gives up the order's **tail** (docs/history/parts.md §4).
 #
 # The orders are read from tables that already state what a bass may be and what a shell
 # must sound, rather than re-derived here - the same rule the rest of the module follows,
@@ -390,7 +390,7 @@ def harmony_allowed(harmony: str, parts: Tuple[str, ...]) -> Tuple[bool, str]:
     about the **chord part**, so a selection that does not take it has no part to state
     the order on. This is `harmony=root`'s old refusal generalised - a content policy
     for a part the selection does not name is refused, naming the part that would work
-    (`docs/parts.md` §5 item 7).
+    (`docs/history/parts.md` §5 item 7).
 
     Checked before any voicing work, on the library's standing rule that an impossible
     request is answered by saying what would work rather than by dropping something the
@@ -418,7 +418,7 @@ TARGET_BEATS: Tuple[int, ...] = (1, 3)
 # --- The chord part's family palette: derived from the arity -----------------
 #
 # **The grip families are an internal search space, not a choice** - `grips=` is not a
-# flag any more (`docs/parts.md` §4). What a caller chooses is the arity (`texture=`),
+# flag any more (`docs/history/parts.md` §4). What a caller chooses is the arity (`texture=`),
 # and the families that state exactly that many notes under the melody are the ones the
 # selector may use. The mapping is read off `GRIP_STRING_SETS`: a family sounds
 # `len(strings)` strings, one of which carries the melody, so the number of chord-part
@@ -628,7 +628,7 @@ def texture_palette(
 # until its own row says otherwise.
 #
 # **`bass:walk` is the rhythm half of the old `bass=` flag** and `bass:anchors` the
-# other half (`docs/parts.md` §9): the note rules are `bass_style=`'s, and this says
+# other half (`docs/history/parts.md` §9): the note rules are `bass_style=`'s, and this says
 # how often they fire. `walk` is every beat of every bar the melody touches; `anchors`
 # is where the **harmony timeline** changes, a position set the timeline derives rather
 # than one that is bar-relative.

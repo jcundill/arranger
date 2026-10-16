@@ -1401,7 +1401,7 @@ class TestSelectionDeterminism(unittest.TestCase):
         """The family is the engine's search space, so there is nothing to pin.
 
         `grips=("drop2",)` with the old soprano set used to reproduce this library's
-        original output, and that is exactly what `docs/parts.md` §4 deletes: a caller
+        original output, and that is exactly what `docs/history/parts.md` §4 deletes: a caller
         chooses the *arity* (`texture=`) and the parts, and `TONE_PRIORITY` plus the
         neck window decide which family states those notes. The arrangement here is
         therefore the engine's own - and where it disagrees with the old pinned tabs it
@@ -1896,7 +1896,7 @@ class TestClosePosition(unittest.TestCase):
         5th, and `BASS_DEGREES_6432` scores those the same - so the position of `closed`
         in `GRIP_PREFERENCE` is what picks between them. **That order is the engine's
         now**: it is the internal search space rather than a caller's preference list
-        (`docs/parts.md` §4), so there is no second spelling to assert and the claim is
+        (`docs/history/parts.md` §4), so there is no second spelling to assert and the claim is
         one-directional - the shipped order decides, and `closed` holds its place because
         it is generated before `drop2_6432`.
         """
@@ -2018,7 +2018,7 @@ class TestKnownTableGaps(unittest.TestCase):
 class TestTheFamilyIsNotASpelling(unittest.TestCase):
     """There is no `--grips` and no `parse_grips`: a family is not a choice.
 
-    The families are the chord part's *internal search space* (`docs/parts.md` §4):
+    The families are the chord part's *internal search space* (`docs/history/parts.md` §4):
     `parts=` says which parts sound, `texture=` says how many notes the chord part
     states, and `TONE_PRIORITY` plus the neck window decide which family states
     them. So the spelling this class used to test - a comma-separated list of

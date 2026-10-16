@@ -2,7 +2,7 @@
 
 **Retired into `docs/history/` — the record of a completed plan.** Stage 2 landed: `step.grip`,
 `step.bass` and the melody-only signal are one fact each, and the axis the last of them landed
-on is `parts=` ([docs/parts.md](../parts.md)). The live statement of those rules is
+on is `parts=` ([docs/history/parts.md](parts.md)). The live statement of those rules is
 [docs/engine.md](../engine.md). What this document is still for is the *why* — which fact was
 in two places, and what the duplication cost — because that reasoning is not in the code.
 
@@ -11,7 +11,7 @@ in two places, and what the duplication cost — because that reasoning is not i
 this document's own update is commit 4, and the version bump is commit 5. The body below
 is the plan as written before implementation; §5 records where the landing differed, and
 that is the only part that supersedes it. The axis the melody-only signal landed on is
-`parts=` now ([docs/parts.md](parts.md)) - `voices=` is the spelling this plan wrote.
+`parts=` now ([docs/history/parts.md](parts.md)) - `voices=` is the spelling this plan wrote.
 
 It was committed before implementation because the Stage-1 plan lived only in a
 conversation and had to be reconstructed from the tree — a plan that exists only in a

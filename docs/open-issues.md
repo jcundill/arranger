@@ -241,7 +241,7 @@ nothing got, and nothing on the line says so. That is the failure this document 
 spelling stating a choice the library did not make.
 
 **Why it exists / not fixed.** The rows are part of the axis's vocabulary —
-[docs/parts.md](parts.md) §7 step 5 fixes `grid=` as positions × parts — and `parse_grid`
+[docs/history/parts.md](history/parts.md) §7 step 5 fixes `grid=` as positions × parts — and `parse_grid`
 validates them, so refusing them would be the axis rejecting a spelling it documents. What is
 missing is the *reader*: building it moves the walk's positions off `bass.py`'s timeline and onto
 the row, which changes the walked-beat union that item 2's figures are taken over. That is a

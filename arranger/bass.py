@@ -86,7 +86,7 @@ BASS_ROLE_HOLD = "hold"
 # --- The bass style: which note rules the thumb line is written on -----------------
 #
 # A **style**, not a flag, and it names *note rules* rather than a rhythm: how many beats
-# carry a note is `grid=`'s business ([docs/parts.md](docs/parts.md) §4), and the rule list
+# carry a note is `grid=`'s business ([docs/history/parts.md](docs/history/parts.md) §4), and the rule list
 # says only what a note that does sound is *for*.
 #
 # The four rules, and the `BASS_ROLE_*` values each admits:
@@ -109,7 +109,7 @@ BASS_ROLE_HOLD = "hold"
 #
 # The shipped resolution order is `root, 5th, approach, nearest`. `approach` sits *before*
 # `nearest` because on the last beat the approach outranks the connective note - that
-# ordering is what makes the full list the library's walk. [docs/parts.md](docs/parts.md) §9
+# ordering is what makes the full list the library's walk. [docs/history/parts.md](docs/history/parts.md) §9
 # records why it is not §4's literal `root, 5th, nearest, approach`.
 BASS_RULE_ROOT = "root"
 BASS_RULE_5TH = "5th"
@@ -958,7 +958,7 @@ def _walking_bass_line(
     #
     # The end is a derivation, not a rule about chordless bars: a part whose notes are
     # chosen from a chord cannot state anything where there is no chord
-    # (docs/parts.md §4). So `carried` is cleared rather than left standing, which is
+    # (docs/history/parts.md §4). So `carried` is cleared rather than left standing, which is
     # what keeps the *bass* part out of an `NC` bar: the forward fill below is the only
     # thing that would otherwise hand it the previous chord's root, and the emission
     # then skips every beat whose harmony is None. "No chord here" and "a chord this
@@ -1292,7 +1292,7 @@ def bass_allowed(
         return True, ""
     if not parts_have_bass(parts):
         # **A style named for a part the selection leaves out is refused**, naming the
-        # part that would work (docs/parts.md §9). A bass line is a claim about the
+        # part that would work (docs/history/parts.md §9). A bass line is a claim about the
         # bass part; a selection that does not take it has nothing for the line to
         # state, and writing one anyway would put a note in the part a bassist owns.
         return False, (

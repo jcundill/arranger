@@ -335,7 +335,7 @@ class TestGridAndHarmonyEdges(unittest.TestCase):
     def test_an_nc_bar_yields_no_notes_rather_than_continuing_the_harmony(self):
         """A chordless bar states no bass part - and the assertion inverts with the rule.
 
-        This asserted the opposite until `docs/parts.md` §4 derived the other answer: a
+        This asserted the opposite until `docs/history/parts.md` §4 derived the other answer: a
         part whose notes are chosen from a chord cannot state anything where there is no
         chord, so continuing the last known harmony across the gap is the *guess* here —
         it is the right pitch class for the wrong music. Per AGENTS.md trap 5 the test is

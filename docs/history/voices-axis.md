@@ -1,11 +1,11 @@
 # `voices=` — a third axis: which voices the guitar plays
 
 **Retired into `docs/history/` — the record of a superseded spelling.** `voices=` is gone:
-`parts=` replaced it ([docs/parts.md](../parts.md)), and the live statement of that axis is
+`parts=` replaced it ([docs/history/parts.md](parts.md)), and the live statement of that axis is
 [docs/engine.md](../engine.md). What follows was true of `voices=`, and the QA this document
 handed over is answered by the collapse it records.
 
-**Status: superseded by `parts=`** ([docs/parts.md](parts.md)): the axis below
+**Status: superseded by `parts=`** ([docs/history/parts.md](parts.md)): the axis below
 shipped as `voices=`, and this document is the record of that spelling and of the QA it
 owed. What follows was true of `voices=`.
 

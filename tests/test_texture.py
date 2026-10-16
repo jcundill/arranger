@@ -317,7 +317,7 @@ class TestRoles(unittest.TestCase):
 
         It used to be a texture of its own (`texture="walking_bass"`), which made
         one name cover two claims: which note the thumb states (a *bass* fact) and
-        how many notes the chord part states (a *texture* fact). `parts.md` §6
+        how many notes the chord part states (a *texture* fact). `docs/history/parts.md` §6
         splits them - `bass=BASS_STYLE_WALK` with `texture="targets"` - and the
         arrangement is the same, so what is asserted here is the pair rather than
         the one spelling.
@@ -378,7 +378,7 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
 
     This class replaces `TestGripsIntersectTheTexture`, whose subject - the
     intersection of a requested grip list with the texture's - no longer exists
-    (`docs/parts.md` §4 and §6): what a caller chooses is the *arity*, and the
+    (`docs/history/parts.md` §4 and §6): what a caller chooses is the *arity*, and the
     families that state exactly that many notes under the melody are the ones the
     selector may use. **Inverted rather than deleted**, so the fact that there is
     nothing left to intersect is still asserted, and the two rules that survived
@@ -1009,7 +1009,7 @@ class TestMelodyOnlySelections(unittest.TestCase):
     `GRIP_PREFERENCE` deliberately leaves `melody` out for exactly that reason.
     They were the `melody` and `melody_bass` textures, then the `voices=` axis,
     and they are the `parts=` axis now - see `docs/history/one-fact.md` and
-    `docs/parts.md`.
+    `docs/history/parts.md`.
     """
 
     PROGRESSION = BUT_NOT_FOR_ME

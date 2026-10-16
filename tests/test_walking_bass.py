@@ -158,7 +158,7 @@ class TestValidation(unittest.TestCase):
 
         It used to be a texture of its own (`texture="walking_bass"`), which made one
         name cover two claims - what the thumb states, and how many notes the chord
-        part states. `parts.md` §6 splits them, so what "accepted" means here is that
+        part states. `docs/history/parts.md` §6 splits them, so what "accepted" means here is that
         `bass=BASS_STYLE_WALK` parses and the arrangement it makes is one bar of four
         beats.
         """
@@ -2200,7 +2200,7 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
         `auto` used to resolve to a walk because `texture="walking_bass"` *meant* a
         thumb line, and every published walking-bass tab is pinned against that
         arrangement. With the walk on the bass axis there is no texture left that
-        implies one, so the shipped answer is no line (`docs/parts.md` §9) - the
+        implies one, so the shipped answer is no line (`docs/history/parts.md` §9) - the
         equivalence this asserts is therefore the other direction: the style and the
         four rules it is spelled from are one arrangement, and the default is not it.
         """
@@ -2310,7 +2310,7 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
 class TestAChordlessBarHasNoBassPart(unittest.TestCase):
     """A part whose notes come from a chord cannot state anything where there is none.
 
-    This is `docs/parts.md` §4's rule, derived rather than a rule about chordless bars:
+    This is `docs/history/parts.md` §4's rule, derived rather than a rule about chordless bars:
     the chord part has no event and the bass part has no event either, while the melody
     part is unaffected. It is deliberately *not* the claim an off-grid rest makes - a grid
     thins the chords and not the bass line, so a rest keeps its thumb and "no chord here"
