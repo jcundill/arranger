@@ -441,9 +441,9 @@ def select_step_voicing(
 ) -> Optional[Voicing]:
     """The candidate the engine's own rule prefers, honouring a slash bass first.
 
-    This is the rule the Weimar corpus brought (rule C), and it is what let
-    `wjazzd.arrange_slots` - now `arranger.slots` - delegate to `arrange_progression`
-    instead of running a second step loop. The
+    This is the rule the Weimar corpus brought (rule C), and it is what let the corpus
+    loader's own step loop - `arranger.slots` now - delegate to `arrange_progression`
+    instead of running a second one. The
     library passes no `bass_pc` and gets exactly the behaviour it always had.
 
     The two rules that select a candidate - the slash bass and voice leading - are

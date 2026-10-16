@@ -148,12 +148,13 @@ def _resolve_bass(
 
     Three outcomes, in the order they are decided:
 
-    - `auto` resolves from the texture and the selection. `texture="walking_bass"`
-      writes the full note-rule list; so does a melody-only selection that names the
-      bass voice - `melody="soprano,bass"` is the tune with a thumb under it, the part
-      the `melody_bass` texture spells. A lone `bass` selection is **not**
-      melody-only (it has no soprano) and keeps no thumb: that part already is the
-      bass line, and a thumb under it would double it.
+    - `auto` resolves from the selection, and the shipped answer is **no line**: a
+      caller who wants one names the note rules or a `bass:walk` grid row. The one
+      case the sentinel writes one is a melody-only selection that also names the
+      bass part - `parts="melody,bass"` is the tune with a thumb under it. A
+      `parts="bass"` selection alone is **not** melody-only (it has no tune) and keeps
+      no thumb: that part already is the bass line, and a thumb under it would double
+      it.
     - an unknown rule raises. The same rule as everywhere else in the library: a
       spelling nobody recognises is a question, and answering it by defaulting to a
       walk would put a bass line under an arrangement that did not ask for one.
@@ -246,7 +247,7 @@ def _resolve_harmony(
 
     Takes **no texture**, and that is deliberate rather than an oversight: whether a
     degree family can be voiced depends on how many notes were asked for, and on
-    nothing about where the notes fall. `guide` under `walking_bass` and `guide` under
+    nothing about where the notes fall. `guide` under `targets` and `guide` under
     `uniform` are the same two degrees.
 
     Resolved **once per arrangement**, next to `_resolve_melody` and for the reason
@@ -645,7 +646,7 @@ def _resolve_policies(
 
     **The melody axis comes before `_resolve_bass` because the bass policy needs
     to know which route the engine is on**, and only this function knows.
-    `bass_allowed` measures thumb capacity against `TEXTURE_GRIPS`, which
+    `bass_allowed` measures thumb capacity against `textures.texture_palette`, which
     describes the shapes the melody-bearing route generates and is *inert* on the
     comping one - so asking it about a texture on that route refused a
     combination that is playable and, worse, told the player to change a setting
@@ -664,14 +665,14 @@ def _resolve_policies(
     # way it is on the comping one.
     melody_only = parts_has_melody_only(parts)
 
-    # The bass policy. `auto` means "whatever this texture and this selection
-    # mean", so `walking_bass` keeps walking and a melody-only selection that
-    # names the bass voice walks too; an explicit policy overrides both, which
-    # is what lets a texture that was never written for a thumb line carry one.
+    # The bass policy. `auto` means "whatever this selection means", and the shipped
+    # answer is no line at all; a melody-only selection that also names the bass part
+    # is the one case that walks. An explicit style overrides both, which is what lets
+    # a texture that was never written for a thumb line carry one.
     #
-    # The resolved `voices` are passed rather than the flags derived from them -
-    # the route, the arity and the lone-bass case are decided inside, from the
-    # selection, so the two spellings of one request cannot disagree.
+    # The resolved parts are passed rather than the flags derived from them - the
+    # route, the arity and the lone-bass case are decided inside, from the selection,
+    # so the two spellings of one request cannot disagree.
     bass = _resolve_bass(
         texture,
         bass,
@@ -1998,7 +1999,7 @@ def _slot_state(
     # _roles_for_slot re-validates the texture, which is harmless: the table was
     # already checked before the loop, so this cannot raise here.
     #
-    # Under walking_bass a strong beat is only a target when something new
+    # Under `targets` a strong beat is only a target when something new
     # happens on it: a different harmony from the last target's (the off-beat
     # change rule), or the melody actually moving onto it (decision F, which is
     # what lets the second bar of a two-bar chord restate its shell when the
@@ -2035,10 +2036,8 @@ def _slot_state(
     # are documented once in decisions.resolve_texture_grips.
     #
     # A melody-only selection never asks: the left hand plays nothing on
-    # every slot, whatever the texture's palettes say, so the loop hands the
-    # empty palette straight through - the same declaration `TEXTURE_GRIPS`
-    # makes with an empty tuple, and the one channel `melody_alone_case`
-    # reads. Skipping the resolution is what
+    # every slot, whatever the texture's palettes say, so the loop hands an
+    # empty palette straight through. Skipping the resolution is what
     # makes `texture=` silently inert here rather than noisily so.
     slot_grips = (
         ()
@@ -2179,10 +2178,10 @@ def arrange_progression(
     a combination the left hand cannot accommodate is refused rather
     than degraded. **Both rules, and the measurement behind the second, are stated
     once** - in `_resolve_bass` and `bass.bass_allowed` - rather than repeated here.
-    Two consequences a caller is most likely to meet: `texture="walking_bass"` and
-    `texture="walking_bass", bass="root,5th,approach,nearest"` are the same arrangement,
-    and `bass="none"` on a walking bass gives the same strong-beat shells with the thumb
-    dropped - a coherent texture in its own right.
+    Two consequences a caller is most likely to meet: a melody-only selection that also
+    names the bass part walks without any style being named (`parts="melody,bass"`), and
+    `bass="none"` on that selection is the same arrangement with the thumb dropped - a
+    coherent part in its own right.
 
     `texture="targets"` uses the timing to arrange the way the guide describes:
     a full four-note chord on beats 1 and 3 of the bar, and a shell, a 3rd/6th
@@ -2203,10 +2202,11 @@ def arrange_progression(
     `slots.arrange_slots` already applies to its own timings, for the same
     reason - a hand-built list must not silently shift the rhythm.
 
-    `texture="walking_bass"` adds a thumb line on the bass strings under a light
-    left hand: a **shell** (3rd & 7th) on a target beat, the **melody alone**
-    between, and a walk underneath, one thumb note per beat of the bar. Four
-    consequences are part of its contract rather than details of it:
+    `texture="targets"` with a walking thumb (`bass="root,5th,approach,nearest"`, or a
+    `bass:walk` grid row) adds a thumb line on the bass strings under a light left hand:
+    a **shell** (3rd & 7th) on a target beat, the **melody alone** between, and a walk
+    underneath, one thumb note per beat of the bar. Four consequences are part of the
+    contract rather than details of it:
 
     - **It may return more steps than it was given.** The bass grid is finer than
       the melody grid, so a bar whose melody is a whole note still yields a step
@@ -2216,7 +2216,7 @@ def arrange_progression(
       grid is `beats_per_bar` beats wide - and three of the committed scores are in
       cut time. Callers that zip their
       progression against the result, or derive a bar count from `len(steps)`, are
-      wrong under this texture only; `uniform` and `targets` are untouched. A step
+      wrong under a walked route only; `uniform` and the default `targets` are untouched. A step
       the walk invented can be promoted to a **target** when the melody moves onto
       it, and then it states its harmony rather than holding - which is
       `decisions.is_bass_only`, and the reason a `bass_only` step is always a fill.

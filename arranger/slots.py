@@ -314,8 +314,8 @@ def arrange_slots(
     # handed.
     #
     # **The substitution must be applied before the slot's role is computed.** Under
-    # `targets` the role does not read the harmony, so the order would not show; under
-    # `walking_bass` it does, so reordering this would move the walk's roles.
+    # `targets` the role does not read the harmony, so the order would not show; on a
+    # walked route it does, so reordering this would move the walk's roles.
     # `tests/test_step_loop_equivalence.py` is the standing check that the two entry
     # points still agree.
     unresolved = unresolved_steps(list(triples), non_chord_tone, onsets)

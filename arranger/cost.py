@@ -250,8 +250,8 @@ def _best_voicing(
     of the loop: where two families tie - `Cmaj` under a `C4` melody is the pinned case,
     and `tests/test_grips.py::TestClosePosition` holds it - `grips=("closed",
     "drop2_6432")` takes the first tab and the reversed pair takes the second. That is
-    what `--grips`' "most preferred first" promises, and it is why the position of a
-    family in `GRIP_PREFERENCE` is load-bearing.
+    what `GRIP_PREFERENCE`'s "most preferred first" promises, and it is why a family's
+    position there is load-bearing.
 
     Determinism follows from the inputs being sequences: the same progression always
     arranges to the same tab, which is what makes its output worth asserting on in tests.

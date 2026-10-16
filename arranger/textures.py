@@ -329,9 +329,9 @@ def parse_harmony(argument: str) -> str:
     """A `harmony` argument as one of `HARMONY_STYLES`, or the `HARMONY_AUTO` sentinel.
 
     A single identifier out of a closed set rather than a comma-separated list, because
-    unlike the voice selection this axis names **one** degree family and not a subset of
-    roles in a stack. Parsed here rather than inline at the call site so the vocabulary
-    and the refusal live in one place, on the same rule as `parse_voices`.
+    unlike the parts selection this axis names **one** degree family and not a subset of
+    parts. Parsed here rather than inline at the call site so the vocabulary
+    and the refusal live in one place, on the same rule as `parse_parts`.
 
     Raises `ValueError` on an unknown name: a spelling nobody recognises is a question,
     and answering it by falling back to `guide` would hand back a part that states

@@ -207,7 +207,7 @@ NON_CHORD_TONE_EXTENSIONS = {
     # that have no fallback at all (`shell`, `duo`, `interval`, whose shapes are
     # defined by the chord's own degrees) then had nothing to fall back to, so
     # the step went missing instead: `Ebmaj` under `F4` in "But Not For Me" bar 2
-    # with `--grips shell` produced no candidate and was dropped. `add9` is the
+    # with a shell-only palette produced no candidate and was dropped. `add9` is the
     # narrowest quality that contains the 9th, `madd9` its minor twin, and both
     # are already in CHORD_TONES_FROM_ROOT, SHELL_DEGREES and the drop-2 tables,
     # so no other table needs a row for them.

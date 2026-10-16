@@ -41,9 +41,10 @@ from .tuning import (
 # Grip families, in the order they are generated in - which is *also* the order an exact
 # tie is broken in: `cost._best_voicing` is a stable `min` and no criterion in
 # `cost.voicing_cost` names a family, so of two candidates at the winning cost the one
-# generated first wins. This tuple is the default `grips=`, and a caller's own order
-# replaces it, which is what makes `--grips`' "most preferred first" a promise rather than
-# a description. One tuple, one job, and a family's position here is load-bearing.
+# generated first wins. This tuple is the default `grips=`, and with the family axis gone
+# nothing replaces it: the tuple *is* the order, which is what makes "most preferred first"
+# a property of the library rather than of a request. One tuple, one job, and a family's
+# position here is load-bearing.
 #
 # It is **not** what decides how many notes a step sounds. That is criterion 2,
 # `missing = 4 - len(active)`, so a shell never beats a four-note shape by sitting early
@@ -460,12 +461,14 @@ def thumb_safe_grips(palette: Tuple[str, ...]) -> Tuple[str, ...]:
     separate questions (see `docs/history/fingering.md` §4.3).
 
     An **empty** palette comes back unchanged, because it is not a palette that fails the
-    budget - it is the table saying "the left hand plays nothing here" (`walking_bass`'s
-    fills), and "narrowing" it would hand the thumb a chord it was never offered.
+    budget - it is the declaration saying "the left hand plays nothing here", and
+    "narrowing" it would hand the thumb a chord it was never offered. No shipped texture,
+    selection or thumb line yields one (`tests/test_texture.py` sweeps them all), but the
+    rule stays for a caller that passes one.
 
     When every grip the palette names spends all four fingers, the answer is the **widest
     statement that leaves one free** rather than nothing: a target still has to state the
-    harmony, which is the rule `TEXTURE_GRIPS["walking_bass"]` already encodes with its
+    harmony, which is the rule a walked target's palette already encodes with its
     `("shell",)` target palette. Derived from `GRIP_PREFERENCE` and the string tables, so
     a three-string grip added later is admitted here without an edit - and when two are
     equally wide the winner is the fuller one, which is `shell`.
@@ -824,8 +827,8 @@ def _interval_offsets(
         most often has to cover, since a passing tone is by definition not a chord
         tone.
       - Because it is confined to fill slots, the looser rule cannot leak into a
-        position where a chord is being stated. `TEXTURE_GRIPS` is what enforces that,
-        and it is the reason this can safely be more permissive than a duo.
+        position where a chord is being stated. The **fill-only palette** is what enforces
+        that, and it is the reason this can safely be more permissive than a duo.
 
     The second voice is the nearest pitch a 3rd, a 6th or a 10th below the melody that
     is one of the chord's own tones. When the melody is *not* a chord tone, the walk
@@ -1367,9 +1370,9 @@ def _shell_voicing(
         # the **first** guide tone (the 3rd, or the 4th on a sus chord) and drops the second,
         # which is the same preference order `_duo_offsets` already applies.
         #
-        # Refusing here would instead make `--voices alto` fall through to the ordinary
+        # Refusing here would instead make `--texture chord1` fall through to the ordinary
         # melody-bearing route, which states the horn's line on the guitar on every step
-        # and hands it back - the opposite of what naming one voice asked for.
+        # and hands it back - the opposite of what asking for one note meant.
         keep = 2 if notes >= 2 else 1
         needed = {(root_pc + degree) % 12 for degree in guide[:keep]}
         allowed = {(root_pc + tone) % 12 for tone in tones}
@@ -1983,8 +1986,8 @@ def get_interval_voicings(
     the next one. It is a **texture and not a harmony** - it says nothing about
     what the chord is, and it is meant to sit on a weak beat - so unlike a duo it
     is offered under *any* melody degree, including a 3rd or a 7th that a duo
-    refuses. `TEXTURE_GRIPS` is what confines it to fill slots, which is what makes
-    the looser rule safe.
+    refuses. The **fill-only palette** is what confines it to fill slots, which is what
+    makes the looser rule safe.
 
     Kept as a named entry point for the same reason as `get_drop2_voicings`: every
     grip family is reachable from the public surface, so a caller who wants a

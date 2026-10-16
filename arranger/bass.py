@@ -163,7 +163,7 @@ def parse_bass_style(argument: str) -> Tuple[str, ...]:
     order, so `"approach,root"` and `"root,approach"` are two styles even though they
     admit the same roles. A repeat is dropped keeping its first occurrence, and nothing
     is re-sorted, for the same reason `grips.parse_grips` keeps its order and
-    `textures.parse_voices` does not.
+    `textures.parse_parts` does not (a sequence is ordered, a selection is a set).
 
     `none` and `auto` are **not** rules and are refused here: `none` is the absence of a
     style and `auto` is a default, both resolved before this runs. Refusing them keeps
@@ -562,8 +562,8 @@ class _Slot:
 
     For `uniform` and `targets` this is exactly one slot per progression triple and
     the three timing fields are read off `timings` with the guard the corpus loader
-    already applies. It exists as a type rather than a tuple because under
-    `walking_bass` the list is the **union** of the melody slots and the walked
+    already applies. It exists as a type rather than a tuple because on a walked
+    route the list is the **union** of the melody slots and the walked
     beats, so an entry can name a progression index that is not its own position -
     which is the price of decision B, and the reason the union has to be built
     *before* the melody loop rather than spliced into its output.
@@ -1281,8 +1281,8 @@ def bass_allowed(
     the other, and only the engine's own route decision knows which.
 
     **`melody_only` is the melody-only route's half, and it is unbounded rather than
-    measured.** A selection that plays the melody and nothing else (`voices=soprano`,
-    with or without the bass voice named) puts a single fret above the thumb on every
+    measured.** A selection that plays the tune and no chord part (`parts="melody"`,
+    with or without the bass part named) puts a single fret above the thumb on every
     slot, so all three thumb strings are free whatever the texture's palette says -
     asking the palette would refuse a line with the whole neck to walk under, on the
     say-so of grips that route never generates. The texture is inert on that route for
