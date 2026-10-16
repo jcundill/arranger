@@ -31,21 +31,22 @@ gate and the conventions — not the explanation.
 | the MusicXML **importer's chord timeline**, or a bar the melody skips | [docs/open-issues.md](docs/open-issues.md) item 1 | `headxml.py` (`chord_at`, `chord_slots`, `_merge_chord_slots`, `_generated_beats`, `_bar_resolution`, `_tick_key`) and `textures.py` (`grid_resolutions`, `TICKS_PER_BEAT`) — **built in full**: the default grid generates a chord at each bar's own subdivision, the union takes those positions wherever the tune is *silent*, and §9.2 refuses the ones it is still **holding**. Measured at **88 steps** across the eight heads. The fifth `melody_alone_case` kind the item predicted proved **not to be owed** — §9.3 step D already routes a note-less grid position through the comping branch. **Item 6 is the edge of that refusal** — the instant a note *stops* sounding counts as one it still holds, so the grid declines a position the tune has left (`headxml.melody_at`, `melody_state`; the item carries the measurement) |
 | an open bug, with its measurement | [docs/open-issues.md](docs/open-issues.md) | `tests/test_open_issues.py` runs the **behaviour** the items describe (item 1's generated-slot closure, item 3's `harmony=full` no-op, item 6's release instant); the **figures** are that document's own business, re-measured by hand from the recipe beside each item, and nothing in the suite compares them with the prose |
 | which finger frets which string, or a per-finger cost criterion; which strings the right hand's `p-i-m-a` pluck, the gaps between them, and how far the thumb reaches | [docs/history/fingering.md](docs/history/fingering.md) | `arranger/fingers.py` (not inert any more: `bass` reads `can_fret` for the four-fret budget — `tests/test_fingers.py` holds the caller set to exactly `{bass}`; no per-finger cost yet). Its §4.3 measurement landed a *right-hand* rule first (`grips.thumb_safe_grips`, read by `decisions.resolve_texture_grips`) and then a *left-hand* one (`fingers.can_fret`, read by `bass._place_bass`); its **§4.4 finger-skip half is now built**, not recorded: the four `drop24` sets that carried the skip were removed from `GRIP_STRING_SETS` (`grips.finger_skip_count` is the rule and `tests/test_grips.py` holds the tables to it), at a price counted in chords, and the three rejected forms of the same lever are in §4.4 rather than here. Its thumb's-reach half still changes no count (`tests/test_texture.py::TestTheThumbReach` pins the reach), and §4.3's follow-on (should the *selector* leave room for the thumb?) is measured and unbuilt, and its numbers are in §4.3 and [docs/open-issues.md](docs/open-issues.md) item 2 rather than here: that item is where they are re-measured by hand, so a figure repeated in this table would be a second source for one fact. Its **fourth lever — the walk's own pitch — costs the tuple nothing** and is the cheapest of the four; **item 5** of that document is the same §4.3 question asked from the lone-note end, where the walk's register is what leaves the hand's reach |
-| `parts=`, which of melody / bass / chord the guitar plays | [docs/history/parts.md](docs/history/parts.md) | `arranger/textures.py` (`PART_NAMES`, `parse_parts`, `parts_have_melody`) |
-| the harmonisation axes (`parts=`, `texture=`, `bass=`, `harmony=`, `grid=`) - what replaced `voices=` and the grip-family axis | [docs/history/parts.md](docs/history/parts.md) | `arranger/textures.py`, `arranger/bass.py`, `arranger/grips.py` |
-| the retired `voices=` axis | [docs/history/voices-axis.md](docs/history/voices-axis.md) - the record of the collapse into `parts=` | `arranger/textures.py` |
-| the comping axes (`harmony=`, `grid=`, the rhythm grid) | [docs/history/comping-styles.md](docs/history/comping-styles.md) | `arranger/textures.py` |
-| the step/voicing mirrored fields (`step.grip`, `step.bass`), or which voice selection is melody-only | [docs/history/one-fact.md](docs/history/one-fact.md) | `arranger/tuning.py`, `arranger/movement.py` |
-| how something was decided, historically | [docs/history/](docs/history/) | — |
+| `parts=`, which of melody / bass / chord the guitar plays | [docs/engine.md](docs/engine.md) | `arranger/textures.py` (`PART_NAMES`, `parse_parts`, `parts_have_melody`, `parts_has_melody_only`) |
+| the harmonisation axes (`parts=`, `texture=`, `harmony=`, `bass=`, `grid=`) — the four-string arithmetic, and what replaced `voices=` and the grip-family axis | [docs/engine.md](docs/engine.md) | `arranger/textures.py`, `arranger/bass.py`, `arranger/grips.py` |
+| the step/voicing mirrored fields (`step.grip`, `step.bass`), or which selection is melody-only | [docs/engine.md](docs/engine.md), and [docs/history/one-fact.md](docs/history/one-fact.md) for why | `arranger/tuning.py`, `arranger/movement.py` |
+| how something was decided, historically — `voices=`, the comping styles, the parts redesign, the generated grips, the fingering notes, the Stage-2 collapse | [docs/history/](docs/history/) | — |
 | user-facing behaviour and examples | [README.md](README.md) | — |
 
-**`docs/history/` is not extended, and the one exception is recorded here.** It is where a
-completed plan goes: it records why a decision was made and is never revised. If the code
-has moved on, the history is still true *about the past* — so read the current documents
-above first and treat a contradiction between them as a bug in one of them. The exception
-is a **retired** document: `reharmonisation-proposals.md` was moved here when the Weimar
-corpus its measurements depended on was removed. A retired document is added once and then
-frozen like the rest — it is not a home for an open plan.
+**`docs/history/` is not extended.** It is where a completed plan or a retired document goes:
+it records why a decision was made and is never revised. If the code has moved on, the history
+is still true *about the past* — so read the current documents above first and treat a
+contradiction between them as a bug in one of them. A retired document is added once and then
+frozen like the rest; it is not a home for an open plan. Seven are retired there:
+`reharmonisation-proposals.md`, whose corpus went away, and the six plan documents whose live
+halves are now stated in [docs/engine.md](docs/engine.md) — `voices-axis.md`, `one-fact.md`,
+`parts.md`, `generated-grips.md`, `comping-styles.md` and `fingering.md`. Each of those six
+carries a retirement header saying which half of it is the record and where the live rule went,
+which is the one thing to read before quoting one.
 
 ## The gate
 
@@ -69,7 +70,7 @@ are **orthogonal**, and a band setting is a combination rather than a mode:
 `bass="none", parts="melody"` is a bassist on the root, a horn on the melody and the guitar
 holding the tune alone between them.
 Adding an axis means a new vocabulary (`*_STYLES` / `*_POLICIES`, or a note-rule
-`*_RULES` table like `bass`'s per [docs/history/parts.md](docs/history/parts.md) §7 step 1) and a `*_AUTO`
+`*_RULES` table like `bass`'s `BASS_RULE_ROLES`) and a `*_AUTO`
 sentinel that is deliberately **not** in the vocabulary, plus a `*_allowed` refusal function
 derived from a table rather than listed — never another branch at the call sites. The trap: a loop
 variable shadowing a policy parameter (`melody`, in the since-removed `wjazzd.arrange_slots`,
@@ -96,8 +97,9 @@ a fifth:
   with is the selector's business - the melody is pinned to the soprano string and the
   family comes from `GRIP_PREFERENCE`, the caller's grip *order* having gone with the
   family axis. `harmony=guide` is the melody-free part, so `harmony=` is inert on any
-  arrangement the guitar sings and cannot reach that route at all - see
-  [docs/history/comping-styles.md §4.1](docs/history/comping-styles.md). §6 Q2 option (A) - routing
+  arrangement the guitar sings and cannot reach that route at all - see the `harmony=`
+  section of [docs/engine.md](docs/engine.md). Option (A) in the retired
+  [docs/history/comping-styles.md](docs/history/comping-styles.md) §6 Q2 - routing
   `harmony=guide` with a melody through the shell grip - would have given the axis one
   spelling for both routes, and it is **moot now**: the axis that expresses "the tune and
   nothing else" is `parts=melody`, which is what the `--voices` rename became. A fifth axis
@@ -477,8 +479,9 @@ gate, and a snapshot mechanism would let a regression pass by regenerating itsel
    shell, add it to `SHELL_DEGREES` — the drop-2 rule and the derived grips work
    without one.
    `tests/test_generated_grips.py` holds the rule to the hand-written 119
-   (`tests/support.py::WITNESS`), so **a new quality needs no table row of its own**;
-   see [docs/history/generated-grips.md](docs/history/generated-grips.md). A quality with a priority row
+   (`tests/support.py::WITNESS`), so **a new quality needs no table row of its own**; the
+   measurements behind it are in [docs/history/generated-grips.md](docs/history/generated-grips.md).
+   A quality with a priority row
    and a tone set needs nothing else, and one with a tone set but no row is offered no
    drop-2 shapes at all rather than a guess.
 3. Add aliases to `ChordParser.QUALITY_ALIASES`.
@@ -713,17 +716,10 @@ Each of these cost real time, or nearly shipped a defect.
 | document | what it holds |
 |---|---|
 | [README.md](README.md) | user-facing overview, worked examples, limitations |
-| [docs/engine.md](docs/engine.md) | grips, the selector, texture, the cost tuple, non-chord tones |
-| [docs/history/generated-grips.md](docs/history/generated-grips.md) | which chord tones a shape states: the `TONE_PRIORITY` rule, the tone a four-voice shape gives up, and the order that was not taken |
+| [docs/engine.md](docs/engine.md) | the engine: grips, the selector, the cost tuple, the five axes (`parts=`, `texture=`, `harmony=`, `bass=`, `grid=`), non-chord tones, and the recipe for adding a chord quality |
 | [docs/renderers.md](docs/renderers.md) | tab staff, MusicXML import/export, GP5, and their traps |
 | [docs/open-issues.md](docs/open-issues.md) | the open bugs, each stated as **issue / problem / why it exists** with its measurement; a fixed one is removed, and its record lives in git |
-| [docs/history/reharmonisation-proposals.md](docs/history/reharmonisation-proposals.md) | **retired** - tritone substitution (shipped) and chromatic approach chords (measured, not built), with the corpus numbers behind each. Its reproduction path went with the Weimar corpus |
-| [docs/history/fingering.md](docs/history/fingering.md) | fingering: which finger frets which string, and which strings the right hand's `p-i-m-a` pluck. Step 1 of its §5 landed (`arranger/fingers.py` + `tests/test_fingers.py`: assignment, barres, movement, feasibility), and §5 step 2 is now **measured on all of its halves**. Its §4.3 half found two real defects, one per hand: a merged step could sound five *strings* (fixed by `grips.thumb_safe_grips` + `decisions.resolve_texture_grips`) and a `bass_only` step could need five *frets* (fixed by `fingers.can_fret` + `bass._place_bass`, the module's only engine caller - so the module is no longer inert). Its movement half came back nearly empty, and its **§4.4 right-hand half** found the only finger-skip string sets to be four `drop24` sets and one `shell` - then **shipped the ban**: the four are gone from the tables, so the default row's skip-carrying steps fall **223 → 1**, at a price counted in chords (the convention is the *right* hand's fan, so a barre still pays; the count is in §4.4), and the removal dissolved `uniform`'s bass refusal on the way, because `(4,2,1,0)` was the set that spanned all three thumb strings. The three rejected forms of the same lever - the tuple criterion after `span` (17 probe picks, 94 pools), the per-shape rule (skip *and* a real reach), and the keep-them-as-a-last-resort palette - are recorded there with their numbers. §4.4 also measures the thumb's *reach* - it sweeps the low four strings (E A D G), which is why a two- or three-note shape whose bottom note is above the G has no thumb in it at all, bass voice or not. Only three of the 24 reachable sets put the bottom note up there and all three are contiguous, so narrowing §2.5's exemption to that reach moves no count - the same "recorded, not built" outcome. §4.3's follow-on - should the *selector* leave room for the thumb? - is measured the same way and is **not built**. What the measurement establishes is that the harmless recovery is gone — its hosts were the removed `drop24` sets — so every remaining recovery changes the harmony and pays the span bucket, and that the **walk's own pitch** does the rest of the work as the fourth lever. The counts live in [docs/open-issues.md](docs/open-issues.md) item 2, and are re-measured there by hand rather than quoted here. §5 step 3 (the cost-tuple decision) is still open |
-| [docs/history/](docs/history/) | completed plans: corpus, walking bass, texture, arranging guide - a record of the past, not of what exists |
-| [docs/history/voices-axis.md](docs/history/voices-axis.md) | the `voices=` axis, **superseded** by `parts=` - the record of the collapse and of its measurements |
-| [docs/history/comping-styles.md](docs/history/comping-styles.md) | the comping axes (`harmony=`, the rhythm grid): **partly built** - Stage C shipped `harmony=`, Stage D shipped the named `grid=` rows, and §9 steps 0, B, A, A', C, D and E have landed (E, `parts=melody` = the melody and nothing else, landed earlier as Stage 2 — `docs/history/one-fact.md`; A' makes a **chords-only lead sheet** loadable, `Head.bars` a fact about the file; C makes `--non-chord-tone` reach the comping route at harmony level, onset-guarded by `melody_onsets`; D makes the soprano **per slot**, so a soprano-named selection comps the grid positions its tune does not articulate at); §9.4's four-note comping chord, and §6's open questions, are still proposal |
-| [docs/history/one-fact.md](docs/history/one-fact.md) | the Stage-2 collapse, **landed**: one field per fact (`step.grip`, `step.bass` as derived views), and the melody-only signal moved off `texture=` onto the selection, which is `parts=` |
-| [docs/history/parts.md](docs/history/parts.md) | **built** - the harmonisation axes replaced by three parts (melody, bass, chord): the four-string budget they add up to, the ownership map, and the order the change landed in |
+| [docs/history/](docs/history/) | the retired documents - the completed plans (corpus, walking bass, texture, arranging guide, `voices=`, the Stage-2 collapse, parts, generated grips, comping styles, fingering) and the retired reharmonisation proposals. A plan that landed whole carries a header saying where its live rules went: `docs/engine.md` |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | what CI runs, and which tests it does *not* run |
 
 `common_grips.md` is generated from the engine's own tables by `grip_chart.py` and
