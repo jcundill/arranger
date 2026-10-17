@@ -466,7 +466,7 @@ class ArrangementStep:
     # lets the line say *why* instead of guessing from an all-muted fret vector,
     # where "the grid placed no chord", "there is no chord to comp" and "no string
     # reaches the melody" are indistinguishable. Set by the route that declines to
-    # play (`routes._rest_step`); defaulted, so a hand-built step and every
+    # play (`routes.rest_step`); defaulted, so a hand-built step and every
     # existing construction are unaffected.
     silence: Optional[str] = None
     # The pitch class of a bass note the left hand **could not place**, or None
@@ -479,7 +479,7 @@ class ArrangementStep:
     # tab cannot supply - the fret vector has no thumb, so a reader cannot derive
     # which note went missing. `render._bass_refusal_clause` phrases it.
     #
-    # Set by `bass_merge._attach_bass`, at the one point the refusal is known, and
+    # Set by `bass_merge.attach_bass`, at the one point the refusal is known, and
     # read by the renderer alone: `bass` above is a derived view of
     # `voicing.bass_midi`, so this is a fact the voicing does not own - it is
     # about a note that is *not* sounding.
@@ -510,7 +510,7 @@ class ArrangementStep:
 
         A **derived view** of `voicing.bass_midi`, for the same reason `grip` is a
         view of `voicing.grip`: the two were one fact stated twice, written
-        together in `_attach_bass`, and a stored copy was another field that
+        together in `attach_bass`, and a stored copy was another field that
         could disagree - see `docs/history/one-fact.md`, commit 2. The voicing owns the
         fact, because the thumb is merged into its fret vector and its string
         recorded beside the pitch; deriving the step's spelling from it is also

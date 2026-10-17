@@ -27,7 +27,7 @@ from .bass import (
     BASS_STYLE_AUTO,
     BassNote,
 )
-from .bass_merge import _attach_bass
+from .bass_merge import attach_bass
 from .chords import (
     NON_CHORD_TONE_EXTENSIONS,
     NON_CHORD_TONE_STRATEGIES,
@@ -322,14 +322,14 @@ class VoiceLeadingEngine:
     # --- the two entry points: forwarded to `movement`, which owns the loop ---
 
     @classmethod
-    def _attach_bass(
+    def attach_bass(
         cls,
         step: ArrangementStep,
         note: Optional[BassNote],
         arrangements: List[ArrangementStep],
     ) -> None:
-        """See `bass_merge._attach_bass` - the full docstring is there."""
-        return _attach_bass(step, note, arrangements)
+        """See `bass_merge.attach_bass` - the full docstring is there."""
+        return attach_bass(step, note, arrangements)
 
     @classmethod
     def prepare_step(

@@ -500,7 +500,7 @@ class TestTheMemoChangesNothingButTheTime(unittest.TestCase):
     def test_a_caller_writing_into_its_shape_does_not_reach_the_next_caller(self):
         """The memo may not hand one object out twice, because the engine writes into it.
 
-        `bass_merge._attach_bass` merges the walking bass into the shape it *chose*: a fret
+        `bass_merge.attach_bass` merges the walking bass into the shape it *chose*: a fret
         onto a string the shape had muted, and `bass_pc` with it. Handing the stored object
         back would let one step's thumb line become the next step's shape, silently and
         only in the tab. The identity assertion is what makes this a witness: it is the
@@ -511,7 +511,7 @@ class TestTheMemoChangesNothingButTheTime(unittest.TestCase):
         assert first is not None
         pristine_tab = first.tab_string()
         pristine_bass = first.bass_pc
-        # Exactly what `_attach_bass` does, down to the string: the thumb takes a string
+        # Exactly what `attach_bass` does, down to the string: the thumb takes a string
         # the shape left muted and writes its fret there.
         muted = [index for index, fret in enumerate(first.frets) if fret < 0]
         self.assertTrue(muted, "no muted string for the thumb note to be written onto")

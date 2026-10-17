@@ -15,7 +15,7 @@ from arranger import (
     format_progression,
 )
 from arranger.grips import _drop2_template_for
-from arranger.melody_alone import _melody_alone_shape
+from arranger.melody_alone import melody_alone_shape
 from arranger.render import _step_annotation
 
 
@@ -151,7 +151,7 @@ class TestMelodyOnlyPalette(unittest.TestCase):
 class TestTheLoneNoteIsPlacedLikeAChord(unittest.TestCase):
     """The lone note's position is the cost tuple's, not the highest string's.
 
-    `melody_alone._melody_alone_shape` is the seam every lone-note route goes through, and it
+    `melody_alone.melody_alone_shape` is the seam every lone-note route goes through, and it
     scores the palette against the shape the hand is holding. Without that, F4 after a
     chord at frets 6-8 came back on the high E at fret 1 - below the preferred window and
     six frets away from the hand - because the generator's preference order put it there.
@@ -163,7 +163,7 @@ class TestTheLoneNoteIsPlacedLikeAChord(unittest.TestCase):
     AT_TWELVE = Voicing(frets=[-1, -1, 12, 12, 12, 12], top_fret=12, avg_fret=12.0)
 
     def _chosen(self, previous: Voicing) -> Tuple[Optional[Voicing], bool]:
-        return _melody_alone_shape(
+        return melody_alone_shape(
             Note("F4"), previous=previous, top_strings=(5, 4, 3)
         )
 
@@ -189,7 +189,7 @@ class TestTheLoneNoteIsPlacedLikeAChord(unittest.TestCase):
         high E string's F4 is fret 1, below `NECK_FRET_MIN`, and it is the whole palette
         because the caller named that string alone.
         """
-        chosen, inside_window = _melody_alone_shape(
+        chosen, inside_window = melody_alone_shape(
             Note("F4"), previous=None, top_strings=(5,)
         )
         self.assertIsNotNone(chosen)
@@ -199,7 +199,7 @@ class TestTheLoneNoteIsPlacedLikeAChord(unittest.TestCase):
 
     def test_an_in_window_lone_note_reports_a_populated_window(self):
         """The same note with the B string available is placed inside the frets asked for."""
-        chosen, inside_window = _melody_alone_shape(
+        chosen, inside_window = melody_alone_shape(
             Note("F4"), previous=None, top_strings=(5, 4)
         )
         self.assertIsNotNone(chosen)

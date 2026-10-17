@@ -2,9 +2,9 @@
 
 Every route that sounds the melody by itself - a thinned fill, an `NC` bar, a rescue
 when no shape can carry the chord, a demotion when the only shape that fitted needs a
-stretch - picks its position here, through `_melody_alone_shape`. The position is a
+stretch - picks its position here, through `melody_alone_shape`. The position is a
 choice among one-note shapes made by the same `cost.voicing_cost` tuple a chord goes
-through, and `_sounding_melody` records the pitch that sounds when the generator had to
+through, and `sounding_melody` records the pitch that sounds when the generator had to
 drop the written note an octave.
 
 Sits above `bass_merge` and `decisions`; the route handlers that append the steps are in
@@ -20,12 +20,12 @@ from musthe import Note
 from . import cost as _cost
 from . import grips as _grips
 from .bass import Slot
-from .bass_merge import _attach_bass
+from .bass_merge import attach_bass
 from .decisions import is_bass_only
 from .tuning import ArrangementStep, Palette, Voicing, _note_name
 
 
-def _sounding_melody(voicing: Voicing, written: str) -> Tuple[str, Optional[str]]:
+def sounding_melody(voicing: Voicing, written: str) -> Tuple[str, Optional[str]]:
     """The pitch a melody-alone step *sounds*, and the written one when they differ.
 
     `get_melody_only_voicings` retries a note an octave down when no string reaches it
@@ -44,7 +44,7 @@ def _sounding_melody(voicing: Voicing, written: str) -> Tuple[str, Optional[str]
     return _note_name(sounding), written
 
 
-def _melody_alone_shape(
+def melody_alone_shape(
     melody_note: Note,
     *,
     previous: Optional[Voicing],
@@ -61,7 +61,7 @@ def _melody_alone_shape(
     frets away from the chord either side of it.
 
     `named_only` drops the candidates on strings the caller did not name, which is what
-    `_rescue_melody_alone` promises: the generator rescues a note the named set cannot
+    `rescue_melody_alone` promises: the generator rescues a note the named set cannot
     carry by searching below it, and that rescue does not widen the caller's soprano set
     - however much better the position on a string it did not ask for.
 
@@ -89,7 +89,7 @@ def _melody_alone_shape(
     return chosen, inside_window
 
 
-def _rescue_melody_alone(
+def rescue_melody_alone(
     arrangements: List[ArrangementStep],
     slot: Slot,
     *,
@@ -130,14 +130,14 @@ def _rescue_melody_alone(
     # override: the rescue answers a palette that cannot voice a chord, not
     # a caller asking for a string that cannot carry the tune. `named_only`
     # is where that promise is kept.
-    solo_voicing, inside_window = _melody_alone_shape(
+    solo_voicing, inside_window = melody_alone_shape(
         melody_note, previous=previous, top_strings=top_strings, named_only=True
     )
     if solo_voicing is not None:
         # The note may have been dropped an octave to stay inside
         # HIGH_FRET_LIMIT, so the step reports what sounds and keeps the
         # written pitch - the same seam every melody-alone route uses.
-        sounding, written_original = _sounding_melody(solo_voicing, note_str)
+        sounding, written_original = sounding_melody(solo_voicing, note_str)
         step = ArrangementStep(
             chord=name,
             melody=sounding,
@@ -146,7 +146,7 @@ def _rescue_melody_alone(
             partial=False,
             # The palette is the lone note's own - the positions the caller's strings
             # offer - so the line can say whether anything inside the window was on the
-            # table. See `_melody_alone_shape`.
+            # table. See `melody_alone_shape`.
             palette=Palette(available=1, inside_window=inside_window),
             # The harmony is stated nowhere in this step. A fill reaches
             # the same shape deliberately and does not carry this; see
@@ -159,13 +159,13 @@ def _rescue_melody_alone(
             metric_weight=weight,
             bass_only=is_bass_only(slot.bass_only, role),
         )
-        _attach_bass(step, slot.bass, arrangements)
+        attach_bass(step, slot.bass, arrangements)
         arrangements.append(step)
         return True
     return False
 
 
-def _demoted_to_melody_alone(
+def demoted_to_melody_alone(
     arrangements: List[ArrangementStep],
     slot: Slot,
     *,
@@ -192,7 +192,7 @@ def _demoted_to_melody_alone(
     stops. **False** when the melody alone would be the wider reach of the two,
     which leaves the chosen shape in place for the caller to play.
     """
-    solo, inside_window = _melody_alone_shape(
+    solo, inside_window = melody_alone_shape(
         melody_note, previous=previous, top_strings=top_strings
     )
     if solo is not None and solo.fret_span() < best_voicing.fret_span():
@@ -219,6 +219,6 @@ def _demoted_to_melody_alone(
             metric_weight=weight,
             bass_only=is_bass_only(slot.bass_only, role),
         ))
-        _attach_bass(arrangements[-1], slot.bass, arrangements)
+        attach_bass(arrangements[-1], slot.bass, arrangements)
         return True
     return False

@@ -287,7 +287,7 @@ class TestTheCompingPaletteIsRemembered(unittest.TestCase):
         """The memo may not hand one object out twice, because the engine writes into it.
 
         The comping route is where this bites hardest: `decisions.select_step_voicing`
-        returns one of the palette's **own objects**, and `bass_merge._attach_bass` then
+        returns one of the palette's **own objects**, and `bass_merge.attach_bass` then
         merges the walked thumb into its fret vector and `bass_pc`. A shared object would
         let one step's bass line become the next step's palette, silently and only in the
         tab, so the identity assertion is the witness: it is the *sharing* that is
@@ -300,7 +300,7 @@ class TestTheCompingPaletteIsRemembered(unittest.TestCase):
         self.assertIsNot(first[0], second[0], "the memo handed one object out twice")
         pristine_tab = first[0].tab_string()
         pristine_bass = first[0].bass_pc
-        # Exactly what `_attach_bass` does, down to the string: the thumb takes a string
+        # Exactly what `attach_bass` does, down to the string: the thumb takes a string
         # the shape left muted and writes its fret there.
         muted = [index for index, fret in enumerate(first[0].frets) if fret < 0]
         self.assertTrue(muted, "no muted string for the thumb note to be written onto")

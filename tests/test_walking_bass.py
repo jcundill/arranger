@@ -495,7 +495,7 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
 
         A walk beat landing before the tune has started has no melody in force, and
         `_bass_slots` falls back to index 0 rather than dropping the step - the same
-        "a step survives even when its bass cannot be placed" rule `_attach_bass`
+        "a step survives even when its bass cannot be placed" rule `attach_bass`
         follows.
 
         It cannot be reached from the public API, and that is worth stating rather
@@ -1341,7 +1341,7 @@ class TestBassPlacement(unittest.TestCase):
         """
         `step.bass` is a derived view of `voicing.bass_midi`, not a second field.
 
-        The two were written together in `_attach_bass`, and a stored copy was
+        The two were written together in `attach_bass`, and a stored copy was
         another field that could disagree - the bug class `docs/history/one-fact.md`
         exists to remove. The proof is the assignment: a view that cannot be
         written cannot disagree with the fact it reads.
@@ -1395,13 +1395,13 @@ class TestTheRefusal(unittest.TestCase):
 
     def _refusal(self, step: ArrangementStep, name: str,
                  arrangements: Optional[List[ArrangementStep]] = None) -> Optional[str]:
-        """What `_attach_bass` records on the step when it cannot place one note.
+        """What `attach_bass` records on the step when it cannot place one note.
 
         The refusal is `step.bass_refused` now rather than a warning, so this reads
-        the field. Running `_attach_bass` also proves the step *survives*, which is
+        the field. Running `attach_bass` also proves the step *survives*, which is
         the other half of the trade: the upper voicing is kept.
         """
-        VoiceLeadingEngine._attach_bass(
+        VoiceLeadingEngine.attach_bass(
             step,
             BassNote(bar=1, beat=1.0, pitch_class=pc(name), role=BASS_ROLE_ANCHOR),
             arrangements if arrangements is not None else [step],

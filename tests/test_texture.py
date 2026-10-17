@@ -578,7 +578,7 @@ class TestTheRightHandBudget(unittest.TestCase):
     so four strings is the most that can sound at once. That is the same four
     `supported_string_sets()` states, and it states it for a **voicing**: a step is the
     thing the renderers print, and the thumb note is merged into the step *after*
-    selection (`VoiceLeadingEngine._attach_bass`), so no check ever saw the two together.
+    selection (`VoiceLeadingEngine.attach_bass`), so no check ever saw the two together.
     A four-note target on a strong beat with a bass note placed under it is five
     simultaneous plucks - one more hand than a player has. The counts are in
     [docs/open-issues.md](../docs/open-issues.md) item 2.
@@ -1022,7 +1022,7 @@ class TestMelodyOnlySelections(unittest.TestCase):
     def test_every_slot_is_the_melody_alone(self):
         """Neither selection harmonises anything, on any slot, strong or weak.
 
-        Counted on `upper_midi_notes`, not on `active_frets`: `_attach_bass` merges the
+        Counted on `upper_midi_notes`, not on `active_frets`: `attach_bass` merges the
         thumb into the voicing *after* the upper voice is chosen, so a
         `melody,bass` step legitimately has two sounding frets. The thing under
         test is that the **left hand** plays one note, and that is what the

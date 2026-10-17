@@ -2,7 +2,7 @@
 
 The rest, the thinned fill, the `NC` bar and the comping route each build their step
 without re-entering the step loop; `_harmonised_step` stays in `movement` because it is
-the orchestrating route, retrying through `prepare_step`. `_last_sounding_step` lives
+the orchestrating route, retrying through `prepare_step`. `last_sounding_step` lives
 here because a route reads the arrangement it is appending to, and
 `resolve_substitute_harmony` lives in `chords`, where the non-chord-tone routing it
 composes already is.
@@ -16,11 +16,11 @@ from musthe import Note
 
 from . import grips as _grips
 from .bass import Slot
-from .bass_merge import _attach_bass, _next_resolution_melody
+from .bass_merge import attach_bass, next_resolution_melody
 from .chords import ChordParser, resolve_substitute_harmony
 from .decisions import is_bass_only, select_step_voicing
 from .harmony import HARMONY_SHELL_ROOT
-from .melody_alone import _melody_alone_shape, _sounding_melody
+from .melody_alone import melody_alone_shape, sounding_melody
 from .parts import PART_BASS
 from .texture import comping_arity
 from .tuning import (
@@ -35,7 +35,7 @@ from .tuning import (
 )
 
 
-def _last_sounding_step(
+def last_sounding_step(
     arrangements: List[ArrangementStep],
 ) -> Optional[ArrangementStep]:
     """The last step whose shape the hand was actually holding.
@@ -54,7 +54,7 @@ def _last_sounding_step(
     return None
 
 
-def _rest_step(
+def rest_step(
     arrangements: List[ArrangementStep],
     slot: Slot,
     *,
@@ -104,12 +104,12 @@ def _rest_step(
     # not the bass line - that is the whole difference between `grid=` and
     # `bass=none`, and dropping the attach here would silently delete the
     # walk from every bar the grid thinned.
-    _attach_bass(
+    attach_bass(
         arrangements[-1], slot.bass, arrangements
     )
 
 
-def _texture_fill_step(
+def texture_fill_step(
     arrangements: List[ArrangementStep],
     slot: Slot,
     *,
@@ -137,11 +137,11 @@ def _texture_fill_step(
     # needs the same statement: `note_str` is only narrowed inside the
     # branch that built `melody_note`, and this route needs both.
     assert melody_note is not None and note_str is not None
-    solo_voicing, inside_window = _melody_alone_shape(
+    solo_voicing, inside_window = melody_alone_shape(
         melody_note, previous=previous, top_strings=top_strings
     )
     if solo_voicing is not None:
-        sounding, written_original = _sounding_melody(solo_voicing, note_str)
+        sounding, written_original = sounding_melody(solo_voicing, note_str)
         fill = ArrangementStep(
             chord=name,
             melody=sounding,
@@ -162,13 +162,13 @@ def _texture_fill_step(
             metric_weight=weight,
             bass_only=is_bass_only(slot.bass_only, role),
         )
-        _attach_bass(fill, slot.bass, arrangements)
+        attach_bass(fill, slot.bass, arrangements)
         arrangements.append(fill)
         return True
     return False
 
 
-def _no_chord_step(
+def no_chord_step(
     arrangements: List[ArrangementStep],
     slot: Slot,
     *,
@@ -193,11 +193,11 @@ def _no_chord_step(
     # As the texture branch above: this kind means the guitar sings, and
     # that guard already refused a singing slot with no note.
     assert melody_note is not None and note_str is not None
-    solo_voicing, inside_window = _melody_alone_shape(
+    solo_voicing, inside_window = melody_alone_shape(
         melody_note, previous=previous, top_strings=top_strings
     )
     if solo_voicing is None:
-        _rest_step(
+        rest_step(
             arrangements, slot,
             name=name, note_str=note_str,
             bar=bar, beat=beat, duration=duration,
@@ -207,8 +207,8 @@ def _no_chord_step(
         return
     # get_melody_only_voicings may have dropped the note an octave to stay
     # below HIGH_FRET_LIMIT, so the step reports the pitch that sounds and
-    # keeps the written one for the renderer. See `_sounding_melody`.
-    sounding, written_original = _sounding_melody(solo_voicing, note_str)
+    # keeps the written one for the renderer. See `sounding_melody`.
+    sounding, written_original = sounding_melody(solo_voicing, note_str)
     arrangements.append(ArrangementStep(
         chord=name,
         melody=sounding,
@@ -217,7 +217,7 @@ def _no_chord_step(
         melody_only=True,
         # A bar of melody with no harmony has a palette like any other lone note - the
         # positions the eligible strings offer - so it says what that palette held rather
-        # than leaving the window clause to guess. See `_melody_alone_shape`.
+        # than leaving the window clause to guess. See `melody_alone_shape`.
         palette=Palette(available=1, inside_window=inside_window),
         # `step.grip` is a derived view of `voicing.grip`, so nothing is
         # passed here: the voicing says "melody" and the step cannot
@@ -234,10 +234,10 @@ def _no_chord_step(
     # string free. Attaching it here rather than only on harmonised steps is
     # what keeps a bar of no-chord melody from being a hole in the walk.
     arrangements[-1].bass_only = is_bass_only(slot.bass_only, role)
-    _attach_bass(arrangements[-1], slot.bass, arrangements)
+    attach_bass(arrangements[-1], slot.bass, arrangements)
 
 
-def _comping_step(
+def comping_step(
     arrangements: List[ArrangementStep],
     slot: Slot,
     *,
@@ -295,7 +295,7 @@ def _comping_step(
     # state it twice or hand the horn's line back to the guitarist. The guitar
     # is silent on this bar, and the horn is not - so the line says which.
     if chord_type == NO_CHORD or name == NO_CHORD:
-        _rest_step(
+        rest_step(
             arrangements, slot,
             name=name, note_str=note_str,
             bar=bar, beat=beat, duration=duration,
@@ -329,7 +329,7 @@ def _comping_step(
             chord_type,
             name,
             non_chord_tone,
-            next_melody=_next_resolution_melody(
+            next_melody=next_resolution_melody(
                 progression, index, melody_onsets
             ),
         )
@@ -387,7 +387,7 @@ def _comping_step(
             # to either, so the chord of the tune cannot be stated here at
             # all. Reported as the hole it is, and the position emitted
             # silent; the next grid position still gets its chance.
-            _rest_step(
+            rest_step(
                 arrangements, slot,
                 name=name, note_str=note_str,
                 bar=bar, beat=beat, duration=duration,
@@ -410,8 +410,8 @@ def _comping_step(
         _canonical, root_pc, _tones = _grips._chord_context(comp_chord_type, comp_name)
         # The last *sounding* shape: a silent position between here and the
         # previous chord is a hole in the tab, not a shape the hand held -
-        # see `_last_sounding_step`.
-        prev_sounding = _last_sounding_step(arrangements)
+        # see `last_sounding_step`.
+        prev_sounding = last_sounding_step(arrangements)
         arrangements.append(ArrangementStep(
             chord=name,
             # The written note, which is the horn's line. The guitar does not
@@ -460,7 +460,7 @@ def _comping_step(
             strategy=comp_strategy,
             harmonized_as=comp_harmonized_as,
         ))
-        _attach_bass(
+        attach_bass(
             arrangements[-1], slot.bass, arrangements
         )
         return True

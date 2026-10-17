@@ -251,7 +251,7 @@ def is_bass_only(slot_bass_only: bool, role: str) -> bool:
 
     The answer is a flag the renderers read, so it has to be right here rather than in
     four renderers that would each have to re-derive it - and it also has to be right
-    before `_attach_bass` reads it, because a target measures its thumb against its own
+    before `attach_bass` reads it, because a target measures its thumb against its own
     voicing rather than against a shape it is holding.
     """
     return slot_bass_only and role != ROLE_TARGET

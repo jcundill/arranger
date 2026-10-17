@@ -1,12 +1,12 @@
 """Merging the walking bass into a chosen step, and the next resolution melody.
 
-`_attach_bass` runs **after** selection: the thumb is written into the fret vector
+`attach_bass` runs **after** selection: the thumb is written into the fret vector
 only once the upper shape has been chosen, so it cannot enter the cost tuple by
 construction. Three independent failures are all handled the same way - the step
 survives and the bass is named, which is why `bass_refused` carries the wanted pitch
 class rather than a flag.
 
-`_next_resolution_melody` is the other half of the same concern: the pitch the dim7
+`next_resolution_melody` is the other half of the same concern: the pitch the dim7
 substitution resolves into, read from the written onsets when the comping route has
 no melody of its own.
 
@@ -25,7 +25,7 @@ from .bass import BassNote, held_shape, place_bass, previous_bass
 from .tuning import PITCH_CLASS_NAMES, ArrangementStep
 
 
-def _attach_bass(
+def attach_bass(
     step: ArrangementStep,
     note: Optional[BassNote],
     arrangements: List[ArrangementStep],
@@ -93,7 +93,7 @@ def _attach_bass(
     step.voicing.bass_pc = midi % 12
 
 
-def _next_resolution_melody(
+def next_resolution_melody(
     progression: Sequence[Tuple[Optional[str], str, str]],
     index: int,
     onsets: Optional[Container[int]] = None,

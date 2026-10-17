@@ -34,7 +34,7 @@ from .bass import (
     parse_bass_style,
     walking_slots,
 )
-from .bass_merge import _attach_bass, _next_resolution_melody
+from .bass_merge import attach_bass, next_resolution_melody
 from .chords import (
     NON_CHORD_TONE_STRATEGIES,
     ChordParser,
@@ -67,7 +67,7 @@ from .harmony import (
     parse_harmony,
     resolve_harmony,
 )
-from .melody_alone import _demoted_to_melody_alone, _rescue_melody_alone
+from .melody_alone import demoted_to_melody_alone, rescue_melody_alone
 from .options import ArrangeOptions
 from .parts import (
     PART_BASS,
@@ -79,11 +79,11 @@ from .parts import (
     resolve_parts,
 )
 from .routes import (
-    _comping_step,
-    _last_sounding_step,
-    _no_chord_step,
-    _rest_step,
-    _texture_fill_step,
+    comping_step,
+    last_sounding_step,
+    no_chord_step,
+    rest_step,
+    texture_fill_step,
 )
 from .texture import (
     TEXTURE_STYLES,
@@ -169,7 +169,7 @@ def _resolve_bass(
       substitution. A walking line with gaps in it is worse than no line, so the
       choice between them is the caller's, and the message names a texture that would
       work. Losing the *bass* still costs less than losing the tune - that trade is
-      made per beat, by `_attach_bass`, where the step survives and the tab says so.
+      made per beat, by `attach_bass`, where the step survives and the tab says so.
 
     **The selection is passed rather than the flags derived from it** - the route
     (`voices_have_soprano`), the comping arity (`len(voices)`), the lone-bass case
@@ -363,7 +363,7 @@ def prepare_step(
                 chord_type,
                 name,
                 non_chord_tone,
-                next_melody=_next_resolution_melody(progression, index),
+                next_melody=next_resolution_melody(progression, index),
             )
             if substitute is not None:
                 substitute_quality, substitute_name = substitute[0], substitute[1]
@@ -666,11 +666,11 @@ def _resolve_policies(
 def _previous_shape(arrangements: List[ArrangementStep]) -> Optional[Voicing]:
     """The voicing of the last sounding step, or None - what a shape is scored against.
 
-    The same answer `_last_sounding_step` gives, in the form the selector wants, so a
+    The same answer `last_sounding_step` gives, in the form the selector wants, so a
     lone note and a chord lead from one shape rather than two lookbacks that could
     disagree about which step the hand was holding.
     """
-    previous = _last_sounding_step(arrangements)
+    previous = last_sounding_step(arrangements)
     return previous.voicing if previous is not None else None
 
 
@@ -708,7 +708,7 @@ def _promoted_fill(
         melody_only=melody_only,
     ):
         return None
-    prev_sounding = _last_sounding_step(arrangements)
+    prev_sounding = last_sounding_step(arrangements)
     return prepare_step(
         progression, index,
         # The last *sounding* shape, not the step before this one: a silent
@@ -863,8 +863,8 @@ def _harmonised_step(
     #
     # The previous shape is the last *sounding* one: a silent position between
     # here and the previous chord is a hole in the tab, not a shape the hand
-    # held - see `_last_sounding_step`.
-    prev_sounding = _last_sounding_step(arrangements)
+    # held - see `last_sounding_step`.
+    prev_sounding = last_sounding_step(arrangements)
     prepared = prepare_step(
         progression, index,
         previous=prev_sounding.voicing if prev_sounding is not None else None,
@@ -878,8 +878,8 @@ def _harmonised_step(
     if prepared is None:
         # The tune is never dropped while it can be played at all: play it
         # alone first, then promote the fill, and only then report the step
-        # missing. See `_rescue_melody_alone` and `_promoted_fill`.
-        if _rescue_melody_alone(
+        # missing. See `rescue_melody_alone` and `_promoted_fill`.
+        if rescue_melody_alone(
             arrangements, slot,
             name=name, note_str=note_str, melody_note=melody_note,
             top_strings=top_strings, previous=_previous_shape(arrangements),
@@ -911,7 +911,7 @@ def _harmonised_step(
             # under a chord nothing could voice (`no_shape`). The rescue above
             # asked the same question, so the answer is read back rather than
             # re-derived from the clause's own words.
-            _rest_step(
+            rest_step(
                 arrangements, slot,
                 name=name, note_str=note_str,
                 bar=bar, beat=beat, duration=duration,
@@ -960,7 +960,7 @@ def _harmonised_step(
     # changing strings.
     # The shape the selector leads *from* is the last sounding one, not the step
     # before this one: a silent position is a hole in the tab rather than a shape
-    # the hand held (`_last_sounding_step`). `prev_step` above stays
+    # the hand held (`last_sounding_step`). `prev_step` above stays
     # `arrangements[-1]`, because a hold is about what is *ringing* - and a rest
     # stops the ringing, whether it is the grid's or a position the guitar
     # declined.
@@ -1126,7 +1126,7 @@ def _harmonised_step(
         if narrower is not None:
             best_voicing = narrower
             palette = palette_facts_for(best_voicing)
-        elif _demoted_to_melody_alone(
+        elif demoted_to_melody_alone(
             arrangements, slot,
             name=name, note_str=note_str, melody_note=melody_note,
             top_strings=top_strings, previous=prev_voicing,
@@ -1182,7 +1182,7 @@ def _harmonised_step(
     # Select first, merge after: the bass is written into the fret vector only
     # once `best_voicing` has returned, so it cannot enter the cost tuple by
     # construction rather than by discipline.
-    _attach_bass(arrangements[-1], slot.bass, arrangements)
+    attach_bass(arrangements[-1], slot.bass, arrangements)
 
 
 @dataclass
@@ -1691,7 +1691,7 @@ def arrange_progression(
             continue
 
         if plan.melody_alone == MELODY_ALONE_REST:
-            _rest_step(
+            rest_step(
                 arrangements, slot,
                 name=plan.name, note_str=plan.note_str,
                 bar=plan.bar, beat=plan.beat, duration=plan.duration,
@@ -1700,7 +1700,7 @@ def arrange_progression(
             )
             continue
         if plan.melody_alone == MELODY_ALONE_TEXTURE:
-            if _texture_fill_step(
+            if texture_fill_step(
                 arrangements, slot,
                 name=plan.name, note_str=plan.note_str,
                 melody_note=plan.melody_note, top_strings=top_strings,
@@ -1711,7 +1711,7 @@ def arrange_progression(
                 continue
 
         if plan.melody_alone == MELODY_ALONE_NO_CHORD:
-            _no_chord_step(
+            no_chord_step(
                 arrangements, slot,
                 name=plan.name, note_str=plan.note_str,
                 melody_note=plan.melody_note, top_strings=top_strings,
@@ -1722,11 +1722,11 @@ def arrange_progression(
             continue
 
         # --- The comping route: the guitar harmonises, somebody else sings ---
-        # See `_comping_step`: taken before `prepare_step` because there is no
+        # See `comping_step`: taken before `prepare_step` because there is no
         # melody for the guitar here, and only after the NC and melody-alone
         # branches, which are the cases with no harmony to state.
         if not plan.sings_here and not melody_only:
-            if _comping_step(
+            if comping_step(
                 arrangements, slot,
                 progression=progression, index=plan.index,
                 chord_type=plan.chord_type, name=plan.name,
