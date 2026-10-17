@@ -62,13 +62,13 @@ from arranger import (
     resolve_parts,
     supported_string_sets,
 )
+from arranger.grip_place import snapshot
 from arranger.grip_tables import (
     comping_string_sets,
 )
 from arranger.grips import (
     _comping_palette,
     _search_comping_voicings,
-    _snapshot,
 )
 from arranger.options import ArrangeOptions
 from arranger.render import _step_cells
@@ -162,7 +162,7 @@ class TestCompingGenerator(unittest.TestCase):
         ]
         self.assertEqual(missing, [], f"no comping shape for {missing}")
 
-    def test_every_candidate_states_the_chord(self):
+    def test_everycandidate_states_the_chord(self):
         """Both guide tones sound, and nothing outside the chord does."""
         for name in ("Cmaj7", "Am7", "G7", "Dm7b5", "Bdim7", "Fmaj7", "C6", "G7sus4"):
             needed, allowed = guide_pcs(name), chord_pcs(name)
@@ -277,7 +277,7 @@ class TestTheCompingPaletteIsRemembered(unittest.TestCase):
                             shell_root,
                         )
                         self.assertEqual(
-                            [_snapshot(voicing) for voicing in searched],
+                            [snapshot(voicing) for voicing in searched],
                             list(remembered),
                             f"{name} notes={notes} bass_voice={bass_voice} "
                             f"shell_root={shell_root}",

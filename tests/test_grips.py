@@ -127,7 +127,7 @@ class TestGripGeneration(unittest.TestCase):
         for grip in GRIP_PREFERENCE:
             self.assertIn(grip, seen, f"no {grip} candidate is ever generated")
 
-    def test_candidate_generation_does_not_filter_by_position(self):
+    def testcandidate_generation_does_not_filter_by_position(self):
         """No window, no repositioning: generation is pure and selection comes later.
 
         This is what keeps the grip families and the octave-down rescue independent of
@@ -1022,7 +1022,7 @@ class TestStringSetTable(unittest.TestCase):
         """
         Every family in GRIP_STRING_SETS is also in GRIP_MAX_SPAN, and vice versa.
 
-        The two tables are read independently - the span by `_candidate` and the sets by
+        The two tables are read independently - the span by `candidate` and the sets by
         `_string_sets_for` - so a family added to one and
         not the other would fail with a bare KeyError deep inside placement, naming
         neither the grip nor the omission. The two-note families are held to 4 rather
@@ -1207,7 +1207,7 @@ class TestStringSetTable(unittest.TestCase):
         """
         Every set `_string_sets_for` hands back must be ordered highest string first.
 
-        This is the order `_place_template` assigns voices in, so a set that ascends
+        This is the order `place_template` assigns voices in, so a set that ascends
         lays the voices on the strings in reverse. It is asserted on the *returned*
         value rather than on the stored tuple because the two were not the same: the
         stored sets are low-to-high for readability, and rotating one from its

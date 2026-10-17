@@ -1,8 +1,8 @@
-"""Tests for the shared placement search: `_frets_in_span` and `_place_shape`.
+"""Tests for the shared placement search: `frets_in_span` and `place_shape`.
 
 The string sets whose voices are not in descending pitch order down the strings - 6-4-3,
 both 5-3-2s and 6-4-3-2 - are *searched* rather than stacked, because the tuning is not
-monotonic in the useful direction. `_search_shape` is that search stated once, answered
+monotonic in the useful direction. `search_shape` is that search stated once, answered
 through the memo `_searched_shape` - which must change nothing but the time, so the checks
 below call the search and `TestTheMemoChangesNothingButTheTime` is where the memo is asked
 for its own. What this file holds the search to, and nothing else can:
@@ -40,16 +40,18 @@ from arranger import (
     ChordParser,
     GuitarFretboard,
 )
+from arranger.grip_place import (
+    Placement,
+    _searched_shape,
+    candidate,
+    frets_in_span,
+    place_shape,
+    place_template,
+    search_shape,
+)
 from arranger.grips import (
-    _candidate,
     _chord_context,
     _drop2_6432_request,
-    _frets_in_span,
-    _place_shape,
-    _place_template,
-    _Placement,
-    _search_shape,
-    _searched_shape,
     _shell_request,
     _string_sets_for,
     get_grip_voicings,
@@ -97,7 +99,7 @@ def _allowed_for(canonical: str, root_pc: int, tones: Tuple[int, ...]) -> Frozen
     return frozenset((root_pc + tone) % 12 for tone in tones)
 
 
-def _reference(placement: _Placement, allowed: frozenset) -> Optional[List[int]]:
+def _reference(placement: Placement, allowed: frozenset) -> Optional[List[int]]:
     """The documented rules, written the obvious way: every combination, then filter.
 
     Deliberately a second implementation rather than a call to the thing under test, and
@@ -137,12 +139,12 @@ def _reference(placement: _Placement, allowed: frozenset) -> Optional[List[int]]
 
 
 class TestTheSearchIsExhaustive(unittest.TestCase):
-    """`_frets_in_span` tries every span-legal combination, in ascending order."""
+    """`frets_in_span` tries every span-legal combination, in ascending order."""
 
     def test_every_span_legal_combination_is_yielded_and_none_other(self):
         """The window-narrowing recursion misses nothing and invents nothing.
 
-        The property `_place_shape`'s docstring rests on: because the search is
+        The property `place_shape`'s docstring rests on: because the search is
         exhaustive within the span limit, "no shape was found" means there is none.
         """
         for strings, lo, hi, limit in (
@@ -157,24 +159,24 @@ class TestTheSearchIsExhaustive(unittest.TestCase):
                 if max(combo) - min(combo) <= limit
             ]
             self.assertEqual(
-                list(_frets_in_span(strings, lo, hi, limit)),
+                list(frets_in_span(strings, lo, hi, limit)),
                 expected,
                 f"{strings} in {lo}..{hi} at span {limit}",
             )
 
     def test_the_yielded_order_is_ascending(self):
         """The order is load-bearing: it is how an exact tie is broken."""
-        yielded = list(_frets_in_span((4, 3, 2), 0, 4, 3))
+        yielded = list(frets_in_span((4, 3, 2), 0, 4, 3))
         self.assertEqual(yielded, sorted(yielded))
 
     def test_an_empty_string_set_yields_the_empty_shape(self):
         """The recursion's base case, which a one-voice shape would reach."""
-        self.assertEqual(list(_frets_in_span((), 0, 5, 5)), [()])
+        self.assertEqual(list(frets_in_span((), 0, 5, 5)), [()])
 
 
 def _requests(
     chord_name: str, melody: str, top_string: int
-) -> List[Tuple[_Placement, FrozenSet[int]]]:
+) -> List[Tuple[Placement, FrozenSet[int]]]:
     """The requests the two searched families make for one melody on one soprano string.
 
     Built through the families' *own* request builders, so the search is asked the question
@@ -188,7 +190,7 @@ def _requests(
     if top_fret < 0:
         return []
     allowed = _allowed_for(canonical, root_pc, tones)
-    requests: List[Tuple[_Placement, FrozenSet[int]]] = []
+    requests: List[Tuple[Placement, FrozenSet[int]]] = []
     for strings in _string_sets_for("shell", top_string):
         request = _shell_request(canonical, root_pc, strings, melody_midi, top_fret)
         if request is not None:
@@ -201,7 +203,7 @@ def _requests(
 
 
 class TestTheSearchObeysTheInvariants(unittest.TestCase):
-    """`_place_shape` against the rules, and against a second implementation of them."""
+    """`place_shape` against the rules, and against a second implementation of them."""
 
     def test_the_search_agrees_with_the_rules_written_out(self):
         """Every searched family's request, checked against the brute-force reference."""
@@ -209,7 +211,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
         for chord_name, melody in CASES:
             for top_string in MELODY_STRING_CHOICES_FULL:
                 for placement, allowed in _requests(chord_name, melody, top_string):
-                    found = _search_shape(placement, allowed)
+                    found = search_shape(placement, allowed)
                     self.assertEqual(
                         found.frets if found else None,
                         _reference(placement, allowed),
@@ -243,7 +245,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
                     for request, _allowed in _requests(chord_name, melody, top_string):
                         if request.grip != grip:
                             continue
-                        found = _search_shape(request, allowed)
+                        found = search_shape(request, allowed)
                         if found is not None:
                             searched.add(tuple(found.frets))
                     self.assertEqual(
@@ -259,7 +261,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
                 if GuitarFretboard.note_to_fret(top_string, Note(melody)) < 0:
                     continue
                 for request, _allowed in _requests(chord_name, melody, top_string):
-                    found = _search_shape(request, allowed)
+                    found = search_shape(request, allowed)
                     if found is None:
                         continue
                     self.assertEqual(
@@ -286,7 +288,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
         request = _shell_request(canonical, root_pc, (4, 3, 2), melody.midi_note(), top_fret)
         assert request is not None
         self.assertIsNone(
-            _search_shape(request, _allowed_for(canonical, root_pc, tones))
+            search_shape(request, _allowed_for(canonical, root_pc, tones))
         )
 
         guide = frozenset((root_pc + g) % 12 for g in SHELL_DEGREES[canonical])
@@ -310,7 +312,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
         """
         melody = Note("F#5")
         top_fret = GuitarFretboard.note_to_fret(5, melody)
-        placement = _Placement(
+        placement = Placement(
             grip="shell",
             strings=(5, 4, 3),
             melody_midi=melody.midi_note(),
@@ -319,12 +321,12 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
         )
         self.assertEqual(top_fret, 14)
         self.assertGreater(top_fret + GRIP_MAX_SPAN["shell"], 18)
-        self.assertIsNone(_search_shape(placement, frozenset(range(12))))
+        self.assertIsNone(search_shape(placement, frozenset(range(12))))
 
     def test_a_tone_the_chord_does_not_contain_is_refused(self):
         """`required ⊆ pcs ⊆ allowed` is one condition, so an impossible claim finds nothing."""
         melody = Note("B4")
-        placement = _Placement(
+        placement = Placement(
             grip="shell",
             strings=(5, 4, 3),
             melody_midi=melody.midi_note(),
@@ -332,12 +334,12 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
             required=frozenset({1}),
         )
         # Cmaj7 without its root: nothing can sound a Db, so no shape can honour the claim.
-        self.assertIsNone(_search_shape(placement, frozenset({4, 7, 11})))
+        self.assertIsNone(search_shape(placement, frozenset({4, 7, 11})))
 
     def test_the_bass_rule_refuses_a_bottom_note_outside_the_degrees(self):
         """`lowest_pc_allowed` is the family's claim about the bass, and it is enforced."""
         melody = Note("B4")
-        base = _Placement(
+        base = Placement(
             grip="drop2_6432",
             strings=_string_sets_for("drop2_6432", 4)[0],
             melody_midi=melody.midi_note(),
@@ -346,14 +348,14 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
         )
         # A Cmaj7 whose bass may only be an F: no shape of it can honour that.
         self.assertIsNone(
-            _search_shape(
+            search_shape(
                 replace(base, lowest_pc_allowed=frozenset({5})),
                 frozenset({0, 4, 7, 11}),
             )
         )
         # The same request with the chord's own root or 5th allowed does find one.
         self.assertIsNotNone(
-            _search_shape(
+            search_shape(
                 replace(base, lowest_pc_allowed=frozenset({0, 7})),
                 frozenset({0, 4, 7, 11}),
             )
@@ -368,7 +370,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
             Note("B4").midi_note(),
             GuitarFretboard.note_to_fret(4, Note("B4")),
         )
-        found = _search_shape(request, _allowed_for(canonical, root_pc, tones))
+        found = search_shape(request, _allowed_for(canonical, root_pc, tones))
         self.assertIsNotNone(found)
         assert found is not None
         self.assertLessEqual({midi % 12 for midi in found.midi_notes()}, {0, 4, 7, 11})
@@ -382,7 +384,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
             GuitarFretboard.note_to_fret(5, Note("B4")),
         )
         assert request is not None
-        found = _search_shape(request, _allowed_for(canonical, root_pc, tones))
+        found = search_shape(request, _allowed_for(canonical, root_pc, tones))
         self.assertIsNotNone(found)
         assert found is not None
         self.assertEqual(found.active_strings, [3, 4, 5])
@@ -395,7 +397,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
         request says how many strings the shape uses. Without the rule a producer that
         filled in a different subset would ship a shape nobody chose.
         """
-        placement = _Placement(
+        placement = Placement(
             grip="shell",
             strings=(5, 3, 2),
             melody_midi=Note("E4").midi_note(),
@@ -403,10 +405,10 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
             required=frozenset(),
         )
         frets = [-1, -1, 0, 0, -1, 0]
-        self.assertIsNotNone(_candidate(placement, frets, None))
+        self.assertIsNotNone(candidate(placement, frets, None))
         # The same frets read as a two-voice shape sound the high E and the G, which is
         # `{3, 5}` - a set no table entry offers.
-        self.assertIsNone(_candidate(replace(placement, voices=2), frets, None))
+        self.assertIsNone(candidate(replace(placement, voices=2), frets, None))
 
     def test_a_voice_below_a_strings_open_pitch_refuses_the_shape(self):
         """A fret of -1 is a refusal here, not a mute - and it is reachable.
@@ -422,19 +424,19 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
         top_fret = GuitarFretboard.note_to_fret(5, melody)
         # A duo's second voice a tritone below the melody: -1 on the B string.
         self.assertIsNone(
-            _place_template([0, -6], (5, 4), melody.midi_note(), top_fret, "duo")
+            place_template([0, -6], (5, 4), melody.midi_note(), top_fret, "duo")
         )
         # A four-voice drop-2 of C7 reaches the same string. Read as a mute, this shape
         # sounded the high E, the G and the A - {1, 3, 5}, which is no set in the table.
         self.assertIsNone(
-            _place_template(
+            place_template(
                 [0, -6, -9, -16], (5, 4, 3, 1), melody.midi_note(), top_fret, "drop2"
             )
         )
         # A note *further* below the open pitch is refused for the same reason, so the rule
         # is "used strings carry a fret on the board" rather than "no fret of exactly -1".
         self.assertIsNone(
-            _place_template(
+            place_template(
                 [0, -14], (3, 2), Note("C4").midi_note(),
                 GuitarFretboard.note_to_fret(3, Note("C4")), "duo",
             )
@@ -448,7 +450,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
         """
         ranked = 0
         for placement, allowed in _requests("Cmaj7", "B4", 5):
-            found = _search_shape(placement, allowed)
+            found = search_shape(placement, allowed)
             if found is None:
                 continue
             reference = _reference(placement, allowed)
@@ -463,7 +465,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
 
 
 class TestTheMemoChangesNothingButTheTime(unittest.TestCase):
-    """`_search_shape` is answered through `_searched_shape`; the answer may not move.
+    """`search_shape` is answered through `_searched_shape`; the answer may not move.
 
     An invisible memo stops being invisible in only three ways, and each has an assertion
     here: an answer that differs from the search's, a caller's write reaching the next
@@ -487,8 +489,8 @@ class TestTheMemoChangesNothingButTheTime(unittest.TestCase):
         for chord_name, melody in CASES:
             for top_string in MELODY_STRING_CHOICES_FULL:
                 for request, allowed in _requests(chord_name, melody, top_string):
-                    searched = _search_shape(request, allowed)
-                    placed = _place_shape(request, allowed)
+                    searched = search_shape(request, allowed)
+                    placed = place_shape(request, allowed)
                     self.assertEqual(
                         None if searched is None else searched.tab_string(),
                         None if placed is None else placed.tab_string(),
@@ -507,7 +509,7 @@ class TestTheMemoChangesNothingButTheTime(unittest.TestCase):
         *sharing* that is forbidden, not the equality of the two answers.
         """
         request, allowed = _requests("Cmaj7", "B4", 4)[0]
-        first = _place_shape(request, allowed)
+        first = place_shape(request, allowed)
         assert first is not None
         pristine_tab = first.tab_string()
         pristine_bass = first.bass_pc
@@ -518,7 +520,7 @@ class TestTheMemoChangesNothingButTheTime(unittest.TestCase):
         first.frets[muted[0]] = 7
         first.bass_pc = None if pristine_bass is None else (pristine_bass + 1) % 12
 
-        second = _place_shape(request, allowed)
+        second = place_shape(request, allowed)
         assert second is not None
         self.assertIsNot(second, first, "the memo handed one object out twice")
         self.assertEqual(second.tab_string(), pristine_tab)
@@ -532,8 +534,8 @@ class TestTheMemoChangesNothingButTheTime(unittest.TestCase):
         """
         request, allowed = _requests("Cmaj7", "B4", 4)[0]
         before = _searched_shape.cache_info()
-        first = _place_shape(request, allowed)
-        second = _place_shape(request, allowed)
+        first = place_shape(request, allowed)
+        second = place_shape(request, allowed)
         after = _searched_shape.cache_info()
         self.assertIsNotNone(first)
         self.assertIsNotNone(second)
@@ -548,17 +550,17 @@ class TestTheMemoChangesNothingButTheTime(unittest.TestCase):
         file rather than a hope.
         """
         request, allowed = _requests("Cmaj7", "B4", 4)[0]
-        _place_shape(request, allowed)
+        place_shape(request, allowed)
         self.assertGreater(_searched_shape.cache_info().currsize, 0)
         _searched_shape.cache_clear()
         self.assertEqual(_searched_shape.cache_info().currsize, 0)
-        self.assertIsNotNone(_place_shape(request, allowed))
+        self.assertIsNotNone(place_shape(request, allowed))
 
 
 class TestTheGripDistribution(unittest.TestCase):
     """How the families are actually used over every committed head.
 
-    This is the shared placement's gate rather than a curiosity: `_place_shape` is the one
+    This is the shared placement's gate rather than a curiosity: `place_shape` is the one
     path every searched family now takes, so a change that altered a shape moves one of
     these counts. A *count* is the metre this repository asks a change to give - a moved
     tab in `tests/test_voicings.py` says something changed, and this table says what.

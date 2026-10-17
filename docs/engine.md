@@ -440,25 +440,27 @@ filtering, no transposition) and `best_voicing` does all the deciding. That spli
 what stops the grip families and the octave-down rescue from having to know about each
 other, and it is asserted in `tests/test_grips.py`.
 
-**Two ways to propose a shape, one way to accept one.** `_candidate` is the only place a set
+**Two ways to propose a shape, one way to accept one.** `candidate` is the only place a set
 of frets becomes a `Voicing`: the melody sounds and is the highest note, every fret is on the
 board and inside `GRIP_MAX_SPAN`, the family's tone claim (`required`) and bass claim
 (`lowest_pc_allowed`) hold, nothing outside the chord sounds where the family makes that claim,
 and the sounding strings are one `supported_string_sets()` entry. The proposers are the
-**search** (`_search_shape`, for the families whose frets have to be found) and the **layouts**
-(`_place_template`, which computes them from an interval template). `_LAYOUT_GRIPS` and
+**search** (`search_shape`, for the families whose frets have to be found) and the **layouts**
+(`place_template`, which computes them from an interval template). Both the proposers and the
+rules they share live in `arranger/grip_place.py`, which sits below `grips` in the package order:
+a generator builds a `Placement` and the module answers it. `_LAYOUT_GRIPS` and
 `_SEARCHED_GRIPS` name the two kinds and must **partition** the families - a family listed in
 neither generates nothing at all, which is what makes adding one a decision rather than a
 silent omission.
 
 The searched families' one search is answered from a memo that builds a fresh shape per call,
 so generation stays pure in the observable sense: it changes the time and nothing else.
-`_search_shape` enumerates, `_searched_shape` (an `lru_cache`) remembers one request's
-answer, and `_place_shape` - the name the generators call - rebuilds a fresh `Voicing` from
+`search_shape` enumerates, `_searched_shape` (an `lru_cache`) remembers one request's
+answer, and `place_shape` - the name the generators call - rebuilds a fresh `Voicing` from
 the snapshot. Three things make it safe rather than merely fast, and
 `tests/test_placement.py` holds each to a witness:
 
-- **The key is the whole request.** `_Placement` is a frozen dataclass of strings, tuples,
+- **The key is the whole request.** `Placement` is a frozen dataclass of strings, tuples,
   ints and frozensets, so equal requests share an entry and different ones cannot, and
   nothing needs invalidating. The tables it reads besides the request (`GRIP_MAX_SPAN`,
   `STANDARD_TUNING`, `supported_string_sets()`) are fixed when the module is imported, so
@@ -474,7 +476,7 @@ The **comping palette is the same memo for the same reason**
 (`_search_comping_voicings`, `_comping_palette`, and `get_comping_voicings` rebuilding fresh
 `Voicing`s), because `decisions.select_step_voicing` hands one of the palette's own objects
 back and `_attach_bass` writes the thumb into it. It buys time only: the search is still
-exhaustive over the span window, so `_frets_in_span`'s cost is the floor for a request
+exhaustive over the span window, so `frets_in_span`'s cost is the floor for a request
 nobody has asked before.
 
 **Three levers the placement has made possible, all measured and none taken.** Each would
@@ -637,7 +639,7 @@ skip to a lower string — what `drop2_6432` does with the low E, generalised. T
 strings are tuned higher than the one below, so a deep bass runs out of board on a
 contiguous block long before the low E would; skipping moves the shape down the neck as
 a unit instead of stretching it. `GRIP_STRING_SETS` carries the skipping set for each
-four-string block, and `_place_template` still assigns the voices soprano-first, so a
+four-string block, and `place_template` still assigns the voices soprano-first, so a
 set is ordered descending with the gap at the bottom.
 
 Five decisions in here were each forced by something measurable:
@@ -695,7 +697,7 @@ Five decisions in here were each forced by something measurable:
   `2-3-0-x-x-x` — B2 on the A string, F3 on the D string, G3 on the G — where the A string
   carries the *lower* note while being the higher string; Gm7 in 6-4-3 is `3-x-3-3-x-x`,
   with G3 on the D string below A2 on the low E. A model that stacks voices by pitch gets
-  both backwards and finds nothing, so `_place_shape` holds the melody and searches every
+  both backwards and finds nothing, so `place_shape` holds the melody and searches every
   combination of frets inside the span limit. That makes the search *exhaustive within the
   playability invariant*: if a playable shell exists in that position, it is found.
 - **No four-note voicing on 6-5-4-3.** A G-string soprano has no four-note block, because
@@ -1384,7 +1386,7 @@ is generated.
 The generator behind a `parts="chord"` selection. **It is the same exhaustive search with
 nothing held at the top.** A shell is already a claim about the chord's 3rd and 7th rather
 than about
-the tune, so the search needed no new rule: `_frets_in_span` already tries every fret
+the tune, so the search needed no new rule: `frets_in_span` already tries every fret
 combination on the remaining strings and the candidate keeps the ones where both guide
 tones sound and nothing outside
 the chord does. The only difference is that the top fret is searched too rather than fixed

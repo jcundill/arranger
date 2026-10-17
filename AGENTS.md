@@ -18,7 +18,7 @@ gate and the conventions — not the explanation.
 | If you are changing | Read first | Then |
 |---|---|---|
 | the drop-2 rule, a grip, `GRIP_MAX_SPAN`, `voicing_cost` | [docs/engine.md](docs/engine.md) | `arranger/grip_tables.py`, `arranger/grips.py`, `arranger/cost.py` |
-| how a shape is placed on its strings — a family that *searches* versus one that computes a layout, `_Placement`, `_candidate`, the placement memo (`_search_shape` / `_searched_shape` / `_place_shape`) | [docs/history/generated-grips.md](docs/history/generated-grips.md) §4 | `arranger/grips.py`, `tests/test_placement.py` |
+| how a shape is placed on its strings — a family that *searches* versus one that computes a layout, `Placement`, `candidate`, the placement memo (`search_shape` / `_searched_shape` / `place_shape`) | [docs/history/generated-grips.md](docs/history/generated-grips.md) §4 | `arranger/grip_place.py`, `arranger/grips.py`, `tests/test_placement.py` |
 | where a **lone note** is fretted — a fill, an `NC` bar, a rescued melody, a span demotion (`get_melody_only_voicings`, `_melody_alone_shape`) | [docs/engine.md](docs/engine.md) | `arranger/grips.py`, `arranger/melody_alone.py`, `arranger/routes.py`, `tests/test_non_chord_tones.py` |
 | which chord tones a shape states — `TONE_PRIORITY`, the tone a four-voice shape gives up, the palette a melody with no degree to match is offered, or the order that was not taken | [docs/history/generated-grips.md](docs/history/generated-grips.md) | `arranger/grip_tables.py` (`TONE_PRIORITY`, `stated_tones`), `arranger/grips.py` (`drop2_template_for`, `_drop2_palette`), `tests/test_generated_grips.py`, `tests/support.py` (`WITNESS`) |
 | the trailing annotation a step carries, why a shape is thin, or what **must** be explained when a choice is added (`ArrangementStep.palette`, `cost.VOICING_COST_CRITERIA`, `tests/test_explanations.py`) | [docs/engine.md](docs/engine.md) | `arranger/render.py`, `arranger/movement.py` |
@@ -131,6 +131,7 @@ arranger/
 │   ├── fingers.py       #   which finger holds which fret; read by bass for the fret budget
 │   ├── chords.py        #   ChordParser, non-chord-tone routing
 │   ├── grip_tables.py   #   the grip tables and the questions asked of them
+│   ├── grip_place.py    #   where a shape is placed on its strings, and the memo
 │   ├── grips.py         #   the builders and the candidate generators
 │   ├── cost.py          #   voicing_cost - the library's central invariant
 │   ├── parts.py         #   which of melody / bass / chord the guitar takes
@@ -175,7 +176,8 @@ The engine was one 4290-line module until Phase 5 of the package refactor. It is
 now a package of focused modules in a strict dependency order:
 
 ```
-tuning -> fingers -> chords -> grip_tables -> grips -> cost -> parts -> harmony -> grid -> texture
+tuning -> fingers -> chords -> grip_tables -> grip_place -> grips -> cost -> parts -> harmony
+                             -> grid -> texture
                                                                                  |
                                       bass -> bass_merge -> options -------------+
                                                    |

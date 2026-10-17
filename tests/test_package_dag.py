@@ -41,6 +41,7 @@ ORDER = [
     "fingers",      # which finger holds which fret; `bass` reads it for the four-fret budget
     "chords",       # chord symbols and the non-chord-tone routing
     "grip_tables",  # the grip tables and the questions asked of them
+    "grip_place",   # where a shape is placed on its strings, and the memo
     "grips",        # the grip builders and candidate generators
     "cost",         # voicing_cost: which candidate is played
     "parts",        # the parts axis: which of melody / bass / chord the guitar takes
@@ -209,7 +210,7 @@ class TestPackageDag(unittest.TestCase):
             ("GuitarFretboard", "tuning", "GuitarFretboard"),
             ("bass_cost", "bass", "bass_cost"),
             ("format_progression", "render", "format_progression"),
-            ("supported_string_sets", "grips", "supported_string_sets"),
+            ("supported_string_sets", "grip_tables", "supported_string_sets"),
         ]:
             module = __import__(f"arranger.{home}", fromlist=[attribute])
             self.assertIs(
