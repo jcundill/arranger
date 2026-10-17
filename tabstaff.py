@@ -76,68 +76,65 @@ def _rest_grain(
     return max(min(written), 1e-6)
 
 
-def _staff_columns(
+def _placed_steps(
     steps: List[ArrangementStep],
     beats_per_bar: int,
-    beat_type: int,
     rhythm: bool,
-    collapse: bool = True,
-) -> List[Tuple[float, Optional[ArrangementStep], bool]]:
-    """
-    Places each step on an absolute beat, padding the gaps with rests.
+) -> List[Tuple[float, ArrangementStep]]:
+    """Every step on its absolute beat, or one per beat when there is no timing.
 
     An absolute beat is `bar * beats_per_bar + (beat - 1)`, the same signed-bar
     arithmetic NoteEvent.beat_position uses, so a pickup in a negative bar sorts
-    before bar 0 without a special case. The list is sorted and de-duplicated
-    because two steps can share an onset (a chord change inside a held bar), and
-    the first step in a column owns that column.
-
-    Each column comes back with a `strikes` flag. With `collapse` on, a step
-    sounding exactly the same pitches as the one before it is a *hold*, not a new
-    attack: it stays on the grid (so the barlines and the chord line still line
-    up) but prints no frets, because the previous shape is still ringing. That is
-    what separates chord-melody tab from a chord list - the skeleton voices one
-    step per eighth, and a player holds the shape rather than restriking it eight
-    times a bar. Comparing sounding pitches rather than fret numbers is what makes
-    this work: the same shape reached by a different route is still the same hold.
-
-    The comparison is of the **upper** voices, so a walking bass does not destroy
-    it. A thumb line changes the lowest pitch on every quarter, so comparing the
-    full pitch set would mark every column a strike and turn the whole arrangement
-    back into the chord list the 0.7.0 collapse behaviour exists to prevent.
-    `Voicing.upper_midi_notes` does the exclusion, by the recorded bass string
-    rather than a constant index, because the thumb moves between strings.
-
-    Without timing - a hand-written progression, or `rhythm=False` - each step
-    simply takes the next beat, reproducing a one-chord-per-cell grid.
+    before bar 0 without a special case. Without timing - a hand-written
+    progression, or `rhythm=False` - each step simply takes the next beat,
+    reproducing a one-chord-per-cell grid.
     """
     if _is_timed(steps, rhythm):
-        placed: List[Tuple[float, ArrangementStep]] = [
+        return [
             (step.bar * beats_per_bar + (step.beat - 1), step)  # type: ignore[operator]
             for step in steps
         ]
-    else:
-        placed = [(float(index), step) for index, step in enumerate(steps)]
+    return [(float(index), step) for index, step in enumerate(steps)]
 
+
+def _dedupe_onsets(
+    placed: List[Tuple[float, ArrangementStep]],
+) -> List[Tuple[float, Optional[ArrangementStep]]]:
+    """One column per onset, sorted; the first step to claim an onset owns it.
+
+    Two steps can share an onset (a chord change inside a held bar), and the onset
+    is compared with an epsilon rather than for equality because it is a sum of
+    floats.
+    """
     columns: List[Tuple[float, Optional[ArrangementStep]]] = []
     for onset, step in sorted(placed, key=lambda item: item[0]):
         if columns and abs(columns[-1][0] - onset) < 1e-9:
             continue
         columns.append((onset, step))
+    return columns
 
-    # Fill the holes a real rhythm leaves, so a chord held for two beats is
-    # followed by a rest rather than by the next chord jammed up against it.
-    # The grid starts at the first onset, not at zero: a head selected from bar 1
-    # (or from a negative pickup bar) should not be preceded by a screen of empty
-    # bars standing in for the music before it.
-    #
-    # **But not part-way through its own bar.** Starting at the onset dropped a
-    # leading rest *within* the first bar, so a head that enters on beat 2 - a pickup,
-    # which is how But Not For Me bar 1 is written - came out with its first fret hard
-    # against the opening barline and read as a downbeat. TuxGuitar's export draws the
-    # rest as dashes and puts the fret where it falls. The start is therefore rounded
-    # *down to the bar containing the first onset*, which preserves the rest inside
-    # that bar while still refusing to invent whole empty bars before it.
+
+def _fill_rests(
+    columns: List[Tuple[float, Optional[ArrangementStep]]],
+    beats_per_bar: int,
+    beat_type: int,
+) -> List[Tuple[float, Optional[ArrangementStep]]]:
+    """The grid: every onset, every hole between them, and the last bar padded out.
+
+    Fill the holes a real rhythm leaves, so a chord held for two beats is
+    followed by a rest rather than by the next chord jammed up against it.
+    The grid starts at the first onset, not at zero: a head selected from bar 1
+    (or from a negative pickup bar) should not be preceded by a screen of empty
+    bars standing in for the music before it.
+
+    **But not part-way through its own bar.** Starting at the onset dropped a
+    leading rest *within* the first bar, so a head that enters on beat 2 - a pickup,
+    which is how But Not For Me bar 1 is written - came out with its first fret hard
+    against the opening barline and read as a downbeat. TuxGuitar's export draws the
+    rest as dashes and puts the fret where it falls. The start is therefore rounded
+    *down to the bar containing the first onset*, which preserves the rest inside
+    that bar while still refusing to invent whole empty bars before it.
+    """
     filled: List[Tuple[float, Optional[ArrangementStep]]] = []
     current = (
         float(int(columns[0][0] // beats_per_bar) * beats_per_bar)
@@ -174,16 +171,35 @@ def _staff_columns(
     # bar is padded: every earlier one is closed by the next onset or the next bar's
     # first column, and padding those would invent silence that is not written.
     #
-    # Before the `collapse` split below, deliberately: a padded column is a rest, and a
-    # rest breaks the ring, so it has to reach the collapse pass to be marked as one.
+    # Before the `collapse` pass, deliberately: a padded column is a rest, and a rest
+    # breaks the ring, so it has to reach that pass to be marked as one.
     if filled:
         bar_end = float((int(filled[-1][0] // beats_per_bar) + 1) * beats_per_bar)
         while filled[-1][0] < bar_end - 1e-9:
             filled.append((filled[-1][0] + 1.0, None))
+    return filled
 
-    if not collapse:
-        return [(onset, step, True) for onset, step in filled]
 
+def _collapse_holds(
+    filled: List[Tuple[float, Optional[ArrangementStep]]],
+) -> List[Tuple[float, Optional[ArrangementStep], bool]]:
+    """Mark each column as a fresh strike or a hold of the shape already ringing.
+
+    A step sounding exactly the same pitches as the one before it is a *hold*: it
+    stays on the grid (so the barlines and the chord line still line up) but prints
+    no frets, because the previous shape is still ringing. That is what separates
+    chord-melody tab from a chord list - the skeleton voices one step per eighth,
+    and a player holds the shape rather than restriking it eight times a bar.
+    Comparing sounding pitches rather than fret numbers is what makes this work:
+    the same shape reached by a different route is still the same hold.
+
+    The comparison is of the **upper** voices, so a walking bass does not destroy
+    it. A thumb line changes the lowest pitch on every quarter, so comparing the
+    full pitch set would mark every column a strike and turn the whole arrangement
+    back into the chord list the 0.7.0 collapse behaviour exists to prevent.
+    `Voicing.upper_midi_notes` does the exclusion, by the recorded bass string
+    rather than a constant index, because the thumb moves between strings.
+    """
     collapsed: List[Tuple[float, Optional[ArrangementStep], bool]] = []
     held: Optional[Tuple[int, ...]] = None
     for onset, step in filled:
@@ -207,6 +223,32 @@ def _staff_columns(
         if strikes:
             held = pitches
     return collapsed
+
+
+def _staff_columns(
+    steps: List[ArrangementStep],
+    beats_per_bar: int,
+    beat_type: int,
+    rhythm: bool,
+    collapse: bool = True,
+) -> List[Tuple[float, Optional[ArrangementStep], bool]]:
+    """
+    The grid both renderers draw: every step on an absolute beat, the holes a real
+    rhythm leaves padded with rests, and each column marked as a strike or a hold.
+
+    Four stages, each stated once for both renderers. `_placed_steps` puts each step
+    on its absolute beat; `_dedupe_onsets` gives one column per onset;
+    `_fill_rests` adds the rests and pads the last bar out; `_collapse_holds` marks a
+    repeated shape as a hold rather than a new attack. `collapse=False` skips only
+    the last - the columns are the same, and every one of them strikes.
+    """
+    placed = _placed_steps(steps, beats_per_bar, rhythm)
+    columns = _dedupe_onsets(placed)
+    filled = _fill_rests(columns, beats_per_bar, beat_type)
+    if not collapse:
+        return [(onset, step, True) for onset, step in filled]
+    return _collapse_holds(filled)
+
 
 def _is_timed(steps: List[ArrangementStep], rhythm: bool) -> bool:
     """
@@ -647,19 +689,24 @@ def _marker_columns(
 class _StaffGrid:
     """The rules a row of the staff is drawn by, as one value.
 
-    The row builders still close over the laid-out columns; what lives here is the
-    part that is a *property of the grid* - how wide its cells are, what a fret cell
-    says, and where the metre goes. `columns` and the flags are what those three
-    questions need, and nothing else is carried.
+    The row builders are methods here, so each takes the system it draws rather than
+    the twelve locals they used to close over. What they read is what the value
+    carries: the laid-out columns, the grid's own width rules, the barlines, and the
+    flags that decide which rows exist.
     """
 
+    steps: List[ArrangementStep]
     columns: List[Tuple[float, Optional[ArrangementStep], bool]]
+    slots: List[int]
     values: List[Tuple[str, str]]
+    bar_marks: set
+    barline_token: Dict[int, str]
     volta_at: Dict[int, str]
     beats_per_bar: int
     beat_type: int
     show_chords: bool
     show_melody: bool
+    show_melody_string: bool
     show_mutes: bool
     show_timing: bool
 
@@ -733,6 +780,137 @@ class _StaffGrid:
         reading as a continuation of the one before.
         """
         return [_meter_label(self.beats_per_bar, self.beat_type)] + [""] * (count - 1)
+
+    def string_line(self, width: int, system: List[int], string_index: int) -> str:
+        """One string's row: its label, its barlines, and its fret cells in dashes."""
+        lead = (
+            "*" if self.show_melody_string
+            and _carries_melody(self.steps, string_index)
+            else " "
+        )
+        out = [lead, self.barline_token.get(system[0], "|")]
+        # The lead-in dash, for the reason given in `line`. On a string row it is a
+        # real dash rather than the space used there, because here the character is
+        # part of the string's own drawn line.
+        out.append("-")
+        for position, index in enumerate(system):
+            # The `position` guard for the reason given in `line`: this row has
+            # already written its own opening barline.
+            if index in self.bar_marks and position:
+                # A barline inside the line is followed by its own lead-in, exactly as
+                # the opening one is. Without it the first fret of the second bar sat
+                # hard against the `|`, where TuxGuitar - and the opening bar, and
+                # every other bar - all have a dash between the two.
+                out.append(self.barline_token.get(index, "|") + "-")
+            # **The fill is a dash, not a space** - and this is the whole reason the
+            # staff reads as tab rather than as a chord list. A string is one
+            # continuous line running the length of the system, with the fret numbers
+            # sitting *in* it. Left blank, the six lines were six scattered numbers
+            # and the reader had to infer the strings from the labels alone.
+            #
+            # The cell spans **its own slots**, for the reason given in `line`: one
+            # slot is one fret cell, so a note two slots long is drawn two cells wide
+            # and the dashes after the fret are the note sounding on.
+            _, step, strikes = self.columns[index]
+            out.append(
+                self.cell(step, string_index, strikes).ljust(
+                    width * self.slots[index], "-"
+                )
+            )
+        out.append("|")
+        # The highest string is labelled with a lowercase 'e', the usual tab
+        # convention, so the top and bottom lines of the staff stay distinct.
+        name = "e" if string_index == 5 else STRING_NAMES[string_index]
+        return f"{name}{''.join(out)}"
+
+
+    def line(self, width: int, system: List[int], text_for: Any,
+             when_struck: bool, dedupe: bool = False,
+             cells: Optional[Sequence[str]] = None,
+             in_force: Optional[str] = None) -> Tuple[str, Optional[str]]:
+        """
+        Renders a chord, melody, metre or rhythm row for one system of music.
+
+        `width` is `self.system_width(system)` and is passed rather than recomputed,
+        because it is a property of the system and every row of that system must use
+        the same one. `system` is the column indexes of this system alone, not the
+        whole progression: a staff that wraps draws each system separately, and a row
+        built from the whole column list would run the full width of the progression
+        while the strings beneath it ran the width of one line - the misalignment the
+        alignment tests exist to catch.
+
+        `when_struck` is False for the melody line, which must label every step:
+        the melody moves on even while the shape underneath it is being held.
+        `dedupe` prints a label only where it changes from the previous one, which
+        is how a lead sheet spells a chord held across several slots. The chord in
+        force is threaded in and out so a chord held across a *system break* is
+        named once - the same rule the HTML page follows, for the same reason.
+
+        `cells` supplies the text **by column index** instead of from the step, and
+        that is what the metre and rhythm rows need: a held column has a step but no
+        note of its own, and a rest column has neither a step nor anything to
+        derive a value from. Routing both through this one function is what keeps
+        the two rows ruled identically to the string rows - the alignment
+        `TestStaffBarlineAlignment` asserts, which would otherwise only hold for the
+        rows that existed when it was written.
+
+        **These rows are not dash-filled.** A `-` between columns is the string's
+        *own* line, running through the fret numbers; a chord name or a note value is
+        text sitting above the staff, and ruling it would draw a line through the
+        words. So the separator is a space here and a dash on the string rows - and
+        both are exactly one character, which is what keeps the columns of the two
+        kinds of row aligned.
+        """
+        # Two spaces then a barline, which is the same three-character offset the
+        # string lines use (string label, melody marker, '|'), so a chord name
+        # starts in the column of its own frets and every row is ruled identically.
+        # The closing barline matters as much as the leading one: without it these
+        # rows stop short of the string rows and the staff reads as unaligned.
+        out = ["  " + self.barline_token.get(system[0], "|")]
+        previous = in_force
+        # **One separator after every barline, including this row's own opening one.**
+        # TuxGuitar writes a dash between the barline and the first fret of the bar and
+        # never a fret hard against the `|`, so no beat-1 fret reads as glued to the
+        # barline it follows. Here it is a space, because these rows are text and
+        # unruled; the string rows put a `-` in the same column, and both being exactly
+        # one character wide is what keeps the two kinds of row aligned.
+        # `docs/renderers.md` records the check against `jon6.tab`.
+        #
+        # It is written unconditionally because the row's own opening barline needs it
+        # as much as any other, and the loop below already suppresses the *barline*
+        # itself for position 0 - so without this, the first column of every system
+        # would sit hard against the `|` while every later column had a separator.
+        out.append(" ")
+        for position, index in enumerate(system):
+            # `position`, not `index`: the row has just written its own opening
+            # barline, so the first column of a system must not write a second.
+            # Every system begins on a barline, so this is not a rare case - without
+            # it every line after the first opened with a doubled `||`.
+            if index in self.bar_marks and position:
+                # The barline's own lead-in, for the reason given above: every
+                # barline is followed by a separator, not only the opening one.
+                out.append(self.barline_token.get(index, "|") + " ")
+            if cells is not None:
+                text = cells[index] if index < len(cells) else ""
+            else:
+                _, step, strikes = self.columns[index]
+                text = text_for(step) if (strikes or not when_struck) else ""
+            if dedupe and text and text == previous:
+                text = ""
+            if text:
+                previous = text
+            # **The cell spans its own slots, and there is no separate separator.**
+            # One slot is one fret cell wide, so a note two slots long is drawn two
+            # cells wide and the whole line is the same width whatever it contains.
+            # That is what puts our bars where TuxGuitar's are: seventeen characters
+            # for a bar of a quarter rest and three quarter notes.
+            out.append(text.ljust(width * self.slots[index]))
+        # No rstrip here. The chord and melody rows share their column grid with the
+        # string rows, so a trailing blank column has to stay blank rather than be
+        # trimmed: trimming shortens the row and leaves its closing barline short of
+        # the string rows'. The closing '|' is what makes the trailing spaces read as
+        # an empty bar rather than as ragged text.
+        return "".join(out) + "|", previous
 
 
 def format_tab_staff(
@@ -855,141 +1033,21 @@ def format_tab_staff(
     )
 
     grid = _StaffGrid(
+        steps=steps,
         columns=columns,
+        slots=slots,
         values=values,
+        bar_marks=bar_marks,
+        barline_token=barline_token,
         volta_at=volta_at,
         beats_per_bar=beats_per_bar,
         beat_type=beat_type,
         show_chords=show_chords,
         show_melody=show_melody,
+        show_melody_string=show_melody_string,
         show_mutes=show_mutes,
         show_timing=show_timing,
     )
-
-    def line(width: int, system: List[int], text_for: Any, when_struck: bool,
-             dedupe: bool = False, cells: Optional[Sequence[str]] = None,
-             in_force: Optional[str] = None) -> Tuple[str, Optional[str]]:
-        """
-        Renders a chord, melody, metre or rhythm row for one system of music.
-
-        `width` is `system_width(system)` and is passed rather than recomputed, because
-        it is a property of the system and every row of that system must use the same
-        one - see `system_width` for why it is per system.
-
-        `system` is the list of column indexes this printed line covers, so every row
-        is drawn over the same columns as the six string rows beneath it. It has to
-        be passed rather than taken from `columns`, because a staff that wraps draws
-        each system separately - and a row built from the whole column list would run
-        the full width of the progression while the strings beneath it ran the width
-        of one line, which is the misalignment the alignment tests exist to catch.
-
-        `when_struck` is False for the melody line, which must label every step:
-        the melody moves on even while the shape underneath it is being held.
-        `dedupe` prints a label only where it changes from the previous one, which
-        is how a lead sheet spells a chord held across several slots. The chord in
-        force is threaded in and out so a chord held across a *system break* is
-        named once - the same rule the HTML page follows, for the same reason.
-
-        `cells` supplies the text **by column index** instead of from the step, and
-        that is what the metre and rhythm rows need: a held column has a step but no
-        note of its own, and a rest column has neither a step nor anything to
-        derive a value from. Routing both through this one function is what keeps
-        the new rows ruled identically to the string rows - the alignment
-        `TestStaffBarlineAlignment` asserts, which would otherwise only hold for the
-        two rows that existed when it was written.
-
-        **These rows are not dash-filled.** A `-` between columns is the string's
-        *own* line, running through the fret numbers; a chord name or a note value is
-        text sitting above the staff, and ruling it would draw a line through the
-        words. So the separator is a space here and a dash on the string rows - and
-        both are exactly one character, which is what keeps the columns of the two
-        kinds of row aligned.
-        """
-        # Two spaces then a barline, which is the same three-character offset the
-        # string lines use (string label, melody marker, '|'), so a chord name
-        # starts in the column of its own frets and every row is ruled identically.
-        # The closing barline matters as much as the leading one: without it these
-        # rows stop short of the string rows and the staff reads as unaligned.
-        out = ["  " + barline_token.get(system[0], "|")]
-        previous = in_force
-        # **One separator after every barline, including this row's own opening one.**
-        # TuxGuitar writes a dash between the barline and the first fret of the bar and
-        # never a fret hard against the `|`, so no beat-1 fret reads as glued to the
-        # barline it follows. Here it is a space, because these rows are text and
-        # unruled; the string rows put a `-` in the same column, and both being exactly
-        # one character wide is what keeps the two kinds of row aligned.
-        # `docs/renderers.md` records the check against `jon6.tab`.
-        #
-        # It is written unconditionally because the row's own opening barline needs it
-        # as much as any other, and the loop below already suppresses the *barline*
-        # itself for position 0 - so without this, the first column of every system
-        # would sit hard against the `|` while every later column had a separator.
-        out.append(" ")
-        for position, index in enumerate(system):
-            # `position`, not `index`: the row has just written its own opening
-            # barline, so the first column of a system must not write a second.
-            # Every system begins on a barline, so this is not a rare case - without
-            # it every line after the first opened with a doubled `||`.
-            if index in bar_marks and position:
-                # The barline's own lead-in, for the reason given in `string_line`:
-                # every barline is followed by a separator, not only the opening one.
-                out.append(barline_token.get(index, "|") + " ")
-            if cells is not None:
-                text = cells[index] if index < len(cells) else ""
-            else:
-                _, step, strikes = columns[index]
-                text = text_for(step) if (strikes or not when_struck) else ""
-            if dedupe and text and text == previous:
-                text = ""
-            if text:
-                previous = text
-            # **The cell spans its own slots, and there is no separate separator.**
-            # One slot is one fret cell wide, so a note two slots long is drawn two
-            # cells wide and the whole line is the same width whatever it contains.
-            # That is what puts our bars where TuxGuitar's are: seventeen characters
-            # for a bar of a quarter rest and three quarter notes.
-            out.append(text.ljust(width * slots[index]))
-        # No rstrip here. The chord and melody rows share their column grid with the
-        # string rows, so a trailing blank column has to stay blank rather than be
-        # trimmed: trimming shortens the row and leaves its closing barline short of
-        # the string rows'. The closing '|' is what makes the trailing spaces read as
-        # an empty bar rather than as ragged text.
-        return "".join(out) + "|", previous
-
-    def string_line(width: int, system: List[int], string_index: int) -> str:
-        lead = "*" if show_melody_string and _carries_melody(steps, string_index) else " "
-        out = [lead, barline_token.get(system[0], "|")]
-        # The lead-in dash, for the reason given in `line`. On a string row it is a
-        # real dash rather than the space used there, because here the character is
-        # part of the string's own drawn line.
-        out.append("-")
-        for position, index in enumerate(system):
-            # The `position` guard for the reason given in `line`: this row has
-            # already written its own opening barline.
-            if index in bar_marks and position:
-                # A barline inside the line is followed by its own lead-in, exactly as
-                # the opening one is. Without it the first fret of the second bar sat
-                # hard against the `|`, where TuxGuitar - and the opening bar, and
-                # every other bar - all have a dash between the two.
-                out.append(barline_token.get(index, "|") + "-")
-            # **The fill is a dash, not a space** - and this is the whole reason the
-            # staff reads as tab rather than as a chord list. A string is one
-            # continuous line running the length of the system, with the fret numbers
-            # sitting *in* it. Left blank, the six lines were six scattered numbers
-            # and the reader had to infer the strings from the labels alone.
-            #
-            # The cell spans **its own slots**, for the reason given in `line`: one
-            # slot is one fret cell, so a note two slots long is drawn two cells wide
-            # and the dashes after the fret are the note sounding on.
-            _, step, strikes = columns[index]
-            out.append(
-                grid.cell(step, string_index, strikes).ljust(width * slots[index], "-")
-            )
-        out.append("|")
-        # The highest string is labelled with a lowercase 'e', the usual tab
-        # convention, so the top and bottom lines of the staff stay distinct.
-        name = "e" if string_index == 5 else STRING_NAMES[string_index]
-        return f"{name}{''.join(out)}"
 
     lines: List[str] = []
     # The chord in force, threaded across systems so a chord held over a system
@@ -1014,14 +1072,14 @@ def format_tab_staff(
             # The `1.` / `2.` bracket numbers, over the bars the endings span, where a
             # printed score puts them. Above everything else so the bracket reads as a
             # label on the repeat rather than on a chord.
-            lines.append(line(
+            lines.append(grid.line(
                 width, system, lambda step: "", when_struck=True, cells=volta_cells,
             )[0])
         if show_timing:
             # The metre goes in the first column of the *first* system, over the bar it
             # governs, which is where a printed score puts a time signature - and not
             # again on the next system, because a signature holds until it changes.
-            lines.append(line(
+            lines.append(grid.line(
                 width, system, lambda step: "", when_struck=True,
                 # The cells are addressed by global column index, so the metre row is
                 # blank on every column but the very first of the first system.
@@ -1034,21 +1092,21 @@ def format_tab_staff(
             # progression is one chord per beat, so every cell would be the same letter
             # and the row would be a blank line that looks like a missing one.
             if values:
-                lines.append(line(
+                lines.append(grid.line(
                     width, system, lambda step: "", when_struck=True, cells=labels,
                 )[0])
         if show_chords:
-            row, in_force = line(
+            row, in_force = grid.line(
                 width, system, lambda step: step.chord if step else "",
                 when_struck=True, dedupe=True, in_force=in_force,
             )
             lines.append(row)
         if show_melody:
-            lines.append(line(
+            lines.append(grid.line(
                 width, system, lambda step: (step.melody or "") if step else "",
                 when_struck=False,
             )[0])
-        lines.extend(string_line(width, system, index) for index in range(5, -1, -1))
+        lines.extend(grid.string_line(width, system, index) for index in range(5, -1, -1))
     return "\n".join(lines).rstrip()
 
 
@@ -1371,6 +1429,86 @@ def _html_string_row(
     return _html_row(_CLASS_STRING, cells)
 
 
+def _html_head(
+    title: str,
+    subtitle: str,
+    steps: Sequence[ArrangementStep],
+    meter: str,
+    show_timing: bool,
+) -> List[str]:
+    """The page's opening: document head, heading, provenance and the systems div.
+
+    Split from the body so the page's *frame* is stated once, in one place, rather
+    than interleaved with the loop that fills it.
+    """
+    parts: List[str] = [
+        "<!DOCTYPE html>",
+        '<html lang="en">',
+        "<head>",
+        '<meta charset="utf-8">',
+        '<meta name="viewport" content="width=device-width, initial-scale=1">',
+        f"<title>{_escape(title)}</title>",
+        f"<style>{_HTML_STYLESHEET}</style>",
+        "</head>",
+        "<body><main>",
+        f"<h1>{_escape(title)}</h1>",
+    ]
+    if subtitle:
+        parts.append(f'<p class="sub">{_escape(subtitle)}</p>')
+    count = len(steps)
+    parts.append(
+        f'<p class="meta">{count} step{"" if count == 1 else "s"}'
+        f'{" · " + _escape(meter) if show_timing else ""}</p>'
+    )
+    parts.append('<div class="systems">')
+    return parts
+
+
+def _html_measure_spans(
+    columns: List[Tuple[float, Optional[ArrangementStep], bool]],
+    line: List[int],
+    beats_per_bar: int,
+    start_bar: int,
+) -> List[List[int]]:
+    """Split one system into measures at each bar change.
+
+    Every measure gets its own ruled box, and the last measure of a system may be
+    short. `start_bar` is subtracted because a pickup sits in a negative bar and the
+    page counts bars from the first one it draws.
+    """
+    measures: List[List[int]] = []
+    for index in line:
+        same_bar = (
+            measures
+            and int(columns[measures[-1][0]][0] // beats_per_bar)
+            == int(columns[index][0] // beats_per_bar)
+        )
+        if same_bar:
+            measures[-1].append(index)
+        else:
+            measures.append([index])
+    return measures
+
+
+def _html_measure_opening(group: Sequence[Any]) -> str:
+    """A measure's opening div: its repeat classes, its volta label, and its table.
+
+    `<table>` is appended to the same string so the default markup stays
+    `<div class="measure"><table>`, which is what the layout tests match.
+    """
+    classes = [_CLASS_MEASURE]
+    if any(m.kind == "repeat_start" for m in group):
+        classes.append(_CLASS_REPEAT_START)
+    if any(m.kind == "repeat_end" for m in group):
+        classes.append(_CLASS_REPEAT_END)
+    opening = f'<div class="{" ".join(classes)}">'
+    volta = next((m for m in group if m.kind == "ending_start"), None)
+    if volta is not None:
+        number = ",".join(str(n) for n in volta.numbers)
+        opening += f'<span class="{_CLASS_VOLTA}">{number}.</span>'
+    return opening + "<table>"
+
+
 def format_tab_html(
     steps: List[ArrangementStep],
     title: str = "Chord-melody arrangement",
@@ -1453,25 +1591,7 @@ def format_tab_html(
     # can be marked once for the whole page rather than per chord.
     sopranos = {index for index in range(6) if _carries_melody(steps, index)}
 
-    parts: List[str] = [
-        "<!DOCTYPE html>",
-        '<html lang="en">',
-        "<head>",
-        '<meta charset="utf-8">',
-        '<meta name="viewport" content="width=device-width, initial-scale=1">',
-        f"<title>{_escape(title)}</title>",
-        f"<style>{_HTML_STYLESHEET}</style>",
-        "</head>",
-        "<body><main>",
-        f"<h1>{_escape(title)}</h1>",
-    ]
-    if subtitle:
-        parts.append(f'<p class="sub">{_escape(subtitle)}</p>')
-    parts.append(
-        f'<p class="meta">{len(steps)} step{"" if len(steps) == 1 else "s"}'
-        f'{" · " + _escape(meter) if show_timing else ""}</p>'
-    )
-    parts.append('<div class="systems">')
+    parts = _html_head(title, subtitle, steps, meter, show_timing)
 
     start_bar = int(columns[0][0] // beats_per_bar)
     # The head's repeat and ending signs, by the absolute bar they sit on - the same
@@ -1494,31 +1614,11 @@ def format_tab_html(
         parts.append(f'<span class="{_CLASS_BARNUM}">{bar_of(line[0]) + 1}</span>')
         # Split the system into measures at each bar change, so every measure gets
         # its own ruled box. The last measure of a system may be short.
-        measures: List[List[int]] = []
-        for index in line:
-            if measures and bar_of(measures[-1][0]) == bar_of(index):
-                measures[-1].append(index)
-            else:
-                measures.append([index])
-        for measure in measures:
+        for measure in _html_measure_spans(columns, line, beats_per_bar, start_bar):
             absolute = int(columns[measure[0]][0] // beats_per_bar)
-            group = markers_by_bar.get(absolute, ())
-            classes = [_CLASS_MEASURE]
-            if any(m.kind == "repeat_start" for m in group):
-                classes.append(_CLASS_REPEAT_START)
-            if any(m.kind == "repeat_end" for m in group):
-                classes.append(_CLASS_REPEAT_END)
-            opening = f'<div class="{" ".join(classes)}">'
-            volta = next(
-                (m for m in group if m.kind == "ending_start"), None
+            parts.append(
+                _html_measure_opening(markers_by_bar.get(absolute, ()))
             )
-            if volta is not None:
-                number = ",".join(str(n) for n in volta.numbers)
-                opening += f'<span class="{_CLASS_VOLTA}">{number}.</span>'
-            # `<table>` is appended to the same string so the default markup stays
-            # `<div class="measure"><table>`, which is what the layout tests match.
-            opening += "<table>"
-            parts.append(opening)
             if show_timing:
                 parts.extend(
                     _html_timing_rows(columns, measure, values, meter, first_measure)

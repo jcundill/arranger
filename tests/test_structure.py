@@ -91,7 +91,7 @@ BUDGETS: Dict[str, Budget] = {
     "headxml.py": Budget(29, 239, 12),
     "grip_chart.py": Budget(14, 84, 5),
     "tabgp.py": Budget(27, 223, 13),
-    "tabstaff.py": Budget(27, 315, 13),
+    "tabstaff.py": Budget(17, 195, 13),
     "tabxml.py": Budget(24, 176, 12),
 }
 

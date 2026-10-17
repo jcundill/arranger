@@ -181,9 +181,9 @@ byte-identical, `make chart-audit` clean.
 ## Phase 9 — Decompose the high-complexity functions (in progress)
 
 Extract-method only, with the suite and a byte-identical `make demo` as the
-oracle. Nine commits landed; `bass.py` fell from **31/202 to 16/82**,
+oracle. Ten commits landed; `bass.py` fell from **31/202 to 16/82**,
 `movement.py` from **23/360 to 9/251**, `routes.py` from **13/229 to 6/97** and
-`tabstaff.py` from **27/396 to 27/315**.
+`tabstaff.py` from **27/396 to 17/195**.
 
 - `_walking_bass_line` (202) → `_located_onsets`, `_anchor_only_line`,
   `_walked_beats`, `_filled_harmony`, `_anchor_flags`, `_next_anchor_pitches`,
@@ -228,13 +228,21 @@ oracle. Nine commits landed; `bass.py` fell from **31/202 to 16/82**,
 
 Phase 9's engine cuts are complete. Remaining in the round:
 
-- 9.6, started: `tabstaff.format_tab_staff` → `_marker_columns` (the repeat and
-  ending signs keyed by the column a bar opens at) and `_StaffGrid` (the grid's
-  own rules: `cell`, `system_width`, `meter_cells`): **396 → 315 lines, CC 27 →
-  17.** The two row builders (`line`, `string_line`) still close over the grid;
-  what remains is the assembly loop and those two. The module ceiling does not
-  move yet because `format_tab_html` (174 lines, CC 27, 13 parameters) now holds
-  both of the other maxima - that is the next cut, followed by the 9.7 importers.
+- 9.6, done. The ASCII staff and the HTML page, in three stages:
+  - `format_tab_staff` → `_marker_columns` (repeat/ending signs keyed by the column
+    a bar opens at) and `_StaffGrid` (the grid's own rules), then the two row
+    builders `line` and `string_line` became methods on that value:
+    **396 → 195 lines, CC 27 → 17.**
+  - `_staff_columns` → `_placed_steps`, `_dedupe_onsets`, `_fill_rests`,
+    `_collapse_holds`: **131 lines / CC 21 → 47 / 3**, with each stage's comment
+    block moved to the stage it explains.
+  - `format_tab_html` → `_html_head`, `_html_measure_spans`,
+    `_html_measure_opening`: **174 → 136 lines, CC 27 → 14.**
+  `tabstaff.py`'s budget falls from 27/396 to **17/195**; its parameter ceiling is
+  unchanged at 13 (`format_tab_html`), which is a public signature.
+
+Next: 9.7, the importers — `headxml._read_notes` (239), `_expand_repeats`,
+`_expand_play_order`; `tabxml.score_events`/`_build_part`; `tabgp._build_song`.
 - 9.7: `headxml._read_notes` (239), `_expand_repeats`, `_expand_play_order`;
   `tabxml.score_events`/`_build_part`; `tabgp._build_song`.
 - Then Phases 11–15 (hygiene included: `docs/engine.md` still says
@@ -333,8 +341,8 @@ Round 2:
 - Phase 7: DONE (two commits).
 - Phase 8: DONE (five commits). 1107 tests OK (skipped=2), ruff 0, pyright 0/0,
   `make demo` byte-identical, `make chart-audit` clean.
-- Phase 9: 9.1–9.5 and `arrange_progression` landed; 9.6 started on the ASCII
-  staff (nine commits). Next: `format_tab_html`, the rest of the staff, 9.7.
+- Phase 9: 9.1–9.6 landed (ten commits) — the engine's worst functions and both
+  tab renderers. Next: 9.7, the importers.
 - Phase 10: DONE (moved before 9.3). 1107 tests OK, ruff 0, pyright 0/0,
   demo byte-identical.
 - Phases 11-15: planned, in the order above.
