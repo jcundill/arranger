@@ -12,9 +12,9 @@ them, and that placement is what keeps the package acyclic:
   role vocabulary has to be below `grips` and `texture` alike. `ROLE_TARGET` and
   `ROLE_FILL` are therefore *defined* here and re-exported by `texture`, rather
   than the other way round;
-- `Voicing.tab_block` calls `_cells_from_frets` / `_tab_block_from_cells`, so the
+- `Voicing.tab_block` calls `cells_from_frets` / `_tab_block_from_cells`, so the
   tab-cell primitives have to be below `Voicing` too, and `render` imports them
-  from here instead of owning them. `_STAFF_CELL_WIDTH` was the second of two
+  from here instead of owning them. `STAFF_CELL_WIDTH` was the second of two
   identical definitions of that one constant; `tabstaff` had the other.
 
 `ArrangementStep` is here for one more reason: `bass` compares steps and `chords`
@@ -101,7 +101,7 @@ class GuitarFretboard:
         return STANDARD_TUNING[string_index].midi_note() + fret
 
 
-def _note_name(midi: int) -> str:
+def note_name(midi: int) -> str:
     """
     Spells a MIDI number as a pitch-class name plus octave, e.g. 82 -> 'Bb5'.
 
@@ -193,7 +193,7 @@ class Voicing:
         renders as six 'x' lines rather than raising. Purely a render: it
         prints nothing, so callers decide how to display it.
         """
-        return _tab_block_from_cells(_cells_from_frets(self.frets))
+        return _tab_block_from_cells(cells_from_frets(self.frets))
 
     def tab(self) -> str:
         """Returns tab_block() as a single newline-joined string."""
@@ -550,18 +550,18 @@ class ArrangementStep:
 # width every fret cell is padded to. Two characters covers frets 0-18, which is
 # the whole range the library allows, and it is the same convention tab_block()
 # uses - so the two renderings put a fret in the same column.
-_MUTED_CELL = "x"
-_STAFF_CELL_WIDTH = 2
+MUTED_CELL = "x"
+STAFF_CELL_WIDTH = 2
 
 
-def _cells_from_frets(frets: List[int]) -> List[str]:
+def cells_from_frets(frets: List[int]) -> List[str]:
     """
     Renders each fret as a one-character tab cell, muted strings as 'x'.
 
     A string that is sounding but not being struck is handled by the caller
     (_step_cells), which mutes it; this function renders a literal voicing.
     """
-    return [_MUTED_CELL if fret < 0 else str(fret) for fret in frets]
+    return [MUTED_CELL if fret < 0 else str(fret) for fret in frets]
 
 def _tab_block_from_cells(cells: List[str]) -> List[str]:
     """Lays six one-character cells out as a six-line vertical tab block."""

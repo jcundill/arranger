@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from arranger.tuning import _MUTED_CELL, STRING_NAMES, ArrangementStep
+from arranger.tuning import MUTED_CELL, STAFF_CELL_WIDTH, STRING_NAMES, ArrangementStep
 
 # The MusicXML and Guitar Pro renderers are ordinary top-level imports, re-exported
 # from `arranger` so that `from arranger import format_musicxml` - the spelling in
@@ -43,10 +43,9 @@ from arranger.tuning import _MUTED_CELL, STRING_NAMES, ArrangementStep
 from tabgp import format_gp5, write_gp5
 from tabxml import format_musicxml, write_musicxml
 
-# The width every fret cell is padded to. Two characters covers frets 0-18, the
-# whole range the library allows, and matches the convention `Voicing.tab_block()`
-# uses, so the vertical block and the staff put a fret in the same column.
-_STAFF_CELL_WIDTH = 2
+# `STAFF_CELL_WIDTH` and `MUTED_CELL` are `tuning`'s: the staff and the vertical
+# block have to put a fret in the same column by construction, and a second copy
+# of the width here is exactly how the two would drift apart.
 
 
 
@@ -754,7 +753,7 @@ def format_tab_staff(
             return ""
         fret = step.voicing.frets[string_index]
         if fret < 0:
-            return _MUTED_CELL if (show_mutes or step.melody_only) else ""
+            return MUTED_CELL if (show_mutes or step.melody_only) else ""
         return str(fret)
 
     def system_width(system: List[int]) -> int:
@@ -782,7 +781,7 @@ def format_tab_staff(
         system have to share a grid or a fret stops lining up across the six strings.
         Per *bar* would match the export more closely and would break it.
         """
-        width = _STAFF_CELL_WIDTH
+        width = STAFF_CELL_WIDTH
         for index in system:
             step = columns[index][1]
             label = volta_at.get(index)

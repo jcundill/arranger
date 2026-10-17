@@ -103,7 +103,7 @@ from .tuning import (
     ArrangementStep,
     Palette,
     Voicing,
-    _note_name,
+    note_name,
 )
 
 __all__ = [
@@ -337,7 +337,7 @@ def prepare_step(
         there = _cost._window_penalty(octave_down, fret_min, fret_max)
         if octave_down and there < here:
             candidates = octave_down
-            sounding_melody = Note(_note_name(melody_note.midi_note() - 12))
+            sounding_melody = Note(note_name(melody_note.midi_note() - 12))
             original_melody = note_str
 
     strategy_used: Optional[str] = None
@@ -396,7 +396,7 @@ def prepare_step(
         melody=(
             note_str
             if original_melody is None
-            else _note_name(sounding_melody.midi_note())
+            else note_name(sounding_melody.midi_note())
         ),
         original_melody=original_melody,
         chord_type=chord_type,

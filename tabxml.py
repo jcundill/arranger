@@ -153,7 +153,7 @@ def _pitch(midi: int) -> Tuple[str, int]:
     Spells a MIDI number as (step, octave) for music21, flats preferred.
 
     Flats because that is the convention the rest of the library prints in
-    (`PITCH_CLASS_NAMES`, `arranger._note_name`): a `Bb7` that came out of the
+    (`PITCH_CLASS_NAMES`, `arranger.note_name`): a `Bb7` that came out of the
     Weimar database as a flat should not be re-spelled sharp on its way into a
     score a player reads.
     """

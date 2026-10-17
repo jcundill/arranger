@@ -735,7 +735,7 @@ class TestStaffTab(unittest.TestCase):
         is the finest split that keeps two bars on one line sharing a grid.
 
         The long label is a *chord name*, not a fret, and that is deliberate: a fret
-        cell has a floor of two characters (`_STAFF_CELL_WIDTH`, which covers frets
+        cell has a floor of two characters (`STAFF_CELL_WIDTH`, which covers frets
         0-18), so a two-digit fret widens nothing on its own. What varies a bar's width
         in practice is the text above it.
         """

@@ -22,7 +22,7 @@ from . import grips as _grips
 from .bass import Slot
 from .bass_merge import attach_bass
 from .decisions import is_bass_only
-from .tuning import ArrangementStep, Palette, Voicing, _note_name
+from .tuning import ArrangementStep, Palette, Voicing, note_name
 
 
 def sounding_melody(voicing: Voicing, written: str) -> Tuple[str, Optional[str]]:
@@ -41,7 +41,7 @@ def sounding_melody(voicing: Voicing, written: str) -> Tuple[str, Optional[str]]
     sounding = max(voicing.midi_notes())
     if sounding == Note(written).midi_note():
         return written, None
-    return _note_name(sounding), written
+    return note_name(sounding), written
 
 
 def melody_alone_shape(

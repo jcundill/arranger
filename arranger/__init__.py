@@ -171,7 +171,6 @@ from .texture import (
     texture_palette,
 )
 from .tuning import (
-    _MUTED_CELL,  # re-exported: `tabstaff` imports it from here
     HIGH_FRET_LIMIT,
     MELODY_STRING_CHOICES,
     MELODY_STRING_CHOICES_FULL,

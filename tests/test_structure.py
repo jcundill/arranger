@@ -98,24 +98,15 @@ BUDGETS: Dict[str, Budget] = {
 # module that imports it. Keys read `importer -> home.name`.
 ALLOWED_PRIVATE_IMPORTS: Set[str] = {
     "__init__ -> render._print_step",
-    "__init__ -> tuning._MUTED_CELL",
     "bass -> grid._BEAT_EPSILON",
     "bass -> grips._comping_string_sets",
     "bass -> texture._metric_weight",
-    "grips -> tuning._note_name",
-    "melody_alone -> tuning._note_name",
     "movement -> texture._metric_weight",
     "movement -> texture._roles_for_slot",
-    "movement -> tuning._note_name",
     "render -> grips._INTERVAL_NAMES",
-    "render -> tuning._MUTED_CELL",
-    "render -> tuning._STAFF_CELL_WIDTH",
-    "render -> tuning._cells_from_frets",
-    "render -> tuning._note_name",
     "grip_chart -> grips._drop2_template_for",
     "tabgp -> tabxml._events",
     "tabgp -> tabxml._substitute_steps",
-    "tabstaff -> tuning._MUTED_CELL",
 }
 
 

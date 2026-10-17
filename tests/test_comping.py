@@ -70,7 +70,7 @@ from arranger.grips import (
 )
 from arranger.options import ArrangeOptions
 from arranger.render import _step_cells
-from arranger.tuning import _MUTED_CELL
+from arranger.tuning import MUTED_CELL
 
 PROGRESSION: List[Tuple[str, str, str]] = [
     ("D5", "m7", "Dm7"),
@@ -1586,8 +1586,8 @@ class TestRepeatedStepsHoldTheShape(unittest.TestCase):
 
         cells = _step_cells(make_step([-1, -1, -1, 10, 12, 10], repeated=True))
         self.assertEqual(cells[5], "10")
-        self.assertEqual(cells[3], _MUTED_CELL)
-        self.assertEqual(cells[4], _MUTED_CELL)
+        self.assertEqual(cells[3], MUTED_CELL)
+        self.assertEqual(cells[4], MUTED_CELL)
 
     def test_a_bass_only_fill_mutes_every_string_it_does_not_play(self):
         """A bass slot prints 'x' above the thumb, like any other unplayed string.
@@ -1606,7 +1606,7 @@ class TestRepeatedStepsHoldTheShape(unittest.TestCase):
         cells = _step_cells(step)
         self.assertEqual(cells[0], "3")
         for string_index in range(1, 6):
-            self.assertEqual(cells[string_index], _MUTED_CELL)
+            self.assertEqual(cells[string_index], MUTED_CELL)
 
     def test_a_repeat_holds_the_whole_shape_when_the_guitar_is_not_singing(self):
         """No soprano to re-strike, so nothing is struck anew.
@@ -1615,15 +1615,15 @@ class TestRepeatedStepsHoldTheShape(unittest.TestCase):
         rule rendered every one as a single moving note - a melody line on the guitar
         part, on exactly the beats where the arrangement had handed the tune away.
 
-        Compared against `_cells_from_frets` rather than a hand-written list, because
+        Compared against `cells_from_frets` rather than a hand-written list, because
         the difference between a *muted* string ('x') and a *held* one (blank) is the
         library's, not this test's - and a literal here would re-state it wrongly.
         """
-        from arranger.tuning import _cells_from_frets
+        from arranger.tuning import cells_from_frets
         from tests.support import make_step
 
         step = make_step([-1, -1, -1, 10, 12, 10], repeated=True, melody_voiced=False)
-        self.assertEqual(_step_cells(step), _cells_from_frets(step.voicing.frets))
+        self.assertEqual(_step_cells(step), cells_from_frets(step.voicing.frets))
         # And the three sounding strings are all struck, not just the top one.
         for string_index in (3, 4, 5):
             self.assertEqual(_step_cells(step)[string_index], str(step.voicing.frets[string_index]))

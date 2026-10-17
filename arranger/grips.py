@@ -35,7 +35,7 @@ from .tuning import (
     STANDARD_TUNING,
     GuitarFretboard,
     Voicing,
-    _note_name,
+    note_name,
 )
 
 # Grip families, in the order they are generated in - which is *also* the order an exact
@@ -2067,7 +2067,7 @@ def _melody_only_voicings_on(
     order given. The shift is applied to the *note*, not to the fret, so an octave-down
     attempt asks the fretboard the same question it would ask of the written pitch.
     """
-    shifted = Note(_note_name(melody_note.midi_note() + octave_shift))
+    shifted = Note(note_name(melody_note.midi_note() + octave_shift))
     candidates: List[Voicing] = []
     for string_index in strings:
         fret = GuitarFretboard.note_to_fret(string_index, shifted)
@@ -2110,7 +2110,7 @@ def get_octave_down_candidates(
     Returns an empty list when the octave-down melody cannot be voiced at all, so
     the caller can keep the original candidates rather than losing the step.
     """
-    octave_down = Note(_note_name(melody_note.midi_note() - 12))
+    octave_down = Note(note_name(melody_note.midi_note() - 12))
     return get_all_grip_voicings(
         octave_down,
         chord_type,

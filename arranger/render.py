@@ -17,9 +17,9 @@ non-chord tone, a chord tone with a degree to name, a repeated melody, a partial
 shell, a thumb note - and the precedence between them is the whole content of that
 function.
 
-The tab-cell primitives (`_MUTED_CELL`, `_cells_from_frets`) are **not** defined
+The tab-cell primitives (`MUTED_CELL`, `cells_from_frets`) are **not** defined
 here: `Voicing.tab_block` calls them and `Voicing` sits below this module, so they
-live in `tuning` and are imported from there. `_STAFF_CELL_WIDTH` and
+live in `tuning` and are imported from there. `STAFF_CELL_WIDTH` and
 `_tab_block_from_cells` live in `tuning` for the same reason and are imported from
 there too.
 """
@@ -35,8 +35,7 @@ from .cost import SPAN_CRITERION, VOICING_COST_CRITERIA
 from .grips import _INTERVAL_NAMES
 from .slots import bass_pitch_class, slash_bass, slash_bass_cost
 from .tuning import (
-    _MUTED_CELL,
-    _STAFF_CELL_WIDTH,
+    MUTED_CELL,
     NECK_FRET_MAX,
     NECK_FRET_MIN,
     PITCH_CLASS_NAMES,
@@ -46,13 +45,14 @@ from .tuning import (
     SILENCE_NO_SHAPE,
     SILENCE_OUT_OF_REACH,
     SILENCE_TUNE_SILENT,
+    STAFF_CELL_WIDTH,
     ArrangementStep,
     Voicing,
-    _cells_from_frets,
-    _note_name,
+    cells_from_frets,
+    note_name,
 )
 
-__all__ = ["_MUTED_CELL", "_STAFF_CELL_WIDTH", "format_progression"]
+__all__ = ["MUTED_CELL", "STAFF_CELL_WIDTH", "format_progression"]
 
 
 #: The width `format_progression` lays a step's explanation out to. A line breaks only
@@ -381,7 +381,7 @@ def _comping_clause(step: ArrangementStep) -> str:
     # pitch order and would say "G 6, Bb Root & D 3".
     named: Dict[str, Tuple[int, str]] = {}
     for pitch in step.voicing.upper_midi_notes():
-        note = Note(_note_name(pitch))
+        note = Note(note_name(pitch))
         degree = melody_degree_name(note, harmony)
         if not degree or degree in named:
             continue
@@ -507,7 +507,7 @@ def _slash_bass_clause(step: ArrangementStep) -> str:
     semitones = "semitone" if distance == 1 else "semitones"
     return (
         f"the written bass {written} is not sounded - the lowest voice "
-        f"({_note_name(min(sounding))}) is {distance} {semitones} from it"
+        f"({note_name(min(sounding))}) is {distance} {semitones} from it"
     )
 
 
@@ -598,7 +598,7 @@ def _omission_clause(step: ArrangementStep) -> str:
     # degrees a shape *states* with, so one line's omission is the other line's list. Any
     # octave will do: the name depends on the interval from the root, not the register.
     names = [
-        melody_degree_name(Note(_note_name(48 + (root_pc + tone) % 12)), harmony)
+        melody_degree_name(Note(note_name(48 + (root_pc + tone) % 12)), harmony)
         for tone in missing
     ]
     names = [name for name in names if name]
@@ -630,7 +630,7 @@ def _voice_pairs(step: ArrangementStep) -> List[str]:
     """
     harmony = step.harmonized_as or step.chord
     return [
-        _voice_name(pitch, melody_degree_name(Note(_note_name(pitch)), harmony))
+        _voice_name(pitch, melody_degree_name(Note(note_name(pitch)), harmony))
         for pitch in step.voicing.upper_midi_notes()
     ]
 
@@ -701,7 +701,7 @@ def _bass_annotation(step: ArrangementStep, existing: str = "") -> str:
     """
     if step.bass is None:
         return existing
-    spelled = _note_name(step.bass)
+    spelled = note_name(step.bass)
     role = step.bass_role or "bass"
     return f"{existing} (bass: {spelled}, {role})"
 
@@ -748,7 +748,7 @@ def _step_cells(step: ArrangementStep) -> List[str]:
     frets = step.voicing.frets
     partial = (step.repeated or step.bass_only) and not step.melody_only
     if not partial:
-        return _cells_from_frets(frets)
+        return cells_from_frets(frets)
     struck = set()
     if step.bass_only:
         struck.add(step.voicing.bass_string)
@@ -758,14 +758,14 @@ def _step_cells(step: ArrangementStep) -> List[str]:
             # inner voices are still ringing from the step before. `bass_only` is a
             # separate case above and composes with this one, exactly as it does when
             # the guitar does sing.
-            return _cells_from_frets(frets)
+            return cells_from_frets(frets)
         struck.add(step.voicing.soprano_string())
         # A repeated melody still moves the thumb: the bass is a moving voice, not a
         # held one, so blanking it here would silently delete the walking line.
         if step.voicing.bass_midi is not None:
             struck.add(step.voicing.bass_string)
     # Every string the step does not play is muted: the line states what is plucked.
-    cells = [_MUTED_CELL] * len(frets)
+    cells = [MUTED_CELL] * len(frets)
     for string_index in struck:
         if string_index is not None and 0 <= string_index < len(frets):
             cells[string_index] = str(frets[string_index])
@@ -897,7 +897,7 @@ def _format_step(
     cells = _step_cells(step)
     tab = "-".join(cells)
     # Two characters per cell - a fret reaches 18 - plus one hyphen between each pair.
-    field = len(cells) * _STAFF_CELL_WIDTH + len(cells) - 1
+    field = len(cells) * STAFF_CELL_WIDTH + len(cells) - 1
     line = (
         f"{step.chord:<8} {(step.melody or ''):<3} "
         f"{_melody_degree_label(step):<4} {tab:<{field}}"
