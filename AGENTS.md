@@ -207,7 +207,17 @@ A module may import only what is *below* it, and
 **`tests/test_package_dag.py` asserts that from the AST** — so the layering cannot
 erode one "temporary" import at a time. Read its `ORDER` list before adding a module.
 `ALLOWED_EDGES` in that file is the escape hatch: each entry there must justify itself
-in a comment, which is what makes a seventh edge visible.
+in a comment. It is **empty** now, and an entry that no longer permits an import fails,
+so permission cannot outlive the code it was granted for.
+
+The same discipline has two other checks. **`tests/test_structure.py`** fails a module
+that reaches a sibling's `_`-prefixed name either by importing it or through a module
+alias (`alias._helper`), and its `ALLOWED_PRIVATE_ATTRIBUTES` list is empty too -
+`render` importing `annotation.step_annotation` rather than `_step_annotation` is what
+kept it so. **`tests/test_front_end_dag.py`** holds the top-level modules to the same
+rule, with the deliberate edges named: `tabstaff`'s re-exports of the two writers, and
+each writer's use of `tabscore` for placement. `FRONT_ENDS` in `tests/support.py` is
+the one list the budget table and that DAG test both read.
 
 Three consequences worth knowing:
 
