@@ -25,6 +25,7 @@ gate and the conventions — not the explanation.
 | `texture=`, target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/texture.py`, `arranger/routes.py`, `arranger/bass_rules.py`, `arranger/bass.py`, `arranger/decisions.py` |
 | non-chord melody notes, a new chord quality | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` |
 | the step loop, `arrange_progression` | [docs/engine.md](docs/engine.md) | `arranger/movement.py`, `arranger/resolution.py`, `arranger/slot_plan.py` |
+| a step route's arguments - `SlotContext`, one slot's request as a value rather than twenty parameters | [docs/engine.md](docs/engine.md) | `arranger/context.py`, `arranger/movement.py`, `arranger/routes.py` |
 | tab staff, HTML, MusicXML, GP5, or the MusicXML importer | [docs/renderers.md](docs/renderers.md) | `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py` |
 | an imported head's **repeats or volta endings** — why it is longer than the file's measure count, or the `|:` / `:|` / `1.` / `2.` the writers draw | [docs/renderers.md](docs/renderers.md) | `headxml.py` (`_parse_barline`, `_expand_play_order`, `_expand_repeats`, `BarMarker`, `Head.markers`, `HeadNote.written_bar`); each writer's `markers=` parameter |
 | the slot layer: triples to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
@@ -41,12 +42,14 @@ gate and the conventions — not the explanation.
 it records why a decision was made and is never revised. If the code has moved on, the history
 is still true *about the past* — so read the current documents above first and treat a
 contradiction between them as a bug in one of them. A retired document is added once and then
-frozen like the rest; it is not a home for an open plan. Seven are retired there:
+frozen like the rest; it is not a home for an open plan. Eight are retired there:
 `reharmonisation-proposals.md`, whose corpus went away, and the six plan documents whose live
 halves are now stated in [docs/engine.md](docs/engine.md) — `voices-axis.md`, `one-fact.md`,
 `parts.md`, `generated-grips.md`, `comping-styles.md` and `fingering.md`. Each of those six
 carries a retirement header saying which half of it is the record and where the live rule went,
-which is the one thing to read before quoting one.
+which is the one thing to read before quoting one. The eighth, `restructuring.md`, is the
+round-2 plan: its live half is the module map below and the budget table in
+`tests/test_structure.py`, and its record is what each phase cost.
 
 ## The gate
 
@@ -54,7 +57,7 @@ which is the one thing to read before quoting one.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1098 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **1108 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
 
@@ -728,7 +731,7 @@ Each of these cost real time, or nearly shipped a defect.
 | [docs/engine.md](docs/engine.md) | the engine: grips, the selector, the cost tuple, the five axes (`parts=`, `texture=`, `harmony=`, `bass=`, `grid=`), non-chord tones, and the recipe for adding a chord quality |
 | [docs/renderers.md](docs/renderers.md) | tab staff, MusicXML import/export, GP5, and their traps |
 | [docs/open-issues.md](docs/open-issues.md) | the open bugs, each stated as **issue / problem / why it exists** with its measurement; a fixed one is removed, and its record lives in git |
-| [docs/history/](docs/history/) | the retired documents - the completed plans (corpus, walking bass, texture, arranging guide, `voices=`, the Stage-2 collapse, parts, generated grips, comping styles, fingering) and the retired reharmonisation proposals. A plan that landed whole carries a header saying where its live rules went: `docs/engine.md` |
+| [docs/history/](docs/history/) | the retired documents - the completed plans (corpus, walking bass, texture, arranging guide, `voices=`, the Stage-2 collapse, parts, generated grips, comping styles, fingering, restructuring) and the retired reharmonisation proposals. A plan that landed whole carries a header saying where its live rules went: `docs/engine.md` |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | what CI runs, and which tests it does *not* run |
 
 `common_grips.md` is generated from the engine's own tables by `grip_chart.py` and

@@ -1,8 +1,26 @@
-# Restructuring plan — jazz-arranger
+# Restructuring round 2: coupling, cohesion, and the gate as the ruler
 
-Living document. Updated at the end of every phase; each phase keeps
-`make check` green (baseline after Phase 7: 1107 tests OK, skipped=2, ruff 0,
-pyright 0 errors 0 warnings). Measured invariants are never changed.
+**Retired into `docs/history/` - the record of a completed plan.** Both rounds landed, and
+the structure they produced is stated where it is read from: the module map and the
+dependency order are in [AGENTS.md](../AGENTS.md), asserted from the AST by
+`tests/test_package_dag.py`, and the engine's own rules are in
+[docs/engine.md](../engine.md). The ratchet this plan introduced is
+`tests/test_structure.py::BUDGETS` - a per-module ceiling for complexity, length and
+parameter count that may only shrink, seeded at the worst function in each module and
+lowered by the phase that extracts the seam.
+
+What is still here is the *measurement*: what each phase cost, which seam was worth
+cutting, and the three things this round learned the hard way - a local import with an
+excusing comment is a seam nobody has cut yet; a stale test premise is re-pointed rather
+than deleted; and a rename is a token-level edit, because a line-wise one rewrites prose
+that nothing tests.
+
+---
+
+**Status: complete.** Both rounds landed. While it was live this was updated at the end
+of every phase, each of which kept `make check` green (baseline after Phase 7: 1107
+tests OK, skipped=2, ruff 0, pyright 0 errors 0 warnings); the final count is 1108.
+Measured invariants were never changed, and that is what made the phases comparable.
 
 ## Goal
 
@@ -280,7 +298,7 @@ that is where to start.
 `ORDER` and the AGENTS map in the same commit), the test split (move
 `BUT_NOT_FOR_ME` to `tests/support.py` **first**, it is cross-imported), and the
 docs/hygiene pass (the three stale `best_voicing` references in `docs/engine.md`,
-the 1107 count, `RESTRUCTURING_PLAN.md` → `docs/history/` with a retirement
+the 1107 count, this document → `docs/history/` with a retirement
 header).
 - 9.7: `headxml._read_notes` (239), `_expand_repeats`, `_expand_play_order`;
   `tabxml.score_events`/`_build_part`; `tabgp._build_song`.
@@ -600,4 +618,22 @@ Round 2:
   `arranger.chords`. 1107 tests OK (skipped=2), ruff 0, pyright 0/0, demo
   byte-identical. The doc references naming the old home were updated in the same
   commit, including one test docstring.
-- Phases 12-15: planned, in the order above.
+- Phase 12: DONE (two commits) - `grip_tables.py` and `grip_place.py` split out of
+  `grips.py`, both AST-verified byte-identical to the originals apart from the
+  intended renames. `grips.py` 2286 -> 1454 lines.
+- Phase 13: DONE (three commits) - `bass_rules.py` (bass 1507 -> 1125),
+  `resolution.py` (movement 2020 -> 1617), `slot_plan.py` (1617 -> 1325).
+- Phase 14: DONE - the cross-test fixtures went to `support`, five
+  monoliths were split by concern: `test_comping` (three files),
+  `test_tab_rendering` (three), `test_walking_bass` (three),
+  `test_grips` (three), and `test_headxml` (five). 1108 tests before the splits
+  began and 1108 after the last one; every class AST-identical to its original.
+  The three lessons this phase cost are recorded above, each in the phase that
+  paid for it: a stale premise is re-pointed rather than deleted, a fixture used
+  by two files goes to `support`, and a *rename* needs token matching - a
+  line-wise regex rewrote the word "note" inside assertion messages.
+- Phase 15: DONE - the routing table gained the `SlotContext` row, the eight
+  retired documents are named, and the measured state moved to 1108. This
+  document is retired below.
+- Final gate: 1108 tests OK (skipped=2), ruff 0, pyright 0/0, `make demo` and
+  `make chart-audit` unchanged throughout.
