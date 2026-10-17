@@ -63,7 +63,7 @@ the one edge that genuinely points down (`decisions`).
 
 Validation: 1098 tests OK (skipped=2), ruff 0, pyright 0/0.
 
-## Phase 3 — Split `movement.py` by route (DONE, pending commit)
+## Phase 3 — Split `movement.py` by route (DONE, committed 2c5198e)
 
 `movement.py` (2526 lines) was the step loop plus every route handler. Two modules
 split out, plus one helper whose home was the wrong file:
@@ -124,7 +124,7 @@ up, so no `ALLOWED_EDGES` entry is needed.
 - Phase 1: DONE (committed 903694b).
 - Phase 2: DONE (committed c6ed08a).
 - Phase 3: DONE — `bass_merge.py` (committed cb86f65), `melody_alone.py` and
-  `routes.py`; `resolve_substitute_harmony` moved to `chords.py`.
+  `routes.py` (committed 2c5198e); `resolve_substitute_harmony` moved to `chords.py`.
 - Phase 4: DONE (committed 5ad9fe1).
 - Phase 5: NOT REQUIRED (YAGNI).
 - Phase 6: DONE (committed 1517073).
