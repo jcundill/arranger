@@ -423,15 +423,47 @@ family generators and the public surface. Verified before starting:
 `comping_string_sets` from the new table module; `grip_chart` keeps importing
 `grips.drop2_template_for`.
 
-## Phase 13 — Split `bass` and `movement` (planned)
+## Phase 13 — Split `bass` and `movement` (landed)
 
-`bass_rules.py` (style vocabulary, capacities and refusals - pure policy, no
-voicing logic) below `bass`; `resolution.py` (the six `_resolve_*` functions)
-after `options`; `slot_plan.py` (`Carried`, `SlotPlan`, `slot_state`) after
-`routes`. `movement` keeps `prepare_step`, `_harmonised_step` and
-`arrange_progression`; `bass` keeps `BassNote`, `bass_cost`, the line, slots and
-placement, and re-exports the rule vocabulary so `cli`/`__init__` spellings do
-not move. `ORDER` and the AGENTS map change in the same commit.
+Three modules, one commit each, and every seam was measured closed before anything
+moved: no part of a lifted block reads a definition that stays behind.
+
+| module | from | to | what moved |
+|---|---|---|---|
+| `bass_rules.py` | `bass` 1507 | `bass` 1125 | the vocabulary, capacities and refusals |
+| `resolution.py` | `movement` 2020 | `movement` 1325 | the six axis resolvers and their two result types |
+| `slot_plan.py` | `movement` | (same) | `Carried`, `SlotPlan`, `SlotInputs`, `slot_state` and three helpers |
+
+Public names are the ones another module imports: `resolve_knobs`, `resolve_policies`,
+`Carried`, `SlotInputs`, `SlotPlan`, `slot_state`. `_Knobs`/`_Policies` stayed private
+because only the resolver that returns them names them, as did `_tune_silent_plan`,
+`_carried_role` and `_texture_grips`.
+
+Four things this phase taught:
+
+- **The local-import apology is a seam detector.** Two `bass` functions carried
+  `from .grip_tables import ...` *inside* the function with a comment saying the
+  module did not depend on the grip tables "for its own sake". In `bass_rules` that
+  sentence is false - the capacity question is the module's whole job - so the imports
+  became module-level and ruff deleted the redundant local ones. When an import needs
+  a paragraph of apology, ask whether the function belongs somewhere else.
+- **Importers moved; the vocabulary was not re-exported from `bass`.** That departs
+  from this document's earlier wording, for the reason Phase 11 gives: a re-export is
+  a second binding of one fact. `from arranger import BASS_RULES` is unchanged, because
+  the facade already exports it.
+- **A stale premise is re-pointed, never deleted** (trap 5).
+  `test_the_engine_is_the_only_step_loop` read `movement`'s source to prove the engine
+  calls each shared decision; two of them moved to `slot_plan`, so it now reads the
+  three modules the engine is made of. Its docstring records the third re-pointing and
+  why deleting the two names from `DECISIONS` would have retired the check instead.
+- **A facade name needs a binding, not just membership.** `grip_place` in `__all__`
+  without an import of it is a pyright `reportUnsupportedDunderAll` warning that no
+  test can see, because the suite imports the package and the attribute does exist at
+  runtime. Every new module is now added to `from . import (...)` as well.
+
+`make demo` stayed byte-identical through all three, and the AST comparison of each
+moved block against its original found only the intended renames and the deleted
+local imports.
 
 ## Phase 14 — Split the test monoliths (planned)
 
