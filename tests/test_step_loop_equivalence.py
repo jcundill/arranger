@@ -43,6 +43,7 @@ from arranger import VoiceLeadingEngine, slots
 from arranger.bass_rules import (
     BASS_STYLE_WALK,
 )
+from arranger.options import ArrangeOptions
 
 # (melody, quality, name) triples chosen to cover the decision points rather than to
 # be a tune: a chord tone, a 9th the extension strategy absorbs, a note with no route
@@ -97,7 +98,9 @@ def through_library(triples, timings, texture, **kwargs):
 
 def through_slots(triples, timings, texture, **kwargs):
     steps, _rescued, notes = slots.arrange_slots(
-        triples, timings=timings, texture=texture, **kwargs
+        triples,
+        timings=timings,
+        options=ArrangeOptions(texture=texture, **kwargs),
     )
     return steps, notes
 

@@ -340,12 +340,8 @@ def _previous_shape(arrangements: List[ArrangementStep]) -> Optional[Voicing]:
 
 
 def _promoted_fill(
-    context: SlotContext,
+    plan: SlotPlan,
     arrangements: List[ArrangementStep],
-    *,
-    top_strings: Tuple[int, ...],
-    slot_grips: Tuple[str, ...],
-    melody_only: bool,
 ) -> Optional[StepPreparation]:
     """Re-prepare a fill that produced nothing as a principal note.
 
@@ -362,10 +358,12 @@ def _promoted_fill(
     for the retry or the retry found nothing either - the two cases the caller
     answers the same way, by reporting the step as skipped.
     """
+    context = plan.context
+    inputs = plan.inputs
     if not should_promote_fill(
-        context.texture, context.role, True, slot_grips,
+        context.texture, context.role, True, plan.slot_grips,
         has_thumb=context.has_thumb,
-        melody_only=melody_only,
+        melody_only=inputs.melody_only,
     ):
         return None
     prev_sounding = last_sounding_step(arrangements)
@@ -375,7 +373,7 @@ def _promoted_fill(
         # position is a hole in the tab rather than a shape the hand held.
         previous=prev_sounding.voicing if prev_sounding is not None else None,
         previous_chord=prev_sounding.chord if prev_sounding is not None else None,
-        top_strings=top_strings,
+        top_strings=inputs.top_strings,
         non_chord_tone=context.non_chord_tone,
         fret_min=context.fret_min,
         fret_max=context.fret_max,
@@ -404,15 +402,7 @@ def _lost_to_the_bass_partition(
 def _palette_facts(
     candidates: Sequence[Voicing],
     chosen: Voicing,
-    *,
-    previous: Optional[Voicing],
-    fret_min: int,
-    fret_max: int,
-    allowed_tones: Optional[Container[int]],
-    root_pc: Optional[int],
-    melody_pc: Optional[int],
-    bass_pc: Optional[int] = None,
-    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]] = None,
+    criteria: _cost.SelectionCriteria,
 ) -> Palette:
     """What the palette offered besides the shape it chose, recorded for the renderer.
 
@@ -432,19 +422,14 @@ def _palette_facts(
     """
 
     def cost(voicing: Voicing) -> Tuple[float, ...]:
-        return _cost.voicing_cost(
-            voicing,
-            previous,
-            fret_min,
-            fret_max,
-            allowed_tones=allowed_tones,
-            root_pc=root_pc,
-            melody_pc=melody_pc,
-        )
+        return criteria.cost(voicing)
 
     available = max(len(candidate.active_frets()) for candidate in candidates)
     inside_window = any(
-        all(fret_min <= fret <= fret_max for fret in candidate.active_frets())
+        all(
+            criteria.fret_min <= fret <= criteria.fret_max
+            for fret in candidate.active_frets()
+        )
         for candidate in candidates
     )
     chosen_voices = len(chosen.active_frets())
@@ -453,7 +438,9 @@ def _palette_facts(
         return Palette(available=available, inside_window=inside_window)
     alternative = min(fuller, key=cost)
     decided_by = _cost.decisive_criterion(cost(chosen), cost(alternative))
-    if _lost_to_the_bass_partition(chosen, alternative, bass_pc, slash_bass_cost):
+    if _lost_to_the_bass_partition(
+        chosen, alternative, criteria.bass_pc, criteria.slash_bass_cost
+    ):
         # The partition runs *before* the tuple, so the two cost tuples need not differ at
         # all: what removed this shape is the bass note it does not sound.
         decided_by = _cost.PARTITION_CRITERION
@@ -487,12 +474,8 @@ def _bass_group(
 def _prepare_or_rescue(
     arrangements: List[ArrangementStep],
     slot: Slot,
-    context: SlotContext,
+    plan: SlotPlan,
     prev_sounding: Optional[ArrangementStep],
-    *,
-    top_strings: Tuple[int, ...],
-    slot_grips: Tuple[str, ...],
-    melody_only: bool,
 ) -> Optional[Tuple[StepPreparation, str]]:
     """Prepare the slot's candidates, or answer why the tune cannot sound.
 
@@ -506,15 +489,17 @@ def _prepare_or_rescue(
     the fill, and only then report the step missing. See `rescue_melody_alone` and
     `_promoted_fill`.
     """
+    context = plan.context
+    inputs = plan.inputs
     prepared = prepare_step(
         context.progression, context.index,
         previous=prev_sounding.voicing if prev_sounding is not None else None,
         previous_chord=prev_sounding.chord if prev_sounding is not None else None,
-        top_strings=top_strings,
+        top_strings=inputs.top_strings,
         non_chord_tone=context.non_chord_tone,
         fret_min=context.fret_min,
         fret_max=context.fret_max,
-        grips=slot_grips,
+        grips=plan.slot_grips,
     )
     if prepared is not None:
         return prepared, context.role
@@ -522,19 +507,11 @@ def _prepare_or_rescue(
     melody_note = context.melody_note
     assert melody_note is not None and note_str is not None
     if rescue_melody_alone(
-        arrangements, slot,
-        name=context.name, note_str=note_str, melody_note=melody_note,
-        top_strings=top_strings, previous=_previous_shape(arrangements),
-        bar=context.bar, beat=context.beat, duration=context.duration,
-        role=context.role, weight=context.weight,
+        arrangements, slot, context,
+        top_strings=inputs.top_strings, previous=_previous_shape(arrangements),
     ):
         return None
-    prepared = _promoted_fill(
-        context, arrangements,
-        top_strings=top_strings,
-        slot_grips=slot_grips,
-        melody_only=melody_only,
-    )
+    prepared = _promoted_fill(plan, arrangements)
     if prepared is not None:
         return prepared, ROLE_TARGET
     # Reached only when the melody **cannot be played at all** - the rescue above has
@@ -550,14 +527,13 @@ def _prepare_or_rescue(
     # voice (`no_shape`). The rescue above asked the same question, so the answer is
     # read back rather than re-derived from the clause's own words.
     rest_step(
-        arrangements, slot,
-        name=context.name, note_str=note_str,
-        bar=context.bar, beat=context.beat, duration=context.duration,
-        role=context.role, weight=context.weight,
+        arrangements, slot, context,
         sings_here=False,
         silence=(
             SILENCE_OUT_OF_REACH
-            if not _grips.get_melody_only_voicings(melody_note, prefer=top_strings)
+            if not _grips.get_melody_only_voicings(
+                melody_note, prefer=inputs.top_strings
+            )
             else SILENCE_NO_SHAPE
         ),
     )
@@ -576,28 +552,11 @@ class _Selection:
     """
 
     candidates: List[Voicing]
-    previous: Optional[Voicing]
-    fret_min: int
-    fret_max: int
-    allowed_tones: Optional[Container[int]]
-    root_pc: Optional[int]
-    melody_pc: int
-    bass_pc: Optional[int]
-    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]]
+    criteria: _cost.SelectionCriteria
 
     def chosen(self) -> Optional[Voicing]:
         """The shape the engine's own rule prefers, honouring a slash bass first."""
-        return select_step_voicing(
-            self.candidates,
-            self.previous,
-            self.fret_min,
-            self.fret_max,
-            allowed_tones=self.allowed_tones,
-            root_pc=self.root_pc,
-            melody_pc=self.melody_pc,
-            bass_pc=self.bass_pc,
-            slash_bass_cost=self.slash_bass_cost,
-        )
+        return select_step_voicing(self.candidates, self.criteria)
 
     def palette(self, chosen: Voicing) -> Palette:
         """What was on offer besides `chosen`, and the criterion that ranked it lower.
@@ -606,18 +565,7 @@ class _Selection:
         about the shape the step carries - a record about any other shape is a second
         source for one fact, and the wrong one.
         """
-        return _palette_facts(
-            self.candidates,
-            chosen,
-            previous=self.previous,
-            fret_min=self.fret_min,
-            fret_max=self.fret_max,
-            allowed_tones=self.allowed_tones,
-            root_pc=self.root_pc,
-            melody_pc=self.melody_pc,
-            bass_pc=self.bass_pc,
-            slash_bass_cost=self.slash_bass_cost,
-        )
+        return _palette_facts(self.candidates, chosen, self.criteria)
 
     def narrower_than(self, demoted: Voicing) -> Optional[Voicing]:
         """A tighter shape inside the budget that the tuple ranks at least as high.
@@ -659,44 +607,32 @@ class _Selection:
         narrower shape may only replace the demoted one from the same group: a shape
         that drops the written bass for a tighter hand is the same bad trade.
         """
-        turned_away = _cost.voicing_cost(
-            demoted, self.previous, self.fret_min, self.fret_max,
-            allowed_tones=self.allowed_tones, root_pc=self.root_pc,
-            melody_pc=self.melody_pc,
-        )
+        turned_away = self.criteria.cost(demoted)
         span = _cost.SPAN_CRITERION
-        turned_away_bass = _bass_group(demoted, self.bass_pc, self.slash_bass_cost)
+        turned_away_bass = _bass_group(
+            demoted, self.criteria.bass_pc, self.criteria.slash_bass_cost
+        )
 
         def would_the_tuple_have_chosen_it(candidate: Voicing) -> bool:
-            if _bass_group(candidate, self.bass_pc, self.slash_bass_cost) != turned_away_bass:
+            if _bass_group(
+                candidate, self.criteria.bass_pc, self.criteria.slash_bass_cost
+            ) != turned_away_bass:
                 return False
-            cost = _cost.voicing_cost(
-                candidate, self.previous, self.fret_min, self.fret_max,
-                allowed_tones=self.allowed_tones, root_pc=self.root_pc,
-                melody_pc=self.melody_pc,
-            )
+            cost = self.criteria.cost(candidate)
             return cost[:span] + cost[span + 1:] <= turned_away[:span] + turned_away[span + 1:]
 
         inside_budget = [
             candidate for candidate in self.candidates
             if candidate.fret_span() < GRIP_MAX_SPAN[demoted.grip]
-            and all(self.fret_min <= fret <= self.fret_max
-                    for fret in candidate.active_frets())
+            and all(
+                self.criteria.fret_min <= fret <= self.criteria.fret_max
+                for fret in candidate.active_frets()
+            )
             and would_the_tuple_have_chosen_it(candidate)
         ]
         if not inside_budget:
             return None
-        return select_step_voicing(
-            inside_budget,
-            self.previous,
-            self.fret_min,
-            self.fret_max,
-            allowed_tones=self.allowed_tones,
-            root_pc=self.root_pc,
-            melody_pc=self.melody_pc,
-            bass_pc=self.bass_pc,
-            slash_bass_cost=self.slash_bass_cost,
-        )
+        return select_step_voicing(inside_budget, self.criteria)
 
 
 def _held_candidates(
@@ -771,17 +707,19 @@ def _selection_for(
     # four.
     return _Selection(
         candidates=candidates,
-        previous=previous,
-        fret_min=context.fret_min,
-        fret_max=context.fret_max,
-        allowed_tones=allowed_tones,
-        root_pc=root_pc,
-        melody_pc=melody_note.midi_note() % 12,
-        bass_pc=(
-            None if context.bass_pcs is None
-            else context.bass_pcs.get(context.index)
+        criteria=_cost.SelectionCriteria(
+            previous=previous,
+            fret_min=context.fret_min,
+            fret_max=context.fret_max,
+            allowed_tones=allowed_tones,
+            root_pc=root_pc,
+            melody_pc=melody_note.midi_note() % 12,
+            bass_pc=(
+                None if context.bass_pcs is None
+                else context.bass_pcs.get(context.index)
+            ),
+            slash_bass_cost=context.slash_bass_cost_for,
         ),
-        slash_bass_cost=context.slash_bass_cost_for,
     )
 
 
@@ -845,11 +783,7 @@ def _emit_step(
 def _harmonised_step(
     arrangements: List[ArrangementStep],
     slot: Slot,
-    context: SlotContext,
-    *,
-    top_strings: Tuple[int, ...],
-    slot_grips: Tuple[str, ...],
-    melody_only: bool,
+    plan: SlotPlan,
 ) -> None:
     """The melody-bearing route: pin the tune, and voice the chord under it.
 
@@ -858,6 +792,8 @@ def _harmonised_step(
     library is built around: `prepare_step` supplies the candidates, `voicing_cost`
     picks among them, and the last resort before silence is the melody alone.
     """
+    context = plan.context
+    inputs = plan.inputs
     note_str = context.note_str
     melody_note = context.melody_note
     assert note_str is not None and melody_note is not None
@@ -868,10 +804,7 @@ def _harmonised_step(
     # Everything up to choosing a shape is shared with the corpus loader, which needs
     # the same candidates but honours a slash bass first. See `prepare_step`.
     prepared_and_role = _prepare_or_rescue(
-        arrangements, slot, context, prev_sounding,
-        top_strings=top_strings,
-        slot_grips=slot_grips,
-        melody_only=melody_only,
+        arrangements, slot, plan, prev_sounding,
     )
     if prepared_and_role is None:
         return
@@ -920,13 +853,10 @@ def _harmonised_step(
             best_voicing = narrower
             palette = selection.palette(best_voicing)
         elif demoted_to_melody_alone(
-            arrangements, slot,
-            name=prepared.chord_name, note_str=note_str, melody_note=melody_note,
-            top_strings=top_strings, previous=selection.previous,
+            arrangements, slot, replace(context, role=role),
+            top_strings=inputs.top_strings, previous=selection.criteria.previous,
             best_voicing=best_voicing,
             palette=palette,
-            bar=context.bar, beat=context.beat, duration=context.duration,
-            role=role, weight=context.weight,
         ):
             return
     # A repeated melody is a hold, so the renderers strike the soprano alone and
@@ -937,33 +867,6 @@ def _harmonised_step(
     _emit_step(
         arrangements, slot, context, prepared, best_voicing, palette,
         role=role, repeated=repeated,
-    )
-
-
-def _context_for(plan: SlotPlan, inputs: SlotInputs) -> SlotContext:
-    """The route-facing view of one planned slot.
-
-    Derived from the plan and the arrangement-level inputs only, so a route cannot
-    read a fact the plan has not already decided.
-    """
-    return SlotContext(
-        progression=inputs.progression,
-        index=plan.index,
-        name=plan.name,
-        note_str=plan.note_str,
-        melody_note=plan.melody_note,
-        fret_min=inputs.fret_min,
-        fret_max=inputs.fret_max,
-        texture=inputs.texture,
-        has_thumb=inputs.has_thumb,
-        non_chord_tone=inputs.non_chord_tone,
-        bass_pcs=inputs.bass_pcs,
-        slash_bass_cost_for=inputs.slash_bass_cost_for,
-        bar=plan.bar,
-        beat=plan.beat,
-        duration=plan.duration,
-        role=plan.role,
-        weight=plan.weight,
     )
 
 
@@ -1004,72 +907,56 @@ def _route_slot(
     arrangements: List[ArrangementStep],
     slot: Slot,
     plan: SlotPlan,
-    context: SlotContext,
-    *,
-    top_strings: Tuple[int, ...],
-    melody_onsets: Optional[Container[int]],
-    parts: Tuple[str, ...],
-    harmony_family: str,
-    melody_only: bool,
 ) -> None:
     """Send one planned slot to exactly one route, which appends its step.
 
     The order is the contract: rest, fill, `NC`, comping, melody-bearing. A fill that
     cannot be filled falls through rather than returning, because the chord of the
     tune must not be lost to a texture - `texture_fill_step`'s own answer.
+
+    The route reads the plan's `context` and `inputs`, so the slot facts and the
+    arrangement facts keep the values the plan decided.
     """
+    context = plan.context
+    inputs = plan.inputs
     if plan.melody_alone == MELODY_ALONE_REST:
         rest_step(
-            arrangements, slot,
-            name=plan.name, note_str=plan.note_str,
-            bar=plan.bar, beat=plan.beat, duration=plan.duration,
-            role=plan.role, weight=plan.weight,
+            arrangements, slot, context,
             sings_here=plan.sings_here, silence=plan.silence,
         )
         return
     if plan.melody_alone == MELODY_ALONE_TEXTURE:
         if texture_fill_step(
-            arrangements, slot,
-            name=plan.name, note_str=plan.note_str,
-            melody_note=plan.melody_note, top_strings=top_strings,
+            arrangements, slot, context,
+            top_strings=inputs.top_strings,
             previous=_previous_shape(arrangements),
-            bar=plan.bar, beat=plan.beat, duration=plan.duration,
-            role=plan.role, weight=plan.weight,
         ):
             return
     if plan.melody_alone == MELODY_ALONE_NO_CHORD:
         no_chord_step(
-            arrangements, slot,
-            name=plan.name, note_str=plan.note_str,
-            melody_note=plan.melody_note, top_strings=top_strings,
+            arrangements, slot, context,
+            top_strings=inputs.top_strings,
             previous=_previous_shape(arrangements),
-            bar=plan.bar, beat=plan.beat, duration=plan.duration,
-            role=plan.role, weight=plan.weight,
         )
         return
     # --- The comping route: the guitar harmonises, somebody else sings ---
     # See `comping_step`: taken before `prepare_step` because there is no melody for
     # the guitar here, and only after the NC and melody-alone branches, which are the
     # cases with no harmony to state.
-    if not plan.sings_here and not melody_only:
+    if not plan.sings_here and not inputs.melody_only:
         if comping_step(
             arrangements, slot, context,
-            chord_type=plan.chord_type,
-            melody_onsets=melody_onsets,
-            parts=parts,
-            harmony_family=harmony_family,
+            chord_type=context.chord_type,
+            melody_onsets=inputs.melody_onsets,
+            parts=inputs.parts,
+            harmony_family=inputs.harmony_family,
         ):
             return
 
     # Every melody-bearing route below pins a note, and a slot with none has left the
     # loop by now: the guard at the top refuses one the guitar is asked to sing, and
     # the comping block above always steps or returns.
-    _harmonised_step(
-        arrangements, slot, context,
-        top_strings=top_strings,
-        slot_grips=plan.slot_grips,
-        melody_only=melody_only,
-    )
+    _harmonised_step(arrangements, slot, plan)
 
 
 def arrange_progression(
@@ -1295,12 +1182,14 @@ def arrange_progression(
     loop = _loop_slots(progression, timings, slots)
     slot_inputs = SlotInputs(
         progression=progression,
+        top_strings=top_strings,
         texture=texture,
         parts=chosen_parts,
         has_thumb=has_thumb,
         melody_only=melody_only,
         melody_voiced=melody_voiced,
         melody_onsets=melody_onsets,
+        harmony_family=harmony_family,
         grid_pattern=grid_pattern,
         beats_per_bar=beats_per_bar,
         fret_min=fret_min,
@@ -1313,13 +1202,6 @@ def arrange_progression(
         plan = slot_state(carried, slot, slot_inputs)
         if plan is None:
             continue
-        _route_slot(
-            arrangements, slot, plan, _context_for(plan, slot_inputs),
-            top_strings=top_strings,
-            melody_onsets=melody_onsets,
-            parts=chosen_parts,
-            harmony_family=harmony_family,
-            melody_only=melody_only,
-        )
+        _route_slot(arrangements, slot, plan)
 
     return arrangements

@@ -21,6 +21,7 @@ from . import cost as _cost
 from . import grips as _grips
 from .bass import Slot
 from .bass_merge import attach_bass
+from .context import SlotContext
 from .decisions import is_bass_only
 from .tuning import ArrangementStep, Palette, Voicing, note_name
 
@@ -92,17 +93,10 @@ def melody_alone_shape(
 def rescue_melody_alone(
     arrangements: List[ArrangementStep],
     slot: Slot,
+    context: SlotContext,
     *,
-    name: str,
-    note_str: str,
-    melody_note: Note,
     top_strings: Tuple[int, ...],
     previous: Optional[Voicing],
-    bar: Optional[int],
-    beat: Optional[float],
-    duration: Optional[float],
-    role: str,
-    weight: int,
 ) -> bool:
     """Play the tune alone when no shape in the palette can carry the chord.
 
@@ -122,6 +116,12 @@ def rescue_melody_alone(
     reach the note at all - below the library's G3 floor, or past the end of the
     board - and the caller reports the step as skipped.
     """
+    name = context.name
+    note_str = context.note_str
+    melody_note = context.melody_note
+    bar, beat, duration = context.bar, context.beat, context.duration
+    role, weight = context.role, context.weight
+    assert melody_note is not None and note_str is not None
     # **The string must be one the caller named.** `get_melody_only_voicings`
     # keeps searching *below* the set it is given, so a note the named set
     # cannot carry - D4 under `top_strings=(5,)`, below the high E string's
@@ -168,19 +168,12 @@ def rescue_melody_alone(
 def demoted_to_melody_alone(
     arrangements: List[ArrangementStep],
     slot: Slot,
+    context: SlotContext,
     *,
-    name: str,
-    note_str: str,
-    melody_note: Note,
     top_strings: Tuple[int, ...],
     previous: Optional[Voicing],
     best_voicing: Voicing,
     palette: Palette,
-    bar: Optional[int],
-    beat: Optional[float],
-    duration: Optional[float],
-    role: str,
-    weight: int,
 ) -> bool:
     """Play the tune alone when the only shape that fitted needs a stretch.
 
@@ -192,6 +185,12 @@ def demoted_to_melody_alone(
     stops. **False** when the melody alone would be the wider reach of the two,
     which leaves the chosen shape in place for the caller to play.
     """
+    name = context.name
+    note_str = context.note_str
+    melody_note = context.melody_note
+    bar, beat, duration = context.bar, context.beat, context.duration
+    role, weight = context.role, context.weight
+    assert melody_note is not None and note_str is not None
     solo, inside_window = melody_alone_shape(
         melody_note, previous=previous, top_strings=top_strings
     )

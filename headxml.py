@@ -38,7 +38,7 @@ import re
 import zipfile
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 from xml.etree import ElementTree
 
 from arranger import (
@@ -57,7 +57,11 @@ from arranger import (
     resolve_grid,
     resolve_parts,
 )
+from arranger.bass_rules import BASS_STYLE_AUTO
 from arranger.chords import midi_to_note_name, promote_slash_chord
+from arranger.harmony import HARMONY_AUTO
+from arranger.options import ArrangeOptions
+from arranger.parts import PARTS_AUTO
 from arranger.slots import arrange_slots
 
 __all__ = [
@@ -2028,6 +2032,53 @@ def head_skeleton(
     return slots
 
 
+def _head_request(
+    head: Head,
+    options: Optional[ArrangeOptions],
+    *,
+    non_chord_tone: str,
+    texture: str,
+    bass: str,
+    parts: str,
+    harmony: str,
+    grid: str,
+) -> ArrangeOptions:
+    """The arrangement request for a loaded head, from either spelling.
+
+    The head owns the metre: a caller supplying `options` cannot know it before the
+    file is read, so the score's own count and denominator replace the object's.
+    Passing both spellings is a caller bug and raises rather than silently choosing.
+    """
+    if options is not None:
+        explicit_knobs = (
+            non_chord_tone != "extension"
+            or texture != "uniform"
+            or bass != BASS_STYLE_AUTO
+            or parts != PARTS_AUTO
+            or harmony != HARMONY_AUTO
+            or grid != GRID_DEFAULT
+        )
+        if explicit_knobs:
+            raise ValueError(
+                "pass either options= or the individual arrangement knobs, not both"
+            )
+        return replace(
+            options,
+            beats_per_bar=head.beats_per_bar,
+            beat_type=head.beat_type,
+        )
+    return ArrangeOptions(
+        non_chord_tone=non_chord_tone,
+        texture=texture,
+        bass=bass,
+        parts=parts,
+        harmony=harmony,
+        grid=grid,
+        beats_per_bar=head.beats_per_bar,
+        beat_type=head.beat_type,
+    )
+
+
 def arrange_xml_head(
     path: Union[str, Path],
     part: Optional[str] = None,
@@ -2039,6 +2090,7 @@ def arrange_xml_head(
     parts: str = "auto",
     harmony: str = "auto",
     grid: str = GRID_DEFAULT,
+    options: Optional[ArrangeOptions] = None,
 ) -> Tuple[List[ArrangementStep], Head, List[str]]:
     """Loads a MusicXML head, reduces it and arranges it, end to end.
 
@@ -2054,12 +2106,15 @@ def arrange_xml_head(
     unless asked for.
 
     `bass` is the note rules the thumb states, `texture` the chord part's arity policy,
-    and `grid` when each part falls; all three are forwarded the same way.
-    `beats_per_bar` is passed because **this** module is where the metre trap
-    bites hardest: three of the four committed scores are in cut time, whose beat is
-    a half note, so a rule that assumed four beats to the bar would put a full chord
-    on a beat that does not exist in a 2/2 head. A count without a denominator is
-    not a metre.
+    and `grid` when each part falls. `options=` is the same request as one value; when
+    it is given, the individual knobs must be left at their defaults, and the head's
+    own metre replaces the object's. That is the spelling `head` uses, because a
+    score already holds its metre and key together.
+
+    The metre trap bites hardest here: three of the four committed scores are in cut
+    time, whose beat is a half note, so a rule that assumed four beats to the bar
+    would put a full chord on a beat that does not exist in a 2/2 head. A count
+    without a denominator is not a metre.
 
     `head.beat_type` goes with it, and it is not a duplicate: the count says which beats
     exist, the denominator says how long one lasts. Only the walking bass reads the
@@ -2067,6 +2122,16 @@ def arrange_xml_head(
     committed 3/4 head is where passing the count in its place shows up.
     """
     head = load_musicxml(path, part)
+    options = _head_request(
+        head,
+        options,
+        non_chord_tone=non_chord_tone,
+        texture=texture,
+        bass=bass,
+        parts=parts,
+        harmony=harmony,
+        grid=grid,
+    )
     slots = head_skeleton(head, section)
     # **The comping union is gated on whether the guitar comps at all, not on the
     # route.** `parts=chord` is the ensemble answer: the guitar states the chord while
@@ -2093,9 +2158,9 @@ def arrange_xml_head(
     # policy reads as something it is not. The predicate itself is the engine's own
     # (`VoiceLeadingEngine.arrange_progression` routes each slot through the same
     # question), which is why it is imported rather than re-tested.
-    resolved_parts = resolve_parts(parse_parts(parts))
+    resolved_parts = resolve_parts(parse_parts(options.parts))
     if not parts_has_melody_only(resolved_parts):
-        slots = _merge_chord_slots(slots, head, section, grid) or slots
+        slots = _merge_chord_slots(slots, head, section, options.grid) or slots
     triples = [slot[0] for slot in slots]
     timings = [(slot[1], slot[2], slot[3]) for slot in slots]
     # §9.3 step C: which slots the melody **articulates** on. On the note path every
@@ -2109,18 +2174,15 @@ def arrange_xml_head(
         for index, slot in enumerate(slots)
         if melody_state(head.notes, slot[1], slot[2]) == "onset"
     }
+    # Both halves of the metre are in `options`: the count says which beats exist,
+    # the denominator says how long one lasts, and `arrange_xml_head` took them from
+    # the head above. The walking bass is the only engine rule that needs the second.
     steps, _rescued, notes = arrange_slots(
-        triples, timings, non_chord_tone=non_chord_tone, fallback=fallback,
-        texture=texture, bass=bass, parts=parts,
-        harmony=harmony, grid=grid,
-        beats_per_bar=head.beats_per_bar,
-        # Both halves of the metre, because they answer different questions: the count
-        # says which beats exist, the denominator says how long one lasts. The walking
-        # bass is the only engine rule that needs the second - a slot's `duration` is in
-        # whole notes and a whole note is `beat_type` beats - and passing the count in
-        # its place made every span a quarter short in a 3/4 head.
-        beat_type=head.beat_type,
+        triples,
+        timings,
+        fallback=fallback,
         onsets=onsets,
+        options=options,
     )
     return steps, head, list(head.report) + notes
 
@@ -2234,6 +2296,18 @@ def _key_label(head: Head) -> str:
     return f"{major[index]} major/{minor[index]} minor"
 
 
+def _head_options(args: Any) -> ArrangeOptions:
+    """The `head` command's arrangement knobs, as the engine request."""
+    return ArrangeOptions(
+        non_chord_tone=args.non_chord_tone,
+        texture=args.texture,
+        bass=args.bass_style,
+        parts=args.parts,
+        harmony=args.harmony,
+        grid=args.grid,
+    )
+
+
 def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     """The `head` command: arrange a MusicXML file as chord-melody.
 
@@ -2246,7 +2320,12 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     """
     import argparse
 
-    from arranger.cli import HEAD_HELP, add_common_arguments, render_and_write
+    from arranger.cli import (
+        HEAD_HELP,
+        ScoreMeta,
+        add_common_arguments,
+        render_and_write,
+    )
     from arranger.slots import parse_bar_range
 
     parser = argparse.ArgumentParser(
@@ -2268,7 +2347,6 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
         parser.error("--fret-min must not be above --fret-max")
     if not Path(args.file).is_file():
         parser.error(f"no such file: {args.file}")
-
     section: Optional[Tuple[int, int]] = None
     if args.bars:
         try:
@@ -2290,15 +2368,9 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
         steps, head, notes = arrange_xml_head(
             args.file,
             part=args.part,
-
-            non_chord_tone=args.non_chord_tone,
             fallback=args.fallback,
             section=section,
-            texture=args.texture,
-            bass=args.bass_style,
-            parts=args.parts,
-            harmony=args.harmony,
-            grid=args.grid,
+            options=_head_options(args),
         )
     except (ValueError, zipfile.BadZipFile) as error:
         parser.error(str(error))
@@ -2350,12 +2422,14 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     return render_and_write(
         args,
         steps,
-        title=title,
+        meta=ScoreMeta(
+            title=title,
+            beats_per_bar=head.beats_per_bar,
+            beat_type=head.beat_type,
+            fifths=head.key_fifths,
+            mode=head.key_mode,
+            markers=head.markers,
+        ),
         notes=notes,
-        beats_per_bar=head.beats_per_bar,
-        beat_type=head.beat_type,
-        fifths=head.key_fifths,
-        mode=head.key_mode,
-        markers=head.markers,
         written_bars=head.written_bars,
     )

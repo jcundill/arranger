@@ -35,8 +35,10 @@ from arranger.grip_tables import (
     comping_string_sets,
 )
 from arranger.grips import (
+    CompingRequest,
     _comping_palette,
     _search_comping_voicings,
+    get_comping_voicings_for,
 )
 from arranger.options import ArrangeOptions
 from tests.support import (
@@ -170,14 +172,7 @@ class TestTheCompingPaletteIsRemembered(unittest.TestCase):
             for notes in (1, 3):
                 for bass_voice in (False, True):
                     for shell_root in (False, True):
-                        searched = _search_comping_voicings(
-                            quality,
-                            name,
-                            notes=notes,
-                            bass_voice=bass_voice,
-                            shell_root=shell_root,
-                        )
-                        remembered = _comping_palette(
+                        request = CompingRequest(
                             quality,
                             name,
                             NECK_FRET_MIN,
@@ -186,6 +181,8 @@ class TestTheCompingPaletteIsRemembered(unittest.TestCase):
                             bass_voice,
                             shell_root,
                         )
+                        searched = _search_comping_voicings(request)
+                        remembered = _comping_palette(request)
                         self.assertEqual(
                             [snapshot(voicing) for voicing in searched],
                             list(remembered),
@@ -222,6 +219,22 @@ class TestTheCompingPaletteIsRemembered(unittest.TestCase):
         third = get_comping_voicings("maj7", "Cmaj7")
         self.assertEqual(third[0].tab_string(), pristine_tab)
         self.assertEqual(third[0].bass_pc, pristine_bass)
+
+    def test_the_request_is_the_memo_key(self):
+        """The object entry point and the primitive one share one memo entry."""
+        request = CompingRequest(
+            "maj7", "Cmaj7", NECK_FRET_MIN, NECK_FRET_MAX, 3, False, False
+        )
+        before = _comping_palette.cache_info()
+        by_object = get_comping_voicings_for(request)
+        after = _comping_palette.cache_info()
+        self.assertEqual(after.misses - before.misses, 1)
+        by_keyword = get_comping_voicings("maj7", "Cmaj7")
+        self.assertEqual(
+            [voicing.tab_string() for voicing in by_object],
+            [voicing.tab_string() for voicing in by_keyword],
+        )
+        self.assertEqual(_comping_palette.cache_info().hits - after.hits, 1)
 
     def test_the_memo_is_read_rather_than_bypassed(self):
         """A memo nothing hits is a claim with no effect - an invisible knob.
@@ -487,7 +500,12 @@ class TestTheCompingArrangement(unittest.TestCase):
         from arranger.slots import arrange_slots
 
         steps, _rescued, _notes = arrange_slots(
-            PROGRESSION, self.timings, parts=PARTS_WITH_BASS, bass="root,5th,approach,nearest",
+            PROGRESSION,
+            self.timings,
+            options=ArrangeOptions(
+                parts=PARTS_WITH_BASS,
+                bass="root,5th,approach,nearest",
+            ),
         )
         self.assertTrue(steps, "an arrangement with no steps at all is a defect")
         self.assertTrue(any(step.bass is not None for step in steps))
@@ -583,10 +601,12 @@ class TestCompingMelodyIndependence(unittest.TestCase):
         steps, _, _ = arrange_slots(
             [slot[0] for slot in slots],
             [(slot[1], slot[2], slot[3]) for slot in slots],
-            parts=parts,
-            grid=grid,
-            beats_per_bar=head.beats_per_bar,
-            non_chord_tone=non_chord_tone,
+            options=ArrangeOptions(
+                parts=parts,
+                grid=grid,
+                beats_per_bar=head.beats_per_bar,
+                non_chord_tone=non_chord_tone,
+            ),
             onsets=onsets,
         )
         return tuple((step.bar, step.beat, step.chord, tuple(step.voicing.frets)) for step in steps)
@@ -875,7 +895,11 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
         progression = [("D5", "m7", "Bbm7"), ("D5", "m7", "Bbm7")]
         timings = [(0, 1.0, 1.0), (0, 1.5, 0.5)]
         steps, rescued, _notes = arrange_slots(
-            progression, timings, parts=VOICES_ARG, fallback="diminished", onsets={0},
+            progression,
+            timings,
+            options=ArrangeOptions(parts=VOICES_ARG),
+            fallback="diminished",
+            onsets={0},
         )
         self.assertEqual(rescued, [0])
         self.assertNotEqual(steps[0].chord, "Bbm7")

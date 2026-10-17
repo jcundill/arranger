@@ -24,10 +24,10 @@ imports are ordinary top-level ones and there is no cycle to dodge.
 
 from __future__ import annotations
 
-from typing import Callable, Container, List, Optional, Sequence, Tuple
+from typing import List, Optional, Tuple
 
 from .chords import sounding_harmony
-from .cost import best_voicing
+from .cost import SelectionCriteria, best_voicing_for
 from .grip_tables import (
     GRIP_MAX_SPAN,
     GRIP_PREFERENCE,
@@ -434,14 +434,7 @@ SLASH_BASS_SATISFIED = 2
 
 def select_step_voicing(
     candidates: List[Voicing],
-    previous: Optional[Voicing],
-    fret_min: int,
-    fret_max: int,
-    allowed_tones: Optional[Container[int]],
-    root_pc: Optional[int],
-    melody_pc: Optional[int] = None,
-    bass_pc: Optional[int] = None,
-    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]] = None,
+    criteria: SelectionCriteria,
 ) -> Optional[Voicing]:
     """The candidate the engine's own rule prefers, honouring a slash bass first.
 
@@ -467,18 +460,17 @@ def select_step_voicing(
     at the call site, which is the point: wanting a slash-bass preference is the only
     reason to supply one.
     """
-    if bass_pc is not None and slash_bass_cost is not None and candidates:
-        costs = [slash_bass_cost(v.midi_notes(), bass_pc) for v in candidates]
+    if (
+        criteria.bass_pc is not None
+        and criteria.slash_bass_cost is not None
+        and candidates
+    ):
+        costs = [
+            criteria.slash_bass_cost(v.midi_notes(), criteria.bass_pc)
+            for v in candidates
+        ]
         best = min(costs)
         if best <= SLASH_BASS_SATISFIED:
             candidates = [v for v, c in zip(candidates, costs) if c == best]
 
-    return best_voicing(
-        candidates,
-        previous,
-        fret_min,
-        fret_max,
-        allowed_tones=allowed_tones,
-        root_pc=root_pc,
-        melody_pc=melody_pc,
-    )
+    return best_voicing_for(candidates, criteria)

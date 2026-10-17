@@ -20,6 +20,7 @@ order down the strings: the A string is tuned five semitones above the D. See
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import lru_cache
 from typing import List, Optional, Tuple
 
@@ -863,15 +864,27 @@ def _shell_voicing(
     )
 
 
-def _search_comping_voicings(
-    chord_type: str,
-    chord_name: Optional[str] = None,
-    fret_min: int = NECK_FRET_MIN,
-    fret_max: int = NECK_FRET_MAX,
-    notes: int = 3,
-    bass_voice: bool = False,
-    shell_root: bool = False,
-) -> List[Voicing]:
+@dataclass(frozen=True)
+class CompingRequest:
+    """One melody-free comping shape request, as a value.
+
+    The seven fields are exactly what the enumeration reads - the chord, the neck
+    window, the arity and the two degree flags - so the memo key and the request
+    cannot drift apart. `frozen` also makes it hashable, which is what lets
+    `_comping_palette` cache on the request itself rather than a reconstructed
+    tuple.
+    """
+
+    chord_type: str
+    chord_name: Optional[str] = None
+    fret_min: int = NECK_FRET_MIN
+    fret_max: int = NECK_FRET_MAX
+    notes: int = 3
+    bass_voice: bool = False
+    shell_root: bool = False
+
+
+def _search_comping_voicings(request: CompingRequest) -> List[Voicing]:
     """
     Guide-tone comping shapes: the chord stated **without** the melody on top.
 
@@ -927,6 +940,13 @@ def _search_comping_voicings(
     outside the window is still generated and still playable, because losing a chord
     of the tune is worse than being a fret out of position.
     """
+    chord_type = request.chord_type
+    chord_name = request.chord_name
+    fret_min = request.fret_min
+    fret_max = request.fret_max
+    notes = request.notes
+    bass_voice = request.bass_voice
+    shell_root = request.shell_root
     canonical, root_pc, tones = chord_context(chord_type, chord_name)
     # No root, no claim to make: a guide tone is a claim about *this* chord's 3rd and
     # 7th, and guessing them without a root is how a wrong note gets in. The same
@@ -969,21 +989,14 @@ def _search_comping_voicings(
 
 
 @lru_cache(maxsize=None)
-def _comping_palette(
-    chord_type: str,
-    chord_name: Optional[str],
-    fret_min: int,
-    fret_max: int,
-    notes: int,
-    bass_voice: bool,
-    shell_root: bool,
-) -> Tuple[ShapeSnapshot, ...]:
+def _comping_palette(request: CompingRequest) -> Tuple[ShapeSnapshot, ...]:
     """
     `_search_comping_voicings` remembered: one request enumerated once, read back after.
 
-    The enumeration is a **pure function of the request**: the seven arguments above are
-    all it reads, and the rest - `GRIP_STRING_SETS`, `BASS_VOICE_STRING_SETS`,
-    `GRIP_MAX_SPAN`, `NECK_FRET_MIN`, `NECK_FRET_MAX`, `STANDARD_TUNING` and
+    The enumeration is a **pure function of the request**, and the request is exactly
+    what it reads: the chord, the neck window, the arity and the two degree flags. The
+    rest - `GRIP_STRING_SETS`, `BASS_VOICE_STRING_SETS`, `GRIP_MAX_SPAN`,
+    `NECK_FRET_MIN`, `NECK_FRET_MAX`, `STANDARD_TUNING` and
     `ChordParser.CHORD_TONES_FROM_ROOT` - is fixed when this module is imported. That is
     what makes the key sufficient and the memo need no invalidation, and it is why those
     tables must not be reassigned at runtime. Same argument, and the same snapshot, as
@@ -995,27 +1008,11 @@ def _comping_palette(
     """
     return tuple(
         snapshot(voicing)
-        for voicing in _search_comping_voicings(
-            chord_type,
-            chord_name,
-            fret_min,
-            fret_max,
-            notes,
-            bass_voice,
-            shell_root,
-        )
+        for voicing in _search_comping_voicings(request)
     )
 
 
-def get_comping_voicings(
-    chord_type: str,
-    chord_name: Optional[str] = None,
-    fret_min: int = NECK_FRET_MIN,
-    fret_max: int = NECK_FRET_MAX,
-    notes: int = 3,
-    bass_voice: bool = False,
-    shell_root: bool = False,
-) -> List[Voicing]:
+def get_comping_voicings_for(request: CompingRequest) -> List[Voicing]:
     """
     The comping shapes for one request, answered through the memo.
 
@@ -1031,16 +1028,33 @@ def get_comping_voicings(
     """
     return [
         voicing_from_snapshot(snapshot)
-        for snapshot in _comping_palette(
-            chord_type,
-            chord_name,
-            fret_min,
-            fret_max,
-            notes,
-            bass_voice,
-            shell_root,
-        )
+        for snapshot in _comping_palette(request)
     ]
+
+
+def get_comping_voicings(
+    chord_type: str,
+    chord_name: Optional[str] = None,
+    fret_min: int = NECK_FRET_MIN,
+    fret_max: int = NECK_FRET_MAX,
+    notes: int = 3,
+    bass_voice: bool = False,
+    shell_root: bool = False,
+) -> List[Voicing]:
+    """The primitive spelling of `get_comping_voicings_for`, kept for callers.
+
+    It builds the request the object entry point takes, so the two spellings cannot
+    enumerate different shapes.
+    """
+    return get_comping_voicings_for(CompingRequest(
+        chord_type=chord_type,
+        chord_name=chord_name,
+        fret_min=fret_min,
+        fret_max=fret_max,
+        notes=notes,
+        bass_voice=bass_voice,
+        shell_root=shell_root,
+    ))
 
 
 def get_grip_voicings(

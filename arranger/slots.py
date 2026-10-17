@@ -21,14 +21,13 @@ so it needs no entry in `ALLOWED_EDGES`.
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 from typing import Container, Dict, List, Optional, Sequence, Tuple
 
 from musthe import Note
 
 from .chords import bass_pitch_class, slash_bass, slash_bass_cost
-from .grid import GRID_DEFAULT
 from .options import ArrangeOptions
-from .parts import PARTS_AUTO
 from .steps import VoiceLeadingEngine
 from .texture import TEXTURE_STYLES
 from .tuning import NO_CHORD, ArrangementStep
@@ -143,15 +142,9 @@ def _next_chord_tone_melody(
 def arrange_slots(
     triples: Sequence[Tuple[Optional[str], str, str]],
     timings: Sequence[Tuple[Optional[int], Optional[float], Optional[float]]] = (),
-    non_chord_tone: str = "extension",
+    *,
+    options: Optional[ArrangeOptions] = None,
     fallback: Optional[str] = None,
-    texture: str = "uniform",
-    bass: str = "auto",
-    parts: str = PARTS_AUTO,
-    harmony: str = "auto",
-    grid: str = GRID_DEFAULT,
-    beats_per_bar: int = 4,
-    beat_type: int = 4,
     onsets: Optional[Container[int]] = None,
 ) -> Tuple[List[ArrangementStep], List[int], List[str]]:
     """Voices a list of (note, quality, name) triples, one step per slot.
@@ -189,27 +182,26 @@ def arrange_slots(
     it is off unless asked for; the count of steps it *would* rescue is always
     returned in the notes.
 
-    `texture` is the chord part's **arity policy**, applied by the engine's own
-    `metric_weight` and `roles_for_slot`, so every caller is textured identically: a
-    `targets` slot states the most notes the arithmetic allows on a strong beat and
-    a thinner shape between them, `chord1`/`chord2`/`chord3` state that many
-    everywhere, and `uniform` (the default) states the maximum everywhere.
-    `beats_per_bar` is the metre that rule reads, and a head in cut time must pass
-    its own - a count without a denominator is not a metre.
+    `options` is the engine request as one value: the five axes, the neck window,
+    the search strings and both halves of the metre. It is the same object
+    `arrange_progression` accepts, so this layer only fills in the three fields it
+    owns - the normalised timings, the slash-bass map and the melody onsets.
 
-    `beat_type` is the other half of that metre, and the two are not interchangeable:
-    `beats_per_bar` says **which** beats exist, `beat_type` says how long one lasts
-    (`4 / beat_type` quarters). One rule in the engine reads the second - the walking
-    bass, whose melody timeline converts a slot's whole-note `duration` to beats - so a
-    3/4 head passing only the count has every span a quarter short.
+    The metre is **both** `beats_per_bar` and `beat_type`, and the two are not
+    interchangeable: the count says which beats exist, the denominator says how long
+    one lasts (`4 / beat_type` quarters). One rule in the engine reads the second -
+    the walking bass, whose melody timeline converts a slot's whole-note `duration`
+    to beats - so a 3/4 head passing only the count has every span a quarter short.
 
     Returns the steps, the indexes of the steps the diminished retry actually
     substituted, and any notes worth printing. The `notes` are arrangement-level
     remarks the caller is expected to print itself.
     """
-    if texture not in TEXTURE_STYLES:
+    if options is None:
+        options = ArrangeOptions()
+    if options.texture not in TEXTURE_STYLES:
         raise ValueError(
-            f"Unknown texture {texture!r}; expected one of {TEXTURE_STYLES}"
+            f"Unknown texture {options.texture!r}; expected one of {TEXTURE_STYLES}"
         )
     if fallback not in (None, "diminished"):
         raise ValueError(f"Unknown fallback {fallback!r}; expected None or 'diminished'")
@@ -228,7 +220,7 @@ def arrange_slots(
     # walked route it does, so reordering this would move the walk's roles.
     # `tests/test_step_loop_equivalence.py` is the standing check that the two entry
     # points still agree.
-    unresolved = unresolved_steps(list(triples), non_chord_tone, onsets)
+    unresolved = unresolved_steps(list(triples), options.non_chord_tone, onsets)
     retry = set(unresolved) if fallback == "diminished" else set()
     rescued: List[int] = []
     working = list(triples)
@@ -261,15 +253,8 @@ def arrange_slots(
     options = _slot_options(
         triples=working,
         timings=timings,
-        non_chord_tone=non_chord_tone,
-        texture=texture,
-        bass=bass,
-        parts=parts,
-        harmony=harmony,
-        grid=grid,
-        beats_per_bar=beats_per_bar,
-        beat_type=beat_type,
-        melody_onsets=onsets,
+        onsets=onsets,
+        options=options,
     )
 
     steps = engine.arrange_progression(
@@ -280,15 +265,8 @@ def arrange_slots(
 def _slot_options(
     triples: Sequence[Tuple[Optional[str], str, str]],
     timings: Sequence[Tuple[Optional[int], Optional[float], Optional[float]]],
-    non_chord_tone: str,
-    texture: str,
-    beats_per_bar: int,
-    beat_type: int = 4,
-    bass: str = "auto",
-    parts: str = PARTS_AUTO,
-    harmony: str = "auto",
-    grid: str = GRID_DEFAULT,
-    melody_onsets: Optional[Container[int]] = None,
+    onsets: Optional[Container[int]],
+    options: ArrangeOptions,
 ) -> ArrangeOptions:
     """The request `arrange_slots` makes of the engine, as one value.
 
@@ -335,24 +313,19 @@ def _slot_options(
     # --- the slash bass, as data -------------------------------------------------
     bass_pcs: Dict[int, Optional[int]] = {}
     for index, (_melody, _quality, name) in enumerate(triples):
-        # Named `slash`, not `bass`: this function takes a `bass` **policy**
-        # parameter, and a loop local of that name would silently shadow it and pass a
-        # pitch class where the policy belongs.
+        # Named `slash`, not `bass`: the request's bass policy is a field of
+        # `options`, and a loop local of that name would read like the policy while
+        # holding a pitch class.
         slash = slash_bass(name)
         if slash is not None:
             bass_pcs[index] = bass_pitch_class(slash)
 
-    return ArrangeOptions(
-        non_chord_tone=non_chord_tone,
-        texture=texture,
-        bass=bass,
-        parts=parts,
-        harmony=harmony,
-        grid=grid,
-        beats_per_bar=beats_per_bar,
-        beat_type=beat_type,
+    # The three fields this layer computes are the whole of its pre-pass; every
+    # other knob is the caller's `ArrangeOptions`, carried through untouched.
+    return replace(
+        options,
         timings=typed_timings,
         bass_pcs=bass_pcs or None,
         slash_bass_cost=slash_bass_cost,
-        melody_onsets=melody_onsets,
+        melody_onsets=onsets,
     )

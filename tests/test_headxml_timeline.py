@@ -14,6 +14,7 @@ import tempfile
 import unittest
 
 from arranger import SILENCE_TUNE_SILENT, format_progression
+from arranger.options import ArrangeOptions
 from arranger.slots import arrange_slots
 from headxml import (
     Head,
@@ -856,7 +857,7 @@ class TestSilentSlotsCarryNoMelody(unittest.TestCase):
         steps, _rescued, _notes = arrange_slots(
             [(None, "m7", "Dm7"), ("C5", "maj7", "Cmaj7")],
             [(1, 1.0, 0.5), (1, 2.0, 0.5)],
-            parts="auto",
+            options=ArrangeOptions(parts="auto"),
         )
         self.assertEqual([s.chord for s in steps], ["Dm7", "Cmaj7"])
         self.assertIsNone(steps[0].melody)

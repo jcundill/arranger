@@ -13,13 +13,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Container, List, Optional, Tuple
 
-from musthe import Note
-
 from . import grips as _grips
 from .bass import Slot
 from .bass_merge import attach_bass, next_resolution_melody
 from .chords import ChordParser, resolve_substitute_harmony
 from .context import SlotContext
+from .cost import SelectionCriteria
 from .decisions import is_bass_only, select_step_voicing
 from .harmony import HARMONY_SHELL_ROOT
 from .melody_alone import melody_alone_shape, sounding_melody
@@ -59,14 +58,8 @@ def last_sounding_step(
 def rest_step(
     arrangements: List[ArrangementStep],
     slot: Slot,
+    context: SlotContext,
     *,
-    name: str,
-    note_str: Optional[str],
-    bar: Optional[int],
-    beat: Optional[float],
-    duration: Optional[float],
-    role: str,
-    weight: int,
     sings_here: bool,
     silence: str,
 ) -> None:
@@ -78,21 +71,24 @@ def rest_step(
     beat and the chord name: it is what keeps the melody's position in the tab
     staff, and a comping part whose bars collapsed to their stabs would not line
     up against the tune it is comping under.
+
+    The slot's own facts come from `context`, so a route cannot read a bar the
+    plan did not decide.
     """
     arrangements.append(ArrangementStep(
-        chord=name,
-        melody=note_str,
+        chord=context.name,
+        melody=context.note_str,
         voicing=Voicing(
             frets=[-1] * len(STANDARD_TUNING),
             top_fret=0,
             avg_fret=0.0,
             grip="rest",
         ),
-        bar=bar,
-        beat=beat,
-        duration=duration,
-        role=role,
-        metric_weight=weight,
+        bar=context.bar,
+        beat=context.beat,
+        duration=context.duration,
+        role=context.role,
+        metric_weight=context.weight,
         # A rest is a slot the guitar does **not** sing - which is `sings_here`,
         # False here by construction. The route-level `melody_voiced` would
         # claim the guitar sings a slot it just declined to play.
@@ -114,17 +110,10 @@ def rest_step(
 def texture_fill_step(
     arrangements: List[ArrangementStep],
     slot: Slot,
+    context: SlotContext,
     *,
-    name: str,
-    note_str: Optional[str],
-    melody_note: Optional[Note],
     top_strings: Tuple[int, ...],
     previous: Optional[Voicing],
-    bar: Optional[int],
-    beat: Optional[float],
-    duration: Optional[float],
-    role: str,
-    weight: int,
 ) -> bool:
     """Append the thin "fill" step for a slot the texture thins to a melody.
 
@@ -133,6 +122,11 @@ def texture_fill_step(
     route - an unreachable melody is genuinely unplayable, so inventing a shape
     for it would be worse than trying the full one.
     """
+    name = context.name
+    note_str = context.note_str
+    melody_note = context.melody_note
+    bar, beat, duration = context.bar, context.beat, context.duration
+    role, weight = context.role, context.weight
     # This kind is answered only when the guitar sings, and a singing slot
     # with no note was refused at the top of this loop - so a note is
     # pinned here, which is what lets the type say so below. The *name*
@@ -173,17 +167,10 @@ def texture_fill_step(
 def no_chord_step(
     arrangements: List[ArrangementStep],
     slot: Slot,
+    context: SlotContext,
     *,
-    name: str,
-    note_str: Optional[str],
-    melody_note: Optional[Note],
     top_strings: Tuple[int, ...],
     previous: Optional[Voicing],
-    bar: Optional[int],
-    beat: Optional[float],
-    duration: Optional[float],
-    role: str,
-    weight: int,
 ) -> None:
     """Append the melody-alone step for an `NC` bar: melody, but no harmony.
 
@@ -192,6 +179,11 @@ def no_chord_step(
     set here and *only* here; the texture case above reaches the same shape
     deliberately without it.
     """
+    name = context.name
+    note_str = context.note_str
+    melody_note = context.melody_note
+    bar, beat, duration = context.bar, context.beat, context.duration
+    role, weight = context.role, context.weight
     # As the texture branch above: this kind means the guitar sings, and
     # that guard already refused a singing slot with no note.
     assert melody_note is not None and note_str is not None
@@ -200,10 +192,7 @@ def no_chord_step(
     )
     if solo_voicing is None:
         rest_step(
-            arrangements, slot,
-            name=name, note_str=note_str,
-            bar=bar, beat=beat, duration=duration,
-            role=role, weight=weight,
+            arrangements, slot, context,
             sings_here=False, silence=SILENCE_OUT_OF_REACH,
         )
         return
@@ -341,15 +330,15 @@ def _comping_candidates(
     under them - the one degree family neither `notes` nor `bass_voice` can express.
     Derived from the resolved family for the same reason.
     """
-    return _grips.get_comping_voicings(
-        harmony.chord_type,
+    return _grips.get_comping_voicings_for(_grips.CompingRequest(
+        chord_type=harmony.chord_type,
         chord_name=harmony.name,
         fret_min=context.fret_min,
         fret_max=context.fret_max,
         notes=notes,
         bass_voice=bass_voice,
         shell_root=harmony_family == HARMONY_SHELL_ROOT,
-    )
+    ))
 
 
 def _comping_choice(
@@ -371,26 +360,30 @@ def _comping_choice(
     prev_sounding = last_sounding_step(arrangements)
     return select_step_voicing(
         candidates,
-        prev_sounding.voicing if prev_sounding is not None else None,
-        context.fret_min,
-        context.fret_max,
-        # The tones the written chord allows. Passed even though the generator already
-        # filters on them: `voicing_cost` counts wrong notes itself, and a generator
-        # that could be wrong should not be the only thing standing between a chord
-        # symbol and a note that is not in it.
-        ChordParser.get_chord_tones(harmony.chord_type, harmony.name),
-        # The root, which enables the bass-function tie-break. None for a chord whose
-        # name will not parse, which leaves that criterion unasked rather than guessing
-        # a bass - the same rule the ordinary route follows.
-        root_pc,
-        # No `melody_pc`: there is no melody on the guitar for the wrong-note count to
-        # excuse, which is what lets a comping shape be held to the chord's full tone
-        # set.
-        None,
-        # The corpus's slash bass, honoured before selection rather than after,
-        # exactly as on the ordinary route.
-        context.bass_pcs.get(context.index) if context.bass_pcs else None,
-        context.slash_bass_cost_for,
+        SelectionCriteria(
+            previous=prev_sounding.voicing if prev_sounding is not None else None,
+            fret_min=context.fret_min,
+            fret_max=context.fret_max,
+            # The tones the written chord allows. Passed even though the generator
+            # already filters on them: `voicing_cost` counts wrong notes itself, and a
+            # generator that could be wrong should not be the only thing standing
+            # between a chord symbol and a note that is not in it.
+            allowed_tones=ChordParser.get_chord_tones(harmony.chord_type, harmony.name),
+            # The root, which enables the bass-function tie-break. None for a chord
+            # whose name will not parse, which leaves that criterion unasked rather
+            # than guessing a bass - the same rule the ordinary route follows.
+            root_pc=root_pc,
+            # No `melody_pc`: there is no melody on the guitar for the wrong-note count
+            # to excuse, which is what lets a comping shape be held to the chord's full
+            # tone set.
+            melody_pc=None,
+            # The corpus's slash bass, honoured before selection rather than after,
+            # exactly as on the ordinary route.
+            bass_pc=(
+                context.bass_pcs.get(context.index) if context.bass_pcs else None
+            ),
+            slash_bass_cost=context.slash_bass_cost_for,
+        ),
     ) or candidates[0]
 
 
@@ -476,10 +469,7 @@ def comping_step(
     # is silent on this bar, and the horn is not - so the line says which.
     if chord_type == NO_CHORD or context.name == NO_CHORD:
         rest_step(
-            arrangements, slot,
-            name=context.name, note_str=context.note_str,
-            bar=context.bar, beat=context.beat, duration=context.duration,
-            role=context.role, weight=context.weight,
+            arrangements, slot, context,
             sings_here=False, silence=SILENCE_NC_COMPING,
         )
         return True
@@ -514,10 +504,7 @@ def comping_step(
             # the position emitted silent; the next grid position still gets its
             # chance.
             rest_step(
-                arrangements, slot,
-                name=context.name, note_str=context.note_str,
-                bar=context.bar, beat=context.beat, duration=context.duration,
-                role=context.role, weight=context.weight,
+                arrangements, slot, context,
                 sings_here=False, silence=SILENCE_NO_SHAPE,
             )
             return True

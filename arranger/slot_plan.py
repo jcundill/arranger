@@ -15,6 +15,7 @@ from musthe import Note
 
 from .bass import Slot
 from .chords import normalised_harmony
+from .context import SlotContext
 from .decisions import (
     MELODY_ALONE_REST,
     melody_alone_case,
@@ -54,19 +55,15 @@ class SlotPlan:
     Built by `slot_state`, which refuses a slot outright by returning None. The
     routes read this rather than recomputing anything, so the metric weight, the
     role, the texture grips and the melody-alone kind are each decided once.
+
+    `context` is the slot's route-facing request and `inputs` the arrangement it
+    belongs to; both are kept whole rather than unpacked, so a route cannot read a
+    bar, a role or a search window the plan did not decide.
     """
 
-    index: int
-    note_str: Optional[str]
-    chord_type: str
-    name: str
-    melody_note: Optional[Note]
+    context: SlotContext
+    inputs: SlotInputs
     sings_here: bool
-    bar: Optional[int]
-    beat: Optional[float]
-    duration: Optional[float]
-    weight: int
-    role: str
     slot_grips: Tuple[str, ...]
     melody_alone: str
     # Why a `MELODY_ALONE_REST` step sounds nothing, one of the SILENCE_* constants.
@@ -84,12 +81,14 @@ class SlotInputs:
     """
 
     progression: Sequence[Tuple[Optional[str], str, str]]
+    top_strings: Tuple[int, ...]
     texture: str
     parts: Tuple[str, ...]
     has_thumb: bool
     melody_only: bool
     melody_voiced: bool
     melody_onsets: Optional[Container[int]]
+    harmony_family: str
     grid_pattern: str
     beats_per_bar: int
     fret_min: int
@@ -97,6 +96,44 @@ class SlotInputs:
     non_chord_tone: str
     bass_pcs: Optional[Mapping[int, Optional[int]]]
     slash_bass_cost_for: Optional[Callable[[Sequence[int], Optional[int]], int]]
+
+
+def _slot_context(
+    inputs: SlotInputs,
+    slot: Slot,
+    triple: Tuple[Optional[str], str, str],
+    role: str,
+) -> SlotContext:
+    """The route-facing view of one slot, from the arrangement and the slot.
+
+    `SlotContext` sits at the bottom of the dependency order and cannot import
+    `SlotInputs`, so this is where the two are joined. The plan keeps both, which
+    is what lets the routes read one object rather than the same fields twice.
+
+    The weight is derived here from the slot and the metre, so the caller does not
+    pass a value the context can compute from the same facts.
+    """
+    note_str, chord_type, name = triple
+    return SlotContext(
+        progression=inputs.progression,
+        index=slot.index,
+        name=name,
+        chord_type=chord_type,
+        note_str=note_str,
+        melody_note=Note(note_str) if note_str is not None else None,
+        fret_min=inputs.fret_min,
+        fret_max=inputs.fret_max,
+        texture=inputs.texture,
+        has_thumb=inputs.has_thumb,
+        non_chord_tone=inputs.non_chord_tone,
+        bass_pcs=inputs.bass_pcs,
+        slash_bass_cost_for=inputs.slash_bass_cost_for,
+        bar=slot.bar,
+        beat=slot.beat,
+        duration=slot.duration,
+        role=role,
+        weight=metric_weight(slot.bar, slot.beat, inputs.beats_per_bar),
+    )
 
 
 def _tune_silent_plan(
@@ -118,7 +155,7 @@ def _tune_silent_plan(
     the grid union - positions the tune is silent at - and the guitar **comps** them
     rather than being refused, which is why those fall through in `slot_state`.
     """
-    bar, beat, duration = slot.bar, slot.beat, slot.duration
+    bar, beat = slot.bar, slot.beat
     weight = metric_weight(bar, beat, inputs.beats_per_bar)
     # The role the slot would have had, read without committing to `car`: a refused
     # slot must not move the target or the tracked pitch that a later slot is judged
@@ -135,17 +172,9 @@ def _tune_silent_plan(
         melody_only=inputs.melody_only,
     )[0]
     return SlotPlan(
-        index=slot.index,
-        note_str=None,
-        chord_type=chord_type,
-        name=name,
-        melody_note=None,
+        context=_slot_context(inputs, slot, (None, chord_type, name), role),
+        inputs=inputs,
         sings_here=False,
-        bar=bar,
-        beat=beat,
-        duration=duration,
-        weight=weight,
-        role=role,
         slot_grips=(),
         melody_alone=MELODY_ALONE_REST,
         silence=SILENCE_TUNE_SILENT,
@@ -273,7 +302,7 @@ def slot_state(
     # a principal note rather than a fill. The bar and beat are also stamped
     # onto the step, because a caller that supplied the rhythm wants to read it
     # back off the result rather than have to correlate two lists.
-    bar, beat, duration = slot.bar, slot.beat, slot.duration
+    bar, beat = slot.bar, slot.beat
     weight = metric_weight(bar, beat, inputs.beats_per_bar)
     role = _carried_role(car, weight, name, melody_note, inputs)
     slot_grips = _texture_grips(role, slot, inputs)
@@ -301,17 +330,11 @@ def slot_state(
         on_grid=on_grid(beat, inputs.grid_pattern, inputs.beats_per_bar),
     )
     return SlotPlan(
-        index=index,
-        note_str=note_str,
-        chord_type=chord_type,
-        name=name,
-        melody_note=melody_note,
+        context=_slot_context(
+            inputs, slot, (note_str, chord_type, name), role
+        ),
+        inputs=inputs,
         sings_here=sings_here,
-        bar=bar,
-        beat=beat,
-        duration=duration,
-        weight=weight,
-        role=role,
         slot_grips=slot_grips,
         melody_alone=melody_alone,
     )

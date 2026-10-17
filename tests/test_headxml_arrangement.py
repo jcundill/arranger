@@ -11,6 +11,7 @@ import unittest
 
 import arranger
 from arranger import NO_CHORD
+from arranger.options import ArrangeOptions
 from arranger.slots import arrange_slots
 from headxml import (
     Head,
@@ -436,6 +437,31 @@ class TestReductionAndArranging(unittest.TestCase):
         # it back at concert pitch, which is what makes these two lists equal.
         self.assertEqual([n.pitch for n in reloaded.notes],
                          [max(s.voicing.midi_notes()) for s in steps])
+
+
+class TestTheHeadRequestAsOneValue(unittest.TestCase):
+    """`options=` and the keyword spellings are two spellings of one request."""
+
+    def test_options_and_keywords_produce_the_same_arrangement(self):
+        """The object entry point must not be a second arrangement path."""
+        keywords = arrange_xml_head(BUT_NOT_FOR_ME, texture="chord1")[0]
+        as_object = arrange_xml_head(
+            BUT_NOT_FOR_ME,
+            options=ArrangeOptions(texture="chord1"),
+        )[0]
+        self.assertEqual(
+            [step.tab_line() for step in keywords],
+            [step.tab_line() for step in as_object],
+        )
+
+    def test_the_two_spellings_cannot_be_combined(self):
+        """A caller who passes both has a bug, and hears about it."""
+        with self.assertRaises(ValueError):
+            arrange_xml_head(
+                BUT_NOT_FOR_ME,
+                texture="chord1",
+                options=ArrangeOptions(texture="targets"),
+            )
 
 
 class TestTheMetreHasADenominator(unittest.TestCase):

@@ -11,7 +11,8 @@ here would make `cost` import `bass` and `bass` import `cost`.
 
 from __future__ import annotations
 
-from typing import Container, List, Optional, Sequence, Tuple
+from dataclasses import dataclass
+from typing import Callable, Container, List, Optional, Sequence, Tuple
 
 from .grips import BASS_DEGREES_6432
 from .tuning import NECK_FRET_MAX, NECK_FRET_MIN, GuitarFretboard, Voicing
@@ -181,6 +182,42 @@ def voicing_cost(
     )
 
 
+@dataclass(frozen=True)
+class SelectionCriteria:
+    """Everything a candidate is ranked against, except the candidate itself.
+
+    `voicing_cost` is the primitive function and keeps its seven-argument public
+    signature; this is the value the internal selector and the palette record pass
+    around so they cannot score the same slot against different arguments.
+
+    `previous` is here rather than beside `candidates` because it is part of the
+    ranking context, not a candidate: every shape in one palette is scored against
+    the same held shape. `bass_pc` and `slash_bass_cost` are the partition's half of
+    the rule and are read before `cost` is called.
+    """
+
+    previous: Optional[Voicing] = None
+    fret_min: int = NECK_FRET_MIN
+    fret_max: int = NECK_FRET_MAX
+    allowed_tones: Optional[Container[int]] = None
+    root_pc: Optional[int] = None
+    melody_pc: Optional[int] = None
+    bass_pc: Optional[int] = None
+    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]] = None
+
+    def cost(self, voicing: Voicing) -> Tuple[float, ...]:
+        """This shape's cost under exactly these criteria."""
+        return voicing_cost(
+            voicing,
+            self.previous,
+            self.fret_min,
+            self.fret_max,
+            allowed_tones=self.allowed_tones,
+            root_pc=self.root_pc,
+            melody_pc=self.melody_pc,
+        )
+
+
 #: The name of each way a shape can lose to another, so a caller holding two candidates
 #: can say *which* one separated them: `movement` records the index on the step and
 #: `render` reads the phrase from here, which is what keeps the labels from going stale.
@@ -267,6 +304,21 @@ def best_voicing(
             v, previous, fret_min, fret_max, allowed_tones, root_pc, melody_pc
         ),
     )
+
+
+def best_voicing_for(
+    candidates: List[Voicing],
+    criteria: SelectionCriteria,
+) -> Optional[Voicing]:
+    """The candidate `criteria` likes best, or None when there are no candidates.
+
+    The object form of `best_voicing`, for the selector and the palette record: a
+    tie still falls to the previous candidate, because this is the same stable `min`
+    over the same cost tuple.
+    """
+    if not candidates:
+        return None
+    return min(candidates, key=criteria.cost)
 
 
 def calculate_voice_leading_distance(voicing_a: Voicing | dict, voicing_b: Voicing | dict) -> float:

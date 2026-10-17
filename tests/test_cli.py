@@ -34,6 +34,7 @@ import arranger
 from arranger.cli import (
     HEAD_HELP,
     CommonHelp,
+    ScoreMeta,
     add_common_arguments,
     render_and_write,
 )
@@ -331,7 +332,9 @@ class TestTheSharedDispatch(unittest.TestCase):
         """No flag asked for a file, so none is written - and the exit code is 0."""
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
-            code = render_and_write(self.args(), self.steps(), title="T")
+            code = render_and_write(
+                self.args(), self.steps(), ScoreMeta(title="T")
+            )
         printed = buffer.getvalue()
         self.assertEqual(code, 0)
         self.assertIn("Dm7", printed)
@@ -359,7 +362,7 @@ class TestTheSharedDispatch(unittest.TestCase):
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
             code = render_and_write(
-                self.args(gp5="unused.gp5"), self.steps(), title="T"
+                self.args(gp5="unused.gp5"), self.steps(), ScoreMeta(title="T")
             )
         printed = buffer.getvalue()
         self.assertEqual(code, 1)
@@ -415,7 +418,9 @@ class TestTheSharedDispatch(unittest.TestCase):
             gp5="out.gp5",
         )
         with contextlib.redirect_stdout(io.StringIO()):
-            code = render_and_write(namespace, self.steps(), title="T", **metre)
+            code = render_and_write(
+                namespace, self.steps(), ScoreMeta(title="T", **metre)
+            )
         self.assertEqual(code, 0)
         return calls
 
@@ -520,8 +525,7 @@ class TestTheSharedDispatch(unittest.TestCase):
             render_and_write(
                 self.args(html=path),
                 self.steps(),
-                title="Blue Train",
-                subtitle="John Coltrane - Bb",
+                ScoreMeta(title="Blue Train", subtitle="John Coltrane - Bb"),
             )
         self.assertEqual(calls["subtitle"], "John Coltrane - Bb")
 

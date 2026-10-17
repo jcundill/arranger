@@ -23,9 +23,10 @@ from musthe import Note
 class SlotContext:
     """Everything one route needs to know about the slot it is deciding.
 
-    `name`, `note_str` and `melody_note` are what the caller asked for, not what a
-    non-chord-tone strategy decided: a route may report a substituted harmony, and
-    a context that carried the substitution would make the request unreadable.
+    `name`, `chord_type`, `note_str` and `melody_note` are what the caller asked
+    for, not what a non-chord-tone strategy decided: a route may report a
+    substituted harmony, and a context that carried the substitution would make the
+    request unreadable.
 
     `bar`, `beat` and `duration` are Optional because a caller may not have placed
     the slot; the routes report that rather than inventing a position.
@@ -34,6 +35,7 @@ class SlotContext:
     progression: Sequence[Tuple[Optional[str], str, str]]
     index: int
     name: str
+    chord_type: str
     note_str: Optional[str]
     melody_note: Optional[Note]
 

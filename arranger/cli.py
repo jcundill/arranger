@@ -45,6 +45,7 @@ if TYPE_CHECKING:  # pragma: no cover - the annotations are strings at runtime
 __all__ = [
     "HEAD_HELP",
     "CommonHelp",
+    "ScoreMeta",
     "add_common_arguments",
     "render_and_write",
 ]
@@ -82,6 +83,26 @@ class CommonHelp:
     mutes: str
     tab: str
     texture: str
+
+
+@dataclass(frozen=True)
+class ScoreMeta:
+    """The score-level facts every writer needs, as one value.
+
+    `None` for the metre and the key is the same "the caller did not state it"
+    convention the writers already use, so this object does not force a default
+    into a call that deliberately omitted one. `markers` are the head's repeat and
+    ending instructions; a hand-built arrangement passes none.
+    """
+
+    title: str
+    subtitle: str = ""
+    composer: str = ""
+    beats_per_bar: Optional[int] = None
+    beat_type: Optional[int] = None
+    fifths: Optional[int] = None
+    mode: str = ""
+    markers: Sequence[Any] = ()
 
 
 #: The `arranger head` wording. Says "of the notated bar" because three of the four
@@ -289,18 +310,16 @@ def _as_written(
 def render_and_write(
     args: argparse.Namespace,
     steps: List[ArrangementStep],
+    meta: ScoreMeta,
     *,
-    title: str,
-    subtitle: str = "",
     notes: Sequence[str] = (),
-    beats_per_bar: Optional[int] = None,
-    beat_type: Optional[int] = None,
-    fifths: Optional[int] = None,
-    mode: str = "",
-    markers: Sequence[Any] = (),
     written_bars: Optional[Mapping[int, int]] = None,
 ) -> int:
     """Print the arrangement and write whatever files `args` asked for.
+
+    `meta` is the score-level facts as one value: the title and credits, the
+    notated metre, the key and the head's repeat markers. `head` already holds them
+    together, and a hand-built arrangement names only the title it wants.
 
     Returns a process exit code: 0, or 1 if an optional renderer could not be
     imported. A missing extra is a usage problem rather than a crash, and it is
@@ -308,29 +327,21 @@ def render_and_write(
     has already produced the thing it came for, and losing that to a missing
     dependency would be worse than the missing file.
 
-    `beats_per_bar` and `beat_type` are the notated metre, and both fall back to
-    this writer's own default of 4 when `None`. `head` passes the score's own, and
-    passing the default and omitting the argument are indistinguishable at every
-    writer. The fallback is the only way anything reaches this function without a
-    metre, and it stays because every writer has that default anyway and a caller
-    that has no metre should land on it.
-
-    `fifths` / `mode` are the key signature, and follow the same convention: `None`
-    means 0, which is C major - a legal thing for a score to be in and what an
-    absent `<key>` already means in a MusicXML document. They reach the two
-    **file** writers only - `format_musicxml` writes `<key>` and `format_gp5` a
-    `KeySignature` - and deliberately not `format_tab_staff` or `write_tab_html`,
-    which show fret numbers rather than pitches and so have nothing for a signature
-    to say.
+    `meta.beats_per_bar` and `meta.beat_type` fall back to this writer's own
+    default of 4 when `None`. `meta.fifths` / `meta.mode` follow the same
+    convention: `None` means 0, which is C major and what an absent `<key>`
+    already means in a MusicXML document. The key reaches the two **file** writers
+    only - `format_musicxml` writes `<key>` and `format_gp5` a `KeySignature` - and
+    deliberately not `format_tab_staff` or `write_tab_html`, which show fret numbers
+    rather than pitches and so have nothing for a signature to say.
 
     `notes` goes only to the HTML page, the one renderer that shows them; the two
-    file writers have no notes list. `subtitle` defaults to `""`, which is also
-    `format_musicxml`'s and `format_gp5`'s own default, so `head` passing nothing
-    here is indistinguishable from passing an empty string.
+    file writers have no notes list.
 
-    `markers` are the head's repeat and ending instructions (`headxml.BarMarker`s), or
-    empty for none - every non-head caller, and a head with no repeat. Each reaches
-    every sign-drawing writer, which draws it as a `|:` / `:|` and a `1.` / `2.` bracket.
+    `meta.markers` are the head's repeat and ending instructions
+    (`headxml.BarMarker`s), or empty for none - every non-head caller, and a head
+    with no repeat. Each reaches every sign-drawing writer, which draws it as a
+    `|:` / `:|` and a `1.` / `2.` bracket.
 
     `written_bars` is `Head.written_bars` (absolute -> written), and it is what makes the
     written score come out written: the arrangement is the bars a player *plays*, so a
@@ -343,17 +354,19 @@ def render_and_write(
     from tabxml import write_musicxml
 
     # The score the sign-drawing renderers get: one pass of each written bar.
-    written_steps, written_markers = _as_written(steps, markers, written_bars)
+    written_steps, written_markers = _as_written(
+        steps, meta.markers, written_bars
+    )
 
     # A count without a denominator is not a metre, and `head` is the command that
     # has to say which. Four is the writer's own default, so a caller with no metre
     # lands in the same place rather than raising.
-    bars = 4 if beats_per_bar is None else beats_per_bar
-    beat = 4 if beat_type is None else beat_type
+    bars = 4 if meta.beats_per_bar is None else meta.beats_per_bar
+    beat = 4 if meta.beat_type is None else meta.beat_type
     # The key, on the same terms as the metre above: 0 is C major, which is what a
     # MusicXML document with no `<key>` already means, so passing nothing is not a
     # change.
-    key_fifths = 0 if fifths is None else fifths
+    key_fifths = 0 if meta.fifths is None else meta.fifths
 
     if args.tab == "staff":
         # The staff is the only renderer that uses the step timing, so it is the
@@ -379,8 +392,8 @@ def render_and_write(
         out_path = write_tab_html(
             written_steps,
             args.html,
-            title=title,
-            subtitle=subtitle,
+            title=meta.title,
+            subtitle=meta.subtitle,
             beats_per_bar=bars,
             beat_type=beat,
             measures_per_line=args.bars_per_line,
@@ -404,12 +417,13 @@ def render_and_write(
             out_path = writer(
                 written_steps,
                 target,
-                title=title,
-                subtitle=subtitle,
+                title=meta.title,
+                subtitle=meta.subtitle,
+                composer=meta.composer,
                 beats_per_bar=bars,
                 beat_type=beat,
                 fifths=key_fifths,
-                mode=mode,
+                mode=meta.mode,
                 markers=written_markers,
             )
         except ImportError as error:

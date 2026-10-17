@@ -140,7 +140,9 @@ from .grip_tables import (
 from .grips import (
     BASS_DEGREES_6432,
     DUO_DEGREES,
+    CompingRequest,
     get_comping_voicings,
+    get_comping_voicings_for,
 )
 from .harmony import (
     HARMONY_AUTO,
@@ -574,7 +576,9 @@ __all__ = [
     "format_musicxml",
     "format_tab_html",
     "format_tab_staff",
+    "CompingRequest",
     "get_comping_voicings",
+    "get_comping_voicings_for",
     "grid",
     "grip_place",
     "grip_tables",

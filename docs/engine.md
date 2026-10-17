@@ -277,6 +277,11 @@ you whether a change is an improvement or a different library.
     arrangement route reaches it: the axis that let a caller give one is deleted, so the
     family a step is voiced with is `GRIP_PREFERENCE`'s order and nothing else.
     `best_voicing` is its argmin and is stable, so the engine is deterministic.
+    The internal selector passes the same inputs as one `SelectionCriteria` value
+    (`previous`, the window, the allowed tones, the pitch classes and the slash-bass
+    ranking), so the selection and the palette record cannot be scored against
+    different arguments. `voicing_cost` keeps its primitive signature; the object is
+    the internal seam, not a second public cost rule.
   - **No element names a finger, and that is measured rather than omitted.** The right
     hand's own criterion was a candidate and it is settled: measured at every placement it
     changed **0** picks below `position` and **17** just after `span`, across 94 of 1,204
@@ -476,9 +481,12 @@ the snapshot. Three things make it safe rather than merely fast, and
   leaving the other checks green.
 
 The **comping palette is the same memo for the same reason**
-(`_search_comping_voicings`, `_comping_palette`, and `get_comping_voicings` rebuilding fresh
-`Voicing`s), because `decisions.select_step_voicing` hands one of the palette's own objects
-back and `_attach_bass` writes the thumb into it. It buys time only: the search is still
+(`_search_comping_voicings`, `_comping_palette`, and `get_comping_voicings_for` rebuilding
+fresh `Voicing`s), because `decisions.select_step_voicing` hands one of the palette's own
+objects back and `_attach_bass` writes the thumb into it. The memo key is the
+`CompingRequest` itself - the chord, window, arity and degree flags - so the seven values
+cannot be reconstructed in a different order at the next call. `get_comping_voicings` is
+the primitive spelling that builds the same request. It buys time only: the search is still
 exhaustive over the span window, so `frets_in_span`'s cost is the floor for a request
 nobody has asked before.
 

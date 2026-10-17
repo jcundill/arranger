@@ -101,7 +101,10 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/steps.py": Budget(1, 49, 15),
     "arranger/texture.py": Budget(11, 57, 6),
     "arranger/tuning.py": Budget(5, 28, 2),
-    "headxml.py": Budget(17, 125, 10),
+    # `arrange_xml_head` keeps the keyword spellings as an adapter beside
+    # `options=`; the object path is what the CLI and the tests use. The extra
+    # parameter is the compatibility spelling, not a new decision.
+    "headxml.py": Budget(17, 125, 11),
     "grip_chart.py": Budget(14, 84, 5),
     "tabgp.py": Budget(19, 151, 13),
     "tabscore.py": Budget(10, 98, 5),
