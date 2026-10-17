@@ -26,7 +26,7 @@ you whether a change is an improvement or a different library.
 - `GRIP_PREFERENCE = ("drop2", "closed", "drop3", "drop24", "drop2_6432", "shell", "duo")`
   — the grip families, in the order they are generated in. **One order with one job**: no
   criterion in `voicing_cost` names a family, so a candidate tie that runs off the end of
-  the cost tuple is broken by this order alone (see `_best_voicing` below). It is *not*
+  the cost tuple is broken by this order alone (see `best_voicing` below). It is *not*
   what decides how many notes a step sounds — that is criterion 2,
   `missing = 4 - len(active)` — so a shell never beats a four-note shape by sitting early
   here, and a family's place only orders shapes of the same arity against each other.
@@ -160,7 +160,7 @@ you whether a change is an improvement or a different library.
   A fifth names a loss the tab cannot show: the slash bass the partition could not reach
   (`the written bass D is not sounded - the lowest voice (G3) is 5 semitones from it`). The
   symbol asks for that note and no part of the tab answers, so the line does — read from the
-  chord symbol and the shape, through `slots._slash_bass` and `slots.slash_bass_cost`.
+  chord symbol and the shape, through `slots.slash_bass` and `slots.slash_bass_cost`.
 
   A sixth names the other loss the tab cannot show, and it is the rule's own price: a
   four-voice shape on a chord with more tones than voices *gives one up* — the root first,
@@ -276,7 +276,7 @@ you whether a change is an improvement or a different library.
     take a `grips=` preference list - that is how the order is written down - but no
     arrangement route reaches it: the axis that let a caller give one is deleted, so the
     family a step is voiced with is `GRIP_PREFERENCE`'s order and nothing else.
-    `_best_voicing` is its argmin and is stable, so the engine is deterministic.
+    `best_voicing` is its argmin and is stable, so the engine is deterministic.
   - **No element names a finger, and that is measured rather than omitted.** The right
     hand's own criterion was a candidate and it is settled: measured at every placement it
     changed **0** picks below `position` and **17** just after `span`, across 94 of 1,204
@@ -436,7 +436,7 @@ what `tests/test_generated_grips.py` asserts.
 The engine generates several grip families and then chooses between them, rather than
 generating one kind and voice-leading it. Generation and selection are deliberately
 separate: `get_grip_voicings` and `get_all_grip_voicings` are *pure* (no position
-filtering, no transposition) and `_best_voicing` does all the deciding. That split is
+filtering, no transposition) and `best_voicing` does all the deciding. That split is
 what stops the grip families and the octave-down rescue from having to know about each
 other, and it is asserted in `tests/test_grips.py`.
 

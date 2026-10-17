@@ -34,6 +34,7 @@ from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES, ArrangementStep
 
 __all__ = [
     "arrange_slots",
+    "slash_bass",
     "slash_bass_cost",
     "bass_pitch_class",
     "midi_to_note_name",
@@ -193,7 +194,7 @@ def bass_pitch_class(bass: Optional[str]) -> Optional[int]:
 _SLASH_BASS_RE = re.compile(r"^[^/]*/([A-Ga-g][#b]?)\s*$")
 
 
-def _slash_bass(symbol: str) -> Optional[str]:
+def slash_bass(symbol: str) -> Optional[str]:
     """The bass note a chord symbol asks for, or None when it asks for none.
 
     **This reads the one part of the symbol this call site needs.** The symbol is parsed
@@ -430,7 +431,7 @@ def _slot_options(
         # Named `slash`, not `bass`: this function takes a `bass` **policy**
         # parameter, and a loop local of that name would silently shadow it and pass a
         # pitch class where the policy belongs.
-        slash = _slash_bass(name)
+        slash = slash_bass(name)
         if slash is not None:
             bass_pcs[index] = bass_pitch_class(slash)
 

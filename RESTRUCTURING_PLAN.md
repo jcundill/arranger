@@ -86,15 +86,16 @@ Each route's guards local and testable in isolation (addresses trap 12).
 Five routes, `melody_alone_case` kinds, `SLASH_BASS_SATISFIED`,
 `_attach_bass` semantics, `Palette`/`inside_window` recording unchanged.
 
-## Phase 4 — Encapsulate module internals (fix private leakage)
+## Phase 4 — Encapsulate module internals (DONE, pending commit)
 
-- `cost._best_voicing`: promote to public `best_voicing` (justified edge
-  `decisions`→`cost`) or move the call into `cost`.
-- `render` imports `_slash_bass`/`bass_pitch_class`/`slash_bass_cost`
-  from `slots`: move helpers so `render` reads from step fields rather
-  than reaching into slot internals.
-- `decisions.select_step_voicing` calls `cost._best_voicing` — make edge
-  explicit/justified or route through a public cost selection function.
+- `cost._best_voicing` was the selector's private argmin, imported by `decisions`.
+  Renamed to **`cost.best_voicing`** (public); `decisions`, `movement` and
+  `steps` call the public name. `VoiceLeadingEngine._best_voicing` is kept as
+  the published spelling tests use, forwarding to `cost.best_voicing`.
+- `slots._slash_bass` was reached from `render`. Renamed to
+  **`slots.slash_bass`** and added to `slots.__all__`; `render` imports the
+  public name. The renderer's own `_slash_bass_clause` stays private.
+- Live docs and comments repointed.
 
 Selection rule (`voicing_cost` tuple order) unchanged.
 
@@ -121,5 +122,9 @@ versa, consistently. Verify no cycle introduced (`slots` is after
 
 - Phase 1: DONE (committed 903694b).
 - Phase 2: DONE (committed c6ed08a).
-- Phase 3: next.
-- Phases 4-6: not started.
+- Phase 3: PARTIAL — `bass_merge.py` extracted (committed cb86f65); the remaining
+  route handlers stay in `movement.py` because `_promoted_fill` calls
+  `prepare_step` and `_sounding_melody` is shared by every route, so a full
+  split needs a dependency break first.
+- Phase 4: DONE (pending commit).
+- Phases 5-6: not started.

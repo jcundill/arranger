@@ -2,7 +2,7 @@
 
 `voicing_cost` is the library's central invariant - a tuple compared lexicographically,
 not a weighted sum, with its order asserted positionally by
-`tests/test_grips.py::TestVoicingCost` - and `_best_voicing` is its argmin. **No
+`tests/test_grips.py::TestVoicingCost` - and `best_voicing` is its argmin. **No
 criterion names a grip family**: a tie that runs off the end of the tuple is broken by
 generation order, which is `grips.GRIP_PREFERENCE`. `bass_cost` deliberately lives in
 `bass` instead, next to the `BASS_ROLE_*` vocabulary it ranks over, because importing it
@@ -135,7 +135,7 @@ def voicing_cost(
     rather than a sound - and a four-note drop-2 never reaches a tie with a shell to
     begin with, because criterion 2 separates them on note count. The order families are
     offered in is `grips.GRIP_PREFERENCE`, and that is where an exact tie is broken: see
-    `_best_voicing`.
+    `best_voicing`.
     """
     active = voicing.active_frets()
     outside = sum(1 for fret in active if not fret_min <= fret <= fret_max)
@@ -216,7 +216,7 @@ def decisive_criterion(winner: Sequence[float], loser: Sequence[float]) -> Optio
 
     The first index at which two costs differ *is* the criterion that decided between
     them, because every element before it is equal. None means the two tied, in which
-    case no criterion can be named - `_best_voicing` broke it on generation order.
+    case no criterion can be named - `best_voicing` broke it on generation order.
 
     Asking this of a shape with **more** voices than the winner never returns the
     voice-count criterion, because a fuller shape cannot lose on how many voices it has.
@@ -230,7 +230,7 @@ def decisive_criterion(winner: Sequence[float], loser: Sequence[float]) -> Optio
     return None
 
 
-def _best_voicing(
+def best_voicing(
     candidates: List[Voicing],
     previous: Optional[Voicing] = None,
     fret_min: int = NECK_FRET_MIN,

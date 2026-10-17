@@ -1630,7 +1630,7 @@ class TestTheInvariant(unittest.TestCase):
         """
         "Select first, merge after" is the structural answer to coupling.
 
-        The upper shape of a walking step is the one `_best_voicing` chose from a
+        The upper shape of a walking step is the one `best_voicing` chose from a
         candidate list that never contained a thumb, so the cheapest way to assert the
         property is to show what that list is: exactly the palette the arity rule gave
         the slot - and not one candidate in it carries a bass note. The thumb is merged

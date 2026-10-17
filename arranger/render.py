@@ -33,7 +33,7 @@ from musthe import Note
 from .chords import ChordParser, melody_degree_name
 from .cost import SPAN_CRITERION, VOICING_COST_CRITERIA
 from .grips import _INTERVAL_NAMES
-from .slots import _slash_bass, bass_pitch_class, slash_bass_cost
+from .slots import bass_pitch_class, slash_bass, slash_bass_cost
 from .tuning import (
     _MUTED_CELL,
     _STAFF_CELL_WIDTH,
@@ -485,7 +485,7 @@ def _slash_bass_clause(step: ArrangementStep) -> str:
     the tab can say why - so the line says it, with the distance the selection settled for.
 
     Read from the step alone: the written bass comes out of the chord symbol
-    (`slots._slash_bass`, the one place that rule lives) and the distance is
+    (`slots.slash_bass`, the one place that rule lives) and the distance is
     `slash_bass_cost`'s own measure, the smallest interval from the written bass to the
     lowest sounding note.
 
@@ -493,14 +493,14 @@ def _slash_bass_clause(step: ArrangementStep) -> str:
     part that does not cover the written bass is worth knowing even where another
     instrument may be playing it.
     """
-    written = _slash_bass(step.chord)
+    written = slash_bass(step.chord)
     if written is None:
         return ""
     sounding = step.voicing.midi_notes()
     if not sounding:
         return ""
     wanted = bass_pitch_class(written)
-    assert wanted is not None  # `_slash_bass` returned a pitch name
+    assert wanted is not None  # `slash_bass` returned a pitch name
     if any(pitch % 12 == wanted for pitch in sounding):
         return ""
     distance = slash_bass_cost(sounding, wanted)

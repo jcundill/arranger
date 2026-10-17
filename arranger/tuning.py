@@ -155,7 +155,7 @@ class Voicing:
     # unaffected. A plain string rather than an enum, for the same reason `grip` is.
     role: str = ROLE_TARGET
     # A walking-bass thumb note merged into the fret vector, and the string carrying it.
-    # Set **only after** `_best_voicing` has chosen the upper shape, never as a
+    # Set **only after** `best_voicing` has chosen the upper shape, never as a
     # candidate: `voicing_cost`'s `missing = 4 - len(active)` counts the voices that
     # sound, and a merged fifth voice would corrupt it. Selecting first and merging
     # after is what keeps the bass out of the cost tuple by construction rather than by

@@ -2038,7 +2038,7 @@ class TestTheFamilyIsNotASpelling(unittest.TestCase):
 
         It is no longer a caller's preference list, but an exact tie between two
         candidates still goes to the family generated first - so the tuple is the
-        ranking and `cost._best_voicing` is its argmin.
+        ranking and `cost.best_voicing` is its argmin.
         """
         self.assertEqual(
             tuple(sorted(GRIP_PREFERENCE, key=GRIP_PREFERENCE.index)), GRIP_PREFERENCE

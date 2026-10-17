@@ -27,7 +27,7 @@ from __future__ import annotations
 from typing import Callable, Container, List, Optional, Sequence, Tuple
 
 from .chords import sounding_harmony
-from .cost import _best_voicing
+from .cost import best_voicing
 from .grips import GRIP_MAX_SPAN, GRIP_PREFERENCE, thumb_safe_grips
 from .tuning import NO_CHORD, ROLE_FILL, ROLE_TARGET, ArrangementStep, Voicing
 
@@ -469,7 +469,7 @@ def select_step_voicing(
         if best <= SLASH_BASS_SATISFIED:
             candidates = [v for v, c in zip(candidates, costs) if c == best]
 
-    return _best_voicing(
+    return best_voicing(
         candidates,
         previous,
         fret_min,

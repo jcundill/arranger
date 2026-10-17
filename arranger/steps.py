@@ -300,8 +300,8 @@ class VoiceLeadingEngine:
         root_pc: Optional[int] = None,
         melody_pc: Optional[int] = None,
     ) -> Optional[Voicing]:
-        """See `cost._best_voicing`."""
-        return _cost._best_voicing(
+        """See `cost.best_voicing`."""
+        return _cost.best_voicing(
             candidates, previous, fret_min, fret_max, allowed_tones, root_pc, melody_pc
         )
 

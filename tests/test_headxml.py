@@ -226,7 +226,7 @@ class TestChordParsing(unittest.TestCase):
         """The bass is returned separately, so the quality stays a bare '7'.
 
         Glued onto the quality it would be '7/F', which matches no table - the
-        same trap `arranger.slots._slash_bass` documents for a slash chord.
+        same trap `arranger.slots.slash_bass` documents for a slash chord.
         """
         self.assertEqual(self.parse(harmony("G", "major-ninth", bass="F#")), ("G", "maj9", "F#"))
         self.assertEqual(self.parse(harmony("D", "dominant", bass="C")), ("D", "7", "C"))

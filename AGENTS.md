@@ -629,7 +629,7 @@ Each of these cost real time, or nearly shipped a defect.
     first is a rest.
 13. **An invariant asserted on a voicing says nothing about a step the engine builds
     *after* the check.** The merge is deliberately after selection — "the bass is written
-    into the fret vector only once `_best_voicing` has returned, so it cannot enter the
+    into the fret vector only once `best_voicing` has returned, so it cannot enter the
     cost tuple by construction" — and every `supported_string_sets()` assertion in the
     suite is on a generated *voicing*. So a four-note target plus a thumb note was five
     strings, four fingers be damned, on **281 steps** of the committed heads under

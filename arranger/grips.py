@@ -39,7 +39,7 @@ from .tuning import (
 )
 
 # Grip families, in the order they are generated in - which is *also* the order an exact
-# tie is broken in: `cost._best_voicing` is a stable `min` and no criterion in
+# tie is broken in: `cost.best_voicing` is a stable `min` and no criterion in
 # `cost.voicing_cost` names a family, so of two candidates at the winning cost the one
 # generated first wins. This tuple is the default `grips=`, and with the family axis gone
 # nothing replaces it: the tuple *is* the order, which is what makes "most preferred first"
@@ -1900,7 +1900,7 @@ def get_grip_voicings(
 
     Candidate generation is *pure*. It does not filter by neck position, does not
     transpose, and does not know what came before - choosing among the results is
-    _best_voicing's job. Keeping that split is what stops the grip families and the
+    best_voicing's job. Keeping that split is what stops the grip families and the
     octave-down rescue from having to know about each other.
 
     Every candidate uses 2-4 strings belonging to one `supported_string_sets()` entry,

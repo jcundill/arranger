@@ -117,7 +117,7 @@ class StepPreparation:
     rather than re-deriving the voicing itself.
 
     That distinction is load-bearing: a caller that builds its own candidates and
-    calls `_best_voicing` directly silently skips the non-chord-tone strategies,
+    calls `best_voicing` directly silently skips the non-chord-tone strategies,
     the selector's tone-purity criterion (because `allowed_tones` defaults to None)
     and the octave-down rescue. `chord_type`
     and `chord_name` stay the *written* chord even when `harmonized_as` names a
@@ -343,7 +343,7 @@ def prepare_step(
     This is a whole step up to selection: the candidates across every allowed
     soprano string and grip family, the octave-down rescue, and the
     non-chord-tone strategies. `arrange_progression` selects with
-    `_best_voicing` straight afterwards, and the corpus loader selects the
+    `best_voicing` straight afterwards, and the corpus loader selects the
     same way after honouring a slash bass, so the two cannot drift.
 
     Returns None when the step has no voicing at all. `previous` is only read
@@ -833,7 +833,7 @@ def _melody_alone_shape(
         ]
     if not candidates:
         return None, False
-    chosen = _cost._best_voicing(candidates, previous)
+    chosen = _cost.best_voicing(candidates, previous)
     assert chosen is not None
     # The same pair `render._window_clause` measures a step against, so the phrase a
     # reader sees and the fact recorded here cannot disagree.
@@ -1844,7 +1844,7 @@ def _harmonised_step(
         bass_only=is_bass_only(slot.bass_only, role),
     ))
     # Select first, merge after: the bass is written into the fret vector only
-    # once `_best_voicing` has returned, so it cannot enter the cost tuple by
+    # once `best_voicing` has returned, so it cannot enter the cost tuple by
     # construction rather than by discipline.
     _attach_bass(arrangements[-1], slot.bass, arrangements)
 
