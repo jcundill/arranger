@@ -1318,19 +1318,156 @@ class _SlotPlan:
     silence: str = SILENCE_GRID
 
 
+@dataclass(frozen=True)
+class _SlotInputs:
+    """The arrangement-level facts every slot's plan is decided against.
+
+    Bound once by `arrange_progression` and passed to each stage of the plan, so a
+    stage takes the *slot* rather than ten words about the arrangement.
+    """
+
+    progression: Sequence[Tuple[Optional[str], str, str]]
+    texture: str
+    parts: Tuple[str, ...]
+    has_thumb: bool
+    melody_only: bool
+    melody_voiced: bool
+    melody_onsets: Optional[Container[int]]
+    grid_pattern: str
+    beats_per_bar: int
+
+
+def _tune_silent_plan(
+    car: _Carried,
+    slot: Slot,
+    chord_type: str,
+    name: str,
+    inputs: _SlotInputs,
+) -> _SlotPlan:
+    """The plan for a position a melody-only selection has nothing to play.
+
+    A melody-only selection plays the tune and nothing else, so a position with no
+    note has nothing for the guitar to play. The position is still **emitted**,
+    silent: the tab keeps its bar count and its line-up against the band, and
+    `tune_silent` is what the line says rather than the grid's own reason.
+
+    It is kept as the only *early* answer because §9.3 step D made the other case a
+    real one: a *singing* selection (soprano named) now receives note-less slots from
+    the grid union - positions the tune is silent at - and the guitar **comps** them
+    rather than being refused, which is why those fall through in `_slot_state`.
+    """
+    bar, beat, duration = slot.bar, slot.beat, slot.duration
+    weight = metric_weight(bar, beat, inputs.beats_per_bar)
+    # The role the slot would have had, read without committing to `car`: a refused
+    # slot must not move the target or the tracked pitch that a later slot is judged
+    # against, so the two `car` writes stay in `_carried_role`.
+    role = roles_for_slot(
+        weight,
+        inputs.texture,
+        harmony_changed=(
+            car.last_target_harmony is None
+            or normalised_harmony(name) != car.last_target_harmony
+        ),
+        melody_moves=False,
+        has_thumb=inputs.has_thumb,
+        melody_only=inputs.melody_only,
+    )[0]
+    return _SlotPlan(
+        index=slot.index,
+        note_str=None,
+        chord_type=chord_type,
+        name=name,
+        melody_note=None,
+        sings_here=False,
+        bar=bar,
+        beat=beat,
+        duration=duration,
+        weight=weight,
+        role=role,
+        slot_grips=(),
+        melody_alone=MELODY_ALONE_REST,
+        silence=SILENCE_TUNE_SILENT,
+    )
+
+
+def _carried_role(
+    car: _Carried,
+    weight: int,
+    name: str,
+    melody_note: Optional[Note],
+    inputs: _SlotInputs,
+) -> str:
+    """This slot's metric role, updating the state the next slot is judged against.
+
+    `roles_for_slot` re-validates the texture, which is harmless: the table was
+    already checked before the loop, so this cannot raise here.
+
+    Under `targets` a strong beat is only a target when something new happens on it:
+    a different harmony from the last target's (the off-beat change rule), or the
+    melody actually moving onto it (decision F, which is what lets the second bar of
+    a two-bar chord restate its shell when the player re-articulates the line there
+    and stay thin when they do not).
+
+    A silent slot moves nothing onto the beat: `melody_moves` is False, and the
+    tracked pitch clears to None so the next onset reads as the melody arriving
+    there - a fresh attack after silence counts as movement, which is what the
+    placeholder's C4 accidentally produced for the slot *after* a rest, minus its
+    false claim about the silent slot itself.
+    """
+    harmony_key = normalised_harmony(name)
+    melody_moves = (
+        melody_note is not None
+        and (car.previous_melody_midi is None
+             or melody_note.midi_note() != car.previous_melody_midi)
+    )
+    role = roles_for_slot(
+        weight,
+        inputs.texture,
+        harmony_changed=(car.last_target_harmony is None
+                         or harmony_key != car.last_target_harmony),
+        melody_moves=melody_moves,
+        has_thumb=inputs.has_thumb,
+        melody_only=inputs.melody_only,
+    )[0]
+    if role == ROLE_TARGET:
+        car.last_target_harmony = harmony_key
+    car.previous_melody_midi = (
+        melody_note.midi_note() if melody_note is not None else None
+    )
+    return role
+
+
+def _texture_grips(role: str, slot: Slot, inputs: _SlotInputs) -> Tuple[str, ...]:
+    """Which grips the texture makes *available* on this step.
+
+    It is not a term in the cost, so a fill cannot be outbid for being in position -
+    the point is that fewer notes are played here, not that this shape is better.
+    The narrowing rule itself, and why the default is not an intersection, are
+    documented once in `decisions.resolve_texture_grips`.
+
+    A melody-only selection never asks: the left hand plays nothing on every slot,
+    whatever the texture's palettes say, so the loop hands an empty palette straight
+    through. Skipping the resolution is what makes `texture=` silently inert here
+    rather than noisily so.
+    """
+    if inputs.melody_only:
+        return ()
+    return resolve_texture_grips(
+        role,
+        texture_palette(role, inputs.texture, inputs.parts, inputs.has_thumb),
+        # The right hand's budget, and a fact about *this slot* rather than about
+        # the arrangement: a target may sound three strings only where a bass note
+        # is actually being placed under it, which is what `slot.bass` says.
+        # `has_thumb` alone would thin chords the thumb never plays under -
+        # `--bass-style root` leaves most slots bare.
+        has_thumb=inputs.has_thumb and slot.bass is not None,
+    )
+
+
 def _slot_state(
     car: _Carried,
     slot: Slot,
-    *,
-    progression: Sequence[Tuple[Optional[str], str, str]],
-    texture: str,
-    parts: Tuple[str, ...],
-    has_thumb: bool,
-    melody_only: bool,
-    melody_voiced: bool,
-    melody_onsets: Optional[Container[int]],
-    grid_pattern: str,
-    beats_per_bar: int,
+    inputs: _SlotInputs,
 ) -> Optional[_SlotPlan]:
     """One slot's decisions, and the one refusal that ends a slot here.
 
@@ -1341,54 +1478,10 @@ def _slot_state(
     updated in place.
     """
     index = slot.index
-    note_str, chord_type, name = progression[index]
+    note_str, chord_type, name = inputs.progression[index]
     if note_str is None:
-        if melody_only:
-            # A melody-only selection plays the tune and nothing else, so a
-            # position with no note has nothing for the guitar to play. The
-            # position is still **emitted**, silent: the tab keeps its bar
-            # count and its line-up against the band, and `tune_silent` is
-            # what the line says rather than the grid's own reason.
-            #
-            # It is kept as the only *early* answer here because §9.3 step D
-            # made the other case a real one: a *singing* selection (soprano
-            # named) now receives note-less slots from the grid union - positions
-            # the tune is silent at - and the guitar **comps** them rather than
-            # being refused, which is why they fall through to the comping
-            # branch below.
-            bar, beat, duration = slot.bar, slot.beat, slot.duration
-            weight = metric_weight(bar, beat, beats_per_bar)
-            # The role the slot would have had, read without committing to
-            # `car`: a refused slot must not move the target or the tracked
-            # pitch that a later slot is judged against, so the two `car`
-            # writes further down stay where they are.
-            role = roles_for_slot(
-                weight,
-                texture,
-                harmony_changed=(
-                    car.last_target_harmony is None
-                    or normalised_harmony(name) != car.last_target_harmony
-                ),
-                melody_moves=False,
-                has_thumb=has_thumb,
-                melody_only=melody_only,
-            )[0]
-            return _SlotPlan(
-                index=index,
-                note_str=note_str,
-                chord_type=chord_type,
-                name=name,
-                melody_note=None,
-                sings_here=False,
-                bar=bar,
-                beat=beat,
-                duration=duration,
-                weight=weight,
-                role=role,
-                slot_grips=(),
-                melody_alone=MELODY_ALONE_REST,
-                silence=SILENCE_TUNE_SILENT,
-            )
+        if inputs.melody_only:
+            return _tune_silent_plan(car, slot, chord_type, name, inputs)
         melody_note = None
     else:
         melody_note = Note(note_str)
@@ -1407,9 +1500,9 @@ def _slot_state(
     # every slot is an onset, the honest default for a hand-built progression
     # with no timeline, which keeps a bare `arrange_progression` unchanged.
     sings_here = (
-        melody_voiced
+        inputs.melody_voiced
         and melody_note is not None
-        and (melody_onsets is None or index in melody_onsets)
+        and (inputs.melody_onsets is None or index in inputs.melody_onsets)
     )
 
     # Where this slot falls in the bar, and therefore what it is for. Read
@@ -1419,64 +1512,9 @@ def _slot_state(
     # onto the step, because a caller that supplied the rhythm wants to read it
     # back off the result rather than have to correlate two lists.
     bar, beat, duration = slot.bar, slot.beat, slot.duration
-    weight = metric_weight(bar, beat, beats_per_bar)
-    # roles_for_slot re-validates the texture, which is harmless: the table was
-    # already checked before the loop, so this cannot raise here.
-    #
-    # Under `targets` a strong beat is only a target when something new
-    # happens on it: a different harmony from the last target's (the off-beat
-    # change rule), or the melody actually moving onto it (decision F, which is
-    # what lets the second bar of a two-bar chord restate its shell when the
-    # player re-articulates the line there and stay thin when they do not).
-    harmony_key = normalised_harmony(name)
-    # A silent slot moves nothing onto the beat: `melody_moves` is False, and
-    # the tracked pitch clears to None so the next onset reads as the melody
-    # arriving there - a fresh attack after silence counts as movement, which
-    # is what the placeholder's C4 accidentally produced for the slot *after*
-    # a rest, minus its false claim about the silent slot itself.
-    melody_moves = (
-        melody_note is not None
-        and (car.previous_melody_midi is None
-             or melody_note.midi_note() != car.previous_melody_midi)
-    )
-    role = roles_for_slot(
-        weight,
-        texture,
-        harmony_changed=(car.last_target_harmony is None
-                         or harmony_key != car.last_target_harmony),
-        melody_moves=melody_moves,
-        has_thumb=has_thumb,
-        melody_only=melody_only,
-    )[0]
-    if role == ROLE_TARGET:
-        car.last_target_harmony = harmony_key
-    car.previous_melody_midi = (
-        melody_note.midi_note() if melody_note is not None else None
-    )
-    # The texture decides which grips are *available* on this step. It is not a
-    # term in the cost, so a fill cannot be outbid for being in position - the
-    # point is that fewer notes are played here, not that this shape is better.
-    # The narrowing rule itself, and why the default is not an intersection,
-    # are documented once in decisions.resolve_texture_grips.
-    #
-    # A melody-only selection never asks: the left hand plays nothing on
-    # every slot, whatever the texture's palettes say, so the loop hands an
-    # empty palette straight through. Skipping the resolution is what
-    # makes `texture=` silently inert here rather than noisily so.
-    slot_grips = (
-        ()
-        if melody_only
-        else resolve_texture_grips(
-            role,
-            texture_palette(role, texture, parts, has_thumb),
-            # The right hand's budget, and a fact about *this slot* rather than
-            # about the arrangement: a target may sound three strings only where
-            # a bass note is actually being placed under it, which is what
-            # `slot.bass` says. `has_thumb` alone would thin chords the thumb
-            # never plays under - `--bass-style root` leaves most slots bare.
-            has_thumb=has_thumb and slot.bass is not None,
-        )
-    )
+    weight = metric_weight(bar, beat, inputs.beats_per_bar)
+    role = _carried_role(car, weight, name, melody_note, inputs)
+    slot_grips = _texture_grips(role, slot, inputs)
 
     # A slot that is played as a single note rather than looked up. Which
     # slots those are, and why each is a branch rather than a missing case,
@@ -1496,9 +1534,9 @@ def _slot_state(
     # off-grid note-less slot rests rather than asserting a melody it has not
     # got. §9.3 step D.
     melody_alone = melody_alone_case(
-        texture, role, slot_grips, chord_type, name, has_thumb,
+        inputs.texture, role, slot_grips, chord_type, name, inputs.has_thumb,
         melody_voiced=sings_here,
-        on_grid=on_grid(beat, grid_pattern, beats_per_bar),
+        on_grid=on_grid(beat, inputs.grid_pattern, inputs.beats_per_bar),
     )
     return _SlotPlan(
         index=index,
@@ -1765,19 +1803,19 @@ def arrange_progression(
         ]
     )
 
+    slot_inputs = _SlotInputs(
+        progression=progression,
+        texture=texture,
+        parts=chosen_parts,
+        has_thumb=has_thumb,
+        melody_only=melody_only,
+        melody_voiced=melody_voiced,
+        melody_onsets=melody_onsets,
+        grid_pattern=grid_pattern,
+        beats_per_bar=beats_per_bar,
+    )
     for slot in loop:
-        plan = _slot_state(
-            carried, slot,
-            progression=progression,
-            texture=texture,
-            parts=chosen_parts,
-            has_thumb=has_thumb,
-            melody_only=melody_only,
-            melody_voiced=melody_voiced,
-            melody_onsets=melody_onsets,
-            grid_pattern=grid_pattern,
-            beats_per_bar=beats_per_bar,
-        )
+        plan = _slot_state(carried, slot, slot_inputs)
         if plan is None:
             continue
 

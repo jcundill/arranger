@@ -181,7 +181,7 @@ byte-identical, `make chart-audit` clean.
 ## Phase 9 — Decompose the high-complexity functions (in progress)
 
 Extract-method only, with the suite and a byte-identical `make demo` as the
-oracle. Five commits landed; `bass.py` fell from **31/202 to 16/82**,
+oracle. Six commits landed; `bass.py` fell from **31/202 to 16/82**,
 `movement.py` from **23/360 to 17/340** and `routes.py` from **13/229 to 6/97**.
 
 - `_walking_bass_line` (202) → `_located_onsets`, `_anchor_only_line`,
@@ -206,10 +206,15 @@ oracle. Five commits landed; `bass.py` fell from **31/202 to 16/82**,
   and the two derived flags), `_comping_choice` and `_emit_comping_step`:
   **229 → 97 lines, CC 13 → 6**. The `if`/`else` that fell through to the melody
   route is now an early `return False`, so the handled case reads linearly.
+- `_slot_state` (197 lines, CC 14, 11 parameters) → `_SlotInputs` (the nine
+  arrangement-level words, bound once by the loop), `_tune_silent_plan`,
+  `_carried_role` and `_texture_grips`: **197 → 89 lines, CC 14 → 6, three
+  parameters.** The module ceiling did not move, because it is a max: complexity
+  is `prepare_step` and length `arrange_progression`.
 
 Remaining, in this order:
 
-- `_slot_state` (197), `prepare_step` (131), `arrange_progression` (340).
+- `prepare_step` (131, CC 17), `arrange_progression` (340).
 - `tabstaff.format_tab_staff` (396), `format_tab_html`.
 - `headxml._read_notes` (239), `_expand_repeats`, `_expand_play_order`;
   `tabxml.score_events`/`_build_part`; `tabgp._build_song`.
@@ -303,7 +308,7 @@ Round 2:
 - Phase 7: DONE (two commits).
 - Phase 8: DONE (five commits). 1107 tests OK (skipped=2), ruff 0, pyright 0/0,
   `make demo` byte-identical, `make chart-audit` clean.
-- Phase 9: IN PROGRESS — 9.1–9.4 landed (five commits); 9.5+ next.
+- Phase 9: IN PROGRESS — 9.1–9.5 landed (six commits); 9.6+ next.
 - Phase 10: DONE (moved before 9.3). 1107 tests OK, ruff 0, pyright 0/0,
   demo byte-identical.
 - Phases 11-15: planned, in the order above.
