@@ -40,6 +40,60 @@ DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 #: several that need this fixture, not its owner.
 BUT_NOT_FOR_ME = os.path.join(DATA, "but_not_for_me.mxl")
 
+# The library's own demonstration cadences. These are the progressions whose tab is
+# already asserted elsewhere in the suite, so they double as the fixture here: if the
+# metric layer ever leaked into the default path, these strings would move.
+MINOR_CADENCE = [
+    ("D5", "m7", "Dm7"),
+    ("C5", "maj7", "Cmaj7"),
+    ("B4", "7", "G7"),
+    ("C5", "maj7", "Cmaj7"),
+]
+
+MAJOR_CADENCE = [
+    ("D5", "m7", "Dm7"),
+    ("C#5", "7", "A7"),
+    ("C#5", "m7", "A-7"),
+    ("D5", "mMaj7", "Dm(maj7)"),
+]
+
+def minor_cadence_tabs():
+    """
+    The published fingerings for MINOR_CADENCE, as the library produces them now.
+
+    Defined here as a function rather than a literal in each test, because two files
+    assert this tab and a second copy of the literals is a second thing to forget when
+    a change is deliberate. Callers compare against it rather than typing it.
+
+    The G7 is a drop-3 on strings 5-3-2-1 (`x-8-x-7-8-7`) where it was a drop-2 at
+    `x-x-5-7-6-7` - the same G7, span 1 against span 2. See
+    `test_the_demo_cadences_still_produce_the_same_tab`, which pins both cadences and
+    says why each shape moved.
+    """
+    return [
+        "x-x-10-10-10-10", "x-x-9-9-8-8", "x-8-x-7-8-7", "x-x-9-9-8-8",
+    ]
+
+
+def major_cadence_tabs():
+    """
+    The published fingerings for MAJOR_CADENCE. See `minor_cadence_tabs`.
+
+    The A-7 is `x-x-x-x-x-9` - the melody alone, its chord dropped - where it was a
+    complete four-note drop-2 & 4 at `x-10-10-x-10-9`. That shape came from one of the
+    four inner-skip `drop24` sets, removed because a finger had to reach over the
+    unplucked G to fret it (`docs/history/fingering.md` §4.4), and C#5 over an Am7 is a non-chord
+    tone, so the set that could harmonise it was doing the *fallback* work as well: the
+    only candidate left needs five frets (`x-10-x-5-10-9`), the four-fret budget refuses
+    it, and the step keeps the tune and loses the chord, with a diagnostic naming the
+    cause. It is the ban's one audible cost in the demos, and it is pinned rather than
+    re-pinned away - if that chord is judged worth more than the ban, the alternative is
+    to keep the sets and let the *selector* rank them last (measured in §4.4).
+    """
+    return [
+        "x-x-10-10-10-10", "x-10-x-9-10-9", "x-x-x-x-x-9", "x-x-11-10-10-10",
+    ]
+
 #: The 119 hand-written drop-2 templates, keyed by the degree their top voice states.
 #: This is `grips.DROP2_INTERVAL_SETS` moved out of the engine, where it was paired
 #: positionally with `grips.DEGREE_OFFSETS_FROM_ROOT`: it is a *witness*, so it belongs

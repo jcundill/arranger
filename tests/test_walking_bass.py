@@ -79,10 +79,14 @@ from tabgp import _sounding_frets
 from tabstaff import _strikes_here
 from tests.support import (
     BUT_NOT_FOR_ME,
+    MAJOR_CADENCE,
+    MINOR_CADENCE,
     arranged,
     bass_string,
+    major_cadence_tabs,
     make_step,
     make_voicing,
+    minor_cadence_tabs,
     nearest_reach_for_note,
     pc,
     sweep_head_paths,
@@ -1812,13 +1816,6 @@ class TestNoRegression(unittest.TestCase):
         now goes through `Slot`, the union and the walking-bass role rule, and the
         guarantee is that none of that is visible unless the texture asks for it.
         """
-        from tests.test_texture import (
-            MAJOR_CADENCE,
-            MINOR_CADENCE,
-            major_cadence_tabs,
-            minor_cadence_tabs,
-        )
-
         # Imported, not re-typed. The docstring above says the point is that these tabs
         # are defined once; a second copy of the literals is a second thing to forget
         # to update, and it is how a stale pin survives a deliberate change.
@@ -2042,7 +2039,6 @@ class TestWalkingBassRendering(unittest.TestCase):
         `voicing.bass_string`, so a step carrying none must render exactly as before -
         which is what keeps `uniform` and `targets` byte-identical.
         """
-        from tests.test_texture import MINOR_CADENCE
 
         steps = VoiceLeadingEngine.arrange_progression(MINOR_CADENCE)
         rendered = format_progression(steps)
