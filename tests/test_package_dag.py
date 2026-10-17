@@ -56,6 +56,7 @@ ORDER = [
     "decisions",    # the decisions both step loops share
     "melody_alone", # where a lone note is fretted: the tune alone, with or without harmony
     "routes",       # the route handlers: rest, fill, NC and the comping route
+    "slot_plan",    # one slot's plan: `slot_state` and the value it returns
     "movement",     # the step loop: one progression in, one arrangement out
     "steps",        # the engine's published facade - delegates, incl. to `movement`
     "slots",        # the slot layer: triples to steps, the one pre-pass over them

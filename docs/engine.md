@@ -365,10 +365,11 @@ concrete value on every axis. Both run before any slot is looked at,
 because the band does not change halfway through a tune and a spelling nobody recognises
 has to be reported **once** rather than never.
 
-**Once per slot**, `_slot_state` returns a `_SlotPlan` - the note, whether the guitar
+**Once per slot**, `slot_state` returns a `SlotPlan` - the note, whether the guitar
 *sings* this slot, the metric weight, the role, the permitted grips, the melody-alone
 kind and, for a silent plan, *why* it is silent (`silence`, one of the `SILENCE_*`
-constants). It no longer refuses a slot outright: a melody-only selection at a position
+constants). That decision, and the `Carried` / `SlotInputs` values it reads, live in
+**`slot_plan.py`**; `movement.py` only walks the plans it returns. It no longer refuses a slot outright: a melody-only selection at a position
 with no note gets a silent plan (`MELODY_ALONE_REST` + `tune_silent`) rather than `None`,
 so the tab keeps the bar. The plan then goes to **one** of five routes:
 

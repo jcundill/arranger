@@ -66,6 +66,7 @@ from . import (
     parts,
     resolution,
     routes,
+    slot_plan,
     slots,
     texture,
 )
@@ -586,6 +587,7 @@ __all__ = [
     "render",
     "resolution",
     "routes",
+    "slot_plan",
     "slots",
     "sounding_harmony",
     "steps",

@@ -24,7 +24,7 @@ gate and the conventions — not the explanation.
 | the trailing annotation a step carries, why a shape is thin, or what **must** be explained when a choice is added (`ArrangementStep.palette`, `cost.VOICING_COST_CRITERIA`, `tests/test_explanations.py`) | [docs/engine.md](docs/engine.md) | `arranger/render.py`, `arranger/movement.py` |
 | `texture=`, target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/texture.py`, `arranger/routes.py`, `arranger/bass_rules.py`, `arranger/bass.py`, `arranger/decisions.py` |
 | non-chord melody notes, a new chord quality | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` |
-| the step loop, `arrange_progression` | [docs/engine.md](docs/engine.md) | `arranger/movement.py`, `arranger/resolution.py` |
+| the step loop, `arrange_progression` | [docs/engine.md](docs/engine.md) | `arranger/movement.py`, `arranger/resolution.py`, `arranger/slot_plan.py` |
 | tab staff, HTML, MusicXML, GP5, or the MusicXML importer | [docs/renderers.md](docs/renderers.md) | `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py` |
 | an imported head's **repeats or volta endings** — why it is longer than the file's measure count, or the `|:` / `:|` / `1.` / `2.` the writers draw | [docs/renderers.md](docs/renderers.md) | `headxml.py` (`_parse_barline`, `_expand_play_order`, `_expand_repeats`, `BarMarker`, `Head.markers`, `HeadNote.written_bar`); each writer's `markers=` parameter |
 | the slot layer: triples to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
@@ -146,6 +146,7 @@ arranger/
 │   ├── decisions.py     #   decisions both step loops share
 │   ├── melody_alone.py  #   where a lone note is fretted: the tune alone, chord or not
 │   ├── routes.py        #   the route handlers: rest, fill, NC and the comping route
+│   ├── slot_plan.py     #   one slot's plan: `slot_state` and the value it returns
 │   ├── movement.py      #   the step loop: arrange_progression, prepare_step
 │   ├── steps.py         #   VoiceLeadingEngine - the published facade
 │   ├── slots.py         #   the slot layer: triples to steps, the one pre-pass
@@ -182,7 +183,7 @@ tuning -> fingers -> chords -> grip_tables -> grip_place -> grips -> cost -> par
                              -> grid -> texture -> bass_rules -> bass -> bass_merge
                              -> options -> resolution
                                                                     |
-                       melody_alone -> routes -> movement -> steps -> slots -> render -> cli
+                       melody_alone -> routes -> slot_plan -> movement -> steps -> slots -> render -> cli
                                                                     |              |
                                                                   (facade) <-------+
 ```

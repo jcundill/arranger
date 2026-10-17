@@ -271,8 +271,23 @@ class TestTheDecisionsAreActuallyShared(unittest.TestCase):
         whose step loop had been deleted outright. `arranger.steps` was the loop's
         home until the loop moved to `movement`; `steps` is a facade now too, so
         this is re-pointed a second time rather than dropped.
+
+        It is re-pointed a third time here, to the **set** of modules the engine is
+        made of. The per-slot plan was extracted to `slot_plan` and the axis
+        resolvers to `resolution`, so two decisions the loop calls are now one
+        module away from the loop itself. Reading `movement` alone would have
+        asserted that those two are *not* called - the opposite of what this test
+        exists to protect - and dropping them from `DECISIONS` would have retired
+        the check for the busiest decision in the engine.
         """
-        engine = source_of("arranger.movement")
+        engine = " ".join(
+            source_of(name)
+            for name in (
+                "arranger.movement",
+                "arranger.slot_plan",
+                "arranger.resolution",
+            )
+        )
         for name in DECISIONS:
             with self.subTest(decision=name):
                 self.assertIn(f"{name}(", engine, f"the engine does not call {name}")
