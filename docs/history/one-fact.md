@@ -1,10 +1,17 @@
 # One fact, one home — the Stage-2 collapse plan
 
+**Retired into `docs/history/` — the record of a completed plan.** Stage 2 landed: `step.grip`,
+`step.bass` and the melody-only signal are one fact each, and the axis the last of them landed
+on is `parts=` ([docs/history/parts.md](parts.md)). The live statement of those rules is
+[docs/engine.md](../engine.md). What this document is still for is the *why* — which fact was
+in two places, and what the duplication cost — because that reasoning is not in the code.
+
 **Status: landed.** Commits 1–3 are on `comping` — `d3fb13a` (`step.grip`), `1f0ed54`
 (`step.bass`), `12fd804` (the melody-only signal) — each gated on a green `make check`;
 this document's own update is commit 4, and the version bump is commit 5. The body below
 is the plan as written before implementation; §5 records where the landing differed, and
-that is the only part that supersedes it.
+that is the only part that supersedes it. The axis the melody-only signal landed on is
+`parts=` now ([docs/history/parts.md](parts.md)) - `voices=` is the spelling this plan wrote.
 
 It was committed before implementation because the Stage-1 plan lived only in a
 conversation and had to be reconstructed from the tree — a plan that exists only in a
@@ -22,7 +29,7 @@ Stage 1 was three QA fixes off the checklist in [docs/voices-axis.md §4](voices
 each gated on a green `make check`:
 
 - `4fdde0d` — the `--bass` plumbing: the `ArrangeOptions.bass` field defaulted to the
-  resolved `"none"` while `arrange_progression`'s keyword defaulted to the `BASS_AUTO`
+  resolved `"none"` while `arrange_progression`'s keyword defaulted to the `BASS_STYLE_AUTO`
   sentinel, so the two spellings of one request could never be compared, and the flag was
   silently inert on `arranger head`.
 - `ee2c7f1` — `tabstaff._carries_melody` derived "this string carries the melody" from the
@@ -92,7 +99,7 @@ that fact lives on the texture axis, `MELODY_ONLY_TEXTURES = ("melody", "melody_
   `resolve_texture_grips`, so `texture=` and `grips=` are inert and silent there, and the
   guard ordering the plan worried about (trap 12) is untouched by construction — asserted
   anyway, with new tests for the `NC` and off-grid cases under `voices=soprano`.
-- The thumb: `BASS_AUTO` resolves to walk when `texture == "walking_bass"` **or** the
+- The thumb: `BASS_STYLE_AUTO` resolves to walk when `texture == "walking_bass"` **or** the
   selection is melody-only with the bass voice named. `--voices soprano,bass` is today's
   `texture="melody_bass"`; `--voices soprano` alone is today's `texture="melody"` (no
   thumb). **Not** for a lone `voices=bass` comping selection: no soprano means not

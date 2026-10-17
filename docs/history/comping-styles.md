@@ -1,22 +1,28 @@
 # Comping styles: a design proposal
 
+**Retired into `docs/history/` — the record of a design that landed in parts.** The live
+statement of the two axes it argues for is [docs/engine.md](../engine.md): the **chord part's
+two axes** (`harmony=` and `grid=`) are sections of that document now, and the selection this
+document calls a voice set is `parts=` ([parts.md](parts.md)). It was kept out of this
+directory while it was open; what closed it is the shipped engine rather than a decision
+recorded here.
+
 **Status: partly built.** Stage C of [§8](#8-staged-approach) has landed the *harmony*
 axis (`harmony=full|guide|shell_root|root`), so `shell_root` exists and the degree-family
 table in §4.1 is no longer a proposal in its entirety. Stage D has landed the **first half
 of the rhythm grid** — `grid=every_note|freddie|charleston|joe_pass|final_and` — so §4.2's
 table is built as a closed set of named rows, with the free-form spelling (§6 Q6) still to
 come. **`hold=` is withdrawn** — see Stage D — and a measured defect stood between the grid
-and the styles it was built for: [open-issues.md](open-issues.md) item 1, where a quarter
+and the styles it was built for: [open-issues.md](../open-issues.md) item 1, where a quarter
 of the beat positions a grid names produced no chord at all, because a grid could only
 *filter* melody slots and harmony was stored per melody note. **Its stage 3 landed**: on the
 comping route the grid now *generates* positions rather than filtering them, so the union is
 live and `charleston` and `joe_pass` are no longer silent on a 2/2 head — the silence was
-never the metre, as §4.2 below originally supposed. §6 still holds open questions, and
-`--voices`
-is still `--voices`. This
+never the metre, as §4.2 below originally supposed. §6 still holds open questions, and the
+flag the axis ships under is `--parts`. This
 records a design and the measurements that forced it, so the decision can be reviewed
 rather than re-derived. It follows
-[the retired reharmonisation proposals](history/reharmonisation-proposals.md), which is the
+[the retired reharmonisation proposals](reharmonisation-proposals.md), which is the
 precedent: a proposal that says what was measured, what is proposed and what is deliberately
 not built. That document now lives in `docs/history/` because its corpus went away - read it
 for the genre, not for numbers that can be re-run.
@@ -27,9 +33,11 @@ actual influence on a comping part, the rule that follows from it, and six steps
 dependency order. Steps 0, B, A, A', C, D and E have landed; §9.4's four-note comping
 chord is the remaining item, and it is still a proposal.
 
-It is deliberately **not** in `docs/history/`, which is for completed plans and is never
-extended. The shipped `voices=` axis is described in [voices-axis.md](voices-axis.md); this
-document is about the **other two axes**, and about the fact that all three overlap.
+Where it writes `voices=` or `melody=` it is naming the spelling that axis
+shipped as, and the mapping is direct: `voices=none` is `parts=chord`, `voices=soprano` is
+`parts=melody`, and `melody=alto,tenor` is also `parts=chord`. **§9.4's four-note comping chord
+is the one thing still unbuilt**, and it is [open-issues.md](../open-issues.md) item 3's other
+direction — "build `full`" rather than "refuse it".
 
 Measurements are over `tests/data/but_not_for_me.mxl` (2/2, Eb major, 80 melody notes),
 `texture=targets`, all 80 steps, unless stated otherwise.
@@ -85,7 +93,7 @@ The overlap is not theoretical. It produces three observable oddities:
 1. **`--voices soprano` was a no-op.** It was byte-identical to `--voices auto`, because
    the soprano's only remaining job was to switch the engine onto the melody-bearing
    route: `melody_voiced = voices_have_soprano(voices)` in `movement.py`. **Stage 2 closed
-   this**: soprano alone is the melody and nothing else now — see `docs/one-fact.md`.
+   this**: soprano alone is the melody and nothing else now — see `docs/history/one-fact.md`.
 2. **The flags could contradict, so one had to be refused.** `melody_allowed` refused
    `--texture melody --voices alto` with a warning, because `melody` *already* meant
    "nothing but the tune". **That refusal was the seam showing, and Stage 2 closed it**:
@@ -121,7 +129,7 @@ questions**: what is stated × does the guitar sing.
 
 (The table also carried `melody` and `melody_bass` rows — empty on both roles — until
 Stage 2 keyed "the tune and nothing else" on the voice selection and deleted the two
-textures; see `docs/one-fact.md`.)
+textures; see `docs/history/one-fact.md`.)
 
 **`walking_bass` is a comping style that also keeps the melody on top**, and the table says
 so directly: its only target grip is `shell`, with no melody-bearing grip involved. Yet
@@ -229,7 +237,7 @@ played in another is not a rhythmic idea, it is a spelling.
 silent on this 2/2 head was **not the metre at all**. This paragraph originally said it was
 "a 4/4 idiom asked of a 2/2 bar… the mismatch is the arranger's, not the library's". That
 was a misdiagnosis, reached from a measurement that was right and an inference that was not,
-and the same failure mode as [open-issues.md](open-issues.md) item 1.
+and the same failure mode as [open-issues.md](../open-issues.md) item 1.
 
 The measurement was correct — `charleston` **was** silent — and the cause was that a grid
 could only *filter* melody slots, so a position with no written note was unreachable
@@ -314,11 +322,13 @@ split:
   under both); only `<normal-type>` distinguishes them.
 - **A melody note with no chord position on it sounds alone.** The machinery is already
   built and already correct for this: `melody_alone_case` returns `MELODY_ALONE_TEXTURE`,
-  which routes through `get_melody_only_voicing` and leaves `melody_only=False`. It is
+  which routes through `grips.get_melody_only_voicings` and leaves `melody_only=False`. It is
   deliberately **not** the `NC` case, because the step *does* have a harmony — it is
   simply not spelled out under that note, and the flag would make the annotation read
   "(no chord - melody alone)" and claim a lie. That is AGENTS.md trap 6's shape, already
-  handled by returning a *kind* rather than a bool.
+  handled by returning a *kind* rather than a bool. Which *position* the note sounds at is
+  `cost.voicing_cost`'s, from the one-per-string palette, so the grid thins the harmony
+  without moving the hand.
 - **The grid selection is a chord placement, not a melody reduction.** It has four rows:
 
 | grid selection | a chord lands on |
@@ -343,17 +353,17 @@ different answers:
 
 | cause | measured example | the right response |
 |---|---|---|
-| **the grid is too coarse** | `final_and` (2.5) under `--skeleton beats`, which offers only 1.0 and 2.0 | warn — the user asked for something the grid cannot express |
+| **the grid is too coarse** | `final_and` (2.5) under a beats-only grid, which offers only 1.0 and 2.0 | **refuse** — the user asked for something the grid cannot express |
 | **no melody note there** | a bar whose notes are all on the beat, under any grid | **nothing** — a chord cannot go where there is no note, and the melody-alone route handles it |
 
-Warning on the second would be noise: "you asked for comping on the ands, there are no
+A refusal on the second would be noise: "you asked for comping on the ands, there are no
 notes on the ands" is not an error, it is the answer. Only the first deserves a message,
 and it must name the grid that is too coarse. The test is therefore one-directional —
 **the grid must be at least as fine as the pattern** — rather than the two-way
 "resolution versus placement" an earlier draft of this section described.
 
 `joe_pass` is not invented here: it is
-[history/Arranging_Guide.md](history/Arranging_Guide.md) §"Joe Pass" Walking Bass & Comp
+[history/Arranging_Guide.md](Arranging_Guide.md) §"Joe Pass" Walking Bass & Comp
 Style, which specifies the bass on beats 1–4 and "the melody and chord pops live primarily
 on the **and** of beats".
 
@@ -385,7 +395,7 @@ rests in `skipped`, so it contributes no slot and no bar number. A named grid th
 loses **49 of 190 beat positions (25%)** across the three committed fixtures — a quarter
 of the positions it names — and `hold=` cannot be the answer, because the missing thing is
 not a sustain policy but the *chord timeline the grid would be written against*. That is
-[open-issues.md](open-issues.md) item 1, and it is what makes the harmonisation engine
+[open-issues.md](../open-issues.md) item 1, and it is what makes the harmonisation engine
 in this document's place rather than a rename of the flags.
 
 #### The metre trap
@@ -423,7 +433,7 @@ and finer.
 Two different reasons a position can be unavailable, and only the first is about the
 metre: **the metre decides which beat the position sits on**, and **the lattice decides
 whether that position has a slot to sit in**. A grid naming the final upbeat therefore
-needs `--skeleton eighths` or finer, and a warning when it is asked for under `beats` is
+needs a finer grid, and a refusal when it is asked for under a beats-only lattice is
 the honest answer — not silence, and not an invented beat.
 
 ### 4.3 Does the guitar sing
@@ -470,11 +480,11 @@ replacement flag born with the emptiness option (1) was chosen to avoid.
 
 Two live facts in the tree that this section did not know about, both settled in Stage C:
 
-- `ArrangeOptions` carries **`melody: str = MELODY_AUTO`** (`options.py`), and
-  `arrange_progression` takes a **`melody=`** keyword that is fed straight into
-  `parse_voices`. A keyword named `melody` that takes `soprano,alto` reads as the melody
-  *note* and is actively misleading; the rename is the moment to fix the name rather than
-  inherit it.
+- `ArrangeOptions` carried **`melody: str = MELODY_AUTO`** (`options.py`), and
+  `arrange_progression` took a **`melody=`** keyword fed straight into `parse_voices`. A
+  keyword named `melody` that takes `soprano,alto` reads as the melody *note* and is
+  actively misleading. **Settled by the rename**: the field is `parts` and the keyword is
+  `parts=`, which is what `parse_parts` reads.
 - `options.py` cites **`MELODY_STYLES`** in `textures.py`. **No such table exists.** The
   real one is `MELODY_POLICIES`, keyed `auto` / `none` only. A live documentation error,
   independent of anything else in this document.
@@ -492,13 +502,13 @@ rather than pruned because the reasoning behind each answer is the useful part.
 | Q1 grid vs `--skeleton`'s lattice | **moot.** `--skeleton` is gone (§4.2), and stage 3 of open-issues item 1 settled the substance: the grid *generates* positions rather than selecting from a lattice. |
 | Q2 `harmony=guide` under `sings=yes` | settled as **(C)** — `harmony=` is scoped to the melody-free comping route. |
 | Q3 rename `--voices` to `harmony=` | still deferred, and **§9.4 argues it should stay deferred longer than planned.** |
-| Q4 does `--texture` survive? | **partly answered by Stage 2**: it lost `melody` and `melody_bass` to the voices axis (`docs/one-fact.md`), and §9.6 still argues against removing the rest. |
+| Q4 does `--texture` survive? | **partly answered by Stage 2**: it lost `melody` and `melody_bass` to the voices axis (`docs/history/one-fact.md`), and §9.6 still argues against removing the rest. |
 | Q5 where does the style table live? | open; gated on the DAG test. |
 | Q6 free-form grid spelling | open, and still the main tension in the proposal. |
 | Q7 `walking_bass`'s fate | open. |
 | Q8 integer eighths or float? | **settled by implementation** — `SUB` is an integer and has been all along. |
 | `melody_alone_case`'s fifth kind | **specified in §9.2** and scheduled as part of step B. |
-| stab duration | **open, and not covered by §9.** It is not `hold=` (withdrawn); the claim is that the grid owns the rhythm, so a stab lasts until the next grid position. Worth deciding with Q6, since a free-form spelling would have to say it too. |
+| stab duration | **partly open, and not covered by §9.** It is not `hold=` (withdrawn); the claim is that the grid owns the rhythm, so a stab lasts until the next grid position. A *generated* position already obeys that — `chord_slots` sets the length from the following grid position — while a *written* onset keeps the melody note's own length, so the claim holds for one producer and not the other (`open-issues.md` item 1's bullet carries the measurement). Worth deciding with Q6, since a free-form spelling would have to say it too. |
 | the input's shape | **open, and the thing §9 is about** — a harmonisation engine whose input is a chord timeline rather than a list of melody notes. §9.4 finds it again from the arity side. |
 
 **Q8 deserves a note, because the document still calls it unresolved.** `SUB` is `1` in
@@ -566,9 +576,12 @@ purpose"*. The integer won by implementation and the question was never revisite
    sings + thumb*. Under the proposal it becomes `harmony=guide`, sings=yes, `bass=walk` —
    and **its shipped output must stay byte-identical**, which is the acceptance test for
    the whole refactor.
-8. **Is the subdivision an integer count of eighths, or a float?** Proposed: **integer
-   eighths**, because it avoids float comparison for a notated position — the same
-   reasoning `_BEAT_EPSILON` exists for. Unresolved.
+8. **Is the subdivision an integer count of eighths, or a float?** **Settled: an integer
+   count of twenty-fourths of a beat** (`textures.TICKS_PER_BEAT`, with `SUB` = 12 = half a
+   beat). Integer, as proposed and for the proposed reason. Eighths was the grain when this was
+   written; the sixteenth and the eighth-note triplet a generated bar is subdivided at need a
+   twelfth, and the cut-time heads — where a sixteenth is an eighth of a *beat* — need a
+   twenty-fourth, so that is the coarsest unit holding every position the corpus writes.
 
 ---
 
@@ -582,7 +595,11 @@ purpose"*. The integer won by implementation and the question was never revisite
   see [generated-grips.md](generated-grips.md) §3), and no touching the 54 hardcoded tab
   strings.
 - **No default change.** Every existing arrangement must come out byte-identical, which is
-  the acceptance criterion for any part of this that gets built.
+  the acceptance criterion for any part of this that gets built. **Except the one that says
+  otherwise:** `docs/open-issues.md` item 1's position-level half *is* a default change, made
+  deliberately, by a later decision than this section — the default grid now generates a chord
+  at each bar's own subdivision, +88 steps over the eight heads. Every stage below was built
+  to this criterion, and the record of which gate it held at is in §9.
 
 ---
 
@@ -669,11 +686,13 @@ through `arrange_progression`, `ArrangeOptions`, `arrange_slots`, `_corpus_optio
 both CLIs. Inert twice over — `auto` resolves to the shipped `guide`, and the axis is read
 only by the comping route — and all six published arrangements are byte-identical.
 
-**Not done: the rename, and §6 Q2 is now settled as (C)** — `harmony=` covers the
-melody-free comping route and `--grips shell` stays a separate grip choice. That settles
-*why* the rename did not happen: `harmony=` cannot express `soprano`, so under (C) it is a
-strictly weaker `--voices` and renaming would drop the axis's headline case. `--voices` is
-still `--voices`, and `melody=` still carries a voice list.
+**§6 Q2 was settled as (C)** — `harmony=` covers the melody-free comping route, and the
+shell chord-melody stayed a separate grip choice. That settles *why* the rename waited:
+`harmony=` cannot express "the tune and nothing else", so under (C) it was a strictly
+weaker `voices=`, and renaming would have dropped that axis's headline case. **The rename
+has since landed on its own terms**: the axis is `parts=`, named for the parts in a band
+rather than the voices in a stack, and the grip-family axis went with it — so which
+*grip* a chord-melody is voiced with is the selector's business, not a caller's.
 
 The follow-up is §6 Q2 option (A) as **one commit**: route `harmony=guide` + `sings=yes`
 through the shell grip, deprecate `--grips shell`, rename. Its output is byte-identical to
@@ -685,7 +704,7 @@ the part that was worth landing first.
 the real one is `MELODY_POLICIES`, keyed `auto` / `none`. **Fixed**: the comment now names
 the table that exists.
 
-### Stage D — The rhythm grid (**partly built**: `grid=`; `hold=` withdrawn; blocked on open-issues item 1)
+### Stage D — The rhythm grid (**landed**: `grid=`, the lattice and the union; `hold=` withdrawn; the free-form spelling is §6 Q6)
 
 The largest genuinely new work, and the only stage that adds a concept rather than
 renaming one. `joe_pass` and `charleston` are the payoff.
@@ -702,13 +721,13 @@ Three things the implementation settled that this section did not say:
 
 - **`every_note` is not a pattern with positions; it is the absence of one.** Reading
   its "does it place anything?" off `grid_positions` reports it as placing nothing in
-  every metre, which made the *default* warn everywhere. Caught by
+  every metre, which made the *default* a mismatch everywhere. Caught by
   `test_a_bar_relative_pattern_is_allowed_in_every_metre`. "Places nothing" and "has no
   positions to place" are different claims, and only the first is a mismatch.
 - **The refusal is unreachable through the shipped vocabulary.** Measured over every
   metre-relative row against every metre from 1 up: none is ever refused, because
   `charleston` keeps its beat 1 (which exists everywhere) and `joe_pass` is built on
-  `ALL`. The two warning messages are therefore exercised against a *temporary* row
+  `ALL`. The refusal and its reason are therefore exercised against a *temporary* row
   (`_temporary_pattern`), and `test_no_shipped_row_is_a_mismatch_in_any_metre` exists
   to keep that fact from being quietly forgotten — a check no input can fail proves
   nothing about the axis.
@@ -721,13 +740,13 @@ Three things the implementation settled that this section did not say:
   and 41 become rests.
 
 **What the grid did *not* turn out to touch: the bass line.** Measured on
-`texture=targets, melody=alto,tenor, bass=walk`, `bass` is `[51, None, 52, None]` both
+`texture=targets, parts=chord, bass=walk`, `bass` is `[51, None, 52, None]` both
 at `grid=auto` and under `grid=freddie`. The walk visits whole beats only and a grid
 only removes *chords*, so the two axes are orthogonal — which is the orthogonality
 claim of §4 tested rather than asserted. An earlier reading of that measurement as a
 `bass=walk` bug was wrong: `bass=walk` with `texture=uniform` is **refused by design**
-(`bass_allowed`, with a warning naming `texture='targets'`), and the diagnostic was
-missed only because no `Diagnostics` collector was passed.
+(`bass_allowed`, which raises and names a texture that would work), and the diagnostic was
+missed only because the refusal went into a collector nobody read.
 
 **Not done, and deliberately:**
 
@@ -753,16 +772,17 @@ missed only because no `Diagnostics` collector was passed.
      what this entry proposed: the chord needs to stop *outlasting* the note, not to
      outlast it.
 
-  The gap is real and it is still in Stage D's scope, but it is not a `hold=` flag: it is
-  the grid owning the rhythm, so a stab's duration is the distance to the next grid
-  position. That change cannot be made until the grid can *place* a stab at all — see
-  [open-issues.md](open-issues.md) item 1, where a quarter of the positions a grid names
-  produce nothing. **Withdrawn rather than deferred**, because as worded it is a no-op and
+  The gap is real, but it is not a `hold=` flag: it is the grid owning the rhythm, so a stab's
+  duration is the distance to the next grid position. The grid can *place* a stab now —
+  [open-issues.md](../open-issues.md) item 1's union landed, so a position a grid names is no
+  longer filtered out of the melody — and that leaves the gap where it always was: a *generated*
+  position obeys the grid and a *written* onset obeys the melody note (item 1's bullet carries
+  the measurement). **Withdrawn rather than deferred**, because as worded it is a no-op and
   leaving it in the document invites someone to build it.
 
   §6 Q5's question about where the style table lives survives the withdrawal, and the
-  answer is now a row of `{grid, harmony}` — composition rather than fusion — with stab
-  duration falling out of the grid once item 1 is fixed.
+  answer is now a row of `{grid, harmony}` — composition rather than fusion — with the
+  duration question attached to that row rather than falling out of it.
 
 Two things must be settled **inside** this stage, not discovered by it. The first is now
 settled and the second remains a design decision:
@@ -780,7 +800,7 @@ settled and the second remains a design decision:
   the concern dissolves.** A guide-tone comp is the same pair of notes whether the melody
   above it is a chord tone or a 9th, and the same on beat 1 as on beat 2: `Ebmaj` with the
   9th `D5` over it returns `[2, 7]` in every case, with `non_chord_tone=False`, no strategy
-  consulted and no warning. The strategies are not "a no-op on weak beats" — they are
+  consulted and no clause beside it. The strategies are not "a no-op on weak beats" — they are
   **structurally unreachable** from this route, because `get_comping_voicings` is never
   handed a beat and never sees the melody pitch that a tension strategy would resolve.
   The guitar states the chord; the tune is somebody else's, so there is no tension of ours
@@ -815,14 +835,14 @@ a comping baseline of `--voices alto,tenor`. "—" means not separately measured
 | `--non-chord-tone` | **inert** — see §9 | changes |
 | `--fallback` | changes | changes |
 | `--fret-min` / `--fret-max` | changes | — |
-| `--bass none` | inert (already the default) | — |
+| `--bass-style none` | inert (already the default) | — |
 | `--bars`, `--part` | input scope | input scope |
 | `--tab`, `--melody`, `--mutes`, `--bars-per-line` | render only | render only |
 | `--html`, `--musicxml`, `--gp5` | output format | output format |
 
 Only `--non-chord-tone` goes inert on the comping route for a reason a user could act on,
 and §9 is that reason: it is not inert by policy but because the code path that implements
-the three strategies is only reached from the melody-bearing branch. `--bass none` is inert
+the three strategies is only reached from the melody-bearing branch. `--bass-style none` is inert
 because it names the default, not because of the route. Everything else is either live and
 orthogonal, or already spoken for by a stage above.
 
@@ -849,11 +869,11 @@ predicted.
   `--non-chord-tone` reach the comping route at harmony level with the §9.2 onset guard,
   and step D made the soprano **per slot** so a soprano-named selection comps the grid
   positions its tune does not articulate at, and step E — `--voices soprano` giving the
-  melody and nothing else — landed ahead of the others as Stage 2 (`docs/one-fact.md`).
+  melody and nothing else — landed ahead of the others as Stage 2 (`docs/history/one-fact.md`).
   §9.4 is the one item still a proposal; each description below carries its own **Landed**
   marker where it has one.
 - **Every decision in §9 is settled.** The questions that shaped it — what `every_note` means
-  on a head with no melody, whether the melody-less file warns or is silent, what an unknown
+  on a head with no melody, whether the melody-less file is refused or silent, what an unknown
   grid does, whether `--fallback` reaches this route — are all answered below and marked as
   decisions rather than left open. **One of them has since been reversed, and it is marked
   where it stands**: `every_note` on a head with no melody is no longer silent, because
@@ -904,9 +924,9 @@ Measured on this document's own example, a passing D over Cmaj7:
 
 | | `--non-chord-tone extension` | `diminished` |
 |---|---|---|
-| `voices=auto` | `harmonized_as=Cmaj9` | `harmonized_as=Bdim7` |
-| `voices=alto,tenor` | `None` | `None` |
-| `voices=alto,tenor,bass` | `None` | `None` |
+| `parts=auto` | `harmonized_as=Cmaj9` | `harmonized_as=Bdim7` |
+| `parts=chord` | `None` | `None` |
+| `parts=bass,chord` | `None` | `None` |
 
 The cause is structural rather than a policy decision: all three strategies live in
 `prepare_step`, and `prepare_step` is called only from the melody-bearing branch. The
@@ -1021,11 +1041,11 @@ that has none, `ArrangementStep.melody` becomes `Optional[str]`, and `_PLACEHOLD
 **deleted rather than hidden**. It exists only because a harmony-only step needed *a* melody
 string to satisfy `melody: str`, and under §9.2 it has no reason to exist.
 
-It is also the visible half of item 1's deferral: the default line tab prints a comping
-step with the melody column still carrying the horn's note and the shape's degrees trailing
-it (`Cmaj7  C4  Root  ...  (comping - 3 & 7; the guitar does not play the tune)`), 14 times
-on `but_not_for_me` under
-`--voices alto,tenor --grid freddie`, and reads as a claim that the guitar played C4. It did
+It is also the visible half of the union's arrival: where the default line tab used to print a
+comping step with the melody column still carrying the horn's note and the shape's degrees
+trailing it (`Cmaj7  C4  Root  ...  (comping - 3 & 7; the guitar does not play the tune)`), 14
+times on `but_not_for_me` under
+`--parts chord --grid freddie`, it read as a claim that the guitar played C4. It did
 not, and the clause now says so rather than leaving the melody column to imply otherwise.
 The sentinel is indistinguishable from a real note by equality — all 30 `"C4"` slots
 across the fixtures sit on genuinely written C4s — so any test asserting
@@ -1053,8 +1073,8 @@ convention it can safely break:
 
 ```
 GRID_POLICIES = {'auto': 'every_note'}
-grid=auto         2/4 -> every_note   warnings=0
-grid=every_note   2/4 -> every_note   warnings=0
+grid=auto         2/4 -> every_note
+grid=every_note   2/4 -> every_note
 voices=alto,tenor   auto == every_note: True    (identical voicings)
 voices=auto         auto == every_note: True
 ```
@@ -1080,9 +1100,10 @@ as the defect: a bar the melody never entered produced **no part at all** on eve
 The union now excepts at the level of the **bar**, so a chords-only file does arrange under the
 default grid, and the withdrawal decision survives on its stronger ground alone: `auto`'s
 context-sensitivity would be invisible to the suite, and `every_note` is already a selectable
-member of `GRID_STYLES` that the CLI help calls the default. What is *still* true below the bar
-— a beat the melody skips inside a bar it occupies is silent, and `every_note` cannot supply it
-— is item 1's remaining half, and it needs generated slots rather than a sentinel.
+member of `GRID_STYLES` that the CLI help calls the default. What was true below the bar when
+this was written — a beat the melody skips inside a bar it occupies is silent, and `every_note`
+cannot supply it — is no longer true: item 1's position-level union landed, so the default grid
+generates at each bar's own subdivision.
 
 So the departure from the house rule that every axis carries a `*_AUTO` sentinel stands, and
 is recorded here so a later reader does not "restore" it. The sentinel's purpose is to let an
@@ -1093,9 +1114,9 @@ explicitly named metre-relative figure such as `charleston` asked of a 2/2 bar. 
 fire for `auto`, because `every_note` is allowed in every metre by construction.
 
 **Three tests encode the reason rather than the spelling, and are inverted rather than
-deleted.** `test_auto_resolves_to_every_note` and `test_a_resolved_auto_never_warns` state
-that the default is inert; both properties survive under `every_note` and are worth keeping
-in that spelling. `test_a_pattern_may_be_named_on_the_command_line` asserted
+deleted.** `test_the_default_grid_is_every_note` and `test_the_default_grid_is_never_refused`
+state that the default is inert; both properties survive under `every_note` and are worth
+keeping in that spelling. `test_a_pattern_may_be_named_on_the_command_line` asserted
 `parse_grid(GRID_AUTO) == GRID_AUTO`; the inverse is that `auto` is no longer vocabulary and
 is now refused like any other unknown name.
 
@@ -1132,9 +1153,10 @@ replace the five `== GRID_EVERY_NOTE` sites (`on_grid`, `grid_allowed`, `resolve
 **withdrawn**: the default is `every_note` outright, `parse_grid("auto")` raises like any
 unknown name, and `headxml._merge_chord_slots` no longer coerces an unrecognised grid to
 `every_note`. Three tests encode the reason and were **inverted rather than deleted**:
-`parse_grid(GRID_AUTO) == GRID_AUTO` became "`auto` is refused", `test_auto_resolves_to_every_note`
-was re-spelled as the default naming `every_note` (`ArrangeOptions().grid`), and
-`test_a_resolved_auto_never_warns` became `test_the_default_grid_never_warns`. A new
+`parse_grid(GRID_AUTO) == GRID_AUTO` became "`auto` is refused",
+`test_the_default_grid_is_every_note` was re-spelled as the default naming `every_note`
+(`ArrangeOptions().grid`), and the never-refused assertion became
+`test_the_default_grid_is_never_refused`. A new
 `tests/test_headxml.py::TestAnUnknownGridIsRefused` covers the library-only behaviour change.
 Gate: all six fixtures byte-identical, plus the new tests.
 
@@ -1152,8 +1174,9 @@ Gate: all six fixtures byte-identical, plus the new tests.
    **bar**, so `arranger head leadsheet.musicxml --voices alto,tenor` on a chords-only file
    arranges all four bars. *Decided against a warning* — naming `--grid freddie` was considered
    and rejected, on the grounds that an empty arrangement is the flag's own instruction rather
-   than a hole to report. That reasoning held for the bar and not for the head: below the bar,
-   deferring to the melody is still the documented decision (item 1's remaining half).
+   than a hole to report. That reasoning held for the bar and not for the head, and item 1's
+   position-level union then took the level below the bar with it: what a position still defers
+   to is a note *holding* it, which is §9.2's rule rather than a missing sentinel.
 
    **What "works fine" means for a chords-only file is therefore the whole head, and the
    distinction this step drew still holds one level down.** Such a file used to be *refused* —
@@ -1161,23 +1184,26 @@ Gate: all six fixtures byte-identical, plus the new tests.
    failure a user cannot act on without reading the source. It now **loads, reports its bars and
    metre, and arranges**, and it does so under the default grid too, because a head with no
    melody at all is a head every bar of which the melody never enters. What it still does not do
-   is guess a rhythm *inside* a bar the tune occupies — a `joe_pass` stab on a head whose notes
-   all sit on the beat is still silent, exactly as it is for any head whose melody does not sit
-   on a beat.
+   is place a stab on a position a sounding note is *holding*: a `joe_pass` stab on a beat the
+   tune has left silent is generated now — item 1's position-level union landed after this was
+   written — while one inside a held note stays absent, and §9.2 says it should, because the
+   chord beneath that note was decided where the note began.
 3. **A soprano-only selection on a chords-only head produces nothing**, and this one did *not*
    move — it is a different claim. It falls out of `every_note`-style deference once "the guitar
    sings" is separated from "the guitar has voices": a melody-only selection plays the tune and
    nothing else, so a bar with no tune has nothing for it to play. `melody_only_selection` gates
    the union in `arrange_xml_head`. It used to be the worst outcome of the three — measured, it
-   took the melody-bearing route, tried to voice the sentinel against every chord, and warned
-   sixteen times — `melody C4 is not a chord tone of Emaj7 and the 'extension' strategy found no
-   voicing`. It is now simply empty, which is the honest answer.
+   took the melody-bearing route and tried to voice the sentinel against every chord, sixteen
+   times over, each one reporting `melody C4 is not a chord tone of Emaj7`. It is now simply
+   empty, which is the honest answer.
 
 Gate: a committed chords-only fixture, and the six existing fixtures byte-identical.
 **The gate's second half is re-read, not waived** (AGENTS.md trap 5): "byte-identical" is now
-*every note-bearing bar* of every fixture. Five of the eight heads gained **57** steps between
+*every note-bearing bar* of every fixture. Six of the eight heads gained **87** steps between
 them, all in bars the melody never enters; `tenor_madness` and `but_not_for_me` have no such
-bar and are untouched.
+bar and are untouched. **That gate is itself superseded by item 1's position-level half**, which
+adds 88 steps *inside* melody-bearing bars as well — the record is §9.3 step B's re-scoped
+bullet, and the surviving criterion is the pair of invariants asserted in `TestChordSlots`.
 
 **Landed.** `Head` carries a `measure_range`, set by `_read_notes` from the measures it
 walks, and `bars` reports it — falling back to the note span only for a `Head` built by
@@ -1197,7 +1223,9 @@ file's extent is not free. Three fixtures — `Trouble_in_Mind_Blues`,
 `heres_that_rainy_day`, `i_was_doing_all_right` — have changes that outlast their last note,
 so on the **comping route with a named grid** their parts now run to the file's end:
 `freddie` 79→87, 103→109, 124→126 and `joe_pass` 83→91, 114→120, 159→161. The other three
-fixtures, and **every default arrangement**, are byte-identical. So "the six fixtures
+fixtures are untouched by *that* change, and **every default arrangement** was byte-identical
+**then** — item 1's position-level half has since moved the defaults deliberately, so what
+holds now is the pair of invariants rather than the equality. So "the six fixtures
 byte-identical" holds for the acceptance criterion §8 actually states — *an arrangement
 with no flags passed* — and the comping-route counts are **re-baselined rather than kept**,
 because the change *is* the fix: a chord still in force in a trailing bar was being dropped.
@@ -1297,17 +1325,21 @@ did not say, each measured on `but_not_for_me`:
   `soprano,bass` play the tune and nothing else, so a grid position with no tune has nothing
   for them to play; they are left unmerged and unchanged. This is why the union is gated on
   `melody_only_selection` and not on `voices_have_soprano`.
-- ~~**The default is still inert.**~~ **Re-scoped when open-issues item 1's bar-level half
-  landed.** `every_note` names no positions of its own, so `_merge_chord_slots` merges nothing
-  a named grid would have merged inside a bar the melody occupies — and every no-flags
-  arrangement is byte-identical **over those bars**, which is the acceptance criterion of §7
-  and the property that makes the change safe to ship. What it now adds is the **bar the
-  melody never enters**, which used to produce no part at all: 57 steps across five heads,
-  zero on `tenor_madness` and `but_not_for_me`.
+- ~~**The default is still inert.**~~ **Re-scoped twice.** When item 1's **bar-level** half
+  landed, `every_note` merged nothing inside a bar the melody occupies and added only the **bar
+  the melody never enters** — 87 steps across six heads, zero on `tenor_madness` and
+  `but_not_for_me`. When item 1's **position-level** half landed, the default began generating at
+  each bar's own subdivision (`textures.grid_resolutions`), adding **88** steps across the eight
+  heads — inside bars the tune occupies as well as the ones it never enters — so **no no-flags
+  arrangement is byte-identical to its skeleton any more.** What survives is the property that
+  acceptance criterion was a proxy for, and it is asserted directly in `TestChordSlots`: **no
+  written note is lost**, and **no chord is added under a note the tune is still holding**
+  (§9.2). The second is what leaves `All_the_Things_You_Are` bar 4 at three steps — its beat 3
+  is a held `C5` — while bar 16 of the same head gains the downbeat it used to skip.
 
 The one behaviour change beyond the axis itself is at the library surface: a hand-built
-`None` melody under a *singing* selection used to be refused with a warning and a skipped
-slot, and is now **comped** — the note-less slot the grid union produces on that route is a
+`None` melody under a *singing* selection used to be refused and its slot skipped, and is now
+**comped** — the note-less slot the grid union produces on that route is a
 real case now, and dropping the bar is worse than stating its chord. `TestSilentSlotsCarry
 NoMelody`'s assertion was inverted rather than deleted (AGENTS.md trap 5).
 
@@ -1316,7 +1348,7 @@ NoMelody`'s assertion was inverted rather than deleted (AGENTS.md trap 5).
 The plan made this the last step, on the assumption that soprano alone still arranged like
 `auto`: `notes=len(voices)` is passed *only* when `melody_voiced` is False, and the
 melody-bearing route has no arity concept, so the soprano's only remaining job was to switch
-the engine onto that route. **Stage 2 (`docs/one-fact.md`) closed it first**, by keying "the
+the engine onto that route. **Stage 2 (`docs/history/one-fact.md`) closed it first**, by keying "the
 tune and nothing else" on the voice selection — `melody_only_selection` in `textures.py` —
 rather than on a texture. That also deleted the `melody` and `melody_bass` textures the plan
 referred to, so the "measure `texture=melody`" step no longer exists to run.
@@ -1326,7 +1358,7 @@ note per step** — the written melody, no left hand under it — while `--voice
 voices) still gives **four**. They are no longer the same arrangement, which is the whole of
 this step.
 
-**Landed as Stage 2 and released with the one-fact collapse** (`docs/one-fact.md`), not with
+**Landed as Stage 2 and released with the one-fact collapse** (`docs/history/one-fact.md`), not with
 the later §9 steps. The plan had bundled this with two other breaking changes — `melody`
 becoming `Optional[str]` (step B) and the loader accepting a chords-only file (step A') —
 under "the next minor release"; the soprano change shipped earlier, and B and A' followed it
@@ -1470,11 +1502,11 @@ import copy, hashlib
 from headxml import load_musicxml, head_skeleton, _merge_chord_slots
 from arranger.slots import arrange_slots
 from arranger.textures import parse_voices, resolve_voices, voices_have_soprano
-from arranger import Diagnostics
+from arranger import resolve_voices, voices_have_soprano, parse_voices
 
 def run(head, vox, grid):
     slots = head_skeleton(head, None)
-    if not voices_have_soprano(resolve_voices(parse_voices(vox), 'uniform', Diagnostics())):
+    if not voices_have_soprano(resolve_voices(parse_voices(vox), 'uniform')):
         slots = _merge_chord_slots(slots, head, None, grid) or slots
     steps, _, _ = arrange_slots(
         [s[0] for s in slots], [(s[1], s[2], s[3]) for s in slots],
@@ -1533,10 +1565,12 @@ for n in (1, 2, 3, 4):
 
 **A melody-less lead sheet is in scope for *loading*, and not for guessing.** It was
 measured and refused — `_choose_part` filters on `_part_note_count(p) > 0` — and step A'
-makes it load and arrange to a named grid. What it does not do is supply a rhythm the user
-did not ask for: with the default grid it is empty, because `every_note` has nothing to defer
-to. That is the decision, and the distinction between *the file is accepted* and *the file
-guesses* is the one worth keeping from this step.
+makes it load and arrange to a named grid. It arranges under the default grid as well,
+because open-issues item 1's union landed after this section was written: a head with no melody
+is a head every bar of which the melody never enters, so each bar is generated on its beats —
+the fallback `_bar_resolution` takes when a bar has no onsets to read a density from. What the
+default grid will not do is guess a rhythm *finer* than that, and the distinction between *the
+file is accepted* and *the file guesses* is the one worth keeping from this step.
 
 **`texture` is not proposed for removal.** Its overlap with `grid` is real — `targets` already
 means "full on strong beats, thin between", and a grid position carrying a content hint
@@ -1544,7 +1578,7 @@ means "full on strong beats, thin between", and a grid position carrying a conte
 a merge. **One of the two things that used to stop it moved off the axis entirely:**
 the `melody` and `melody_bass` textures — **empty grip tuples on both roles**,
 "harmonise nothing, ever" — were not a rhythm, and Stage 2 keyed that fact on the voice
-selection (`docs/one-fact.md`), so nothing of it sits on the texture axis any more.
+selection (`docs/history/one-fact.md`), so nothing of it sits on the texture axis any more.
 What still stops the merge is that `metric_roles` decides targets by
 harmonic and melodic *change*, not only position: a slot is a target only when it is metrically
 strong **and** something new happens there, because a passing slot is exactly where the
@@ -1556,12 +1590,46 @@ rhythm table. If a grid gains a content hint it defers to the texture; it does n
 entirely (step A), and repointing the default at a real pattern is the comping-first question,
 which belongs after step D, when `grid` means the same thing on both routes.
 
-**Stab duration is not in this plan.** It is a real gap rather than a deferral: nothing
-currently says how long a comp lasts, and the natural answer — that the grid owns the rhythm,
-so a stab sounds until the next grid position — is not implemented anywhere. `chord_slots`
-computes a `length` from the following position and `head_skeleton` from the melody note, but
-no axis decides which of the two a *comping* step obeys. It was not `hold=`, which is
-withdrawn, and it belongs with §6 Q6 rather than here: a free-form grid spelling would have to
-say it as well, so designing one without settling it would mean designing the grammar twice.
-This is the fifth kind `open-issues.md` item 1 predicts for `melody_alone_case`: an invented
-slot has no melody note to be alone *with*, so it cannot be reached by the existing four.
+**Stab duration is not in this plan, and it is stated where it is measured.** It is a real gap
+rather than a deferral: nothing says how long a comp lasts, and the natural answer — that the
+grid owns the rhythm, so a stab sounds until the next grid position — is implemented for one
+producer and not the other. `chord_slots` computes a `length` from the following grid position
+and `head_skeleton` from the melody note, so a *generated* position obeys the grid while a
+*written* onset keeps the note's own length; the figure is `open-issues.md` item 1's bullet,
+stated once there rather than repeated here. It was not `hold=`, which is withdrawn, and it
+belongs with §6 Q6 rather than here: a free-form grid spelling would have to say it as well, so
+designing one without settling it would mean designing the grammar twice. The fifth
+`melody_alone_case` kind item 1 predicted for an invented slot — no melody note to be alone
+*with*, so unreachable by the existing four — turned out **not to be owed**: §9.3 step D had
+already made a note-less grid position on a singing selection a real case, and the comping
+branch answers it.
+
+### 9.7 The palette is remembered
+
+`grips.get_comping_voicings` is the generator the whole comping route runs on, and it was
+uncached: every slot of every bar enumerated its shapes from scratch, and so did every test that
+re-arranged a head another test had already arranged. It is now the *same* memo the placement
+search is answered through (`_search_shape` / `_searched_shape` / `_place_shape`, §4 of
+[generated-grips.md](generated-grips.md)): `_search_comping_voicings` enumerates,
+`_comping_palette` remembers one request as a `_ShapeSnapshot`, `get_comping_voicings` rebuilds
+fresh `Voicing`s — with `_snapshot` / `_voicing_from_snapshot` shared by the two so that "what a
+snapshot is" stays one fact. The reason the rebuild is not optional is this route's own: the
+walking bass writes into the object `select_step_voicing` chose, so a shared palette would let
+one step's bass line rewrite the next step's chord.
+
+Measured: **61 %** of a full-corpus default arrange is inside `get_comping_voicings`; a
+fingerprint of 112 arrangements (8 heads × 14 settings, 17,227 step lines plus 1,856 direct
+generator requests) takes **240s → 25s** across the change, byte-identical; and the whole suite
+runs **360.0s → 122.2s** on the same tree. The witnesses are
+`tests/test_comping.py::TestTheCompingPaletteIsRemembered` — the memo answers what the
+enumeration answers, a caller's write cannot reach the next caller, the memo is read (hits and
+misses counted), and `cache_clear` is the seam — which is the set `tests/test_placement.py` holds
+the placement memo to.
+
+What the memo does **not** do is make a *new* request cheaper: the enumeration is still
+exhaustive over the span window, so `_frets_in_span` remains the floor for a request nobody has
+asked before. The tables it reads besides its seven arguments (`GRIP_STRING_SETS`,
+`BASS_VOICE_STRING_SETS`, `GRIP_MAX_SPAN`, `NECK_FRET_MIN`/`NECK_FRET_MAX`, `STANDARD_TUNING`,
+`ChordParser.CHORD_TONES_FROM_ROOT`) are fixed at import, which is what makes the key sufficient
+and why **reassigning one at runtime** is the single thing that would leave a stale answer
+behind.

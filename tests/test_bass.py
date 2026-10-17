@@ -20,25 +20,51 @@ import unittest
 from typing import List, Optional, Tuple
 
 from arranger import (
-    BASS_POLICY_ROLES,
     BASS_ROLE_ANCHOR,
     BASS_ROLE_APPROACH,
     BASS_ROLE_CONNECT,
     BASS_ROLE_ENCLOSURE,
     BASS_ROLE_HOLD,
-    BASS_STYLES,
+    BASS_RULE_5TH,
+    BASS_RULE_APPROACH,
+    BASS_RULE_NEAREST,
+    BASS_RULE_ROLES,
+    BASS_RULE_ROOT,
+    BASS_RULES,
+    BASS_STYLE_ANCHORS,
+    BASS_STYLE_NONE,
+    BASS_STYLE_WALK,
     NO_CHORD,
+    PART_NAMES,
     PITCH_CLASS_NAMES,
+    ROLE_FILL,
+    ROLE_TARGET,
     TEXTURE_STYLES,
-    _bass_harmony,
-    _comping_no_room_reason,
-    _walking_bass_line,
     bass_allowed,
     bass_cost,
     bass_line_for,
     comping_capacity,
+    parse_bass_style,
     thumb_capacity,
 )
+
+# Private helpers imported from where they live rather than through the package
+# facade: they are not API, and re-exporting them would enlarge the public
+# surface for one test file's benefit. See `test_package_dag` and the facade
+# docstring.
+from arranger.bass import (
+    _bass_harmony,
+    _walking_bass_line,
+)
+from arranger.bass_rules import (
+    _comping_no_room_reason,
+)
+
+# The two shipped non-`none` styles, as the loops below iterate them. `walk` is the whole
+# rule vocabulary; `anchors` is the root rule alone. `none` and `auto` are not styles a
+# caller asks `bass_allowed` about directly - `auto` is resolved first, and `none` is
+# answered without a capacity question - so they are not in this list.
+SHIPPED_STYLES = (BASS_STYLE_WALK, BASS_STYLE_ANCHORS)
 
 
 def line(chords, onsets, beats_per_bar=4):
@@ -315,14 +341,29 @@ class TestGridAndHarmonyEdges(unittest.TestCase):
         walked = line([("G", "7", "G7")], [(1, 1.0)])
         self.assertEqual([entry[1] for entry in walked], [1.0, 2.0, 3.0, 4.0])
 
-    def test_an_nc_bar_continues_the_last_known_harmony(self):
-        """Never a guessed one - the same rule the loaders follow."""
+    def test_an_nc_bar_yields_no_notes_rather_than_continuing_the_harmony(self):
+        """A chordless bar states no bass part - and the assertion inverts with the rule.
+
+        This asserted the opposite until `docs/history/parts.md` §4 derived the other answer: a
+        part whose notes are chosen from a chord cannot state anything where there is no
+        chord, so continuing the last known harmony across the gap is the *guess* here —
+        it is the right pitch class for the wrong music. Per AGENTS.md trap 5 the test is
+        inverted rather than deleted, because the rule it protects is the same one.
+
+        It sits beside the unspeakable-quality case on purpose: that one also yields no
+        notes, but for the opposite reason. An `NC` bar has no chord to state; an
+        untranslatable symbol has a chord this library cannot voice, and its harmony
+        stays in force for the bar after it.
+        """
         chords = [("C", "maj7", "Cmaj7"), (None, None, NO_CHORD), ("G", "7", "G7")]
         walked = line(chords, [(1, 1.0), (2, 1.0), (3, 1.0)])
-        bar_two = [entry for entry in walked if entry[0] == 2]
-        self.assertTrue(bar_two)
-        anchors = [entry for entry in bar_two if entry[3] == BASS_ROLE_ANCHOR]
-        self.assertEqual([entry[2] for entry in anchors], ["C"])
+        # Every beat of bars 1 and 3 is walked; bar 2 contributes nothing at all. The
+        # anchors are still C then G - the walk re-enters on the next chord that sounds.
+        bars = [entry[0] for entry in walked]
+        self.assertNotIn(2, bars)
+        self.assertEqual(set(bars), {1, 3})
+        anchors = [entry for entry in walked if entry[3] == BASS_ROLE_ANCHOR]
+        self.assertEqual([entry[2] for entry in anchors], ["C", "G"])
 
     def test_an_unspeakable_quality_yields_no_notes_and_is_never_guessed(self):
         """
@@ -423,39 +464,66 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class TestTheBassPolicyRegistry(unittest.TestCase):
-    """`bass=` is a policy with a name, and the set of policies is open.
+class TestTheBassStyleRegistry(unittest.TestCase):
+    """`bass=` names note rules, and the set of rules is open.
 
-    The point of the registry is that a **new bass pattern is a row in a table**, not
+    The point of the registry is that a **new note rule is a row in a table**, not
     another branch at each of the call sites that decide whether a thumb line exists.
-    These tests are mostly about that staying true - the two tables agreeing, and no
-    policy being nameable without a rule - because a registry that can be named past
-    its own rules is worse than the branches it replaced.
+    These tests are mostly about that staying true - the vocabulary and the role table
+    agreeing, and no rule being nameable without the roles it governs - because a
+    registry that can be named past its own rules is worse than the branches it
+    replaced.
     """
 
-    def test_every_policy_has_a_rule_and_every_rule_has_a_policy(self):
-        """`BASS_STYLES` and `BASS_POLICY_ROLES` describe the same set.
+    def test_every_rule_has_roles_and_every_role_entry_has_a_rule(self):
+        """`BASS_RULES` and `BASS_RULE_ROLES` describe the same set.
 
-        The two differ in exactly one entry by design - `BASS_AUTO` is a default and not
-        a policy - so `BASS_STYLES` minus `none` is the key set of the rule table.
+        The rule vocabulary and the table mapping each rule to the `BASS_ROLE_*` values
+        it admits are one set seen twice: a rule cannot be nameable without the roles it
+        governs, and the table cannot carry a row for a rule nobody can ask for.
         """
         self.assertEqual(
-            sorted(p for p in BASS_STYLES if p != "none"),
-            sorted(BASS_POLICY_ROLES),
-            "a policy is nameable without a rule, or has a rule without a name",
+            sorted(BASS_RULES),
+            sorted(BASS_RULE_ROLES),
+            "a rule is nameable without roles, or has roles without a name",
         )
 
-    def test_auto_is_not_a_policy(self):
-        """`auto` is resolved before it reaches any of this.
+    def test_auto_and_none_are_not_rules(self):
+        """`auto` and `none` are resolved before they reach the rule vocabulary.
 
-        It is a default for an argument, not a pattern a caller can ask for, and keeping
-        it out of `BASS_STYLES` is what lets `arrange_progression` validate `bass`
-        against the policies without special-casing a sentinel.
+        `auto` is a default for an argument, not a note a caller can ask for, and `none`
+        is the absence of a style. Keeping both out of `BASS_RULES` is what lets
+        `parse_bass_style` refuse them and `arrange_progression` validate a style
+        without special-casing a sentinel.
         """
-        self.assertNotIn("auto", BASS_STYLES)
-        self.assertNotIn("auto", BASS_POLICY_ROLES)
+        self.assertNotIn("auto", BASS_RULES)
+        self.assertNotIn("none", BASS_RULES)
+        self.assertNotIn("auto", BASS_RULE_ROLES)
+        with self.assertRaises(ValueError):
+            parse_bass_style("auto")
+        with self.assertRaises(ValueError):
+            parse_bass_style("none")
 
-    def test_walk_keeps_every_role_and_anchors_keeps_only_the_root(self):
+    def test_the_shipped_walk_is_the_whole_vocabulary_in_order(self):
+        """`BASS_STYLE_WALK` is every rule, and its order is the resolution order.
+
+        `approach` before `nearest` is what makes the walk byte-identical to the old
+        `walk` policy: on the last beat the approach outranks the connective note.
+        """
+        self.assertEqual(BASS_STYLE_WALK, ",".join(BASS_RULES))
+        self.assertEqual(
+            parse_bass_style(BASS_STYLE_WALK),
+            (BASS_RULE_ROOT, BASS_RULE_5TH, BASS_RULE_APPROACH, BASS_RULE_NEAREST),
+        )
+
+    def test_the_shipped_anchors_is_the_root_rule_alone(self):
+        """`BASS_STYLE_ANCHORS` names only the root rule, which admits only anchors."""
+        self.assertEqual(BASS_STYLE_ANCHORS, BASS_RULE_ROOT)
+        self.assertEqual(
+            BASS_RULE_ROLES[BASS_RULE_ROOT], frozenset({BASS_ROLE_ANCHOR})
+        )
+
+    def test_the_walk_keeps_every_role_and_anchors_keeps_only_the_root(self):
         """`anchors` is `walk` with the connective roles dropped, not a second opinion.
 
         Asserted against the same generator's output so the two cannot drift: if a role
@@ -468,8 +536,8 @@ class TestTheBassPolicyRegistry(unittest.TestCase):
         # timing list in this suite.
         chords: List[Tuple[Optional[str], str, str]] = [("C", "maj7", "Cmaj7")] * 8
         onsets: List[Tuple[int, float]] = [(1, 1.0 + 0.5 * i) for i in range(8)]
-        walked = bass_line_for("walk", chords, onsets, 4)
-        anchored = bass_line_for("anchors", chords, onsets, 4)
+        walked = bass_line_for(BASS_STYLE_WALK, chords, onsets, 4)
+        anchored = bass_line_for(BASS_STYLE_ANCHORS, chords, onsets, 4)
         self.assertGreater(len(walked), len(anchored))
         self.assertEqual({n.role for n in anchored}, {BASS_ROLE_ANCHOR})
         self.assertTrue(
@@ -487,13 +555,14 @@ class TestTheBassPolicyRegistry(unittest.TestCase):
     def test_none_writes_no_line(self):
         self.assertEqual(bass_line_for("none", [("C", "maj7", "Cmaj7")], None, 4), [])
 
-    def test_an_unknown_policy_raises_rather_than_defaulting(self):
+    def test_an_unknown_rule_raises_rather_than_defaulting(self):
         """A spelling nobody recognises is a question, not a walk.
 
         Defaulting here would put a bass line under an arrangement that did not ask for
         one, which is the failure mode the house rule exists to prevent everywhere else.
+        The parser owns the vocabulary, so it raises `ValueError` naming the rules.
         """
-        with self.assertRaises(KeyError):
+        with self.assertRaises(ValueError):
             bass_line_for("stride", [("C", "maj7", "Cmaj7")], None, 4)
 
 
@@ -501,26 +570,31 @@ class TestThumbCapacityAndRefusal(unittest.TestCase):
     """A thumb line needs a string, and the capacity is derived not listed."""
 
     def test_capacity_is_read_from_the_grip_tables(self):
-        """No texture can fill every thumb string any more: the set that could is gone.
+        """No texture can fill every thumb string: the set that could is gone.
 
         `uniform` used to answer **0** here, because `drop24`'s `(4,2,1,0)` set spanned the
         low E, the A and the D at once. That was one of the four inner-skip `drop24` sets
-        removed for a *finger* reason (`docs/fingering.md` §4.4), and this capacity is
+        removed for a *finger* reason (`docs/history/fingering.md` §4.4), and this capacity is
         derived from the tables rather than listed, so it followed on its own: one string is
         the worst case now - which is the rule's threshold, not a special case.
         """
-        self.assertEqual(thumb_capacity("uniform", "target"), 1)
-        targets_capacity = thumb_capacity("targets", "target")
+        self.assertEqual(thumb_capacity("uniform", ROLE_TARGET), 1)
+        targets_capacity = thumb_capacity("targets", ROLE_TARGET)
         assert targets_capacity is not None, "a grip palette cannot be unbounded"
         self.assertGreaterEqual(targets_capacity, 1)
-        # An empty palette means the left hand plays nothing: every string is free.
-        self.assertIsNone(thumb_capacity("walking_bass", "fill"))
+        # A palette that states nothing the left hand frets leaves every string free.
+        # `chord1`'s fill is the melody alone, and the `melody` family has no string set
+        # of its own - so the answer is `None`, which the caller reads as unbounded
+        # rather than as zero.
+        self.assertIsNone(thumb_capacity("chord1", ROLE_FILL))
         # A melody-only *selection* is not in the grip tables at all: its upper
         # shapes are single frets, so all three thumb strings are free whatever
         # the texture's palette says, and the capacity is answered where the
         # route is known - `bass_allowed`'s `melody_only`, unbounded by
         # construction rather than measured.
-        allowed, _why = bass_allowed("uniform", "walk", melody_only=True)
+        allowed, _why = bass_allowed(
+            PART_NAMES, "uniform", BASS_STYLE_WALK, melody_only=True
+        )
         self.assertTrue(allowed, "a single-fret upper shape leaves every string free")
 
     def test_no_texture_refuses_a_policy_now_that_uniform_leaves_a_string(self):
@@ -530,7 +604,7 @@ class TestThumbCapacityAndRefusal(unittest.TestCase):
         `uniform` failed every policy because its palette held `drop24`'s `(4,2,1,0)` - the
         one reachable set that spanned all three thumb strings - so `bass_allowed` refused
         and the caller was told which texture to use instead. Removing the four inner-skip
-        `drop24` sets (`docs/fingering.md` §4.4) left one string free in the worst case,
+        `drop24` sets (`docs/history/fingering.md` §4.4) left one string free in the worst case,
         which is the rule's threshold, so every texture now carries every policy.
 
         **This test was inverted rather than deleted.** It used to assert that `uniform` was
@@ -540,20 +614,20 @@ class TestThumbCapacityAndRefusal(unittest.TestCase):
         shipped texture refuses, and the reason machinery is simply not reached.
         """
         for texture in TEXTURE_STYLES:
-            for policy in (p for p in BASS_STYLES if p != "none"):
-                allowed, reason = bass_allowed(texture, policy)
-                self.assertTrue(allowed, f"{texture} + {policy}: {reason}")
-                self.assertEqual(reason, "", f"{texture} + {policy} carries a reason")
+            for style in SHIPPED_STYLES:
+                allowed, reason = bass_allowed(PART_NAMES, texture, style)
+                self.assertTrue(allowed, f"{texture} + {style}: {reason}")
+                self.assertEqual(reason, "", f"{texture} + {style} carries a reason")
 
     def test_the_textures_that_leave_a_string_are_allowed(self):
         for texture in TEXTURE_STYLES:
-            for policy in BASS_STYLES:
-                allowed, _why = bass_allowed(texture, policy)
-                self.assertTrue(allowed, f"{texture} + {policy}")
+            for style in (BASS_STYLE_NONE, *SHIPPED_STYLES):
+                allowed, _why = bass_allowed(PART_NAMES, texture, style)
+                self.assertTrue(allowed, f"{texture} + {style}")
 
     def test_none_is_always_allowed(self):
         for texture in TEXTURE_STYLES:
-            allowed, _why = bass_allowed(texture, "none")
+            allowed, _why = bass_allowed(PART_NAMES, texture, "none")
             self.assertTrue(allowed, texture)
 
 
@@ -567,7 +641,7 @@ class TestCompingCapacity(unittest.TestCase):
     warning telling the player to change a setting that could not affect the result.
 
     Measured on `tests/data/but_not_for_me.mxl` before the fix, with
-    `melody="alto,tenor", bass="walk"`:
+    `parts="chord", bass="root,5th,approach,nearest"`:
 
         texture=uniform    80 steps, **0 thumb notes**, warning "uniform leaves no
                            bass string free for a target"
@@ -579,7 +653,7 @@ class TestCompingCapacity(unittest.TestCase):
     """
 
     def test_the_capacity_is_measured_at_every_arity(self):
-        """Derived from `_comping_string_sets`, so a new arity is covered by this.
+        """Derived from `comping_string_sets`, so a new arity is covered by this.
 
         The numbers rather than a bare `>= 1`, because "never zero" is the finding and
         a regression should say *which* arity changed rather than fail on a boolean.
@@ -621,22 +695,22 @@ class TestCompingCapacity(unittest.TestCase):
         meaningless name.
         """
         for texture in TEXTURE_STYLES:
-            for policy in (p for p in BASS_STYLES if p != "none"):
-                allowed, reason = bass_allowed(texture, policy, notes=2)
+            for style in SHIPPED_STYLES:
+                allowed, reason = bass_allowed(PART_NAMES, texture, style, notes=2)
                 self.assertTrue(
                     allowed,
-                    f"texture={texture} + {policy} refused the comping route: {reason}",
+                    f"texture={texture} + {style} refused the comping route: {reason}",
                 )
 
     def test_a_refusal_on_this_route_would_not_name_a_texture(self):
         """There is no texture to try instead, so the sentence must not offer one.
 
         `_no_room_reason` names a texture because a palette is what failed. On the comping
-        route the route itself was chosen by the voice selection, and the original bug
+        route the route itself was chosen by the parts selection, and the original bug
         produced a warning that pointed at `texture=` - a setting that could not change
         the outcome. Since no arity currently refuses, this asserts the sentence's shape
         directly against the function rather than through `bass_allowed`.
         """
         reason = _comping_no_room_reason(2, False)
         self.assertNotIn("texture=", reason)
-        self.assertIn("voices", reason)
+        self.assertIn("parts", reason)

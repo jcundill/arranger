@@ -1,6 +1,7 @@
 import contextlib
 import io
 import unittest
+from typing import Optional, Tuple
 
 from musthe import Note
 
@@ -10,11 +11,12 @@ from arranger import (
     ChordParser,
     VoiceLeadingEngine,
     Voicing,
-    _print_step,
-    _step_annotation,
     format_progression,
 )
-from arranger.grips import _drop2_template_for
+from arranger.annotation import step_annotation
+from arranger.grips import drop2_template_for
+from arranger.melody_alone import melody_alone_shape
+from arranger.render import print_step
 
 
 class TestMelodyOnlyVoicing(unittest.TestCase):
@@ -86,6 +88,122 @@ class TestMelodyOnlyVoicing(unittest.TestCase):
         self.assertIsNotNone(voicing)
         assert voicing is not None
         self.assertEqual(voicing.soprano_string(), 5)
+
+
+class TestMelodyOnlyPalette(unittest.TestCase):
+    """get_melody_only_voicings is the palette a lone note is placed from.
+
+    A lone note - a fill, an `NC` bar, a rescued melody, a span demotion - is chosen by
+    `cost.voicing_cost` from one position per eligible string, so the *group* of strings
+    the caller allowed is the generator's business and the position within it is the
+    selector's. The singular keeps its old meaning: the first candidate, which is the
+    high E whenever it can carry the note.
+    """
+
+    def setUp(self):
+        self.engine = VoiceLeadingEngine()
+
+    def test_one_candidate_per_eligible_string_in_preference_order(self):
+        """The default two melody strings offer F4 at frets 1 and 6, in that order."""
+        candidates = self.engine.get_melody_only_voicings(Note("F4"))
+        self.assertEqual(
+            [candidate.tab_string() for candidate in candidates],
+            ["x-x-x-x-x-1", "x-x-x-x-6-x"],
+        )
+        for candidate in candidates:
+            self.assertEqual(len(candidate.active_frets()), 1)
+            self.assertEqual(candidate.grip, "melody")
+            self.assertEqual(candidate.midi_notes(), [65])
+
+    def test_a_wider_named_set_widens_the_palette(self):
+        """Naming the G string too offers its own position - the palette is the caller's."""
+        candidates = self.engine.get_melody_only_voicings(Note("F4"), prefer=(5, 4, 3))
+        self.assertEqual(
+            [candidate.tab_string() for candidate in candidates],
+            ["x-x-x-x-x-1", "x-x-x-x-6-x", "x-x-x-10-x-x"],
+        )
+
+    def test_the_singular_is_the_first_of_the_palette(self):
+        """`get_melody_only_voicing` stays the preference-order answer it always was."""
+        for name in ("F4", "Eb4", "G3", "Bb4", "Eb5"):
+            note = Note(name)
+            first = self.engine.get_melody_only_voicing(note)
+            candidates = self.engine.get_melody_only_voicings(note)
+            self.assertIsNotNone(first, name)
+            self.assertEqual(first, candidates[0], name)
+
+    def test_a_named_set_is_never_widened_while_it_can_carry_the_note(self):
+        """`prefer=(5,)` offers the high E alone - the fallback below it is a rescue."""
+        candidates = self.engine.get_melody_only_voicings(Note("F4"), prefer=(5,))
+        self.assertEqual([c.tab_string() for c in candidates], ["x-x-x-x-x-1"])
+
+    def test_the_fallback_below_a_named_set_still_happens(self):
+        """A note the named string cannot carry is rescued below it, as before."""
+        candidates = self.engine.get_melody_only_voicings(Note("Eb4"), prefer=(5,))
+        self.assertTrue(candidates)
+        self.assertNotIn(5, [c.soprano_string() for c in candidates])
+
+    def test_unreachable_note_returns_an_empty_palette(self):
+        """D2 is below the low E open, so there is nothing to choose from."""
+        self.assertEqual(self.engine.get_melody_only_voicings(Note("D2")), [])
+
+
+class TestTheLoneNoteIsPlacedLikeAChord(unittest.TestCase):
+    """The lone note's position is the cost tuple's, not the highest string's.
+
+    `melody_alone.melody_alone_shape` is the seam every lone-note route goes through, and it
+    scores the palette against the shape the hand is holding. Without that, F4 after a
+    chord at frets 6-8 came back on the high E at fret 1 - below the preferred window and
+    six frets away from the hand - because the generator's preference order put it there.
+    """
+
+    #: `6-x-6-7-8-x`: the shape the committed heads hold when the melody is on the B string.
+    AT_SEVEN = Voicing(frets=[6, -1, 6, 7, 8, -1], top_fret=8, avg_fret=6.75)
+    #: The same chord up the neck, so the two choices cannot be confused.
+    AT_TWELVE = Voicing(frets=[-1, -1, 12, 12, 12, 12], top_fret=12, avg_fret=12.0)
+
+    def _chosen(self, previous: Voicing) -> Tuple[Optional[Voicing], bool]:
+        return melody_alone_shape(
+            Note("F4"), previous=previous, top_strings=(5, 4, 3)
+        )
+
+    def test_the_note_lands_where_the_hand_is(self):
+        """F4 sits on the B string at fret 6, inside the window and a fret from the hand."""
+        chosen, inside_window = self._chosen(self.AT_SEVEN)
+        self.assertIsNotNone(chosen)
+        assert chosen is not None
+        self.assertEqual(chosen.tab_string(), "x-x-x-x-6-x")
+        self.assertTrue(inside_window)
+
+    def test_the_same_note_follows_the_hand_up_the_neck(self):
+        """The choice is the hand's, so the identical note lands somewhere else at fret 12."""
+        chosen, _inside_window = self._chosen(self.AT_TWELVE)
+        self.assertIsNotNone(chosen)
+        assert chosen is not None
+        self.assertEqual(chosen.tab_string(), "x-x-x-10-x-x")
+
+    def test_a_lone_note_out_of_position_reports_an_empty_window(self):
+        """The window fact is measured over the palette, which is what the clause reads.
+
+        A named set that cannot reach inside the preferred frets is the live case: the
+        high E string's F4 is fret 1, below `NECK_FRET_MIN`, and it is the whole palette
+        because the caller named that string alone.
+        """
+        chosen, inside_window = melody_alone_shape(
+            Note("F4"), previous=None, top_strings=(5,)
+        )
+        self.assertIsNotNone(chosen)
+        assert chosen is not None
+        self.assertEqual(chosen.tab_string(), "x-x-x-x-x-1")
+        self.assertFalse(inside_window)
+
+    def test_an_in_window_lone_note_reports_a_populated_window(self):
+        """The same note with the B string available is placed inside the frets asked for."""
+        chosen, inside_window = melody_alone_shape(
+            Note("F4"), previous=None, top_strings=(5, 4)
+        )
+        self.assertIsNotNone(chosen)
+        self.assertTrue(inside_window)
 
 
 class TestNonChordToneDetection(unittest.TestCase):
@@ -193,16 +311,23 @@ class TestThePaletteRescue(unittest.TestCase):
     "this is the tune and nothing under it", so it is recorded on the step
     (`chord_unvoiced`) and reported by the renderers rather than inferred from the
     shape, which a deliberate melody-alone **fill** shares.
+
+    **The thin palette is `texture="chord1"` now.** It asks the chord part for a
+    single note, and the one family that states one note under a melody is `duo` -
+    which is a *pair* of specific degrees, so a melody it cannot pair with leaves the
+    chord unstated. That is the shipped spelling of the case; the `grips=` argument
+    that used to pin it is gone (`docs/history/parts.md` §6 item 6), because a grip family is
+    the search space rather than a choice.
     """
 
     def test_the_step_survives_the_chord_it_cannot_voice(self):
         steps = VoiceLeadingEngine.arrange_progression(
-            [("Bb4", "dim7", "F#dim7")], grips=("shell",)
+            [("Eb5", "maj", "Cmaj")], texture="chord1"
         )
         self.assertEqual(len(steps), 1, "the note went missing with the chord")
         step = steps[0]
-        self.assertEqual(step.chord, "F#dim7")
-        self.assertEqual(step.melody, "Bb4")
+        self.assertEqual(step.chord, "Cmaj")
+        self.assertEqual(step.melody, "Eb5")
         self.assertTrue(step.chord_unvoiced)
         # Not the `NC` case: there *is* a chord here, it just is not sounding.
         self.assertFalse(step.melody_only)
@@ -211,29 +336,29 @@ class TestThePaletteRescue(unittest.TestCase):
     def test_the_renderer_says_the_chord_is_not_sounding(self):
         """A bare note under a chord symbol is the thing this label exists to prevent."""
         steps = VoiceLeadingEngine.arrange_progression(
-            [("Bb4", "dim7", "F#dim7")], grips=("shell",)
+            [("Eb5", "maj", "Cmaj")], texture="chord1"
         )
         self.assertEqual(
-            _step_annotation(steps[0]), " (melody alone - no voicing for this chord)"
+            step_annotation(steps[0]), " (melody alone - no voicing for this chord)"
         )
 
     def test_a_step_that_is_also_transposed_reports_both_facts(self):
         """The rescue drops a high note an octave *and* leaves the chord unstated.
 
-        G5 is fret 15 on the high E string, past `HIGH_FRET_LIMIT`, so the melody-alone
-        shape sounds G4 - and both facts have to reach the reader. Measured on "The
+        Gb5 is fret 14 on the high E string, past `HIGH_FRET_LIMIT`, so the melody-alone
+        shape sounds F#4 - and both facts have to reach the reader. Measured on "The
         Jitterbug Waltz" bars 1 and 9; this is the unit form of it.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("G5", "6", "Eb6")], grips=("shell",)
+            [("Gb5", "6", "Eb6")], texture="chord1"
         )
         self.assertEqual(len(steps), 1)
         step = steps[0]
         self.assertTrue(step.chord_unvoiced)
-        self.assertEqual(step.original_melody, "G5")
-        self.assertEqual(step.melody, "G4")
-        self.assertIn("transposed down an octave from G5", _step_annotation(step))
-        self.assertIn("no voicing for this chord", _step_annotation(step))
+        self.assertEqual(step.original_melody, "Gb5")
+        self.assertEqual(step.melody, "F#4")
+        self.assertIn("transposed down an octave from Gb5", step_annotation(step))
+        self.assertIn("no voicing for this chord", step_annotation(step))
 
 
 class TestExtendedExtensionMappings(unittest.TestCase):
@@ -258,7 +383,7 @@ class TestExtendedExtensionMappings(unittest.TestCase):
                 # "Can top it" is now the shape itself rather than a degree list: the rule
                 # answers for every chord tone, so asking for one proves the substitution can
                 # be voiced with the melody on top.
-                topped = _drop2_template_for(target, degree % 12)
+                topped = drop2_template_for(target, degree % 12)
                 self.assertTrue(topped, (quality, degree, target))
                 self.assertEqual(topped[0], 0, (quality, degree, target))
 
@@ -344,9 +469,8 @@ class TestExtendedExtensionMappings(unittest.TestCase):
             Note("Ab5"), "7", "G7", "extension"
         )
         # A bare `assert` rather than `assertIsNotNone`: pyright does not narrow
-        # through the unittest helper, and this is the trap `test_docs.py`'s
-        # `_layout_block` already had to work around. Resolving the Optional where
-        # the type is still known is the house answer.
+        # through the unittest helper. Resolving the Optional where the type is
+        # still known is the house answer.
         assert substituted is not None
         quality, name = substituted
         self.assertEqual(quality, "7b9")
@@ -522,7 +646,11 @@ class TestNoChordSteps(unittest.TestCase):
         self.assertFalse(step.non_chord_tone)
         self.assertIsNone(step.harmonized_as)
         self.assertIsNone(step.strategy)
-        self.assertEqual(step.tab_line(), "x-x-x-x-x-1")
+        # The note is placed by the same cost tuple a chord is: with no previous shape the
+        # rule is "start near the middle of the neck", which for F4 is the G string's
+        # fret 10 rather than the high E string's fret 1. Where the tune stands alone the
+        # window and the hand still decide it - see `TestTheLoneNoteIsPlacedLikeAChord`.
+        self.assertEqual(step.tab_line(), "x-x-x-10-x-x")
 
     def test_nc_step_grip_mirrors_the_voicing(self):
         """`step.grip` says what `voicing.grip` says, not the "drop2" default.
@@ -583,12 +711,12 @@ class TestNoChordSteps(unittest.TestCase):
         self.assertEqual(step.melody, "D2")
 
     def test_annotation_is_shared_by_both_renderings(self):
-        """format_progression and _print_step report the same text.
+        """format_progression and print_step report the same text.
 
         The second assertion used to be the `vertical=True` block, which printed the
         same annotation over a six-line header. That renderer is gone, and the two
-        consumers of `_step_annotation` that remain are `format_progression` and
-        `_print_step` - the compact line and the demo's one-line summary. They share
+        consumers of `step_annotation` that remain are `format_progression` and
+        `print_step` - the compact line and the demo's one-line summary. They share
         the function precisely so a melody-only step cannot read one way in the
         library and another in `make demo`.
 
@@ -597,18 +725,21 @@ class TestNoChordSteps(unittest.TestCase):
         the renderer and its own step method.
         """
         steps = self.engine.arrange_progression([("F4", NO_CHORD, NO_CHORD)])
-        expected = _step_annotation(steps[0])
+        expected = step_annotation(steps[0])
         self.assertEqual(expected, " (no chord - melody alone)")
         self.assertIn(expected, format_progression(steps))
         printed = io.StringIO()
         with contextlib.redirect_stdout(printed):
-            _print_step(steps[0])
+            print_step(steps[0])
         self.assertIn(expected, printed.getvalue())
 
-    def test_ordinary_step_annotation_names_the_degree(self):
-        """A chord tone names the degree it is and how many voices state it."""
+    def test_ordinarystep_annotation_names_the_degree(self):
+        """A chord tone names the degree it is, how many voices state it, and which ones."""
         steps = self.engine.arrange_progression([("C5", "maj7", "Cmaj7")])
-        self.assertEqual(_step_annotation(steps[0]), " (harmony under Root - 4 voices)")
+        self.assertEqual(
+            step_annotation(steps[0]),
+            " (harmony under Root - 4 voices - sounding: B 7, E 3, G 5, C Root)",
+        )
 
     def test_melody_only_defaults_to_false(self):
         """The defaulted field keeps plain construction and the shim working."""

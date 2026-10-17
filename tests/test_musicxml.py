@@ -732,12 +732,12 @@ class TestMusicXMLWithoutMusic21(unittest.TestCase):
 
 
 class TestEventsWithNoSteps(unittest.TestCase):
-    """`_events` answers the empty arrangement itself, at the definition.
+    """`score_events` answers the empty arrangement itself, at the definition.
 
     The pickup is read from the first onset of the steps placed, and an arrangement
-    with no steps has no first onset - so the empty case belongs to `_events`, the
+    with no steps has no first onset - so the empty case belongs to `score_events`, the
     one seam `format_musicxml` and `format_gp5` both place through, rather than to a
-    guard at each caller. Undecorated on purpose: `_events` needs neither optional
+    guard at each caller. Undecorated on purpose: `score_events` needs neither optional
     extra, so this runs on a clean clone.
     """
 
@@ -749,13 +749,13 @@ class TestEventsWithNoSteps(unittest.TestCase):
         to raise. The pickup is 0 because there is no first note to measure it
         from - the same answer a head that starts on a downbeat gets.
         """
-        from tabxml import _events
+        from tabscore import score_events
 
-        self.assertEqual(_events([], 4, True), ([], 0.0))
-        self.assertEqual(_events([], 4, False), ([], 0.0))
+        self.assertEqual(score_events([], 4, True), ([], 0.0))
+        self.assertEqual(score_events([], 4, False), ([], 0.0))
         # A cut-time metre as well: with no steps there is nothing to place in any
         # bar, so the beat arithmetic is never asked.
-        self.assertEqual(_events([], 2, True, 2), ([], 0.0))
+        self.assertEqual(score_events([], 2, True, 2), ([], 0.0))
 
 
 @requires_music21

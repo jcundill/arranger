@@ -24,31 +24,32 @@ from . import chords as _chords
 from . import cost as _cost
 from . import grips as _grips
 from .bass import (
-    BASS_AUTO,
     BassNote,
+)
+from .bass_merge import attach_bass
+from .bass_rules import (
+    BASS_STYLE_AUTO,
 )
 from .chords import (
     NON_CHORD_TONE_EXTENSIONS,
     NON_CHORD_TONE_STRATEGIES,
 )
-from .diagnostics import Diagnostics
-from .grips import (
+from .grid import GRID_DEFAULT
+from .grip_tables import (
     GRIP_PREFERENCE,
+)
+from .grips import (
     MELODY_STRING_CHOICES,
     MELODY_STRING_CHOICES_FULL,
 )
+from .harmony import HARMONY_AUTO
 from .movement import (
     StepPreparation,
-    _attach_bass,
     arrange_progression,
     prepare_step,
 )
 from .options import ArrangeOptions
-from .textures import (
-    GRID_EVERY_NOTE,
-    HARMONY_AUTO,
-    MELODY_AUTO,
-)
+from .parts import PARTS_AUTO
 from .tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
@@ -87,23 +88,6 @@ class VoiceLeadingEngine:
     # --- delegates: each forwards to the module that owns the body ---
 
     @staticmethod
-    def _parse_chord_name(name: str) -> Tuple[Optional[str], Optional[str]]:
-        """See `grips._parse_chord_name`."""
-        return _grips._parse_chord_name(name)
-
-    @staticmethod
-    def _string_sets_for(grip: str, top_string: int) -> List[Tuple[int, ...]]:
-        """See `grips._string_sets_for`."""
-        return _grips._string_sets_for(grip, top_string)
-
-    @classmethod
-    def _chord_context(
-        cls, chord_type: str, chord_name: Optional[str]
-    ) -> Tuple[str, Optional[int], Tuple[int, ...]]:
-        """See `grips._chord_context`."""
-        return _grips._chord_context(chord_type, chord_name)
-
-    @staticmethod
     def get_comping_voicings(
         chord_type: str,
         chord_name: Optional[str] = None,
@@ -123,11 +107,6 @@ class VoiceLeadingEngine:
             bass_voice,
             shell_root,
         )
-
-    @staticmethod
-    def _lower_soprano_strings(top_strings: Tuple[int, ...]) -> Tuple[int, ...]:
-        """See `grips._lower_soprano_strings`."""
-        return _grips._lower_soprano_strings(top_strings)
 
     @classmethod
     def get_grip_voicings(
@@ -209,6 +188,15 @@ class VoiceLeadingEngine:
         )
 
     @classmethod
+    def get_melody_only_voicings(
+        cls,
+        melody_note: Note,
+        prefer: Tuple[int, ...] = MELODY_STRING_CHOICES,
+    ) -> List[Voicing]:
+        """See `grips.get_melody_only_voicings`."""
+        return _grips.get_melody_only_voicings(melody_note, prefer)
+
+    @classmethod
     def get_melody_only_voicing(
         cls,
         melody_note: Note,
@@ -246,28 +234,6 @@ class VoiceLeadingEngine:
         )
 
     @classmethod
-    def _resolution_pitch_class(
-        cls,
-        melody_note: Note,
-        root_str: str,
-        canonical_type: str,
-        next_melody: Optional[str],
-    ) -> Optional[int]:
-        """See `chords._resolution_pitch_class`."""
-        return _chords._resolution_pitch_class(
-            melody_note, root_str, canonical_type, next_melody
-        )
-
-    @staticmethod
-    def _window_penalty(
-        candidates: List[Voicing],
-        fret_min: int = NECK_FRET_MIN,
-        fret_max: int = NECK_FRET_MAX,
-    ) -> int:
-        """See `cost._window_penalty`."""
-        return _cost._window_penalty(candidates, fret_min, fret_max)
-
-    @classmethod
     def voicing_cost(
         cls,
         voicing: Voicing,
@@ -294,8 +260,8 @@ class VoiceLeadingEngine:
         root_pc: Optional[int] = None,
         melody_pc: Optional[int] = None,
     ) -> Optional[Voicing]:
-        """See `cost._best_voicing`."""
-        return _cost._best_voicing(
+        """See `cost.best_voicing`."""
+        return _cost.best_voicing(
             candidates, previous, fret_min, fret_max, allowed_tones, root_pc, melody_pc
         )
 
@@ -316,15 +282,14 @@ class VoiceLeadingEngine:
     # --- the two entry points: forwarded to `movement`, which owns the loop ---
 
     @classmethod
-    def _attach_bass(
+    def attach_bass(
         cls,
         step: ArrangementStep,
         note: Optional[BassNote],
         arrangements: List[ArrangementStep],
-        diagnostics: Optional[Diagnostics] = None,
     ) -> None:
-        """See `movement._attach_bass` - the full docstring is there."""
-        return _attach_bass(step, note, arrangements, diagnostics)
+        """See `bass_merge.attach_bass` - the full docstring is there."""
+        return attach_bass(step, note, arrangements)
 
     @classmethod
     def prepare_step(
@@ -338,12 +303,18 @@ class VoiceLeadingEngine:
         fret_min: int = NECK_FRET_MIN,
         fret_max: int = NECK_FRET_MAX,
         grips: Tuple[str, ...] = GRIP_PREFERENCE,
-        diagnostics: Optional[Diagnostics] = None,
     ) -> Optional[StepPreparation]:
         """See `movement.prepare_step` - the full docstring is there."""
         return prepare_step(
-            progression, index, previous, previous_chord, top_strings,
-            non_chord_tone, fret_min, fret_max, grips, diagnostics,
+            progression,
+            index,
+            previous,
+            previous_chord,
+            top_strings,
+            non_chord_tone,
+            fret_min,
+            fret_max,
+            grips,
         )
 
     @classmethod
@@ -354,16 +325,15 @@ class VoiceLeadingEngine:
         non_chord_tone: str = "extension",
         fret_min: int = NECK_FRET_MIN,
         fret_max: int = NECK_FRET_MAX,
-        grips: Tuple[str, ...] = GRIP_PREFERENCE,
         # `Sequence` and Optional *bar* and *beat*, not `List[Tuple[int, float, ...]]`:
         # a slot a caller could not place is `(None, None, None)`, so an entry point may
         # hold either shape. See `movement.arrange_progression` for the same note.
         timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]] = None,
         texture: str = "uniform",
-        bass: str = BASS_AUTO,
-        melody: str = MELODY_AUTO,
+        bass: str = BASS_STYLE_AUTO,
+        parts: str = PARTS_AUTO,
         harmony: str = HARMONY_AUTO,
-        grid: str = GRID_EVERY_NOTE,
+        grid: str = GRID_DEFAULT,
         beats_per_bar: int = 4,
         # The metre's denominator, read by the walking bass's melody timeline alone: a
         # slot's `duration` is in whole notes and one whole note is `beat_type` beats
@@ -374,16 +344,26 @@ class VoiceLeadingEngine:
         # The progression indexes whose melody note articulates, for the §9.2
         # reharmonise rule on the comping route (§9.3 step C). `None` means every slot
         # is an onset - the correct answer for a hand-built progression with no
-        # timeline, and what keeps a bare `arrange_progression(..., melody="alto,tenor")`
+        # timeline, and what keeps a bare `arrange_progression(..., parts="chord")`
         # honouring `--non-chord-tone`. See `ArrangeOptions.melody_onsets`.
         melody_onsets: Optional[Container[int]] = None,
-        diagnostics: Optional[Diagnostics] = None,
         options: Optional[ArrangeOptions] = None,
     ) -> List[ArrangementStep]:
         """See `movement.arrange_progression` - the full docstring is there."""
         return arrange_progression(
-            progression, top_strings, non_chord_tone, fret_min,
-            fret_max, grips, timings, texture, bass, melody, harmony,
-            grid, beats_per_bar, beat_type, melody_onsets, diagnostics,
-            options,
+            progression,
+            top_strings=top_strings,
+            non_chord_tone=non_chord_tone,
+            fret_min=fret_min,
+            fret_max=fret_max,
+            timings=timings,
+            texture=texture,
+            bass=bass,
+            parts=parts,
+            harmony=harmony,
+            grid=grid,
+            beats_per_bar=beats_per_bar,
+            beat_type=beat_type,
+            melody_onsets=melody_onsets,
+            options=options,
         )

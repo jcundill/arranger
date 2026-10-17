@@ -9,12 +9,12 @@ them, and that placement is what keeps the package acyclic:
 
 - `grips` *constructs* a `Voicing`, so `Voicing` has to be below `grips`;
 - `Voicing.role` and `ArrangementStep.role` both default to `ROLE_TARGET`, so the
-  role vocabulary has to be below `grips` and `textures` alike. `ROLE_TARGET` and
-  `ROLE_FILL` are therefore *defined* here and re-exported by `textures`, rather
+  role vocabulary has to be below `grips` and `texture` alike. `ROLE_TARGET` and
+  `ROLE_FILL` are therefore *defined* here and re-exported by `texture`, rather
   than the other way round;
-- `Voicing.tab_block` calls `_cells_from_frets` / `_tab_block_from_cells`, so the
+- `Voicing.tab_block` calls `cells_from_frets` / `_tab_block_from_cells`, so the
   tab-cell primitives have to be below `Voicing` too, and `render` imports them
-  from here instead of owning them. `_STAFF_CELL_WIDTH` was the second of two
+  from here instead of owning them. `STAFF_CELL_WIDTH` was the second of two
   identical definitions of that one constant; `tabstaff` had the other.
 
 `ArrangementStep` is here for one more reason: `bass` compares steps and `chords`
@@ -44,7 +44,7 @@ PITCH_CLASS_NAMES = ["C", "Db", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb",
 
 # The Weimar Jazz Database's "no chord" marker: a bar that carries melody but no
 # harmony. Such a step is voiced as melody alone - no harmonisation, no
-# reharmonisation, no warning (see VoiceLeadingEngine.get_melody_only_voicing).
+# reharmonisation, no clause (see VoiceLeadingEngine.get_melody_only_voicing).
 NO_CHORD = "NC"
 # Soprano (melody) string indices a Drop-2 voicing may be pinned to, and the four
 # contiguous strings each one uses. Index 0 = low E ... index 5 = high E.
@@ -67,7 +67,8 @@ MELODY_STRING_CHOICES_FULL = (5, 4, 3)
 # The comfortable neck window. Both ends are a strong *preference*, not a filter: a
 # voicing is penalised by how many of its frets fall outside, never rejected for
 # falling outside. A filter would silently drop every step whose melody has no
-# in-window shape, and arrange_progression already skips such a step with a warning -
+# in-window shape, and arrange_progression already emits such a step as a rest with the
+# reason on it -
 # losing a chord of the tune to keep a fretboard preference would be a bad trade.
 NECK_FRET_MIN = 2
 NECK_FRET_MAX = 13
@@ -100,7 +101,7 @@ class GuitarFretboard:
         return STANDARD_TUNING[string_index].midi_note() + fret
 
 
-def _note_name(midi: int) -> str:
+def note_name(midi: int) -> str:
     """
     Spells a MIDI number as a pitch-class name plus octave, e.g. 82 -> 'Bb5'.
 
@@ -119,10 +120,10 @@ ROLE_TARGET = "target"
 ROLE_FILL = "fill"
 
 # Why a step sounds nothing, recorded on `ArrangementStep.silence` and phrased by
-# the renderer (`render._silence_clause`). A position the guitar cannot play is
+# the renderer (`annotation._silence_clause`). A position the guitar cannot play is
 # still **emitted** - carrying the bar, the beat and the chord name - so the tab
-# keeps its line-up against the tune; the warning alone was not enough, because it
-# goes to a Diagnostics sink while the tab is what a user reads. Five values, one
+# keeps its line-up against the tune; a message alone was not enough, because it
+# reached nobody reading the part. Five values, one
 # per route that can decline to play:
 SILENCE_GRID = "grid"            # the grid places no chord on this beat
 SILENCE_NC_COMPING = "nc_comping"  # an NC bar: nothing for a comping part to state
@@ -143,7 +144,7 @@ class Voicing:
     # Defaulted, so existing construction and the __getitem__ shim are unaffected.
     grip: str = "drop2"
     # The pitch class of the lowest sounding voice, or None for an all-muted shape.
-    # Cached so the slash-bass rule (`slots.slash_bass_cost`) does not have to
+    # Cached so the slash-bass rule (`chords.slash_bass_cost`) does not have to
     # re-derive it, and so a caller can ask "what is the bass of this grip" directly.
     bass_pc: Optional[int] = None
     # Which metric role produced this shape, mirroring ArrangementStep.role: ROLE_TARGET
@@ -154,7 +155,7 @@ class Voicing:
     # unaffected. A plain string rather than an enum, for the same reason `grip` is.
     role: str = ROLE_TARGET
     # A walking-bass thumb note merged into the fret vector, and the string carrying it.
-    # Set **only after** `_best_voicing` has chosen the upper shape, never as a
+    # Set **only after** `best_voicing` has chosen the upper shape, never as a
     # candidate: `voicing_cost`'s `missing = 4 - len(active)` counts the voices that
     # sound, and a merged fifth voice would corrupt it. Selecting first and merging
     # after is what keeps the bass out of the cost tuple by construction rather than by
@@ -192,7 +193,7 @@ class Voicing:
         renders as six 'x' lines rather than raising. Purely a render: it
         prints nothing, so callers decide how to display it.
         """
-        return _tab_block_from_cells(_cells_from_frets(self.frets))
+        return _tab_block_from_cells(cells_from_frets(self.frets))
 
     def tab(self) -> str:
         """Returns tab_block() as a single newline-joined string."""
@@ -359,7 +360,7 @@ class ArrangementStep:
     # Kept as its own field rather than derived from `grip == "melody"`, because a
     # texture **fill** is deliberately the melody alone and must not carry this claim:
     # the two arrive at the same shape by different routes, which is the distinction
-    # `decisions.melody_alone_case` exists to keep. See `render._step_annotation`.
+    # `decisions.melody_alone_case` exists to keep. See `annotation.step_annotation`.
     chord_unvoiced: bool = False
     # The melody as written, when the step was transposed down an octave to keep the
     # voicing below HIGH_FRET_LIMIT (see VoiceLeadingEngine.get_octave_down_candidates).
@@ -405,7 +406,7 @@ class ArrangementStep:
     # melody-bearing route had under this melody note, and the fuller shape it did not
     # take. None on every step whose shape was *not* chosen that way - a comping shape, a
     # fill, a rescued melody - where "fewer voices than the palette could state" is not a
-    # claim the engine made. See `render._step_annotation`.
+    # claim the engine made. See `annotation.step_annotation`.
     palette: Optional[Palette] = None
     # Which metric role the texture rules gave this step: ROLE_TARGET on a principal
     # melody note (a full chord states the harmony there), ROLE_FILL on a connecting
@@ -417,9 +418,9 @@ class ArrangementStep:
     # beat, and **-1 when the step carries no timing at all**. The -1 matters: it
     # separates "we know this note is weak" from "we were never told where it falls",
     # and it is what keeps a progression with no rhythm on the default path.
-    # See `_metric_weight`.
+    # See `metric_weight`.
     metric_weight: int = 0
-    # --- Walking bass (texture="walking_bass") ---
+    # --- Walking bass (a `bass=` style, or a `bass:walk` grid row) ---
     #
     # The bass note's role, one of the BASS_ROLE_* constants. Defaulted and a plain
     # string, like `role`.
@@ -465,9 +466,24 @@ class ArrangementStep:
     # lets the line say *why* instead of guessing from an all-muted fret vector,
     # where "the grid placed no chord", "there is no chord to comp" and "no string
     # reaches the melody" are indistinguishable. Set by the route that declines to
-    # play (`movement._rest_step`); defaulted, so a hand-built step and every
+    # play (`routes.rest_step`); defaulted, so a hand-built step and every
     # existing construction are unaffected.
     silence: Optional[str] = None
+    # The pitch class of a bass note the left hand **could not place**, or None
+    # when every thumb note the arrangement asked for sounded. Recorded on the
+    # step rather than reported to a sink, because the step survives it: the
+    # upper voicing is kept and only the thumb is missing, so the tab shows
+    # nothing that distinguishes a walk with a gap from one without.
+    #
+    # A *name* rather than a flag, because the wanted pitch is the one fact the
+    # tab cannot supply - the fret vector has no thumb, so a reader cannot derive
+    # which note went missing. `annotation._bass_refusal_clause` phrases it.
+    #
+    # Set by `bass_merge.attach_bass`, at the one point the refusal is known, and
+    # read by the renderer alone: `bass` above is a derived view of
+    # `voicing.bass_midi`, so this is a fact the voicing does not own - it is
+    # about a note that is *not* sounding.
+    bass_refused: Optional[str] = None
 
     @property
     def grip(self) -> str:
@@ -478,7 +494,7 @@ class ArrangementStep:
         A **derived view** of `voicing.grip` rather than a second stored field,
         deliberately: the two were one fact stated twice, and on a no-chord step
         they disagreed - the step said "drop2" while the voicing said "melody"
-        - which is the bug class `docs/one-fact.md` exists to remove. The
+        - which is the bug class `docs/history/one-fact.md` exists to remove. The
         voicing owns the fact, because it is set at construction by whichever
         generator produced the shape and read by `voicing_cost`; the step
         answers in its own spelling and cannot be written apart from the
@@ -494,8 +510,8 @@ class ArrangementStep:
 
         A **derived view** of `voicing.bass_midi`, for the same reason `grip` is a
         view of `voicing.grip`: the two were one fact stated twice, written
-        together in `_attach_bass`, and a stored copy was another field that
-        could disagree - see `docs/one-fact.md`, commit 2. The voicing owns the
+        together in `attach_bass`, and a stored copy was another field that
+        could disagree - see `docs/history/one-fact.md`, commit 2. The voicing owns the
         fact, because the thumb is merged into its fret vector and its string
         recorded beside the pitch; deriving the step's spelling from it is also
         what makes a copy taken *before* the merge impossible, which is the
@@ -534,18 +550,18 @@ class ArrangementStep:
 # width every fret cell is padded to. Two characters covers frets 0-18, which is
 # the whole range the library allows, and it is the same convention tab_block()
 # uses - so the two renderings put a fret in the same column.
-_MUTED_CELL = "x"
-_STAFF_CELL_WIDTH = 2
+MUTED_CELL = "x"
+STAFF_CELL_WIDTH = 2
 
 
-def _cells_from_frets(frets: List[int]) -> List[str]:
+def cells_from_frets(frets: List[int]) -> List[str]:
     """
     Renders each fret as a one-character tab cell, muted strings as 'x'.
 
     A string that is sounding but not being struck is handled by the caller
     (_step_cells), which mutes it; this function renders a literal voicing.
     """
-    return [_MUTED_CELL if fret < 0 else str(fret) for fret in frets]
+    return [MUTED_CELL if fret < 0 else str(fret) for fret in frets]
 
 def _tab_block_from_cells(cells: List[str]) -> List[str]:
     """Lays six one-character cells out as a six-line vertical tab block."""

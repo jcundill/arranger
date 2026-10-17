@@ -34,6 +34,7 @@ import arranger
 from arranger.cli import (
     HEAD_HELP,
     CommonHelp,
+    ScoreMeta,
     add_common_arguments,
     render_and_write,
 )
@@ -119,18 +120,21 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         parser there is nothing to disagree with, so what the count is for changes:
         it is now a tripwire for a flag appearing or vanishing unnoticed.
 
-        **20, and it was 20 before this change too**, which is the interesting part.
-        `--skeleton` and `--pick` were `add_common_arguments` parameters, gated on a
-        vocabulary the one real caller never passed - so `head` never offered them
-        and removing the gate removed no flag from this parser. The count is
-        unchanged because what was removed was a branch nothing took, not an option
-        anyone could type. See `test_the_reduction_flags_are_gone`.
+        **19, and it was 20 before `--grips` was withdrawn.** The flag named a grip
+        family to pin, and a family is the chord part's *internal search space* rather
+        than a choice - `parts=`, `texture=` and the neck window decide it - so the
+        option was deleted rather than deprecated (`docs/history/parts.md` §6 item 6). The
+        count moved by exactly one, which is the tripwire working: the earlier step
+        that removed `--skeleton` and `--pick` left it at 20, because those were
+        `add_common_arguments` parameters gated on a vocabulary the one real caller
+        never passed, so no flag a user could type was ever removed by them. See
+        `test_the_reduction_flags_are_gone`.
 
         `_actions` already drops `help`, so this is the length of the mapping and
         not the parser's action count.
         """
         flags = self.parser()
-        self.assertEqual(len(flags), 20, "the flag count moved; remeasure")
+        self.assertEqual(len(flags), 19, "the flag count moved; remeasure")
 
     def test_every_flag_is_one_somewhere(self):
         """No flag is registered without a decision behind it.
@@ -145,50 +149,41 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         self.assertEqual(
             sorted(self.parser()),
             [
-                "bars", "bars_per_line", "bass", "fallback", "file", "fret_max",
-                "fret_min", "gp5", "grid", "grips", "harmony", "html",
-                "melody", "musicxml", "mutes", "non_chord_tone", "part", "tab",
-                "texture", "voices",
+                "bars", "bars_per_line", "bass_style", "fallback", "file", "fret_max",
+                "fret_min", "gp5", "grid", "harmony", "html",
+                "melody", "musicxml", "mutes", "non_chord_tone", "part", "parts", "tab",
+                "texture",
             ],
         )
 
-    def test_the_grip_palette_is_derived_rather_than_listed(self):
-        """`--grips` names the palette once, and the parser holds no copy of it.
-
-        The flag used to carry `choices=GRIP_PREFERENCE` with `nargs="+"`, so the
-        palette was written out in the parser *and* in the engine - the shape
-        `AGENTS.md` trap 1 is about - and, being the parser's only `nargs` option, it
-        also swallowed the `file` positional written after it. It is a
-        comma-separated string now, parsed by `arranger.parse_grips` on the same
-        route as `--voices`.
-
-        **The assertion is inverted rather than deleted** (trap 5): what replaces
-        `choices` is the *default*, which is the palette spelled out and must parse
-        back to it, so a grip added to the engine is still offered in the same commit
-        with no second list to edit.
-        """
-        action = self.parser()["grips"]
-        self.assertIsNone(action.choices, "the palette must not be listed twice")
-        self.assertIsNone(action.nargs, "a list option must not take the positional")
-        self.assertEqual(
-            arranger.parse_grips(action.default), arranger.GRIP_PREFERENCE
-        )
-
     def test_a_list_option_leaves_the_file_positional_alone(self):
-        """`head --grips shell,duo FILE` finds the file.
+        """`head --parts melody,bass FILE` and `head --grid chord:freddie,bass:walk FILE`.
 
-        This is the defect a `head FILE --grips a b` run hid: `nargs="+"` consumed
-        the filename as a grip and then refused it (`invalid choice:
-        'tests/data/...'`), so `--grips` written *before* the file could not work at
-        all. Asserted on the parse rather than on a whole run, because a positional
-        is the parser's business and no score is needed to see it eaten.
+        This is the defect a `head FILE --grips a b` run hid: `nargs="+"` consumed the
+        filename as a list element and then refused it (`invalid choice:
+        'tests/data/...'`), so a list option written *before* the file could not work at
+        all. `AGENTS.md` trap 14 is the rule - a list-valued option is one comma-separated
+        string the module that owns the vocabulary parses, never `nargs` and never
+        `choices` - and `--parts` and `--grid` are the two flags that carry it now that
+        `--grips` is gone. Asserted on the parse rather than on a whole run, because a
+        positional is the parser's business and no score is needed to see it eaten.
+
+        **The grid half is the reason this asserts a *second row*.** `--grid` carried
+        `choices=GRID_STYLES` while its own help text documented
+        `'melody:every_note,bass:walk'`, so the spelling the flag printed was the one it
+        refused - the flag could name one row and only one, and "run the tune with the
+        thumb walking" was unreachable as written.
         """
         from headxml import head_cli
 
-        parsed = _parser_of(head_cli).parse_args(
-            ["--grips", "shell,duo", "head.musicxml"]
-        )
-        self.assertEqual(parsed.grips, "shell,duo")
+        parser = _parser_of(head_cli)
+        parsed = parser.parse_args(["--parts", "melody,bass", "head.musicxml"])
+        self.assertEqual(parsed.parts, "melody,bass")
+        self.assertEqual(parsed.file, "head.musicxml")
+
+        rows = "chord:freddie,bass:walk"
+        parsed = parser.parse_args(["--grid", rows, "head.musicxml"])
+        self.assertEqual(parsed.grid, rows)
         self.assertEqual(parsed.file, "head.musicxml")
 
     def test_the_help_text_is_not_one_shared_string(self):
@@ -207,12 +202,11 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         wherever it is read is written once at the `add_argument` call, and one
         whose wording carries an arrangement of its own lives in the table.
 
-        The nine: `bass`, `fallback`, `grid`, `grips`, `harmony`, `non_chord_tone`
-        and `voices` are arranging choices that mean the same thing against a
-        transcription and against a score, so they print one help string rather
-        than two - that was the original reason each is *not* in `CommonHelp`, and
-        the reason survives the corpus. `file` and `part` are prose argparse writes
-        from the flag name.
+        The eight: `bass_style`, `fallback`, `grid`, `harmony`, `non_chord_tone` and
+        `parts` are arranging choices that mean the same thing against any file, so
+        they print one help string rather than two - that was the original reason
+        each is *not* in `CommonHelp`, and the reason survives the corpus. `file`
+        and `part` are prose argparse writes from the flag name.
         """
         from dataclasses import fields
 
@@ -221,10 +215,10 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         self.assertEqual(
             sorted(flags),
             [
-                "bars", "bars_per_line", "bass", "fallback", "file", "fret_max",
-                "fret_min", "gp5", "grid", "grips", "harmony", "html",
-                "melody", "musicxml", "mutes", "non_chord_tone", "part", "tab",
-                "texture", "voices",
+                "bars", "bars_per_line", "bass_style", "fallback", "file", "fret_max",
+                "fret_min", "gp5", "grid", "harmony", "html",
+                "melody", "musicxml", "mutes", "non_chord_tone", "part", "parts", "tab",
+                "texture",
             ],
         )
         self.assertEqual(
@@ -244,8 +238,8 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         # And nothing claims to come from the table without declaring it.
         self.assertEqual(
             sorted(flags),
-            sorted(declared | {"bass", "fallback", "file", "grid", "grips",
-                               "harmony", "non_chord_tone", "part", "voices"}),
+            sorted(declared | {"bass_style", "fallback", "file", "grid",
+                               "harmony", "non_chord_tone", "part", "parts"}),
         )
 
     def test_the_reduction_flags_are_gone(self):
@@ -338,7 +332,9 @@ class TestTheSharedDispatch(unittest.TestCase):
         """No flag asked for a file, so none is written - and the exit code is 0."""
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
-            code = render_and_write(self.args(), self.steps(), title="T")
+            code = render_and_write(
+                self.args(), self.steps(), ScoreMeta(title="T")
+            )
         printed = buffer.getvalue()
         self.assertEqual(code, 0)
         self.assertIn("Dm7", printed)
@@ -366,7 +362,7 @@ class TestTheSharedDispatch(unittest.TestCase):
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
             code = render_and_write(
-                self.args(gp5="unused.gp5"), self.steps(), title="T"
+                self.args(gp5="unused.gp5"), self.steps(), ScoreMeta(title="T")
             )
         printed = buffer.getvalue()
         self.assertEqual(code, 1)
@@ -422,7 +418,9 @@ class TestTheSharedDispatch(unittest.TestCase):
             gp5="out.gp5",
         )
         with contextlib.redirect_stdout(io.StringIO()):
-            code = render_and_write(namespace, self.steps(), title="T", **metre)
+            code = render_and_write(
+                namespace, self.steps(), ScoreMeta(title="T", **metre)
+            )
         self.assertEqual(code, 0)
         return calls
 
@@ -527,8 +525,7 @@ class TestTheSharedDispatch(unittest.TestCase):
             render_and_write(
                 self.args(html=path),
                 self.steps(),
-                title="Blue Train",
-                subtitle="John Coltrane - Bb",
+                ScoreMeta(title="Blue Train", subtitle="John Coltrane - Bb"),
             )
         self.assertEqual(calls["subtitle"], "John Coltrane - Bb")
 

@@ -1,7 +1,7 @@
 """The package is a DAG, and this is what holds it to that.
 
-`arranger.py` was one 4290-line module. It is now eleven modules, and the
-*structure* carries an invariant the comments used to carry in prose: a module may
+`arranger.py` was one 4290-line module. It is now a package of focused modules, and
+the *structure* carries an invariant the comments used to carry in prose: a module may
 import only the ones below it. That is worth enforcing mechanically precisely
 because the maintainers here are LLM agents, which edit what they can find and
 cannot infer that a decision documented in one place is duplicated in another - so
@@ -19,7 +19,9 @@ Three things are asserted:
 
 `ALLOWED_EDGES` is the honest escape hatch: a list of named edges rather than a
 blanket exemption, because the split could not be done without them and naming
-each one is what makes a seventh visible.
+each one is what makes a seventh visible. It is empty now - every import points
+up the order - and a stale entry fails, so an edge that is no longer needed
+cannot sit there as permission for the next one.
 """
 
 from __future__ import annotations
@@ -37,15 +39,27 @@ PACKAGE = Path(arranger.__file__).parent
 # in this list, and nothing else. This is the whole rule, in one place.
 ORDER = [
     "tuning",       # the instrument, and the Voicing / ArrangementStep value types
+    "context",      # one slot's request, shared by the two step routes
     "fingers",      # which finger holds which fret; `bass` reads it for the four-fret budget
-    "diagnostics",  # where the warnings go - a value, and nothing depends on it
     "chords",       # chord symbols and the non-chord-tone routing
-    "grips",        # the grip tables, builders and candidate generators
+    "grip_tables",  # the grip tables and the questions asked of them
+    "grip_place",   # where a shape is placed on its strings, and the memo
+    "grips",        # the grip builders and candidate generators
     "cost",         # voicing_cost: which candidate is played
-    "textures",     # metric roles: what a slot is for
+    "annotation",   # the trailing explanation a step carries, as composed clauses
+    "parts",        # the parts axis: which of melody / bass / chord the guitar takes
+    "harmony",      # the harmony axis: which degrees the chord part states
+    "grid",         # the grid axis: when each part sounds
+    "texture",      # the texture axis: how many notes the chord part states
+    "bass_rules",   # the bass vocabulary, capacities and refusals
     "bass",         # the walking-bass thumb line
+    "bass_merge",   # merging the walk into a chosen step; the next resolution melody
     "options",      # the knobs, as one value
+    "resolution",   # what the caller asked for, resolved once: the six resolvers
     "decisions",    # the decisions both step loops share
+    "melody_alone", # where a lone note is fretted: the tune alone, with or without harmony
+    "routes",       # the route handlers: rest, fill, NC and the comping route
+    "slot_plan",    # one slot's plan: `slot_state` and the value it returns
     "movement",     # the step loop: one progression in, one arrangement out
     "steps",        # the engine's published facade - delegates, incl. to `movement`
     "slots",        # the slot layer: triples to steps, the one pre-pass over them
@@ -55,19 +69,10 @@ ORDER = [
 
 # The edges the split could not avoid, each with the reason it is sound. Anything
 # added here has to justify itself in a comment - that is the point of the list.
-ALLOWED_EDGES: Dict[str, Set[str]] = {
-    # `Voicing.role` and `ArrangementStep.role` both default to `ROLE_TARGET`,
-    # which `textures` owns by policy, so `tuning` defines the two labels and
-    # `textures` re-exports them. One definition, two spellings.
-    "textures": {"tuning"},
-    # The walking bass reads the metric grid, and reads chord tones and the
-    # extension table: it is built on top of both, not beside them.
-    "bass": {"tuning", "chords", "textures"},
-    # `decisions.select_step_voicing` is the corpus's slash-bass rule and needs the
-    # engine's own cost function. `steps` imports `decisions`, so this edge has to
-    # point down - which is why it imports `cost` and never `steps`.
-    "decisions": {"tuning", "chords", "cost", "grips", "diagnostics"},
-}
+# Every module's imports point up the order today, so this is the empty place a
+# deliberate exception has to be written down; `test_no_allowed_edge_is_stale`
+# fails if an entry outlives the import it permits.
+ALLOWED_EDGES: Dict[str, Set[str]] = {}
 
 def _is_below(module: str, other: str) -> bool:
     """True when `other` sits *later* in ORDER than `module` - i.e. beneath it."""
@@ -146,6 +151,27 @@ class TestPackageDag(unittest.TestCase):
                     )
         self.assertEqual(offenders, [], "the package is no longer a DAG")
 
+    def test_no_allowed_edge_is_stale(self):
+        """An entry in `ALLOWED_EDGES` must still permit an import that exists.
+
+        This is the same two-way discipline as the private-import allowlist. An
+        exception left behind after the code moved is not merely dead: it is
+        permission for the next down-pointing import, which will then pass
+        unnoticed.
+        """
+        stale = []
+        for module, allowed in ALLOWED_EDGES.items():
+            actual = {
+                imported
+                for imported in _imports_of(module)
+                if imported in ORDER and _is_below(module, imported)
+            }
+            for edge in sorted(allowed - actual):
+                stale.append(f"{module} -> {edge} is allowed but not imported")
+        self.assertEqual(
+            stale, [], "an allowed edge no longer exists - delete the entry"
+        )
+
     def test_no_module_imports_the_facade(self):
         """Nothing inside the package may import `arranger` itself.
 
@@ -204,8 +230,7 @@ class TestPackageDag(unittest.TestCase):
             ("GuitarFretboard", "tuning", "GuitarFretboard"),
             ("bass_cost", "bass", "bass_cost"),
             ("format_progression", "render", "format_progression"),
-            ("supported_string_sets", "grips", "supported_string_sets"),
-            ("Diagnostics", "diagnostics", "Diagnostics"),
+            ("supported_string_sets", "grip_tables", "supported_string_sets"),
         ]:
             module = __import__(f"arranger.{home}", fromlist=[attribute])
             self.assertIs(

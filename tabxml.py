@@ -30,13 +30,13 @@ round trip exactly, with no post-processing at all. So the two renderers divide 
 work by what each format can actually do - notation here, tab there - while the
 placement of every step is still shared, so a head lands on the same beats in both.
 
-The placement is its own, in `_events`, and deliberately does **not** reuse
+The placement is its own, in `tabscore.score_events`, and deliberately does **not** reuse
 `tabstaff._staff_columns`. That column grid is lossy - two steps on one onset collapse
 into one column - which is right for a fixed-width ASCII staff and wrong for a score,
 where the second chord is a note the reader must see. The eighth-note skeleton puts
 two steps on the last beat of most bars, so sharing the grid would drop a chord from
 every bar of a head. What *is* shared is the semantics: absolute onsets with signed
-bars, and collapse on unchanged sounding pitches. See `_events`.
+bars, and collapse on unchanged sounding pitches. See `tabscore.score_events`.
 
 `music21` is an **optional extra** (`pip install 'jazz-arranger[xml]'`) and is
 imported inside the functions, not at the top of the module. The library must keep
@@ -51,10 +51,7 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from xml.etree import ElementTree
 
 from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES, ArrangementStep, GuitarFretboard
-
-# The shortest event MusicXML can write, in quarter lengths: a sixteenth. See the
-# duration floor in `_events`.
-_MIN_EVENT_LENGTH = 0.25
+from tabscore import score_events, substitute_steps
 
 # Guitar sounds an octave below its written pitch, so a score is written an octave
 # higher than the arrangement sounds. The shift is applied to the written pitches and
@@ -153,7 +150,7 @@ def _pitch(midi: int) -> Tuple[str, int]:
     Spells a MIDI number as (step, octave) for music21, flats preferred.
 
     Flats because that is the convention the rest of the library prints in
-    (`PITCH_CLASS_NAMES`, `arranger._note_name`): a `Bb7` that came out of the
+    (`PITCH_CLASS_NAMES`, `arranger.note_name`): a `Bb7` that came out of the
     Weimar database as a flat should not be re-spelled sharp on its way into a
     score a player reads.
     """
@@ -177,198 +174,6 @@ def _sounding(step: ArrangementStep) -> List[int]:
     return [
         GuitarFretboard.fret_to_midi(index, voicing.frets[index]) for index in strings
     ]
-
-
-
-def _events(
-    steps: List[ArrangementStep],
-    beats_per_bar: int,
-    rhythm: bool,
-    beat_type: int = 4,
-) -> Tuple[List[Tuple[Optional[ArrangementStep], bool, float]], float]:
-    """
-    The arrangement as (step, strikes, quarter_length) events, and the pickup.
-
-    A **held** step is not emitted: its length is folded into the event before it,
-    which is what a tie means. A step is a hold when it sounds the same pitches as
-    the one before it and is not a re-articulated melody - the same rule, on the same
-    comparison of sounding pitches, that `tabstaff._staff_columns` applies.
-
-    The pickup is how quarter lengths long the **first** written bar is, which is the
-    bar line before the first note rather than the one after it. A head that starts on
-    a downbeat has a pickup of 0 and every bar is a full bar; one that starts on the
-    third beat has a pickup of two beats, and the first bar is written short. It
-    matters because the onsets are counted from zero at the first note, so the bar
-    lines are not at multiples of the bar length - the first note of a Blue Train
-    head sits at onset 4.0, which is bar 1's downbeat, and a grid anchored at zero
-    would put a bar line in the middle of its first bar. The offset of the first note
-    within its own bar is what recovers the real metre.
-
-    Note that the steps are placed here rather than taken from
-    `tabstaff._staff_columns`, although the two agree on everything a *staff* can
-    show. The column grid is deliberately lossy: two steps sharing an onset collapse
-    into one column, "the first step in a column owns that column", which is right
-    for a fixed-width ASCII staff and wrong for a score, where the second chord is a
-    note the reader must see. The eighth-note skeleton puts two steps on the last beat
-    of most bars, so sharing the grid would drop a chord from every bar of a head.
-    What is shared is the *semantics* - absolute onsets with signed bars, and
-    collapse on unchanged sounding pitches - and both are implemented here.
-
-    `beat_type` is what makes a **beat** a measurable length, and the expression
-    is `4 / beat_type` quarters to the beat. That is a half note in 2/2 and a
-    quarter in 4/4, so both metres give a four-quarter bar and only the counting
-    differs. The tempting `beat_type / 4` is the same number inverted, and it is
-    right in 4/4 and four times too small in 2/2 - which is why a bar written that
-    way holds a quarter of the music its signature claims. `AGENTS.md` records
-    this as the one error 4/4 cannot catch.
-
-    An arrangement with **no steps** has no first onset to measure a pickup from,
-    so it yields no events and a pickup of 0 rather than raising. The empty case
-    is answered here, at the definition: `format_musicxml` and `format_gp5` both
-    place through this seam, and each renderer's own `if not steps` guard is its
-    documented empty-in/empty-out contract (an empty document for an empty
-    arrangement), not what keeps this function safe to call.
-    """
-    if not steps:
-        # No first onset, so no pickup to measure - and nothing to place. Answered
-        # at the definition rather than guarded at each caller: `format_musicxml`
-        # and `format_gp5` both place through this seam.
-        return [], 0.0
-    beat_in_quarters = 4.0 / float(beat_type)
-    timed = bool(rhythm) and bool(steps) and all(step.has_timing for step in steps)
-
-    if timed:
-        # Absolute beat, exactly as NoteEvent.beat_position computes it, so a pickup
-        # in a negative bar sorts before bar 0 with no special case.
-        placed = [
-            (step.bar * beats_per_bar + (step.beat - 1.0), step)  # type: ignore[operator]
-            for step in steps
-        ]
-    else:
-        # No timing, or `rhythm=False`: one chord per beat, reproducing the uniform
-        # grid the other two renderers fall back to.
-        placed = [(float(index), step) for index, step in enumerate(steps)]
-    placed.sort(key=lambda item: item[0])
-
-    # How far the first note sits past the bar line before it. Zero when the head
-    # starts on a downbeat, which is the usual case; the first written bar is then a
-    # full bar rather than a pickup.
-    pickup = (placed[0][0] % beats_per_bar) * beat_in_quarters
-
-    events: List[Tuple[Optional[ArrangementStep], bool, float]] = []
-    index = 0
-    while index < len(placed):
-        onset = placed[index][0]
-        # Every step sharing this onset, kept: a score has to show them all.
-        group: List[ArrangementStep] = []
-        while index < len(placed) and abs(placed[index][0] - onset) < 1e-9:
-            group.append(placed[index][1])
-            index += 1
-        # The group lasts until the next distinct onset, so the written rhythm
-        # survives: a triplet transcription exports as triplets, without this module
-        # ever having to know what a triplet is.
-        if index < len(placed):
-            span = (placed[index][0] - onset) * beat_in_quarters
-        else:
-            # The last group has no next onset to measure against, so it runs to the
-            # end of its own bar. The transcribed `duration` is not used for the span:
-            # it is the length of the *last melody note*, a fraction of a whole note
-            # that MusicXML cannot always express (music21 raises
-            # MusicXMLExportException), and losing the tail of a head to that would be
-            # a poor trade. `_build_part` pads the closing bar.
-            bar_end = (int(onset // beats_per_bar) + 1) * beats_per_bar
-            span = max(bar_end - onset, 1.0) * beat_in_quarters
-
-        # Several steps can share one onset - the eighth-note skeleton puts two on the
-        # last beat of most bars - and they divide the time up to the next onset
-        # equally. The transcribed `duration` is deliberately not used as a weight
-        # here: it is the length of the *melody note* that step came from, which
-        # extends past this onset, and the corpus's own values are arbitrary fractions
-        # of a whole note. Scaling by them produces note values MusicXML cannot
-        # express, and music21 refuses the whole export rather than rounding one. Two
-        # eighths on the last beat of a bar are two eighths, which is what dividing the
-        # beat gives.
-        # **A gap is a rest, and a note is only as long as it is written.** The
-        # gap-to-next-onset rule above says how long a group has until the *next
-        # sound*, which is not the same as how long it *sounds*: bar 4 of "But Not
-        # For Me" is one whole note and bar 5 opens with a quarter rest, so the gap
-        # from the note to the next onset is five quarters and the note is held over
-        # the rest into the next bar. In GP5 that reads as a tie, so the bar opens
-        # with a held chord where the score says silence. `duration` is the melody
-        # note's own length in whole notes, so it caps the span - and it is capped
-        # rather than used as the span because it is *not* always expressible, which
-        # is why the gap rule exists at all. Only ever a cap: a `duration` longer than
-        # the gap is ignored, so nothing is stretched, and a note with no duration
-        # keeps the gap exactly as before.
-        #
-        # Only applied when there *is* a next onset. The last group runs to the end
-        # of its own bar by definition, so there is no gap to represent and a cap
-        # would only invent a rest at the end of the head.
-        gap = span
-        if timed and index < len(placed) and any(s.duration for s in group):
-            longest = max(s.duration or 0.0 for s in group) * 4.0
-            span = longest if longest + 1e-9 < gap else gap
-        else:
-            span = gap
-
-        # Divided after the cap, so the group shares the time it actually occupies
-        # and the silence is left over rather than being shared out with the notes.
-        #
-        # The sixteenth floor can push the shares past the gap they came from - three
-        # steps in a quarter of a bar is three sixteenths, not a quarter - and a
-        # group that overruns its own bar is the one thing a reader rejects outright
-        # ("voice 1 is too long"). So the floor is given up when it would do that: the
-        # gap is what the score says, and it wins.
-        share = span / len(group)
-        lengths = [max(share, _MIN_EVENT_LENGTH) for _ in group]
-        if sum(lengths) > gap + 1e-9:
-            lengths = [share] * len(group)
-
-        # The silence is what the group *did not* fill, measured after the floor
-        # rather than from `span` - the floor can make a group longer than the cap,
-        # and taking the rest from the cap rather than from what was written would
-        # then add the two together and run the bar past its signature.
-        rest_length = max(gap - sum(lengths), 0.0)
-
-        for step, length in zip(group, lengths):
-            if _is_hold(step, events):
-                # Held, not struck: extend what is already ringing rather than
-                # writing a second copy of the same shape.
-                held_step, held_strikes, held_length = events[-1]
-                events[-1] = (held_step, held_strikes, held_length + length)
-                continue
-            events.append((step, True, length))
-
-        if rest_length > 1e-9:
-            # Silence between this note and the next sound, written as an explicit
-            # rest. `None` is what the renderers already read as "nothing here":
-            # `tabxml._build_part` writes a MusicXML `<rest>`, `tabstaff` leaves the
-            # cell blank and clears the ring, and `tabgp` writes `BeatStatus.rest`.
-            # Without it the bar opens with the previous shape held over the gap,
-            # which is the tie this whole branch exists to prevent.
-            events.append((None, False, rest_length))
-    return events, pickup
-
-
-def _is_hold(
-    step: ArrangementStep,
-    events: Sequence[Tuple[Optional[ArrangementStep], bool, float]],
-) -> bool:
-    """
-    True when this step is the previous one still ringing rather than a new attack.
-
-    The comparison is of sounding pitches, not of written note names, because either
-    step may itself have been transposed down an octave by the `HIGH_FRET_LIMIT`
-    rule. A repeated melody is excluded: its note is genuinely re-articulated, which
-    is why `ArrangementStep.repeated` overrides the hold - see
-    `tabstaff._staff_columns` for the same rule in the same words.
-    """
-    if not events or step.repeated:
-        return False
-    previous = events[-1][0]
-    if previous is None:
-        return False
-    return sorted(previous.voicing.midi_notes()) == sorted(step.voicing.midi_notes())
 
 
 def _build_note(step: ArrangementStep, length: float) -> Any:
@@ -890,28 +695,6 @@ def _downgrade_kinds(root: ElementTree.Element) -> None:
             kind.text = "other"
 
 
-def _substitute_steps(steps: List[ArrangementStep]) -> List[ArrangementStep]:
-    """
-    The harmony a step is *sounding*, as a step carrying that chord name.
-
-    The chord name to print for a step, which is the one actually sounding.
-
-    A step harmonised under a substitution or a tension carries it in
-    `harmonized_as`, and the written name is not what the notes are. Printing the
-    written chord over such a step would put a symbol on the score for pitches that
-    are not in it - the same thing `_step_annotation` exists to prevent in the tab.
-    A step with no substitution is returned untouched, so the two renderers spell
-    an ordinary chord identically.
-    """
-    substituted: List[ArrangementStep] = []
-    for step in steps:
-        harmony_name = step.harmonized_as
-        if harmony_name and harmony_name != step.chord:
-            step = ArrangementStep(**{**step.__dict__, "chord": harmony_name})
-        substituted.append(step)
-    return substituted
-
-
 def format_musicxml(
     steps: List[ArrangementStep],
     title: str = "Chord-melody arrangement",
@@ -989,8 +772,8 @@ def format_musicxml(
     # The sounding harmony is settled here rather than inside the note builder,
     # because a substitution is a property of the *step* - it changes the chord name
     # printed above the shape, not the pitches of the shape.
-    events, pickup = _events(
-        _substitute_steps(steps), beats_per_bar, rhythm and collapse, beat_type
+    events, pickup = score_events(
+        substitute_steps(steps), beats_per_bar, rhythm and collapse, beat_type
     )
     if not any(step is not None for step, _, _ in events):
         return ""

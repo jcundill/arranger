@@ -1,12 +1,12 @@
 """Which finger holds which fret, for one voicing.
 
-Stage 1 of [docs/fingering.md](../docs/fingering.md) §5: the assignment, the barres it
+Stage 1 of [docs/history/fingering.md](../docs/history/fingering.md) §5: the assignment, the barres it
 implies, and the movement between two of them. It is built first because the questions
 that remain about fingering are empirical (that document's §2.4 and §4.3) and can only be
 answered by code that exists.
 
 **Exactly one engine call reaches this module, and it is §4.3's left-hand half.**
-`can_fret` is the four-frets-for-four-fingers check, and `bass._place_bass` is its caller:
+`can_fret` is the four-frets-for-four-fingers check, and `bass.place_bass` is its caller:
 on a `bass_only` step the thumb is merged into a shape the hand is still *holding*, so the
 fret it adds joins frets that are not this step's own. Nothing else in the engine reads
 this module - `voicing_cost` does not, `decisions` does not, and every renderer is
@@ -44,7 +44,7 @@ Nothing here decides playability. `GRIP_MAX_SPAN` is still the span bound and
 *which* finger - and returns `None` rather than guessing when no assignment exists. The one
 shape it can refuse, five distinct frets, is not reachable from a generated grip at all: it
 is the *merged* walking-bass step of §4.3, which is why the refusal is a return value the
-check reads - `can_fret`, called from `bass._place_bass` - rather than an exception or a
+check reads - `can_fret`, called from `bass.place_bass` - rather than an exception or a
 silently crossed fingering.
 """
 
@@ -124,7 +124,7 @@ class FingerMovement:
     `largest` of 1; a shape where two stay planted and the third leaps three frets totals 3
     with a `largest` of 3. The sum says the second moved less; `largest` says it is the one
     finger doing the reaching. `total` is the barre double-count fix of
-    [docs/fingering.md](../docs/fingering.md) §1.1 and `largest` is the anchored leap of
+    [docs/history/fingering.md](../docs/history/fingering.md) §1.1 and `largest` is the anchored leap of
     its §1.2.
     """
 
@@ -165,7 +165,7 @@ def _assignment_score(offsets: List[int], choice: Tuple[int, ...]) -> int:
 def fingers_needed(frets: Iterable[int]) -> int:
     """How many left-hand fingers a fret vector asks for: its distinct frets at 1 or above.
 
-    Frets are grouped exactly, which is constraint 3 of [docs/fingering.md](../docs/fingering.md)
+    Frets are grouped exactly, which is constraint 3 of [docs/history/fingering.md](../docs/history/fingering.md)
     §2.1, and fret 0 is an open string that costs no finger - the same two rules
     `assign_fingers` applies when it builds `frets_by_finger`. Stated over a bare vector
     rather than a `Voicing` because the caller that needs it has two shapes merged into one
@@ -181,7 +181,7 @@ def can_fret(frets: Iterable[int]) -> bool:
     holds one fret and no finger holds two, so five distinct frets is not a hard shape but
     an impossible one, and no monotonising score can rescue it.
 
-    `bass._place_bass` is the caller, and it is the only one. Under a `bass_only` step the
+    `bass.place_bass` is the caller, and it is the only one. Under a `bass_only` step the
     thumb is merged into the shape the hand is still **holding**, so its fret joins frets
     that are not this step's own - which is the one way a fifth can appear in an engine
     whose every generated grip sounds at most four strings.
@@ -192,7 +192,7 @@ def can_fret(frets: Iterable[int]) -> bool:
 def assign_fingers(voicing: Voicing) -> Optional[Fingering]:
     """Which finger holds which fret for `voicing`, or None when four cannot do it.
 
-    The whole algorithm is §3 steps 1-4 of [docs/fingering.md](../docs/fingering.md), and it
+    The whole algorithm is §3 steps 1-4 of [docs/history/fingering.md](../docs/history/fingering.md), and it
     is an exact enumeration rather than a search because the problem is tiny: a shape sounds
     at most four strings, so it has at most four distinct frets and at most `C(4, k)`
     monotone choices - 1, 4, 6 or 4 of them.
@@ -240,7 +240,7 @@ def finger_movement(previous: Optional[Fingering], current: Fingering) -> Finger
     `x-x-7-8-7-x` is two fingers moving one fret each and totals 2; summing fret deltas per
     string (`calculate_voice_leading_distance`) counts three, because it has no way to know
     the two notes at fret 6 are one finger. That is the barre double-count of
-    [docs/fingering.md](../docs/fingering.md) §1.1, fixed here rather than measured away.
+    [docs/history/fingering.md](../docs/history/fingering.md) §1.1, fixed here rather than measured away.
 
     A finger idle in *either* shape contributes nothing to either number: a lift is not
     travel, and measuring from fret 0 would make a two-finger shape's movement depend on how

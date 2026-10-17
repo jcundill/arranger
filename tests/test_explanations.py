@@ -6,17 +6,28 @@ fields**, never from the wording, so the check cannot be satisfied by phrasing: 
 below is a decision the engine can make, a predicate for "this step is one of those", and a
 witness the line must carry.
 
-Three decisions are deliberately exempt, and they are named here rather than left implicit,
+Two decisions are deliberately exempt, and they are named here rather than left implicit,
 because a rule with unnamed exceptions is a rule the next editor deletes:
 
 - a **hold** restates what corrects a *column* (its octave, the chord a substitution
-  stated) but not the shape count, which was explained on the step that chose the shape;
-- a **melody-alone shape with no palette** gets no neck-window clause: its fret is where the
-  melody has to be, not a shape the engine picked from alternatives;
+  stated) but not the shape count, which was explained on the step that chose the shape -
+  and the same holds for the two routes whose **own** clause already states the count, an
+  `NC` bar and a melody no shape could voice: `annotation._shape_clause` stays silent for them
+  rather than repeating "melody alone" twice. Their palette is still read by the window
+  clause, so retiring that exemption cost them no explanation;
 - the **written slash bass** is excluded from the table because its witness cannot be
   written as a predicate over the step alone - whether it sounds *is* the clause's own
   question, and a witness that recomputed it would be the clause agreeing with itself.
   `TestEveryChoiceIsExplained.test_the_slash_bass_clause_is_not_a_tautology` pins it directly.
+
+A third exemption - a melody-alone shape getting no neck-window clause, on the grounds that
+its fret is where the melody has to be rather than a choice - is **gone**, because its premise
+is gone: a lone note is chosen from a palette of single-note shapes (one position per eligible
+string) by the same `cost.voicing_cost` a chord goes through, so its fret *is* a shape the
+engine picked from alternatives, and the window clause has a measured `Palette.inside_window`
+to state. `TestTheLoneNoteKeepsTheWindowHonest` holds that down from both ends: the clause
+appears where the note is out of position, and the palette it reports on is the one the note
+was actually chosen from.
 
 Adding a decision to the engine means adding its witness here, in the same commit.
 """
@@ -30,8 +41,8 @@ from typing import Any, Callable, Dict, List, Tuple
 from musthe import Note
 
 from arranger import PITCH_CLASS_NAMES, ChordParser
+from arranger.annotation import _omission_clause, step_annotation
 from arranger.chords import melody_degree_name
-from arranger.render import _omission_clause, _step_annotation
 from arranger.tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
@@ -41,9 +52,9 @@ from arranger.tuning import (
     SILENCE_OUT_OF_REACH,
     SILENCE_TUNE_SILENT,
     ArrangementStep,
+    Palette,
 )
-from headxml import arrange_xml_head
-from tests.support import make_step
+from tests.support import arranged, make_step
 
 #: The committed heads, which between them carry every quality, metre and texture the
 #: library can be asked for. `tests/data` is the only corpus there is.
@@ -55,15 +66,14 @@ HEADS: List[str] = sorted(
 #: sweep of every committed head, so each config costs seconds.
 CONFIGS: List[Dict[str, Any]] = [
     {},
+    {"texture": "chord1"},
     {"texture": "targets"},
-    {"texture": "walking_bass"},
-    {"bass": "walk"},
-    {"melody": "none"},
-    {"melody": "soprano"},
-    {"melody": "alto,tenor"},
-    {"grid": "freddie"},
-    {"grips": ("shell",)},
-    {"grips": ("duo",)},
+    {"parts": "melody"},
+    {"parts": "bass"},
+    {"parts": "chord"},
+    {"parts": "bass,chord"},
+    {"bass": "root,5th,approach,nearest", "grid": "melody:every_note,bass:walk"},
+    {"grid": "chord:freddie"},
     {"non_chord_tone": "sustain"},
 ]
 
@@ -79,7 +89,7 @@ def _thin(step: ArrangementStep) -> bool:
 
 
 def _line(step: ArrangementStep) -> str:
-    return _step_annotation(step)
+    return step_annotation(step)
 
 
 def _missing_degree_names(step: ArrangementStep) -> List[str]:
@@ -126,7 +136,7 @@ def _names_left_out_on_the_line(step: ArrangementStep) -> List[str]:
     **Not** a search of the whole line: a tab is full of digits, so `"5" in line` is true
     whether or not the 5th was named, and a witness that could pass on a line with no clause
     at all is no witness. The names end where the clause does - at the next ` - ` in
-    `render._annotate`'s chain, or at the parenthetical's close - because clauses that follow
+    `annotation._annotate`'s chain, or at the parenthetical's close - because clauses that follow
     it carry digits of their own (`reaches outside the preferred frets 2-13`), and the list
     itself is separated by `_and_list`'s `, ` and ` & `.
     """
@@ -146,6 +156,102 @@ def _names_left_out_on_the_line(step: ArrangementStep) -> List[str]:
     else:  # pragma: no cover - a clause that fired always reads one way or the other
         return []
     return [name.strip() for name in tail.replace(" & ", ", ").split(",") if name.strip()]
+
+
+def _sounding_pairs(step: ArrangementStep) -> List[str]:
+    """The `note degree` pair every upper voice states, from the step's **fields**.
+
+    The decision as stated, worked from the other side of the clause: a shape that sounds
+    two or more upper voices on a route that sings the tune names each of them. The pitches
+    are the step's own - the thumb is not among them - in the tab's order, and the degree is
+    read through `chords.melody_degree_name`, the vocabulary the degree column uses, against
+    the chord the part **states** (`harmonized_as` where a substitute was found). A witness
+    built this way cannot be satisfied by a clause that names a note the shape does not
+    sound, measures it against a chord the part is not playing, or stops one voice short.
+
+    The routes the clause is silent on come back empty here too - a hold, a chord no shape
+    could state, a comping part, and a harmony no table can read - which is what lets the
+    witness catch a clause that speaks where it should not as well as one that stays quiet
+    where it should speak.
+    """
+    if not step.melody_voiced or step.repeated or step.chord_unvoiced:
+        return []
+    harmony = step.harmonized_as or step.chord
+    pitches = step.voicing.upper_midi_notes()
+    if len(pitches) < 2:
+        return []
+    pairs = []
+    for pitch in pitches:
+        name = PITCH_CLASS_NAMES[pitch % 12]
+        pairs.append(f"{name} {melody_degree_name(Note(name + '4'), harmony)}")
+    if not all(pair.split(" ", 1)[-1] for pair in pairs):
+        return []
+    return pairs
+
+
+def _voices_named_on_the_line(step: ArrangementStep) -> List[str]:
+    """The voices a line says the shape sounds, read from the clause's own marker.
+
+    **Not** a search of the whole line: the tab is frets, so a note name has to come from
+    the clause or not at all. The list ends where the clause does - at the next ` - ` in
+    `annotation._annotate`'s chain, or at the parenthetical's close - because clauses that
+    follow it carry names of their own (`the chord tone it leaves out is Root`).
+    """
+    line = _line(step)
+    marker = "sounding: "
+    if marker not in line:
+        return []
+    tail = line.split(marker, 1)[1]
+    for end in (" - ", ")"):
+        cut = tail.find(end)
+        if cut != -1:
+            tail = tail[:cut]
+    return [pair.strip() for pair in tail.split(", ") if pair.strip()]
+
+
+def _comping_names(step: ArrangementStep) -> List[str]:
+    """Every voice a **comping** shape states, as `note degree`, from the step's fields.
+
+    A comping step has no melody column, so the clause is the only place a reader can learn
+    which note of the chord the shape put where - and the tab gives frets. Read from the
+    step's own pitches against the chord the part **states**, one entry per degree (two
+    octaves of one degree is one entry, which is the shape's own claim), and compared as a
+    sorted list by the witness below, because the clause orders the voices by the interval
+    from the root and that order is not the question.
+
+    The routes are the ones `step_annotation` reaches `_comping_clause` by, in the same
+    order - a no-chord bar, a chord no shape could state, and a silent step are all answered
+    before it - so the clause speaking where it should not is caught as well as its silence.
+    """
+    if step.melody_only or step.chord_unvoiced or step.melody_voiced:
+        return []
+    if not step.voicing.active_frets():
+        return []
+    harmony = step.harmonized_as or step.chord
+    named: Dict[str, str] = {}
+    for pitch in step.voicing.upper_midi_notes():
+        name = PITCH_CLASS_NAMES[pitch % 12]
+        degree = melody_degree_name(Note(name + "4"), harmony)
+        if not degree or degree in named:
+            continue
+        named[degree] = f"{name} {degree}"
+    return list(named.values())
+
+
+def _comping_names_on_the_line(step: ArrangementStep) -> List[str]:
+    """The voices the line's comping clause names, read from the clause's own marker.
+
+    The list ends where the clause does - at the `;` that introduces what the part is not
+    doing with the tune - because that tail is prose rather than a voice list.
+    """
+    line = _line(step)
+    marker = "comping - "
+    if marker not in line:
+        return []
+    tail = line.split(marker, 1)[1].split(";", 1)[0]
+    return [
+        name.strip() for name in tail.replace(" & ", ", ").split(",") if name.strip()
+    ]
 
 
 WITNESSES: List[Witness] = [
@@ -198,6 +304,13 @@ WITNESSES: List[Witness] = [
         lambda step: "the tune is silent here" in _line(step),
     ),
     (
+        "the guitar comps, so the voices it states are the only harmony a reader can see",
+        lambda step: bool(_comping_names(step) or _comping_names_on_the_line(step)),
+        lambda step: (
+            sorted(_comping_names_on_the_line(step)) == sorted(_comping_names(step))
+        ),
+    ),
+    (
         "the shape states fewer voices than the palette offered",
         lambda step: (
             step.palette is not None
@@ -213,6 +326,11 @@ WITNESSES: List[Witness] = [
             and step.palette.alternative is None
             and _thin(step)
             and not step.repeated
+            # The routes whose own clause states the count - an `NC` bar and a melody no
+            # shape could voice - keep it to themselves, the way a hold does. See
+            # `annotation._shape_clause`: the *window* fact they carry is still witnessed.
+            and not step.melody_only
+            and not step.chord_unvoiced
         ),
         lambda step: "palette offers" in _line(step),
     ),
@@ -227,6 +345,11 @@ WITNESSES: List[Witness] = [
         ),
     ),
     (
+        "the shape sounds two or more voices, which the frets do not name",
+        lambda step: bool(_sounding_pairs(step) or _voices_named_on_the_line(step)),
+        lambda step: _voices_named_on_the_line(step) == _sounding_pairs(step),
+    ),
+    (
         "the sounding melody is an octave below the written one",
         lambda step: step.original_melody is not None,
         lambda step: "transposed down an octave" in _line(step),
@@ -235,6 +358,11 @@ WITNESSES: List[Witness] = [
         "a bass note was written into the step",
         lambda step: step.bass is not None,
         lambda step: "bass: " in _line(step),
+    ),
+    (
+        "a bass note the walk asked for could not be placed, so the walk reads whole but is not",
+        lambda step: step.bass_refused is not None,
+        lambda step: "no playable bass note" in _line(step),
     ),
     (
         "the shape reaches outside the neck window",
@@ -272,6 +400,11 @@ WITNESSES: List[Witness] = [
             and step.palette.alternative is None
             and _thin(step)
             and not step.repeated
+            # As above: an `NC` fill-role slot states its own count ("no chord - melody
+            # alone"), and it is the no-harmony fact that explains the thinness, not the
+            # texture. The palette's window fact is still witnessed.
+            and not step.melody_only
+            and not step.chord_unvoiced
         ),
         lambda step: "a fill's" in _line(step),
     ),
@@ -279,19 +412,33 @@ WITNESSES: List[Witness] = [
 
 
 class TestEveryChoiceIsExplained(unittest.TestCase):
-    """The invariant, swept over the committed heads rather than argued."""
+    """The invariant, swept over the committed heads rather than argued.
+
+    Every committed head, and not `tests.support.sweep_head_paths()`: the subject here is the
+    behaviour space the witness table claims to cover, and that was measured - over the three
+    sweep heads, seven of the table's eighteen labels are never triggered, so a narrower
+    sweep would retire witnesses rather than save time.
+    """
 
     def test_every_decision_has_a_witness_in_its_line(self):
-        """No step may make a decision its own annotation does not account for."""
+        """No step may make a decision its own annotation does not account for.
+
+        The arrangements are `tests.support.arranged`'s, so the other sweep in this file
+        that shares a config reads the same steps rather than paying for them again.
+        """
         missing: List[str] = []
         checked = 0
         omitted = 0
+        named = 0
+        comping = 0
         for head in HEADS:
             for config in CONFIGS:
-                steps, _head, _notes = arrange_xml_head(head, section=(1, 8), **config)
+                steps, _head, _notes = arranged(head, section=(1, 8), **config)
                 for step in steps:
                     checked += 1
                     omitted += bool(_missing_degree_names(step))
+                    named += bool(_sounding_pairs(step))
+                    comping += bool(_comping_names(step))
                     for label, when, witness in WITNESSES:
                         if when(step) and not witness(step):
                             missing.append(
@@ -301,31 +448,41 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         self.assertGreater(checked, 500, "the sweep stopped arranging anything")
         self.assertEqual(missing[:10], [], f"{len(missing)} unexplained steps")
         # A count, because a clause that stops firing is silent: measured over this sweep,
-        # **98** of the steps it arranges give up a chord tone, and every one of them is
+        # **83** of the steps it arranges give up a chord tone, and every one of them is
         # asked about above. A corpus, grip table or rule that stops reaching the clause
         # would otherwise leave every assertion here passing on its absence.
         self.assertEqual(
-            omitted, 98, "the number of steps owing an omitted-tone clause moved"
+            omitted, 83, "the number of steps owing an omitted-tone clause moved"
         )
+        # The same reasoning for the voice list, which is the clause most steps carry:
+        # measured over this sweep, **710** of the steps it arranges sound two or more
+        # upper voices on a route that sings the tune - so a change that thinned the
+        # default palette, or that stopped the clause firing, moves this number.
+        self.assertEqual(named, 710, "the number of steps naming their voices moved")
+        # And for the comping part, whose voices are the only harmony the line can show:
+        # measured over this sweep, **938** of the steps it arranges state a comping shape
+        # and name each of its voices, so the reading of a thin line cannot quietly become
+        # a list of degrees again.
+        self.assertEqual(comping, 938, "the number of comping lines naming a voice moved")
 
     def test_the_slash_bass_clause_is_not_a_tautology(self):
         """The one decision the witness table cannot hold, pinned in both directions.
 
-        Whether the written bass sounds is decided *inside* `render._slash_bass_clause`, so a
+        Whether the written bass sounds is decided *inside* `annotation._slash_bass_clause`, so a
         witness that recomputed it would be the clause agreeing with itself. Asserted against
         the head that exercises it instead: `Am7/D` loses its D and must say so, `Gmaj/D`
         sounds its F# and must stay quiet about it.
         """
-        steps, _head, _notes = arrange_xml_head(
+        steps, _head, _notes = arranged(
             "tests/data/Trouble_in_Mind_Blues.musicxml"
         )
         lost = [
             step for step in steps
-            if "/" in step.chord and "written bass" in _step_annotation(step)
+            if "/" in step.chord and "written bass" in step_annotation(step)
         ]
         kept = [
             step for step in steps
-            if step.chord == "Gmaj/D" and "written bass" not in _step_annotation(step)
+            if step.chord == "Gmaj/D" and "written bass" not in step_annotation(step)
         ]
         self.assertTrue(lost, "the head stopped losing a slash bass")
         self.assertTrue(kept, "a shape that sounds its written bass was flagged")
@@ -393,29 +550,108 @@ class TestTheToneAFourVoiceShapeGivesUp(unittest.TestCase):
         self.assertEqual(_omission_clause(step), "the chord tone it leaves out is Root")
 
 
+class TestTheLoneNoteKeepsTheWindowHonest(unittest.TestCase):
+    """A lone note is chosen from a palette, so its window fact is measured, not defaulted.
+
+    This is the exemption that went. A melody-alone shape used to carry no palette, which
+    meant `annotation._window_clause` could say nothing about it - and a step that *did* carry
+    one (a fill) recorded `inside_window` at its `False` default, so the clause read as an
+    engine judgement nobody had made. Every lone note now records the palette it was chosen
+    from, and the two halves of the fact can be asserted together: the clause appears where
+    the note is out of position, and the palette behind it has nothing inside the window.
+    """
+
+    #: The configs that thin the guitar to a lone note at all: the off-grid rows, the walk's
+    #: fills, and the melody-only selection.
+    CONFIGS: List[Dict[str, Any]] = [
+        {},
+        {"grid": "chord:freddie"},
+        {"bass": "root,5th,approach,nearest", "grid": "melody:every_note,bass:walk"},
+        {"parts": "melody"},
+    ]
+
+    def test_every_lone_shape_reports_the_palette_it_came_from(self):
+        """A lone step always has a palette - the exemption's premise is gone."""
+        checked = 0
+        for head in HEADS:
+            for config in self.CONFIGS:
+                steps, _head, _notes = arranged(head, section=(1, 8), **config)
+                for step in steps:
+                    if step.grip != "melody":
+                        continue
+                    # A lone *upper* shape: the walk may have merged a thumb into it, which
+                    # is a second active fret and a different question (`bass_only`).
+                    if len(step.voicing.upper_midi_notes()) != 1:
+                        continue
+                    checked += 1
+                    self.assertIsNotNone(
+                        step.palette, f"{head.split('/')[-1]} {config} {step.tab_line()}"
+                    )
+                    assert step.palette is not None
+                    # The walk may have merged a thumb into this step, which is a second
+                    # active fret and a different question - hence the filter on the upper
+                    # notes rather than on `active_frets()`.
+                    self.assertEqual(len(step.voicing.upper_midi_notes()), 1)
+                    # Either the lone note's own palette, or the demotion's record of the
+                    # shape it turned away - which is a different question and says so.
+                    self.assertTrue(
+                        step.palette.available == 1
+                        or step.palette.alternative is not None
+                    )
+        self.assertGreater(checked, 50, "the sweep stopped thinning anything")
+
+    def test_the_window_clause_reports_the_lone_note_palette(self):
+        """The clause reads the palette, in both directions, on the step it is given.
+
+        F4 on the high E string is fret 1 - below `NECK_FRET_MIN` - and the same note is
+        fret 6 on the B string, inside it. Same note, same one-note palette; only what the
+        caller's strings offered differs. The third case is the contrast a chord palette
+        can make and a lone one cannot: an inside-the-window shape losing on correctness.
+        """
+        outside = make_step(
+            [-1, -1, -1, -1, -1, 1],
+            melody="F4",
+            palette=Palette(available=1, inside_window=False),
+        )
+        inside = make_step(
+            [-1, -1, -1, -1, 6, -1],
+            melody="F4",
+            palette=Palette(available=1, inside_window=True),
+        )
+        chord = make_step(
+            [-1, -1, 15, 14, -1, -1],
+            palette=Palette(available=4, inside_window=True),
+        )
+        self.assertIn("nothing in this palette sits inside the window", _line(outside))
+        self.assertNotIn("preferred frets", _line(inside))
+        self.assertIn("sound a note outside the chord", _line(chord))
+
+
 class TestNewClausesMustBeRegistered(unittest.TestCase):
     """A gate that enumerates its inputs by hand skips whatever was added last.
 
-    The set below is read **off the module** rather than typed as the answer, so a seventh
+    The set below is read **off the module** rather than typed as the answer, so another
     clause cannot be added without landing in this test - and so without meeting
     `WITNESSES` above, or recording here why it needs no witness.
     """
 
     def test_every_clause_helper_is_known(self):
-        from arranger import render
+        from arranger import annotation
 
         known = {
+            "_bass_refusal_clause",
             "_comping_clause",
             "_held_clause",
             "_omission_clause",
             "_shape_clause",
             "_silence_clause",
             "_slash_bass_clause",
+            "_sounding_clause",
             "_substitution_clause",
             "_transposition_clause",
             "_window_clause",
         }
-        found = {name for name in dir(render) if name.endswith("_clause")}
+        found = {name for name in dir(annotation) if name.endswith("_clause")}
         self.assertEqual(
             found,
             known,

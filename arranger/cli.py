@@ -16,8 +16,8 @@ would execute the package `__init__` through `arranger.tuning`, so the import st
 function body - which is also what leaves `headxml`'s `load_musicxml` cheap.
 
 This module sits **last** in `tests/test_package_dag.py`'s `ORDER`: it reads
-`NECK_FRET_MIN`/`MAX` from `tuning`, `GRIP_PREFERENCE` from `grips`,
-`NON_CHORD_TONE_STRATEGIES` from `chords`, `TEXTURE_STYLES` from `textures` and
+`NECK_FRET_MIN`/`MAX` from `tuning`,
+`NON_CHORD_TONE_STRATEGIES` from `chords`, `TEXTURE_STYLES` from `texture` and
 `format_progression` from `render`, and is imported by nothing below it. It needs
 no `ALLOWED_EDGES` entry, which is the test that a new module was placed by its
 edges rather than appended.
@@ -28,18 +28,15 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from .bass import BASS_AUTO, BASS_STYLES
-from .chords import NON_CHORD_TONE_STRATEGIES
-from .grips import GRIP_PREFERENCE
-from .render import format_progression
-from .textures import (
-    GRID_EVERY_NOTE,
-    GRID_STYLES,
-    HARMONY_AUTO,
-    HARMONY_STYLES,
-    MELODY_AUTO,
-    TEXTURE_STYLES,
+from .bass_rules import (
+    BASS_STYLE_AUTO,
 )
+from .chords import NON_CHORD_TONE_STRATEGIES
+from .grid import GRID_DEFAULT
+from .harmony import HARMONY_AUTO, HARMONY_STYLES
+from .parts import PARTS_AUTO
+from .render import format_progression
+from .texture import TEXTURE_STYLES
 from .tuning import NECK_FRET_MAX, NECK_FRET_MIN, ArrangementStep
 
 if TYPE_CHECKING:  # pragma: no cover - the annotations are strings at runtime
@@ -48,6 +45,7 @@ if TYPE_CHECKING:  # pragma: no cover - the annotations are strings at runtime
 __all__ = [
     "HEAD_HELP",
     "CommonHelp",
+    "ScoreMeta",
     "add_common_arguments",
     "render_and_write",
 ]
@@ -58,7 +56,7 @@ class CommonHelp:
 
     One field per flag whose help is *written* rather than derived. A flag absent
     from this dataclass has its help written once in `add_common_arguments`, because
-    the text is the same wherever it is read - `fallback`, `grips`, `non_chord_tone`
+    the text is the same wherever it is read - `fallback`, `non_chord_tone`, `grid`
     and `bass` are those four.
 
     **A table rather than inline strings.** A flag's
@@ -85,6 +83,26 @@ class CommonHelp:
     mutes: str
     tab: str
     texture: str
+
+
+@dataclass(frozen=True)
+class ScoreMeta:
+    """The score-level facts every writer needs, as one value.
+
+    `None` for the metre and the key is the same "the caller did not state it"
+    convention the writers already use, so this object does not force a default
+    into a call that deliberately omitted one. `markers` are the head's repeat and
+    ending instructions; a hand-built arrangement passes none.
+    """
+
+    title: str
+    subtitle: str = ""
+    composer: str = ""
+    beats_per_bar: Optional[int] = None
+    beat_type: Optional[int] = None
+    fifths: Optional[int] = None
+    mode: str = ""
+    markers: Sequence[Any] = ()
 
 
 #: The `arranger head` wording. Says "of the notated bar" because three of the four
@@ -131,7 +149,7 @@ def add_common_arguments(
     `--skeleton` and `--pick` are **not** offered, and the reason is a policy
     rather than an omission: the MusicXML path does not reduce - every written note of a
     score gets its own slot. Where chords fall is the `grid=` axis, and which notes the
-    guitar plays is the `voices=` axis.
+    guitar plays is the `parts=` axis.
 
     The order the flags are added in is the order they appear in `--help`.
     """
@@ -154,29 +172,32 @@ def add_common_arguments(
         help=help_text.texture,
     )
     parser.add_argument(
-        "--bass",
-        choices=list(BASS_STYLES),
-        default=BASS_AUTO,
+        "--bass-style",
+        default=BASS_STYLE_AUTO,
         help=(
-            "which pattern the thumb line is written on: 'walk' puts a note on every "
-            "beat, 'anchors' only where the harmony changes, 'none' (the default with "
-            "--texture uniform or targets) no line at all. 'auto' follows the texture "
-            "and the voice selection, so --texture walking_bass walks, as does "
-            "--voices soprano,bass, unless you say otherwise. Refused, with a "
-            "warning, where the left hand leaves the thumb no string"
+            "which note rules the thumb line may state, comma-separated and in "
+            "resolution order, any of root, 5th, approach, nearest. The full "
+            "'root,5th,approach,nearest' puts a note on every beat, which is what makes "
+            "the line a walk; 'root' alone sounds only where the harmony anchors. "
+            "'none' is no line at all, and 'auto' - the default - follows the parts "
+            "selection: a selection that takes the bass part writes the full list, and "
+            "one that leaves it out writes no line. Refused outright where the "
+            "selection does not take the bass part; a single note the left hand cannot "
+            "reach is dropped from that step and named on it"
         ),
     )
     parser.add_argument(
-        "--voices",
-        default=MELODY_AUTO,
+        "--parts",
+        default=PARTS_AUTO,
         help=(
-            "which voices the guitar plays, from the SATB quartet: comma-separated "
-            "any of soprano, alto, tenor, bass (default: auto = all four, the "
-            "historical chord-melody). 'none' is shorthand for 'alto,tenor' - the "
-            "ensemble answer, with a horn on the tune and a bassist on the root. "
-            "Dropping soprano hands the melody to another instrument and leaves a "
-            "guide-tone comping part; soprano alone is the melody and nothing else "
-            "(the tune, with a thumb under it when bass is named too)"
+            "which of melody, bass and chord the guitar takes, comma-separated "
+            "(default: auto = all three). 'melody' is the tune on top, 'bass' the "
+            "bottom the thumb realises, 'chord' the harmonisation between them, "
+            "whose arity --texture states and whose degree order --harmony states. "
+            "Leaving the melody out hands the tune to another instrument and leaves "
+            "a comping part; melody alone is the tune and nothing else (with a thumb "
+            "under it when bass is named too). A policy named for a part the "
+            "selection leaves out is refused, naming the part that would work"
         ),
     )
     parser.add_argument(
@@ -184,26 +205,27 @@ def add_common_arguments(
         choices=list(HARMONY_STYLES) + [HARMONY_AUTO],
         default=HARMONY_AUTO,
         help=(
-            "which degrees the guitar states when it is NOT singing: 'guide' (the "
-            "default) is the 3rd and the 7th, 'shell_root' adds a root or 5th under "
-            "them, 'root' is a bass note alone, 'full' is the whole chord. Read only "
-            "when the guitar has no melody of its own, so it composes with --voices "
-            "rather than replacing it. Refused, with a warning, where the voice "
-            "selection leaves no room for it"
+            "the order the chord part states its degrees in: 'auto' (the default) is "
+            "the full chord when the guitar sings and the guide pair (3rd and 7th) "
+            "when it comps, 'guide' is the pair, 'shell_root' adds a root or 5th under "
+            "them, 'full' is the whole tone set. --texture takes the first n of the "
+            "order, so a thinner part gives up the tail. Refused where the selection "
+            "does not take the chord part"
         ),
     )
     parser.add_argument(
         "--grid",
-        choices=list(GRID_STYLES),
-        default=GRID_EVERY_NOTE,
+        default=GRID_DEFAULT,
         help=(
-            "where a chord falls in the bar: 'every_note' (the default) states one "
-            "under every written melody note, 'freddie' on every beat of the notated "
-            "bar, 'charleston' on beat 1 and the upbeat of beat 2, 'joe_pass' on the "
-            "upbeat of every beat, 'final_and' on the upbeat of the bar's LAST beat. "
-            "Positions are bar-relative, so 'final_and' is the same musical idea in "
-            "2/2, 3/4 and 4/4. Where the guitar is singing, a note with no chord on "
-            "it sounds alone; where it is comping, the guitar rests"
+            "when each part sounds, as comma-separated PART:PATTERN rows. The "
+            "default is melody:every_note - the chord under every written melody "
+            "note - and a row overrides one part: chord:every_note|freddie|joe_pass|"
+            "final_and|charleston, bass:every_note|walk|anchors. So "
+            "'melody:every_note,bass:walk' is a chord under the tune with the thumb "
+            "walking every beat, and 'bass:anchors' walks only where the harmony "
+            "changes. Positions are bar-relative, so final_and is the same musical "
+            "idea in 2/2, 3/4 and 4/4. Where the guitar is singing, a note with no "
+            "chord on it sounds alone; where it is comping, the guitar rests"
         ),
     )
     parser.add_argument(
@@ -217,16 +239,6 @@ def add_common_arguments(
         type=int,
         default=NECK_FRET_MAX,
         help=help_text.fret_max,
-    )
-    parser.add_argument(
-        "--grips",
-        default=",".join(GRIP_PREFERENCE),
-        metavar="GRIP[,GRIP...]",
-        help=(
-            "grip families to use, comma-separated and most preferred first - the "
-            "order decides an exact tie, so 'shell,drop2' is not 'drop2,shell' "
-            "(default: all of them)"
-        ),
     )
     parser.add_argument(
         "--tab",
@@ -298,18 +310,16 @@ def _as_written(
 def render_and_write(
     args: argparse.Namespace,
     steps: List[ArrangementStep],
+    meta: ScoreMeta,
     *,
-    title: str,
-    subtitle: str = "",
     notes: Sequence[str] = (),
-    beats_per_bar: Optional[int] = None,
-    beat_type: Optional[int] = None,
-    fifths: Optional[int] = None,
-    mode: str = "",
-    markers: Sequence[Any] = (),
     written_bars: Optional[Mapping[int, int]] = None,
 ) -> int:
     """Print the arrangement and write whatever files `args` asked for.
+
+    `meta` is the score-level facts as one value: the title and credits, the
+    notated metre, the key and the head's repeat markers. `head` already holds them
+    together, and a hand-built arrangement names only the title it wants.
 
     Returns a process exit code: 0, or 1 if an optional renderer could not be
     imported. A missing extra is a usage problem rather than a crash, and it is
@@ -317,29 +327,21 @@ def render_and_write(
     has already produced the thing it came for, and losing that to a missing
     dependency would be worse than the missing file.
 
-    `beats_per_bar` and `beat_type` are the notated metre, and both fall back to
-    this writer's own default of 4 when `None`. `head` passes the score's own, and
-    passing the default and omitting the argument are indistinguishable at every
-    writer. The fallback is the only way anything reaches this function without a
-    metre, and it stays because every writer has that default anyway and a caller
-    that has no metre should land on it.
-
-    `fifths` / `mode` are the key signature, and follow the same convention: `None`
-    means 0, which is C major - a legal thing for a score to be in and what an
-    absent `<key>` already means in a MusicXML document. They reach the two
-    **file** writers only - `format_musicxml` writes `<key>` and `format_gp5` a
-    `KeySignature` - and deliberately not `format_tab_staff` or `write_tab_html`,
-    which show fret numbers rather than pitches and so have nothing for a signature
-    to say.
+    `meta.beats_per_bar` and `meta.beat_type` fall back to this writer's own
+    default of 4 when `None`. `meta.fifths` / `meta.mode` follow the same
+    convention: `None` means 0, which is C major and what an absent `<key>`
+    already means in a MusicXML document. The key reaches the two **file** writers
+    only - `format_musicxml` writes `<key>` and `format_gp5` a `KeySignature` - and
+    deliberately not `format_tab_staff` or `write_tab_html`, which show fret numbers
+    rather than pitches and so have nothing for a signature to say.
 
     `notes` goes only to the HTML page, the one renderer that shows them; the two
-    file writers have no notes list. `subtitle` defaults to `""`, which is also
-    `format_musicxml`'s and `format_gp5`'s own default, so `head` passing nothing
-    here is indistinguishable from passing an empty string.
+    file writers have no notes list.
 
-    `markers` are the head's repeat and ending instructions (`headxml.BarMarker`s), or
-    empty for none - every non-head caller, and a head with no repeat. Each reaches
-    every sign-drawing writer, which draws it as a `|:` / `:|` and a `1.` / `2.` bracket.
+    `meta.markers` are the head's repeat and ending instructions
+    (`headxml.BarMarker`s), or empty for none - every non-head caller, and a head
+    with no repeat. Each reaches every sign-drawing writer, which draws it as a
+    `|:` / `:|` and a `1.` / `2.` bracket.
 
     `written_bars` is `Head.written_bars` (absolute -> written), and it is what makes the
     written score come out written: the arrangement is the bars a player *plays*, so a
@@ -352,17 +354,19 @@ def render_and_write(
     from tabxml import write_musicxml
 
     # The score the sign-drawing renderers get: one pass of each written bar.
-    written_steps, written_markers = _as_written(steps, markers, written_bars)
+    written_steps, written_markers = _as_written(
+        steps, meta.markers, written_bars
+    )
 
     # A count without a denominator is not a metre, and `head` is the command that
     # has to say which. Four is the writer's own default, so a caller with no metre
     # lands in the same place rather than raising.
-    bars = 4 if beats_per_bar is None else beats_per_bar
-    beat = 4 if beat_type is None else beat_type
+    bars = 4 if meta.beats_per_bar is None else meta.beats_per_bar
+    beat = 4 if meta.beat_type is None else meta.beat_type
     # The key, on the same terms as the metre above: 0 is C major, which is what a
     # MusicXML document with no `<key>` already means, so passing nothing is not a
     # change.
-    key_fifths = 0 if fifths is None else fifths
+    key_fifths = 0 if meta.fifths is None else meta.fifths
 
     if args.tab == "staff":
         # The staff is the only renderer that uses the step timing, so it is the
@@ -388,8 +392,8 @@ def render_and_write(
         out_path = write_tab_html(
             written_steps,
             args.html,
-            title=title,
-            subtitle=subtitle,
+            title=meta.title,
+            subtitle=meta.subtitle,
             beats_per_bar=bars,
             beat_type=beat,
             measures_per_line=args.bars_per_line,
@@ -413,12 +417,13 @@ def render_and_write(
             out_path = writer(
                 written_steps,
                 target,
-                title=title,
-                subtitle=subtitle,
+                title=meta.title,
+                subtitle=meta.subtitle,
+                composer=meta.composer,
                 beats_per_bar=bars,
                 beat_type=beat,
                 fifths=key_fifths,
-                mode=mode,
+                mode=meta.mode,
                 markers=written_markers,
             )
         except ImportError as error:

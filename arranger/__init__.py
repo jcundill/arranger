@@ -1,18 +1,20 @@
 """`jazz-arranger`: playable jazz guitar chord-melody from a chord progression.
 
-This module is a **facade**. The engine is a package of fifteen modules with a
-strict dependency order, and nothing above imports anything below it by accident:
+This module is a **facade**. The engine is a package of modules with a strict
+dependency order, and nothing above imports anything below it by accident:
 
-    tuning -> chords -> grips -> cost
-                 |         |        |
-              textures   (grips)   bass
-                 |                    |
-              options ---------------> |
-                 |                    |
-              steps -> render -> (this module)
+    tuning -> fingers -> chords -> grips -> cost
+                 |
+              parts -> harmony/grid/texture
+                              |
+                             bass -> bass_merge -> options
+                                         |
+                            decisions -> melody_alone -> routes
+                                                       |
+                                              movement -> steps -> slots -> render -> cli
 
 `fingers` is a second edge off `tuning`, and the diagram above omits it: it is the
-left-hand fingering module of `docs/fingering.md`, and `bass` is the one engine reader
+left-hand fingering module of `docs/history/fingering.md`, and `bass` is the one engine reader
 that reaches it - it calls `fingers.can_fret` for the four-fret budget of a merged
 `bass_only` step, which is why the facade binds the module. `tests/test_fingers.py` holds
 that caller set. It is in `test_package_dag.ORDER`, because a module missing from that
@@ -33,18 +35,10 @@ Adding a public name means adding it to `__all__` here, and
 `tests/test_tab_rendering.py::TestTabstaffModuleBoundary` checks the list against
 the module's real surface so the two cannot drift.
 
-**Eight private names are re-exported too** - `_bass_harmony`, `_place_bass`,
-`_walking_bass_line`, `_interval_offsets`, `_metric_weight`, `_roles_for_slot`,
-`_step_annotation` and `_comping_no_room_reason`. They are not API and are
-deliberately absent from `__all__`,
-but the tests reach into them to state a rule directly rather than infer it from
-the engine's output ("the walk's pitch-class set is exactly the chord's tones plus
-its extensions", "a fill is chosen by the role rule", "this refusal must not tell
-the player to change a texture, because on this route a texture changes nothing").
-Moving the code would
-otherwise force those tests to reimplement the rule they are checking, which is a
-copy-paste failure. They are listed here so the cost of
-moving a function - "also re-export it" - is visible rather than discovered.
+The facade re-exports the public surface only. Private helpers live in their
+home modules and tests import them from there (`arranger.bass`, `arranger.grips`,
+`arranger.render`, `arranger.texture`) rather than through `arranger`, so a
+function that moves modules does not also have to move a re-export.
 """
 
 from __future__ import annotations
@@ -55,29 +49,53 @@ from typing import TYPE_CHECKING, Any, List
 
 from musthe import Note  # re-exported: `from arranger import Note` is used by tests
 
-from . import cli, cost, decisions, fingers, movement, options, slots
+from . import (
+    annotation,
+    bass_merge,
+    bass_rules,
+    cli,
+    context,
+    cost,
+    decisions,
+    fingers,
+    grid,
+    grip_place,
+    harmony,
+    melody_alone,
+    movement,
+    options,
+    parts,
+    resolution,
+    routes,
+    slot_plan,
+    slots,
+    texture,
+)
 from .bass import (
-    BASS_ANCHORS,
-    BASS_AUTO,
-    BASS_NONE,
-    BASS_POLICY_ROLES,
+    BassNote,
+    bass_cost,
+    bass_line_for,
+)
+from .bass_rules import (
     BASS_ROLE_ANCHOR,
     BASS_ROLE_APPROACH,
     BASS_ROLE_CONNECT,
     BASS_ROLE_ENCLOSURE,
     BASS_ROLE_HOLD,
+    BASS_RULE_5TH,
+    BASS_RULE_APPROACH,
+    BASS_RULE_NEAREST,
+    BASS_RULE_ROLES,
+    BASS_RULE_ROOT,
+    BASS_RULES,
     BASS_STRING_INDICES,
-    BASS_STYLES,
-    BASS_WALK,
-    BassNote,
-    _bass_harmony,
-    _comping_no_room_reason,
-    _place_bass,
-    _walking_bass_line,
+    BASS_STYLE_ANCHORS,
+    BASS_STYLE_AUTO,
+    BASS_STYLE_NONE,
+    BASS_STYLE_WALK,
     bass_allowed,
-    bass_cost,
-    bass_line_for,
     comping_capacity,
+    parse_bass_style,
     thumb_capacity,
 )
 from .chords import (
@@ -86,76 +104,89 @@ from .chords import (
     normalised_harmony,
     sounding_harmony,
 )
-from .diagnostics import Diagnostics, default_diagnostics
-from .grips import (
-    BASS_DEGREES_6432,
-    DUO_DEGREES,
-    GRIP_MAX_SPAN,
-    GRIP_PREFERENCE,
-    GRIP_STRING_SETS,
-    SHELL_DEGREES,
-    _interval_offsets,
-    get_comping_voicings,
-    parse_grips,
-    supported_string_sets,
-)
-from .render import _print_step, _step_annotation, format_progression
-from .slots import arrange_slots, parse_bar_range, unresolved_steps
-from .steps import StepPreparation, VoiceLeadingEngine
-from .textures import (
+from .grid import (
     ALL,
+    GRID_ANCHORS,
     GRID_CHARLESTON,
-    GRID_DEFERS_TO_MELODY,
+    GRID_DEFAULT,
     GRID_EVERY_NOTE,
     GRID_FINAL_AND,
     GRID_FREDDIE,
     GRID_JOE_PASS,
+    GRID_PART_PATTERNS,
     GRID_PATTERNS,
     GRID_STYLES,
-    HARMONY_AUTO,
-    HARMONY_BUILT,
-    HARMONY_FULL,
-    HARMONY_GUIDE,
-    HARMONY_POLICIES,
-    HARMONY_ROOT,
-    HARMONY_SHELL_ROOT,
-    HARMONY_STYLES,
+    GRID_TIMELINE_PATTERNS,
+    GRID_WALK,
     LAST,
-    MELODY_ALTO,
-    MELODY_AUTO,
-    MELODY_BASS,
-    MELODY_POLICIES,
-    MELODY_SOPRANO,
-    MELODY_TENOR,
-    ROLE_FILL,
-    ROLE_TARGET,
     SUB,
-    TARGET_BEATS,
-    TEXTURE_GRIPS,
-    TEXTURE_STYLES,
-    THUMB_TEXTURES,
-    VOICE_NAMES,
-    VOICES_ALL,
-    VOICES_NONE,
+    TICKS_PER_BEAT,
     GridPattern,
-    _metric_weight,
-    _roles_for_slot,
     grid_allowed,
     grid_defers_to_melody,
     grid_positions,
-    harmony_allowed,
-    melody_only_selection,
+    grid_resolutions,
     on_grid,
     parse_grid,
-    parse_harmony,
-    parse_voices,
     resolve_grid,
+)
+from .grip_tables import (
+    GRIP_MAX_SPAN,
+    GRIP_PREFERENCE,
+    GRIP_STRING_SETS,
+    SHELL_DEGREES,
+    supported_string_sets,
+)
+from .grips import (
+    BASS_DEGREES_6432,
+    DUO_DEGREES,
+    CompingRequest,
+    get_comping_voicings,
+    get_comping_voicings_for,
+)
+from .harmony import (
+    HARMONY_AUTO,
+    HARMONY_AUTO_POLICIES,
+    HARMONY_FULL,
+    HARMONY_GUIDE,
+    HARMONY_LENGTH,
+    HARMONY_SHELL_ROOT,
+    HARMONY_STYLES,
+    harmony_allowed,
+    parse_harmony,
     resolve_harmony,
-    resolve_voices,
-    voices_have_soprano,
+)
+from .parts import (
+    PART_BASS,
+    PART_CHORD,
+    PART_MELODY,
+    PART_NAMES,
+    PARTS_AUTO,
+    parse_parts,
+    parts_has_melody_only,
+    parts_have_bass,
+    parts_have_chord,
+    parts_have_melody,
+    resolve_parts,
+)
+
+# `print_step` is the demo's one-line writer, imported under a private alias so
+# the facade does not publish it as API: `main()` is its only user here.
+from .render import format_progression
+from .render import print_step as _print_step
+from .slots import arrange_slots, parse_bar_range, unresolved_steps
+from .steps import StepPreparation, VoiceLeadingEngine
+from .texture import (
+    TARGET_BEATS,
+    TEXTURE_ARITY,
+    TEXTURE_STYLES,
+    comping_arity,
+    derived_arity,
+    families_for_arity,
+    texture_arity,
+    texture_palette,
 )
 from .tuning import (
-    _MUTED_CELL,  # re-exported: `tabstaff` imports it from here
     HIGH_FRET_LIMIT,
     MELODY_STRING_CHOICES,
     MELODY_STRING_CHOICES_FULL,
@@ -163,6 +194,8 @@ from .tuning import (
     NECK_FRET_MIN,
     NO_CHORD,
     PITCH_CLASS_NAMES,
+    ROLE_FILL,
+    ROLE_TARGET,
     SILENCE_GRID,
     SILENCE_NC_COMPING,
     SILENCE_NO_SHAPE,
@@ -197,7 +230,7 @@ from .tuning import (
 # axis - `voices=soprano` is the melody and nothing else, and the `melody` and
 # `melody_bass` textures are removed (a breaking change to the public surface,
 # same rule as 0.10.0). Measured byte-identical against the old spellings on
-# both committed heads and the engine's own fixture - see `docs/one-fact.md`.
+# both committed heads and the engine's own fixture - see `docs/history/one-fact.md`.
 __version__ = "0.12.0"
 
 
@@ -250,7 +283,7 @@ def main() -> None:
     Falling through to the demo for an unrecognised command would answer a request for
     a head with three arrangements and exit 0 - the exit code would say it worked.
 
-    The test is `argv[1]` being a bare word, so an option (`--grips shell`) still
+    The test is `argv[1]` being a bare word, so an option (`--texture targets`) still
     reaches the demo rather than being rejected, and `--help` is handled by the
     caller's own flag handling below.
     """
@@ -298,10 +331,9 @@ def main() -> None:
     for step in result_major:
         _print_step(step)
 
-    # Example 3: The same low melody arranged two ways. Pinning grips=("drop2",) with
-    # the two traditional soprano strings reproduces the library's original
-    # four-string-only output, which is what a caller wants when they need a known
-    # arrangement rather than the best one.
+    # Example 3: The same low melody, played where the neck allows it. Every grip
+    # family is offered, and the last chord drops to a three-note shell rather than
+    # reaching back up for a four-string shape.
     #
     # The difference is the Cmaj7. D4 and C4 sit at the very bottom of the B string's
     # range, where the original engine put the whole phrase up at frets 2-3 on strings
@@ -312,13 +344,9 @@ def main() -> None:
         ("D4", "7", "G7"),
         ("C4", "maj7", "Cmaj7")
     ]
-    for label, kwargs in (
-        ("every grip, frets 2-13", {}),
-        ("drop-2 only, high E and B strings", {"top_strings": (5, 4), "grips": ("drop2",)}),
-    ):
-        print(f"\n--- LOW-REGISTER CADENCE, {label} (Dm7 -> G7 -> Cmaj7) ---")
-        for step in engine.arrange_progression(low_progression, **kwargs):
-            _print_step(step)
+    print("\n--- LOW-REGISTER CADENCE, frets 2-13 (Dm7 -> G7 -> Cmaj7) ---")
+    for step in engine.arrange_progression(low_progression):
+        _print_step(step)
 
     # Example 4: Texture. The same four melody notes under Fmaj7, arranged twice.
     # Without timings every slot is a principal note and all four are full chords.
@@ -362,10 +390,11 @@ def main() -> None:
 
     # Example 8: Tab rendering. format_progression() returns the tab as a string
     # and prints nothing itself, so callers choose what to do with it. It is the
-    # compact form - one line per chord. (It also rendered a six-line block per
+    # compact form - one block per chord, whose explanation wraps onto the lines
+    # below when it is too long for one. (It also rendered a six-line block per
     # chord behind `vertical=True`, reachable from the CLI as --vertical; both
     # were removed, because the staff below is what a player actually reads.)
-    print("\n--- TAB RENDERING: format_progression(), one line per chord ---")
+    print("\n--- TAB RENDERING: format_progression(), one block per chord ---")
     print(format_progression(result_major))
 
     # Example 8: The whole progression on one six-line staff. format_tab_staff()
@@ -429,64 +458,60 @@ __all__ = [
     "BASS_DEGREES_6432",
     "BASS_ROLE_ANCHOR",
     "BASS_ROLE_APPROACH",
-    "BASS_ANCHORS",
-    "BASS_AUTO",
-    "BASS_NONE",
-    "BASS_POLICY_ROLES",
+    "BASS_RULE_5TH",
+    "BASS_RULE_APPROACH",
+    "BASS_RULE_NEAREST",
+    "BASS_RULE_ROOT",
+    "BASS_RULES",
+    "BASS_RULE_ROLES",
+    "BASS_STYLE_ANCHORS",
+    "BASS_STYLE_AUTO",
+    "BASS_STYLE_NONE",
+    "BASS_STYLE_WALK",
     "BASS_ROLE_CONNECT",
     "BASS_ROLE_ENCLOSURE",
     "BASS_ROLE_HOLD",
-    "BASS_STYLES",
     "BASS_STRING_INDICES",
-    "BASS_WALK",
     "BassNote",
     "DUO_DEGREES",
     "GRIP_MAX_SPAN",
     "ALL",
+    "GRID_ANCHORS",
     "GRID_CHARLESTON",
-    "GRID_DEFERS_TO_MELODY",
+    "GRID_DEFAULT",
     "GRID_EVERY_NOTE",
     "GRID_FINAL_AND",
     "GRID_FREDDIE",
     "GRID_JOE_PASS",
     "GRID_PATTERNS",
+    "GRID_PART_PATTERNS",
     "GRID_STYLES",
+    "GRID_TIMELINE_PATTERNS",
+    "GRID_WALK",
     "GridPattern",
     "LAST",
     "SUB",
+    "TICKS_PER_BEAT",
     "grid_allowed",
     "grid_defers_to_melody",
     "grid_positions",
+    "grid_resolutions",
     "on_grid",
     "parse_bar_range",
     "parse_grid",
     "resolve_grid",
     "HARMONY_AUTO",
-    "HARMONY_BUILT",
+    "HARMONY_AUTO_POLICIES",
+    "HARMONY_LENGTH",
     "HARMONY_FULL",
     "HARMONY_GUIDE",
-    "HARMONY_POLICIES",
-    "HARMONY_ROOT",
     "HARMONY_SHELL_ROOT",
     "HARMONY_STYLES",
-    "MELODY_ALTO",
-    "MELODY_AUTO",
-    "MELODY_BASS",
-    "MELODY_POLICIES",
-    "MELODY_SOPRANO",
-    "MELODY_TENOR",
-    "VOICES_ALL",
-    "VOICES_NONE",
-    "VOICE_NAMES",
-    "parse_voices",
-    "resolve_voices",
     "harmony_allowed",
     "parse_harmony",
     "resolve_harmony",
-    "voices_have_soprano",
     "GRIP_PREFERENCE",
     "GRIP_STRING_SETS",
-    "parse_grips",
     "HIGH_FRET_LIMIT",
     "MELODY_STRING_CHOICES",
     "MELODY_STRING_CHOICES_FULL",
@@ -505,49 +530,76 @@ __all__ = [
     "STANDARD_TUNING",
     "STRING_NAMES",
     "TARGET_BEATS",
-    "TEXTURE_GRIPS",
+    "PART_BASS",
+    "PART_CHORD",
+    "PART_MELODY",
+    "PART_NAMES",
+    "PARTS_AUTO",
+    "TEXTURE_ARITY",
     "TEXTURE_STYLES",
-    "THUMB_TEXTURES",
+    "comping_arity",
+    "derived_arity",
+    "families_for_arity",
+    "parse_parts",
+    "parts_has_melody_only",
+    "parts_have_bass",
+    "parts_have_chord",
+    "parts_have_melody",
+    "resolve_parts",
+    "texture_arity",
+    "texture_palette",
     "ArrangementStep",
     "arrange_slots",
     "ChordParser",
     "melody_degree_name",
-    "Diagnostics",
     "GuitarFretboard",
     "StepPreparation",
     "VoiceLeadingEngine",
     "Voicing",
+    "annotation",
     "bass",
+    "bass_rules",
     "bass_allowed",
     "bass_cost",
     "bass_line_for",
+    "bass_merge",
+    "parse_bass_style",
     "chords",
     "comping_capacity",
     "cli",
+    "context",
     "cost",
     "decisions",
-    "default_diagnostics",
-    "diagnostics",
     "fingers",
     "format_progression",
     "format_gp5",
     "format_musicxml",
     "format_tab_html",
     "format_tab_staff",
+    "CompingRequest",
     "get_comping_voicings",
+    "get_comping_voicings_for",
+    "grid",
+    "grip_place",
+    "grip_tables",
     "grips",
+    "harmony",
     "main",
+    "melody_alone",
     "normalised_harmony",
-    "melody_only_selection",
     "movement",
     "options",
+    "parts",
     "render",
+    "resolution",
+    "routes",
+    "slot_plan",
     "slots",
     "sounding_harmony",
     "steps",
     "supported_string_sets",
     "thumb_capacity",
-    "textures",
+    "texture",
     "tuning",
     "unresolved_steps",
     "write_musicxml",

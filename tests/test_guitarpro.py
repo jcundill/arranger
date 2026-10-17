@@ -29,10 +29,10 @@ import unittest
 from arranger import ArrangementStep, VoiceLeadingEngine
 
 # The shared placement core, reached directly: these tests are about where events
-# land, which is decided in `tabxml` and only turned into beats by `tabgp`.
+# land, which is decided in `tabscore` and only turned into beats by `tabgp`.
 from tabgp import format_gp5
-from tabxml import _events, _substitute_steps
-from tests.support import bass_string, make_step
+from tabscore import score_events, substitute_steps
+from tests.support import BUT_NOT_FOR_ME, bass_string, make_step
 
 try:
     import guitarpro  # noqa: F401
@@ -271,9 +271,7 @@ class TestRoundTrip(GuitarProTestCase):
             with self.subTest(head=name):
                 buffer = io.StringIO()
                 with contextlib.redirect_stdout(buffer):
-                    steps, head, _notes = arrange_xml_head(
-                        f"tests/data/{name}", grips=("shell",)
-                    )
+                    steps, head, _notes = arrange_xml_head(f"tests/data/{name}")
                 self.assertEqual(
                     head.key_fifths, fifths, f"{name}: the fixture's own key"
                 )
@@ -413,7 +411,7 @@ class TestRhythm(GuitarProTestCase):
         ]
         measures = self.measures(steps=timed)
         # Two bars. The grid is what this renderer owns; the lengths within it come
-        # from `tabxml._events`, shared with the MusicXML renderer and tested there.
+        # from `tabscore.score_events`, shared with the MusicXML renderer and tested there.
         # The beat *count* is not asserted, because a length the format cannot hold
         # exactly is written as more than one note - see `_duration_split`.
         self.assertEqual(len(measures), 2)
@@ -505,7 +503,7 @@ class TestRhythm(GuitarProTestCase):
         """
         import headxml
         from tabgp import _measures
-        from tabxml import _events, _substitute_steps
+        from tabscore import score_events, substitute_steps
 
         data = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
         scores = ("i_was_doing_all_right.mxl", "Trouble_in_Mind_Blues.musicxml",
@@ -524,8 +522,8 @@ class TestRhythm(GuitarProTestCase):
                 # of a 2/2 head as over-long, which is the test being wrong and
                 # sounding exactly like a renderer bug.
                 limit = float(head.beats_per_bar) * (4.0 / float(head.beat_type))
-                events, pickup = _events(
-                    _substitute_steps(steps), head.beats_per_bar, True,
+                events, pickup = score_events(
+                    substitute_steps(steps), head.beats_per_bar, True,
                     head.beat_type,
                 )
                 for number, beats in enumerate(
@@ -649,7 +647,7 @@ class TestRhythm(GuitarProTestCase):
                           bar=1, beat=1, duration=1.0)
         after = make_step([-1, -1, 12, 12, 12, 12], "G7", "B4",
                           bar=2, beat=2, duration=1.0)
-        events, _pickup = _events(_substitute_steps([whole, after]), 4, True)
+        events, _pickup = score_events(substitute_steps([whole, after]), 4, True)
         # The Dm7 fills one bar and does not run into the second; the quarter
         # before the G7 is a rest rather than more Dm7. The G7 is the *last* group,
         # so it runs to the end of its own bar - three quarters, not four - which is
@@ -673,7 +671,7 @@ class TestRhythm(GuitarProTestCase):
                           bar=1, beat=1, duration=1.0)
         second = make_step([-1, -1, 12, 12, 12, 12], "G7", "B4",
                            bar=2, beat=1, duration=1.0)
-        events, _pickup = _events(_substitute_steps([first, second]), 4, True)
+        events, _pickup = score_events(substitute_steps([first, second]), 4, True)
         self.assertEqual([s is None for s, _strikes, _length in events], [False, False])
         self.assertEqual(
             [round(length, 6) for _s, _strikes, length in events], [4.0, 4.0]
@@ -690,7 +688,7 @@ class TestRhythm(GuitarProTestCase):
         plain2 = make_step([-1, -1, 12, 12, 12, 12], "G7", "B4")
         # No bar, beat or duration on either: this is the uniform-grid fallback.
         self.assertIsNone(plain.duration)
-        events, _pickup = _events(_substitute_steps([plain, plain2]), 4, True)
+        events, _pickup = score_events(substitute_steps([plain, plain2]), 4, True)
         self.assertEqual([s is None for s, _strikes, _length in events], [False, False])
 
     def test_a_long_step_is_split_across_a_bar_line_rather_than_stretched(self):
@@ -865,8 +863,8 @@ class TestRhythm(GuitarProTestCase):
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
             steps, head, _notes = arrange_xml_head(path)
-        events, pickup = _events(
-            _substitute_steps(steps), head.beats_per_bar, True, head.beat_type
+        events, pickup = score_events(
+            substitute_steps(steps), head.beats_per_bar, True, head.beat_type
         )
         model = _measures(events, pickup, head.beats_per_bar, head.beat_type)
         written = self.beats(
@@ -937,8 +935,8 @@ class TestRhythm(GuitarProTestCase):
         # The changes, walked over the events - written out here rather than
         # derived from `_build_song`, so a label on a continuation part would show
         # up as an extra name below.
-        events, _pickup = _events(
-            _substitute_steps(steps), head.beats_per_bar, True, head.beat_type
+        events, _pickup = score_events(
+            substitute_steps(steps), head.beats_per_bar, True, head.beat_type
         )
         changes = []
         in_force = None
@@ -1191,7 +1189,7 @@ class TestOptions(GuitarProTestCase):
 
         `harmonized_as` names the chord actually sounding, so the file must not
         claim the written one. It is reached through the same shared
-        `_substitute_steps` pass `tabxml` uses, so the two files cannot disagree.
+        `substitute_steps` pass `tabxml` uses, so the two files cannot disagree.
         """
         step = make_step([-1, -1, 10, 10, 10, 10], "Cmaj7", "E4",
                           harmonized_as="Cmaj9")
@@ -1262,7 +1260,8 @@ class TestWalkingBass(GuitarProTestCase):
         self.walk_steps = VoiceLeadingEngine.arrange_progression(
             [("F5", "maj7", "Fmaj7")],
             timings=[(0, 1.0, None)],
-            texture="walking_bass",
+            texture="targets", bass="root,5th,approach,nearest",
+            grid="melody:every_note,bass:walk",
         )
         self.walk_song = _parse(io.BytesIO(format_gp5(self.walk_steps)))
         self.walk_beats = [
@@ -1363,12 +1362,12 @@ class TestWalkingBass(GuitarProTestCase):
         """
         import tabgp
         from headxml import arrange_xml_head
-        from tests.test_headxml import BUT_NOT_FOR_ME
 
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
             steps, _, _ = arrange_xml_head(
-                BUT_NOT_FOR_ME, grips=("shell",), texture="walking_bass"
+                BUT_NOT_FOR_ME, texture="targets",
+                bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk",
             )
         song = _parse(
             io.BytesIO(format_gp5(steps, beats_per_bar=2, beat_type=2))
@@ -1423,12 +1422,12 @@ class TestWalkingBass(GuitarProTestCase):
         handling is known to be exercised rather than merely unexercised.
         """
         from headxml import arrange_xml_head
-        from tests.test_headxml import BUT_NOT_FOR_ME
 
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
             steps, _, _ = arrange_xml_head(
-                BUT_NOT_FOR_ME, grips=("shell",), texture="walking_bass"
+                BUT_NOT_FOR_ME, texture="targets",
+                bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk",
             )
 
         ringing = None

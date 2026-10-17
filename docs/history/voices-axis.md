@@ -1,15 +1,25 @@
 # `voices=` — a third axis: which voices the guitar plays
 
-**Status: implemented and committed, awaiting QA.** The code is complete and the gate is
+**Retired into `docs/history/` — the record of a superseded spelling.** `voices=` is gone:
+`parts=` replaced it ([docs/history/parts.md](parts.md)), and the live statement of that axis is
+[docs/engine.md](../engine.md). What follows was true of `voices=`, and the QA this document
+handed over is answered by the collapse it records.
+
+**Status: superseded by `parts=`** ([docs/history/parts.md](parts.md)): the axis below
+shipped as `voices=`, and this document is the record of that spelling and of the QA it
+owed. What follows was true of `voices=`.
+
+**Implemented and committed, awaiting QA.** The code is complete and the gate is
 green; nobody has yet read a rendered part and asked whether it is *good*. That is the job
 this document exists to hand over. Stage 1's QA landed three fixes off the §4 checklist,
 and Stage 2 moved the melody-only claim onto this axis — `soprano` alone is the tune and
 nothing else, and the `melody`/`melody_bass` textures are gone — see
 [docs/one-fact.md](one-fact.md).
 
-Deliberately **not** in `docs/history/` — that directory is for completed plans and is not
-extended. This one is open, and the "Known limitations" section is the part most likely to
-change after someone plays it.
+It was kept out of `docs/history/` while it was open — that directory is for completed plans and
+is not extended. It is here now because the collapse finished: `voices=` has no spelling in the
+tree any more, so the "Known limitations" section below is a record of a spelling rather than a
+live list.
 
 Measured state at the time of writing: **938 tests OK (skipped=2)**, ruff 0 errors, pyright
 **0 errors 0 warnings**. Baseline before this work was **883** — all 883 pass unchanged.
@@ -28,7 +38,7 @@ That is **one flag**:
 
 ```bash
 python -m arranger head tests/data/heres_that_rainy_day.musicxml \
-    --bars 1-3 --voices alto,tenor --bass none --texture targets
+    --bars 1-3 --voices alto,tenor --bass-style none --texture targets
 ```
 
 ```text
@@ -98,8 +108,8 @@ Each row is a command worth running. The first three are the claim; the rest are
 | 7 | `--voices auto,alto` | usage error |
 | 8 | `--voices alto,tenor` under any texture | comps — the old `--texture melody` refusal dissolved when the melody-only claim moved onto the selection |
 | 9 | `--voices alto,tenor --tab staff --melody` | staff draws; no soprano string marked |
-| 10 | `--voices alto,tenor --bass walk` | thumb walks *under* a 2-note shape, or refuses |
-| 11 | a head containing an `NC` bar | warns once, skips the bar |
+| 10 | `--voices alto,tenor --bass-style root,5th,approach,nearest` | thumb walks *under* a 2-note shape, or refuses |
+| 11 | a head containing an `NC` bar | comps nothing: a rest step carrying `silence="nc_comping"` |
 | 12 | `--voices alto,tenor --html out.html` | page renders, no melody on the tab |
 | 13 | `--voices alto,tenor --musicxml x.musicxml --gp5 y.gp5` | both write without error |
 
@@ -165,8 +175,8 @@ a small change and a real decision.
 1. **A one-voice selection states the chord weakly.** Two notes can sound both guide tones;
    one cannot, so `--voices alto` keeps only the **first** guide tone (the 3rd, or the 4th
    on a sus chord). It is a `duo`-grade statement, not a shell. The alternative was to
-   refuse, which measured worse: it warned on every step and handed the horn's line back
-   to the guitarist. **`--voices bass` is the exception** and no longer reads this way — see
+   refuse, which measured worse: it stated the horn's line on the guitar on every step and
+   handed it back. **`--voices bass` is the exception** and no longer reads this way — see
    §8a.
 2. **The arity picks the grip family.** Two voices use the `duo` string sets, three use the
    `shell` sets. Truncating a shell set to two strings looks free and is not — it yields
@@ -178,8 +188,9 @@ a small change and a real decision.
    one as a single moving note — a melody line on the guitar part, on exactly the beats
    where the tune had been given away. Stated in two places on purpose (`render` and
    `tabstaff`) so the renderers cannot disagree; a test asserts they agree.
-4. **An `NC` bar is skipped, with a warning.** No chord means no guide tones, so the guitar
-   is silent there while the horn is not.
+4. **An `NC` bar is a rest that says why.** No chord means no guide tones, so the guitar
+   is silent there while the horn is not; the comping route emits a rest step carrying
+   `silence="nc_comping"`, which `_silence_clause` phrases.
 5. **`--voices` is not validated by `argparse`.** It is a free string, so a bad value is
    reported as a usage error by the parser rather than by `choices=`. That was the price of
    accepting a comma list, and it means `--help` no longer lists the vocabulary.

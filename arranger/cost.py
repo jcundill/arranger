@@ -2,7 +2,7 @@
 
 `voicing_cost` is the library's central invariant - a tuple compared lexicographically,
 not a weighted sum, with its order asserted positionally by
-`tests/test_grips.py::TestVoicingCost` - and `_best_voicing` is its argmin. **No
+`tests/test_grip_selection.py::TestVoicingCost` - and `best_voicing` is its argmin. **No
 criterion names a grip family**: a tie that runs off the end of the tuple is broken by
 generation order, which is `grips.GRIP_PREFERENCE`. `bass_cost` deliberately lives in
 `bass` instead, next to the `BASS_ROLE_*` vocabulary it ranks over, because importing it
@@ -11,13 +11,14 @@ here would make `cost` import `bass` and `bass` import `cost`.
 
 from __future__ import annotations
 
-from typing import Container, List, Optional, Sequence, Tuple
+from dataclasses import dataclass
+from typing import Callable, Container, List, Optional, Sequence, Tuple
 
 from .grips import BASS_DEGREES_6432
 from .tuning import NECK_FRET_MAX, NECK_FRET_MIN, GuitarFretboard, Voicing
 
 
-def _window_penalty(
+def window_penalty(
     candidates: List[Voicing],
     fret_min: int = NECK_FRET_MIN,
     fret_max: int = NECK_FRET_MAX,
@@ -135,7 +136,7 @@ def voicing_cost(
     rather than a sound - and a four-note drop-2 never reaches a tie with a shell to
     begin with, because criterion 2 separates them on note count. The order families are
     offered in is `grips.GRIP_PREFERENCE`, and that is where an exact tie is broken: see
-    `_best_voicing`.
+    `best_voicing`.
     """
     active = voicing.active_frets()
     outside = sum(1 for fret in active if not fret_min <= fret <= fret_max)
@@ -181,6 +182,42 @@ def voicing_cost(
     )
 
 
+@dataclass(frozen=True)
+class SelectionCriteria:
+    """Everything a candidate is ranked against, except the candidate itself.
+
+    `voicing_cost` is the primitive function and keeps its seven-argument public
+    signature; this is the value the internal selector and the palette record pass
+    around so they cannot score the same slot against different arguments.
+
+    `previous` is here rather than beside `candidates` because it is part of the
+    ranking context, not a candidate: every shape in one palette is scored against
+    the same held shape. `bass_pc` and `slash_bass_cost` are the partition's half of
+    the rule and are read before `cost` is called.
+    """
+
+    previous: Optional[Voicing] = None
+    fret_min: int = NECK_FRET_MIN
+    fret_max: int = NECK_FRET_MAX
+    allowed_tones: Optional[Container[int]] = None
+    root_pc: Optional[int] = None
+    melody_pc: Optional[int] = None
+    bass_pc: Optional[int] = None
+    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]] = None
+
+    def cost(self, voicing: Voicing) -> Tuple[float, ...]:
+        """This shape's cost under exactly these criteria."""
+        return voicing_cost(
+            voicing,
+            self.previous,
+            self.fret_min,
+            self.fret_max,
+            allowed_tones=self.allowed_tones,
+            root_pc=self.root_pc,
+            melody_pc=self.melody_pc,
+        )
+
+
 #: The name of each way a shape can lose to another, so a caller holding two candidates
 #: can say *which* one separated them: `movement` records the index on the step and
 #: `render` reads the phrase from here, which is what keeps the labels from going stale.
@@ -216,7 +253,7 @@ def decisive_criterion(winner: Sequence[float], loser: Sequence[float]) -> Optio
 
     The first index at which two costs differ *is* the criterion that decided between
     them, because every element before it is equal. None means the two tied, in which
-    case no criterion can be named - `_best_voicing` broke it on generation order.
+    case no criterion can be named - `best_voicing` broke it on generation order.
 
     Asking this of a shape with **more** voices than the winner never returns the
     voice-count criterion, because a fuller shape cannot lose on how many voices it has.
@@ -230,7 +267,7 @@ def decisive_criterion(winner: Sequence[float], loser: Sequence[float]) -> Optio
     return None
 
 
-def _best_voicing(
+def best_voicing(
     candidates: List[Voicing],
     previous: Optional[Voicing] = None,
     fret_min: int = NECK_FRET_MIN,
@@ -250,8 +287,8 @@ def _best_voicing(
     of the loop: where two families tie - `Cmaj` under a `C4` melody is the pinned case,
     and `tests/test_grips.py::TestClosePosition` holds it - `grips=("closed",
     "drop2_6432")` takes the first tab and the reversed pair takes the second. That is
-    what `--grips`' "most preferred first" promises, and it is why the position of a
-    family in `GRIP_PREFERENCE` is load-bearing.
+    what `GRIP_PREFERENCE`'s "most preferred first" promises, and it is why a family's
+    position there is load-bearing.
 
     Determinism follows from the inputs being sequences: the same progression always
     arranges to the same tab, which is what makes its output worth asserting on in tests.
@@ -267,6 +304,21 @@ def _best_voicing(
             v, previous, fret_min, fret_max, allowed_tones, root_pc, melody_pc
         ),
     )
+
+
+def best_voicing_for(
+    candidates: List[Voicing],
+    criteria: SelectionCriteria,
+) -> Optional[Voicing]:
+    """The candidate `criteria` likes best, or None when there are no candidates.
+
+    The object form of `best_voicing`, for the selector and the palette record: a
+    tie still falls to the previous candidate, because this is the same stable `min`
+    over the same cost tuple.
+    """
+    if not candidates:
+        return None
+    return min(candidates, key=criteria.cost)
 
 
 def calculate_voice_leading_distance(voicing_a: Voicing | dict, voicing_b: Voicing | dict) -> float:

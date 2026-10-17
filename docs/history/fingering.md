@@ -1,5 +1,14 @@
 # Fingering: research notes
 
+**Retired into `docs/history/` — the record of a measurement programme, not a plan.** The two
+defects it found shipped (`grips.thumb_safe_grips` and `fingers.can_fret`), the finger-skip ban
+is in the string tables, and the two rules a reader needs from it live in
+[docs/engine.md](../engine.md): the four-string budget and the right hand's `p-i-m-a`
+assignment are stated in §"`parts=` as the third axis", and the cost-tuple decision - that no
+element names a finger, and why - is stated with `voicing_cost`. What is still open is §5 step 3,
+and its counts are [open-issues.md](../open-issues.md) item 2 rather than here: they have moved
+since, and that item is where they are re-measured by hand.
+
 **Status: step 1 of §5 is built; step 2's §4.3 measurement has landed on both hands, and it
 gave `arranger/fingers.py` its first engine caller.** §4.3's *string* budget needed the right
 hand (`grips.thumb_safe_grips`) and no code from this module; its *fret* budget needed the
@@ -34,13 +43,15 @@ reason the span cap does not already catch.
 
 **Next step: step 3 of §5, and nothing measured so far argues for it.** Step 2's *§4.3*
 half found a real defect and fixed it (the five-finger check; see §4.3 and §5 step 2), and its
-follow-on — whether the *selector* should have left room for the thumb — came back small: **53**
-dropped bass notes when it was first measured, **39** re-measured on the current tree, of which the
-harmless recovery is now **none** rather than ten, always at the span bucket
-(`docs/open-issues.md` item 2). Its **fourth lever — the walk's own pitch — was measured with the
-re-measurement**, and it is the one that does *not* pay the bucket: **24 of 38** "no octave below"
-refusals are recoverable by stating a different pitch, **12** of them by a chord tone, all 12 in one
-head and one figure; **14** cannot be helped by any pitch. Recorded, not built. Its
+follow-on — whether the *selector* should have left room for the thumb — came back small: **161**
+refusals over the committed heads and the four thumb rows **when §4.3 measured them**, **53** where
+it was first measured
+and **39** at `246ff69`, of which the harmless recovery is now **none** rather than ten, always at
+the span bucket (`docs/open-issues.md` item 2, where the current figures live - re-measured by
+hand from that item's recipe rather than quoted here, since they have moved). Its **fourth lever — the walk's own pitch —** is the one that does *not* pay
+the bucket: **93 of the 161** refusals are recoverable by stating a different pitch and **64** of
+those by a chord tone, spread over seven chords in six heads; **68** cannot be helped by any pitch.
+Recorded, not built. Its
 *movement* half is measured — where finger-level movement disagrees with `position` and
 `movement`, over every struck transition of the committed heads — and it came back nearly
 empty. Its **right-hand half is measured too** (§4.4: which strings `p-i-m-a` pluck,
@@ -56,7 +67,7 @@ the state of record.
 
 ## 1. Why: what whole-hand measures cannot see
 
-`voicing_cost` (see [engine.md](engine.md)) ranks candidates with whole-hand
+`voicing_cost` (see [engine.md](../engine.md)) ranks candidates with whole-hand
 measures:
 
 - **`fret_span()`** (criterion 3) — `max(frets) - min(frets)`. Under monotone
@@ -147,7 +158,7 @@ These follow from four fingers, each pressing at one fret position at a time:
 ### 2.3 Numbers and physics (measurement wanted before asserting)
 
 - **Maximum span.** The engine already claims `GRIP_MAX_SPAN = 5` (4 for a
-  duo and an interval) — see [engine.md](engine.md) §"Span outranks neck
+  duo and an interval) — see [engine.md](../engine.md) §"Span outranks neck
   position" for what promoting span over position cost. Independent reference
   implementations land near 4 for an intermediate player (the `mutheors` Rust
   crate's default `max_fret_span` is 4). Worth stating: fret spacing narrows up
@@ -251,7 +262,7 @@ the exempt gap never arises on a shape the thumb cannot reach.
 
 **The trap, and it is the reason this section exists rather than a sentence.** The
 obvious metric — "are the plucked strings contiguous?" — **over-reports by an order of
-magnitude**. Counting *any* gap made 275 of the 307 gap-carrying `--bass walk` steps look
+magnitude**. Counting *any* gap made 275 of the 307 gap-carrying `--bass-style root,5th,approach,nearest` steps look
 like defects the post-selection bass merge had *created*; counting only the fingers' gaps
 makes the true figure **2**. A bass note merged under a shape lands directly beneath it,
 so the gap it opens is precisely the exempt one — the same "assert the rule on the whole"
@@ -354,7 +365,7 @@ Adding or changing a criterion is **a musical decision, not a refactor** —
 `AGENTS.md` and the `voicing_cost` docstring both say so, and the span bucket
 just demonstrated the protocol: implement, measure what moves, re-pin only what
 the measurement exonerates, record the trade and any rejected alternatives in
-[engine.md](engine.md), update the test count. A finger-level criterion would
+[engine.md](../engine.md), update the test count. A finger-level criterion would
 land in the span/position region of the tuple — the region the `0/1/2` bucket
 measurement showed is the most sensitive in the whole function. Measure first,
 decide placement second. Candidates worth measuring, in likely order:
@@ -409,11 +420,15 @@ under it is five, whatever the frets. Counting what each step actually plucks
 
 | arrangement | steps | pluck five strings | five distinct frets | …counting the held shape |
 |---|---|---|---|---|
-| `--texture targets --bass walk` | 839 | **151** | 10 | 15 |
-| `--texture targets --bass anchors` | 688 | **130** | 9 | 10 |
-| `--texture walking_bass --bass walk` | 839 | 0 | 0 | 0 |
-| `--texture uniform --bass walk` | 643 | 0 | 0 | 0 — the axis is refused (`bass_allowed`) |
+| `--texture targets --bass-style root,5th,approach,nearest` | 839 | **151** | 10 | 15 |
+| `--texture targets --bass-style root` | 688 | **130** | 9 | 10 |
+| `--texture walking_bass --bass-style root,5th,approach,nearest` | 839 | 0 | 0 | 0 |
+| `--texture uniform --bass-style root,5th,approach,nearest` | 643 | 0 | 0 | 0 — the axis is refused (`bass_allowed`) |
 | `_place_bass` over the generated corpus, all 12 bass pitch classes | 86,315 placements | — | — | 8 |
+
+**Two rows name `walking_bass`, which was the walk's own texture then.** It is `--texture
+targets` with a bass style now, because the walk is a property of the bass *part*; those rows
+are the measurements taken at the time rather than commands that still run.
 
 The two budgets overlap rather than nest, and both are real. `7-9-x-8-12-10`, a `Bmaj`
 target in "Tenor Madness", needs five distinct frets and fails both hands;
@@ -427,7 +442,7 @@ carries a bass note, and falls back to the widest statement that leaves a finger
 `("drop2", "drop3")` becomes `("shell",)`. `decisions.resolve_texture_grips` applies it per
 slot (`movement.py` passes `slot.bass is not None`), so a target on a beat the thumb leaves
 bare keeps all four strings. Measured after: **0** five-string steps anywhere; `--texture
-targets --bass walk` is byte-identical to `--texture walking_bass --bass walk`; the other
+targets --bass-style root,5th,approach,nearest` is byte-identical to `--texture walking_bass --bass-style root,5th,approach,nearest`; the other
 rows do not move. `arranger/fingers.py` was not needed for any of it, and that is the result
 this document records: the first real playability defect in this area was a *string* budget,
 not a finger assignment. Full measurement, the cost, and the rejected alternatives are in §4.3.
@@ -435,7 +450,7 @@ not a finger assignment. Full measurement, the cost, and the rejected alternativ
 **The left-hand half closed too, one release later, and the answer was the one this section
 rejected as a fix for the other half.** Measured on the tree the string fix left behind — the
 seven committed heads × five `texture`/`bass` rows, 3,697 steps — exactly **one** step
-violated the fret budget: "Tenor Madness" bar 40 under `--texture targets --bass anchors`,
+violated the fret budget: "Tenor Madness" bar 40 under `--texture targets --bass-style root`,
 where the hand holds `x-9-x-8-12-10` and the walk's `B` has a single candidate, the low E at
 fret 7. The A string is spoken for by the held shape, and a `B` on the D at fret 9 would
 sound above the shape's F#3, which `_place_bass` forbids. Five frets from four fingers, and
@@ -449,24 +464,29 @@ After: **0**. The two counting decisions below are the rest of the record.
 **The follow-on question this section leaves open has since been measured, and the answer is
 small — and its numbers have been re-measured once already.** The question behind it was whether the **selector** should have left room for the thumb in the
 first place — the palette narrowing above, but at *candidate* level, where `_place_bass` runs only
-after `_best_voicing` has chosen. Measured over the same heads and rows, the warning fires **53**
-times on the tree the question was asked on and **39** today (two commits moved it, neither of them
-aimed at this). On the current tree the dominant cause is
-unchanged and is the third one the message used not to name — **38 of the 39** are "no octave of the
-walk's pitch below the shape" (the chord's own bottom note is already that low), **1** is the
-five-frets case, and **0** are "no free string"; that clause is **now in the message**.
+after `_best_voicing` has chosen. Measured over the same heads and rows, `_place_bass` returned
+None **53** times on the tree the question was asked on, **39** at `246ff69` and **161** when this was
+measured — playing the repeats and one more fixture moved it, neither aimed at this, and
+`docs/open-issues.md` item 2 holds the figure since. The dominant cause is
+unchanged and is the third one the clause names — **160 of the 161** are "no octave of the walk's
+pitch below the shape" (the chord's own bottom note is already that low), **1** is the five-frets
+case, and **0** are "no free string". A replica of the function's own three filters is what names
+the cause, because the step records the wanted pitch class (`bass_refused`) and not the reason.
 
-What the re-measurement changes about the *levers*: of the 34 refusals a selector could reach, a host
-exists for every one — but **0 of them sounds the chosen shape's own notes** any more, because the
+What the re-measurement changes about the *levers*: there is a host for nearly every refusal a selector
+could reach — but **0 of them sounds the chosen shape's own notes** any more, because the
 identical-notes hosts were the `drop24` string sets that §4.4 removed. So this lever now costs a
 harmonic change on every recovery, at the span bucket. The **walk's own pitch** is the fourth lever
 and does not pay the bucket, because it re-states the bass under the shape already chosen:
-**24 of 38** refusals are recoverable by another pitch, **12** of them by a chord tone (all 12 being
-"But Not For Me"'s `Cm7` downbeats, whose root the shape already sounds an octave up), and **14**
+**93 of the 161** refusals are recoverable by another pitch, **64** of them by a chord tone (seven
+chords across six heads, not the one figure this used to say), and **68**
 cannot be helped by any pitch at all. It needs no pipeline change — the walk does not have to see the
 shapes — which is the opposite of what the question implied. So nothing was built, a third time for
-the same reason. [docs/open-issues.md](open-issues.md) item 2 has the counts, the attribution, the
-step-3 ceiling table, the aliasing trap this instrumentation hit, and the four alternatives.
+the same reason. [docs/open-issues.md](../open-issues.md) item 2 has the counts, the attribution, the
+step-3 ceiling table, the aliasing trap this instrumentation hit, and the four alternatives — and
+**item 5** is the same question asked from the other end: a lone note the hand holds can leave the
+walk's own register out of its reach, which is the *selector's* room to leave again and is measured
+there rather than built.
 
 **One of those counting decisions moves the number by a factor of ten**, and both are about
 which hand the check is stated over:
@@ -547,12 +567,12 @@ steps), steps carrying a finger skip, either side of the removal:
 | row | steps | before | after |
 |---|---|---|---|
 | `uniform` (the default) | 643 | **223 (34.7%)** | **1** |
-| `targets --bass walk` | 837 | 19 (2.3%) | 19 (2.3%) |
-| `targets --bass anchors` | 688 | 16 (2.3%) | 16 (2.3%) |
-| `walking_bass --bass walk` | 837 | 19 (2.3%) | 19 (2.3%) |
-| `walking_bass --bass anchors` | 688 | 19 (2.8%) | 19 (2.8%) |
-| `uniform --bass walk` | 839 | refused outright | 95 (11.3%) |
-| `uniform --bass anchors` | 688 | refused outright | 27 (3.9%) |
+| `targets --bass-style root,5th,approach,nearest` | 837 | 19 (2.3%) | 19 (2.3%) |
+| `targets --bass-style root` | 688 | 16 (2.3%) | 16 (2.3%) |
+| `walking_bass --bass-style root,5th,approach,nearest` | 837 | 19 (2.3%) | 19 (2.3%) |
+| `walking_bass --bass-style root` | 688 | 19 (2.8%) | 19 (2.8%) |
+| `uniform --bass-style root,5th,approach,nearest` | 839 | refused outright | 95 (11.3%) |
+| `uniform --bass-style root` | 688 | refused outright | 27 (3.9%) |
 
 The bass textures are nearly clean because their target palettes are shells — the one set
 the ban left — so **they do not move at all**; the default `uniform` arrangement carried the
@@ -617,14 +637,14 @@ than lucky:
 | row | steps | …bottom note above the G | …carrying a gap at all | skips, exemption as documented | …narrowed to the thumb's reach |
 |---|---|---|---|---|---|
 | `uniform` (the default) | 643 | 80 (12.4%) | 0 | **223** | **223** |
-| `targets --bass walk` | 839 | 288 (34.3%) | 0 | 19 | **19** |
-| `targets --bass anchors` | 688 | 446 (64.8%) | 0 | 16 | **16** |
-| `walking_bass --bass walk` | 839 | 288 (34.3%) | 0 | 19 | **19** |
-| `walking_bass --bass anchors` | 688 | 466 (67.7%) | 0 | 19 | **19** |
+| `targets --bass-style root,5th,approach,nearest` | 839 | 288 (34.3%) | 0 | 19 | **19** |
+| `targets --bass-style root` | 688 | 446 (64.8%) | 0 | 16 | **16** |
+| `walking_bass --bass-style root,5th,approach,nearest` | 839 | 288 (34.3%) | 0 | 19 | **19** |
+| `walking_bass --bass-style root` | 688 | 466 (67.7%) | 0 | 19 | **19** |
 
 The last two columns are identical on every row, which is the narrowing being free rather than
 being argued to be. The sub-count column is 0 because every off-reach step is a
-**single** note — a lone voice on the high E (212 of the 288 on `targets --bass walk`, 365 of
+**single** note — a lone voice on the high E (212 of the 288 on `targets --bass-style root,5th,approach,nearest`, 365 of
 the 446 under `anchors`) or on the B (76 and 81), with `uniform` the one row that also reaches a
 pair, once, on 1-2 — and one pluck has no gap in it.
 
@@ -658,7 +678,7 @@ candidate in the pool:
   **17**. And the zero-skip alternative loses first at **span 197**, missing 35, position
   17, outside 15, foreign 1 — so the skip is overwhelmingly what the *span* criterion buys.
   Preferring adjacency over span would undo the deliberate promotion of span above neck
-  position (see [engine.md](engine.md) §"Span outranks neck position"), and on the
+  position (see [engine.md](../engine.md) §"Span outranks neck position"), and on the
   committed heads the same placement changes 94 of 1,204 pools. It would also rank the
   `(5,3,2)` shell down, and that shape is the walking bass's three-layer split — so the
   criterion and the shell cannot both be kept as they stand. Measured, not built.
@@ -746,18 +766,22 @@ and §4.4), which is why step 1 had to exist before any of the measurements coul
      caller and the reason it is not inert. Measured before and after: **1** step, then
      **0**, and no pinned tab in the suite moved.
    - **The follow-on — would the *selector* leaving room for the thumb pay? — came back small, and
-     its numbers have been re-measured since.** The warning fires **53** times on the tree the
-     question was asked on and **39** today. The dominant cause is a third one (no octave of the
-     walk's pitch below the shape, because the chord's own bottom note is already that low), not the
-     fret budget — **38 of the 39** now, and that clause is **in the message** as of this work. Of the
-     34 refusals a selector could reach, a host exists for every one, but **none** sounds the chosen
-     shape's own notes (the ten that did were the removed `drop24` sets), so every recovery now
-     changes the harmony and pays the span bucket. The **walk's own pitch** is the fourth lever and
-     costs the tuple nothing: **24 of 38** refusals are recoverable by another pitch, **12** by a
-     chord tone, **14** by none. Recorded as [open-issues.md](open-issues.md) item 2, not built.
+     its numbers have been re-measured since.** `_place_bass` returns None **53** times on the tree
+     the question was asked on, **39** at `246ff69` and **161** when this was measured — and
+     `docs/open-issues.md` item 2, where the current figure lives - re-measured by hand from that
+     figure lives. The dominant cause is a third
+     one (no octave of the walk's pitch below the shape, because the chord's own bottom note is
+     already that low), not the fret budget — **160 of the 161** now, and a replica of the
+     function's own filters is what names it, because the step records the wanted pitch and not the
+     reason. There is a host for nearly every refusal a selector could reach, but **none** sounds
+     the chosen shape's own notes (the ten that did were the removed `drop24` sets), so every
+     recovery now changes the harmony and pays the span bucket. The **walk's own pitch** is the
+     fourth lever and costs the tuple nothing. Its figures are
+     [open-issues.md](../open-issues.md) item 2's, re-measured there by hand and deliberately not
+     restated here — one fact, one home.
    - **The movement comparison came back nearly empty, and the two numbers that did not
-     argue against a tuple slot.** Over 1,330 struck transitions (six heads × `uniform`
-     and `walking_bass`):
+     argue against a tuple slot.** Over 1,330 struck transitions (six heads × two textures,
+     `uniform` and the walk):
      - `assign_fingers` is undefined on **0** of them: a candidate at selection time always
        sounds at most four strings, so a per-finger criterion would be safe by construction;
      - **4** transitions are the anchor leap of §1.2 — `largest >= 3` while
@@ -800,7 +824,7 @@ and §4.4), which is why step 1 had to exist before any of the measurements coul
    candidate that would touch every step — `finger_movement.total` in `movement`'s place —
    reports "nothing moved" on a quarter of them. If it is taken up anyway, the protocol is
    the span bucket's: implement, measure which pinned tabs move, re-pin only what the
-   measurement exonerates, record the rejected alternatives in [engine.md](engine.md), and
+   measurement exonerates, record the rejected alternatives in [engine.md](../engine.md), and
    update the counts here and in `AGENTS.md`. The **inversion** that protocol named has
    already happened, for §4.3 rather than for a tuple slot: `TestTheModuleIsInert` is now
    `TestTheEngineUsesItForOneQuestion` (`AGENTS.md` trap 5), so a step-3 change inherits a

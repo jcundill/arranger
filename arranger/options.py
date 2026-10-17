@@ -21,9 +21,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Container, Mapping, Optional, Sequence, Tuple
 
-from .bass import BASS_AUTO
-from .grips import GRIP_PREFERENCE
-from .textures import GRID_EVERY_NOTE, HARMONY_AUTO, MELODY_AUTO
+from .bass_rules import (
+    BASS_STYLE_AUTO,
+)
+from .grid import GRID_DEFAULT
+from .harmony import HARMONY_AUTO
+from .parts import PARTS_AUTO
 from .tuning import MELODY_STRING_CHOICES_FULL, NECK_FRET_MAX, NECK_FRET_MIN
 
 # `(bar, beat, duration)` for one slot. `bar` is signed - a pickup is negative -
@@ -41,69 +44,67 @@ class ArrangeOptions:
     non_chord_tone: str = "extension"
     fret_min: int = NECK_FRET_MIN
     fret_max: int = NECK_FRET_MAX
-    grips: Tuple[str, ...] = GRIP_PREFERENCE
     texture: str = "uniform"
-    # Which bass **policy** the thumb line is written on: "none", "anchors" or "walk".
-    # An axis of its own rather than a property of the texture, because the pattern is
-    # the composer's choice and the set of patterns is open - see `BASS_STYLES` in
-    # `bass.py`, where a new one is a row in a table.
+    # Which bass **style** the thumb line is written on, as a comma-separated list of
+    # note rules: "none", "root", or the full "root,5th,approach,nearest". An axis of its
+    # own rather than a property of the texture, because the note rules are the
+    # composer's choice and the set is open - see `BASS_RULE_ROLES` in `bass.py`, where a
+    # new one is a row in a table.
     #
-    # The default is the **sentinel** `BASS_AUTO` ("auto"), not the resolved "none",
-    # for the same reason `melody`'s and `harmony`'s defaults are sentinels: it matches
+    # The default is the **sentinel** `BASS_STYLE_AUTO` ("auto"), not the resolved "none",
+    # for the same reason `parts`'s and `harmony`'s defaults are sentinels: it matches
     # `arrange_progression`'s keyword default, so the two spellings can be compared
     # field-by-field, and a default that disagreed with the keyword's would make every
     # slot-path call look like a caller who had passed both. The sentinel resolves from
     # the texture, so a bare options value leaves the thumb line where the keyword
-    # default leaves it. `steps.py` reads the field back, which is what keeps `--bass`
-    # live on the `arranger head` path.
-    bass: str = BASS_AUTO
-    # Which voices the guitar plays, from `MELODY_POLICIES` in `textures.py` (which
-    # resolves the `auto` sentinel). `soprano` keeps the melody pinned to the soprano
-    # string - the default - and dropping it gives the
-    # tune to another instrument, leaving the guitar a guide-tone comping part.
+    # default leaves it. `steps.py` reads the field back, which is what keeps
+    # `--bass-style` live on the `arranger head` path.
+    bass: str = BASS_STYLE_AUTO
+    # Which of melody / bass / chord the guitar takes, from `parts.py` (where
+    # `parse_parts` owns the vocabulary and `resolve_parts` expands the `auto`
+    # sentinel to all three). The melody is the tune on top, the bass is the bottom
+    # the thumb realises, and the chord is the harmonisation between them - whose
+    # **arity** `texture=` states and whose **degree order** `harmony=` states.
     #
-    # **Named `melody` and carrying a voice list, which reads as a mistake** and is
-    # left in place deliberately: the `harmony=` axis landed beside it and this one is
-    # still a rename away (`docs/comping-styles.md` §6 Q2 and §8 Stage C), and a flag
-    # called `melody` taking `"soprano,alto"` will mislead the next reader. Renaming it
-    # before the question it raises is settled would trade one wrong name for another.
+    # The three are parts in a band, not voices in a stack, and a band setting is a
+    # *combination* of axes rather than a mode: `parts=melody,chord` with
+    # `bass_style=root` is a bassist on the root and a horn on the tune, with the
+    # guitar comping under it. `parts=auto` - the default - names every part.
     #
-    # An axis of its own, and orthogonal to `texture` and to `bass`, because those
-    # answer different questions: where notes fall, and who plays the bottom. A band
-    # setting is a *combination* -- `bass="none", melody="none"` is a bassist on the
-    # root and a horn on the tune with the guitar between them -- so each is chosen
-    # separately rather than as one mode. The default changes nothing that worked
-    # before it.
+    # A part the caller names is a request for it to sound, and a policy named for a
+    # part the selection leaves out is refused naming the part that would work. The
+    # arithmetic `melody + bass + chord <= RIGHT_HAND_STRINGS` is a precondition:
+    # `parts=melody,bass` with `texture=chord3` is five strings and is refused before
+    # anything is generated.
     #
-    # The default is the **sentinel** `MELODY_AUTO` ("auto"), not the resolved "guitar",
-    # so that it matches `arrange_progression`'s keyword default and the two spellings
-    # can be compared field-by-field. That comparison is load-bearing: `arrange_slots`
-    # builds an `ArrangeOptions` and passes it, so a default that disagreed with the
-    # keyword's would make every corpus call look like a caller who had passed both.
-    # `bass` follows the same rule: its field default is the sentinel too, so the
-    # comparison can be made and the field read back. See the note beside its own
-    # field above.
-    melody: str = MELODY_AUTO
+    # The default is the **sentinel** `PARTS_AUTO` ("auto"), not the resolved part
+    # list, so that it matches `arrange_progression`'s keyword default and the two
+    # spellings can be compared field-by-field. That comparison is load-bearing:
+    # `arrange_slots` builds an `ArrangeOptions` and passes it, so a default that
+    # disagreed with the keyword's would make every corpus call look like a caller who
+    # had passed both. `bass` and `harmony` follow the same rule. See the note beside
+    # `bass` above.
+    parts: str = PARTS_AUTO
     # Which **degrees** this part states when it is not singing, from `HARMONY_STYLES`
-    # in `textures.py`: "guide" is the shipped comping shape (the 3rd and the 7th).
+    # in `harmony.py`: "guide" is the shipped comping shape (the 3rd and the 7th).
     #
     # A fourth axis, and orthogonal to the other three rather than another way of
     # spelling one of them - and that orthogonality is why it is separate from
-    # `melody`. The three existing axes answer *how many* notes (from the voice
+    # `parts`. The three existing axes answer *how many* notes (from the voice
     # selection), *where* they fall (texture, and the rhythm grid to come) and *who
     # plays the bottom* (bass). None of them answers **what the part says about the
     # chord**, which is a different question: `guide` and `shell_root` both sound a
     # 3rd and a 7th, and differ in whether a root or 5th is stated underneath them.
     #
     # The default is the sentinel `HARMONY_AUTO` ("auto") rather than the resolved
-    # "guide", for the same reason `melody` is: it matches `arrange_progression`'s
+    # "guide", for the same reason `parts` is: it matches `arrange_progression`'s
     # keyword default, so the two spellings can be compared field-by-field and a
     # default that disagreed would make every corpus call look like a caller who had
     # passed both. It resolves to `guide` because that is what the comping route has
     # always said, so the axis is **inert by default** and every existing arrangement
     # is unaffected.
     harmony: str = HARMONY_AUTO
-    # Where a chord **falls** inside the bar, from `GRID_STYLES` in `textures.py`:
+    # Where a chord **falls** inside the bar, from `GRID_STYLES` in `grid.py`:
     # `every_note` (the default) places one wherever a melody note is, and the named
     # patterns place on beats and subdivisions instead.
     #
@@ -114,13 +115,13 @@ class ArrangeOptions:
     # style name is a shorthand for one of them rather than a mode.
     #
     # The default is `every_note` **outright, with no `*_AUTO` sentinel** - a
-    # deliberate departure from the convention `harmony`, `melody` and `bass` follow,
+    # deliberate departure from the convention `harmony`, `parts` and `bass` follow,
     # because `grid=auto` resolved to `every_note` unconditionally and was then never
     # read again, so it named the default rather than deferring to any context. It
     # still matches `arrange_progression`'s keyword default, so the two spellings can
     # be compared field-by-field, and `every_note` is what a score-imported head
     # already produced, so the axis is inert by default.
-    grid: str = GRID_EVERY_NOTE
+    grid: str = GRID_DEFAULT
     beats_per_bar: int = 4
     # The metre's **denominator**, and it is not decoration: a beat is `4 / beat_type`
     # quarters, so `beats_per_bar` alone says which beats exist but not how long one
@@ -160,7 +161,7 @@ class ArrangeOptions:
     # substituted where it begins, not under a held note and not where the tune is
     # silent. `None` means *every* slot is an onset - the honest default for a
     # hand-built progression that carries no timeline, so a bare
-    # `arrange_progression(..., melody="alto,tenor")` still honours `--non-chord-tone`.
+    # `arrange_progression(..., parts=chord)` still honours `--non-chord-tone`.
     # The head layer computes it from `headxml.melody_state`, which is the one place
     # that knows a note is sounding rather than merely in force.
     #

@@ -6,8 +6,8 @@ GP5 is a *tab* format: it stores a fret number and a string for every note nativ
 so a chord shape survives the round trip exactly. `tabxml` writes no TAB staff, because
 `music21` cannot write one a notation program renders correctly - it emits neither the
 six `<staff-lines>` nor a fret and string per note. So the two renderers divide the work
-by what each format can do: **notation in MusicXML, tab here**, with `_events` and
-`_substitute_steps` shared so a head lands on the same beats in both files.
+by what each format can do: **notation in MusicXML, tab here**, with `score_events` and
+`substitute_steps` shared so a head lands on the same beats in both files.
 
 What it writes is one guitar track of shapes, on the written rhythm, with a held
 shape written as one longer note rather than a re-strike. Each chord is labelled
@@ -18,7 +18,7 @@ shape written as one longer note rather than a re-strike. Each chord is labelled
 format, so it is read by *tab* programs - Guitar Pro 5 and later that read GP5, TuxGuitar,
 and the browser and mobile readers that import it - while MusicXML remains the way into
 Sibelius, MuseScore and Final. What the two share is the *placement*: both call
-`tabxml._events`, so a head lands on the same beats in both files and the two
+`tabscore.score_events`, so a head lands on the same beats in both files and the two
 renderings cannot drift apart. Where they genuinely differ is bar lines - see
 `_measures`.
 
@@ -60,7 +60,7 @@ import io
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from arranger.tuning import NO_CHORD, ArrangementStep
-from tabxml import _events, _substitute_steps
+from tabscore import score_events, substitute_steps
 
 # The GP file version written. (5, 1, 0) is the 5.1 format, which Guitar Pro 5 and
 # every later release read. PyGuitarPro writes GP3/GP4/GP5/TGP from the same model,
@@ -387,6 +387,113 @@ def _key_signature(gp: Any, fifths: int, mode: str = "") -> Any:
     return None
 
 
+def _measure_header(
+    gp: Any,
+    number: int,
+    beats_per_bar: int,
+    beat_type: int,
+    key_signature: Any,
+) -> Any:
+    """The `MeasureHeader` for one bar after the first.
+
+    Every bar needs its own header rather than inheriting the previous one's, and the
+    key has to be stated on each:
+
+    - **Every bar states its key, not just the first.** A fresh `MeasureHeader`
+      defaults `keySignature` to `KeySignature.CMajor`, so omitting this stated the
+      head's key correctly on bar 1 and then reverted to C on bar 2 - a file that read
+      as "Eb major, then C major" for a tune in one key. Nothing about a
+      `MeasureHeader` inherits from the previous one here: the key is a per-bar field
+      in the format, and this module writes one header per bar.
+    - **Only ever a real member.** `PyGuitarPro`'s GP5 writer dereferences this field
+      unconditionally, so a `None` here - the "no key GP5 can name" answer from
+      `_key_signature` - raises `AttributeError` on the *second* bar and the file is
+      never written. `CMajor` is the format's own default and is what an absent
+      signature means to every reader anyway.
+    """
+    return gp.MeasureHeader(
+        number=number,
+        timeSignature=gp.TimeSignature(beats_per_bar, gp.Duration(beat_type)),
+        keySignature=key_signature or gp.KeySignature.CMajor,
+    )
+
+
+def _strike_notes(
+    gp: Any,
+    beat: Any,
+    step: Optional[ArrangementStep],
+    continued: bool,
+    part: int,
+    tie: bool,
+    ringing: Optional[List[int]],
+    last_on_string: Dict[int, int],
+) -> Optional[List[int]]:
+    """Write `step`'s notes into `beat`; return the shape that is now ringing.
+
+    Two jobs, because a GP5 beat has to state both:
+
+    - the step's **own** sounding frets, as ties when `continued` (the second half of
+      a length split, or a chunk that began in an earlier bar), which is what makes
+      the halves of a dotted length one held note rather than a re-struck shape;
+    - the shape **already ringing** above the thumb, on a `bass_only` beat. A GP beat
+      cannot express "held" as an empty string the way a tab cell can, so the shape is
+      written as ties. Skipped on the first part of a beat that continues a chunk from
+      an earlier bar, which already carries the tie from the chunk that began it - but
+      written on the later parts of a split, where nothing else would say the shape
+      rings for the rest of the beat.
+
+    **A tie is only written where its claim is true.** GP5 carries no fret for a
+    `NoteType.tie` note at all: PyGuitarPro's writer emits `fret = 0`, and the reader
+    reconstructs a pitch by scanning backwards for the most recent note on the same
+    string. So a tie asserts "same pitch as the last note on this string" rather than
+    naming one. The thumb is written first and may be on a string the held shape
+    occupies - the engine picks that string from the *current* step's thinned voicing,
+    not the ringing shape - so a tie there would resolve to the thumb's fret and the
+    file would carry a pitch the engine never produced. Such a note is struck normally
+    instead: an audible re-strike is a far smaller fault than a silently wrong note.
+    """
+    if step is None:
+        return ringing
+    for string_index, fret in _sounding_frets(step):
+        gp_string = _GP_STRING_OFFSET - string_index
+        beat.notes.append(
+            gp.Note(
+                beat,
+                value=fret,
+                string=gp_string,
+                velocity=_VELOCITY,
+                # A continuation part carries the tie from the part before it.
+                type=(gp.NoteType.tie if continued else gp.NoteType.normal),
+            )
+        )
+        last_on_string[gp_string] = fret
+    if step.bass_only:
+        if (part > 0 or not tie) and ringing is not None:
+            for string_index, fret in _held_upper_frets(
+                ringing, step.voicing.bass_string
+            ):
+                gp_string = _GP_STRING_OFFSET - string_index
+                held = last_on_string.get(gp_string) == fret
+                beat.notes.append(
+                    gp.Note(
+                        beat,
+                        value=fret,
+                        string=gp_string,
+                        velocity=_VELOCITY,
+                        type=(gp.NoteType.tie if held else gp.NoteType.normal),
+                    )
+                )
+                last_on_string[gp_string] = fret
+        return ringing
+    # Any other step re-states the shape in full, so it becomes the one ringing. A
+    # `repeated` step strikes the soprano alone over the shape already sounding, which
+    # is why it is excluded: taking its one-fret vector would erase the held shape for
+    # the bass-only beats that follow.
+    if not step.repeated:
+        return list(step.voicing.frets)
+    return ringing
+
+
 def _build_song(
     gp: Any,
     measures: List[List[Tuple[Optional[ArrangementStep], float, bool]]],
@@ -473,24 +580,8 @@ def _build_song(
 
     for index, beats in enumerate(measures, start=1):
         if index > 1:
-            header = gp.MeasureHeader(
-                number=index,
-                timeSignature=gp.TimeSignature(beats_per_bar, gp.Duration(beat_type)),
-                # **Every bar, not just the first.** A fresh `MeasureHeader` defaults
-                # `keySignature` to `KeySignature.CMajor`, so omitting this stated the
-                # head's key correctly on bar 1 and then reverted to C on bar 2 - a
-                # file that read as "Eb major, then C major" for a tune in one key.
-                # Nothing about a `MeasureHeader` inherits from the previous one here:
-                # the key is a per-bar field in the format, and this module writes one
-                # header per bar, so it has to be stated on each.
-                #
-                # Only ever a real member. `PyGuitarPro`'s GP5 writer dereferences
-                # this field unconditionally, so a `None` here - the "no key GP5 can
-                # name" answer from `_key_signature` - raises `AttributeError` on the
-                # *second* bar and the file is never written. `CMajor` is the format's
-                # own default and is what an absent signature means to every reader
-                # anyway.
-                keySignature=key_signature or gp.KeySignature.CMajor,
+            header = _measure_header(
+                gp, index, beats_per_bar, beat_type, key_signature
             )
             song.measureHeaders.append(header)
         voice = gp.Voice(None)
@@ -544,65 +635,9 @@ def _build_song(
                             else gp.BeatStatus.rest),
                     text=label,
                 )
-                if step is not None:
-                    for string_index, fret in _sounding_frets(step):
-                        gp_string = _GP_STRING_OFFSET - string_index
-                        beat.notes.append(
-                            gp.Note(
-                                beat,
-                                value=fret,
-                                string=gp_string,
-                                velocity=_VELOCITY,
-                                # A continuation part carries the tie from the part
-                                # before it, which is what makes the halves of a
-                                # split one held note rather than a re-struck shape.
-                                type=(gp.NoteType.tie if continued
-                                      else gp.NoteType.normal),
-                            )
-                        )
-                        last_on_string[gp_string] = fret
-                    # A bass-only beat still has to *say* the shape that is ringing
-                    # above the thumb, because a GP beat cannot have an empty string
-                    # in the way a tab cell can. Written as ties, so it reads as held
-                    # rather than re-struck - see `_sounding_frets`. Skipped on the
-                    # first part of a beat that continues a chunk from an earlier
-                    # bar, which already carries the tie from the chunk that began
-                    # it - but written on the later parts of a split, where nothing
-                    # else would say the shape rings for the rest of the beat.
-                    if step.bass_only and (part > 0 or not tie) and ringing is not None:
-                        for string_index, fret in _held_upper_frets(
-                            ringing, step.voicing.bass_string
-                        ):
-                            gp_string = _GP_STRING_OFFSET - string_index
-                            # A tie here says "this string is still sounding what it
-                            # sounded last", which holds only while nothing else has
-                            # been written on it since. The thumb is written first and
-                            # may well be on this string (the engine picks it from the
-                            # current step's thinned voicing, not the ringing shape), in
-                            # which case a tie would resolve to the thumb's fret and
-                            # the file would carry a pitch the engine never produced.
-                            # Struck normally instead: an audible re-strike is a far
-                            # smaller fault than a silently wrong note.
-                            held = last_on_string.get(gp_string) == fret
-                            beat.notes.append(
-                                gp.Note(
-                                    beat,
-                                    value=fret,
-                                    string=gp_string,
-                                    velocity=_VELOCITY,
-                                    type=(gp.NoteType.tie if held
-                                          else gp.NoteType.normal),
-                                )
-                            )
-                            last_on_string[gp_string] = fret
-                    elif step is not None and not step.bass_only:
-                        # Any other step re-states the shape in full, so it becomes
-                        # the one ringing. A `repeated` step strikes the soprano
-                        # alone over the shape already sounding, which is why it is
-                        # excluded: taking its one-fret vector would erase the held
-                        # shape for the bass-only beats that follow.
-                        if not step.repeated:
-                            ringing = list(step.voicing.frets)
+                ringing = _strike_notes(
+                    gp, beat, step, continued, part, tie, ringing, last_on_string
+                )
                 voice.beats.append(beat)
         # maxVoices is 2 and the writer emits every voice; one would desync the
         # file. See the module docstring.
@@ -756,8 +791,8 @@ def format_gp5(
     # The substitution pass is shared with the MusicXML renderer, so a step that
     # is sounding a different chord from the one written is named the same way in
     # both files rather than only in the one that remembered to ask.
-    events, pickup = _events(
-        _substitute_steps(steps), beats_per_bar, rhythm and collapse, beat_type
+    events, pickup = score_events(
+        substitute_steps(steps), beats_per_bar, rhythm and collapse, beat_type
     )
     if not any(step is not None for step, _, _ in events):
         return b""

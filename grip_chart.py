@@ -49,7 +49,7 @@ from arranger import (
     VoiceLeadingEngine,
     Voicing,
 )
-from arranger.grips import _drop2_template_for
+from arranger.grips import drop2_template_for
 
 # The two four-string blocks a drop-2 chord melody actually uses, as
 # (conventional string numbers high-to-low, soprano string index). Drop-2 is
@@ -578,7 +578,7 @@ def _engine_has_shape(quality: str, top: int, chart_frets: List[int]) -> bool:
     drop-2 of that chord, and it is position-independent by construction:
 
     * a shape is correct if its notes, measured down from the melody, match the rule's
-      own template for the melody's degree (`_drop2_template_for`);
+      own template for the melody's degree (`drop2_template_for`);
     * failing that, it is correct if the engine can actually voice those notes on
       one of its two blocks.
 
@@ -599,7 +599,7 @@ def _engine_has_shape(quality: str, top: int, chart_frets: List[int]) -> bool:
     tones = {t % 12 for t in ChordParser.CHORD_TONES_FROM_ROOT.get(quality, ())}
     root_pc = chord_root_pc(quality)
     degree = (top - root_pc) % 12
-    rule = _drop2_template_for(quality, degree) if degree in tones else []
+    rule = drop2_template_for(quality, degree) if degree in tones else []
     if rule and offsets == sorted(-offset for offset in rule):
         return True
 

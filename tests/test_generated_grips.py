@@ -2,7 +2,7 @@
 replaced.
 
 `TONE_PRIORITY` says which of a chord's tones a shape states, in what order, one row per
-quality; `grips._drop2_template_for` turns one degree into the shape for it, and
+quality; `grips.drop2_template_for` turns one degree into the shape for it, and
 `_drop2_palette` is that rule read at every degree the chord has. The 119 hand-written
 templates live in `tests/support.py` now - the engine stopped carrying them - re-keyed by
 the degree their top voice states (`WITNESS`), and the assertion below compares the rule
@@ -26,11 +26,13 @@ import unittest
 from musthe import Note
 
 from arranger import SHELL_DEGREES, ChordParser, VoiceLeadingEngine
-from arranger.grips import (
+from arranger.grip_tables import (
     TONE_PRIORITY,
-    _drop2_palette,
-    _drop2_template_for,
     stated_tones,
+)
+from arranger.grips import (
+    _drop2_palette,
+    drop2_template_for,
 )
 from tests.support import WITNESS
 
@@ -70,7 +72,7 @@ class TestTheRuleReproducesTheTables(unittest.TestCase):
         for quality, by_degree in WITNESS.items():
             for degree, want in by_degree.items():
                 checked += 1
-                got = _drop2_template_for(quality, degree)
+                got = drop2_template_for(quality, degree)
                 self.assertEqual(
                     got, want,
                     f"{quality} with degree {degree} in the melody: "
@@ -110,7 +112,7 @@ class TestTheRuleReproducesTheTables(unittest.TestCase):
 
         The aliases (`min7`, `dom7`, `min7b5`, `mmaj7` and the rest) have no priority row
         of their own, so the rule itself answers nothing for them. They work because
-        `_chord_context` canonicalises the quality before the rule is asked, and this is
+        `chord_context` canonicalises the quality before the rule is asked, and this is
         what says so - on the route a caller takes, not on a table key.
         """
         aliases = [
@@ -192,7 +194,7 @@ class TestTheOmissionDecision(unittest.TestCase):
     def _sounding(self, quality, degree):
         """The degrees the rule's shape for `degree` sounds, measured from the root."""
         return {
-            (degree + offset) % 12 for offset in _drop2_template_for(quality, degree)
+            (degree + offset) % 12 for offset in drop2_template_for(quality, degree)
         }
 
     def test_the_shape_gives_up_the_tone_the_row_says_it_does(self):
@@ -259,7 +261,7 @@ class TestStatedTones(unittest.TestCase):
     def test_an_unknown_quality_is_offered_nothing(self):
         """The house rule: never guess a chord. A quality with no row states no tones."""
         self.assertEqual(stated_tones("not-a-quality", 0), ())
-        self.assertEqual(_drop2_template_for("not-a-quality", 0), [])
+        self.assertEqual(drop2_template_for("not-a-quality", 0), [])
 
     def test_a_quality_the_rule_cannot_build_has_no_palette(self):
         """A quality with no priority row offers no shapes rather than truncated ones."""
@@ -272,13 +274,13 @@ class TestTheGeneratedShapesAreLegal(unittest.TestCase):
     def test_a_generated_template_is_a_four_voice_drop2(self):
         """Four voices, soprano first, descending, and inside a hand's reach.
 
-        Read over `_drop2_template_for` at **every chord tone** of every quality, not just
+        Read over `drop2_template_for` at **every chord tone** of every quality, not just
         the degrees the hand table named: the rule is asked for one degree at a time, so
         the degrees it is legal at is whatever it answers for.
         """
         for quality, chord_tones in ChordParser.CHORD_TONES_FROM_ROOT.items():
             for degree in {t % 12 for t in chord_tones}:
-                template = _drop2_template_for(quality, degree)
+                template = drop2_template_for(quality, degree)
                 self.assertEqual(len(template), 4, (quality, degree))
                 self.assertEqual(template[0], 0, (quality, degree))
                 self.assertEqual(
@@ -311,7 +313,7 @@ class TestTheGeneratedShapesAreLegal(unittest.TestCase):
             for degree in {t % 12 for t in chord_tones}:
                 sounding = {
                     (degree + offset) % 12
-                    for offset in _drop2_template_for(quality, degree)
+                    for offset in drop2_template_for(quality, degree)
                 }
                 for want in guide:
                     self.assertIn(want % 12, sounding, (quality, degree))
@@ -326,7 +328,7 @@ class TestThePalette(unittest.TestCase):
         for quality, row in TONE_PRIORITY.items():
             self.assertEqual(
                 _drop2_palette(quality),
-                [_drop2_template_for(quality, d) for d in row],
+                [drop2_template_for(quality, d) for d in row],
                 quality,
             )
             self.assertEqual(

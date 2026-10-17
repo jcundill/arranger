@@ -39,7 +39,11 @@ import importlib
 import unittest
 from typing import List, Optional, Tuple
 
-from arranger import Diagnostics, VoiceLeadingEngine, slots
+from arranger import VoiceLeadingEngine, slots
+from arranger.bass_rules import (
+    BASS_STYLE_WALK,
+)
+from arranger.options import ArrangeOptions
 
 # (melody, quality, name) triples chosen to cover the decision points rather than to
 # be a tune: a chord tone, a 9th the extension strategy absorbs, a note with no route
@@ -56,7 +60,7 @@ TRIPLES: List[Tuple[str, str, str]] = [
     ("B4", "NC", "NC"),        # no harmony at all
 ]
 
-TEXTURES = ("uniform", "targets", "walking_bass")
+TEXTURES = ("uniform", "targets", "chord2")
 
 # The decisions the step loop makes: one implementation each, all of them called from
 # `arranger.movement` rather than re-derived there.
@@ -86,19 +90,19 @@ def timings_for(count: int, beats_per_bar: int = 4):
 
 
 def through_library(triples, timings, texture, **kwargs):
-    diagnostics = Diagnostics()
     steps = VoiceLeadingEngine.arrange_progression(
-        triples, timings=timings, texture=texture, diagnostics=diagnostics, **kwargs
+        triples, timings=timings, texture=texture, **kwargs
     )
-    return steps, diagnostics.warnings
+    return steps
 
 
 def through_slots(triples, timings, texture, **kwargs):
-    diagnostics = Diagnostics()
-    steps, _rescued, _notes = slots.arrange_slots(
-        triples, timings=timings, texture=texture, diagnostics=diagnostics, **kwargs
+    steps, _rescued, notes = slots.arrange_slots(
+        triples,
+        timings=timings,
+        options=ArrangeOptions(texture=texture, **kwargs),
     )
-    return steps, diagnostics.warnings
+    return steps, notes
 
 
 def source_of(module_name: str) -> str:
@@ -120,8 +124,8 @@ class TestTheTwoLoopsAgree(unittest.TestCase):
 
     def assert_same_arrangement(self, triples, texture, **kwargs):
         timings = timings_for(len(triples))
-        mine, my_warnings = through_library(triples, timings, texture, **kwargs)
-        theirs, their_warnings = through_slots(triples, timings, texture, **kwargs)
+        mine = through_library(triples, timings, texture, **kwargs)
+        theirs, their_notes = through_slots(triples, timings, texture, **kwargs)
 
         self.assertEqual(
             [step.tab_line() for step in mine],
@@ -135,9 +139,9 @@ class TestTheTwoLoopsAgree(unittest.TestCase):
                 f"{texture}: the two entry points disagree about {field!r}",
             )
         self.assertEqual(
-            my_warnings,
-            their_warnings,
-            f"{texture}: the two entry points report different warnings",
+            their_notes,
+            [],
+            f"{texture}: the slot wrapper added notes of its own",
         )
         return mine
 
@@ -162,18 +166,58 @@ class TestTheTwoLoopsAgree(unittest.TestCase):
             with self.subTest(texture=texture):
                 self.assert_same_arrangement([("F5", "maj7", "Fmaj7")], texture)
 
-    def test_a_grip_the_texture_never_uses_agrees(self):
-        """The empty-intersection warning path, which both loops used to format
-        separately."""
-        for texture in ("targets", "walking_bass"):
-            with self.subTest(texture=texture):
-                self.assert_same_arrangement(TRIPLES[:4], texture, grips=("duo",))
+    def assert_same_refusal(self, triples, texture, **kwargs):
+        """Both entry points refuse one request identically.
 
-    def test_a_grip_the_role_does_use_agrees(self):
-        """The narrowing path, which is not the empty-intersection warning."""
-        for texture in TEXTURES:
+        **Rewritten from `test_a_grip_the_texture_never_uses_agrees`.** That test
+        compared the *warnings* the two loops formatted for a grip the texture never
+        uses, which was the remaining half of a check written when `wjazzd.arrange_slots`
+        held a near-verbatim second copy of the loop. The copy is long gone - `arrange_slots`
+        delegates - and the refusal is a `ValueError` now, so what remains to compare is
+        that both spellings raise the same message rather than that they print the same
+        line. That is a stronger claim: one entry point silently accepting a request the
+        other refuses would fail here.
+        """
+        timings = timings_for(len(triples))
+        with self.assertRaises(ValueError) as from_library:
+            through_library(triples, timings, texture, **kwargs)
+        with self.assertRaises(ValueError) as from_slots:
+            through_slots(triples, timings, texture, **kwargs)
+        self.assertEqual(
+            str(from_library.exception),
+            str(from_slots.exception),
+            f"{texture}: the two entry points refuse one request differently",
+        )
+
+    def test_a_request_the_axes_refuse_agrees(self):
+        """Both loops refuse one request with one message.
+
+        **Rewritten from `test_a_grip_the_texture_never_uses_agrees`.** The request used to
+        be a `grips=` narrowing; the family axis is deleted, so what is compared here is the
+        parts refusal - a bass *style* with a selection that does not take the bass part.
+        One entry point silently accepting what the other refuses is what this catches.
+        """
+        for parts in ("chord", "melody"):
+            with self.subTest(parts=parts):
+                self.assert_same_refusal(
+                    TRIPLES[:4], "targets", parts=parts, bass=BASS_STYLE_WALK
+                )
+
+    def test_a_narrowed_palette_agrees(self):
+        """A narrowed palette is the texture's now, and the thumb line is where it bites.
+
+        **Rewritten from `test_a_grip_the_role_does_use_agrees`.** What a caller narrowed
+        was a `grips=` list, and the family axis is deleted; the texture owns the arity, so
+        `test_every_texture_over_the_shared_fixtures` above sweeps every narrowing there
+        is. What is left here is the path a walk needs - a style that merges a thumb note
+        into a shape the hand is holding, which no other test in this file asks for.
+        """
+        for texture in ("targets", "uniform"):
             with self.subTest(texture=texture):
-                self.assert_same_arrangement(TRIPLES[:4], texture, grips=("shell",))
+                self.assert_same_arrangement(
+                    TRIPLES[:4], texture,
+                    bass=BASS_STYLE_WALK, grid="melody:every_note,bass:walk",
+                )
 
 
 class TestTheDecisionsAreActuallyShared(unittest.TestCase):
@@ -230,8 +274,23 @@ class TestTheDecisionsAreActuallyShared(unittest.TestCase):
         whose step loop had been deleted outright. `arranger.steps` was the loop's
         home until the loop moved to `movement`; `steps` is a facade now too, so
         this is re-pointed a second time rather than dropped.
+
+        It is re-pointed a third time here, to the **set** of modules the engine is
+        made of. The per-slot plan was extracted to `slot_plan` and the axis
+        resolvers to `resolution`, so two decisions the loop calls are now one
+        module away from the loop itself. Reading `movement` alone would have
+        asserted that those two are *not* called - the opposite of what this test
+        exists to protect - and dropping them from `DECISIONS` would have retired
+        the check for the busiest decision in the engine.
         """
-        engine = source_of("arranger.movement")
+        engine = " ".join(
+            source_of(name)
+            for name in (
+                "arranger.movement",
+                "arranger.slot_plan",
+                "arranger.resolution",
+            )
+        )
         for name in DECISIONS:
             with self.subTest(decision=name):
                 self.assertIn(f"{name}(", engine, f"the engine does not call {name}")

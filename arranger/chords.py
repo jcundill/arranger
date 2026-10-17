@@ -23,11 +23,11 @@ itself under `TYPE_CHECKING`, which is what keeps this module below `steps`.
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, Optional, Sequence, Tuple
 
 from musthe import Note
 
-from .tuning import PITCH_CLASS_NAMES
+from .tuning import NO_CHORD, PITCH_CLASS_NAMES
 
 if TYPE_CHECKING:  # pragma: no cover - type only, never imported at runtime
     from .tuning import ArrangementStep
@@ -207,7 +207,7 @@ NON_CHORD_TONE_EXTENSIONS = {
     # that have no fallback at all (`shell`, `duo`, `interval`, whose shapes are
     # defined by the chord's own degrees) then had nothing to fall back to, so
     # the step went missing instead: `Ebmaj` under `F4` in "But Not For Me" bar 2
-    # with `--grips shell` produced no candidate and was dropped. `add9` is the
+    # with a shell-only palette produced no candidate and was dropped. `add9` is the
     # narrowest quality that contains the 9th, `madd9` its minor twin, and both
     # are already in CHORD_TONES_FROM_ROOT, SHELL_DEGREES and the drop-2 tables,
     # so no other table needs a row for them.
@@ -372,7 +372,7 @@ def resolve_non_chord_tone(
         return None
 
     if strategy == "diminished":
-        target_pc = _resolution_pitch_class(melody_note, root_str, canonical, next_melody)
+        target_pc = resolution_pitch_class(melody_note, root_str, canonical, next_melody)
         if target_pc is None:
             return None
         # A dim7 is symmetrical, so naming the root a semitone below the
@@ -383,7 +383,46 @@ def resolve_non_chord_tone(
 
     return None
 
-def _resolution_pitch_class(
+
+def resolve_substitute_harmony(
+    melody_note: Note,
+    chord_type: str,
+    name: str,
+    strategy: str,
+    next_melody: Optional[str] = None,
+) -> Optional[Tuple[str, str, str]]:
+    """The `(quality, name, strategy)` that makes a non-chord melody note a chord tone.
+
+    Shared by both routes: the melody route pins the note and
+    re-voices a substituted chord around it; the comping route never sounds the note
+    but must still *state* the chord the horn's line implies, so the two have to make
+    the same decision the same way - otherwise `--non-chord-tone` means one thing on
+    one route and another on the other, which is the split this codebase keeps having
+    to close.
+
+    Returns `None` when the note is already a chord tone, when the chord is outside
+    `CHORD_TONES_FROM_ROOT` (nothing to substitute against), when `name` is empty, or
+    when `resolve_non_chord_tone` finds no route for the strategy. `sustain` is
+    deliberately excluded up front: it holds the *previous shape's* inner voices,
+    which is a melody-route move with no meaning where the generator builds a fresh
+    comping shape on every slot.
+    """
+    if strategy == "sustain" or not name:
+        return None
+    canonical = ChordParser.canonical_quality(chord_type)
+    if canonical not in ChordParser.CHORD_TONES_FROM_ROOT:
+        return None
+    if is_chord_tone(melody_note, chord_type, name):
+        return None
+    resolved = resolve_non_chord_tone(
+        melody_note, chord_type, name, strategy, next_melody=next_melody
+    )
+    if resolved is None:
+        return None
+    return resolved[0], resolved[1], strategy
+
+
+def resolution_pitch_class(
     melody_note: Note,
     root_str: str,
     canonical_type: str,
@@ -407,3 +446,91 @@ def _resolution_pitch_class(
     melody_pc = melody_note.midi_note() % 12
     below = [tone for tone in tones if tone <= melody_pc]
     return below[-1] if below else tones[-1]
+
+_TRIAD_QUALITIES = ("maj", "m")
+
+# Which seventh a triad becomes when its bass note is the seventh, keyed by the
+# triad's own quality. A minor triad over a minor seventh is m7, a major triad
+# over a major seventh is maj7.
+_TRIAD_PROMOTION = {"m": "m7", "maj": "maj7"}
+
+
+def promote_slash_chord(root: str, quality: str, bass: Optional[str]) -> str:
+    """Promotes a triad to a seventh chord when the bass implies one.
+
+    The Weimar database writes `A-/G`, `C-/Bb` and `D/C` for what a musician
+    reads as Am7/G, Cm7/Bb and Dm7/C: a triad whose bass is its own seventh.
+    Naming the seventh makes the melody note a chord tone instead of an
+    unresolved tension, and it recovers the largest group of otherwise
+    inexplicable basses.
+
+    Triads with any other bass, and every non-triad quality, pass through
+    unchanged. A pedal or an inverted bass is honoured by `bass_pitch_class`
+    instead, which is a preference rather than a change of chord.
+    """
+    if bass is None or quality not in _TRIAD_QUALITIES:
+        return quality
+    root_pc = Note(root + "4").midi_note() % 12
+    bass_pc = Note(bass + "4").midi_note() % 12
+    if (bass_pc - root_pc) % 12 == 10:  # the seventh
+        return _TRIAD_PROMOTION[quality]
+    return quality
+
+
+def midi_to_note_name(pitch: int) -> str:
+    """MIDI number to a note name, spelled with flats.
+
+    Flats because the keys and chord symbols this library is handed are
+    flat-based (Eb, Bb, Ab), so a flat spelling is the one that reads correctly
+    next to them.
+    """
+    pitch = int(round(pitch))
+    return f"{PITCH_CLASS_NAMES[pitch % 12]}{pitch // 12 - 1}"
+
+
+def bass_pitch_class(bass: Optional[str]) -> Optional[int]:
+    """The pitch class a slash bass asks for, or None when there is none."""
+    if bass is None:
+        return None
+    return Note(bass + "4").midi_note() % 12
+
+
+# A chord symbol's slash bass: anything after a single `/`, which must be a
+# pitch. Deliberately looser than the Weimar pattern this replaces - it read the
+# *same* field with a stricter one, and the strictness bought a quality lookup
+# this call site never used. `A-/G` -> `G`; `A-` and `NC` -> None.
+_SLASH_BASS_RE = re.compile(r"^[^/]*/([A-Ga-g][#b]?)\s*$")
+
+
+def slash_bass(symbol: str) -> Optional[str]:
+    """The bass note a chord symbol asks for, or None when it asks for none.
+
+    **This reads the one part of the symbol this call site needs.** The symbol is parsed
+    for its slash bass and nothing else: the quality and the root come from the
+    progression's own triples, so a quality table here would be dead weight - which is
+    why there is none.
+    """
+    symbol = (symbol or "").strip()
+    if not symbol or symbol == NO_CHORD:
+        return None
+    match = _SLASH_BASS_RE.match(symbol)
+    return match.group(1) if match else None
+
+
+def slash_bass_cost(voicing_midis: Sequence[int], bass_pc: Optional[int]) -> int:
+    """How far a voicing's lowest sounding pitch is from the requested bass.
+
+    In semitones, as the smallest interval from the bass pitch class to the
+    lowest note actually played. Zero means the bass is in the voicing; 6 means
+    it is a tritone away. Used only to *prefer* one candidate over another, so a
+    voicing that cannot honour the bass is still usable.
+
+    Named `slash_bass_cost`, not `bass_cost`, because the walking line already
+    owns that name (`arranger.bass.bass_cost`) - the two rank different things and
+    the shared spelling was a trap. This is the slash-chord half.
+    """
+    if bass_pc is None or not voicing_midis:
+        return 0
+    lowest = min(voicing_midis) % 12
+    direct = abs(lowest - bass_pc)
+    return min(direct, 12 - direct)
