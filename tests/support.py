@@ -29,6 +29,8 @@ fixture built by the engine is a defect; a share of the engine's own output is n
 from __future__ import annotations
 
 import os
+import tempfile
+import zipfile
 from typing import Any, Dict, List, Optional, Tuple
 
 from musthe import Note
@@ -686,3 +688,146 @@ def a_shape_on(strings):
     for index in strings:
         frets[index] = 0
     return Voicing(frets=frets, top_fret=0, avg_fret=0.0)
+
+
+# The real scores the importer's tests read, in `tests/data/`. They are committed
+# and are NOT guarded: a missing fixture is a broken checkout, not a reason to
+# pass the suite quietly. `tests/data/` is excepted from the `*.musicxml` / `*.mxl`
+# rules in `.gitignore`, which exist for *export output*.
+#
+# Who wrote each one, which is the point of keeping them:
+#   but_not_for_me.mxl            music21, cut time, lyrics, a tie across a barline
+#   i_was_doing_all_right.mxl     music21, 2/2, triplets in 10080 divisions, a piano part
+#   heres_that_rainy_day.musicxml MuseScore 3 (3.1), slash chords, <degree> alterations
+#   tenor_madness.musicxml        this library's own export: a TAB staff beside a
+#                                 notation one, and chords music21 could not classify
+#   Trouble_in_Mind_Blues.musicxml  a 4/4 blues with ties written across barlines, which
+#                                 is the case `TestAHeldNoteIsOneNoteAcrossABarline` pins
+#   lead_sheet_chords_only.musicxml  written by hand: four bars, six <harmony> symbols and
+#                                 **no pitched notes** - the chords-only case (step A')
+#   The_Jitterbug_Waltz.musicxml  MuseScore 3, the **only** head in the repository whose
+#                                 numerator and denominator differ (3/4), and so the only one
+#                                 that can see a conversion written as `beats_per_bar / 4`
+RAINY_DAY = os.path.join(DATA, "heres_that_rainy_day.musicxml")
+TROUBLE_IN_MIND = os.path.join(DATA, "Trouble_in_Mind_Blues.musicxml")
+WALTZ = os.path.join(DATA, "The_Jitterbug_Waltz.musicxml")
+TENOR_MADNESS = os.path.join(DATA, "tenor_madness.musicxml")
+I_WAS_DOING_ALL_RIGHT = os.path.join(DATA, "i_was_doing_all_right.mxl")
+
+
+# A lead sheet with **no melody at all**: four bars, six `<harmony>` symbols and not
+# one pitched note (§9.3 step A'). It is the fixture the loader used to refuse.
+CHORDS_ONLY = os.path.join(DATA, "lead_sheet_chords_only.musicxml")
+
+
+def score(
+    measures: str,
+    divisions: int = 4,
+    beats: int = 4,
+    beat_type: int = 4,
+    part_id: str = "P1",
+    fifths: Optional[int] = None,
+    mode: str = "",
+    transpose: str = "",
+) -> str:
+    """A minimal score-partwise document around the measures given.
+
+    `fifths` states a `<key>` when given, and omitting it writes no `<key>` at all -
+    which is a real case rather than a gap in the fixture, because a score with no
+    signature states C major.
+
+    `transpose` is raw `<transpose>` XML placed in the part's `<attributes>`, so a
+    test can state a transposing instrument: a guitar notated an octave above its
+    sound, or a Bb horn a tone above it.
+    """
+    key = "" if fifths is None else f"<key><fifths>{fifths}</fifths>{mode}</key>"
+    return f"""<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+  <work><work-title>Test</work-title></work>
+  <part-list><score-part id="{part_id}"><part-name>Voice</part-name></score-part></part-list>
+  <part id="{part_id}">
+    <measure number="1">
+      <attributes>
+        <divisions>{divisions}</divisions>
+        {key}
+        <time><beats>{beats}</beats><beat-type>{beat_type}</beat-type></time>
+        {transpose}
+      </attributes>
+      {measures}
+    </measure>
+  </part>
+</score-partwise>
+"""
+
+
+def harmony(root: str = "C", kind: str = "major", text: Optional[str] = None,
+            degrees: str = "", bass: str = "") -> str:
+    """One `<harmony>` element, as a score would spell it."""
+    root_xml = f"<root><root-step>{root[0]}</root-step>"
+    if len(root) > 1:
+        root_xml += f"<root-alter>{'-1' if root[1] == 'b' else '1'}</root-alter>"
+    root_xml += "</root>"
+    kind_xml = f'<kind text="{text}">{kind}</kind>' if text else f"<kind>{kind}</kind>"
+    bass_xml = (
+        f"<bass><bass-step>{bass[0]}</bass-step>"
+        + (f"<bass-alter>{'-1' if bass[1] == 'b' else '1'}</bass-alter>" if len(bass) > 1 else "")
+        + "</bass>"
+        if bass
+        else ""
+    )
+    return f"<harmony>{root_xml}{kind_xml}{bass_xml}{degrees}</harmony>"
+
+
+def degree(value: int, alter: int = 0, kind_type: str = "alter") -> str:
+    """One `<degree>` child, as MusicXML spells an altered tone."""
+    return (
+        f"<degree><degree-value>{value}</degree-value>"
+        f"<degree-alter>{alter}</degree-alter>"
+        f"<degree-type>{kind_type}</degree-type></degree>"
+    )
+
+
+def note(step: str, octave: int = 4, duration: int = 4, alter: Optional[int] = None,
+         chord: bool = False, tie: str = "", tuplet: bool = False) -> str:
+    """One `<note>` element."""
+    pitch = f"<pitch><step>{step}</step>"
+    if alter is not None:
+        pitch += f"<alter>{alter}</alter>"
+    pitch += f"<octave>{octave}</octave></pitch>"
+    return (
+        "<note>"
+        + ("<chord/>" if chord else "")
+        + pitch
+        + f"<duration>{duration}</duration>"
+        + (f"<tie type=\"{tie}\"/>" if tie else "")
+        + ("<time-modification><actual-notes>3</actual-notes>"
+           "<normal-notes>2</normal-notes></time-modification>" if tuplet else "")
+        + "</note>"
+    )
+
+
+def rest(duration: int = 4) -> str:
+    return f"<note><rest/><duration>{duration}</duration></note>"
+
+
+def write_score(document: str, suffix: str = ".musicxml", container: bool = False) -> str:
+    """Write a document to a temp file, optionally zipped as a real `.mxl`."""
+    handle, path = tempfile.mkstemp(suffix=suffix)
+    os.close(handle)
+    if not container:
+        with open(path, "w", encoding="utf-8") as out:
+            out.write(document)
+        return path
+    # A real container, with the score *not* first in the archive and a decoy XML
+    # member beside it: both are the cases a "first .xml in the zip" reader gets
+    # wrong, so both are here on purpose.
+    with zipfile.ZipFile(path, "w") as archive:
+        archive.writestr(
+            "META-INF/container.xml",
+            '<?xml version="1.0"?><container><rootfiles>'
+            '<rootfile full-path="music/score.xml" media-type="application/vnd.recordare.musicxml+xml"/>'
+            "</rootfiles></container>",
+        )
+        archive.writestr("META-INF/other.xml", "<junk/>")
+        archive.writestr("music/score.xml", document)
+    return path

@@ -229,7 +229,7 @@ head whose numerator and denominator differ.
 uses it.** `headxml` read `beats_per_bar` and `beat_type` and then converted
 onsets with the first of the two - right in 4/4 and 2/2, six of the seven
 committed heads, and 25% early in the 3/4 one. Every assertion in
-`tests/test_headxml.py::TestTheMetreHasADenominator` was run against the old
+`tests/test_headxml_arrangement.py::TestTheMetreHasADenominator` was run against the
 factor before it was kept: a test for a metre bug that cannot fail on the old
 arithmetic is not a test, and all five of them do.
 
