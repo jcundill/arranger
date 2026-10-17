@@ -318,7 +318,8 @@ class TestRoles(unittest.TestCase):
         `GRIP_PREFERENCE` is the authored ranking, and the tuple no longer names a
         family - so an order difference is not a behavioural one here. The order
         that *is* load-bearing is the generation order, and that is pinned by
-        `TestBackwardCompatibility` and `test_grips.TestPlacement`.
+        `TestBackwardCompatibility` and by the exact fingerings in `test_grips.py`:
+        a tie shows only in which shape wins.
 
         Only the **target** row: `uniform` makes every slot a target, so its fill
         row is never read - it exists because the table is total, and it is the

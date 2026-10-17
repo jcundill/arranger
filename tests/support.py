@@ -634,3 +634,55 @@ def bass_name(step: arranger.ArrangementStep) -> str:
     if step.bass is None:
         return "-"
     return PITCH_CLASS_NAMES[step.bass % 12]
+
+
+# A representative spread of the families the library voices well: sevenths, sixths,
+# ninths, a half-diminished and a plain triad.
+QUALITIES = [
+    ("Cmaj7", "maj7"),
+    ("Cm7", "m7"),
+    ("C6", "6"),
+    ("Cm6", "m6"),
+    ("C7", "7"),
+    ("Cm7b5", "m7b5"),
+    ("Cdim7", "dim7"),
+    ("Cm9", "m9"),
+    ("C13", "13"),
+    ("Cmaj", "maj"),
+    ("C7sus4", "7sus4"),
+]
+
+
+def root_midi_of(chord_name):
+    root, _ = ChordParser.parse_chord_name(chord_name)
+    return Note(f"{root}4").midi_note()
+
+
+def every_chord_tone(chord_name, quality):
+    """Every tone of the chord, in the register around middle C.
+
+    Built from the degrees rather than from `get_chord_tones`, which returns *absolute*
+    pitch classes - adding those to the root would place a tone from a chord whose root
+    is not C a tritone or more out, and a ninth would arrive as a non-chord tone.
+    """
+    root_pc = root_midi_of(chord_name) % 12
+    degrees = {(pc - root_pc) % 12 for pc in ChordParser.get_chord_tones(quality, chord_name)}
+    return [
+        note_name(root_midi_of(chord_name) + degree)
+        for degree in sorted(degrees)
+    ]
+
+
+def a_shape_on(strings):
+    """A bare `Voicing` sounding exactly `strings`, for the table-level questions.
+
+    Frets are all zero - nothing here is about where the hand is - so the shape's *strings*
+    are the only thing under test. Built rather than taken from a generator because these
+    questions are asked of sets the tables may no longer offer: `finger_skip_count` is what
+    flagged the four removed `drop24` sets, and a test that could only ask about offered
+    sets could not show what the rule costs.
+    """
+    frets = [-1] * 6
+    for index in strings:
+        frets[index] = 0
+    return Voicing(frets=frets, top_fret=0, avg_fret=0.0)

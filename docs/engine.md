@@ -539,8 +539,8 @@ where the only candidate is wide, span is consulted first, finds every candidate
 equal, and the wide one is played. `GRIP_MAX_SPAN` remains the outer bound. The
 promotion is also below the correctness criteria: a shape sounding a foreign note or
 a partial harmonisation still loses to a correct one however tight it is, which
-`tests/test_grips.py::TestVoicingCost` asserts directly on the tuple rather than only
-through a result.
+`tests/test_grip_selection.py::TestVoicingCost` asserts directly on the tuple rather
+than only through a result.
 
 **Span 0 and span 1 are bucketed together.** The span index reports `0.0` for both,
 so a zero-span barre and a one-fret reach tie and the decision falls through to neck
@@ -743,7 +743,7 @@ Five decisions in here were each forced by something measurable:
 The window is a **penalty, not a filter**: a step with no voicing inside frets 2–13 is
 still played, just outside it. A filter would silently drop every step whose melody
 has no in-window shape, and losing a chord of the tune is worse than being a fret out
-of position. `tests/test_grips.py::TestFretWindow` pins that.
+of position. `tests/test_grip_tables.py::TestFretWindow` pins that.
 
 ## Texture: chords on the beats, fills between
 
@@ -1022,7 +1022,7 @@ melodic interval.
   13 chord, for example. That gap is **closed**, and closed for every chord tone: the rule
   answers for all 125 degrees of the 29 qualities, each pure and stating both guide tones,
   so `get_drop2_voicings` has a shape of its own for every chord tone a melody can be.
-  `tests/test_grips.py::TestKnownTableGaps` pins the closure, so a regression re-opens it
+  `tests/test_grip_tables.py::TestKnownTableGaps` pins the closure, so a regression re-opens it
   visibly rather than silently.
 - **A *non-chord* melody is still offered borrowed shapes.** No degree matches it, so the
   palette (`_drop2_palette`) hands the selector the rule's shape for each chord tone,

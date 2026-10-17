@@ -127,7 +127,7 @@ GRIP_STRING_SETS: Dict[str, Tuple[Tuple[Tuple[int, ...], int], ...]] = {
     # No set here skips an *inner* string: the digit that takes a string above an
     # unplucked one has to reach over it, and that is the right hand's cost rather than
     # the left's. `finger_skip_count` states the rule, `docs/engine.md` records the price
-    # of the four sets removed for it, and `tests/test_grips.py` holds every reachable set
+    # of the four sets removed for it, and `tests/test_grip_tables.py` holds every reachable set
     # to it.
     #
     # Stored as **string indices**, high to low, like every other entry - so the
@@ -452,7 +452,7 @@ def finger_skip_count(voicing: Voicing) -> int:
     the engine enforces the rule by **not offering** the shapes that fail it, so no
     inner-skip `drop24` set is in the table above. Only the `(5,3,2)`
     shell can answer nonzero, kept on purpose for the walking bass's three-layer
-    split; `tests/test_grips.py` is what holds the tables to it.
+    split; `tests/test_grip_tables.py` is what holds the tables to it.
     """
     sounded = sorted(index for index, fret in enumerate(voicing.frets) if fret >= 0)
     total = 0
