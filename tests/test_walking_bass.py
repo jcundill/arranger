@@ -50,8 +50,6 @@ from arranger import (
     ChordParser,
     VoiceLeadingEngine,
     Voicing,
-    _place_bass,
-    _step_annotation,
     format_progression,
     format_tab_html,
     format_tab_staff,
@@ -68,9 +66,11 @@ from arranger.bass import (
     _beat_offset,
     _melody_in_force,
     _melody_timeline,
+    _place_bass,
     _walking_slots,
     parse_bass_style,
 )
+from arranger.render import _step_annotation
 from arranger.textures import PART_NAMES, texture_palette
 from tabgp import _sounding_frets
 from tabstaff import _strikes_here
@@ -281,7 +281,7 @@ class TestFillsAreTheMelodyAlone(unittest.TestCase):
         """
         for step in walk([("F5", "maj7", "Fmaj7")], [(0, 1.0)])[1:]:
             self.assertFalse(step.melody_only)
-            self.assertNotIn("no chord", arranger._step_annotation(step))
+            self.assertNotIn("no chord", _step_annotation(step))
 
     def test_an_off_beat_change_is_a_fill_under_the_new_chord(self):
         """

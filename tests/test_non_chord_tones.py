@@ -12,11 +12,11 @@ from arranger import (
     VoiceLeadingEngine,
     Voicing,
     _print_step,
-    _step_annotation,
     format_progression,
 )
 from arranger.grips import _drop2_template_for
 from arranger.movement import _melody_alone_shape
+from arranger.render import _step_annotation
 
 
 class TestMelodyOnlyVoicing(unittest.TestCase):

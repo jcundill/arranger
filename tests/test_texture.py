@@ -38,9 +38,6 @@ from arranger import (
     TEXTURE_STYLES,
     ChordParser,
     VoiceLeadingEngine,
-    _interval_offsets,
-    _metric_weight,
-    _roles_for_slot,
     derived_arity,
     supported_string_sets,
     texture_palette,
@@ -57,10 +54,12 @@ from arranger.decisions import (
     is_repeated_step,
     resolve_texture_grips,
 )
-from arranger.grips import RIGHT_HAND_STRINGS, grip_pluck_count, thumb_safe_grips
+from arranger.grips import RIGHT_HAND_STRINGS, _interval_offsets, grip_pluck_count, thumb_safe_grips
 from arranger.textures import (
     FILL_THINNING,
     THIN_ENTRIES,
+    _metric_weight,
+    _roles_for_slot,
     families_up_to_arity,
     families_up_to_with_thin,
 )

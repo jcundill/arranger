@@ -33,18 +33,10 @@ Adding a public name means adding it to `__all__` here, and
 `tests/test_tab_rendering.py::TestTabstaffModuleBoundary` checks the list against
 the module's real surface so the two cannot drift.
 
-**Eight private names are re-exported too** - `_bass_harmony`, `_place_bass`,
-`_walking_bass_line`, `_interval_offsets`, `_metric_weight`, `_roles_for_slot`,
-`_step_annotation` and `_comping_no_room_reason`. They are not API and are
-deliberately absent from `__all__`,
-but the tests reach into them to state a rule directly rather than infer it from
-the engine's output ("the walk's pitch-class set is exactly the chord's tones plus
-its extensions", "a fill is chosen by the role rule", "this refusal must not tell
-the player to change a texture, because on this route a texture changes nothing").
-Moving the code would
-otherwise force those tests to reimplement the rule they are checking, which is a
-copy-paste failure. They are listed here so the cost of
-moving a function - "also re-export it" - is visible rather than discovered.
+The facade re-exports the public surface only. Private helpers live in their
+home modules and tests import them from there (`arranger.bass`, `arranger.grips`,
+`arranger.render`, `arranger.textures`) rather than through `arranger`, so a
+function that moves modules does not also have to move a re-export.
 """
 
 from __future__ import annotations
@@ -74,10 +66,6 @@ from .bass import (
     BASS_STYLE_NONE,
     BASS_STYLE_WALK,
     BassNote,
-    _bass_harmony,
-    _comping_no_room_reason,
-    _place_bass,
-    _walking_bass_line,
     bass_allowed,
     bass_cost,
     bass_line_for,
@@ -98,11 +86,10 @@ from .grips import (
     GRIP_PREFERENCE,
     GRIP_STRING_SETS,
     SHELL_DEGREES,
-    _interval_offsets,
     get_comping_voicings,
     supported_string_sets,
 )
-from .render import _print_step, _step_annotation, format_progression
+from .render import _print_step, format_progression
 from .slots import arrange_slots, parse_bar_range, unresolved_steps
 from .steps import StepPreparation, VoiceLeadingEngine
 from .textures import (
@@ -140,8 +127,6 @@ from .textures import (
     TEXTURE_STYLES,
     TICKS_PER_BEAT,
     GridPattern,
-    _metric_weight,
-    _roles_for_slot,
     comping_arity,
     derived_arity,
     families_for_arity,

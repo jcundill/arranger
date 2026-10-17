@@ -40,9 +40,6 @@ from arranger import (
     ROLE_FILL,
     ROLE_TARGET,
     TEXTURE_STYLES,
-    _bass_harmony,
-    _comping_no_room_reason,
-    _walking_bass_line,
     bass_allowed,
     bass_cost,
     bass_line_for,
@@ -50,6 +47,12 @@ from arranger import (
     parse_bass_style,
     thumb_capacity,
 )
+
+# Private helpers imported from where they live rather than through the package
+# facade: they are not API, and re-exporting them would enlarge the public
+# surface for one test file's benefit. See `test_package_dag` and the facade
+# docstring.
+from arranger.bass import _bass_harmony, _comping_no_room_reason, _walking_bass_line
 
 # The two shipped non-`none` styles, as the loops below iterate them. `walk` is the whole
 # rule vocabulary; `anchors` is the root rule alone. `none` and `auto` are not styles a

@@ -13,12 +13,12 @@ from arranger import (
     NO_CHORD,
     ArrangementStep,
     VoiceLeadingEngine,
-    _step_annotation,
     format_progression,
     format_tab_html,
     format_tab_staff,
     write_tab_html,
 )
+from arranger.render import _step_annotation
 from tabstaff import _NOTE_VALUES, _staff_columns, _staff_rhythm
 from tests.support import arranged, make_voicing, sweep_head_paths
 
