@@ -323,7 +323,7 @@ you whether a change is an improvement or a different library.
     point like `get_drop2_voicings` so every family is reachable on its own.
   - `__version__` — the library version string, the single source of truth that
     `pyproject.toml` reads as the dynamic project version. No document may state a
-    different one: `tests/test_docs.py` fails the suite if one does.
+    different one.
 - `NO_CHORD` — the string `"NC"`, a bar carrying melody with no harmony.
 - `VoiceLeadingEngine.get_melody_only_voicings(melody_note, prefer=...)` — **the palette a
   lone note is placed from**: one **single-fret** `Voicing` per eligible string, at the

@@ -469,9 +469,8 @@ class TestExtendedExtensionMappings(unittest.TestCase):
             Note("Ab5"), "7", "G7", "extension"
         )
         # A bare `assert` rather than `assertIsNotNone`: pyright does not narrow
-        # through the unittest helper, and this is the trap `test_docs.py`'s
-        # `_layout_block` already had to work around. Resolving the Optional where
-        # the type is still known is the house answer.
+        # through the unittest helper. Resolving the Optional where the type is
+        # still known is the house answer.
         assert substituted is not None
         quality, name = substituted
         self.assertEqual(quality, "7b9")

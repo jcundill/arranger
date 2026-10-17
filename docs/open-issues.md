@@ -6,9 +6,7 @@ its record lives in the commit that fixed it and in the document it belongs to. 
 each figure is stated **once**, in its own item: a summary here would be a second source for it,
 which is how the numbers in this paragraph rotted three times before the *recipes* below were
 made explicit. **Every figure in this file is re-measured by hand from the recipe beside it**:
-they are this document's own business, and nothing in the test suite compares them with these
-sentences. What the gate does run is the *behaviour* each item describes, in
-`tests/test_open_issues.py`.
+they are this document's own business, and the gate is not keyed to these items.
 
 1. **The library facade takes its harmony per melody note, so a hand-built timing cannot place a
    chord where the tune is silent** — the importer's half is fixed in full, at the bar and at the

@@ -29,7 +29,7 @@ gate and the conventions — not the explanation.
 | an imported head's **repeats or volta endings** — why it is longer than the file's measure count, or the `|:` / `:|` / `1.` / `2.` the writers draw | [docs/renderers.md](docs/renderers.md) | `headxml.py` (`_parse_barline`, `_expand_play_order`, `_expand_repeats`, `BarMarker`, `Head.markers`, `HeadNote.written_bar`); each writer's `markers=` parameter |
 | the slot layer: triples to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
 | the MusicXML **importer's chord timeline**, or a bar the melody skips | [docs/open-issues.md](docs/open-issues.md) item 1 | `headxml.py` (`chord_at`, `chord_slots`, `_merge_chord_slots`, `_generated_beats`, `_bar_resolution`, `_tick_key`) and `textures.py` (`grid_resolutions`, `TICKS_PER_BEAT`) — **built in full**: the default grid generates a chord at each bar's own subdivision, the union takes those positions wherever the tune is *silent*, and §9.2 refuses the ones it is still **holding**. Measured at **88 steps** across the eight heads. The fifth `melody_alone_case` kind the item predicted proved **not to be owed** — §9.3 step D already routes a note-less grid position through the comping branch. **Item 6 is the edge of that refusal** — the instant a note *stops* sounding counts as one it still holds, so the grid declines a position the tune has left (`headxml.melody_at`, `melody_state`; the item carries the measurement) |
-| an open bug, with its measurement | [docs/open-issues.md](docs/open-issues.md) | `tests/test_open_issues.py` runs the **behaviour** the items describe (item 1's generated-slot closure, item 3's `harmony=full` no-op, item 6's release instant); the **figures** are that document's own business, re-measured by hand from the recipe beside each item, and nothing in the suite compares them with the prose |
+| an open bug, with its measurement | [docs/open-issues.md](docs/open-issues.md) | — the figures and the behaviour are that document's own business; no test compares them with the prose or is keyed to these items |
 | which finger frets which string, or a per-finger cost criterion; which strings the right hand's `p-i-m-a` pluck, the gaps between them, and how far the thumb reaches | [docs/history/fingering.md](docs/history/fingering.md) | `arranger/fingers.py` (not inert any more: `bass` reads `can_fret` for the four-fret budget — `tests/test_fingers.py` holds the caller set to exactly `{bass}`; no per-finger cost yet). Its §4.3 measurement landed a *right-hand* rule first (`grips.thumb_safe_grips`, read by `decisions.resolve_texture_grips`) and then a *left-hand* one (`fingers.can_fret`, read by `bass._place_bass`); its **§4.4 finger-skip half is now built**, not recorded: the four `drop24` sets that carried the skip were removed from `GRIP_STRING_SETS` (`grips.finger_skip_count` is the rule and `tests/test_grips.py` holds the tables to it), at a price counted in chords, and the three rejected forms of the same lever are in §4.4 rather than here. Its thumb's-reach half still changes no count (`tests/test_texture.py::TestTheThumbReach` pins the reach), and §4.3's follow-on (should the *selector* leave room for the thumb?) is measured and unbuilt, and its numbers are in §4.3 and [docs/open-issues.md](docs/open-issues.md) item 2 rather than here: that item is where they are re-measured by hand, so a figure repeated in this table would be a second source for one fact. Its **fourth lever — the walk's own pitch — costs the tuple nothing** and is the cheapest of the four; **item 5** of that document is the same §4.3 question asked from the lone-note end, where the walk's register is what leaves the hand's reach |
 | `parts=`, which of melody / bass / chord the guitar plays | [docs/engine.md](docs/engine.md) | `arranger/textures.py` (`PART_NAMES`, `parse_parts`, `parts_have_melody`, `parts_has_melody_only`) |
 | the harmonisation axes (`parts=`, `texture=`, `harmony=`, `bass=`, `grid=`) — the four-string arithmetic, and what replaced `voices=` and the grip-family axis | [docs/engine.md](docs/engine.md) | `arranger/textures.py`, `arranger/bass.py`, `arranger/grips.py` |
@@ -54,13 +54,9 @@ which is the one thing to read before quoting one.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1124 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **1098 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
-(`tests/test_docs.py` is 17 of those 1124, and it is the one that fails if this
-document — or the CI workflow — stops describing the tree. It also fails if a document
-exists that it does not know about: `DOCUMENTS` is compared against what is on disk, so a
-new file cannot be added without being registered.)
 
 **Five axes, not one.** `texture=` (how many chord tones the part states, `TEXTURE_STYLES`),
 `bass=` (the note rules the thumb states, `BASS_RULES`), `parts=` (which of melody / bass /
@@ -163,8 +159,7 @@ arranger/
 There is **no** `setup.py`, `setup.cfg` or `requirements.txt`. CI *is* configured
 (`.github/workflows/ci.yml`, added in Phase 9) and it runs exactly `make check`.
 Packaging metadata lives solely in `pyproject.toml`, which reads the version
-dynamically from `arranger.__version__` — that is the single source of truth, and
-`tests/test_docs.py` fails if a document states a different one.
+dynamically from `arranger.__version__` — that is the single source of truth.
 
 ### The engine is a package, and the order is enforced
 
@@ -204,7 +199,7 @@ Three consequences worth knowing:
 ## Requirements and licence
 
 - Python **3.11+**. The local dev virtualenv runs 3.14. 3.10 was dropped because
-  `tests/test_docs.py` reads the metadata with `tomllib`, which is 3.11+.
+  `tomllib` is 3.11+.
 - **One** runtime dependency: [musthe](https://pypi.org/project/musthe/).
 - **Two** optional extras, each behind a lazy import so the library works without
   either: `xml` → [music21](https://pypi.org/project/music21/) (`tabxml.py`), and
@@ -314,8 +309,7 @@ for that space, and only the first belongs in the source:
   where it is least likely to be re-measured. Leave a one-line pointer instead.
 
 A module docstring is one to three sentences: what the module owns, and where it sits
-in the dependency order. `tests/test_docs.py` resolves a relative link written inside a
-docstring, so a pointer to a file that is not on disk fails the gate.
+in the dependency order.
 
 ### Playability invariants
 
@@ -691,25 +685,28 @@ Each of these cost real time, or nearly shipped a defect.
     had moved onto the tab line; playing the repeats (`6cdcbaa`) lengthened every head, so item
     1's "57 steps" was **87** and the `comps+freddie` triple moved with it; and `bass_refused`
     counting every refused thumb where the old warning counted one call site took item 2 from
-    **39** to **161**. `make check` was green through all of it, because `tests/test_docs.py`
-    checks a document's *version*, *module count* and *links* — and nothing checked a count.
+    **39** to **161**. `make check` was green through all of it, because the doc checker
+    that existed then compared only a document's *version*, *module count* and *links* — and
+    nothing checked a count.
 
-    Two things follow, and only the second is still enforced by the gate. **A figure repeated in
+    Two things follow, though neither is enforced by the gate now. **A figure repeated in
     two documents is a second source for one fact** — AGENTS.md's own `step.bass` rule — so the
     routing rows here *point* at the document that owns a number instead of restating it; the four
     counts that lived in three places at once are what made this rot invisible. And **a stated
     figure gets a recipe**: `docs/open-issues.md` now carries the snippet that takes each of its
     numbers, so the figure is re-measurable without the suite. That re-measurement is **by hand**:
-    the module that once compared the document's numbers with the tree (`tests/test_open_issues.py`)
-    was cut back to the *behaviour* those items describe, because re-taking a document's own prose
-    from the tree is a check that regenerates its own expectation — the one thing the pinned tabs
-    in the rest of the suite exist to avoid. A number in that document can therefore move without
-    the gate failing, which is the cost of that choice and is stated where the numbers live.
+    the module that once compared the document's numbers with the tree was cut back to the
+    *behaviour* those items describe, and has since been removed with the rest of the
+    documentation tests, because re-taking a document's own prose from the tree is a check that
+    regenerates its own expectation — the one thing the pinned tabs in the rest of the suite
+    exist to avoid. A number in that document can therefore move without the gate failing,
+    which is the cost of that choice and is stated where the numbers live.
 
     The same clean-up found an **unclosed code fence** in that file, which had rendered its
-    entire tail as a shell script for four commits, so `test_docs.py` counts fences now too. The
-    general form of both: **a document is code that nothing compiles, so the parts of it that
-    *can* be checked mechanically must be** — and a number, a fence and a link are all of that.
+    entire tail as a shell script for four commits, so the doc checker that existed then
+    counted fences too. The general form of both: **a document is code that nothing compiles,
+    so the parts of it that *can* be checked mechanically must be** — and a number, a fence
+    and a link are all of that.
 
 ## Where things are documented
 

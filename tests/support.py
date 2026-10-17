@@ -302,8 +302,7 @@ def nearest_reach_for_note(
     be free in what the hand is holding, the note must sound below all of it, and the merged
     step must fit the four-fret budget (`fingers.can_fret`) - and then returns the
     proximity the engine ranks on, so a test can ask the question without asking the engine
-    that produced the answer. (`test_open_issues`' own `_cause` helper was the same kind of
-    replica, and went with the figures that needed it.)
+    that produced the answer.
 
     `held_frets` is the shape still ringing and `held_thumb` its bass string, because the
     walking line reuses its own string: that string is fretted but does **not** reserve the
