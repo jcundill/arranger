@@ -341,11 +341,41 @@ Three things the move taught, worth having before the placement half:
   package catches it, which is what `tests/test_package_dag.py` and the facade test are
   for. The repair is the same script with `'.' * level + module`.
 
-The placement half is still open and its seam is measured: `_Placement` is constructed
-at three sites (all inside the request/generator functions), and no placement function
-calls a generation function. So `grip_place.py` stays viable below `grips`; the work is
-the cross-module naming (`Placement`, `candidate`, `place_template`, `search_shape`
-become public) and a second `ORDER` entry, in the same commit as the move.
+**The placement half landed too**, in `arranger/grip_place.py` (337 lines):
+`frets_in_span`, `Placement`, the string-set membership table, `candidate`,
+`place_template`, `search_shape`, `ShapeSnapshot` / `snapshot` / `voicing_from_snapshot`,
+the `_searched_shape` memo and `place_shape`. `grips.py` is 1454 lines and imports the
+seven names it calls. The seam held exactly as measured: `Placement` is constructed in
+the three request builders, `frets_in_span` and the snapshot trio are read by the comping
+memo as well, and no placement function calls a generation function.
+
+Nine names became public because a module other than their own imports them -
+`Placement`, `candidate`, `search_shape`, `ShapeSnapshot`, `snapshot`,
+`voicing_from_snapshot`, `frets_in_span`, `place_template`, `place_shape`. Two stayed
+private because nothing outside reads them: `_searched_shape` (the memo, reached through
+`place_shape`) and `_SUPPORTED_STRING_SETS` (built once, read twice in the module). The
+rule is the one the meter enforces, read at its narrowest.
+
+Three things to carry into the rest of the work:
+
+- **A substring rename is not an identifier rename.** Replacing `_candidate` with
+  `candidate` also clipped `get_octave_down_candidates` into
+  `get_octave_downcandidates` in three files. The suite caught it with an
+  `AttributeError` on the first test that called it, but the repair cost a round trip and
+  the general fix is a token-level rename (`tokenize`, exact `NAME` match), not
+  `str.replace`. The same edit renamed `_voicing_from_snapshot` twice over, because
+  `_snapshot` is a suffix of it - so the order of replacements is not a substitute for
+  matching whole tokens either.
+- **A facade test that names a home has to move with the name.**
+  `test_the_facade_reexports_the_public_surface` hardcodes nine `(public name, home
+  module, attribute)` rows so the identity half is testable; `supported_string_sets`
+  moved home to `grip_tables`, and the row is the record of that.
+- **`grips`' budget did not move because its worst function did not.** `_shell_voicing`
+  is 22 / 128 / 9 and stays in `grips`; `grip_place`'s own worst is `candidate` at
+  19 / 66 / 5. A split that lowers the total but leaves every ceiling where it was is
+  still a success - the ceilings describe the worst function, not the file.
+
+The demo is byte-identical and `make chart-audit` still agrees with the tables.
 
 
 The seam was verified by an AST closure before any text moved, and it holds: the
