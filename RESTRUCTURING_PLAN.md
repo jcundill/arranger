@@ -181,7 +181,8 @@ byte-identical, `make chart-audit` clean.
 ## Phase 9 — Decompose the high-complexity functions (in progress)
 
 Extract-method only, with the suite and a byte-identical `make demo` as the
-oracle. Three commits landed; `bass.py`'s budget fell from **31/202 to 16/82**.
+oracle. Four commits landed; `bass.py` fell from **31/202 to 16/82** and
+`movement.py` from **23/360 to 17/340**.
 
 - `_walking_bass_line` (202) → `_located_onsets`, `_anchor_only_line`,
   `_walked_beats`, `_filled_harmony`, `_anchor_flags`, `_next_anchor_pitches`,
@@ -193,13 +194,18 @@ oracle. Three commits landed; `bass.py`'s budget fell from **31/202 to 16/82**.
 - `_bass_slots` (132) → `_located_slots`, `_gridless_slots`,
   `_melody_entries`, `_bass_only_entries`. The extraction found a real coupling:
   the second pass had been appending to the first pass's list.
+- `_harmonised_step` (360 lines, 22 parameters) → `_prepare_or_rescue` (prepare,
+  rescue, promote, rest), `_held_candidates`, `_selection_for`, `_Selection`
+  (`chosen`, `palette`, `narrower_than`) and `_emit_step`. **360 → 96 lines, CC
+  23 → 8, six parameters.** `_promoted_fill` lost seven keywords to the context,
+  and its docstring's dangling half-sentence was completed with the rule it was
+  describing (the retry uses the whole search space, not the palette that just
+  failed).
 
-Remaining, in this order. **9.3 and 9.4 follow Phase 10**, because their stage
-helpers take the context rather than twenty keywords:
+Remaining, in this order. 9.4 takes the context the reorder in Phase 10 gave it:
 
-- `_harmonised_step` (360) → rescue / hold / selection / demotion / emit stages.
-- `comping_step` (229) → the same shape.
-- `_slot_state` (197), `prepare_step` (131), `arrange_progression`.
+- `comping_step` (229) → the same shape, one stage per branch.
+- `_slot_state` (197), `prepare_step` (131), `arrange_progression` (340).
 - `tabstaff.format_tab_staff` (396), `format_tab_html`.
 - `headxml._read_notes` (239), `_expand_repeats`, `_expand_play_order`;
   `tabxml.score_events`/`_build_part`; `tabgp._build_song`.
@@ -293,7 +299,7 @@ Round 2:
 - Phase 7: DONE (two commits).
 - Phase 8: DONE (five commits). 1107 tests OK (skipped=2), ruff 0, pyright 0/0,
   `make demo` byte-identical, `make chart-audit` clean.
-- Phase 9: IN PROGRESS — 9.1 and 9.2 landed (three commits); 9.3+ follow Phase 10.
+- Phase 9: IN PROGRESS — 9.1–9.3 landed (four commits); 9.4+ follow.
 - Phase 10: DONE (moved before 9.3). 1107 tests OK, ruff 0, pyright 0/0,
   demo byte-identical.
 - Phases 11-15: planned, in the order above.

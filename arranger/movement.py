@@ -676,18 +676,11 @@ def _previous_shape(arrangements: List[ArrangementStep]) -> Optional[Voicing]:
 
 
 def _promoted_fill(
-    *,
-    progression: Sequence[Tuple[Optional[str], str, str]],
-    index: int,
+    context: SlotContext,
     arrangements: List[ArrangementStep],
+    *,
     top_strings: Tuple[int, ...],
-    non_chord_tone: str,
-    fret_min: int,
-    fret_max: int,
     slot_grips: Tuple[str, ...],
-    texture: str,
-    role: str,
-    has_thumb: bool,
     melody_only: bool,
 ) -> Optional[StepPreparation]:
     """Re-prepare a fill that produced nothing as a principal note.
@@ -697,29 +690,31 @@ def _promoted_fill(
     harmony. Same argument as `NECK_FRET_MIN` being a penalty and not a filter.
     `decisions.should_promote_fill` decides whether this step gets the retry.
 
-    The retry is prepared against the **whole** search space, not the
+    The retry is prepared against the **whole** search space, not the narrower
+    palette the fill's role was given: that palette is exactly what produced
+    nothing, so asking it again would repeat the failure.
 
     Returns the promoted preparation, or **None** when the texture does not ask
     for the retry or the retry found nothing either - the two cases the caller
     answers the same way, by reporting the step as skipped.
     """
     if not should_promote_fill(
-        texture, role, True, slot_grips,
-        has_thumb=has_thumb,
+        context.texture, context.role, True, slot_grips,
+        has_thumb=context.has_thumb,
         melody_only=melody_only,
     ):
         return None
     prev_sounding = last_sounding_step(arrangements)
     return prepare_step(
-        progression, index,
+        context.progression, context.index,
         # The last *sounding* shape, not the step before this one: a silent
         # position is a hole in the tab rather than a shape the hand held.
         previous=prev_sounding.voicing if prev_sounding is not None else None,
         previous_chord=prev_sounding.chord if prev_sounding is not None else None,
         top_strings=top_strings,
-        non_chord_tone=non_chord_tone,
-        fret_min=fret_min,
-        fret_max=fret_max,
+        non_chord_tone=context.non_chord_tone,
+        fret_min=context.fret_min,
+        fret_max=context.fret_max,
     )
 
 def _lost_to_the_bass_partition(
@@ -825,6 +820,364 @@ def _bass_group(
     return slash_bass_cost(voicing.midi_notes(), bass_pc)
 
 
+def _prepare_or_rescue(
+    arrangements: List[ArrangementStep],
+    slot: Slot,
+    context: SlotContext,
+    prev_sounding: Optional[ArrangementStep],
+    *,
+    top_strings: Tuple[int, ...],
+    slot_grips: Tuple[str, ...],
+    melody_only: bool,
+) -> Optional[Tuple[StepPreparation, str]]:
+    """Prepare the slot's candidates, or answer why the tune cannot sound.
+
+    Returns the preparation **and the role the step will state**, because a fill that
+    is promoted to a principal note is a target: the retry exists to keep the chord,
+    so the step must not carry on describing itself as a fill. `None` means the step
+    has already been emitted as a rest - by the rescue or by the rest step below - and
+    the caller has nothing left to do.
+
+    The order of the three attempts is the contract: play the tune alone, then promote
+    the fill, and only then report the step missing. See `rescue_melody_alone` and
+    `_promoted_fill`.
+    """
+    prepared = prepare_step(
+        context.progression, context.index,
+        previous=prev_sounding.voicing if prev_sounding is not None else None,
+        previous_chord=prev_sounding.chord if prev_sounding is not None else None,
+        top_strings=top_strings,
+        non_chord_tone=context.non_chord_tone,
+        fret_min=context.fret_min,
+        fret_max=context.fret_max,
+        grips=slot_grips,
+    )
+    if prepared is not None:
+        return prepared, context.role
+    note_str = context.note_str
+    melody_note = context.melody_note
+    assert melody_note is not None and note_str is not None
+    if rescue_melody_alone(
+        arrangements, slot,
+        name=context.name, note_str=note_str, melody_note=melody_note,
+        top_strings=top_strings, previous=_previous_shape(arrangements),
+        bar=context.bar, beat=context.beat, duration=context.duration,
+        role=context.role, weight=context.weight,
+    ):
+        return None
+    prepared = _promoted_fill(
+        context, arrangements,
+        top_strings=top_strings,
+        slot_grips=slot_grips,
+        melody_only=melody_only,
+    )
+    if prepared is not None:
+        return prepared, ROLE_TARGET
+    # Reached only when the melody **cannot be played at all** - the rescue above has
+    # already been tried, and answered None because no string reaches the note (below
+    # the library's G3 floor, or past the end of the board).
+    #
+    # The palette is named because it is the usual cause and the caller is the only
+    # one who can change it, and the message says the step is *skipped* because that
+    # is what happens to the note. Naming a family the caller never asked for, or
+    # wording it like a fallback that had happened, would both misdescribe the step.
+    # The reason is told apart at the source: no string reaches the written pitch at
+    # all (`out_of_reach`) versus a reachable melody under a chord nothing could
+    # voice (`no_shape`). The rescue above asked the same question, so the answer is
+    # read back rather than re-derived from the clause's own words.
+    rest_step(
+        arrangements, slot,
+        name=context.name, note_str=note_str,
+        bar=context.bar, beat=context.beat, duration=context.duration,
+        role=context.role, weight=context.weight,
+        sings_here=False,
+        silence=(
+            SILENCE_OUT_OF_REACH
+            if not _grips.get_melody_only_voicings(melody_note, prefer=top_strings)
+            else SILENCE_NO_SHAPE
+        ),
+    )
+    return None
+
+
+@dataclass(frozen=True)
+class _Selection:
+    """Everything one slot's candidates are ranked against, as one value.
+
+    `select_step_voicing`, the palette record and the demotion's own filter all ask
+    these same questions of the same slot, and their answers have to agree: a palette
+    computed from different arguments than the selection would be a second opinion
+    rather than the criterion that decided. Grouping them makes that agreement
+    structural instead of a convention every call site has to repeat.
+    """
+
+    candidates: List[Voicing]
+    previous: Optional[Voicing]
+    fret_min: int
+    fret_max: int
+    allowed_tones: Optional[Container[int]]
+    root_pc: Optional[int]
+    melody_pc: int
+    bass_pc: Optional[int]
+    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]]
+
+    def chosen(self) -> Optional[Voicing]:
+        """The shape the engine's own rule prefers, honouring a slash bass first."""
+        return select_step_voicing(
+            self.candidates,
+            self.previous,
+            self.fret_min,
+            self.fret_max,
+            allowed_tones=self.allowed_tones,
+            root_pc=self.root_pc,
+            melody_pc=self.melody_pc,
+            bass_pc=self.bass_pc,
+            slash_bass_cost=self.slash_bass_cost,
+        )
+
+    def palette(self, chosen: Voicing) -> Palette:
+        """What was on offer besides `chosen`, and the criterion that ranked it lower.
+
+        Asked again whenever a rule replaces the chosen shape, so the record is always
+        about the shape the step carries - a record about any other shape is a second
+        source for one fact, and the wrong one.
+        """
+        return _palette_facts(
+            self.candidates,
+            chosen,
+            previous=self.previous,
+            fret_min=self.fret_min,
+            fret_max=self.fret_max,
+            allowed_tones=self.allowed_tones,
+            root_pc=self.root_pc,
+            melody_pc=self.melody_pc,
+            bass_pc=self.bass_pc,
+            slash_bass_cost=self.slash_bass_cost,
+        )
+
+    def narrower_than(self, demoted: Voicing) -> Optional[Voicing]:
+        """A tighter shape inside the budget that the tuple ranks at least as high.
+
+        The demotion documented in `decisions.should_demote_to_melody_alone` exists
+        because the *palette* offered nothing inside the span budget. That premise is
+        checkable here, and checking it is what stops the demotion from throwing away
+        a chord that a narrower candidate could have kept.
+
+        Two tests make this a fallback rather than a re-ranking, and both are
+        load-bearing:
+
+        - **The narrower shape must tie with the demoted one on every criterion that
+          outranks span.** The comparison is the tuple's own prefix rather than a
+          hand-written list. Without it the filter silently *re-ranks*: on `Am7`
+          under D5 the palette also holds a span-0 shape sounding F4, which the tuple
+          puts below the span-5 shape on criterion 0 (a note outside the chord) - so
+          re-selecting within the budget would trade a pure five-fret reach for an
+          impure chord, exactly the trade the demotion says the tuple would never
+          make. Measured on the committed heads: without the span tie, 23 `uniform`
+          steps move; with it, `uniform` is byte-identical and only the textures
+          whose palette grew move.
+        - **Inside the neck window as well.** A candidate that is merely tighter
+          while sitting at fret 14 is not the alternative the rule was written for:
+          the demotion demotes a shape that is *unplayable*, and trading it for one
+          out of position is a different bad trade. Measured on the committed heads,
+          both halves earn their place: without the span test 30 `targets` steps lose
+          three notes each, and without the window test the A-7 of `MAJOR_CADENCE`
+          trades its pinned melody-alone step for a shape at fret 14
+          (`docs/history/fingering.md` §4.4's ban is why nothing else fits there).
+
+        The comparison drops the span element from the tuple: everything the ranking
+        says *except* the one criterion the demotion exists for. Keeping it would let
+        the re-selection trade position, inner-voice movement or the written bass for
+        span - a re-ranking after all, measured at two `heres_that_rainy_day` steps
+        whose `Bb7/F` slots would come back at a worse fret for a tighter hand.
+
+        The **partition** is not part of the tuple and it outranks all of it, so a
+        narrower shape may only replace the demoted one from the same group: a shape
+        that drops the written bass for a tighter hand is the same bad trade.
+        """
+        turned_away = _cost.voicing_cost(
+            demoted, self.previous, self.fret_min, self.fret_max,
+            allowed_tones=self.allowed_tones, root_pc=self.root_pc,
+            melody_pc=self.melody_pc,
+        )
+        span = _cost.SPAN_CRITERION
+        turned_away_bass = _bass_group(demoted, self.bass_pc, self.slash_bass_cost)
+
+        def would_the_tuple_have_chosen_it(candidate: Voicing) -> bool:
+            if _bass_group(candidate, self.bass_pc, self.slash_bass_cost) != turned_away_bass:
+                return False
+            cost = _cost.voicing_cost(
+                candidate, self.previous, self.fret_min, self.fret_max,
+                allowed_tones=self.allowed_tones, root_pc=self.root_pc,
+                melody_pc=self.melody_pc,
+            )
+            return cost[:span] + cost[span + 1:] <= turned_away[:span] + turned_away[span + 1:]
+
+        inside_budget = [
+            candidate for candidate in self.candidates
+            if candidate.fret_span() < GRIP_MAX_SPAN[demoted.grip]
+            and all(self.fret_min <= fret <= self.fret_max
+                    for fret in candidate.active_frets())
+            and would_the_tuple_have_chosen_it(candidate)
+        ]
+        if not inside_budget:
+            return None
+        return select_step_voicing(
+            inside_budget,
+            self.previous,
+            self.fret_min,
+            self.fret_max,
+            allowed_tones=self.allowed_tones,
+            root_pc=self.root_pc,
+            melody_pc=self.melody_pc,
+            bass_pc=self.bass_pc,
+            slash_bass_cost=self.slash_bass_cost,
+        )
+
+
+def _held_candidates(
+    prepared: StepPreparation,
+    prev_step: Optional[ArrangementStep],
+    harmony: Tuple[Optional[str], Optional[str]],
+) -> List[Voicing]:
+    """The candidates a held melody may use: the string it is already on.
+
+    `harmony` is the normalised `(root, quality)` pair the caller also gives
+    `is_repeated_step`, so "the note did not move" cannot mean two things.
+
+    A melody that did not move is a **hold**: the previous shape is still ringing, so
+    only the harmony under it changes. The candidates are narrowed before the selector
+    sees them, which is a filter over a list rather than a new cost criterion -
+    ranking a hold above a jump cannot stop the jump, because both are legal shapes,
+    and `span` outranks position in the tuple precisely so the hand stays put. The
+    rule, and the reason it comes back empty-handed rather than starving a thin
+    palette, is `decisions.hold_the_melody_string`.
+    """
+    if prev_step is not None and holds_the_shape(
+        prev_step, Note(prepared.melody).midi_note(), harmony
+    ):
+        return hold_the_melody_string(prepared.candidates, prev_step)
+    return prepared.candidates
+
+
+def _selection_for(
+    context: SlotContext,
+    prepared: StepPreparation,
+    candidates: List[Voicing],
+    previous: Optional[Voicing],
+) -> _Selection:
+    """One slot's ranking inputs, from the context and the preparation.
+
+    The tones are those of the chord **actually sounding**, which is `harmonized_as`
+    where a non-chord-tone strategy substituted one. Scoring the substitute against
+    the written chord asked the wrong question: a Bdim7 voicing under a written Cmaj7
+    is three foreign notes and every candidate alike, so criterion 0 could not
+    separate them and `missing` then picked a three-note shell over the complete
+    Bdim7 drop-2 that was generated and correct. The step sounded D4-Ab4-D5 - two
+    tones of Bdim7 rather than four - under a strategy whose whole purpose is to
+    state the substituted chord.
+
+    `harmonized_as` is a chord *name* ("Bdim7"), not a quality, so it is parsed
+    rather than passed to `canonical_quality` directly: that returns the whole name
+    unchanged for an unrecognised spelling, and `get_chord_tones` then yields an
+    empty set, which silently switches the criterion off rather than asking it the
+    right question.
+
+    The root enables the bass-function tie-break in `voicing_cost`; it is None for a
+    chord whose name cannot be parsed, which leaves that criterion unasked rather
+    than guessing a bass.
+    """
+    substitute = (
+        prepared.harmonized_as
+        if prepared.harmonized_as is not None
+        else prepared.chord_name
+    )
+    _sub_root, sub_quality = ChordParser.parse_chord_name(substitute)
+    if sub_quality is None:
+        sub_quality = ChordParser.canonical_quality(prepared.chord_type)
+        substitute = prepared.chord_name
+    allowed_tones = ChordParser.get_chord_tones(sub_quality, substitute)
+    root_pc = _grips._chord_context(prepared.chord_type, prepared.chord_name)[1]
+    melody_note = context.melody_note
+    assert melody_note is not None
+    # The melody is the caller's note and is never rewritten, so when it lies outside
+    # the chord every candidate is impure on it. Scoring it separately lets a shape
+    # that adds no *other* wrong note reach zero - see `cost.voicing_cost`, where
+    # counting rather than flagging makes the difference between one wrong note and
+    # four.
+    return _Selection(
+        candidates=candidates,
+        previous=previous,
+        fret_min=context.fret_min,
+        fret_max=context.fret_max,
+        allowed_tones=allowed_tones,
+        root_pc=root_pc,
+        melody_pc=melody_note.midi_note() % 12,
+        bass_pc=(
+            None if context.bass_pcs is None
+            else context.bass_pcs.get(context.index)
+        ),
+        slash_bass_cost=context.slash_bass_cost_for,
+    )
+
+
+def _emit_step(
+    arrangements: List[ArrangementStep],
+    slot: Slot,
+    context: SlotContext,
+    prepared: StepPreparation,
+    chosen: Voicing,
+    palette: Palette,
+    *,
+    role: str,
+    repeated: bool,
+) -> None:
+    """Append the chosen shape as the step, then merge the thumb into it.
+
+    Select first, merge after: the bass is written into the fret vector only once the
+    shape has been chosen, so it cannot enter the cost tuple by construction rather
+    than by discipline.
+    """
+    arrangements.append(ArrangementStep(
+        chord=prepared.chord_name,
+        # The transposed pitch when the step was moved down an octave, so the
+        # step reports what actually sounds; original_melody keeps the written one.
+        melody=prepared.melody,
+        voicing=chosen,
+        palette=palette,
+        non_chord_tone=prepared.is_non_chord_tone,
+        strategy=prepared.strategy,
+        harmonized_as=prepared.harmonized_as,
+        original_melody=prepared.original_melody,
+        repeated=repeated,
+        # A shell or a duo leaves part of the chord unsounded, so the chord name
+        # printed above the step describes the harmony rather than every note in
+        # it. The renderers annotate this.
+        #
+        # Counted over the **upper voices**: the thumb is merged after this, so
+        # a shell plus a bass note is still a shell and stays annotated
+        # "(shell - 3rd & 7th, partial)". The merge happens below, which is what
+        # makes that true by ordering rather than by a second count.
+        partial=len(chosen.active_frets()) < 4,
+        bar=context.bar,
+        beat=context.beat,
+        duration=context.duration,
+        role=role,
+        metric_weight=context.weight,
+        # Decision B: this slot exists for the thumb. The upper voices are held
+        # across it by the renderers rather than re-struck, and the melody is
+        # not re-attacked - the opposite of `repeated`, and never set together.
+        #
+        # `is_bass_only` and not the slot's own flag: the bass grid invented
+        # this beat, but a strong beat the melody moves onto is a **target**,
+        # and a target states the harmony rather than holding it. Passing the
+        # slot's flag straight through marked such a step both bass-only and a
+        # target, which silenced the chord this line had just voiced.
+        bass_only=is_bass_only(slot.bass_only, role),
+    ))
+    attach_bass(arrangements[-1], slot.bass, arrangements)
+
+
 def _harmonised_step(
     arrangements: List[ArrangementStep],
     slot: Slot,
@@ -841,301 +1194,75 @@ def _harmonised_step(
     library is built around: `prepare_step` supplies the candidates, `voicing_cost`
     picks among them, and the last resort before silence is the melody alone.
     """
-    progression = context.progression
-    index = context.index
-    name = context.name
     note_str = context.note_str
     melody_note = context.melody_note
-    fret_min = context.fret_min
-    fret_max = context.fret_max
-    texture = context.texture
-    has_thumb = context.has_thumb
-    non_chord_tone = context.non_chord_tone
-    bass_pcs = context.bass_pcs
-    slash_bass_cost_for = context.slash_bass_cost_for
-    bar = context.bar
-    beat = context.beat
-    duration = context.duration
-    role = context.role
-    weight = context.weight
-    assert melody_note is not None and note_str is not None
-    # Everything up to choosing a shape is shared with the corpus loader,
-    # which needs the same candidates but honours a slash bass first. See
-    # prepare_step.
-    #
-    # The previous shape is the last *sounding* one: a silent position between
-    # here and the previous chord is a hole in the tab, not a shape the hand
-    # held - see `last_sounding_step`.
+    assert note_str is not None and melody_note is not None
+    # The previous shape is the last *sounding* one: a silent position between here
+    # and the previous chord is a hole in the tab, not a shape the hand held - see
+    # `last_sounding_step`.
     prev_sounding = last_sounding_step(arrangements)
-    prepared = prepare_step(
-        progression, index,
-        previous=prev_sounding.voicing if prev_sounding is not None else None,
-        previous_chord=prev_sounding.chord if prev_sounding is not None else None,
+    # Everything up to choosing a shape is shared with the corpus loader, which needs
+    # the same candidates but honours a slash bass first. See `prepare_step`.
+    prepared_and_role = _prepare_or_rescue(
+        arrangements, slot, context, prev_sounding,
         top_strings=top_strings,
-        non_chord_tone=non_chord_tone,
-        fret_min=fret_min,
-        fret_max=fret_max,
-        grips=slot_grips,
+        slot_grips=slot_grips,
+        melody_only=melody_only,
     )
-    if prepared is None:
-        # The tune is never dropped while it can be played at all: play it
-        # alone first, then promote the fill, and only then report the step
-        # missing. See `rescue_melody_alone` and `_promoted_fill`.
-        if rescue_melody_alone(
-            arrangements, slot,
-            name=name, note_str=note_str, melody_note=melody_note,
-            top_strings=top_strings, previous=_previous_shape(arrangements),
-            bar=bar, beat=beat, duration=duration,
-            role=role, weight=weight,
-        ):
-            return
-        prepared = _promoted_fill(
-            progression=progression, index=index,
-            arrangements=arrangements, top_strings=top_strings,
-            non_chord_tone=non_chord_tone,
-            fret_min=fret_min, fret_max=fret_max,
-            slot_grips=slot_grips, texture=texture,
-            role=role, has_thumb=has_thumb, melody_only=melody_only,
-        )
-        if prepared is None:
-            # Reached only when the melody **cannot be played at all** - the
-            # rescue above has already been tried, and answered None because no
-            # string reaches the note (below the library's G3 floor, or past the
-            # end of the board).
-            #
-            # The palette is named because it is the usual cause and the caller
-            # is the only one who can change it, and the message says the step is
-            # *skipped* because that is what happens to the note. Naming a family
-            # the caller never asked for, or wording it like a fallback that had
-            # happened, would both misdescribe the step.
-            # The reason, told apart at the source: no string reaches the
-            # written pitch at all (`out_of_reach`) versus a reachable melody
-            # under a chord nothing could voice (`no_shape`). The rescue above
-            # asked the same question, so the answer is read back rather than
-            # re-derived from the clause's own words.
-            rest_step(
-                arrangements, slot,
-                name=name, note_str=note_str,
-                bar=bar, beat=beat, duration=duration,
-                role=role, weight=weight,
-                sings_here=False,
-                silence=(
-                    SILENCE_OUT_OF_REACH
-                    if not _grips.get_melody_only_voicings(
-                        melody_note, prefer=top_strings
-                    )
-                    else SILENCE_NO_SHAPE
-                ),
-            )
-            return
-        role = ROLE_TARGET
-    candidates = prepared.candidates
-    chord_type = prepared.chord_type
-    name = prepared.chord_name
-    original_melody = prepared.original_melody
-    strategy_used = prepared.strategy
-    harmonized_as = prepared.harmonized_as
-    is_non_chord_tone = prepared.is_non_chord_tone
+    if prepared_and_role is None:
+        return
+    prepared, role = prepared_and_role
 
-    # A melody that did not move is a **hold**: the previous shape is still ringing,
-    # so only the harmony under it changes. The candidates are therefore narrowed to
-    # the string the melody is already on *before* the selector sees them, which is a
-    # filter over a list rather than a new cost criterion - ranking a hold above a
-    # jump cannot stop the jump, because both are legal shapes, and `span` outranks
-    # position in the tuple precisely so the hand stays put. The rule, and the reason
-    # it comes back empty-handed rather than starving a thin palette, is
-    # decisions.hold_the_melody_string.
-    #
     # `harmony` is computed once here and used for the `repeated` flag below, so "the
     # note did not move" cannot mean two different things in one step.
-    harmony = normalised_harmony(name, harmonized_as)
+    harmony = normalised_harmony(prepared.chord_name, prepared.harmonized_as)
+    # The step a hold is about: `arrangements[-1]`, because what matters is what is
+    # *ringing*, and a rest stops the ringing, whether it is the grid's or a position
+    # the guitar declined.
     prev_step = arrangements[-1] if arrangements else None
-    if prev_step is not None and holds_the_shape(
-        prev_step, Note(prepared.melody).midi_note(), harmony
-    ):
-        candidates = hold_the_melody_string(candidates, prev_step)
+    candidates = _held_candidates(prepared, prev_step, harmony)
 
-    # The whole selection rule lives in voicing_cost. The first chord has no
-    # previous shape to lead from, so it falls back to "somewhere comfortable on
-    # the neck"; every later chord is scored against the one before it, which is
-    # what keeps the hand from jumping and lets a melody hold its place by
-    # changing strings.
+    # The whole selection rule lives in voicing_cost. The first chord has no previous
+    # shape to lead from, so it falls back to "somewhere comfortable on the neck";
+    # every later chord is scored against the one before it, which is what keeps the
+    # hand from jumping and lets a melody hold its place by changing strings.
+    #
     # The shape the selector leads *from* is the last sounding one, not the step
-    # before this one: a silent position is a hole in the tab rather than a shape
-    # the hand held (`last_sounding_step`). `prev_step` above stays
-    # `arrangements[-1]`, because a hold is about what is *ringing* - and a rest
-    # stops the ringing, whether it is the grid's or a position the guitar
-    # declined.
-    prev_voicing = prev_sounding.voicing if prev_sounding is not None else None
-    # The tones the *written* chord allows, so the selector can prefer a
-    # shape that is merely out of position over one that sounds a wrong note.
-    # The root enables the bass-function tie-break in voicing_cost; it is None
-    # for a chord whose name cannot be parsed, which simply leaves that
-    # criterion unasked rather than guessing a bass.
-    #
-    # The tones are those of the chord **actually sounding**, which is
-    # `harmonized_as` where a non-chord-tone strategy substituted one. Scoring
-    # the substitute against the written chord asked the wrong question: a
-    # Bdim7 voicing under a written Cmaj7 is three foreign notes and every
-    # candidate alike, so criterion 0 could not separate them and `missing` then
-    # picked a three-note shell over the complete Bdim7 drop-2 that was
-    # generated and correct. The step sounded D4-Ab4-D5 - two tones of Bdim7
-    # rather than four - under a strategy whose whole purpose is to state the
-    # substituted chord.
-    #
-    # `harmonized_as` is a chord *name* ("Bdim7"), not a quality, so it is
-    # parsed rather than passed to `canonical_quality` directly: that returns
-    # the whole name unchanged for an unrecognised spelling, and
-    # `get_chord_tones` then yields an empty set, which silently switches the
-    # criterion off rather than asking it the right question.
-    substitute = harmonized_as if harmonized_as is not None else name
-    _sub_root, sub_quality = ChordParser.parse_chord_name(substitute)
-    if sub_quality is None:
-        sub_quality = ChordParser.canonical_quality(chord_type)
-        substitute = name
-    allowed_tones = ChordParser.get_chord_tones(sub_quality, substitute)
-    root_pc = _grips._chord_context(chord_type, name)[1]
-    # The melody is the caller's note and is never rewritten, so when it
-    # lies outside the chord every candidate is impure on it. Excluding it
-    # lets a shape that adds no *other* wrong note reach zero - see
-    # cost.voicing_cost, where counting rather than flagging makes the
-    # difference between one wrong note and four.
-    melody_pc = melody_note.midi_note() % 12
-    bass_pc = None if bass_pcs is None else bass_pcs.get(index)
-    best_voicing = select_step_voicing(
+    # before this one: a silent position is a hole in the tab rather than a shape the
+    # hand held (`last_sounding_step`). `prev_step` above stays `arrangements[-1]`,
+    # because a hold is about what is *ringing* - and a rest stops the ringing,
+    # whether it is the grid's or a position the guitar declined.
+    selection = _selection_for(
+        context,
+        prepared,
         candidates,
-        prev_voicing,
-        fret_min,
-        fret_max,
-        allowed_tones=allowed_tones,
-        root_pc=root_pc,
-        melody_pc=melody_pc,
-        bass_pc=bass_pc,
-        slash_bass_cost=slash_bass_cost_for,
+        prev_sounding.voicing if prev_sounding is not None else None,
     )
-    # `candidates` is non-empty here (the step is skipped otherwise), so this
-    # cannot fire. Written as an assertion rather than left to Optional
-    # narrowing at every use below.
+    best_voicing = selection.chosen()
+    # `candidates` is non-empty here (the step is skipped otherwise), so this cannot
+    # fire. Written as an assertion rather than left to Optional narrowing at every
+    # use below.
     assert best_voicing is not None
-    def palette_facts_for(chosen: Voicing) -> Palette:
-        """`_palette_facts` with this slot's context bound: what was on offer besides
-        `chosen`, and the criterion that ranked it below the better one.
+    palette = selection.palette(best_voicing)
 
-        A nested function because it is asked twice - once for the shape the selector
-        picked, and again if a rule below replaces it - and the second answer has to be
-        about the shape the step carries. A record about a shape the step does not
-        carry is a second source for one fact, and the wrong one.
-        """
-        return _palette_facts(
-            candidates,
-            chosen,
-            previous=prev_voicing,
-            fret_min=fret_min,
-            fret_max=fret_max,
-            allowed_tones=allowed_tones,
-            root_pc=root_pc,
-            melody_pc=melody_pc,
-            bass_pc=bass_pc,
-            slash_bass_cost=slash_bass_cost_for,
-        )
-
-    palette = palette_facts_for(best_voicing)
-
-    # A complete chord at the very top of the span budget is demoted to
-    # the melody alone. Why that is a fallback rather than a re-ranking is
-    # documented once in decisions.should_demote_to_melody_alone.
-    #
-    # **Only when nothing narrower was generated *that the demoted shape did not
-    # outrank*.** The rule's premise is that the *palette* offered nothing inside the
-    # budget - the shape it names spans the whole thing because no alternative was a
-    # candidate to be ranked against. That premise is now checkable, because a palette
-    # derived from the arity offers more families than the hand-written lists did:
-    # where a four-note shape inside the budget was also generated, demoting threw the
-    # whole chord away.
-    #
-    # **The narrower shape must tie with the demoted one on every criterion that
-    # outranks span** - that is what makes this a fallback rather than a re-ranking,
-    # and the comparison is the tuple's own prefix rather than a hand-written list.
-    # Without it the filter silently *re-ranks*: on `Am7` under D5 the palette also
-    # holds a span-0 shape sounding F4, which the tuple puts below the span-5 shape on
-    # criterion 0 (a note outside the chord) - so re-selecting within the budget
-    # would trade a pure five-fret reach for an impure chord, exactly the trade
-    # `should_demote_to_melody_alone` says the tuple would never make. Measured on the
-    # committed heads: without the span tie, 23 `uniform` steps move; with it,
-    # `uniform` is byte-identical and only the textures whose palette grew move.
-    #
-    # **Inside the neck window as well**, and both halves are load-bearing. A candidate
-    # that is merely tighter while sitting at fret 14 is not the alternative the rule
-    # was written for: the demotion demotes a shape that is *unplayable*, and trading it
-    # for one out of position is a different bad trade. Measured on the committed heads,
-    # both halves earn their place: without the span test 30 `targets` steps lose three
-    # notes each, and without the window test the A-7 of `MAJOR_CADENCE` trades its
-    # pinned melody-alone step for a shape at fret 14 (`docs/history/fingering.md` §4.4's ban is
-    # why nothing else fits there).
+    # A complete chord at the very top of the span budget is demoted to the melody
+    # alone. Why that is a fallback rather than a re-ranking, and why a narrower shape
+    # may replace it only when it ties on every criterion that outranks span, is
+    # documented in `decisions.should_demote_to_melody_alone` and in
+    # `_Selection.narrower_than`.
     if should_demote_to_melody_alone(best_voicing, role):
-        turned_away = _cost.voicing_cost(
-            best_voicing, prev_voicing, fret_min, fret_max,
-            allowed_tones=allowed_tones, root_pc=root_pc, melody_pc=melody_pc,
-        )
-        # The comparison is the tuple **with the span element removed**, which is the
-        # honest form of "the tuple would have chosen it anyway": everything the
-        # ranking says except the one criterion the demotion exists for. Keeping the
-        # element in would let the re-selection trade position, inner-voice movement
-        # or the written bass for span - a re-ranking after all, and measured at two
-        # `heres_that_rainy_day` steps whose `Bb7/F` slots would come back at a worse
-        # fret for a tighter hand.
-        span = _cost.SPAN_CRITERION
-        # The **partition** is not part of the tuple and it outranks all of it: the
-        # selector groups the candidates by how well they honour a written slash bass
-        # and only then ranks within the best group. So a narrower shape may only
-        # replace the demoted one from the **same group** - a shape that drops the
-        # written bass for a tighter hand is the same bad trade as dropping it for
-        # position, and this is the test that catches it.
-        turned_away_bass = _bass_group(
-            best_voicing, bass_pc, slash_bass_cost_for
-        )
-
-        def would_the_tuple_have_chosen_it(candidate: Voicing) -> bool:
-            if _bass_group(candidate, bass_pc, slash_bass_cost_for) != turned_away_bass:
-                return False
-            cost = _cost.voicing_cost(
-                candidate, prev_voicing, fret_min, fret_max,
-                allowed_tones=allowed_tones, root_pc=root_pc, melody_pc=melody_pc,
-            )
-            return cost[:span] + cost[span + 1:] <= turned_away[:span] + turned_away[span + 1:]
-
-        inside_budget = [
-            candidate for candidate in candidates
-            if candidate.fret_span() < GRIP_MAX_SPAN[best_voicing.grip]
-            and all(fret_min <= fret <= fret_max
-                    for fret in candidate.active_frets())
-            and would_the_tuple_have_chosen_it(candidate)
-        ]
-        narrower = (
-            select_step_voicing(
-                inside_budget,
-                prev_voicing,
-                fret_min,
-                fret_max,
-                allowed_tones=allowed_tones,
-                root_pc=root_pc,
-                melody_pc=melody_pc,
-                bass_pc=bass_pc,
-                slash_bass_cost=slash_bass_cost_for,
-            )
-            if inside_budget else None
-        )
+        narrower = selection.narrower_than(best_voicing)
         if narrower is not None:
             best_voicing = narrower
-            palette = palette_facts_for(best_voicing)
+            palette = selection.palette(best_voicing)
         elif demoted_to_melody_alone(
             arrangements, slot,
-            name=name, note_str=note_str, melody_note=melody_note,
-            top_strings=top_strings, previous=prev_voicing,
+            name=prepared.chord_name, note_str=note_str, melody_note=melody_note,
+            top_strings=top_strings, previous=selection.previous,
             best_voicing=best_voicing,
             palette=palette,
-            bar=bar, beat=beat, duration=duration,
-            role=role, weight=weight,
+            bar=context.bar, beat=context.beat, duration=context.duration,
+            role=role, weight=context.weight,
         ):
             return
     # A repeated melody is a hold, so the renderers strike the soprano alone and
@@ -1143,48 +1270,10 @@ def _harmonised_step(
     # makes that true. The rule - the harmony-change case that is not a hold, and
     # the string clause - is decisions.is_repeated_step.
     repeated = is_repeated_step(prev_step, best_voicing, harmony)
-
-    arrangements.append(ArrangementStep(
-        chord=name,
-        # The transposed pitch when the step was moved down an octave, so the
-        # step reports what actually sounds; original_melody keeps the written one.
-        melody=prepared.melody,
-        voicing=best_voicing,
-        palette=palette,
-        non_chord_tone=is_non_chord_tone,
-        strategy=strategy_used,
-        harmonized_as=harmonized_as,
-        original_melody=original_melody,
-        repeated=repeated,
-        # A shell or a duo leaves part of the chord unsounded, so the chord name
-        # printed above the step describes the harmony rather than every note in
-        # it. The renderers annotate this.
-        #
-        # Counted over the **upper voices**: the thumb is merged after this, so
-        # a shell plus a bass note is still a shell and stays annotated
-        # "(shell - 3rd & 7th, partial)". The merge happens below, which is what
-        # makes that true by ordering rather than by a second count.
-        partial=len(best_voicing.active_frets()) < 4,
-        bar=bar,
-        beat=beat,
-        duration=duration,
-        role=role,
-        metric_weight=weight,
-        # Decision B: this slot exists for the thumb. The upper voices are held
-        # across it by the renderers rather than re-struck, and the melody is
-        # not re-attacked - the opposite of `repeated`, and never set together.
-        #
-        # `is_bass_only` and not the slot's own flag: the bass grid invented
-        # this beat, but a strong beat the melody moves onto is a **target**,
-        # and a target states the harmony rather than holding it. Passing the
-        # slot's flag straight through marked such a step both bass-only and a
-        # target, which silenced the chord this line had just voiced.
-        bass_only=is_bass_only(slot.bass_only, role),
-    ))
-    # Select first, merge after: the bass is written into the fret vector only
-    # once `best_voicing` has returned, so it cannot enter the cost tuple by
-    # construction rather than by discipline.
-    attach_bass(arrangements[-1], slot.bass, arrangements)
+    _emit_step(
+        arrangements, slot, context, prepared, best_voicing, palette,
+        role=role, repeated=repeated,
+    )
 
 
 @dataclass
