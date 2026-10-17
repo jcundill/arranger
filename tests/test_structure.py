@@ -83,7 +83,7 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/options.py": Budget(5, 30, 3),
     "arranger/parts.py": Budget(9, 45, 1),
     "arranger/render.py": Budget(18, 130, 2),
-    "arranger/routes.py": Budget(13, 229, 12),
+    "arranger/routes.py": Budget(6, 97, 12),
     "arranger/slots.py": Budget(9, 136, 12),
     "arranger/steps.py": Budget(1, 49, 15),
     "arranger/texture.py": Budget(11, 57, 6),
