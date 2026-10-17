@@ -1083,13 +1083,6 @@ def _place_template(
         # No claim about the chord's tones - the template is the claim.
         None,
     )
-_INTERVAL_CLASSES = (3, 9, 8)
-
-# How those intervals are named in a printed annotation. Keyed by the size in
-# semitones, modulo 12, so a 10th reads as the 3rd it is a compound form of - which is
-# what a player calls it. "2 notes" is the fallback for a size not in here.
-INTERVAL_NAMES: Dict[int, str] = {3: "3rd", 8: "b6", 9: "6th"}
-
 
 
 # --- The drop-2 rule -----------------------------------------------------------

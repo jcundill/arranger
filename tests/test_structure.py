@@ -6,7 +6,7 @@ same idea to the shape of the code, because a restructuring that is not measured
 is a preference: "smaller" and "simpler" are opinions until a number says which
 function and by how much.
 
-Three meters, because they catch different defects:
+Four meters, because they catch different defects:
 
 - **complexity**, counted as decision points, with a nested function body
   *excluded* - a closure is measured where it is defined rather than folded into
@@ -17,6 +17,11 @@ Three meters, because they catch different defects:
   lines even when each fallback is one ``if``.
 - **parameters**, which catches the shape that a parameter object should have
   folded: more than a dozen words in a signature is a missing value object.
+- **single definition**, which catches a name bound twice in one module body. The
+  second binding shadows the first, so an identical copy changes nothing and no
+  test can see it - `grips` carried `_INTERVAL_CLASSES` and `INTERVAL_NAMES` twice
+  for exactly that reason. It matters most during a module split, where a block
+  that is *copied* rather than cut leaves the original behind and still imports.
 
 Every entry is the worst value the tree had when the entry was written. **The
 only edit this table should ever receive is a decrease.** If a number has to go
@@ -299,6 +304,48 @@ class TestTheEncapsulationRule(unittest.TestCase):
             sorted(ALLOWED_PRIVATE_IMPORTS - found),
             [],
             "the allowlist names an import that no longer exists - delete the entry",
+        )
+
+
+def _top_level_bindings(path: Path) -> Iterator[Tuple[str, int]]:
+    """Every name the module binds at its top level, with the line that binds it."""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in tree.body:
+        names: List[str] = []
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names = [node.name]
+        elif isinstance(node, ast.Assign):
+            names = [target.id for target in node.targets if isinstance(target, ast.Name)]
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names = [node.target.id]
+        for name in names:
+            yield name, node.lineno
+
+
+class TestTheSingleDefinition(unittest.TestCase):
+    """No module binds one top-level name twice."""
+
+    def test_no_module_binds_a_top_level_name_twice(self):
+        """A duplicate binding is invisible: the later one wins and nothing fails.
+
+        The duplicate this was written for was an *identical* copy of
+        `_INTERVAL_CLASSES` and `INTERVAL_NAMES`, so even a diff of behaviour
+        would have been empty. A split that copies a block instead of cutting it
+        leaves the same trap in two modules at once, which is why this is checked
+        over the whole tree rather than at the seam.
+        """
+        duplicates: List[str] = []
+        for path in _library_modules():
+            seen: Dict[str, int] = {}
+            for name, lineno in _top_level_bindings(path):
+                if name in seen:
+                    duplicates.append(f"{_relative(path)}: {name} at {seen[name]} and {lineno}")
+                else:
+                    seen[name] = lineno
+        self.assertEqual(
+            duplicates,
+            [],
+            "a top-level name is bound twice - delete the binding that cannot win",
         )
 
 
