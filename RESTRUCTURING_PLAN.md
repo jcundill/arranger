@@ -384,4 +384,10 @@ Round 2:
   renderers, 9.7 the three importers. No module's ceiling is an outlier any more.
 - Phase 10: DONE (moved before 9.3). 1107 tests OK, ruff 0, pyright 0/0,
   demo byte-identical.
-- Phases 11-15: planned, in the order above.
+- Phase 11: DONE (one commit) — the five chord-symbol helpers moved from
+  `slots` to `chords`, which **deletes the `render -> slots` edge**. `slots` now
+  imports the three it still calls, and `headxml` imports the two it uses from
+  `arranger.chords`. 1107 tests OK (skipped=2), ruff 0, pyright 0/0, demo
+  byte-identical. The doc references naming the old home were updated in the same
+  commit, including one test docstring.
+- Phases 12-15: planned, in the order above.
