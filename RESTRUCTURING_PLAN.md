@@ -488,15 +488,28 @@ two **function-local** lines inside methods rather than adding a module-level im
 ruff does not flag an unused function-local import. Edit import blocks by locating the
 module-level block, never by first match.
 
-Then the five monoliths, by the class clusters that already exist:
+**One split landed: `test_comping` -> route / parts / harmony.** 1986 lines and 15
+classes covering three orthogonal axes, now 1000 / 652 / 314 lines and 48 / 39 / 13
+tests. Classes moved by AST span, AST-identical to their originals, count unchanged at
+100 in that file's three parts.
 
-| file | lines | split |
+The plan's guess was `route / harmony / grid`, and the classes said otherwise:
+`test_comping` contains **no grid class at all** (the grid tests live in
+`test_tab_rendering`), and the largest coherent group after the route was `parts=`. So
+the cluster names in the table below are a guess until the class list is read - read it
+first, as the rule, and treat the table as a starting point. Six module-level fixtures
+were shared by two or three of the new files (`PROGRESSION`, `VOICES_ARG` and four
+chord-name helpers) and went to `support`; `PARTS_WITH_BASS` and `bass_comping` had one
+user each and stayed.
+
+Then the four remaining monoliths, by the class clusters that already exist:
+
+| file | lines | split (a guess - read the classes) |
 |---|---|---|
 | `test_headxml` | 3290 | parse / timeline / repeats / cli |
 | `test_grips` | 2409 | families / palette / playability |
 | `test_walking_bass` | 2403 | line / placement / capacity |
-| `test_tab_rendering` | 2195 | step / ascii / html / explanations |
-| `test_comping` | 1986 | route / harmony / grid |
+| `test_tab_rendering` | 2195 | step / ascii / html / explanations (grid lives here) |
 
 A split moves `unittest.TestCase` classes and nothing else: no assertion changes, no
 fixture re-typing, and the test count is the meter (1108 before and after each file).
