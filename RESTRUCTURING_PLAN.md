@@ -465,15 +465,37 @@ Four things this phase taught:
 moved block against its original found only the intended renames and the deleted
 local imports.
 
-## Phase 14 — Split the test monoliths (planned)
+## Phase 14 — Split the test monoliths (in progress)
 
-By the class clusters that already exist: `test_headxml` (3292 lines) →
-parse / timeline / repeats / cli; `test_grips` → families / palette /
-playability; `test_walking_bass` → line / placement / capacity;
-`test_tab_rendering` → step / ascii / html / explanations; `test_comping` →
-route / harmony / grid. `BUT_NOT_FOR_ME` moves to `tests/support.py` first: it
-is imported from `tests.test_headxml` by two other test modules, which is the
-test-suite form of the private-import problem Phase 8 fixes.
+The cross-module fixtures are cleared first, because they are the test-suite form of
+the private-import problem Phase 8 fixes.
+
+**Landed:** `DATA` and `BUT_NOT_FOR_ME` moved to `tests/support.py`; the five
+function-local `from tests.test_headxml import BUT_NOT_FOR_ME` lines are now one
+module-level import per file, and `DATA` moved with the head rather than being copied,
+so there is one spelling of the fixture directory.
+
+**Remaining, measured:** `test_walking_bass` still imports four names from
+`test_texture` at two sites - `MAJOR_CADENCE` and `MINOR_CADENCE` (fixtures, and they
+belong in `support` beside `BUT_NOT_FOR_ME`) and `major_cadence_tabs` /
+`minor_cadence_tabs` (engine-produced tab pins, the "cache of evidence" category the
+`support` docstring already describes). Move the two progressions first, re-run the two
+modules, then move the tab pins separately so a difference in the pins is attributable.
+
+Then the five monoliths, by the class clusters that already exist:
+
+| file | lines | split |
+|---|---|---|
+| `test_headxml` | 3290 | parse / timeline / repeats / cli |
+| `test_grips` | 2409 | families / palette / playability |
+| `test_walking_bass` | 2403 | line / placement / capacity |
+| `test_tab_rendering` | 2195 | step / ascii / html / explanations |
+| `test_comping` | 1986 | route / harmony / grid |
+
+A split moves `unittest.TestCase` classes and nothing else: no assertion changes, no
+fixture re-typing, and the test count is the meter (1108 before and after each file).
+Where a module-level fixture is used by two of the new files, it goes to `support` rather
+than being copied - that is the rule the first half of this phase established.
 
 ## Phase 15 — Documentation and hygiene (planned)
 
