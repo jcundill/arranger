@@ -773,6 +773,101 @@ def _melody_timeline(
     )
 
 
+_SlotEntry = Tuple[Tuple[int, float], int, Optional[BassNote], bool]
+
+
+def _located_slots(
+    progression: Sequence[Tuple[Optional[str], str, str]],
+    timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
+) -> List[Tuple[int, int, float, Optional[float]]]:
+    """Every progression index whose slot the caller could place, with its timing."""
+    located: List[Tuple[int, int, float, Optional[float]]] = []
+    for index in range(len(progression)):
+        timing = timings[index] if timings is not None and index < len(timings) else None
+        if timing is None:
+            continue
+        bar, beat, duration = timing
+        # A `(None, None, None)` placeholder is a slot the caller could not place, not
+        # a timing. Testing the tuple rather than the reference is what catches it -
+        # the head path builds those placeholders explicitly, and an unplaced slot
+        # reaching the grid arithmetic below would place a note at bar None.
+        if bar is None or beat is None:
+            continue
+        located.append((index, bar, beat, duration))
+    return located
+
+
+def _gridless_slots(
+    progression: Sequence[Tuple[Optional[str], str, str]],
+    bass_line: List[BassNote],
+) -> List[Slot]:
+    """One slot per progression entry, when there is no beat grid to union against."""
+    # Gridless: one note per slot, attached by position and guarded, because the
+    # bass line can be shorter than the progression when a chord is unparseable.
+    slots: List[Slot] = []
+    for index in range(len(progression)):
+        slots.append(Slot(
+            index=index,
+            bass=bass_line[index] if index < len(bass_line) else None,
+        ))
+    return slots
+
+
+def _melody_entries(
+    located: Sequence[Tuple[int, int, float, Optional[float]]],
+    bass_line: List[BassNote],
+) -> List[_SlotEntry]:
+    """One entry per melody slot, carrying the walk note on the same onset."""
+    entries: List[Tuple[Tuple[int, float], int, Optional[BassNote], bool]] = []
+    for index, bar, beat, _duration in located:
+        key = (bar, float(beat))
+        bass = next((note for note in bass_line
+                     if note.bar == bar and note.beat is not None
+                     and abs(note.beat - float(beat)) <= BEAT_EPSILON), None)
+        entries.append((key, index, bass, False))
+    return entries
+
+
+def _bass_only_entries(
+    located: Sequence[Tuple[int, int, float, Optional[float]]],
+    bass_line: List[BassNote],
+    melody_at: Dict[Tuple[int, float], Tuple[int, Optional[float]]],
+    beats_per_bar: int,
+    beat_type: int,
+) -> List[_SlotEntry]:
+    """The walked beats with no melody slot, each carrying the melody in force."""
+    # The walked beats with no melody slot. Each takes the melody **in force** at its
+    # own instant, read off the melody timeline rather than off the walk's own beats.
+    #
+    # That distinction is the whole fix. Tracking the previous melody while iterating
+    # `bass_line` means a melody slot is only noticed when the walk happens to land on
+    # it, so in a 2/2 bar - where the walk visits beats 1.0 and 2.0 only - a melody
+    # moving at beat 2.5 is invisible and the invented downbeat inherits from beat 2.0
+    # instead. Nine downbeats of "But Not For Me" stated the wrong note that way, and
+    # because the wrong note then became the melody the slot *looks* correct to every
+    # check that compares against the arrangement's own idea of itself.
+    #
+    # `melody_at` stays for what it is good for - the exact onset test below and the
+    # duration each slot reports - but precedence over time is now `_melody_in_force`'s
+    # job, and it is a different question with a different answer.
+    timeline = _melody_timeline(located, beats_per_bar, beat_type)
+    entries: List[_SlotEntry] = []
+    for note in bass_line:
+        if note.bar is None or note.beat is None:
+            continue
+        key = (note.bar, float(note.beat))
+        if key in melody_at:
+            continue
+        in_force = _melody_in_force(
+            timeline, _beat_offset(note.bar, float(note.beat), beats_per_bar)
+        )
+        # Index 0 when the melody has not started yet, which is the pre-existing
+        # fallback: something has to be named, and the opening slot is the least
+        # wrong thing to say on a beat before the tune begins.
+        entries.append((key, in_force if in_force >= 0 else 0, note, True))
+    return entries
+
+
 def _bass_slots(
     progression: Sequence[Tuple[Optional[str], str, str]],
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
@@ -823,77 +918,23 @@ def _bass_slots(
     degradation stands: one thumb note per anchor, one per slot. That is the
     documented `timings=None` case, not a failure.
     """
-    located: List[Tuple[int, int, float, Optional[float]]] = []
-    for index in range(len(progression)):
-        timing = timings[index] if timings is not None and index < len(timings) else None
-        if timing is None:
-            continue
-        bar, beat, duration = timing
-        # A `(None, None, None)` placeholder is a slot the caller could not place, not
-        # a timing. Testing the tuple rather than the reference is what catches it -
-        # the head path builds those placeholders explicitly, and an unplaced slot
-        # reaching the grid arithmetic below would place a note at bar None.
-        if bar is None or beat is None:
-            continue
-        located.append((index, bar, beat, duration))
-
+    located = _located_slots(progression, timings)
     if not located:
-        # Gridless: one note per slot, attached by position and guarded, because the
-        # bass line can be shorter than the progression when a chord is unparseable.
-        slots: List[Slot] = []
-        for index in range(len(progression)):
-            slots.append(Slot(
-                index=index,
-                bass=bass_line[index] if index < len(bass_line) else None,
-            ))
-        return slots
+        return _gridless_slots(progression, bass_line)
 
     melody_at: Dict[Tuple[int, float], Tuple[int, Optional[float]]] = {
         (bar, float(beat)): (index, duration) for index, bar, beat, duration in located
     }
-
-    entries: List[Tuple[Tuple[int, float], int, Optional[BassNote], bool]] = []
-    for index, bar, beat, _duration in located:
-        key = (bar, float(beat))
-        bass = next((note for note in bass_line
-                     if note.bar == bar and note.beat is not None
-                     and abs(note.beat - float(beat)) <= BEAT_EPSILON), None)
-        entries.append((key, index, bass, False))
-
-    # The walked beats with no melody slot. Each takes the melody **in force** at its
-    # own instant, read off the melody timeline rather than off the walk's own beats.
-    #
-    # That distinction is the whole fix. Tracking the previous melody while iterating
-    # `bass_line` means a melody slot is only noticed when the walk happens to land on
-    # it, so in a 2/2 bar - where the walk visits beats 1.0 and 2.0 only - a melody
-    # moving at beat 2.5 is invisible and the invented downbeat inherits from beat 2.0
-    # instead. Nine downbeats of "But Not For Me" stated the wrong note that way, and
-    # because the wrong note then became the melody the slot *looks* correct to every
-    # check that compares against the arrangement's own idea of itself.
-    #
-    # `melody_at` stays for what it is good for - the exact onset test below and the
-    # duration each slot reports - but precedence over time is now `_melody_in_force`'s
-    # job, and it is a different question with a different answer.
-    timeline = _melody_timeline(located, beats_per_bar, beat_type)
-    for note in bass_line:
-        if note.bar is None or note.beat is None:
-            continue
-        key = (note.bar, float(note.beat))
-        if key in melody_at:
-            continue
-        in_force = _melody_in_force(
-            timeline, _beat_offset(note.bar, float(note.beat), beats_per_bar)
-        )
-        # Index 0 when the melody has not started yet, which is the pre-existing
-        # fallback: something has to be named, and the opening slot is the least
-        # wrong thing to say on a beat before the tune begins.
-        entries.append((key, in_force if in_force >= 0 else 0, note, True))
+    entries = _melody_entries(located, bass_line)
+    entries.extend(
+        _bass_only_entries(located, bass_line, melody_at, beats_per_bar, beat_type)
+    )
 
     # Sort by onset, with a melody slot ahead of a bass-only slot on the same onset
     # so the step that strikes the melody is the step that carries that walk note.
     entries.sort(key=lambda entry: (entry[0][0], entry[0][1], entry[3], entry[1]))
 
-    slots = []
+    slots: List[Slot] = []
     for key, index, bass, bass_only in entries:
         duration = melody_at.get(key, (index, None))[1]
         slots.append(Slot(
