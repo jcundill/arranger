@@ -5,7 +5,8 @@ behind them mean. Read this before touching anything under `arranger/` except
 `options.py`.
 
 The module map and the dependency order that holds it are in
-[../AGENTS.md](../AGENTS.md); this document is the reasoning behind the decisions,
+[../AGENTS.md](../AGENTS.md), and [dependency-dag.md](dependency-dag.md) draws
+that order as a graph; this document is the reasoning behind the decisions,
 not the map. Where a rule was measured, the measurement is kept - it is what tells
 you whether a change is an improvement or a different library.
 
