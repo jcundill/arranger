@@ -1383,6 +1383,56 @@ def _parse_barline(
         # play-order information, so it is ignored rather than guessed at.
     return out
 
+def _ending_membership(
+    raw_markers: Dict[int, List[Tuple[str, Tuple[int, ...], int]]],
+    measure_count: int,
+) -> Dict[int, set]:
+    """Which volta ending each measure position belongs to, by its numbers.
+
+    A bracket runs from its `ending_start` to its `ending_stop` inclusive; an
+    unterminated one runs to the last measure, because a writer that leaves a bracket
+    open means it to the end rather than to nothing.
+    """
+    ending_at: Dict[int, set] = {}
+    open_ending: Dict[Tuple[int, ...], int] = {}
+    for position in sorted(raw_markers):
+        for kind, numbers, _times in raw_markers[position]:
+            if kind == "ending_start":
+                open_ending[numbers] = position
+            elif kind == "ending_stop":
+                start = open_ending.pop(numbers, None)
+                if start is not None:
+                    for covered in range(start, position + 1):
+                        ending_at[covered] = set(numbers)
+    for numbers, start in open_ending.items():
+        for covered in range(start, measure_count):
+            ending_at[covered] = set(numbers)
+    return ending_at
+
+
+def _repeat_start_positions(
+    raw_markers: Dict[int, List[Tuple[str, Tuple[int, ...], int]]],
+) -> List[int]:
+    """The positions carrying a forward repeat, in document order - the jump targets."""
+    return [
+        position
+        for position in sorted(raw_markers)
+        if any(kind == "repeat_start" for kind, _n, _t in raw_markers[position])
+    ]
+
+
+def _repeat_target(position: int, starts: Sequence[int]) -> int:
+    """Where a backward repeat at `position` jumps to: the nearest start before it.
+
+    Zero when the score marks no forward repeat, which is the common case - a lead
+    sheet's opening repeat sign is implied by the backward one, and a player reads a
+    `|:` at bar 1 whether or not the file writes one.
+    """
+    earlier = [start for start in starts if start < position]
+    return max(earlier) if earlier else 0
+
+
+
 
 def _expand_play_order(
     measure_count: int,
@@ -1413,35 +1463,15 @@ def _expand_play_order(
         return [(position, 1) for position in range(measure_count)]
 
     # Ending membership: which positions belong to which volta, so a pass can skip the
-    # endings that are not its own. A bracket runs from its `ending_start` to its
-    # `ending_stop` inclusive; an unterminated one runs to the last measure.
-    ending_at: Dict[int, set] = {}
-    open_ending: Dict[Tuple[int, ...], int] = {}
-    for position in sorted(raw_markers):
-        for kind, numbers, _times in raw_markers[position]:
-            if kind == "ending_start":
-                open_ending[numbers] = position
-            elif kind == "ending_stop":
-                start = open_ending.pop(numbers, None)
-                if start is not None:
-                    for p in range(start, position + 1):
-                        ending_at[p] = set(numbers)
-    for numbers, start in open_ending.items():
-        for p in range(start, measure_count):
-            ending_at[p] = set(numbers)
+    # endings that are not its own.
+    ending_at = _ending_membership(raw_markers, measure_count)
 
     repeat_end: Dict[int, int] = {}
-    repeat_starts: List[int] = []
     for position in sorted(raw_markers):
         for kind, _numbers, times in raw_markers[position]:
             if kind == "repeat_end":
                 repeat_end[position] = times
-            elif kind == "repeat_start":
-                repeat_starts.append(position)
-
-    def target_for(position: int) -> int:
-        earlier = [s for s in repeat_starts if s < position]
-        return max(earlier) if earlier else 0
+    repeat_starts = _repeat_start_positions(raw_markers)
 
     order: List[Tuple[int, int]] = []
     pass_no = 1
@@ -1460,7 +1490,7 @@ def _expand_play_order(
         order.append((index, pass_no))
         if index in repeat_end and pass_no < repeat_end[index]:
             pass_no += 1
-            index = target_for(index)
+            index = _repeat_target(index, repeat_starts)
             continue
         index += 1
     return order
@@ -1499,6 +1529,41 @@ def _expand_repeats(
         return
 
     base = measure_numbers[0]
+    head.notes, head.chords, first_abs = _played_bars(
+        head, order, measure_numbers, base
+    )
+
+    # A backward repeat jumps back to a target - an explicit forward repeat, or the very
+    # start when the score marks none (both committed repeats do). The writers draw a
+    # `|:` there, so a target with no `<repeat direction="forward">` of its own still gets
+    # a `repeat_start` marker: the opening barline of `heres_that_rainy_day` carries no
+    # repeat sign in the file, yet a player reads one there.
+    head.markers = _played_markers(raw_markers, measure_numbers, first_abs)
+    head.measure_range = (base, base + len(order) - 1)
+    # The absolute -> written bar map, for the renderers that draw the signs: it is what
+    # lets them write the score the file actually contains rather than the played bars.
+    head.written_bars = {
+        base + index: measure_numbers[position]
+        for index, (position, _pass) in enumerate(order)
+    }
+
+
+def _played_bars(
+    head: Head,
+    order: List[Tuple[int, int]],
+    measure_numbers: List[int],
+    base: int,
+) -> Tuple[List[HeadNote], List[HeadChange], Dict[int, int]]:
+    """Every played pass, renumbered, plus each position's first absolute bar.
+
+    The `position -> absolute bar` map is what the markers are placed by, and it is
+    **first** pass deliberately: a repeat sign belongs where the section begins, not
+    on every bar it is played in.
+
+    A section played twice contributes its notes twice, which is the point - the
+    arrangement states them on every pass a player makes - and is why `bar` has to be
+    a unique absolute position rather than the written measure number.
+    """
     notes_by_bar: Dict[int, List[HeadNote]] = {}
     for note in head.notes:
         notes_by_bar.setdefault(note.written_bar, []).append(note)
@@ -1517,36 +1582,35 @@ def _expand_repeats(
             new_notes.append(replace(note, bar=absolute))
         for change in changes_by_bar.get(written, ()):
             new_changes.append(replace(change, bar=absolute))
-    head.notes = new_notes
-    head.chords = new_changes
+    return new_notes, new_changes, first_abs
 
-    # A backward repeat jumps back to a target - an explicit forward repeat, or the very
-    # start when the score marks none (both committed repeats do). The writers draw a
-    # `|:` there, so a target with no `<repeat direction="forward">` of its own still gets
-    # a `repeat_start` marker: the opening barline of `heres_that_rainy_day` carries no
-    # repeat sign in the file, yet a player reads one there.
+
+def _played_markers(
+    raw_markers: Dict[int, List[Tuple[str, Tuple[int, ...], int]]],
+    measure_numbers: List[int],
+    first_abs: Dict[int, int],
+) -> List[BarMarker]:
+    """The repeat and ending signs, on the absolute bars that carry them.
+
+    A backward repeat jumps back to a target - an explicit forward repeat, or the very
+    start when the score marks none (both committed repeats do). The writers draw a
+    `|:` there, so a target with no `<repeat direction="forward">` of its own still gets
+    a `repeat_start` marker: the opening barline of `heres_that_rainy_day` carries no
+    repeat sign in the file, yet a player reads one there.
+
+    A marker on a measure the expansion never played (an ending bracket no pass takes)
+    has no absolute bar to land on, so it is dropped rather than guessed.
+    """
     repeat_targets: Dict[int, None] = {}
+    starts = _repeat_start_positions(raw_markers)
     for position in sorted(raw_markers):
         for kind, _numbers, _times in raw_markers[position]:
             if kind == "repeat_end":
-                earlier = [
-                    p
-                    for p in sorted(raw_markers)
-                    if any(k == "repeat_start" for k, _n, _t in raw_markers[p])
-                    and p < position
-                ]
-                target = max(earlier) if earlier else 0
-                repeat_targets.setdefault(target, None)
-    marked_starts = {
-        position
-        for position in sorted(raw_markers)
-        if any(k == "repeat_start" for k, _n, _t in raw_markers[position])
-    }
+                repeat_targets.setdefault(_repeat_target(position, starts), None)
+    marked_starts = set(starts)
 
     markers: List[BarMarker] = []
     for position in sorted(raw_markers):
-        # A marker on a measure the expansion never played (an ending bracket no pass
-        # takes) has no absolute bar to land on, so it is dropped rather than guessed.
         absolute = first_abs.get(position)
         if absolute is None:
             continue
@@ -1571,14 +1635,7 @@ def _expand_repeats(
             )
             marked_starts.add(position)
     markers.sort(key=lambda m: (m.bar, m.kind))
-    head.markers = markers
-    head.measure_range = (base, base + len(order) - 1)
-    # The absolute -> written bar map, for the renderers that draw the signs: it is what
-    # lets them write the score the file actually contains rather than the played bars.
-    head.written_bars = {
-        base + index: measure_numbers[position]
-        for index, (position, _pass) in enumerate(order)
-    }
+    return markers
 
 
 def _read_notes(

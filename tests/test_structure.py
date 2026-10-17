@@ -88,7 +88,7 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/steps.py": Budget(1, 49, 15),
     "arranger/texture.py": Budget(11, 57, 6),
     "arranger/tuning.py": Budget(5, 28, 2),
-    "headxml.py": Budget(26, 125, 10),
+    "headxml.py": Budget(17, 125, 10),
     "grip_chart.py": Budget(14, 84, 5),
     "tabgp.py": Budget(27, 223, 13),
     "tabstaff.py": Budget(17, 195, 13),
