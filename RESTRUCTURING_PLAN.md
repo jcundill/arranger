@@ -7,7 +7,7 @@ pyright 0 errors 0 warnings). Measured invariants are never changed.
 ## Goal
 
 Restructure for coupling/cohesion/SOLID quality without changing any
-measured behaviour. The DAG (Phase 5) is the strongest asset; keep it,
+measured behaviour. The package DAG is the strongest asset; keep it,
 tighten encapsulation at the facade and module boundaries, and split
 the two god modules (`textures`, `movement`) by axis and route.
 
