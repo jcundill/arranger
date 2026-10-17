@@ -475,12 +475,18 @@ function-local `from tests.test_headxml import BUT_NOT_FOR_ME` lines are now one
 module-level import per file, and `DATA` moved with the head rather than being copied,
 so there is one spelling of the fixture directory.
 
-**Remaining, measured:** `test_walking_bass` still imports four names from
-`test_texture` at two sites - `MAJOR_CADENCE` and `MINOR_CADENCE` (fixtures, and they
-belong in `support` beside `BUT_NOT_FOR_ME`) and `major_cadence_tabs` /
-`minor_cadence_tabs` (engine-produced tab pins, the "cache of evidence" category the
-`support` docstring already describes). Move the two progressions first, re-run the two
-modules, then move the tab pins separately so a difference in the pins is attributable.
+**Fixtures complete.** The last crossing - `test_walking_bass` importing the two
+cadences and their tab pins from `test_texture` at two sites - is gone: all four live in
+`tests/support.py`, moved verbatim, and `grep -r 'from tests\.test_' tests/` returns
+nothing. The tab functions count as the "cache of evidence" the `support` docstring
+already carves out for `arranged`, and because they moved as text (AST-identical) rather
+than being re-derived, one commit could carry the fixtures and their pins together.
+
+A caution from that move, because it is trap 7's shape again: the first attempt edited
+`from tests.support import make_step, make_voicing` by string replacement, which matched
+two **function-local** lines inside methods rather than adding a module-level import, and
+ruff does not flag an unused function-local import. Edit import blocks by locating the
+module-level block, never by first match.
 
 Then the five monoliths, by the class clusters that already exist:
 
