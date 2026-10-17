@@ -55,7 +55,7 @@ from arranger.decisions import (
     resolve_texture_grips,
 )
 from arranger.grips import RIGHT_HAND_STRINGS, _interval_offsets, grip_pluck_count, thumb_safe_grips
-from arranger.textures import (
+from arranger.texture import (
     FILL_THINNING,
     THIN_ENTRIES,
     _metric_weight,

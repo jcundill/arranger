@@ -22,7 +22,9 @@ from dataclasses import dataclass
 from typing import Callable, Container, Mapping, Optional, Sequence, Tuple
 
 from .bass import BASS_STYLE_AUTO
-from .textures import GRID_DEFAULT, HARMONY_AUTO, PARTS_AUTO
+from .grid import GRID_DEFAULT
+from .harmony import HARMONY_AUTO
+from .parts import PARTS_AUTO
 from .tuning import MELODY_STRING_CHOICES_FULL, NECK_FRET_MAX, NECK_FRET_MIN
 
 # `(bar, beat, duration)` for one slot. `bar` is signed - a pickup is negative -
@@ -56,7 +58,7 @@ class ArrangeOptions:
     # default leaves it. `steps.py` reads the field back, which is what keeps
     # `--bass-style` live on the `arranger head` path.
     bass: str = BASS_STYLE_AUTO
-    # Which of melody / bass / chord the guitar takes, from `textures.py` (where
+    # Which of melody / bass / chord the guitar takes, from `parts.py` (where
     # `parse_parts` owns the vocabulary and `resolve_parts` expands the `auto`
     # sentinel to all three). The melody is the tune on top, the bass is the bottom
     # the thumb realises, and the chord is the harmonisation between them - whose
@@ -82,7 +84,7 @@ class ArrangeOptions:
     # `bass` above.
     parts: str = PARTS_AUTO
     # Which **degrees** this part states when it is not singing, from `HARMONY_STYLES`
-    # in `textures.py`: "guide" is the shipped comping shape (the 3rd and the 7th).
+    # in `harmony.py`: "guide" is the shipped comping shape (the 3rd and the 7th).
     #
     # A fourth axis, and orthogonal to the other three rather than another way of
     # spelling one of them - and that orthogonality is why it is separate from
@@ -100,7 +102,7 @@ class ArrangeOptions:
     # always said, so the axis is **inert by default** and every existing arrangement
     # is unaffected.
     harmony: str = HARMONY_AUTO
-    # Where a chord **falls** inside the bar, from `GRID_STYLES` in `textures.py`:
+    # Where a chord **falls** inside the bar, from `GRID_STYLES` in `grid.py`:
     # `every_note` (the default) places one wherever a melody note is, and the named
     # patterns place on beats and subdivisions instead.
     #

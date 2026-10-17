@@ -79,7 +79,7 @@ you whether a change is an improvement or a different library.
   an absolute onset, so the rule reads the metre it is given; `_metric_weight` and
   `_roles_for_slot` are the two functions that apply it. `TEXTURE_ARITY` is the
   chord part's arity per texture — `None` for `uniform` and `targets`, which are
-  the parts arithmetic (`textures.derived_arity`).
+  the parts arithmetic (`texture.derived_arity`).
 - `NECK_FRET_MIN` / `NECK_FRET_MAX` — `2` and `13`. A strong preference, never a
   filter; see the selector below.
 - `HIGH_FRET_LIMIT` — `13`. A melody whose only available position sits above this
@@ -1107,7 +1107,7 @@ comparison it should not be in. `parts="melody,bass"` is one selection plus a `b
 answer rather than a second mode: the thumb line is the bass part's own axis.
 
 A melody-only selection reaches `melody_alone_case` through the selection itself
-(`textures.parts_has_melody_only`), which is the fact that says the chord part is not the
+(`parts.parts_has_melody_only`), which is the fact that says the chord part is not the
 guitar's - not through a palette, because the empty palette that used to declare this is
 gone with the grip axis: no texture, selection or thumb line yields one now
 (`tests/test_texture.py` sweeps them all and requires a non-empty palette). The route is
@@ -1211,7 +1211,7 @@ refuses `auto` and `none` as rule names, and an unknown rule raises rather than
 defaulting to a walk.
 
 **One refusal rule, derived rather than listed: a thumb line needs one free bass
-string.** `thumb_capacity` computes it from `textures.texture_palette` and
+string.** `thumb_capacity` computes it from `texture.texture_palette` and
 `GRIP_STRING_SETS` — the left hand's palette is the whole question — so a texture added
 later cannot reach the thumb-line route without its capacity being measured too. Measured
 here:
@@ -1419,7 +1419,7 @@ has always offered for exactly that, so two voices take the `duo` sets and three
 `shell` sets unchanged.
 
 **On a position the guitar does not sing, the soprano's string is free.**
-`textures.comping_arity` drops the melody part from the arithmetic for that one slot,
+`texture.comping_arity` drops the melody part from the arithmetic for that one slot,
 because nothing is sounding on the string the tune would use — on a walked beat the note is
 held rather than re-struck, and on a comping slot it belongs to the horn. It is a fact about
 the *position*, not a rewrite of the selection: `parts_have_melody` still says whether the
@@ -1516,7 +1516,7 @@ it twice or hand the horn's line back to the guitarist.
 `harmony=` answers *which degrees* a stab states; this answers *where one lands*. A
 comping style needs both, and `bass=` supplies a third orthogonal question (what plays the
 bottom). The vocabulary is `GRID_PART_PATTERNS` + `GRID_STYLES` + `GRID_PATTERNS` in
-`textures.py`, with `parse_grid` / `resolve_grid` / `grid_allowed` /
+`grid.py`, with `parse_grid` / `resolve_grid` / `grid_allowed` /
 `grid_defers_to_melody` beside the other axes' functions. A row is written **`part:pattern`**
 — `chord:freddie`, `bass:walk` — so the axis is positions crossed with parts, and each part
 may have a row of its own. There is **no `auto` grid value**: `GRID_DEFAULT` is
@@ -1530,7 +1530,7 @@ position* rather than a beat number — `final_and` is 2.5 in 2/2, 3.5 in 3/4 an
 notated position is a float in practice (a 3/4 bar's second beat is 1.666...) and
 comparing floats for equality is a comparison that will eventually be false for the wrong
 reason — the same argument as `_BEAT_EPSILON`. The subdivision is
-`textures.TICKS_PER_BEAT = 24` — a beat in whole twenty-fourths, integer on purpose — so a
+`grid.TICKS_PER_BEAT = 24` — a beat in whole twenty-fourths, integer on purpose — so a
 position is a tick number and never a rounding of one.
 
 | pattern | positions | kind |

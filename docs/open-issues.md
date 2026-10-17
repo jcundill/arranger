@@ -69,7 +69,7 @@ melody slots — can only *keep* or *drop* a slot and can never *create* one.
   7 steps under `joe_pass`, sounding 1.5, 2.5 and 3.5 — none of them written onsets — and
   bar 3 (onsets 1, 2, 3, 4) yields 8 under the same grid on both routes. What the default
   lacked was positions of its own, and it has them now: **each bar is generated at its own
-  subdivision** (`textures.grid_resolutions`, converted through the metre so no bar is
+  subdivision** (`grid.grid_resolutions`, converted through the metre so no bar is
   generated finer than the sixteenth this library floors at), and the union takes those
   positions wherever the tune is **silent**. §9.2 still refuses a position the tune is
   *holding*, and that is why bar 4 of that head is unchanged under `every_note`: its beat 3
@@ -214,7 +214,7 @@ which weakens `harmony_allowed`'s "derived from arity" property (it would be the
 derived), or **build it**, which is [docs/history/comping-styles.md](history/comping-styles.md) §9.4's four-note
 comping chord — new string sets, deliberately not done. Recorded rather than fixed because it is
 a behaviour change on an axis whose document still lists four-note comping as a proposal. The
-*record* is now correct: `HARMONY_LENGTH` in `textures.py` names the two families with a fixed
+*record* is now correct: `HARMONY_LENGTH` in `harmony.py` names the two families with a fixed
 arity — `guide` (2) and `shell_root` (3) — and `full` is absent from it because its length is the
 chord's own tone set, which varies by quality and lives in `TONE_PRIORITY`.
 

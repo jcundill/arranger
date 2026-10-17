@@ -34,15 +34,10 @@ from musthe import Note
 
 from .chords import NON_CHORD_TONE_EXTENSIONS, ChordParser, normalised_harmony
 from .fingers import can_fret
-from .textures import (
-    _BEAT_EPSILON,
-    ROLE_FILL,
-    ROLE_TARGET,
-    TEXTURE_STYLES,
-    _metric_weight,
-    parts_have_bass,
-)
-from .tuning import NO_CHORD, STANDARD_TUNING, ArrangementStep, Voicing
+from .grid import _BEAT_EPSILON
+from .parts import parts_have_bass
+from .texture import TEXTURE_STYLES, _metric_weight
+from .tuning import NO_CHORD, ROLE_FILL, ROLE_TARGET, STANDARD_TUNING, ArrangementStep, Voicing
 
 # --- Walking bass ---
 #
@@ -163,7 +158,7 @@ def parse_bass_style(argument: str) -> Tuple[str, ...]:
     order, so `"approach,root"` and `"root,approach"` are two styles even though they
     admit the same roles. A repeat is dropped keeping its first occurrence, and nothing
     is re-sorted, for the same reason `grips.parse_grips` keeps its order and
-    `textures.parse_parts` does not (a sequence is ordered, a selection is a set).
+    `parts.parse_parts` does not (a sequence is ordered, a selection is a set).
 
     `none` and `auto` are **not** rules and are refused here: `none` is the absence of a
     style and `auto` is a default, both resolved before this runs. Refusing them keeps
@@ -1137,7 +1132,7 @@ def thumb_capacity(
     **The number a bass policy is checked against.** `_place_bass` skips whichever
     thumb strings the upper shape already speaks on, per note, so a thumb line is a
     question of *capacity* rather than of conflict - and the capacity is whatever the
-    texture's palette for this role may play, read from `textures.texture_palette` and
+    texture's palette for this role may play, read from `texture.texture_palette` and
     the string tables rather than listed here.
 
     Returns `None` for a palette that is empty, which means "the left hand plays
@@ -1154,7 +1149,8 @@ def thumb_capacity(
     # depending on the grip tables for its own sake - it does not, and only this one
     # capacity question does.
     from .grips import GRIP_STRING_SETS
-    from .textures import PART_NAMES, texture_palette
+    from .parts import PART_NAMES
+    from .texture import texture_palette
 
     families = texture_palette(
         role, texture, parts or PART_NAMES, has_thumb

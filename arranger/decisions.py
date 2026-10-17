@@ -47,7 +47,7 @@ def resolve_texture_grips(
     """Which grips this slot may use: the role's palette, under the hand's budget.
 
     `palette` is the texture's own answer for this role, from
-    `textures.texture_palette`: the grip families that state the arity the texture asks
+    `texture.texture_palette`: the grip families that state the arity the texture asks
     for. There is no caller-facing narrowing - the families are the chord part's
     **internal search space**, ranked by `GRIP_PREFERENCE` and decided by
     `TONE_PRIORITY` and the neck window - so the palette is the whole of what this
@@ -114,7 +114,7 @@ def melody_alone_case(
       is *defined* to be a single note. All three reach it the same way, and the
       condition is deliberately **two** clauses rather than one:
 
-      - `slot_grips == ()` is the declaration. `textures.texture_palette` returns an
+      - `slot_grips == ()` is the declaration. `texture.texture_palette` returns an
         empty palette for a slot the left hand plays nothing on - it never omits a
         key, so "nothing here" and "nothing said" stay different claims - and the loop
         hands an empty palette to a melody-only selection for the same reason. So this

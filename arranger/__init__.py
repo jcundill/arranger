@@ -1,15 +1,17 @@
 """`jazz-arranger`: playable jazz guitar chord-melody from a chord progression.
 
-This module is a **facade**. The engine is a package of fourteen modules with a
-strict dependency order, and nothing above imports anything below it by accident:
+This module is a **facade**. The engine is a package of modules with a strict
+dependency order, and nothing above imports anything below it by accident:
 
     tuning -> chords -> grips -> cost
                  |         |        |
-              textures   (grips)   bass
-                 |                    |
-              options ---------------> |
-                 |                    |
-              steps -> render -> (this module)
+              parts -> harmony/grid/texture
+                                        |
+                                     bass
+                                        |
+                                     options
+                                        |
+                                     steps -> render -> (this module)
 
 `fingers` is a second edge off `tuning`, and the diagram above omits it: it is the
 left-hand fingering module of `docs/history/fingering.md`, and `bass` is the one engine reader
@@ -35,7 +37,7 @@ the module's real surface so the two cannot drift.
 
 The facade re-exports the public surface only. Private helpers live in their
 home modules and tests import them from there (`arranger.bass`, `arranger.grips`,
-`arranger.render`, `arranger.textures`) rather than through `arranger`, so a
+`arranger.render`, `arranger.texture`) rather than through `arranger`, so a
 function that moves modules does not also have to move a re-export.
 """
 
@@ -47,7 +49,19 @@ from typing import TYPE_CHECKING, Any, List
 
 from musthe import Note  # re-exported: `from arranger import Note` is used by tests
 
-from . import cli, cost, decisions, fingers, movement, options, slots
+from . import (
+    cli,
+    cost,
+    decisions,
+    fingers,
+    grid,
+    harmony,
+    movement,
+    options,
+    parts,
+    slots,
+    texture,
+)
 from .bass import (
     BASS_ROLE_ANCHOR,
     BASS_ROLE_APPROACH,
@@ -79,20 +93,7 @@ from .chords import (
     normalised_harmony,
     sounding_harmony,
 )
-from .grips import (
-    BASS_DEGREES_6432,
-    DUO_DEGREES,
-    GRIP_MAX_SPAN,
-    GRIP_PREFERENCE,
-    GRIP_STRING_SETS,
-    SHELL_DEGREES,
-    get_comping_voicings,
-    supported_string_sets,
-)
-from .render import _print_step, format_progression
-from .slots import arrange_slots, parse_bar_range, unresolved_steps
-from .steps import StepPreparation, VoiceLeadingEngine
-from .textures import (
+from .grid import (
     ALL,
     GRID_ANCHORS,
     GRID_CHARLESTON,
@@ -106,6 +107,29 @@ from .textures import (
     GRID_STYLES,
     GRID_TIMELINE_PATTERNS,
     GRID_WALK,
+    LAST,
+    SUB,
+    TICKS_PER_BEAT,
+    GridPattern,
+    grid_allowed,
+    grid_defers_to_melody,
+    grid_positions,
+    grid_resolutions,
+    on_grid,
+    parse_grid,
+    resolve_grid,
+)
+from .grips import (
+    BASS_DEGREES_6432,
+    DUO_DEGREES,
+    GRIP_MAX_SPAN,
+    GRIP_PREFERENCE,
+    GRIP_STRING_SETS,
+    SHELL_DEGREES,
+    get_comping_voicings,
+    supported_string_sets,
+)
+from .harmony import (
     HARMONY_AUTO,
     HARMONY_AUTO_POLICIES,
     HARMONY_FULL,
@@ -113,39 +137,33 @@ from .textures import (
     HARMONY_LENGTH,
     HARMONY_SHELL_ROOT,
     HARMONY_STYLES,
-    LAST,
+    harmony_allowed,
+    parse_harmony,
+    resolve_harmony,
+)
+from .parts import (
     PART_BASS,
     PART_CHORD,
     PART_MELODY,
     PART_NAMES,
     PARTS_AUTO,
-    ROLE_FILL,
-    ROLE_TARGET,
-    SUB,
-    TARGET_BEATS,
-    TEXTURE_ARITY,
-    TEXTURE_STYLES,
-    TICKS_PER_BEAT,
-    GridPattern,
-    comping_arity,
-    derived_arity,
-    families_for_arity,
-    grid_allowed,
-    grid_defers_to_melody,
-    grid_positions,
-    grid_resolutions,
-    harmony_allowed,
-    on_grid,
-    parse_grid,
-    parse_harmony,
     parse_parts,
     parts_has_melody_only,
     parts_have_bass,
     parts_have_chord,
     parts_have_melody,
-    resolve_grid,
-    resolve_harmony,
     resolve_parts,
+)
+from .render import _print_step, format_progression
+from .slots import arrange_slots, parse_bar_range, unresolved_steps
+from .steps import StepPreparation, VoiceLeadingEngine
+from .texture import (
+    TARGET_BEATS,
+    TEXTURE_ARITY,
+    TEXTURE_STYLES,
+    comping_arity,
+    derived_arity,
+    families_for_arity,
     texture_arity,
     texture_palette,
 )
@@ -158,6 +176,8 @@ from .tuning import (
     NECK_FRET_MIN,
     NO_CHORD,
     PITCH_CLASS_NAMES,
+    ROLE_FILL,
+    ROLE_TARGET,
     SILENCE_GRID,
     SILENCE_NC_COMPING,
     SILENCE_NO_SHAPE,
@@ -535,18 +555,21 @@ __all__ = [
     "format_tab_html",
     "format_tab_staff",
     "get_comping_voicings",
+    "grid",
     "grips",
+    "harmony",
     "main",
     "normalised_harmony",
     "movement",
     "options",
+    "parts",
     "render",
     "slots",
     "sounding_harmony",
     "steps",
     "supported_string_sets",
     "thumb_capacity",
-    "textures",
+    "texture",
     "tuning",
     "unresolved_steps",
     "write_musicxml",

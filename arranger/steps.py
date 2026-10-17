@@ -31,11 +31,13 @@ from .chords import (
     NON_CHORD_TONE_EXTENSIONS,
     NON_CHORD_TONE_STRATEGIES,
 )
+from .grid import GRID_DEFAULT
 from .grips import (
     GRIP_PREFERENCE,
     MELODY_STRING_CHOICES,
     MELODY_STRING_CHOICES_FULL,
 )
+from .harmony import HARMONY_AUTO
 from .movement import (
     StepPreparation,
     _attach_bass,
@@ -43,11 +45,7 @@ from .movement import (
     prepare_step,
 )
 from .options import ArrangeOptions
-from .textures import (
-    GRID_DEFAULT,
-    HARMONY_AUTO,
-    PARTS_AUTO,
-)
+from .parts import PARTS_AUTO
 from .tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,

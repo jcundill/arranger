@@ -56,33 +56,34 @@ from .decisions import (
     should_demote_to_melody_alone,
     should_promote_fill,
 )
+from .grid import GRID_DEFAULT, on_grid, parse_grid, resolve_grid
 from .grips import (
     GRIP_MAX_SPAN,
     GRIP_PREFERENCE,
     MELODY_STRING_CHOICES_FULL,
 )
-from .options import ArrangeOptions
-from .textures import (
-    GRID_DEFAULT,
+from .harmony import (
     HARMONY_AUTO,
     HARMONY_SHELL_ROOT,
+    parse_harmony,
+    resolve_harmony,
+)
+from .options import ArrangeOptions
+from .parts import (
     PART_BASS,
     PARTS_AUTO,
+    parse_parts,
+    parts_has_melody_only,
+    parts_have_bass,
+    parts_have_melody,
+    resolve_parts,
+)
+from .texture import (
     TEXTURE_STYLES,
     _metric_weight,
     _roles_for_slot,
     comping_arity,
     derived_arity,
-    on_grid,
-    parse_grid,
-    parse_harmony,
-    parse_parts,
-    parts_has_melody_only,
-    parts_have_bass,
-    parts_have_melody,
-    resolve_grid,
-    resolve_harmony,
-    resolve_parts,
     texture_palette,
 )
 from .tuning import (
@@ -225,8 +226,8 @@ def _resolve_parts(parts: str) -> Tuple[str, ...]:
 
     Two steps and they are not the same step. **Parsing** turns the caller's string into
     a canonical tuple of part names, so `bass,melody` and `melody,bass` are one request -
-    `textures.parse_parts` owns the vocabulary and the canonical order. **Resolution** is
-    what `textures.resolve_parts` owns: `auto` becomes every part.
+    `parts.parse_parts` owns the vocabulary and the canonical order. **Resolution** is
+    what `parts.resolve_parts` owns: `auto` becomes every part.
 
     An unknown part name raises from `parse_parts`, before any voicing work, on the
     library's standing rule: a spelling nobody recognises is a question, and answering it
@@ -242,7 +243,7 @@ def _resolve_harmony(
     """The degree family to actually voice: `auto` resolved, parsed, validated.
 
     The same two-step shape as `_resolve_melody` above - parse, then resolve - because
-    it is the same rule about the same thing: `textures` owns the vocabulary and the
+    it is the same rule about the same thing: `parts` owns the vocabulary and the
     validation, this function owns nothing but the wiring.
 
     Takes **no texture**, and that is deliberate rather than an oversight: whether a
@@ -260,7 +261,7 @@ def _resolve_grid(grid: str, beats_per_bar: int) -> str:
     """The grid to place chords on: parsed, `auto` resolved, validated.
 
     The same two-step shape as `_resolve_melody` and `_resolve_harmony` above,
-    because it is the same rule about the same kind of thing: `textures` owns the
+    because it is the same rule about the same kind of thing: `harmony` owns the
     vocabulary and the validation, this function owns only the wiring.
 
     **Takes the metre rather than a texture**, and that is what distinguishes it from
@@ -646,7 +647,7 @@ def _resolve_policies(
 
     **The melody axis comes before `_resolve_bass` because the bass policy needs
     to know which route the engine is on**, and only this function knows.
-    `bass_allowed` measures thumb capacity against `textures.texture_palette`, which
+    `bass_allowed` measures thumb capacity against `texture.texture_palette`, which
     describes the shapes the melody-bearing route generates and is *inert* on the
     comping one - so asking it about a texture on that route refused a
     combination that is playable and, worse, told the player to change a setting
@@ -2063,7 +2064,7 @@ def _slot_state(
     #
     # `on_grid` is read from the **slot's own beat**, not from the bar it sits
     # in: the grid is bar-relative, so the same beat number means different
-    # positions in different bars of different metres, and `textures.on_grid`
+    # positions in different bars of different metres, and `grid.on_grid`
     # is the one place that knows the metre.
     #
     # `melody_voiced` here is the **per-slot** `sings_here`, not the route: a

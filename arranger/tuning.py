@@ -9,8 +9,8 @@ them, and that placement is what keeps the package acyclic:
 
 - `grips` *constructs* a `Voicing`, so `Voicing` has to be below `grips`;
 - `Voicing.role` and `ArrangementStep.role` both default to `ROLE_TARGET`, so the
-  role vocabulary has to be below `grips` and `textures` alike. `ROLE_TARGET` and
-  `ROLE_FILL` are therefore *defined* here and re-exported by `textures`, rather
+  role vocabulary has to be below `grips` and `texture` alike. `ROLE_TARGET` and
+  `ROLE_FILL` are therefore *defined* here and re-exported by `texture`, rather
   than the other way round;
 - `Voicing.tab_block` calls `_cells_from_frets` / `_tab_block_from_cells`, so the
   tab-cell primitives have to be below `Voicing` too, and `render` imports them

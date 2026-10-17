@@ -1309,7 +1309,7 @@ def _shell_voicing(
     degree underneath them, so the ear hears which chord it is as well as what quality.
     It is checked as the conjunction of the two rules above rather than as a third list,
     which is why it can be added without deciding anything new about degrees - see
-    `HARMONY_STYLES` in `textures.py`, which is where the *vocabulary* lives.
+    `HARMONY_STYLES` in `harmony.py`, which is where the *vocabulary* lives.
     """
     guide = SHELL_DEGREES.get(canonical)
     if guide is None:

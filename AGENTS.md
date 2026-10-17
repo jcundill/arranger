@@ -22,17 +22,17 @@ gate and the conventions — not the explanation.
 | where a **lone note** is fretted — a fill, an `NC` bar, a rescued melody, a span demotion (`get_melody_only_voicings`, `_melody_alone_shape`) | [docs/engine.md](docs/engine.md) | `arranger/grips.py`, `arranger/movement.py`, `tests/test_non_chord_tones.py` |
 | which chord tones a shape states — `TONE_PRIORITY`, the tone a four-voice shape gives up, the palette a melody with no degree to match is offered, or the order that was not taken | [docs/history/generated-grips.md](docs/history/generated-grips.md) | `arranger/grips.py` (`TONE_PRIORITY`, `stated_tones`, `_drop2_template_for`, `_drop2_palette`), `tests/test_generated_grips.py`, `tests/support.py` (`WITNESS`) |
 | the trailing annotation a step carries, why a shape is thin, or what **must** be explained when a choice is added (`ArrangementStep.palette`, `cost.VOICING_COST_CRITERIA`, `tests/test_explanations.py`) | [docs/engine.md](docs/engine.md) | `arranger/render.py`, `arranger/movement.py` |
-| `texture=`, target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/textures.py`, `arranger/bass.py`, `arranger/decisions.py` |
+| `texture=`, target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/texture.py`, `arranger/bass.py`, `arranger/decisions.py` |
 | non-chord melody notes, a new chord quality | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` |
 | the step loop, `arrange_progression` | [docs/engine.md](docs/engine.md) | `arranger/movement.py` |
 | tab staff, HTML, MusicXML, GP5, or the MusicXML importer | [docs/renderers.md](docs/renderers.md) | `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py` |
 | an imported head's **repeats or volta endings** — why it is longer than the file's measure count, or the `|:` / `:|` / `1.` / `2.` the writers draw | [docs/renderers.md](docs/renderers.md) | `headxml.py` (`_parse_barline`, `_expand_play_order`, `_expand_repeats`, `BarMarker`, `Head.markers`, `HeadNote.written_bar`); each writer's `markers=` parameter |
 | the slot layer: triples to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
-| the MusicXML **importer's chord timeline**, or a bar the melody skips | [docs/open-issues.md](docs/open-issues.md) item 1 | `headxml.py` (`chord_at`, `chord_slots`, `_merge_chord_slots`, `_generated_beats`, `_bar_resolution`, `_tick_key`) and `textures.py` (`grid_resolutions`, `TICKS_PER_BEAT`) — **built in full**: the default grid generates a chord at each bar's own subdivision, the union takes those positions wherever the tune is *silent*, and §9.2 refuses the ones it is still **holding**. Measured at **88 steps** across the eight heads. The fifth `melody_alone_case` kind the item predicted proved **not to be owed** — §9.3 step D already routes a note-less grid position through the comping branch. **Item 6 is the edge of that refusal** — the instant a note *stops* sounding counts as one it still holds, so the grid declines a position the tune has left (`headxml.melody_at`, `melody_state`; the item carries the measurement) |
+| the MusicXML **importer's chord timeline**, or a bar the melody skips | [docs/open-issues.md](docs/open-issues.md) item 1 | `headxml.py` (`chord_at`, `chord_slots`, `_merge_chord_slots`, `_generated_beats`, `_bar_resolution`, `_tick_key`) and `grid.py` (`grid_resolutions`, `TICKS_PER_BEAT`) — **built in full**: the default grid generates a chord at each bar's own subdivision, the union takes those positions wherever the tune is *silent*, and §9.2 refuses the ones it is still **holding**. Measured at **88 steps** across the eight heads. The fifth `melody_alone_case` kind the item predicted proved **not to be owed** — §9.3 step D already routes a note-less grid position through the comping branch. **Item 6 is the edge of that refusal** — the instant a note *stops* sounding counts as one it still holds, so the grid declines a position the tune has left (`headxml.melody_at`, `melody_state`; the item carries the measurement) |
 | an open bug, with its measurement | [docs/open-issues.md](docs/open-issues.md) | — the figures and the behaviour are that document's own business; no test compares them with the prose or is keyed to these items |
 | which finger frets which string, or a per-finger cost criterion; which strings the right hand's `p-i-m-a` pluck, the gaps between them, and how far the thumb reaches | [docs/history/fingering.md](docs/history/fingering.md) | `arranger/fingers.py` (not inert any more: `bass` reads `can_fret` for the four-fret budget — `tests/test_fingers.py` holds the caller set to exactly `{bass}`; no per-finger cost yet). Its §4.3 measurement landed a *right-hand* rule first (`grips.thumb_safe_grips`, read by `decisions.resolve_texture_grips`) and then a *left-hand* one (`fingers.can_fret`, read by `bass._place_bass`); its **§4.4 finger-skip half is now built**, not recorded: the four `drop24` sets that carried the skip were removed from `GRIP_STRING_SETS` (`grips.finger_skip_count` is the rule and `tests/test_grips.py` holds the tables to it), at a price counted in chords, and the three rejected forms of the same lever are in §4.4 rather than here. Its thumb's-reach half still changes no count (`tests/test_texture.py::TestTheThumbReach` pins the reach), and §4.3's follow-on (should the *selector* leave room for the thumb?) is measured and unbuilt, and its numbers are in §4.3 and [docs/open-issues.md](docs/open-issues.md) item 2 rather than here: that item is where they are re-measured by hand, so a figure repeated in this table would be a second source for one fact. Its **fourth lever — the walk's own pitch — costs the tuple nothing** and is the cheapest of the four; **item 5** of that document is the same §4.3 question asked from the lone-note end, where the walk's register is what leaves the hand's reach |
-| `parts=`, which of melody / bass / chord the guitar plays | [docs/engine.md](docs/engine.md) | `arranger/textures.py` (`PART_NAMES`, `parse_parts`, `parts_have_melody`, `parts_has_melody_only`) |
-| the harmonisation axes (`parts=`, `texture=`, `harmony=`, `bass=`, `grid=`) — the four-string arithmetic, and what replaced `voices=` and the grip-family axis | [docs/engine.md](docs/engine.md) | `arranger/textures.py`, `arranger/bass.py`, `arranger/grips.py` |
+| `parts=`, which of melody / bass / chord the guitar plays | [docs/engine.md](docs/engine.md) | `arranger/parts.py` (`PART_NAMES`, `parse_parts`, `parts_have_melody`, `parts_has_melody_only`) |
+| the harmonisation axes (`parts=`, `texture=`, `harmony=`, `bass=`, `grid=`) — the four-string arithmetic, and what replaced `voices=` and the grip-family axis | [docs/engine.md](docs/engine.md) | `arranger/parts.py`, `arranger/harmony.py`, `arranger/grid.py`, `arranger/texture.py`, `arranger/bass.py`, `arranger/grips.py` |
 | the step/voicing mirrored fields (`step.grip`, `step.bass`), or which selection is melody-only | [docs/engine.md](docs/engine.md), and [docs/history/one-fact.md](docs/history/one-fact.md) for why | `arranger/tuning.py`, `arranger/movement.py` |
 | how something was decided, historically — `voices=`, the comping styles, the parts redesign, the generated grips, the fingering notes, the Stage-2 collapse | [docs/history/](docs/history/) | — |
 | user-facing behaviour and examples | [README.md](README.md) | — |
@@ -74,7 +74,7 @@ did exactly this, and it only raised when a diminished retry had something to re
 
 **`harmony=` was added by following that rule, and the three traps below are what it cost.**
 `HARMONY_STYLES` + `HARMONY_POLICIES` + `HARMONY_AUTO` + `harmony_allowed` in
-`textures.py`, resolved once per arrangement next to `_resolve_melody`, and inert twice
+`harmony.py`, resolved once per arrangement next to `_resolve_melody`, and inert twice
 over: `auto` resolves to the shipped `guide`, and the axis is read only by the comping
 route, so it cannot touch a melody-bearing arrangement. Three things to know before adding
 a fifth:
@@ -131,7 +131,10 @@ arranger/
 │   ├── chords.py        #   ChordParser, non-chord-tone routing
 │   ├── grips.py         #   grip tables and the candidate generators
 │   ├── cost.py          #   voicing_cost - the library's central invariant
-│   ├── textures.py      #   metric roles: what a slot is for
+│   ├── parts.py         #   which of melody / bass / chord the guitar takes
+│   ├── harmony.py       #   which degrees the chord part states
+│   ├── grid.py          #   when each part sounds
+│   ├── texture.py       #   how many notes the chord part states; metric roles
 │   ├── bass.py          #   the walking-bass thumb line
 │   ├── options.py       #   ArrangeOptions - the knobs as one value
 │   ├── decisions.py     #   decisions both step loops share
@@ -164,12 +167,12 @@ dynamically from `arranger.__version__` — that is the single source of truth.
 ### The engine is a package, and the order is enforced
 
 The engine was one 4290-line module until Phase 5 of the package refactor. It is
-now fourteen modules in a strict dependency order:
+now a package of focused modules in a strict dependency order:
 
 ```
-tuning -> fingers -> chords -> grips -> cost -> textures
-                                                   |
-                            bass <- options -----+----> decisions
+tuning -> fingers -> chords -> grips -> cost -> parts -> harmony -> grid -> texture
+                                                                                 |
+                            bass <- options -------------------------------------+
                                                    |
                                           movement -> steps -> slots -> render -> cli
                                                         |              |
@@ -648,7 +651,7 @@ Each of these cost real time, or nearly shipped a defect.
     positional written after it, so `head --grips shell FILE` fed the **filename** to
     `--grips` and reported `invalid choice: 'tests/data/...'` — the flag worked only
     after the file. Every list-valued option is one comma-separated string now, parsed by
-    the module that owns the vocabulary - `textures.parse_parts` for `--parts` - so
+    the module that owns the vocabulary - `parts.parse_parts` for `--parts` - so
     `head --parts melody,chord FILE` and `head FILE --parts melody,chord` are one run.
     **Two things to carry forward: a list-valued option is one string the module that
     owns the vocabulary parses, never `nargs`; and a parser's own output is

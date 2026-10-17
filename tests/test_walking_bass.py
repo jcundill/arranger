@@ -70,8 +70,9 @@ from arranger.bass import (
     _walking_slots,
     parse_bass_style,
 )
+from arranger.parts import PART_NAMES
 from arranger.render import _step_annotation
-from arranger.textures import PART_NAMES, texture_palette
+from arranger.texture import texture_palette
 from tabgp import _sounding_frets
 from tabstaff import _strikes_here
 from tests.support import (

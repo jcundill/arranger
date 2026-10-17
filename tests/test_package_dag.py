@@ -41,7 +41,10 @@ ORDER = [
     "chords",       # chord symbols and the non-chord-tone routing
     "grips",        # the grip tables, builders and candidate generators
     "cost",         # voicing_cost: which candidate is played
-    "textures",     # metric roles: what a slot is for
+    "parts",        # the parts axis: which of melody / bass / chord the guitar takes
+    "harmony",      # the harmony axis: which degrees the chord part states
+    "grid",         # the grid axis: when each part sounds
+    "texture",      # the texture axis: how many notes the chord part states
     "bass",         # the walking-bass thumb line
     "options",      # the knobs, as one value
     "decisions",    # the decisions both step loops share
@@ -55,13 +58,11 @@ ORDER = [
 # The edges the split could not avoid, each with the reason it is sound. Anything
 # added here has to justify itself in a comment - that is the point of the list.
 ALLOWED_EDGES: Dict[str, Set[str]] = {
-    # `Voicing.role` and `ArrangementStep.role` both default to `ROLE_TARGET`,
-    # which `textures` owns by policy, so `tuning` defines the two labels and
-    # `textures` re-exports them. One definition, two spellings.
-    "textures": {"tuning"},
-    # The walking bass reads the metric grid, and reads chord tones and the
-    # extension table: it is built on top of both, not beside them.
-    "bass": {"tuning", "chords", "textures"},
+    # The four axis modules sit between `cost` and `bass`. `harmony` and `grid`
+    # read the parts vocabulary, and `texture` reads `grips` and `parts`; every
+    # one of those is above it in ORDER, so no explicit edge is required. The
+    # entries below are kept only where an edge points *down* the list.
+    #
     # `decisions.select_step_voicing` is the corpus's slash-bass rule and needs the
     # engine's own cost function. `steps` imports `decisions`, so this edge has to
     # point down - which is why it imports `cost` and never `steps`.

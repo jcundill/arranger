@@ -17,7 +17,7 @@ function body - which is also what leaves `headxml`'s `load_musicxml` cheap.
 
 This module sits **last** in `tests/test_package_dag.py`'s `ORDER`: it reads
 `NECK_FRET_MIN`/`MAX` from `tuning`,
-`NON_CHORD_TONE_STRATEGIES` from `chords`, `TEXTURE_STYLES` from `textures` and
+`NON_CHORD_TONE_STRATEGIES` from `chords`, `TEXTURE_STYLES` from `texture` and
 `format_progression` from `render`, and is imported by nothing below it. It needs
 no `ALLOWED_EDGES` entry, which is the test that a new module was placed by its
 edges rather than appended.
@@ -30,14 +30,11 @@ from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, 
 
 from .bass import BASS_STYLE_AUTO
 from .chords import NON_CHORD_TONE_STRATEGIES
+from .grid import GRID_DEFAULT
+from .harmony import HARMONY_AUTO, HARMONY_STYLES
+from .parts import PARTS_AUTO
 from .render import format_progression
-from .textures import (
-    GRID_DEFAULT,
-    HARMONY_AUTO,
-    HARMONY_STYLES,
-    PARTS_AUTO,
-    TEXTURE_STYLES,
-)
+from .texture import TEXTURE_STYLES
 from .tuning import NECK_FRET_MAX, NECK_FRET_MIN, ArrangementStep
 
 if TYPE_CHECKING:  # pragma: no cover - the annotations are strings at runtime

@@ -25,9 +25,11 @@ from typing import Container, Dict, List, Optional, Sequence, Tuple
 
 from musthe import Note
 
+from arranger.grid import GRID_DEFAULT
 from arranger.options import ArrangeOptions
+from arranger.parts import PARTS_AUTO
 from arranger.steps import VoiceLeadingEngine
-from arranger.textures import GRID_DEFAULT, PARTS_AUTO, TEXTURE_STYLES
+from arranger.texture import TEXTURE_STYLES
 from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES, ArrangementStep
 
 __all__ = [
