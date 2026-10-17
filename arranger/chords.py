@@ -372,7 +372,7 @@ def resolve_non_chord_tone(
         return None
 
     if strategy == "diminished":
-        target_pc = _resolution_pitch_class(melody_note, root_str, canonical, next_melody)
+        target_pc = resolution_pitch_class(melody_note, root_str, canonical, next_melody)
         if target_pc is None:
             return None
         # A dim7 is symmetrical, so naming the root a semitone below the
@@ -422,7 +422,7 @@ def resolve_substitute_harmony(
     return resolved[0], resolved[1], strategy
 
 
-def _resolution_pitch_class(
+def resolution_pitch_class(
     melody_note: Note,
     root_str: str,
     canonical_type: str,

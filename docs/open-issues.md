@@ -136,7 +136,7 @@ position inside it.
 left room for the thumb in the first place.
 
 **The issue.** `_place_bass` refuses a candidate and the step keeps its upper voicing.
-`ArrangementStep.bass_refused` records the wanted pitch class and `render._bass_refusal_clause`
+`ArrangementStep.bass_refused` records the wanted pitch class and `annotation._bass_refusal_clause`
 phrases it on the tab line, so the omission is reported on the part rather than in a collector.
 
 **The problem.** Over the eight committed heads × the four rows that place a thumb note under a

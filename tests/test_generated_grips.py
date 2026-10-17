@@ -112,7 +112,7 @@ class TestTheRuleReproducesTheTables(unittest.TestCase):
 
         The aliases (`min7`, `dom7`, `min7b5`, `mmaj7` and the rest) have no priority row
         of their own, so the rule itself answers nothing for them. They work because
-        `_chord_context` canonicalises the quality before the rule is asked, and this is
+        `chord_context` canonicalises the quality before the rule is asked, and this is
         what says so - on the route a caller takes, not on a table key.
         """
         aliases = [

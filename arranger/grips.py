@@ -632,12 +632,12 @@ def _drop2_palette(quality: str) -> List[List[int]]:
 
 
 
-def _parse_chord_name(name: str) -> Tuple[Optional[str], Optional[str]]:
+def parse_chord_name(name: str) -> Tuple[Optional[str], Optional[str]]:
     """Delegates to ChordParser for backward compatibility."""
     return ChordParser.parse_chord_name(name)
 
 
-def _string_sets_for(grip: str, top_string: int) -> List[Tuple[int, ...]]:
+def string_sets_for(grip: str, top_string: int) -> List[Tuple[int, ...]]:
     """
     Every string set `grip` can occupy with its soprano on `top_string`, each
     **ordered from the soprano downwards**, which is the order place_template
@@ -698,7 +698,7 @@ def _string_sets_for(grip: str, top_string: int) -> List[Tuple[int, ...]]:
     return sets
 
 
-def _chord_context(
+def chord_context(
     chord_type: str, chord_name: Optional[str]
 ) -> Tuple[str, Optional[int], Tuple[int, ...]]:
     """
@@ -927,7 +927,7 @@ def _search_comping_voicings(
     outside the window is still generated and still playable, because losing a chord
     of the tune is worse than being a fret out of position.
     """
-    canonical, root_pc, tones = _chord_context(chord_type, chord_name)
+    canonical, root_pc, tones = chord_context(chord_type, chord_name)
     # No root, no claim to make: a guide tone is a claim about *this* chord's 3rd and
     # 7th, and guessing them without a root is how a wrong note gets in. The same
     # rule, and the same reason, as `get_grip_voicings`'s shell and duo branches.
@@ -1084,7 +1084,7 @@ def get_grip_voicings(
     if top_fret < 0 or top_fret > 18:
         return []
 
-    canonical, root_pc, tones = _chord_context(chord_type, chord_name)
+    canonical, root_pc, tones = chord_context(chord_type, chord_name)
 
     # The chord's tones as pitch classes: what `candidate` holds a searched shape's own
     # notes to. Computed once, because every searched family measures the same chord.
@@ -1094,7 +1094,7 @@ def get_grip_voicings(
 
     valid_voicings: List[Voicing] = []
     for grip in grips:
-        for strings in _string_sets_for(grip, top_string):
+        for strings in string_sets_for(grip, top_string):
             if grip not in _SEARCHED_GRIPS:
                 # A layout family: each template *is* a shape, so each is placed in turn.
                 for template in _templates_for(
@@ -1170,7 +1170,7 @@ def get_interval_voicings(
     )
 
 
-def _lower_soprano_strings(top_strings: Tuple[int, ...]) -> Tuple[int, ...]:
+def lower_soprano_strings(top_strings: Tuple[int, ...]) -> Tuple[int, ...]:
     """
     The subset of `top_strings` below the high E, so a transposed melody is voiced
     on the B string rather than back on the high E. Falls back to `top_strings`
@@ -1211,7 +1211,7 @@ def _melody_only_string_groups(
     for string_index in prefer:
         if 0 <= string_index <= top and string_index not in named:
             named += (string_index,)
-    lower = _lower_soprano_strings(named)
+    lower = lower_soprano_strings(named)
 
     def rest(excluded: Tuple[int, ...]) -> Tuple[int, ...]:
         """Every string not in `excluded`, from the highest sounding one down."""
@@ -1283,7 +1283,7 @@ def get_octave_down_candidates(
         octave_down,
         chord_type,
         chord_name=chord_name,
-        top_strings=_lower_soprano_strings(top_strings),
+        top_strings=lower_soprano_strings(top_strings),
         grips=grips,
     )
 

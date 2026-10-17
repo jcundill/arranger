@@ -853,7 +853,7 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
         """A guitarist with no melody on their part must be told why the chord moved.
 
         Asserted on the step's `harmonized_as` and `strategy`, which are the fields
-        `render._substitution_clause` reads - so this is the same fact the tab line
+        `annotation._substitution_clause` reads - so this is the same fact the tab line
         phrases, rather than a second spelling of it. One triple in, one step out:
         the fixture is a single slot, so a second element would mean the route
         duplicated it.

@@ -50,11 +50,11 @@ from arranger.grip_place import (
     search_shape,
 )
 from arranger.grips import (
-    _chord_context,
     _drop2_6432_request,
     _shell_request,
-    _string_sets_for,
+    chord_context,
     get_grip_voicings,
+    string_sets_for,
 )
 
 HEADS = sorted(glob.glob("tests/data/*.musicxml") + glob.glob("tests/data/*.mxl"))
@@ -78,12 +78,12 @@ CASES = [
 def _context(chord_name: str) -> Tuple[str, int, Tuple[int, ...]]:
     """The canonical quality, the root's pitch class and the chord's tones as degrees.
 
-    Read through the engine's own `_chord_context`, because what the search is handed is
+    Read through the engine's own `chord_context`, because what the search is handed is
     what the families hand it. The question this file asks is what the *search* does with a
     request, not how the request is derived.
     """
     _, quality = ChordParser.parse_chord_name(chord_name)
-    canonical, root_pc, tones = _chord_context(quality or chord_name, chord_name)
+    canonical, root_pc, tones = chord_context(quality or chord_name, chord_name)
     assert root_pc is not None
     return canonical, root_pc, tones
 
@@ -191,11 +191,11 @@ def _requests(
         return []
     allowed = _allowed_for(canonical, root_pc, tones)
     requests: List[Tuple[Placement, FrozenSet[int]]] = []
-    for strings in _string_sets_for("shell", top_string):
+    for strings in string_sets_for("shell", top_string):
         request = _shell_request(canonical, root_pc, strings, melody_midi, top_fret)
         if request is not None:
             requests.append((request, allowed))
-    for strings in _string_sets_for("drop2_6432", top_string):
+    for strings in string_sets_for("drop2_6432", top_string):
         requests.append(
             (_drop2_6432_request(root_pc, strings, melody_midi, top_fret), allowed)
         )
@@ -341,7 +341,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
         melody = Note("B4")
         base = Placement(
             grip="drop2_6432",
-            strings=_string_sets_for("drop2_6432", 4)[0],
+            strings=string_sets_for("drop2_6432", 4)[0],
             melody_midi=melody.midi_note(),
             top_fret=GuitarFretboard.note_to_fret(4, melody),
             required=frozenset(),
@@ -366,7 +366,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
         canonical, root_pc, tones = _context("Cmaj7")
         request = _drop2_6432_request(
             root_pc,
-            _string_sets_for("drop2_6432", 4)[0],
+            string_sets_for("drop2_6432", 4)[0],
             Note("B4").midi_note(),
             GuitarFretboard.note_to_fret(4, Note("B4")),
         )

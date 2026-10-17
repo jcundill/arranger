@@ -749,7 +749,7 @@ class TestEventsWithNoSteps(unittest.TestCase):
         to raise. The pickup is 0 because there is no first note to measure it
         from - the same answer a head that starts on a downbeat gets.
         """
-        from tabxml import score_events
+        from tabscore import score_events
 
         self.assertEqual(score_events([], 4, True), ([], 0.0))
         self.assertEqual(score_events([], 4, False), ([], 0.0))

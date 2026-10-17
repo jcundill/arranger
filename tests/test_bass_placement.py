@@ -708,7 +708,7 @@ class TestTheRefusal(unittest.TestCase):
 
         Read off the rendered **line** rather than off `step.bass_refused`, because the
         field carries the wanted pitch class alone and the enumeration of causes is
-        `render._bass_refusal_clause`'s. That split is deliberate: the tab cannot show
+        `annotation._bass_refusal_clause`'s. That split is deliberate: the tab cannot show
         which note went missing, so the field names it and the clause explains it.
         """
         held = make_step([-1, 9, -1, 8, 12, 10], chord="Bmaj7", melody="F#4")
@@ -1059,7 +1059,7 @@ class TestASingleNoteStepHasNothingToHold(unittest.TestCase):
 class TestUpperVoicesExcludeTheThumbByStringNotPosition(unittest.TestCase):
     """`upper_midi_notes` must drop the thumb by **string**, never by list position.
 
-    Both renderers read this to decide hold-versus-strike, and `_step_annotation` reads
+    Both renderers read this to decide hold-versus-strike, and `step_annotation` reads
     it to name an interval or a duo, so getting it wrong is not cosmetic: it returns the
     wrong *notes*.
 

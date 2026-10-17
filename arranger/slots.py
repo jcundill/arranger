@@ -178,7 +178,7 @@ def arrange_slots(
     signed bar, the beat within it, and a length in whole notes. The duration is
     **optional per slot and `None` in practice**: it is a *notated* length, and a
     caller reading performed durations off a database has nothing of the kind -
-    handing one to `tabxml.score_events`, which caps a step's span by it, truncates
+    handing one to `tabscore.score_events`, which caps a step's span by it, truncates
     every chord to a fraction of its real length. So `headxml` supplies one and a
     caller with no written rhythm may not. The whole sequence is optional too and
     indexed defensively, so a hand-built sequence without timings still arranges -

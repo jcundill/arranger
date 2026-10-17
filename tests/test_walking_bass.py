@@ -35,6 +35,7 @@ from arranger import (
     ROLE_TARGET,
     VoiceLeadingEngine,
 )
+from arranger.annotation import step_annotation
 
 # The precedence rule `bass._melody_in_force` implements. Imported from where it
 # lives rather than through the package facade, because these are private to
@@ -51,7 +52,6 @@ from arranger.bass_rules import (
     BASS_RULES,
     parse_bass_style,
 )
-from arranger.render import _step_annotation
 from tests.support import (
     MAJOR_CADENCE,
     MINOR_CADENCE,
@@ -194,7 +194,7 @@ class TestFillsAreTheMelodyAlone(unittest.TestCase):
         """
         for step in walk([("F5", "maj7", "Fmaj7")], [(0, 1.0)])[1:]:
             self.assertFalse(step.melody_only)
-            self.assertNotIn("no chord", _step_annotation(step))
+            self.assertNotIn("no chord", step_annotation(step))
 
     def test_an_off_beat_change_is_a_fill_under_the_new_chord(self):
         """

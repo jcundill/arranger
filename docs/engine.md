@@ -121,7 +121,7 @@ you whether a change is an improvement or a different library.
   (100 columns, or whatever `width=` asks for) continues on the lines below the step,
   indented to the column the explanation starts in, and `width=None` gives one line per
   step at any length. Every step is annotated through the
-  shared `_step_annotation()` helper, which `print_step()` also uses so the two
+  shared `step_annotation()` helper, which `print_step()` also uses so the two
   renderings cannot drift: a chord tone names the degree it is (`(harmony under b7)`), a
   non-chord tone names its substitution, and a partial shape names what it leaves out.
   Where the shape sounds **two or more voices**, the annotation also names them and the
@@ -189,7 +189,7 @@ you whether a change is an improvement or a different library.
   restated on **every** line that suffers it, holds included. An explanation accounts for a
   **choice** (why fewer voices, why that fret, why the thumb moves), and it belongs on the line
   where the choice was made: a hold does not repeat its shape's count. Both are *derived
-  clauses* in `render._annotate`, never branches at a return site, because a fact written as a
+  clauses* in `annotation._annotate`, never branches at a return site, because a fact written as a
   branch is a fact some route will not print — which is precisely how 22 transposed steps lost
   their substitute chord and 2 holds lost their octave. `tests/test_explanations.py` holds the
   whole invariant as a table of (decision, when this step is one of those, what the line must
@@ -341,7 +341,7 @@ you whether a change is an improvement or a different library.
 - `ArrangementStep.chord_unvoiced` — defaulted flag set when the palette could not
   voice the step's chord **at all**, so the melody sounds alone. Distinct from
   `melody_only` (which means the slot had *no* chord) and from the span demotion (where a
-  complete shape existed and was too wide), so `render._step_annotation` can say
+  complete shape existed and was too wide), so `annotation.step_annotation` can say
   `(melody alone - no voicing for this chord)` without claiming something false. See
   [Known limitations](#known-limitations).
 - `main()` — with no arguments, prints the built-in demonstrations; with `head`
@@ -836,7 +836,7 @@ Five decisions are load-bearing:
   the chord, so its second voice is the chord's guide tone and nothing else. Confining an
   interval to fill slots is what makes its looser rule safe.
 
-`_step_annotation` names the interval it actually is ("6th"), not the grip, and it
+`step_annotation` names the interval it actually is ("6th"), not the grip, and it
 takes the existing precedence for free: a non-chord tone's substitution is annotated
 instead, which is the more important fact about the step. `format_tab_staff` has **no**
 annotation channel at all — the line above the staff carries chord names only — so
@@ -917,7 +917,7 @@ that `ArrangementStep.repeated` is set, and the renderers honour it.
 - `collapse` in the staff renderer compares sounding pitches, so an unchanged shape
   is normally suppressed entirely as a *hold*. A repeated step overrides that and still
   strikes, because the melody is genuinely re-articulated.
-- `_step_annotation()` adds `(melody repeated - single note)`, because the
+- `step_annotation()` adds `(melody repeated - single note)`, because the
   chord name printed above a single note would otherwise imply a full voicing. The
   annotation is shared with `format_progression`, so the two cannot disagree.
 
@@ -960,7 +960,7 @@ position — it lands a major tenth below where the note sat on the high E.
 |---|---|
 | `HIGH_FRET_LIMIT = 13` | the neck position above which the move happens |
 | `get_octave_down_candidates(...)` | candidates for the melody an octave down, B string only |
-| `_lower_soprano_strings(top_strings)` | the soprano strings below the high E, so the transposed note is not put straight back on the high E |
+| `lower_soprano_strings(top_strings)` | the soprano strings below the high E, so the transposed note is not put straight back on the high E |
 | `ArrangementStep.original_melody` | the written pitch, when the step was transposed |
 | `_note_name(midi)` | spells a MIDI number (`Bb5`); `musthe.Note` parses strings only, so a transposed pitch must be spelled before it can be rebuilt as a `Note` |
 
@@ -1065,7 +1065,7 @@ melodic interval.
   new failure mode.
 - **A partial harmonisation means the printed chord name is not every note sounding.**
   Where a shell or a duo is used, the chord describes the harmony rather than the full
-  voicing, and `_step_annotation` says so and says why (`(shell - 3rd & 7th, partial -
+  voicing, and `step_annotation` says so and says why (`(shell - 3rd & 7th, partial -
   3 voices: the 4-voice voicing 2-x-1-2-0-x lies outside the neck window)`). The reason
   comes from the recorded `ArrangementStep.palette` rather than a re-derivation, so a thin
   shape is explicable rather than mysterious: a palette that never held four voices reads

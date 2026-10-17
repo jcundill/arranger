@@ -29,7 +29,7 @@ from arranger import (
 # `arranger.bass` and re-exporting them would put four internals into the public
 # surface for the benefit of one test file. `test_bass.py` covers them directly for
 # the same reason.
-from arranger.render import _step_annotation
+from arranger.annotation import step_annotation
 from tabgp import _sounding_frets
 from tabstaff import _strikes_here
 from tests.support import (
@@ -225,7 +225,7 @@ class TestWalkingBassRendering(unittest.TestCase):
 
     def test_the_bass_annotates_a_partial_shell_as_well_as_a_plain_one(self):
         """
-        Every early return out of `_step_annotation` has to carry the bass.
+        Every early return out of `step_annotation` has to carry the bass.
 
         A walking step can equally be a partial shell, a melody-alone fill or a
         repeated melody, and a bass annotated on some of those and not the others is a
@@ -233,7 +233,7 @@ class TestWalkingBassRendering(unittest.TestCase):
         must both survive.
         """
         shell = self.steps[0]
-        annotation = _step_annotation(shell)
+        annotation = step_annotation(shell)
         self.assertIn("partial", annotation)
         self.assertIn("(bass: F3, anchor)", annotation)
 

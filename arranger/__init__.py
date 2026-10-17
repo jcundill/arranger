@@ -50,6 +50,7 @@ from typing import TYPE_CHECKING, Any, List
 from musthe import Note  # re-exported: `from arranger import Note` is used by tests
 
 from . import (
+    annotation,
     bass_merge,
     bass_rules,
     cli,
@@ -553,6 +554,7 @@ __all__ = [
     "StepPreparation",
     "VoiceLeadingEngine",
     "Voicing",
+    "annotation",
     "bass",
     "bass_rules",
     "bass_allowed",

@@ -64,6 +64,7 @@ jazz-arranger = "arranger:main"
 # modules *of* the distribution, not optional extras alongside it.
 packages = ["arranger"]
 py-modules = [
+    "tabscore",
     "tabstaff",
     "tabxml",
     "tabgp",

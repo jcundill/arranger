@@ -48,6 +48,19 @@ from arranger import (
     get_comping_voicings,
 )
 
+#: The library's top-level modules: the shared score core, the renderers, the
+#: importer and the grip-chart generator. Shared by `test_structure` (which budgets
+#: them) and `test_front_end_dag` (which holds their imports to the facade rule), so
+#: the two lists cannot drift apart.
+FRONT_ENDS = (
+    "tabscore.py",
+    "tabstaff.py",
+    "tabxml.py",
+    "tabgp.py",
+    "headxml.py",
+    "grip_chart.py",
+)
+
 #: The committed MusicXML fixtures. Defined once because four test modules build paths
 #: from it, and a second spelling of the same directory is a second source for one fact.
 DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")

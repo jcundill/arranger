@@ -365,7 +365,7 @@ def _comping_choice(
     None - the check is read from the same place the generator read it rather than
     re-derived, so the two cannot disagree.
     """
-    _canonical, root_pc, _tones = _grips._chord_context(harmony.chord_type, harmony.name)
+    _canonical, root_pc, _tones = _grips.chord_context(harmony.chord_type, harmony.name)
     # The last *sounding* shape: a silent position between here and the previous chord
     # is a hole in the tab, not a shape the hand held - see `last_sounding_step`.
     prev_sounding = last_sounding_step(arrangements)

@@ -19,7 +19,7 @@ from headxml import (
     load_musicxml,
     melody_at,
 )
-from tabxml import score_events, substitute_steps
+from tabscore import score_events, substitute_steps
 from tests.support import (
     BUT_NOT_FOR_ME,
     I_WAS_DOING_ALL_RIGHT,
@@ -126,7 +126,7 @@ class TestReductionAndArranging(unittest.TestCase):
 
         The defect was invisible in the tab and glaring in the score. `head_skeleton`
         emitted six-place-rounded beats, which made the gap between two triplet notes
-        longer than the notes in it; `tabxml.score_events` caps a note at the length the
+        longer than the notes in it; `tabscore.score_events` caps a note at the length the
         file wrote, so the surplus became a **rest of about 1e-06 quarters** - a
         length MusicXML cannot express, and which music21 inflates to a whole
         triplet note. Measured on `i_was_doing_all_right.mxl`: **13 such rests and

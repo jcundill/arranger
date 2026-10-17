@@ -13,9 +13,10 @@ from arranger import (
     Voicing,
     format_progression,
 )
+from arranger.annotation import step_annotation
 from arranger.grips import drop2_template_for
 from arranger.melody_alone import melody_alone_shape
-from arranger.render import _step_annotation, print_step
+from arranger.render import print_step
 
 
 class TestMelodyOnlyVoicing(unittest.TestCase):
@@ -338,7 +339,7 @@ class TestThePaletteRescue(unittest.TestCase):
             [("Eb5", "maj", "Cmaj")], texture="chord1"
         )
         self.assertEqual(
-            _step_annotation(steps[0]), " (melody alone - no voicing for this chord)"
+            step_annotation(steps[0]), " (melody alone - no voicing for this chord)"
         )
 
     def test_a_step_that_is_also_transposed_reports_both_facts(self):
@@ -356,8 +357,8 @@ class TestThePaletteRescue(unittest.TestCase):
         self.assertTrue(step.chord_unvoiced)
         self.assertEqual(step.original_melody, "Gb5")
         self.assertEqual(step.melody, "F#4")
-        self.assertIn("transposed down an octave from Gb5", _step_annotation(step))
-        self.assertIn("no voicing for this chord", _step_annotation(step))
+        self.assertIn("transposed down an octave from Gb5", step_annotation(step))
+        self.assertIn("no voicing for this chord", step_annotation(step))
 
 
 class TestExtendedExtensionMappings(unittest.TestCase):
@@ -714,7 +715,7 @@ class TestNoChordSteps(unittest.TestCase):
 
         The second assertion used to be the `vertical=True` block, which printed the
         same annotation over a six-line header. That renderer is gone, and the two
-        consumers of `_step_annotation` that remain are `format_progression` and
+        consumers of `step_annotation` that remain are `format_progression` and
         `print_step` - the compact line and the demo's one-line summary. They share
         the function precisely so a melody-only step cannot read one way in the
         library and another in `make demo`.
@@ -724,7 +725,7 @@ class TestNoChordSteps(unittest.TestCase):
         the renderer and its own step method.
         """
         steps = self.engine.arrange_progression([("F4", NO_CHORD, NO_CHORD)])
-        expected = _step_annotation(steps[0])
+        expected = step_annotation(steps[0])
         self.assertEqual(expected, " (no chord - melody alone)")
         self.assertIn(expected, format_progression(steps))
         printed = io.StringIO()
@@ -732,11 +733,11 @@ class TestNoChordSteps(unittest.TestCase):
             print_step(steps[0])
         self.assertIn(expected, printed.getvalue())
 
-    def test_ordinary_step_annotation_names_the_degree(self):
+    def test_ordinarystep_annotation_names_the_degree(self):
         """A chord tone names the degree it is, how many voices state it, and which ones."""
         steps = self.engine.arrange_progression([("C5", "maj7", "Cmaj7")])
         self.assertEqual(
-            _step_annotation(steps[0]),
+            step_annotation(steps[0]),
             " (harmony under Root - 4 voices - sounding: B 7, E 3, G 5, C Root)",
         )
 

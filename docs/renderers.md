@@ -208,7 +208,7 @@ beat count as a quarter count is what each of the four bugs below was:
 |---|---|---|
 | `headxml._slot_key` | clamped a slot to `beats_per_bar` | **13 of 80 notes lost.** A 2/2 bar's eighths run 1.0 … **2.5**; clamping to 2.0 folded the last eighth of every bar onto beat 2, where it collided and was dropped by `pick` |
 | `head_cli` → the file writers | passed no metre at all | both writers used their own `beats_per_bar=4`, so a 2/2 head was written as 4/4 on the wrong grid |
-| `tabxml.score_events`, `tabgp._measures` | `4.0 / beats_per_bar`, `bar_length = beats_per_bar` | a cut-time beat measured as half a quarter, so every bar came out half length — 32 measures written as 64 |
+| `tabscore.score_events`, `tabgp._measures` | `4.0 / beats_per_bar`, `bar_length = beats_per_bar` | a cut-time beat measured as half a quarter, so every bar came out half length — 32 measures written as 64 |
 | the same two, *after* the fix above | `beat_type / 4` instead of `4 / beat_type` | **every bar a quarter note long.** The measure *count* stayed right, because onsets are placed in beats and that part was correct — so 32 short bars under a 2/2 signature, each holding a quarter of the music it claimed |
 | `headxml._beat_from_onset` (both callers) and `chord_slots` | `beats_per_bar / 4` per onset, `/ beats_per_bar` for a length | **a 3/4 bar of music in 2.25 of its 3 beats.** The waltz's six written eighths read 1.0 … 2.875, so the staff drew a hole of music before every barline, 21 of its 35 interior measures exported short of a full 3/4 bar, and `--musicxml` scaled every onset by a further 0.75 on each round trip |
 | `arranger.bass._melody_timeline` | `duration * beats_per_bar` | a quarter short in 3/4 (`duration * beat_type` is the span). **Measured at 0 of 186 steps** on the waltz: the walk's chord timeline is onset-driven, so only a melody-in-force span reads a duration. Fixed with the rest rather than inherited by the next metre-sensitive rule |
@@ -234,7 +234,7 @@ factor before it was kept: a test for a metre bug that cannot fail on the old
 arithmetic is not a test, and all five of them do.
 
 So `beat_type` is now a parameter of `format_musicxml` and `format_gp5` (and of
-`score_events`, `_measures`, `_build_part`, `_build_song`), it is what makes a 2/2 head
+`tabscore.score_events`, `_measures`, `_build_part`, `_build_song`), it is what makes a 2/2 head
 read as **2/2 rather than 2/4** in the file, and `head_cli` passes
 `head.beats_per_bar` and `head.beat_type` to every renderer.
 
@@ -375,7 +375,7 @@ Two decisions in that row were measured rather than chosen:
   rounding one to a neighbouring value would print a note that is not being played.
   It also widens the grid, which is the `width` computation doing its job.
 
-`_staff_rhythm` is computed from the **column grid**, not from `tabxml.score_events`,
+`_staff_rhythm` is computed from the **column grid**, not from `tabscore.score_events`,
 because the two grids are deliberately different: `score_events` keeps every step sharing
 an onset and divides the span between them, while `_staff_columns` gives the column
 to the first and drops the rest. What is shared is the *rule* — a note lasts until
@@ -492,13 +492,13 @@ has to be post-processed before it is correct.
 |---|---|
 | `tabxml.format_musicxml` | the document, as a string. Pure, like every other renderer |
 | `tabxml.write_musicxml` | the only function in the module that touches the filesystem |
-| `score_events` / `_is_hold` | placement, durations and the pickup; the rhythmic core |
+| `tabscore.score_events` / `tabscore._is_hold` | placement, durations and the pickup; the rhythmic core, shared with `tabgp` |
 | `_build_part` | the staff: measures, notes, ties, chord symbols |
 | `_chord_symbol` | a symbol, or a text-only one for a name music21 rejects |
 | `_drop_empty_inversions` | removes the meaningless `<inversion>-1</inversion>` |
 | `_downgrade_kinds` | rewrites a `<kind>` value MusicXML 3.1 does not have |
 
-**An empty arrangement is answered at the definition.** `score_events` returns no events and a
+**An empty arrangement is answered at the definition.** `tabscore.score_events` returns no events and a
 pickup of 0 when it is handed no steps: the pickup is measured from the first onset of the
 steps placed, and an arrangement with none has no first onset. This is the seam both score
 renderers place through (`tabxml.format_musicxml` and `tabgp.format_gp5`), so the empty case
@@ -520,7 +520,7 @@ work costs more than not shipping it, so `tabxml` writes a **notation staff only
 `tabgp` writes the fretting, as a Guitar Pro 5 file. The two are divided by what each
 format can do: GP5 stores a fret and a string per note natively, MusicXML reaches
 Sibelius, MuseScore and Final. Everything that is genuinely *shared* - `score_events`,
-`_is_hold`, `substitute_steps` - is still shared, so a head lands on the same beats in
+`_is_hold`, `substitute_steps` - lives in `tabscore`, so a head lands on the same beats in
 both files.
 
 Six decisions in here were each forced by a failure or by the instrument's own
@@ -722,8 +722,8 @@ mobile readers built on engines such as AlphaTab. MusicXML remains the way into
 Sibelius, MuseScore and Final. Both are shipped, and both are one flag
 on `corpus_cli` (`--musicxml`, `--gp5`).
 
-**What is shared, deliberately.** `tabgp` calls `tabxml.score_events` and
-`tabxml.substitute_steps` rather than reimplementing either, so a head lands on the
+**What is shared, deliberately.** `tabgp` calls `tabscore.score_events` and
+`tabscore.substitute_steps` rather than reimplementing either, so a head lands on the
 same beats in both files and a substituted chord is named the same way in both.
 The **chord names** are shared too, by rule: `_build_song` keeps an `in_force` and
 writes a name only where the chord changes, which is the same walk
@@ -838,7 +838,7 @@ tied, the bar opened with a tied chord where the score says a rest. The eighth-n
 skeleton puts a rest at the head of every second bar, so this was not one bar but
 half the head.
 
-`tabxml.score_events` therefore **caps** the span at the melody note's own `duration` and
+`tabscore.score_events` therefore **caps** the span at the melody note's own `duration` and
 writes the remainder as an explicit rest — a `(None, False, length)` event, which is
 already what all three renderers read as "nothing here" (`tabxml` writes a
 `<rest>`, `tabstaff` blanks the cell and clears the ring, `tabgp` writes

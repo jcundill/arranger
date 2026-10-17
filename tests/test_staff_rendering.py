@@ -868,7 +868,7 @@ class TestStaffRhythmAgreesWithTheScore(unittest.TestCase):
     """The rhythm row and the score writers must agree where their grids overlap.
 
     `_staff_rhythm` is computed from the column grid rather than from
-    `tabxml.score_events`, because the two grids are deliberately different - the column
+    `tabscore.score_events`, because the two grids are deliberately different - the column
     grid gives a column to the first of several steps on one onset, and the score
     keeps them all. That is a real difference and it is not tested away here.
 
@@ -887,7 +887,7 @@ class TestStaffRhythmAgreesWithTheScore(unittest.TestCase):
         and those onsets are exactly where the two grids are *meant* to differ. A
         fixture with a note on every beat is the case where they must not.
         """
-        from tabxml import score_events, substitute_steps
+        from tabscore import score_events, substitute_steps
 
         steps = _timed(
             ["Dm7", "G7", "Cmaj7"],
@@ -917,7 +917,7 @@ class TestStaffRhythmAgreesWithTheScore(unittest.TestCase):
 
     def test_the_duration_cap_is_the_same_rule_in_both(self):
         """A quarter written under a two-beat gap is a quarter in both renderings."""
-        from tabxml import score_events
+        from tabscore import score_events
 
         steps = _timed(
             ["Dm7", "G7"], beats=[(0, 1.0), (1, 1.0)], durations=[0.25, None],

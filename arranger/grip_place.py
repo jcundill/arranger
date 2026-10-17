@@ -49,7 +49,7 @@ class Placement:
 
     A *value*, so a caller states the request and the search answers it - which is what
     lets the non-contiguous families share one placement instead of each owning a nest of
-    loops. `strings` is ordered from the soprano downwards, as `_string_sets_for` returns
+    loops. `strings` is ordered from the soprano downwards, as `string_sets_for` returns
     it, so `strings[0]` is the string the melody is pinned to and `melody_midi` is that
     pin's pitch.
 

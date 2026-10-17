@@ -37,7 +37,7 @@ ROOT = Path(__file__).resolve().parent.parent
 # The four names the distribution ships (see `pyproject.toml`). `grip_chart` is a
 # developer script that generates `common_grips.md`, so it stays out of the wheel;
 # it is still a flat module and is covered by the flatness test below.
-SHIPPED = ("tabstaff", "tabxml", "tabgp", "headxml")
+SHIPPED = ("tabscore", "tabstaff", "tabxml", "tabgp", "headxml")
 FLAT_MODULES = SHIPPED + ("grip_chart",)
 
 
@@ -113,10 +113,10 @@ class TestTheGuitarProBoundary(unittest.TestCase):
 
 
 class TestTheModuleSurface(unittest.TestCase):
-    """The five front ends are flat modules, and the four shipped ones stay shipped."""
+    """The six front ends are flat modules, and the five shipped ones stay shipped."""
 
     def test_the_front_ends_are_flat_modules(self):
-        """None of the five has an `__init__.py` in front of its contents."""
+        """None of the six has an `__init__.py` in front of its contents."""
         for name in FLAT_MODULES:
             with self.subTest(module=name):
                 module = importlib.import_module(name)
@@ -126,8 +126,8 @@ class TestTheModuleSurface(unittest.TestCase):
                     "one file, not a directory",
                 )
 
-    def test_the_distribution_ships_the_four_and_not_the_chart(self):
-        """`py-modules` names exactly the renderers and the importer.
+    def test_the_distribution_ships_the_five_and_not_the_chart(self):
+        """`py-modules` names exactly the shared core, the renderers and the importer.
 
         `grip_chart` is a repository tool, not part of the installed library; the
         assertion keeps a future `py-modules` edit from shipping it, which would

@@ -12,7 +12,7 @@ because a rule with unnamed exceptions is a rule the next editor deletes:
 - a **hold** restates what corrects a *column* (its octave, the chord a substitution
   stated) but not the shape count, which was explained on the step that chose the shape -
   and the same holds for the two routes whose **own** clause already states the count, an
-  `NC` bar and a melody no shape could voice: `render._shape_clause` stays silent for them
+  `NC` bar and a melody no shape could voice: `annotation._shape_clause` stays silent for them
   rather than repeating "melody alone" twice. Their palette is still read by the window
   clause, so retiring that exemption cost them no explanation;
 - the **written slash bass** is excluded from the table because its witness cannot be
@@ -41,8 +41,8 @@ from typing import Any, Callable, Dict, List, Tuple
 from musthe import Note
 
 from arranger import PITCH_CLASS_NAMES, ChordParser
+from arranger.annotation import _omission_clause, step_annotation
 from arranger.chords import melody_degree_name
-from arranger.render import _omission_clause, _step_annotation
 from arranger.tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
@@ -89,7 +89,7 @@ def _thin(step: ArrangementStep) -> bool:
 
 
 def _line(step: ArrangementStep) -> str:
-    return _step_annotation(step)
+    return step_annotation(step)
 
 
 def _missing_degree_names(step: ArrangementStep) -> List[str]:
@@ -136,7 +136,7 @@ def _names_left_out_on_the_line(step: ArrangementStep) -> List[str]:
     **Not** a search of the whole line: a tab is full of digits, so `"5" in line` is true
     whether or not the 5th was named, and a witness that could pass on a line with no clause
     at all is no witness. The names end where the clause does - at the next ` - ` in
-    `render._annotate`'s chain, or at the parenthetical's close - because clauses that follow
+    `annotation._annotate`'s chain, or at the parenthetical's close - because clauses that follow
     it carry digits of their own (`reaches outside the preferred frets 2-13`), and the list
     itself is separated by `_and_list`'s `, ` and ` & `.
     """
@@ -194,7 +194,7 @@ def _voices_named_on_the_line(step: ArrangementStep) -> List[str]:
 
     **Not** a search of the whole line: the tab is frets, so a note name has to come from
     the clause or not at all. The list ends where the clause does - at the next ` - ` in
-    `render._annotate`'s chain, or at the parenthetical's close - because clauses that
+    `annotation._annotate`'s chain, or at the parenthetical's close - because clauses that
     follow it carry names of their own (`the chord tone it leaves out is Root`).
     """
     line = _line(step)
@@ -219,7 +219,7 @@ def _comping_names(step: ArrangementStep) -> List[str]:
     sorted list by the witness below, because the clause orders the voices by the interval
     from the root and that order is not the question.
 
-    The routes are the ones `_step_annotation` reaches `_comping_clause` by, in the same
+    The routes are the ones `step_annotation` reaches `_comping_clause` by, in the same
     order - a no-chord bar, a chord no shape could state, and a silent step are all answered
     before it - so the clause speaking where it should not is caught as well as its silence.
     """
@@ -328,7 +328,7 @@ WITNESSES: List[Witness] = [
             and not step.repeated
             # The routes whose own clause states the count - an `NC` bar and a melody no
             # shape could voice - keep it to themselves, the way a hold does. See
-            # `render._shape_clause`: the *window* fact they carry is still witnessed.
+            # `annotation._shape_clause`: the *window* fact they carry is still witnessed.
             and not step.melody_only
             and not step.chord_unvoiced
         ),
@@ -468,7 +468,7 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
     def test_the_slash_bass_clause_is_not_a_tautology(self):
         """The one decision the witness table cannot hold, pinned in both directions.
 
-        Whether the written bass sounds is decided *inside* `render._slash_bass_clause`, so a
+        Whether the written bass sounds is decided *inside* `annotation._slash_bass_clause`, so a
         witness that recomputed it would be the clause agreeing with itself. Asserted against
         the head that exercises it instead: `Am7/D` loses its D and must say so, `Gmaj/D`
         sounds its F# and must stay quiet about it.
@@ -478,11 +478,11 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         )
         lost = [
             step for step in steps
-            if "/" in step.chord and "written bass" in _step_annotation(step)
+            if "/" in step.chord and "written bass" in step_annotation(step)
         ]
         kept = [
             step for step in steps
-            if step.chord == "Gmaj/D" and "written bass" not in _step_annotation(step)
+            if step.chord == "Gmaj/D" and "written bass" not in step_annotation(step)
         ]
         self.assertTrue(lost, "the head stopped losing a slash bass")
         self.assertTrue(kept, "a shape that sounds its written bass was flagged")
@@ -554,7 +554,7 @@ class TestTheLoneNoteKeepsTheWindowHonest(unittest.TestCase):
     """A lone note is chosen from a palette, so its window fact is measured, not defaulted.
 
     This is the exemption that went. A melody-alone shape used to carry no palette, which
-    meant `render._window_clause` could say nothing about it - and a step that *did* carry
+    meant `annotation._window_clause` could say nothing about it - and a step that *did* carry
     one (a fill) recorded `inside_window` at its `False` default, so the clause read as an
     engine judgement nobody had made. Every lone note now records the palette it was chosen
     from, and the two halves of the fact can be asserted together: the clause appears where
@@ -636,7 +636,7 @@ class TestNewClausesMustBeRegistered(unittest.TestCase):
     """
 
     def test_every_clause_helper_is_known(self):
-        from arranger import render
+        from arranger import annotation
 
         known = {
             "_bass_refusal_clause",
@@ -651,7 +651,7 @@ class TestNewClausesMustBeRegistered(unittest.TestCase):
             "_transposition_clause",
             "_window_clause",
         }
-        found = {name for name in dir(render) if name.endswith("_clause")}
+        found = {name for name in dir(annotation) if name.endswith("_clause")}
         self.assertEqual(
             found,
             known,

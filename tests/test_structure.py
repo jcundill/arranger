@@ -28,11 +28,11 @@ only edit this table should ever receive is a decrease.** If a number has to go
 up, that is a decision to state in the commit - which is exactly what a budget
 is for: it makes the decision visible instead of letting it pass quietly.
 
-The second test here is the other half of encapsulation. A name another module
-imports is public, whatever its spelling says. The allowlist that held the debt
-from before that rule is empty now; it stays as the place a deliberate exception
-has to be written down, and the test fails in both directions - a new private
-import is caught, and an entry that is no longer used cannot rot there.
+The other tests here are the two halves of encapsulation. A name another module
+imports is public, whatever its spelling says - and the rule covers the two ways
+to import it: the name itself, and a module alias followed by a private
+attribute. Both allowlists fail in both directions, so a new reach is caught and
+an entry that is no longer used cannot rot there.
 """
 
 from __future__ import annotations
@@ -43,14 +43,16 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Iterator, List, Set, Tuple, Union
 
+from tests.support import FRONT_ENDS
+
 ROOT = Path(__file__).resolve().parent.parent
 ENGINE = ROOT / "arranger"
 
-# The five top-level modules are part of the library the gate measures, and they
-# stay flat files: `tabgp`'s lazy `import guitarpro` is the licensing boundary and
-# a package `__init__` would put a file in front of it. See
-# `tests/test_optional_extras.py`, which is the other half of that argument.
-TOP_LEVEL = ("tabstaff.py", "tabxml.py", "tabgp.py", "headxml.py", "grip_chart.py")
+# The top-level modules are part of the library the gate measures, and they stay
+# flat files: `tabgp`'s lazy `import guitarpro` is the licensing boundary and a
+# package `__init__` would put a file in front of it. See
+# `tests/test_optional_extras.py`, which is the other half of that argument. The
+# tuple itself lives in `support`, because the front-end DAG test reads it too.
 
 
 @dataclass(frozen=True)
@@ -71,6 +73,7 @@ class Budget:
 BUDGETS: Dict[str, Budget] = {
     "arranger/__init__.py": Budget(14, 151, 1),
     "arranger/__main__.py": Budget(5, 10, 2),
+    "arranger/annotation.py": Budget(18, 130, 2),
     "arranger/bass_rules.py": Budget(10, 82, 6),
     "arranger/bass.py": Budget(16, 79, 6),
     "arranger/bass_merge.py": Budget(6, 66, 3),
@@ -92,7 +95,7 @@ BUDGETS: Dict[str, Budget] = {
     # `ArrangeOptions` is a flat dataclass of knobs with no methods today.
     "arranger/options.py": Budget(5, 30, 3),
     "arranger/parts.py": Budget(9, 45, 1),
-    "arranger/render.py": Budget(18, 130, 2),
+    "arranger/render.py": Budget(11, 64, 2),
     "arranger/routes.py": Budget(6, 97, 12),
     "arranger/slots.py": Budget(9, 136, 12),
     "arranger/steps.py": Budget(1, 49, 15),
@@ -101,6 +104,7 @@ BUDGETS: Dict[str, Budget] = {
     "headxml.py": Budget(17, 125, 10),
     "grip_chart.py": Budget(14, 84, 5),
     "tabgp.py": Budget(19, 151, 13),
+    "tabscore.py": Budget(10, 98, 5),
     "tabstaff.py": Budget(17, 195, 13),
     "tabxml.py": Budget(12, 176, 12),
 }
@@ -111,13 +115,20 @@ BUDGETS: Dict[str, Budget] = {
 # deleted one cannot leave a stale entry behind.
 ALLOWED_PRIVATE_IMPORTS: Set[str] = set()
 
+# Reaching a sibling's `_`-prefixed name through a module alias is the same coupling
+# as importing it by name, and it was invisible while only `ImportFrom` was read.
+# The list is empty now: every name another module reaches is public, and the six
+# dead delegates that used to spell the rest are gone. The test fails in both
+# directions, so a new reach is caught and a deleted one cannot leave a stale entry.
+ALLOWED_PRIVATE_ATTRIBUTES: Set[str] = set()
+
 
 FunctionNode = Union[ast.FunctionDef, ast.AsyncFunctionDef]
 
 
 def _library_modules() -> List[Path]:
-    """Every module the budgets cover: the engine package and the five front ends."""
-    return sorted(ENGINE.glob("*.py")) + [ROOT / name for name in TOP_LEVEL]
+    """Every module the budgets cover: the engine package and the top-level front ends."""
+    return sorted(ENGINE.glob("*.py")) + [ROOT / name for name in FRONT_ENDS]
 
 
 def _complexity(node: FunctionNode) -> int:
@@ -215,6 +226,49 @@ def _private_imports(path: Path) -> Iterator[str]:
                 yield f"{importer} -> {target}.{alias.name}"
 
 
+def _module_aliases(tree: ast.Module) -> Dict[str, str]:
+    """The sibling modules `tree` binds to a local name, as alias -> module.
+
+    Both spellings that bind a *module* are read: `from . import grips` (and its
+    `as _grips` form) and `import arranger.grips as _grips`. `from .grips import x`
+    binds `x`, not the module, so it is not an alias and is already covered by
+    `_private_imports`.
+    """
+    siblings = {path.stem for path in ENGINE.glob("*.py")}
+    aliases: Dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                target = alias.name.rsplit(".", 1)[-1]
+                if target in siblings:
+                    aliases[alias.asname or alias.name] = target
+        elif isinstance(node, ast.ImportFrom) and (
+            (node.level == 1 and not node.module) or node.module == "arranger"
+        ):
+            for alias in node.names:
+                if alias.name in siblings:
+                    aliases[alias.asname or alias.name] = alias.name
+    return aliases
+
+
+def _private_attributes(path: Path) -> Iterator[str]:
+    """`importer -> home.private_name` for every private attribute reached by alias.
+
+    A module alias is how the engine spelled the imports the import meter could not
+    see: `alias._helper` is the same coupling as `from .module import _helper`, and
+    only the second used to fail the gate.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    aliases = _module_aliases(tree)
+    importer = path.stem
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.Attribute) or not isinstance(node.value, ast.Name):
+            continue
+        target = aliases.get(node.value.id)
+        if target and target != importer and node.attr.startswith("_"):
+            yield f"{importer} -> {target}.{node.attr}"
+
+
 class TestTheMeter(unittest.TestCase):
     """The meters are tested, because a budget is only as good as its ruler."""
 
@@ -309,6 +363,31 @@ class TestTheEncapsulationRule(unittest.TestCase):
             sorted(ALLOWED_PRIVATE_IMPORTS - found),
             [],
             "the allowlist names an import that no longer exists - delete the entry",
+        )
+
+    def test_no_module_reaches_into_a_sibling_by_attribute(self):
+        """No private attribute crosses a module boundary through a module alias.
+
+        This is the same rule as the import test above, and it was the blind spot:
+        `alias._helper` names a private function exactly as plainly as
+        `from .module import _helper` does, but only the second was read.
+        The allowlist is the measured debt and fails in both directions, so a new
+        reach is caught and a name that has been made public cannot linger here.
+        """
+        found: Set[str] = set()
+        for path in _library_modules():
+            found.update(_private_attributes(path))
+        self.assertEqual(
+            sorted(found - ALLOWED_PRIVATE_ATTRIBUTES),
+            [],
+            "a private attribute is reached through a module alias - make it "
+            "public, or add it to ALLOWED_PRIVATE_ATTRIBUTES with a reason",
+        )
+        self.assertEqual(
+            sorted(ALLOWED_PRIVATE_ATTRIBUTES - found),
+            [],
+            "the allowlist names an attribute that is no longer reached - delete "
+            "the entry",
         )
 
 

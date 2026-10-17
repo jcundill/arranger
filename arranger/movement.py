@@ -176,7 +176,7 @@ def _voices_for(
         top_strings=window.top_strings, grips=window.grips,
     )
     voiced = _Voiced(candidates=candidates, melody=melody_note, original_melody=None)
-    here = _cost._window_penalty(candidates, window.fret_min, window.fret_max)
+    here = _cost.window_penalty(candidates, window.fret_min, window.fret_max)
     if not candidates or here <= 0:
         return voiced
     octave_down = _grips.get_octave_down_candidates(
@@ -185,7 +185,7 @@ def _voices_for(
     )
     # Only take the lower octave when it genuinely improves the placement, or a
     # merely slightly out-of-window melody would be moved for nothing.
-    there = _cost._window_penalty(octave_down, window.fret_min, window.fret_max)
+    there = _cost.window_penalty(octave_down, window.fret_min, window.fret_max)
     if not octave_down or there >= here:
         return voiced
     return _Voiced(
@@ -761,7 +761,7 @@ def _selection_for(
         sub_quality = ChordParser.canonical_quality(prepared.chord_type)
         substitute = prepared.chord_name
     allowed_tones = ChordParser.get_chord_tones(sub_quality, substitute)
-    root_pc = _grips._chord_context(prepared.chord_type, prepared.chord_name)[1]
+    root_pc = _grips.chord_context(prepared.chord_type, prepared.chord_name)[1]
     melody_note = context.melody_note
     assert melody_note is not None
     # The melody is the caller's note and is never rewritten, so when it lies outside

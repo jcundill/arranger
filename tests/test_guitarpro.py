@@ -29,9 +29,9 @@ import unittest
 from arranger import ArrangementStep, VoiceLeadingEngine
 
 # The shared placement core, reached directly: these tests are about where events
-# land, which is decided in `tabxml` and only turned into beats by `tabgp`.
+# land, which is decided in `tabscore` and only turned into beats by `tabgp`.
 from tabgp import format_gp5
-from tabxml import score_events, substitute_steps
+from tabscore import score_events, substitute_steps
 from tests.support import BUT_NOT_FOR_ME, bass_string, make_step
 
 try:
@@ -411,7 +411,7 @@ class TestRhythm(GuitarProTestCase):
         ]
         measures = self.measures(steps=timed)
         # Two bars. The grid is what this renderer owns; the lengths within it come
-        # from `tabxml.score_events`, shared with the MusicXML renderer and tested there.
+        # from `tabscore.score_events`, shared with the MusicXML renderer and tested there.
         # The beat *count* is not asserted, because a length the format cannot hold
         # exactly is written as more than one note - see `_duration_split`.
         self.assertEqual(len(measures), 2)
@@ -503,7 +503,7 @@ class TestRhythm(GuitarProTestCase):
         """
         import headxml
         from tabgp import _measures
-        from tabxml import score_events, substitute_steps
+        from tabscore import score_events, substitute_steps
 
         data = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
         scores = ("i_was_doing_all_right.mxl", "Trouble_in_Mind_Blues.musicxml",

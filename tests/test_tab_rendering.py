@@ -19,7 +19,7 @@ from arranger import (
     format_tab_html,
     format_tab_staff,
 )
-from arranger.render import _step_annotation
+from arranger.annotation import step_annotation
 from tests.support import arranged, make_voicing, sweep_head_paths
 
 # The compact line's fixed layout, in columns: chord(8) + space + melody(3) + space =
@@ -193,7 +193,7 @@ class TestFormatProgression(unittest.TestCase):
         lines = rendered.split("\n")
         self.assertEqual(len(lines), len(self.major))
         for line, step in zip(lines, self.major):
-            self.assertIn(_step_annotation(step).strip(), line)
+            self.assertIn(step_annotation(step).strip(), line)
             self.assertIn(step.chord, line)
 
     def test_vertical_is_no_longer_an_argument(self):
@@ -287,7 +287,7 @@ class TestTextureAnnotation(unittest.TestCase):
         self.assertTrue(fills, "the fixture must contain fills")
         for step in fills:
             self.assertTrue(step.partial, f"{step.melody} is a fill but not partial")
-            self.assertIn("partial", _step_annotation(step))
+            self.assertIn("partial", step_annotation(step))
 
     def test_a_non_chord_tone_annotation_takes_precedence_over_the_fill_note(self):
         """
@@ -296,7 +296,7 @@ class TestTextureAnnotation(unittest.TestCase):
         Both are true of such a step, but the substitution is the more important fact:
         it says the *chord* changed, and a reader who missed that would be reading
         the wrong harmony over the tab. This is the pre-existing precedence in
-        `_step_annotation` - a fill does not get its own exception to it.
+        `step_annotation` - a fill does not get its own exception to it.
         """
         steps = VoiceLeadingEngine.arrange_progression(
             [("D5", "maj7", "Fmaj7")], timings=[(0, 2.0, None)], texture="targets"
@@ -304,7 +304,7 @@ class TestTextureAnnotation(unittest.TestCase):
         step = steps[0]
         self.assertEqual(step.role, arranger.ROLE_FILL)
         self.assertTrue(step.non_chord_tone)
-        self.assertIn("non-chord tone", _step_annotation(step))
+        self.assertIn("non-chord tone", step_annotation(step))
 
     def test_the_annotation_names_the_interval_not_the_grip(self):
         """
@@ -317,7 +317,7 @@ class TestTextureAnnotation(unittest.TestCase):
         if not intervals:
             self.skipTest("this fixture produced no interval fills")
         for step in intervals:
-            note = _step_annotation(step)
+            note = step_annotation(step)
             self.assertIn("interval fill", note)
             self.assertRegex(note, r"interval fill - (3rd|b6|6th|2 notes)")
 
@@ -560,7 +560,7 @@ class TestTheExplanationWraps(unittest.TestCase):
 
         checked = 0
         for head, step in self.rendered_steps():
-            annotation = _step_annotation(step).strip()
+            annotation = step_annotation(step).strip()
             lines = _format_step(step, self.WIDTH)
             if not annotation:
                 self.assertEqual(len(lines), 1, f"{head} {step.chord}")

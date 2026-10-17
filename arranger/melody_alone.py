@@ -79,7 +79,7 @@ def melody_alone_shape(
         return None, False
     chosen = _cost.best_voicing(candidates, previous)
     assert chosen is not None
-    # The same pair `render._window_clause` measures a step against, so the phrase a
+    # The same pair `annotation._window_clause` measures a step against, so the phrase a
     # reader sees and the fact recorded here cannot disagree.
     inside_window = any(
         all(_cost.NECK_FRET_MIN <= fret <= _cost.NECK_FRET_MAX

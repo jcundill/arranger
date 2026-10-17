@@ -120,7 +120,7 @@ ROLE_TARGET = "target"
 ROLE_FILL = "fill"
 
 # Why a step sounds nothing, recorded on `ArrangementStep.silence` and phrased by
-# the renderer (`render._silence_clause`). A position the guitar cannot play is
+# the renderer (`annotation._silence_clause`). A position the guitar cannot play is
 # still **emitted** - carrying the bar, the beat and the chord name - so the tab
 # keeps its line-up against the tune; a message alone was not enough, because it
 # reached nobody reading the part. Five values, one
@@ -360,7 +360,7 @@ class ArrangementStep:
     # Kept as its own field rather than derived from `grip == "melody"`, because a
     # texture **fill** is deliberately the melody alone and must not carry this claim:
     # the two arrive at the same shape by different routes, which is the distinction
-    # `decisions.melody_alone_case` exists to keep. See `render._step_annotation`.
+    # `decisions.melody_alone_case` exists to keep. See `annotation.step_annotation`.
     chord_unvoiced: bool = False
     # The melody as written, when the step was transposed down an octave to keep the
     # voicing below HIGH_FRET_LIMIT (see VoiceLeadingEngine.get_octave_down_candidates).
@@ -406,7 +406,7 @@ class ArrangementStep:
     # melody-bearing route had under this melody note, and the fuller shape it did not
     # take. None on every step whose shape was *not* chosen that way - a comping shape, a
     # fill, a rescued melody - where "fewer voices than the palette could state" is not a
-    # claim the engine made. See `render._step_annotation`.
+    # claim the engine made. See `annotation.step_annotation`.
     palette: Optional[Palette] = None
     # Which metric role the texture rules gave this step: ROLE_TARGET on a principal
     # melody note (a full chord states the harmony there), ROLE_FILL on a connecting
@@ -477,7 +477,7 @@ class ArrangementStep:
     #
     # A *name* rather than a flag, because the wanted pitch is the one fact the
     # tab cannot supply - the fret vector has no thumb, so a reader cannot derive
-    # which note went missing. `render._bass_refusal_clause` phrases it.
+    # which note went missing. `annotation._bass_refusal_clause` phrases it.
     #
     # Set by `bass_merge.attach_bass`, at the one point the refusal is known, and
     # read by the renderer alone: `bass` above is a derived view of

@@ -38,7 +38,7 @@ def attach_bass(
 
     - no candidate string survives `place_bass`'s filters, so there is nowhere to
       put the thumb. `step.bass_refused` records the wanted pitch class and
-      `render._bass_refusal_clause` phrases it, because a reader cannot tell the
+      `annotation._bass_refusal_clause` phrases it, because a reader cannot tell the
       three ways that happens apart from the outside and the common one is not the
       intuitive one: no free string below the melody, **no octave of the wanted
       pitch below the shape's own lowest note**, or a fifth fret for four fingers.

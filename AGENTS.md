@@ -21,12 +21,12 @@ gate and the conventions — not the explanation.
 | how a shape is placed on its strings — a family that *searches* versus one that computes a layout, `Placement`, `candidate`, the placement memo (`search_shape` / `_searched_shape` / `place_shape`) | [docs/history/generated-grips.md](docs/history/generated-grips.md) §4 | `arranger/grip_place.py`, `arranger/grips.py`, `tests/test_placement.py` |
 | where a **lone note** is fretted — a fill, an `NC` bar, a rescued melody, a span demotion (`get_melody_only_voicings`, `_melody_alone_shape`) | [docs/engine.md](docs/engine.md) | `arranger/grips.py`, `arranger/melody_alone.py`, `arranger/routes.py`, `tests/test_non_chord_tones.py` |
 | which chord tones a shape states — `TONE_PRIORITY`, the tone a four-voice shape gives up, the palette a melody with no degree to match is offered, or the order that was not taken | [docs/history/generated-grips.md](docs/history/generated-grips.md) | `arranger/grip_tables.py` (`TONE_PRIORITY`, `stated_tones`), `arranger/grips.py` (`drop2_template_for`, `_drop2_palette`), `tests/test_generated_grips.py`, `tests/support.py` (`WITNESS`) |
-| the trailing annotation a step carries, why a shape is thin, or what **must** be explained when a choice is added (`ArrangementStep.palette`, `cost.VOICING_COST_CRITERIA`, `tests/test_explanations.py`) | [docs/engine.md](docs/engine.md) | `arranger/render.py`, `arranger/movement.py` |
+| the trailing annotation a step carries, why a shape is thin, or what **must** be explained when a choice is added (`ArrangementStep.palette`, `cost.VOICING_COST_CRITERIA`, `tests/test_explanations.py`) | [docs/engine.md](docs/engine.md) | `arranger/annotation.py`, `arranger/render.py`, `arranger/movement.py` |
 | `texture=`, target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/texture.py`, `arranger/routes.py`, `arranger/bass_rules.py`, `arranger/bass.py`, `arranger/decisions.py` |
 | non-chord melody notes, a new chord quality | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` |
 | the step loop, `arrange_progression` | [docs/engine.md](docs/engine.md) | `arranger/movement.py`, `arranger/resolution.py`, `arranger/slot_plan.py` |
 | a step route's arguments - `SlotContext`, one slot's request as a value rather than twenty parameters | [docs/engine.md](docs/engine.md) | `arranger/context.py`, `arranger/movement.py`, `arranger/routes.py` |
-| tab staff, HTML, MusicXML, GP5, or the MusicXML importer | [docs/renderers.md](docs/renderers.md) | `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py` |
+| tab staff, HTML, MusicXML, GP5, or the MusicXML importer | [docs/renderers.md](docs/renderers.md) | `tabscore.py`, `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py` |
 | an imported head's **repeats or volta endings** — why it is longer than the file's measure count, or the `|:` / `:|` / `1.` / `2.` the writers draw | [docs/renderers.md](docs/renderers.md) | `headxml.py` (`_parse_barline`, `_expand_play_order`, `_expand_repeats`, `BarMarker`, `Head.markers`, `HeadNote.written_bar`); each writer's `markers=` parameter |
 | the slot layer: triples to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
 | the MusicXML **importer's chord timeline**, or a bar the melody skips | [docs/open-issues.md](docs/open-issues.md) item 1 | `headxml.py` (`chord_at`, `chord_slots`, `_merge_chord_slots`, `_generated_beats`, `_bar_resolution`, `_tick_key`) and `grid.py` (`grid_resolutions`, `TICKS_PER_BEAT`) — **built in full**: the default grid generates a chord at each bar's own subdivision, the union takes those positions wherever the tune is *silent*, and §9.2 refuses the ones it is still **holding**. Measured at **88 steps** across the eight heads. The fifth `melody_alone_case` kind the item predicted proved **not to be owed** — §9.3 step D already routes a note-less grid position through the comping branch. **Item 6 is the edge of that refusal** — the instant a note *stops* sounding counts as one it still holds, so the grid declines a position the tune has left (`headxml.melody_at`, `melody_state`; the item carries the measurement) |
@@ -57,7 +57,7 @@ round-2 plan: its live half is the module map below and the budget table in
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1108 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **1113 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
 
@@ -137,6 +137,7 @@ arranger/
 │   ├── grip_place.py    #   where a shape is placed on its strings, and the memo
 │   ├── grips.py         #   the builders and the candidate generators
 │   ├── cost.py          #   voicing_cost - the library's central invariant
+│   ├── annotation.py    #   the trailing explanation, composed from the step's fields
 │   ├── parts.py         #   which of melody / bass / chord the guitar takes
 │   ├── harmony.py       #   which degrees the chord part states
 │   ├── grid.py          #   when each part sounds
@@ -155,6 +156,7 @@ arranger/
 │   ├── slots.py         #   the slot layer: triples to steps, the one pre-pass
 │   ├── render.py        #   format_progression and per-step rendering
 │   └── cli.py           #   the head CLI's flags and output dispatch
+├── tabscore.py          # score placement shared by the MusicXML and GP5 writers
 ├── tabstaff.py          # whole-progression staff renderers (ASCII + HTML)
 ├── tabxml.py            # MusicXML export (optional extra: music21)
 ├── tabgp.py             # Guitar Pro 5 export (optional extra: PyGuitarPro)
@@ -182,7 +184,7 @@ The engine was one 4290-line module until Phase 5 of the package refactor. It is
 now a package of focused modules in a strict dependency order:
 
 ```
-tuning -> fingers -> chords -> grip_tables -> grip_place -> grips -> cost -> parts -> harmony
+tuning -> fingers -> chords -> grip_tables -> grip_place -> grips -> cost -> annotation -> parts -> harmony
                              -> grid -> texture -> bass_rules -> bass -> bass_merge
                              -> options -> resolution
                                                                     |
@@ -377,7 +379,7 @@ renderer**, never re-derived at a call site:
 
 - a choice *among shapes* lives on `ArrangementStep.palette` (the most voices the palette
   offered, the best fuller candidate, the `cost.voicing_cost` element that ranked it lower,
-  `inside_window`) and is phrased by `render._shape_clause` / `_window_clause`;
+  `inside_window`) and is phrased by `annotation._shape_clause` / `_window_clause`;
 - a fact that **corrects a column** — the octave a melody was moved to, the chord a
   substitution actually states, a written slash bass no shape sounds — is a *derived clause*
   (`_transposition_clause`, `_substitution_clause`, `_slash_bass_clause`), so it reaches every
@@ -417,7 +419,7 @@ steps) and the **fingerings** (`fingers.py` assigns them and no renderer prints 
 visible in the tab). Positions the guitar *declines* used to be the third exemption — dropped
 from the tab with only a warning to report them — and are not any more: the four
 routes that dropped them emit a rest step whose `silence` names the reason, and
-`render._silence_clause` phrases it, which is why it carries a witness in the table above.
+`annotation._silence_clause` phrases it, which is why it carries a witness in the table above.
 
 
 ### The cost tuple is not being refactored

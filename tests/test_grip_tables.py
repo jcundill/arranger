@@ -30,7 +30,7 @@ from arranger.grip_tables import (
 from arranger.grips import (
     _LAYOUT_GRIPS,
     _SEARCHED_GRIPS,
-    _string_sets_for,
+    string_sets_for,
 )
 from tests.support import (
     QUALITIES,
@@ -106,7 +106,7 @@ class TestStringSetTable(unittest.TestCase):
         Every family in GRIP_STRING_SETS is also in GRIP_MAX_SPAN, and vice versa.
 
         The two tables are read independently - the span by `candidate` and the sets by
-        `_string_sets_for` - so a family added to one and
+        `string_sets_for` - so a family added to one and
         not the other would fail with a bare KeyError deep inside placement, naming
         neither the grip nor the omission. The two-note families are held to 4 rather
         than 5 for the same reason a duo is: two fingers, no reason to stretch.
@@ -288,7 +288,7 @@ class TestStringSetTable(unittest.TestCase):
 
     def test_every_string_set_descends_from_its_soprano(self):
         """
-        Every set `_string_sets_for` hands back must be ordered highest string first.
+        Every set `string_sets_for` hands back must be ordered highest string first.
 
         This is the order `place_template` assigns voices in, so a set that ascends
         lays the voices on the strings in reverse. It is asserted on the *returned*
@@ -306,7 +306,7 @@ class TestStringSetTable(unittest.TestCase):
         """
         for grip, shapes in GRIP_STRING_SETS.items():
             for _strings, soprano in shapes:
-                for ordered in _string_sets_for(grip, soprano):
+                for ordered in string_sets_for(grip, soprano):
                     self.assertEqual(
                         list(ordered),
                         sorted(ordered, reverse=True),

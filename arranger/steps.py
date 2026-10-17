@@ -88,23 +88,6 @@ class VoiceLeadingEngine:
     # --- delegates: each forwards to the module that owns the body ---
 
     @staticmethod
-    def _parse_chord_name(name: str) -> Tuple[Optional[str], Optional[str]]:
-        """See `grips._parse_chord_name`."""
-        return _grips._parse_chord_name(name)
-
-    @staticmethod
-    def _string_sets_for(grip: str, top_string: int) -> List[Tuple[int, ...]]:
-        """See `grips._string_sets_for`."""
-        return _grips._string_sets_for(grip, top_string)
-
-    @classmethod
-    def _chord_context(
-        cls, chord_type: str, chord_name: Optional[str]
-    ) -> Tuple[str, Optional[int], Tuple[int, ...]]:
-        """See `grips._chord_context`."""
-        return _grips._chord_context(chord_type, chord_name)
-
-    @staticmethod
     def get_comping_voicings(
         chord_type: str,
         chord_name: Optional[str] = None,
@@ -124,11 +107,6 @@ class VoiceLeadingEngine:
             bass_voice,
             shell_root,
         )
-
-    @staticmethod
-    def _lower_soprano_strings(top_strings: Tuple[int, ...]) -> Tuple[int, ...]:
-        """See `grips._lower_soprano_strings`."""
-        return _grips._lower_soprano_strings(top_strings)
 
     @classmethod
     def get_grip_voicings(
@@ -254,28 +232,6 @@ class VoiceLeadingEngine:
         return _chords.resolve_non_chord_tone(
             melody_note, chord_type, chord_name, strategy, next_melody
         )
-
-    @classmethod
-    def _resolution_pitch_class(
-        cls,
-        melody_note: Note,
-        root_str: str,
-        canonical_type: str,
-        next_melody: Optional[str],
-    ) -> Optional[int]:
-        """See `chords._resolution_pitch_class`."""
-        return _chords._resolution_pitch_class(
-            melody_note, root_str, canonical_type, next_melody
-        )
-
-    @staticmethod
-    def _window_penalty(
-        candidates: List[Voicing],
-        fret_min: int = NECK_FRET_MIN,
-        fret_max: int = NECK_FRET_MAX,
-    ) -> int:
-        """See `cost._window_penalty`."""
-        return _cost._window_penalty(candidates, fret_min, fret_max)
 
     @classmethod
     def voicing_cost(

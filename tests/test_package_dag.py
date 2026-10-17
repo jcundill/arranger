@@ -19,7 +19,9 @@ Three things are asserted:
 
 `ALLOWED_EDGES` is the honest escape hatch: a list of named edges rather than a
 blanket exemption, because the split could not be done without them and naming
-each one is what makes a seventh visible.
+each one is what makes a seventh visible. It is empty now - every import points
+up the order - and a stale entry fails, so an edge that is no longer needed
+cannot sit there as permission for the next one.
 """
 
 from __future__ import annotations
@@ -44,6 +46,7 @@ ORDER = [
     "grip_place",   # where a shape is placed on its strings, and the memo
     "grips",        # the grip builders and candidate generators
     "cost",         # voicing_cost: which candidate is played
+    "annotation",   # the trailing explanation a step carries, as composed clauses
     "parts",        # the parts axis: which of melody / bass / chord the guitar takes
     "harmony",      # the harmony axis: which degrees the chord part states
     "grid",         # the grid axis: when each part sounds
@@ -66,17 +69,10 @@ ORDER = [
 
 # The edges the split could not avoid, each with the reason it is sound. Anything
 # added here has to justify itself in a comment - that is the point of the list.
-ALLOWED_EDGES: Dict[str, Set[str]] = {
-    # The four axis modules sit between `cost` and `bass`. `harmony` and `grid`
-    # read the parts vocabulary, and `texture` reads `grips` and `parts`; every
-    # one of those is above it in ORDER, so no explicit edge is required. The
-    # entries below are kept only where an edge points *down* the list.
-    #
-    # `decisions.select_step_voicing` is the corpus's slash-bass rule and needs the
-    # engine's own cost function. `steps` imports `decisions`, so this edge has to
-    # point down - which is why it imports `cost` and never `steps`.
-    "decisions": {"tuning", "chords", "cost", "grips"},
-}
+# Every module's imports point up the order today, so this is the empty place a
+# deliberate exception has to be written down; `test_no_allowed_edge_is_stale`
+# fails if an entry outlives the import it permits.
+ALLOWED_EDGES: Dict[str, Set[str]] = {}
 
 def _is_below(module: str, other: str) -> bool:
     """True when `other` sits *later* in ORDER than `module` - i.e. beneath it."""
@@ -154,6 +150,27 @@ class TestPackageDag(unittest.TestCase):
                         f"{module} imports {imported}, which is below it in the order"
                     )
         self.assertEqual(offenders, [], "the package is no longer a DAG")
+
+    def test_no_allowed_edge_is_stale(self):
+        """An entry in `ALLOWED_EDGES` must still permit an import that exists.
+
+        This is the same two-way discipline as the private-import allowlist. An
+        exception left behind after the code moved is not merely dead: it is
+        permission for the next down-pointing import, which will then pass
+        unnoticed.
+        """
+        stale = []
+        for module, allowed in ALLOWED_EDGES.items():
+            actual = {
+                imported
+                for imported in _imports_of(module)
+                if imported in ORDER and _is_below(module, imported)
+            }
+            for edge in sorted(allowed - actual):
+                stale.append(f"{module} -> {edge} is allowed but not imported")
+        self.assertEqual(
+            stale, [], "an allowed edge no longer exists - delete the entry"
+        )
 
     def test_no_module_imports_the_facade(self):
         """Nothing inside the package may import `arranger` itself.

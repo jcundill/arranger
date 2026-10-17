@@ -18,7 +18,7 @@ shape written as one longer note rather than a re-strike. Each chord is labelled
 format, so it is read by *tab* programs - Guitar Pro 5 and later that read GP5, TuxGuitar,
 and the browser and mobile readers that import it - while MusicXML remains the way into
 Sibelius, MuseScore and Final. What the two share is the *placement*: both call
-`tabxml.score_events`, so a head lands on the same beats in both files and the two
+`tabscore.score_events`, so a head lands on the same beats in both files and the two
 renderings cannot drift apart. Where they genuinely differ is bar lines - see
 `_measures`.
 
@@ -60,7 +60,7 @@ import io
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from arranger.tuning import NO_CHORD, ArrangementStep
-from tabxml import score_events, substitute_steps
+from tabscore import score_events, substitute_steps
 
 # The GP file version written. (5, 1, 0) is the 5.1 format, which Guitar Pro 5 and
 # every later release read. PyGuitarPro writes GP3/GP4/GP5/TGP from the same model,

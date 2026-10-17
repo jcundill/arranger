@@ -17,7 +17,7 @@ from .grips import BASS_DEGREES_6432
 from .tuning import NECK_FRET_MAX, NECK_FRET_MIN, GuitarFretboard, Voicing
 
 
-def _window_penalty(
+def window_penalty(
     candidates: List[Voicing],
     fret_min: int = NECK_FRET_MIN,
     fret_max: int = NECK_FRET_MAX,

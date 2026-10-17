@@ -912,7 +912,7 @@ class TestDerivedGripShapes(unittest.TestCase):
 
     Both are in `GRIP_PREFERENCE`, and both were unreachable at the default span limit
     for a long time, which is what let two defects survive: the string order
-    `_string_sets_for` returned, and the voice drop-3 actually dropped. Both are
+    `string_sets_for` returned, and the voice drop-3 actually dropped. Both are
     invisible in a generated tab - the pitches are right either way - so they are pinned
     here against the definition rather than against a previous output.
 
@@ -941,26 +941,26 @@ class TestDerivedGripShapes(unittest.TestCase):
         """
         The four pitches `_close_stack_offsets` derives under `melody`.
 
-        The tones come from `_chord_context`, which yields them as **degrees from the
+        The tones come from `chord_context`, which yields them as **degrees from the
         root** and is what every grip builder reads - not
         `ChordParser.get_chord_tones`, which returns absolute pitch classes once a chord
         name is supplied. The two disagree for any non-C chord: G7 is degrees
         (0, 4, 7, 10) but absolute classes (2, 5, 7, 11), and walking down from G4
         looking for absolute class 2 finds C4, so the "G7" comes out as a C-something.
-        That is the whole reason `_chord_context` exists and documents itself as being
+        That is the whole reason `chord_context` exists and documents itself as being
         deliberately not `get_chord_tones`.
         """
-        from arranger.grips import _chord_context, _close_stack_offsets
+        from arranger.grips import _close_stack_offsets, chord_context
 
-        _canonical, root_pc, tones = _chord_context(quality, chord_name)
+        _canonical, root_pc, tones = chord_context(quality, chord_name)
         offsets = _close_stack_offsets(tones, Note(melody).midi_note(), root_pc)
         return [Note(melody).midi_note() + offset for offset in offsets]
 
     def _template(self, grip, chord_name, quality, melody):
         """The one interval template `grip` builds for `melody`, as absolute pitches."""
-        from arranger.grips import _chord_context, _interval_set_for_grip
+        from arranger.grips import _interval_set_for_grip, chord_context
 
-        _canonical, root_pc, tones = _chord_context(quality, chord_name)
+        _canonical, root_pc, tones = chord_context(quality, chord_name)
         melody_midi = Note(melody).midi_note()
         templates = _interval_set_for_grip(
             grip, tones, melody_midi, root_pc,
