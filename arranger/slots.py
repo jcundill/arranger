@@ -25,21 +25,17 @@ from typing import Container, Dict, List, Optional, Sequence, Tuple
 
 from musthe import Note
 
+from .chords import bass_pitch_class, slash_bass, slash_bass_cost
 from .grid import GRID_DEFAULT
 from .options import ArrangeOptions
 from .parts import PARTS_AUTO
 from .steps import VoiceLeadingEngine
 from .texture import TEXTURE_STYLES
-from .tuning import NO_CHORD, PITCH_CLASS_NAMES, ArrangementStep
+from .tuning import NO_CHORD, ArrangementStep
 
 __all__ = [
     "arrange_slots",
-    "slash_bass",
-    "slash_bass_cost",
-    "bass_pitch_class",
-    "midi_to_note_name",
     "parse_bar_range",
-    "promote_slash_chord",
     "unresolved_steps",
 ]
 
@@ -109,47 +105,6 @@ def unresolved_steps(
     return unresolved
 
 
-_TRIAD_QUALITIES = ("maj", "m")
-
-# Which seventh a triad becomes when its bass note is the seventh, keyed by the
-# triad's own quality. A minor triad over a minor seventh is m7, a major triad
-# over a major seventh is maj7.
-_TRIAD_PROMOTION = {"m": "m7", "maj": "maj7"}
-
-
-def promote_slash_chord(root: str, quality: str, bass: Optional[str]) -> str:
-    """Promotes a triad to a seventh chord when the bass implies one.
-
-    The Weimar database writes `A-/G`, `C-/Bb` and `D/C` for what a musician
-    reads as Am7/G, Cm7/Bb and Dm7/C: a triad whose bass is its own seventh.
-    Naming the seventh makes the melody note a chord tone instead of an
-    unresolved tension, and it recovers the largest group of otherwise
-    inexplicable basses.
-
-    Triads with any other bass, and every non-triad quality, pass through
-    unchanged. A pedal or an inverted bass is honoured by `bass_pitch_class`
-    instead, which is a preference rather than a change of chord.
-    """
-    if bass is None or quality not in _TRIAD_QUALITIES:
-        return quality
-    root_pc = Note(root + "4").midi_note() % 12
-    bass_pc = Note(bass + "4").midi_note() % 12
-    if (bass_pc - root_pc) % 12 == 10:  # the seventh
-        return _TRIAD_PROMOTION[quality]
-    return quality
-
-
-def midi_to_note_name(pitch: int) -> str:
-    """MIDI number to a note name, spelled with flats.
-
-    Flats because the keys and chord symbols this library is handed are
-    flat-based (Eb, Bb, Ab), so a flat spelling is the one that reads correctly
-    next to them.
-    """
-    pitch = int(round(pitch))
-    return f"{PITCH_CLASS_NAMES[pitch % 12]}{pitch // 12 - 1}"
-
-
 def _next_chord_tone_melody(
     triples: Sequence[Tuple[Optional[str], str, str]],
     index: int,
@@ -178,54 +133,6 @@ def _next_chord_tone_melody(
         if VoiceLeadingEngine.is_chord_tone(Note(melody), quality, name):
             return melody
     return None
-
-
-def bass_pitch_class(bass: Optional[str]) -> Optional[int]:
-    """The pitch class a slash bass asks for, or None when there is none."""
-    if bass is None:
-        return None
-    return Note(bass + "4").midi_note() % 12
-
-
-# A chord symbol's slash bass: anything after a single `/`, which must be a
-# pitch. Deliberately looser than the Weimar pattern this replaces - it read the
-# *same* field with a stricter one, and the strictness bought a quality lookup
-# this call site never used. `A-/G` -> `G`; `A-` and `NC` -> None.
-_SLASH_BASS_RE = re.compile(r"^[^/]*/([A-Ga-g][#b]?)\s*$")
-
-
-def slash_bass(symbol: str) -> Optional[str]:
-    """The bass note a chord symbol asks for, or None when it asks for none.
-
-    **This reads the one part of the symbol this call site needs.** The symbol is parsed
-    for its slash bass and nothing else: the quality and the root come from the
-    progression's own triples, so a quality table here would be dead weight - which is
-    why there is none.
-    """
-    symbol = (symbol or "").strip()
-    if not symbol or symbol == NO_CHORD:
-        return None
-    match = _SLASH_BASS_RE.match(symbol)
-    return match.group(1) if match else None
-
-
-def slash_bass_cost(voicing_midis: Sequence[int], bass_pc: Optional[int]) -> int:
-    """How far a voicing's lowest sounding pitch is from the requested bass.
-
-    In semitones, as the smallest interval from the bass pitch class to the
-    lowest note actually played. Zero means the bass is in the voicing; 6 means
-    it is a tritone away. Used only to *prefer* one candidate over another, so a
-    voicing that cannot honour the bass is still usable.
-
-    Named `slash_bass_cost`, not `bass_cost`, because the walking line already
-    owns that name (`arranger.bass.bass_cost`) - the two rank different things and
-    the shared spelling was a trap. This is the slash-chord half.
-    """
-    if bass_pc is None or not voicing_midis:
-        return 0
-    lowest = min(voicing_midis) % 12
-    direct = abs(lowest - bass_pc)
-    return min(direct, 12 - direct)
 
 
 # ---------------------------------------------------------------------------

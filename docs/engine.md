@@ -160,7 +160,7 @@ you whether a change is an improvement or a different library.
   A fifth names a loss the tab cannot show: the slash bass the partition could not reach
   (`the written bass D is not sounded - the lowest voice (G3) is 5 semitones from it`). The
   symbol asks for that note and no part of the tab answers, so the line does — read from the
-  chord symbol and the shape, through `slots.slash_bass` and `slots.slash_bass_cost`.
+  chord symbol and the shape, through `chords.slash_bass` and `chords.slash_bass_cost`.
 
   A sixth names the other loss the tab cannot show, and it is the rule's own price: a
   four-voice shape on a chord with more tones than voices *gives one up* — the root first,

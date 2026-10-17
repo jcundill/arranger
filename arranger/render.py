@@ -30,10 +30,15 @@ from typing import Dict, List, Optional, Tuple
 
 from musthe import Note
 
-from .chords import ChordParser, melody_degree_name
+from .chords import (
+    ChordParser,
+    bass_pitch_class,
+    melody_degree_name,
+    slash_bass,
+    slash_bass_cost,
+)
 from .cost import SPAN_CRITERION, VOICING_COST_CRITERIA
 from .grips import INTERVAL_NAMES
-from .slots import bass_pitch_class, slash_bass, slash_bass_cost
 from .tuning import (
     MUTED_CELL,
     NECK_FRET_MAX,
@@ -477,7 +482,7 @@ def _slash_bass_clause(step: ArrangementStep) -> str:
     """Says when the written slash bass is not among the notes played.
 
     A symbol like `Cmaj/D` asks for the D *as the lowest voice*, and the engine prefers
-    that by partitioning the palette on `slots.slash_bass_cost` before the cost tuple runs.
+    that by partitioning the palette on `chords.slash_bass_cost` before the cost tuple runs.
     The partition only **prefers** it: a best score of at most
     `decisions.SLASH_BASS_SATISFIED` keeps the candidates within a tone of the written bass,
     and a chord nothing can reach is treated as if the slash had not been written. Either
@@ -485,7 +490,7 @@ def _slash_bass_clause(step: ArrangementStep) -> str:
     the tab can say why - so the line says it, with the distance the selection settled for.
 
     Read from the step alone: the written bass comes out of the chord symbol
-    (`slots.slash_bass`, the one place that rule lives) and the distance is
+    (`chords.slash_bass`, the one place that rule lives) and the distance is
     `slash_bass_cost`'s own measure, the smallest interval from the written bass to the
     lowest sounding note.
 

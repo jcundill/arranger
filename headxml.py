@@ -57,11 +57,8 @@ from arranger import (
     resolve_grid,
     resolve_parts,
 )
-from arranger.slots import (
-    arrange_slots,
-    midi_to_note_name,
-    promote_slash_chord,
-)
+from arranger.chords import midi_to_note_name, promote_slash_chord
+from arranger.slots import arrange_slots
 
 __all__ = [
     "MUSICXML_KIND_QUALITIES",
@@ -89,7 +86,7 @@ __all__ = [
 # 3.1-era reader will accept, this one says what each one *means* here.
 #
 # A kind the library cannot voice is absent rather than folded into a near
-# neighbour, on the same principle as `slots.promote_slash_chord` beside it: an
+# neighbour, on the same principle as `chords.promote_slash_chord` beside it: an
 # untranslatable chord is counted and reported, because a plausible wrong chord is
 # worse than a gap the user can see. `Neapolitan`, `Italian`, `French`, `German`,
 # `pedal`, `power`, `Tristan` and `none` are all absent for that reason - they are
