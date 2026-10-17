@@ -241,8 +241,23 @@ Phase 9's engine cuts are complete. Remaining in the round:
   `tabstaff.py`'s budget falls from 27/396 to **17/195**; its parameter ceiling is
   unchanged at 13 (`format_tab_html`), which is a public signature.
 
-Next: 9.7, the importers — `headxml._read_notes` (239), `_expand_repeats`,
-`_expand_play_order`; `tabxml.score_events`/`_build_part`; `tabgp._build_song`.
+Next: 9.7, the importers — `headxml._read_notes` (239 lines, CC 29 — the tree's
+worst), `_expand_repeats` (113 / 26), `_expand_play_order` (80 / 21);
+`tabxml.score_events` (168 / 24) and `_build_part` (176 / 12); `tabgp._build_song`
+(223 / 27).
+
+**Start 9.7 with a state carrier, not with a slice.** `_read_notes` is one walk
+over 14 mutable locals (`chord`, `quality`, `bass`, `unmapped`, `skipped`,
+`notes`, `changes`, the seven `group_*` fields, `divisions`, `bar`, `bar_index`,
+`position`, `measure_numbers`, `raw_markers`) plus a `skip` closure. Its CC is
+almost all in one per-child dispatch: `backup`, `forward`, `harmony`, `note`,
+then grace / cue / rest / unreadable-pitch / chord-member inside the note branch.
+No single branch can be lifted out on its own — each one reads and writes most of
+those locals — so the honest first move is a `_NotesWalk` value holding them with
+`measure()`, `_harmony()`, `_note()` and `_flush()` on it, exactly as
+`_StaffGrid` and `SlotContext` were done. A branch-by-branch extraction here
+would thread a nine-tuple through every call and make the function harder to
+read than it is.
 - 9.7: `headxml._read_notes` (239), `_expand_repeats`, `_expand_play_order`;
   `tabxml.score_events`/`_build_part`; `tabgp._build_song`.
 - Then Phases 11–15 (hygiene included: `docs/engine.md` still says
