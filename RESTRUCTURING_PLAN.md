@@ -181,8 +181,8 @@ byte-identical, `make chart-audit` clean.
 ## Phase 9 — Decompose the high-complexity functions (in progress)
 
 Extract-method only, with the suite and a byte-identical `make demo` as the
-oracle. Seven commits landed; `bass.py` fell from **31/202 to 16/82**,
-`movement.py` from **23/360 to 13/340** and `routes.py` from **13/229 to 6/97**.
+oracle. Eight commits landed; `bass.py` fell from **31/202 to 16/82**,
+`movement.py` from **23/360 to 9/251** and `routes.py` from **13/229 to 6/97**.
 
 - `_walking_bass_line` (202) → `_located_onsets`, `_anchor_only_line`,
   `_walked_beats`, `_filled_harmony`, `_anchor_flags`, `_next_anchor_pitches`,
@@ -217,11 +217,23 @@ oracle. Seven commits landed; `bass.py` fell from **31/202 to 16/82**,
   substitution, and the strategy that is recorded even when it settles nothing):
   **131 → 75 lines, CC 17 → 6.** The public signature is unchanged, so the
   corpus loader and the callers do not move.
+- `arrange_progression` (340 lines, CC 13) → `_loop_slots` (the walk's union, or
+  one slot per triple read defensively), `_context_for` (the route-facing view,
+  derived from the plan and the inputs), and `_route_slot` (the five-route
+  dispatch, whose `continue`s become `return`s): **340 → 251 lines, CC 13 → 3.**
+  The 251 is 150 lines of contract docstring; the body is ~90. `_SlotInputs`
+  gained the five knobs the context needed, so there is still one value rather
+  than a second parameter object.
 
-Remaining, in this order:
+Phase 9's function cuts are complete. Remaining in the round:
 
-- `arrange_progression` (340) - the only function left holding a `movement`
-  ceiling, now at 13/340/15.
+- 9.6: `tabstaff.format_tab_staff` (396, the largest function in the tree),
+  `format_tab_html`.
+- 9.7: `headxml._read_notes` (239), `_expand_repeats`, `_expand_play_order`;
+  `tabxml.score_events`/`_build_part`; `tabgp._build_song`.
+- Then Phases 11–15 (hygiene included: `docs/engine.md` still says
+  `best_voicing` in three places for a function deleted long ago; the source
+  docstring is fixed, the document is not).
 - `tabstaff.format_tab_staff` (396), `format_tab_html`.
 - `headxml._read_notes` (239), `_expand_repeats`, `_expand_play_order`;
   `tabxml.score_events`/`_build_part`; `tabgp._build_song`.
@@ -315,8 +327,8 @@ Round 2:
 - Phase 7: DONE (two commits).
 - Phase 8: DONE (five commits). 1107 tests OK (skipped=2), ruff 0, pyright 0/0,
   `make demo` byte-identical, `make chart-audit` clean.
-- Phase 9: IN PROGRESS — 9.1–9.5 landed, `prepare_step` included (seven commits). Next:
-  `arrange_progression`, then the renderers (9.6) and the importers (9.7).
+- Phase 9: phases 9.1–9.5 and `arrange_progression` landed (eight commits); 9.6
+  (renderers) and 9.7 (importers) next.
 - Phase 10: DONE (moved before 9.3). 1107 tests OK, ruff 0, pyright 0/0,
   demo byte-identical.
 - Phases 11-15: planned, in the order above.

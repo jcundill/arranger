@@ -78,7 +78,7 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/grips.py": Budget(22, 128, 9),
     "arranger/harmony.py": Budget(4, 21, 2),
     "arranger/melody_alone.py": Budget(6, 74, 14),
-    "arranger/movement.py": Budget(13, 340, 15),
+    "arranger/movement.py": Budget(9, 251, 15),
     # `ArrangeOptions` is a flat dataclass of knobs with no methods today.
     "arranger/options.py": Budget(5, 30, 3),
     "arranger/parts.py": Budget(9, 45, 1),

@@ -419,7 +419,7 @@ def prepare_step(
     This is a whole step up to selection: the candidates across every allowed
     soprano string and grip family, the octave-down rescue, and the
     non-chord-tone strategies. `arrange_progression` selects with
-    `best_voicing` straight afterwards, and the corpus loader selects the
+    `select_step_voicing` straight afterwards, and the corpus loader selects the
     same way after honouring a slash bass, so the two cannot drift.
 
     Returns None when the step has no voicing at all. `previous` is only read
@@ -1391,7 +1391,7 @@ class _SlotPlan:
 
 @dataclass(frozen=True)
 class _SlotInputs:
-    """The arrangement-level facts every slot's plan is decided against.
+    """The arrangement-level facts every slot's plan and context are built from.
 
     Bound once by `arrange_progression` and passed to each stage of the plan, so a
     stage takes the *slot* rather than ten words about the arrangement.
@@ -1406,6 +1406,11 @@ class _SlotInputs:
     melody_onsets: Optional[Container[int]]
     grid_pattern: str
     beats_per_bar: int
+    fret_min: int
+    fret_max: int
+    non_chord_tone: str
+    bass_pcs: Optional[Mapping[int, Optional[int]]]
+    slash_bass_cost_for: Optional[Callable[[Sequence[int], Optional[int]], int]]
 
 
 def _tune_silent_plan(
@@ -1623,6 +1628,138 @@ def _slot_state(
         role=role,
         slot_grips=slot_grips,
         melody_alone=melody_alone,
+    )
+
+
+def _context_for(plan: _SlotPlan, inputs: _SlotInputs) -> SlotContext:
+    """The route-facing view of one planned slot.
+
+    Derived from the plan and the arrangement-level inputs only, so a route cannot
+    read a fact the plan has not already decided.
+    """
+    return SlotContext(
+        progression=inputs.progression,
+        index=plan.index,
+        name=plan.name,
+        note_str=plan.note_str,
+        melody_note=plan.melody_note,
+        fret_min=inputs.fret_min,
+        fret_max=inputs.fret_max,
+        texture=inputs.texture,
+        has_thumb=inputs.has_thumb,
+        non_chord_tone=inputs.non_chord_tone,
+        bass_pcs=inputs.bass_pcs,
+        slash_bass_cost_for=inputs.slash_bass_cost_for,
+        bar=plan.bar,
+        beat=plan.beat,
+        duration=plan.duration,
+        role=plan.role,
+        weight=plan.weight,
+    )
+
+
+def _loop_slots(
+    progression: Sequence[Tuple[Optional[str], str, str]],
+    timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
+    slots: Optional[List[Slot]],
+) -> List[Slot]:
+    """One slot per triple, carrying that triple's own timing or None for an unplaced one.
+
+    The walk's union wins when it exists, because its extra beats are the steps the
+    thumb needs. Otherwise the list is read defensively - a short `timings` leaves
+    the trailing steps unlocated - and, importantly, tolerating a *present but empty*
+    entry: the corpus normalises its unplaced slots to `(None, None, None)`, so
+    `float(beat)` here has to cope with None or the head path raises the moment it is
+    allowed to delegate. That is the fourth time the two paths' differing timing
+    types have cost something, and the first time it was a crash rather than a
+    signature that would not typecheck.
+    """
+    if slots is not None:
+        return slots
+
+    def timing(index: int) -> Tuple[Optional[int], Optional[float], Optional[float]]:
+        if timings is None or index >= len(timings):
+            return (None, None, None)
+        bar, beat, duration = timings[index]
+        return (bar, None if beat is None else float(beat), duration)
+
+    return [
+        Slot(index=index, bar=bar, beat=beat, duration=duration)
+        for index, (bar, beat, duration) in enumerate(
+            timing(i) for i in range(len(progression))
+        )
+    ]
+
+
+def _route_slot(
+    arrangements: List[ArrangementStep],
+    slot: Slot,
+    plan: _SlotPlan,
+    context: SlotContext,
+    *,
+    top_strings: Tuple[int, ...],
+    melody_onsets: Optional[Container[int]],
+    parts: Tuple[str, ...],
+    harmony_family: str,
+    melody_only: bool,
+) -> None:
+    """Send one planned slot to exactly one route, which appends its step.
+
+    The order is the contract: rest, fill, `NC`, comping, melody-bearing. A fill that
+    cannot be filled falls through rather than returning, because the chord of the
+    tune must not be lost to a texture - `texture_fill_step`'s own answer.
+    """
+    if plan.melody_alone == MELODY_ALONE_REST:
+        rest_step(
+            arrangements, slot,
+            name=plan.name, note_str=plan.note_str,
+            bar=plan.bar, beat=plan.beat, duration=plan.duration,
+            role=plan.role, weight=plan.weight,
+            sings_here=plan.sings_here, silence=plan.silence,
+        )
+        return
+    if plan.melody_alone == MELODY_ALONE_TEXTURE:
+        if texture_fill_step(
+            arrangements, slot,
+            name=plan.name, note_str=plan.note_str,
+            melody_note=plan.melody_note, top_strings=top_strings,
+            previous=_previous_shape(arrangements),
+            bar=plan.bar, beat=plan.beat, duration=plan.duration,
+            role=plan.role, weight=plan.weight,
+        ):
+            return
+    if plan.melody_alone == MELODY_ALONE_NO_CHORD:
+        no_chord_step(
+            arrangements, slot,
+            name=plan.name, note_str=plan.note_str,
+            melody_note=plan.melody_note, top_strings=top_strings,
+            previous=_previous_shape(arrangements),
+            bar=plan.bar, beat=plan.beat, duration=plan.duration,
+            role=plan.role, weight=plan.weight,
+        )
+        return
+    # --- The comping route: the guitar harmonises, somebody else sings ---
+    # See `comping_step`: taken before `prepare_step` because there is no melody for
+    # the guitar here, and only after the NC and melody-alone branches, which are the
+    # cases with no harmony to state.
+    if not plan.sings_here and not melody_only:
+        if comping_step(
+            arrangements, slot, context,
+            chord_type=plan.chord_type,
+            melody_onsets=melody_onsets,
+            parts=parts,
+            harmony_family=harmony_family,
+        ):
+            return
+
+    # Every melody-bearing route below pins a note, and a slot with none has left the
+    # loop by now: the guard at the top refuses one the guitar is asked to sing, and
+    # the comping block above always steps or returns.
+    _harmonised_step(
+        arrangements, slot, context,
+        top_strings=top_strings,
+        slot_grips=plan.slot_grips,
+        melody_only=melody_only,
     )
 
 
@@ -1846,34 +1983,7 @@ def arrange_progression(
     # What one step tells the next; see `_Carried`.
     carried = _Carried()
 
-    # One slot per triple, carrying that triple's own `(bar, beat, duration)` or
-    # None for a slot nobody located. Read defensively - a short `timings` leaves
-    # the trailing steps unlocated - and, importantly, tolerating a *present but
-    # empty* entry: the corpus normalises its unplaced slots to `(None, None, None)`,
-    # so `float(beat)` here has to cope with None or the head path raises the
-    # moment it is allowed to delegate. That is the fourth time the two paths'
-    # differing timing types have cost something, and the first time it was a
-    # crash rather than a signature that would not typecheck.
-    def _timing(index: int) -> Tuple[Optional[int], Optional[float], Optional[float]]:
-        if timings is None or index >= len(timings):
-            return (None, None, None)
-        bar, beat, duration = timings[index]
-        return (
-            bar,
-            None if beat is None else float(beat),
-            duration,
-        )
-
-    loop: List[Slot] = (
-        slots if slots is not None
-        else [
-            Slot(index=index, bar=bar, beat=beat, duration=duration)
-            for index, (bar, beat, duration) in enumerate(
-                _timing(i) for i in range(len(progression))
-            )
-        ]
-    )
-
+    loop = _loop_slots(progression, timings, slots)
     slot_inputs = _SlotInputs(
         progression=progression,
         texture=texture,
@@ -1884,84 +1994,22 @@ def arrange_progression(
         melody_onsets=melody_onsets,
         grid_pattern=grid_pattern,
         beats_per_bar=beats_per_bar,
+        fret_min=fret_min,
+        fret_max=fret_max,
+        non_chord_tone=non_chord_tone,
+        bass_pcs=bass_pcs,
+        slash_bass_cost_for=slash_bass_cost_for,
     )
     for slot in loop:
         plan = _slot_state(carried, slot, slot_inputs)
         if plan is None:
             continue
-
-        context = SlotContext(
-            progression=progression,
-            index=plan.index,
-            name=plan.name,
-            note_str=plan.note_str,
-            melody_note=plan.melody_note,
-            fret_min=fret_min,
-            fret_max=fret_max,
-            texture=texture,
-            has_thumb=has_thumb,
-            non_chord_tone=non_chord_tone,
-            bass_pcs=bass_pcs,
-            slash_bass_cost_for=slash_bass_cost_for,
-            bar=plan.bar,
-            beat=plan.beat,
-            duration=plan.duration,
-            role=plan.role,
-            weight=plan.weight,
-        )
-
-        if plan.melody_alone == MELODY_ALONE_REST:
-            rest_step(
-                arrangements, slot,
-                name=plan.name, note_str=plan.note_str,
-                bar=plan.bar, beat=plan.beat, duration=plan.duration,
-                role=plan.role, weight=plan.weight,
-                sings_here=plan.sings_here, silence=plan.silence,
-            )
-            continue
-        if plan.melody_alone == MELODY_ALONE_TEXTURE:
-            if texture_fill_step(
-                arrangements, slot,
-                name=plan.name, note_str=plan.note_str,
-                melody_note=plan.melody_note, top_strings=top_strings,
-                previous=_previous_shape(arrangements),
-                bar=plan.bar, beat=plan.beat, duration=plan.duration,
-                role=plan.role, weight=plan.weight,
-            ):
-                continue
-
-        if plan.melody_alone == MELODY_ALONE_NO_CHORD:
-            no_chord_step(
-                arrangements, slot,
-                name=plan.name, note_str=plan.note_str,
-                melody_note=plan.melody_note, top_strings=top_strings,
-                previous=_previous_shape(arrangements),
-                bar=plan.bar, beat=plan.beat, duration=plan.duration,
-                role=plan.role, weight=plan.weight,
-            )
-            continue
-
-        # --- The comping route: the guitar harmonises, somebody else sings ---
-        # See `comping_step`: taken before `prepare_step` because there is no
-        # melody for the guitar here, and only after the NC and melody-alone
-        # branches, which are the cases with no harmony to state.
-        if not plan.sings_here and not melody_only:
-            if comping_step(
-                arrangements, slot, context,
-                chord_type=plan.chord_type,
-                melody_onsets=melody_onsets,
-                parts=chosen_parts,
-                harmony_family=harmony_family,
-            ):
-                continue
-
-        # Every melody-bearing route below pins a note, and a slot with none has
-        # left the loop by now: the guard at the top refuses one the guitar is
-        # asked to sing, and the comping block above always steps or continues.
-        _harmonised_step(
-            arrangements, slot, context,
+        _route_slot(
+            arrangements, slot, plan, _context_for(plan, slot_inputs),
             top_strings=top_strings,
-            slot_grips=plan.slot_grips,
+            melody_onsets=melody_onsets,
+            parts=chosen_parts,
+            harmony_family=harmony_family,
             melody_only=melody_only,
         )
 
