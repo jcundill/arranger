@@ -503,9 +503,7 @@ def _prepare_or_rescue(
     )
     if prepared is not None:
         return prepared, context.role
-    note_str = context.note_str
-    melody_note = context.melody_note
-    assert melody_note is not None and note_str is not None
+    assert context.melody_note is not None
     if rescue_melody_alone(
         arrangements, slot, context,
         top_strings=inputs.top_strings, previous=_previous_shape(arrangements),
@@ -532,7 +530,7 @@ def _prepare_or_rescue(
         silence=(
             SILENCE_OUT_OF_REACH
             if not _grips.get_melody_only_voicings(
-                melody_note, prefer=inputs.top_strings
+                context.melody_note, prefer=inputs.top_strings
             )
             else SILENCE_NO_SHAPE
         ),
@@ -698,8 +696,7 @@ def _selection_for(
         substitute = prepared.chord_name
     allowed_tones = ChordParser.get_chord_tones(sub_quality, substitute)
     root_pc = _grips.chord_context(prepared.chord_type, prepared.chord_name)[1]
-    melody_note = context.melody_note
-    assert melody_note is not None
+    assert context.melody_note is not None
     # The melody is the caller's note and is never rewritten, so when it lies outside
     # the chord every candidate is impure on it. Scoring it separately lets a shape
     # that adds no *other* wrong note reach zero - see `cost.voicing_cost`, where
@@ -713,7 +710,7 @@ def _selection_for(
             fret_max=context.fret_max,
             allowed_tones=allowed_tones,
             root_pc=root_pc,
-            melody_pc=melody_note.midi_note() % 12,
+            melody_pc=context.melody_note.midi_note() % 12,
             bass_pc=(
                 None if context.bass_pcs is None
                 else context.bass_pcs.get(context.index)
@@ -793,10 +790,7 @@ def _harmonised_step(
     picks among them, and the last resort before silence is the melody alone.
     """
     context = plan.context
-    inputs = plan.inputs
-    note_str = context.note_str
-    melody_note = context.melody_note
-    assert note_str is not None and melody_note is not None
+    assert context.note_str is not None and context.melody_note is not None
     # The previous shape is the last *sounding* one: a silent position between here
     # and the previous chord is a hole in the tab, not a shape the hand held - see
     # `last_sounding_step`.
@@ -854,7 +848,8 @@ def _harmonised_step(
             palette = selection.palette(best_voicing)
         elif demoted_to_melody_alone(
             arrangements, slot, replace(context, role=role),
-            top_strings=inputs.top_strings, previous=selection.criteria.previous,
+            top_strings=plan.inputs.top_strings,
+            previous=selection.criteria.previous,
             best_voicing=best_voicing,
             palette=palette,
         ):

@@ -122,24 +122,21 @@ def texture_fill_step(
     route - an unreachable melody is genuinely unplayable, so inventing a shape
     for it would be worse than trying the full one.
     """
-    name = context.name
-    note_str = context.note_str
-    melody_note = context.melody_note
-    bar, beat, duration = context.bar, context.beat, context.duration
-    role, weight = context.role, context.weight
     # This kind is answered only when the guitar sings, and a singing slot
     # with no note was refused at the top of this loop - so a note is
     # pinned here, which is what lets the type say so below. The *name*
     # needs the same statement: `note_str` is only narrowed inside the
     # branch that built `melody_note`, and this route needs both.
-    assert melody_note is not None and note_str is not None
+    assert context.melody_note is not None and context.note_str is not None
     solo_voicing, inside_window = melody_alone_shape(
-        melody_note, previous=previous, top_strings=top_strings
+        context.melody_note, previous=previous, top_strings=top_strings
     )
     if solo_voicing is not None:
-        sounding, written_original = sounding_melody(solo_voicing, note_str)
+        sounding, written_original = sounding_melody(
+            solo_voicing, context.note_str
+        )
         fill = ArrangementStep(
-            chord=name,
+            chord=context.name,
             melody=sounding,
             voicing=solo_voicing,
             # The tune alone *is* this slot's palette - the texture thinned the slot, or the
@@ -151,12 +148,12 @@ def texture_fill_step(
             palette=Palette(available=1, inside_window=inside_window),
             original_melody=written_original,
             partial=False,
-            bar=bar,
-            beat=beat,
-            duration=duration,
-            role=role,
-            metric_weight=weight,
-            bass_only=is_bass_only(slot.bass_only, role),
+            bar=context.bar,
+            beat=context.beat,
+            duration=context.duration,
+            role=context.role,
+            metric_weight=context.weight,
+            bass_only=is_bass_only(slot.bass_only, context.role),
         )
         attach_bass(fill, slot.bass, arrangements)
         arrangements.append(fill)
@@ -179,16 +176,11 @@ def no_chord_step(
     set here and *only* here; the texture case above reaches the same shape
     deliberately without it.
     """
-    name = context.name
-    note_str = context.note_str
-    melody_note = context.melody_note
-    bar, beat, duration = context.bar, context.beat, context.duration
-    role, weight = context.role, context.weight
     # As the texture branch above: this kind means the guitar sings, and
     # that guard already refused a singing slot with no note.
-    assert melody_note is not None and note_str is not None
+    assert context.melody_note is not None and context.note_str is not None
     solo_voicing, inside_window = melody_alone_shape(
-        melody_note, previous=previous, top_strings=top_strings
+        context.melody_note, previous=previous, top_strings=top_strings
     )
     if solo_voicing is None:
         rest_step(
@@ -199,9 +191,11 @@ def no_chord_step(
     # get_melody_only_voicings may have dropped the note an octave to stay
     # below HIGH_FRET_LIMIT, so the step reports the pitch that sounds and
     # keeps the written one for the renderer. See `sounding_melody`.
-    sounding, written_original = sounding_melody(solo_voicing, note_str)
+    sounding, written_original = sounding_melody(
+        solo_voicing, context.note_str
+    )
     arrangements.append(ArrangementStep(
-        chord=name,
+        chord=context.name,
         melody=sounding,
         voicing=solo_voicing,
         original_melody=written_original,
@@ -214,17 +208,17 @@ def no_chord_step(
         # passed here: the voicing says "melody" and the step cannot
         # disagree with it. The property is what keeps the two spellings
         # one fact with one home - see `docs/history/one-fact.md`, commit 1.
-        bar=bar,
-        beat=beat,
-        duration=duration,
-        role=role,
-        metric_weight=weight,
+        bar=context.bar,
+        beat=context.beat,
+        duration=context.duration,
+        role=context.role,
+        metric_weight=context.weight,
     ))
     # An `NC` bar is still a place the thumb walks: the walk reads the last
     # known harmony (or skips), and the melody-alone shape leaves every bass
     # string free. Attaching it here rather than only on harmonised steps is
     # what keeps a bar of no-chord melody from being a hole in the walk.
-    arrangements[-1].bass_only = is_bass_only(slot.bass_only, role)
+    arrangements[-1].bass_only = is_bass_only(slot.bass_only, context.role)
     attach_bass(arrangements[-1], slot.bass, arrangements)
 
 
@@ -269,13 +263,12 @@ def _comping_harmony(
         harmonized_as=None,
         is_non_chord_tone=False,
     )
-    melody_note = context.melody_note
-    if melody_note is None or (
+    if context.melody_note is None or (
         melody_onsets is not None and context.index not in melody_onsets
     ):
         return written
     substitute = resolve_substitute_harmony(
-        melody_note,
+        context.melody_note,
         chord_type,
         context.name,
         non_chord_tone,

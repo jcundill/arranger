@@ -940,14 +940,7 @@ def _search_comping_voicings(request: CompingRequest) -> List[Voicing]:
     outside the window is still generated and still playable, because losing a chord
     of the tune is worse than being a fret out of position.
     """
-    chord_type = request.chord_type
-    chord_name = request.chord_name
-    fret_min = request.fret_min
-    fret_max = request.fret_max
-    notes = request.notes
-    bass_voice = request.bass_voice
-    shell_root = request.shell_root
-    canonical, root_pc, tones = chord_context(chord_type, chord_name)
+    canonical, root_pc, tones = chord_context(request.chord_type, request.chord_name)
     # No root, no claim to make: a guide tone is a claim about *this* chord's 3rd and
     # 7th, and guessing them without a root is how a wrong note gets in. The same
     # rule, and the same reason, as `get_grip_voicings`'s shell and duo branches.
@@ -958,11 +951,11 @@ def _search_comping_voicings(request: CompingRequest) -> List[Voicing]:
     # The board, not the window: `fret_max` is a preference `voicing_cost` applies, so
     # searching past it and letting the selector rank is what keeps a chord of the tune
     # from vanishing. Clamped at 18, which is the end of the neck.
-    hi = min(fret_max + limit, 18)
-    lo = max(0, fret_min - limit)
+    hi = min(request.fret_max + limit, 18)
+    lo = max(0, request.fret_min - limit)
 
     valid: List[Voicing] = []
-    for used in comping_string_sets(notes, bass_voice):
+    for used in comping_string_sets(request.notes, request.bass_voice):
         best: Optional[Tuple[Tuple[int, float], Voicing]] = None
         for frets in frets_in_span(used, lo, hi, limit):
             midis = sorted(
@@ -970,8 +963,15 @@ def _search_comping_voicings(request: CompingRequest) -> List[Voicing]:
                 for string, fret in zip(used, frets)
             )
             found = _shell_voicing(
-                used, frets, midis, canonical, root_pc, tones, notes, bass_voice,
-                shell_root,
+                used,
+                frets,
+                midis,
+                canonical,
+                root_pc,
+                tones,
+                request.notes,
+                request.bass_voice,
+                request.shell_root,
             )
             if found is None:
                 continue
