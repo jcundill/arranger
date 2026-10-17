@@ -127,6 +127,7 @@ arranger/
 │   ├── __init__.py      #   facade: re-exports, __version__, main()
 │   ├── __main__.py      #   `python -m arranger`
 │   ├── tuning.py        #   STANDARD_TUNING, Voicing, ArrangementStep
+│   ├── context.py       #   one slot's request, shared by the two step routes
 │   ├── fingers.py       #   which finger holds which fret; read by bass for the fret budget
 │   ├── chords.py        #   ChordParser, non-chord-tone routing
 │   ├── grips.py         #   grip tables and the candidate generators

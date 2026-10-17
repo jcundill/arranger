@@ -178,26 +178,44 @@ changed; the names said what the import graph already depended on.
 Validation: 1107 tests OK (skipped=2), ruff 0, pyright 0/0, `make demo`
 byte-identical, `make chart-audit` clean.
 
-## Phase 9 — Decompose the high-complexity functions (planned)
+## Phase 9 — Decompose the high-complexity functions (in progress)
 
-Extract-method only; no reordering of candidate generation (`min` is first-wins
-in `bass_cost`, and generation order is the cost tuple's tie-break). Order:
-`bass._walking_bass_line` (202 lines), `_place_bass`/`_bass_slots`;
-`movement._harmonised_step` (359 lines, 22 parameters) and `_slot_state`;
-`routes._comping_step` (228 lines, 23 parameters); `tabstaff.format_tab_staff`
-(396 lines) and `format_tab_html`; `headxml._read_notes` (239),
-`_expand_repeats`, `_expand_play_order`; `tabxml.score_events`/`_build_part`;
-`tabgp._build_song`. Lower that module's budget in the same commit. Oracle: the
-pinned tab strings, `test_step_loop_equivalence.py`, the MusicXML/GP5 round
-trips, and a byte-identical `make demo`.
+Extract-method only, with the suite and a byte-identical `make demo` as the
+oracle. Three commits landed; `bass.py`'s budget fell from **31/202 to 16/82**.
 
-## Phase 10 — Parameter objects (planned)
+- `_walking_bass_line` (202) → `_located_onsets`, `_anchor_only_line`,
+  `_walked_beats`, `_filled_harmony`, `_anchor_flags`, `_next_anchor_pitches`,
+  `_walk_note`. The candidate order in `_walk_note` is untouched: `min` is
+  first-wins and that is the walk's tie-break.
+- `place_bass` (159) → `_thumb_frame` (the geometry a thumb is placed against,
+  including the held-shape widening) and `_best_thumb_fret` (enumeration and
+  ranking).
+- `_bass_slots` (132) → `_located_slots`, `_gridless_slots`,
+  `_melody_entries`, `_bass_only_entries`. The extraction found a real coupling:
+  the second pass had been appending to the first pass's list.
 
-New `arranger/context.py` after `options`: frozen `SlotContext` (the ~22 values
-`_harmonised_step` and `_comping_step` both thread) and published
-`ResolvedKnobs`. `prepare_step`/`arrange_progression` keep their keyword
-signatures and build the context internally (trap 15: no positional reordering
-at a facade). Ratchet: no function over 12 parameters.
+Remaining, in this order. **9.3 and 9.4 follow Phase 10**, because their stage
+helpers take the context rather than twenty keywords:
+
+- `_harmonised_step` (360) → rescue / hold / selection / demotion / emit stages.
+- `comping_step` (229) → the same shape.
+- `_slot_state` (197), `prepare_step` (131), `arrange_progression`.
+- `tabstaff.format_tab_staff` (396), `format_tab_html`.
+- `headxml._read_notes` (239), `_expand_repeats`, `_expand_play_order`;
+  `tabxml.score_events`/`_build_part`; `tabgp._build_song`.
+
+## Phase 10 — Parameter objects (DONE, moved before 9.3)
+
+`arranger/context.py` holds `SlotContext` - the seventeen facts both routes
+receive about one slot - and sits after `tuning` in the DAG. Both routes now
+take `(arrangements, slot, context, *, ...)`: `_harmonised_step` is **22 → 6**
+parameters and `comping_step` **23 → 7**, with each route's own policy words
+left as keywords. The bodies destructure the context at the top; that costs one
+line in each, the round's only budget increase (stated in the commit), and the
+9.3/9.4 splits remove the need for it.
+
+`arranger.context` joins the submodule names in `arranger.__all__`, because the
+module-boundary test counts any public name it can see in the facade.
 
 ## Phase 11 — Move the chord-symbol vocabulary to `chords` (planned)
 
@@ -275,4 +293,7 @@ Round 2:
 - Phase 7: DONE (two commits).
 - Phase 8: DONE (five commits). 1107 tests OK (skipped=2), ruff 0, pyright 0/0,
   `make demo` byte-identical, `make chart-audit` clean.
-- Phases 9-15: planned, in the order above.
+- Phase 9: IN PROGRESS — 9.1 and 9.2 landed (three commits); 9.3+ follow Phase 10.
+- Phase 10: DONE (moved before 9.3). 1107 tests OK, ruff 0, pyright 0/0,
+  demo byte-identical.
+- Phases 11-15: planned, in the order above.

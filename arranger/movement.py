@@ -41,6 +41,7 @@ from .chords import (
     normalised_harmony,
     resolve_substitute_harmony,
 )
+from .context import SlotContext
 from .decisions import (
     MELODY_ALONE_NO_CHORD,
     MELODY_ALONE_REST,
@@ -827,27 +828,11 @@ def _bass_group(
 def _harmonised_step(
     arrangements: List[ArrangementStep],
     slot: Slot,
+    context: SlotContext,
     *,
-    progression: Sequence[Tuple[Optional[str], str, str]],
-    index: int,
     top_strings: Tuple[int, ...],
-    non_chord_tone: str,
-    fret_min: int,
-    fret_max: int,
     slot_grips: Tuple[str, ...],
-    texture: str,
-    has_thumb: bool,
     melody_only: bool,
-    name: str,
-    note_str: Optional[str],
-    melody_note: Optional[Note],
-    bass_pcs: Optional[Mapping[int, Optional[int]]],
-    slash_bass_cost_for: Optional[Callable[[Sequence[int], Optional[int]], int]],
-    bar: Optional[int],
-    beat: Optional[float],
-    duration: Optional[float],
-    role: str,
-    weight: int,
 ) -> None:
     """The melody-bearing route: pin the tune, and voice the chord under it.
 
@@ -856,6 +841,23 @@ def _harmonised_step(
     library is built around: `prepare_step` supplies the candidates, `voicing_cost`
     picks among them, and the last resort before silence is the melody alone.
     """
+    progression = context.progression
+    index = context.index
+    name = context.name
+    note_str = context.note_str
+    melody_note = context.melody_note
+    fret_min = context.fret_min
+    fret_max = context.fret_max
+    texture = context.texture
+    has_thumb = context.has_thumb
+    non_chord_tone = context.non_chord_tone
+    bass_pcs = context.bass_pcs
+    slash_bass_cost_for = context.slash_bass_cost_for
+    bar = context.bar
+    beat = context.beat
+    duration = context.duration
+    role = context.role
+    weight = context.weight
     assert melody_note is not None and note_str is not None
     # Everything up to choosing a shape is shared with the corpus loader,
     # which needs the same candidates but honours a slash bass first. See
@@ -1690,6 +1692,26 @@ def arrange_progression(
         if plan is None:
             continue
 
+        context = SlotContext(
+            progression=progression,
+            index=plan.index,
+            name=plan.name,
+            note_str=plan.note_str,
+            melody_note=plan.melody_note,
+            fret_min=fret_min,
+            fret_max=fret_max,
+            texture=texture,
+            has_thumb=has_thumb,
+            non_chord_tone=non_chord_tone,
+            bass_pcs=bass_pcs,
+            slash_bass_cost_for=slash_bass_cost_for,
+            bar=plan.bar,
+            beat=plan.beat,
+            duration=plan.duration,
+            role=plan.role,
+            weight=plan.weight,
+        )
+
         if plan.melody_alone == MELODY_ALONE_REST:
             rest_step(
                 arrangements, slot,
@@ -1727,18 +1749,11 @@ def arrange_progression(
         # branches, which are the cases with no harmony to state.
         if not plan.sings_here and not melody_only:
             if comping_step(
-                arrangements, slot,
-                progression=progression, index=plan.index,
-                chord_type=plan.chord_type, name=plan.name,
-                note_str=plan.note_str, melody_note=plan.melody_note,
+                arrangements, slot, context,
+                chord_type=plan.chord_type,
                 melody_onsets=melody_onsets,
-                parts=chosen_parts, texture=texture, has_thumb=has_thumb,
+                parts=chosen_parts,
                 harmony_family=harmony_family,
-                non_chord_tone=non_chord_tone,
-                fret_min=fret_min, fret_max=fret_max,
-                bass_pcs=bass_pcs, slash_bass_cost_for=slash_bass_cost_for,
-                bar=plan.bar, beat=plan.beat, duration=plan.duration,
-                role=plan.role, weight=plan.weight,
             ):
                 continue
 
@@ -1746,17 +1761,10 @@ def arrange_progression(
         # left the loop by now: the guard at the top refuses one the guitar is
         # asked to sing, and the comping block above always steps or continues.
         _harmonised_step(
-            arrangements, slot,
-            progression=progression, index=plan.index,
-            top_strings=top_strings, non_chord_tone=non_chord_tone,
-            fret_min=fret_min, fret_max=fret_max,
-            slot_grips=plan.slot_grips, texture=texture,
-            has_thumb=has_thumb, melody_only=melody_only,
-            name=plan.name, note_str=plan.note_str,
-            melody_note=plan.melody_note,
-            bass_pcs=bass_pcs, slash_bass_cost_for=slash_bass_cost_for,
-            bar=plan.bar, beat=plan.beat, duration=plan.duration,
-            role=plan.role, weight=plan.weight,
+            arrangements, slot, context,
+            top_strings=top_strings,
+            slot_grips=plan.slot_grips,
+            melody_only=melody_only,
         )
 
     return arrangements

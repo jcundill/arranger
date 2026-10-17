@@ -52,6 +52,7 @@ from musthe import Note  # re-exported: `from arranger import Note` is used by t
 from . import (
     bass_merge,
     cli,
+    context,
     cost,
     decisions,
     fingers,
@@ -553,6 +554,7 @@ __all__ = [
     "chords",
     "comping_capacity",
     "cli",
+    "context",
     "cost",
     "decisions",
     "fingers",

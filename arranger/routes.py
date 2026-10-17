@@ -10,7 +10,7 @@ composes already is.
 
 from __future__ import annotations
 
-from typing import Callable, Container, List, Mapping, Optional, Sequence, Tuple
+from typing import Container, List, Optional, Tuple
 
 from musthe import Note
 
@@ -18,6 +18,7 @@ from . import grips as _grips
 from .bass import Slot
 from .bass_merge import attach_bass, next_resolution_melody
 from .chords import ChordParser, resolve_substitute_harmony
+from .context import SlotContext
 from .decisions import is_bass_only, select_step_voicing
 from .harmony import HARMONY_SHELL_ROOT
 from .melody_alone import melody_alone_shape, sounding_melody
@@ -240,28 +241,12 @@ def no_chord_step(
 def comping_step(
     arrangements: List[ArrangementStep],
     slot: Slot,
+    context: SlotContext,
     *,
-    progression: Sequence[Tuple[Optional[str], str, str]],
-    index: int,
     chord_type: str,
-    name: str,
-    note_str: Optional[str],
-    melody_note: Optional[Note],
     melody_onsets: Optional[Container[int]],
     parts: Tuple[str, ...],
-    texture: str,
-    has_thumb: bool,
     harmony_family: str,
-    non_chord_tone: str,
-    fret_min: int,
-    fret_max: int,
-    bass_pcs: Optional[Mapping[int, Optional[int]]],
-    slash_bass_cost_for: Optional[Callable[[Sequence[int], Optional[int]], int]],
-    bar: Optional[int],
-    beat: Optional[float],
-    duration: Optional[float],
-    role: str,
-    weight: int,
 ) -> bool:
     """The comping route: the guitar harmonises, somebody else sings.
 
@@ -286,6 +271,23 @@ def comping_step(
     the tune is still owed to the band, and the guitar playing the tune is a worse
     answer than a thin shape and a better one than silence.
     """
+    progression = context.progression
+    index = context.index
+    name = context.name
+    note_str = context.note_str
+    melody_note = context.melody_note
+    fret_min = context.fret_min
+    fret_max = context.fret_max
+    texture = context.texture
+    has_thumb = context.has_thumb
+    non_chord_tone = context.non_chord_tone
+    bass_pcs = context.bass_pcs
+    slash_bass_cost_for = context.slash_bass_cost_for
+    bar = context.bar
+    beat = context.beat
+    duration = context.duration
+    role = context.role
+    weight = context.weight
     # An `NC` bar has no chord, so there is no guide tone to state and
     # nothing at all for the guitar to play under the horn's line. That is
     # a real hole in the part: the **silent step** records it, so the bar
