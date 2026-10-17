@@ -527,12 +527,29 @@ Two smaller things the move settled: the `_STRING_ROW` staff-row regex went with
 file that reads a staff row, and the rendering class lost a `"Phase 6:"` docstring prefix
 - narrative of the kind AGENTS.md's docstring rule says to delete, which no test can see.
 
-Then the two remaining monoliths, by the class clusters that already exist:
+**Fourth split landed: `test_grips` -> families / tables / selection.** 2409 lines and 22
+classes, now 1428 / 536 / 455 lines and 59 / 21 / 18 tests: what each family builds, the
+questions the tables answer directly, and how the selector ranks. `QUALITIES`,
+`root_midi_of`, `every_chord_tone` and `a_shape_on` moved to `support` verbatim, being
+wanted by two or three files each.
+
+The new thing this split taught: **a live document naming `file::Class` is a map of which
+classes are load-bearing, and a split must re-point every one of them in the same commit.**
+Five were affected - `TestVoicingCost` in `cost.py`, `AGENTS.md` and `docs/engine.md`,
+`TestFretWindow` and `TestKnownTableGaps` in `docs/engine.md`, and the tables' holder in
+`grip_tables.py` twice and `AGENTS.md`. The reference in `docs/history/` was left alone:
+that document records where the test was, which was true when it was written.
+
+Carrying out that sweep found a dangling name older than this phase: `test_texture.py`
+named `test_grips.TestPlacement` as a holder of the generation order, and that class was
+deleted in `c5dde40`. Re-pointed at what does hold it rather than deleted - the stale
+premise rule again, this time applied to a *reference* rather than to a test.
+
+Then the last monolith - and it is the one to slow down for:
 
 | file | lines | split (a guess - read the classes) |
 |---|---|---|
 | `test_headxml` | 3290 | parse / timeline / repeats / cli |
-| `test_grips` | 2409 | families / palette / playability |
 
 A split moves `unittest.TestCase` classes and nothing else: no assertion changes, no
 fixture re-typing, and the test count is the meter (1108 before and after each file).
