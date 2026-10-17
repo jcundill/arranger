@@ -99,17 +99,18 @@ Five routes, `melody_alone_case` kinds, `SLASH_BASS_SATISFIED`,
 
 Selection rule (`voicing_cost` tuple order) unchanged.
 
-## Phase 5 — Optional abstractions (only if demonstrated need)
+## Phase 5 — Optional abstractions (not required)
 
-`CostFunction` protocol for substituting the selector. YAGNI unless a
-caller needs a different cost rule; the library has one cost rule and it
-is an invariant.
+`CostFunction` protocol for substituting the selector. **Judged YAGNI**: the
+library has one cost rule and it is an invariant, so a protocol would add an
+indirection with no caller. Revisit only when a second selector is needed.
 
-## Phase 6 — Consolidate import style
+## Phase 6 — Consolidate import style (DONE, pending commit)
 
-Make `slots.py` use relative imports like the rest of the engine, or vice
-versa, consistently. Verify no cycle introduced (`slots` is after
-`steps` in `ORDER` and constructs `VoiceLeadingEngine`).
+`slots.py` was the only engine module using absolute imports. Converted to
+relative imports, which also makes its dependencies visible to
+`test_package_dag` (it had been invisible to the AST check). Every edge points
+up, so no `ALLOWED_EDGES` entry is needed.
 
 ## Validation after every phase
 

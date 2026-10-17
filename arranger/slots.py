@@ -25,12 +25,12 @@ from typing import Container, Dict, List, Optional, Sequence, Tuple
 
 from musthe import Note
 
-from arranger.grid import GRID_DEFAULT
-from arranger.options import ArrangeOptions
-from arranger.parts import PARTS_AUTO
-from arranger.steps import VoiceLeadingEngine
-from arranger.texture import TEXTURE_STYLES
-from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES, ArrangementStep
+from .grid import GRID_DEFAULT
+from .options import ArrangeOptions
+from .parts import PARTS_AUTO
+from .steps import VoiceLeadingEngine
+from .texture import TEXTURE_STYLES
+from .tuning import NO_CHORD, PITCH_CLASS_NAMES, ArrangementStep
 
 __all__ = [
     "arrange_slots",
