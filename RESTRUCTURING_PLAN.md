@@ -314,7 +314,39 @@ no `ALLOWED_EDGES` entry is needed. The payoff is the edge this deletes:
 `render` stops importing `slots`, so presentation no longer depends on the
 arrangement pipeline.
 
-## Phase 12 — Split `grips` at the placement seam (measured, not started)
+## Phase 12 — Split `grips` at the placement seam (the table half landed)
+
+**Landed:** `arranger/grip_tables.py` holds the seventeen table names and the queries
+over them, and `grips` imports them. Measured: `grips.py` 2286 → 1767 lines, the new
+module 542 lines (526 of them sliced body), and no behaviour moved - the demo is byte-identical and the
+488 tests that read the grip tables (grips, generated grips, voicings, placement,
+texture, comping, bass, walking bass, explanations) pass unchanged.
+
+Three things the move taught, worth having before the placement half:
+
+- **`_BOTTOM_FOUR` had to become `BOTTOM_FOUR`.** It is read by `_string_sets_for` in
+  `grips` and by `supported_string_sets` in `grip_tables`, so the move turned a module
+  local into a cross-module import - which the encapsulation rule refuses for a private
+  name. Renaming it is the fix, not an allowlist entry.
+- **A closure over the module's own definitions is not the whole closure.** The script
+  that verified the seam followed `Name` nodes that resolved to *top-level definitions*,
+  so it could not see that `supported_string_sets` reads
+  `MELODY_STRING_CHOICES_FULL`, which `grips` imports from `tuning`. Ruff found it
+  immediately (`F821`), and the next split should treat free names from the import
+  block as part of the closure rather than discover them at lint time.
+- **The relative-import rewrite must carry `level`.** `ast.ImportFrom.module` is
+  `grips` and `level` is 1 for `from .grips import x`; reading `module` alone rewrote
+  package imports as `from grips import ...`. Ruff does not flag that, because a
+  top-level module named `grips` could legitimately exist - only an import of the
+  package catches it, which is what `tests/test_package_dag.py` and the facade test are
+  for. The repair is the same script with `'.' * level + module`.
+
+The placement half is still open and its seam is measured: `_Placement` is constructed
+at three sites (all inside the request/generator functions), and no placement function
+calls a generation function. So `grip_place.py` stays viable below `grips`; the work is
+the cross-module naming (`Placement`, `candidate`, `place_template`, `search_shape`
+become public) and a second `ORDER` entry, in the same commit as the move.
+
 
 The seam was verified by an AST closure before any text moved, and it holds: the
 closure of `supported_string_sets`, `grip_pluck_count`, `thumb_safe_grips`,
