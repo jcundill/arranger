@@ -17,7 +17,7 @@ hand-built one still run one loop rather than two.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable, Container, List, Mapping, Optional, Sequence, Tuple
 
 from musthe import Note
@@ -275,6 +275,133 @@ def _resolve_grid(grid: str, beats_per_bar: int) -> str:
     return resolve_grid(parse_grid(grid), beats_per_bar)
 
 
+@dataclass(frozen=True)
+class _SearchWindow:
+    """Where the left hand may search: the strings, the grip families, the frets."""
+
+    top_strings: Tuple[int, ...]
+    grips: Tuple[str, ...]
+    fret_min: int
+    fret_max: int
+
+
+@dataclass(frozen=True)
+class _Voiced:
+    """A prepared note's candidates, the pitch that actually sounds, and why.
+
+    `melody` differs from the written note only when the octave-down rescue fired;
+    `strategy` and `harmonized_as` say what the non-chord-tone rule did, if anything.
+    """
+
+    candidates: List[Voicing]
+    melody: Note
+    original_melody: Optional[str]
+    strategy: Optional[str] = None
+    harmonized_as: Optional[str] = None
+
+
+def _voices_for(
+    melody_note: Note,
+    written: str,
+    chord_type: str,
+    name: str,
+    window: _SearchWindow,
+) -> _Voiced:
+    """The candidates for the note, after the octave-down rescue.
+
+    Chord-tone match first, quality-only fallback second, across every allowed
+    soprano string and every grip family.
+
+    A melody whose best position sits outside the neck window is re-voiced an octave
+    down on the B string. The written pitch is kept in `original_melody`. Decided
+    before the non-chord-tone strategies run, so a substituted chord is voiced at the
+    transposed pitch too rather than snapping back up.
+
+    The guard requires candidates to exist: this repositions a voicing that is
+    playable but sits too high. A melody unreachable at the written pitch (C6, fret
+    20 - past the end of the board) is left alone, because there is no shape to move
+    down and respelling it would hide the real problem.
+    """
+    candidates = _grips.get_all_grip_voicings(
+        melody_note, chord_type, chord_name=name,
+        top_strings=window.top_strings, grips=window.grips,
+    )
+    voiced = _Voiced(candidates=candidates, melody=melody_note, original_melody=None)
+    here = _cost._window_penalty(candidates, window.fret_min, window.fret_max)
+    if not candidates or here <= 0:
+        return voiced
+    octave_down = _grips.get_octave_down_candidates(
+        melody_note, chord_type, chord_name=name,
+        top_strings=window.top_strings, grips=window.grips,
+    )
+    # Only take the lower octave when it genuinely improves the placement, or a
+    # merely slightly out-of-window melody would be moved for nothing.
+    there = _cost._window_penalty(octave_down, window.fret_min, window.fret_max)
+    if not octave_down or there >= here:
+        return voiced
+    return _Voiced(
+        candidates=octave_down,
+        melody=Note(note_name(melody_note.midi_note() - 12)),
+        original_melody=written,
+    )
+
+
+def _apply_non_chord_tone(
+    voiced: _Voiced,
+    *,
+    chord_type: str,
+    name: str,
+    strategy: str,
+    previous: Optional[Voicing],
+    previous_chord: Optional[str],
+    window: _SearchWindow,
+    progression: Sequence[Tuple[Optional[str], str, str]],
+    index: int,
+) -> _Voiced:
+    """Re-voice a melody that is not a chord tone, and record what was done.
+
+    Strategy 3 first: holding the shape moves less than any re-voicing. Strategies 1
+    and 2 then reharmonise the note as a genuine chord tone.
+
+    When neither settles anything the strategy is still **recorded**, because the line
+    has to name it: "non-chord tone" alone cannot tell a substitution that failed from
+    one that was never attempted. What distinguishes the two is `harmonized_as`, which
+    stays None here - not the strategy field.
+    """
+    if strategy == "sustain" and previous is not None:
+        sustained = _grips.sustain_inner_voices(previous, voiced.melody)
+        if sustained is not None:
+            return replace(
+                voiced,
+                candidates=[sustained],
+                strategy="sustain",
+                harmonized_as=previous_chord,
+            )
+    substitute = resolve_substitute_harmony(
+        voiced.melody,
+        chord_type,
+        name,
+        strategy,
+        next_melody=next_resolution_melody(progression, index),
+    )
+    if substitute is not None:
+        substitute_quality, substitute_name = substitute[0], substitute[1]
+        substituted = _grips.get_all_grip_voicings(
+            voiced.melody,
+            substitute_quality,
+            chord_name=substitute_name,
+            top_strings=window.top_strings, grips=window.grips,
+        )
+        if substituted:
+            return replace(
+                voiced,
+                candidates=substituted,
+                strategy=strategy,
+                harmonized_as=substitute_name,
+            )
+    return replace(voiced, strategy=strategy)
+
+
 def prepare_step(
     progression: Sequence[Tuple[Optional[str], str, str]],
     index: int,
@@ -308,103 +435,47 @@ def prepare_step(
         # rather than a `Note(None)` waiting for a caller that lies.
         return None
     melody_note = Note(note_str)
-
-    # Chord-tone match first, quality-only fallback second, across every
-    # allowed soprano string and every grip family.
-    candidates = _grips.get_all_grip_voicings(
-        melody_note, chord_type, chord_name=name,
+    window = _SearchWindow(
         top_strings=top_strings, grips=grips,
+        fret_min=fret_min, fret_max=fret_max,
     )
-
-    # A melody whose best position sits outside the neck window is re-voiced an
-    # octave down on the B string. The written pitch is kept in original_melody.
-    # Decided before the non-chord-tone strategies run, so a substituted chord
-    # is voiced at the transposed pitch too rather than snapping back up.
-    #
-    # The guard requires candidates to exist: this repositions a voicing that
-    # is playable but sits too high. A melody unreachable at the written pitch
-    # (C6, fret 20 - past the end of the board) is left alone, because there is
-    # no shape to move down and respelling it would hide the real problem.
-    sounding_melody = melody_note
-    original_melody: Optional[str] = None
-    if candidates and _cost._window_penalty(candidates, fret_min, fret_max) > 0:
-        octave_down = _grips.get_octave_down_candidates(
-            melody_note, chord_type, chord_name=name,
-            top_strings=top_strings, grips=grips,
-        )
-        # Only take the lower octave when it genuinely improves the placement,
-        # or a merely slightly out-of-window melody would be moved for nothing.
-        here = _cost._window_penalty(candidates, fret_min, fret_max)
-        there = _cost._window_penalty(octave_down, fret_min, fret_max)
-        if octave_down and there < here:
-            candidates = octave_down
-            sounding_melody = Note(note_name(melody_note.midi_note() - 12))
-            original_melody = note_str
-
-    strategy_used: Optional[str] = None
-    harmonized_as: Optional[str] = None
+    voiced = _voices_for(melody_note, note_str, chord_type, name, window)
     is_non_chord_tone = (
         ChordParser.canonical_quality(chord_type) in ChordParser.CHORD_TONES_FROM_ROOT
         and not _chords.is_chord_tone(melody_note, chord_type, name)
     )
-
     if is_non_chord_tone:
-        # Strategy 3 first: holding the shape moves less than any re-voicing.
-        if non_chord_tone == "sustain" and previous is not None:
-            sustained = _grips.sustain_inner_voices(previous, sounding_melody)
-            if sustained is not None:
-                candidates = [sustained]
-                strategy_used = "sustain"
-                harmonized_as = previous_chord
+        voiced = _apply_non_chord_tone(
+            voiced,
+            chord_type=chord_type,
+            name=name,
+            strategy=non_chord_tone,
+            previous=previous,
+            previous_chord=previous_chord,
+            window=window,
+            progression=progression,
+            index=index,
+        )
 
-        # Strategies 1 and 2 reharmonise the note as a genuine chord tone.
-        if strategy_used is None:
-            substitute = resolve_substitute_harmony(
-                sounding_melody,
-                chord_type,
-                name,
-                non_chord_tone,
-                next_melody=next_resolution_melody(progression, index),
-            )
-            if substitute is not None:
-                substitute_quality, substitute_name = substitute[0], substitute[1]
-                substituted = _grips.get_all_grip_voicings(
-                    sounding_melody,
-                    substitute_quality,
-                    chord_name=substitute_name,
-                    top_strings=top_strings, grips=grips,
-                )
-                if substituted:
-                    candidates = substituted
-                    strategy_used = non_chord_tone
-                    harmonized_as = substitute_name
-
-        if strategy_used is None:
-            # The strategy is recorded even though it settled nothing, because the line has
-            # to name it: "non-chord tone" alone cannot tell a substitution that failed from
-            # one that was never attempted. What distinguishes the two is `harmonized_as`,
-            # which stays None here - not this field.
-            strategy_used = non_chord_tone
-
-    if not candidates:
+    if not voiced.candidates:
         return None
 
     return StepPreparation(
-        candidates=candidates,
+        candidates=voiced.candidates,
         written_melody=note_str,
         # The transposed pitch when moved down an octave: the step reports
         # what actually sounds.
         melody=(
             note_str
-            if original_melody is None
-            else note_name(sounding_melody.midi_note())
+            if voiced.original_melody is None
+            else note_name(voiced.melody.midi_note())
         ),
-        original_melody=original_melody,
+        original_melody=voiced.original_melody,
         chord_type=chord_type,
         chord_name=name,
         is_non_chord_tone=is_non_chord_tone,
-        strategy=strategy_used,
-        harmonized_as=harmonized_as,
+        strategy=voiced.strategy,
+        harmonized_as=voiced.harmonized_as,
     )
 
 
