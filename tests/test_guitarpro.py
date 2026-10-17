@@ -32,7 +32,7 @@ from arranger import ArrangementStep, VoiceLeadingEngine
 # land, which is decided in `tabxml` and only turned into beats by `tabgp`.
 from tabgp import format_gp5
 from tabxml import score_events, substitute_steps
-from tests.support import bass_string, make_step
+from tests.support import BUT_NOT_FOR_ME, bass_string, make_step
 
 try:
     import guitarpro  # noqa: F401
@@ -1362,7 +1362,6 @@ class TestWalkingBass(GuitarProTestCase):
         """
         import tabgp
         from headxml import arrange_xml_head
-        from tests.test_headxml import BUT_NOT_FOR_ME
 
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
@@ -1423,7 +1422,6 @@ class TestWalkingBass(GuitarProTestCase):
         handling is known to be exercised rather than merely unexercised.
         """
         from headxml import arrange_xml_head
-        from tests.test_headxml import BUT_NOT_FOR_ME
 
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):

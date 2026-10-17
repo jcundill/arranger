@@ -30,6 +30,16 @@ from typing import Any, Dict, List, Optional
 
 from arranger import PITCH_CLASS_NAMES, ArrangementStep, Voicing
 
+#: The committed MusicXML fixtures. Defined once because four test modules build paths
+#: from it, and a second spelling of the same directory is a second source for one fact.
+DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
+
+#: The Gershwin head the importer, the GP5 writer and the walk all name. It is shared
+#: here rather than imported from the module that happened to define it first, which is
+#: the test-suite form of the private-import problem: `test_headxml` is one concern among
+#: several that need this fixture, not its owner.
+BUT_NOT_FOR_ME = os.path.join(DATA, "but_not_for_me.mxl")
+
 #: The 119 hand-written drop-2 templates, keyed by the degree their top voice states.
 #: This is `grips.DROP2_INTERVAL_SETS` moved out of the engine, where it was paired
 #: positionally with `grips.DEGREE_OFFSETS_FROM_ROOT`: it is a *witness*, so it belongs

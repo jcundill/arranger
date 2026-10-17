@@ -38,7 +38,7 @@ from headxml import (
 )
 from tabstaff import format_tab_staff, write_tab_html
 from tabxml import score_events, substitute_steps
-from tests.support import arranged, sweep_head_paths
+from tests.support import BUT_NOT_FOR_ME, DATA, arranged, sweep_head_paths
 
 # The real scores the importer's tests read, in `tests/data/`. They are committed
 # and are NOT guarded: a missing fixture is a broken checkout, not a reason to
@@ -58,7 +58,6 @@ from tests.support import arranged, sweep_head_paths
 #   The_Jitterbug_Waltz.musicxml  MuseScore 3, the **only** head in the repository whose
 #                                 numerator and denominator differ (3/4), and so the only one
 #                                 that can see a conversion written as `beats_per_bar / 4`
-DATA = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 RAINY_DAY = os.path.join(DATA, "heres_that_rainy_day.musicxml")
 TROUBLE_IN_MIND = os.path.join(DATA, "Trouble_in_Mind_Blues.musicxml")
 WALTZ = os.path.join(DATA, "The_Jitterbug_Waltz.musicxml")
@@ -82,7 +81,6 @@ def chord_or_fail(changes, bar: int, beat: float) -> HeadChange:
             f"bar {bar} beat {beat}: no chord is in force, so the query cannot be checked"
         )
     return change
-BUT_NOT_FOR_ME = os.path.join(DATA, "but_not_for_me.mxl")
 TENOR_MADNESS = os.path.join(DATA, "tenor_madness.musicxml")
 I_WAS_DOING_ALL_RIGHT = os.path.join(DATA, "i_was_doing_all_right.mxl")
 # A lead sheet with **no melody at all**: four bars, six `<harmony>` symbols and not

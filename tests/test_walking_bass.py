@@ -78,6 +78,7 @@ from arranger.texture import texture_palette
 from tabgp import _sounding_frets
 from tabstaff import _strikes_here
 from tests.support import (
+    BUT_NOT_FOR_ME,
     arranged,
     bass_string,
     make_step,
@@ -788,7 +789,6 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
 
     def _arrangement(self):
         """The committed head that produced the defect, as a walking bass."""
-        from tests.test_headxml import BUT_NOT_FOR_ME
 
         steps, _, _ = arranged(
             BUT_NOT_FOR_ME,
@@ -1028,7 +1028,6 @@ class TestABassOnlyStepIsNeverATarget(unittest.TestCase):
 
     def _walking_arrangement(self):
         """The committed head that produced the defect, as a walking bass."""
-        from tests.test_headxml import BUT_NOT_FOR_ME
 
         steps, _, _ = arranged(
             BUT_NOT_FOR_ME,
@@ -1752,7 +1751,6 @@ class TestASingleNoteStepHasNothingToHold(unittest.TestCase):
         `Cm7` while voicing a bare `Eb`. Asserted on the pitch rather than the fret so
         the string is free to change if a better voicing appears.
         """
-        from tests.test_headxml import BUT_NOT_FOR_ME
 
         steps, _head, _notes = arranged(
             BUT_NOT_FOR_ME,
