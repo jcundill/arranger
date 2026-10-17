@@ -15,7 +15,7 @@ from typing import Callable, Container, List, Mapping, Optional, Sequence, Tuple
 from musthe import Note
 
 from . import grips as _grips
-from .bass import _Slot
+from .bass import Slot
 from .bass_merge import _attach_bass, _next_resolution_melody
 from .chords import ChordParser, resolve_substitute_harmony
 from .decisions import is_bass_only, select_step_voicing
@@ -56,7 +56,7 @@ def _last_sounding_step(
 
 def _rest_step(
     arrangements: List[ArrangementStep],
-    slot: _Slot,
+    slot: Slot,
     *,
     name: str,
     note_str: Optional[str],
@@ -111,7 +111,7 @@ def _rest_step(
 
 def _texture_fill_step(
     arrangements: List[ArrangementStep],
-    slot: _Slot,
+    slot: Slot,
     *,
     name: str,
     note_str: Optional[str],
@@ -170,7 +170,7 @@ def _texture_fill_step(
 
 def _no_chord_step(
     arrangements: List[ArrangementStep],
-    slot: _Slot,
+    slot: Slot,
     *,
     name: str,
     note_str: Optional[str],
@@ -239,7 +239,7 @@ def _no_chord_step(
 
 def _comping_step(
     arrangements: List[ArrangementStep],
-    slot: _Slot,
+    slot: Slot,
     *,
     progression: Sequence[Tuple[Optional[str], str, str]],
     index: int,

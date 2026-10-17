@@ -21,7 +21,7 @@ from typing import Container, List, Optional, Sequence, Tuple
 from musthe import Note
 
 from . import chords as _chords
-from .bass import BassNote, _held_shape, _place_bass, _previous_bass
+from .bass import BassNote, held_shape, place_bass, previous_bass
 from .tuning import PITCH_CLASS_NAMES, ArrangementStep
 
 
@@ -36,7 +36,7 @@ def _attach_bass(
     Deliberately after selection (see the caller). Three independent failures are
     all handled the same way - **the step survives and the bass is named**:
 
-    - no candidate string survives `_place_bass`'s filters, so there is nowhere to
+    - no candidate string survives `place_bass`'s filters, so there is nowhere to
       put the thumb. `step.bass_refused` records the wanted pitch class and
       `render._bass_refusal_clause` phrases it, because a reader cannot tell the
       three ways that happens apart from the outside and the common one is not the
@@ -68,14 +68,14 @@ def _attach_bass(
     # unplayable bar. For any other step the current
     # voicing *is* the shape, so `held` must not narrow it.
     held = (
-        _held_shape(arrangements)
+        held_shape(arrangements)
         if step.bass_only and not step.melody_only
         else None
     )
-    placed = _place_bass(
+    placed = place_bass(
         step.voicing,
         note.pitch_class,
-        previous_bass=_previous_bass(arrangements),
+        previous_bass=previous_bass(arrangements),
         held=held,
     )
     if placed is None:

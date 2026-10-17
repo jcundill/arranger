@@ -449,7 +449,7 @@ class TestTheFourFretBudget(unittest.TestCase):
     """§4.3's left-hand half: five distinct frets is not a hard shape, it is an impossible one.
 
     Asserted on a bare vector rather than on a `Voicing` because that is the level the refusal
-    lives at: `bass._place_bass` asks *before* it picks a string, and the shape it asks about
+    lives at: `bass.place_bass` asks *before* it picks a string, and the shape it asks about
     is one the hand is **already holding** with the candidate fret added, which is not a
     `Voicing` anyone builds.
     """
@@ -477,7 +477,7 @@ class TestTheFourFretBudget(unittest.TestCase):
         "Tenor Madness" bar 40 under `--texture targets --bass-style root` holds a drop-3
         `x-9-x-8-12-10` - four frets - and the walk's B lands on the low E at fret 7, off it.
         The low E is the *only* candidate: the A string is spoken for by the held shape and a
-        B on the D string at fret 9 would sound above the shape's F#3, which `_place_bass`
+        B on the D string at fret 9 would sound above the shape's F#3, which `place_bass`
         forbids. So the shape is refused rather than written, and `tests/test_walking_bass.py`
         asserts the same fact on the arrangement.
         """

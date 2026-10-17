@@ -15,7 +15,7 @@ output are pinned:
   - decision F, the second bar of a held chord - the thumb re-anchors either way, the
     left hand restates the shell only where the melody moves onto that downbeat.
 
-The two rules the placement step obeys are asserted on `_place_bass` directly rather
+The two rules the placement step obeys are asserted on `place_bass` directly rather
 than through an arrangement, because they are about a fret distance and a sounding
 order, and an arrangement only reaches them by accident. The `hand_fret` measurement
 the pure pass could not make is made here, where an upper voicing exists.
@@ -66,9 +66,9 @@ from arranger.bass import (
     _beat_offset,
     _melody_in_force,
     _melody_timeline,
-    _place_bass,
-    _walking_slots,
     parse_bass_style,
+    place_bass,
+    walking_slots,
 )
 from arranger.parts import PART_NAMES
 from arranger.render import _step_annotation
@@ -131,7 +131,7 @@ def upper_pitches(step: arranger.ArrangementStep) -> List[int]:
     Walked from the fret vector rather than by comparing string indices, because the
     two hands do not have to agree about which string is lower - a 5-3-2 shell's
     A-string note sounds below its G-string note, which is the whole reason the
-    sounding-order filter in `_place_bass` cannot be a tie-break. The thumb's string
+    sounding-order filter in `place_bass` cannot be a tie-break. The thumb's string
     is dropped by **fret-vector index**, never by position in a filtered list, which
     is the mistake that would silently compare a string number against a list offset.
     """
@@ -717,7 +717,7 @@ class TestEveryHeadCarriesTheMelodyInForce(unittest.TestCase):
                 skeleton = head_skeleton(head)
                 triples = [slot[0] for slot in skeleton]
                 timings = [(slot[1], slot[2], slot[3]) for slot in skeleton]
-                slots = _walking_slots(
+                slots = walking_slots(
                     triples, timings, head.beats_per_bar, head.beat_type
                 )
                 located = [
@@ -1124,7 +1124,7 @@ class TestABassOnlyStepIsNeverATarget(unittest.TestCase):
 
 class TestBassPlacement(unittest.TestCase):
     """
-    `_place_bass`: the octave and the string, decided together against the hand.
+    `place_bass`: the octave and the string, decided together against the hand.
 
     Asserted on the function rather than on an arrangement, because the rules below
     are about a fret distance and a sounding order, and an arrangement only reaches
@@ -1141,7 +1141,7 @@ class TestBassPlacement(unittest.TestCase):
         identical pitch, which is the exact opposite of what this library is for.
         """
         upper = upper_shape([-1, -1, -1, 5, 5, 5])
-        placed = _place_bass(upper, pc("D"))
+        placed = place_bass(upper, pc("D"))
         assert placed is not None, "D is reachable on both bass strings here"
         midi, string_index, fret = placed
         self.assertEqual(string_index, 1)
@@ -1158,7 +1158,7 @@ class TestBassPlacement(unittest.TestCase):
         resolve - between them every shell in the table leaves at least one free.
         """
         upper = upper_shape([-1, 7, 7, 7, 7, 7])
-        placed = _place_bass(upper, pc("E"))
+        placed = place_bass(upper, pc("E"))
         assert placed is not None
         _midi, string_index, fret = placed
         self.assertEqual(string_index, 0)
@@ -1191,7 +1191,7 @@ class TestBassPlacement(unittest.TestCase):
         }
         used = set()
         for label, frets in shapes.items():
-            placed = _place_bass(upper_shape(frets), pc("D"))
+            placed = place_bass(upper_shape(frets), pc("D"))
             assert placed is not None, f"no bass string free under {label}"
             _midi, string_index, _fret = placed
             self.assertNotIn(
@@ -1217,7 +1217,7 @@ class TestBassPlacement(unittest.TestCase):
         chosen = {}
         for label, frets in (("high", [-1, -1, -1, 10, 10, 10]),
                              ("low", [-1, -1, -1, 0, 0, 0])):
-            placed = _place_bass(upper_shape(frets), pc("D"))
+            placed = place_bass(upper_shape(frets), pc("D"))
             assert placed is not None
             _midi, string_index, _fret = placed
             chosen[label] = string_index
@@ -1239,7 +1239,7 @@ class TestBassPlacement(unittest.TestCase):
         """
         # 5-3-2 with the A string's note as the shape's *lowest* sounding voice.
         upper = upper_shape([-1, 3, 5, 5, -1, -1])
-        placed = _place_bass(upper, pc("E"))
+        placed = place_bass(upper, pc("E"))
         assert placed is not None
         midi, string_index, _fret = placed
         self.assertNotEqual(string_index, 1)
@@ -1256,7 +1256,7 @@ class TestBassPlacement(unittest.TestCase):
                   [-1, -1, 7, 7, 7, 7], [-1, -1, -1, 7, 7, 7])
         for frets in shapes:
             occupied = {index for index, fret in enumerate(frets) if fret >= 0}
-            placed = _place_bass(upper_shape(frets), pc("D"))
+            placed = place_bass(upper_shape(frets), pc("D"))
             assert placed is not None, f"no bass string free under {frets}"
             _midi, string_index, _fret = placed
             self.assertNotIn(string_index, occupied)
@@ -1272,7 +1272,7 @@ class TestBassPlacement(unittest.TestCase):
         cannot know which, which is exactly why it returns a pitch class.
         """
         upper = upper_shape([-1, -1, -1, 5, 7, 7])
-        placed = _place_bass(upper, pc("C"))
+        placed = place_bass(upper, pc("C"))
         assert placed is not None
         midi, string_index, fret = placed
         self.assertEqual(string_index, 1)
@@ -1289,7 +1289,7 @@ class TestBassPlacement(unittest.TestCase):
         bass rather than a missing one.
         """
         upper = upper_shape([5, 5, 5, 5, 5, 5])
-        self.assertIsNone(_place_bass(upper, pc("D")))
+        self.assertIsNone(place_bass(upper, pc("D")))
 
     def test_a_hand_that_cannot_hold_the_thumb_refuses_the_note(self):
         """
@@ -1304,7 +1304,7 @@ class TestBassPlacement(unittest.TestCase):
         """
         upper = upper_shape([-1, -1, -1, -1, -1, 10])
         self.assertIsNone(
-            _place_bass(upper, pc("B"), held=([-1, 9, -1, 8, 12, 10], None))
+            place_bass(upper, pc("B"), held=([-1, 9, -1, 8, 12, 10], None))
         )
 
     def test_one_fret_less_in_the_held_shape_and_the_same_thumb_is_placed(self):
@@ -1317,7 +1317,7 @@ class TestBassPlacement(unittest.TestCase):
         """
         upper = upper_shape([-1, -1, -1, -1, -1, 10])
         self.assertEqual(
-            _place_bass(upper, pc("B"), held=([-1, 9, -1, 8, -1, 10], None)),
+            place_bass(upper, pc("B"), held=([-1, 9, -1, 8, -1, 10], None)),
             (47, 0, 7),
         )
 
@@ -1333,7 +1333,7 @@ class TestBassPlacement(unittest.TestCase):
         """
         upper = upper_shape([-1, -1, -1, -1, -1, 4])
         self.assertEqual(
-            _place_bass(upper, pc("F#"), held=([5, -1, -1, 7, 9, 11], 0)),
+            place_bass(upper, pc("F#"), held=([5, -1, -1, 7, 9, 11], 0)),
             (42, 0, 2),
         )
 
@@ -1376,7 +1376,7 @@ class TestTheRefusal(unittest.TestCase):
     """
     The three ways a thumb note is refused, and the one message that names them all.
 
-    `_place_bass` answers `None` for three different reasons, and the two *other* than
+    `place_bass` answers `None` for three different reasons, and the two *other* than
     the common one are already pinned beside it: every bass string taken
     (`test_no_candidate_means_no_bass_rather_than_a_wrong_one`) and a fifth fret for four
     fingers (`test_a_hand_that_cannot_hold_the_thumb_refuses_the_note`). What was missing
@@ -1411,7 +1411,7 @@ class TestTheRefusal(unittest.TestCase):
     def test_the_commonest_refusal_is_the_pitch_having_no_octave_below_the_shape(self):
         """A free string, a playable pitch, and no octave of it beneath the shape."""
         frets, name = self.NO_OCTAVE
-        self.assertIsNone(_place_bass(upper_shape(frets), pc(name)))
+        self.assertIsNone(place_bass(upper_shape(frets), pc(name)))
 
     def test_the_line_names_all_three_causes_whichever_one_refused(self):
         """Every refusal says the same three things, so a reader is not left guessing.
@@ -1573,7 +1573,7 @@ class TestTheInvariant(unittest.TestCase):
           holding - it is already sounding elsewhere. Charging for its string counts **10**
           steps instead of 1, which is the item-4 mistake made backwards;
         - the previous thumb note **is** included: that string is still ringing, so it is
-          still fretted. `bass._held_shape` drops it from `structure` for harmonic reasons,
+          still fretted. `bass.held_shape` drops it from `structure` for harmonic reasons,
           which is right for the three questions it answers - and on the committed heads the
           two readings give the same answer, so this one is chosen on the physics rather than
           on a count.
@@ -1809,7 +1809,7 @@ class TestNoRegression(unittest.TestCase):
         than re-typed so there is one definition of them, and the expected tabs are
         the pins `test_texture.py` already holds. Asserting them here too is
         deliberate: this is the file that could have broken them, because every slot
-        now goes through `_Slot`, the union and the walking-bass role rule, and the
+        now goes through `Slot`, the union and the walking-bass role rule, and the
         guarantee is that none of that is visible unless the texture asks for it.
         """
         from tests.test_texture import (
@@ -2125,7 +2125,7 @@ class TestUpperVoicesExcludeTheThumbByStringNotPosition(unittest.TestCase):
         """The result must not depend on *which* string the thumb landed on.
 
         The same melody against a low-E, A-string and D-string thumb has to read the
-        same, because `_place_bass` picks the string per note by fret proximity.
+        same, because `place_bass` picks the string per note by fret proximity.
         """
         cases = [
             (0, 40),   # low E, open

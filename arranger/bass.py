@@ -5,17 +5,17 @@ Three passes, in this order, and the order is the design:
 1. `_walking_bass_line` reads **harmony only** and returns one `BassNote` per
    walked beat, each a *pitch class*. It cannot know the octave or the string,
    because it runs before any upper voicing exists.
-2. `_walking_slots` unions those beats with the melody grid into one `_Slot`
+2. `walking_slots` unions those beats with the melody grid into one `Slot`
    list, built **before** the melody loop, so the loop's index still indexes the
    skeleton it was given.
-3. `_place_bass` resolves the octave and the string together, after selection,
+3. `place_bass` resolves the octave and the string together, after selection,
    because a note an octave away is a different fret on every string.
 
 `bass_cost` is here rather than in `cost.py` because it ranks over the
 `BASS_ROLE_*` constants below and is called by `_walking_bass_line`; in `cost` it
 would need this module and this module would need `cost`.
 
-**One slot union, built once.** The step loop reaches `_walking_slots` -
+**One slot union, built once.** The step loop reaches `walking_slots` -
 `VoiceLeadingEngine.arrange_progression`, and through it the imported-head path -
 because a second copy is exactly the failure this library documents having had once
 already: the corpus path was built separately, drifted, and voiced an `Am7` under a
@@ -208,7 +208,7 @@ class BassNote:
     One entry per **walked beat**, not per melody slot - the bass grid is finer than
     the melody grid, which is what lets a held whole note sound one melody note over
     a thumb note on every beat of the bar. That is four in 4/4 and two in 2/2, where
-    the whole note is the whole bar; see `_walking_slots` for why the count is a
+    the whole note is the whole bar; see `walking_slots` for why the count is a
     property of the metre rather than a constant.
     """
 
@@ -342,7 +342,7 @@ def bass_cost(
             0, pitch_class)
 
 
-def _previous_bass(arrangements: List[ArrangementStep]) -> Optional[int]:
+def previous_bass(arrangements: List[ArrangementStep]) -> Optional[int]:
     """
     The most recent thumb note placed, or None at the head of the phrase.
 
@@ -357,7 +357,7 @@ def _previous_bass(arrangements: List[ArrangementStep]) -> Optional[int]:
     return None
 
 
-def _held_shape(
+def held_shape(
     arrangements: List[ArrangementStep],
 ) -> Optional[Tuple[List[int], Optional[int]]]:
     """The shape the left hand is still holding, and which of its strings the thumb
@@ -375,7 +375,7 @@ def _held_shape(
     (`decisions.is_bass_only`).
 
     The thumb's string comes back too, because that note is **not** part of the shape
-    the fingers are holding - see `_place_bass`. Identifying it by string rather than by
+    the fingers are holding - see `place_bass`. Identifying it by string rather than by
     pitch is what makes that exclusion exact: the thumb moves between beats, so the
     note it played two beats ago is not the one in the shape now being held.
 
@@ -389,7 +389,7 @@ def _held_shape(
     return None
 
 
-def _place_bass(
+def place_bass(
     upper: Voicing,
     pitch_class: int,
     previous_bass: Optional[int] = None,
@@ -404,7 +404,7 @@ def _place_bass(
     and in that order, because a note an octave away is a different fret on every
     string.
 
-    `held` is the shape still ringing under a `bass_only` step - see `_held_shape`.
+    `held` is the shape still ringing under a `bass_only` step - see `held_shape`.
     It matters for **four** of the questions below at once, and passing it is what keeps
     a `bass_only` step playable: that step's own vector holds only the
     melody, so measuring against it alone gets all
@@ -551,7 +551,7 @@ def _place_bass(
 
 
 @dataclass
-class _Slot:
+class Slot:
     """
     One entry of the slot list `arrange_progression` actually loops over.
 
@@ -578,7 +578,7 @@ class _Slot:
     bass_only: bool = False
 
 
-def _walking_slots(
+def walking_slots(
     # `Sequence` + `Optional`, for the same reason as `timings` below: the engine's
     # triples carry an `Optional` melody (§9.3 step B), and `List` is invariant - the
     # covariance note on `timings` is this signature's whole reason for spelling both
@@ -601,7 +601,7 @@ def _walking_slots(
     # whole-note `duration` to beats, which needs this. See `_melody_timeline`.
     beat_type: int = 4,
     bass: str = BASS_STYLE_WALK,
-) -> List[_Slot]:
+) -> List[Slot]:
     """
     The walking-bass slot union: the melody grid plus the walked beats.
 
@@ -746,7 +746,7 @@ def _bass_slots(
     bass_line: List[BassNote],
     beats_per_bar: int = 4,
     beat_type: int = 4,
-) -> List[_Slot]:
+) -> List[Slot]:
     """
     The union of the melody grid and the walked beats, as one ordered slot list.
 
@@ -807,9 +807,9 @@ def _bass_slots(
     if not located:
         # Gridless: one note per slot, attached by position and guarded, because the
         # bass line can be shorter than the progression when a chord is unparseable.
-        slots: List[_Slot] = []
+        slots: List[Slot] = []
         for index in range(len(progression)):
-            slots.append(_Slot(
+            slots.append(Slot(
                 index=index,
                 bass=bass_line[index] if index < len(bass_line) else None,
             ))
@@ -863,7 +863,7 @@ def _bass_slots(
     slots = []
     for key, index, bass, bass_only in entries:
         duration = melody_at.get(key, (index, None))[1]
-        slots.append(_Slot(
+        slots.append(Slot(
             index=index,
             bar=key[0],
             beat=key[1],
@@ -877,7 +877,7 @@ def _bass_slots(
 def _walking_bass_line(
     # `Sequence` rather than `List`, for the reason `bass_line_for` gives: invariance
     # would reject a caller whose chords are a narrower tuple type than this signature
-    # declares, which means the same thing and is what `_walking_slots` builds.
+    # declares, which means the same thing and is what `walking_slots` builds.
     chords: Sequence[Tuple[Optional[str], str, str]],
     onsets: Optional[Sequence[Optional[Tuple[int, float]]]],
     beats_per_bar: int = 4,
@@ -1080,7 +1080,7 @@ def _walking_bass_line(
 
 def bass_line_for(
     bass: str,
-    # `Sequence`, not `List`, for the reason `_walking_slots` gives in full: `List` is
+    # `Sequence`, not `List`, for the reason `walking_slots` gives in full: `List` is
     # invariant, so a caller holding a `List[Tuple[str, str, str]]` is not assignable
     # to a `List[Tuple[Optional[str], str, str]]` and pyright rejects it over a *narrower*
     # type that means the same thing. `Sequence` is covariant and both fit.
@@ -1129,7 +1129,7 @@ def thumb_capacity(
 ) -> Optional[int]:
     """How many of the three thumb strings the left hand leaves free, worst case.
 
-    **The number a bass policy is checked against.** `_place_bass` skips whichever
+    **The number a bass policy is checked against.** `place_bass` skips whichever
     thumb strings the upper shape already speaks on, per note, so a thumb line is a
     question of *capacity* rather than of conflict - and the capacity is whatever the
     texture's palette for this role may play, read from `texture.texture_palette` and

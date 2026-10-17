@@ -58,7 +58,7 @@ melody slots — can only *keep* or *drop* a slot and can never *create* one.
   the tune and nothing else, and there is no tune.
 - ~~The walking bass shares the limit one level down~~ — **was already fixed wherever a named
   grid ran**, and the default grid's silence was the only thing withholding the bar from it.
-  `_walking_slots` walks the bars the *timings* touch, and the union writes its added slots
+  `walking_slots` walks the bars the *timings* touch, and the union writes its added slots
   into those timings, so the default now reaches **exactly** the bars `freddie` reaches.
 - ~~The case is structurally inexpressible~~ — **the field half was already done** before this
   item was last measured: `(None, quality, name)` is a legal triple, and `chord_slots` emits

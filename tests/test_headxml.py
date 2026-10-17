@@ -1273,7 +1273,7 @@ class TestChordSlots(unittest.TestCase):
     def test_the_walking_bass_inherits_the_added_bar(self):
         """The default grid now walks the bars the melody never entered.
 
-        `_walking_slots` walks the bars the *timings* touch, and the union writes its
+        `walking_slots` walks the bars the *timings* touch, and the union writes its
         added slots into those timings - so the bass half of item 1 was already correct
         wherever a named grid ran. The default grid's silence was the only thing
         withholding the bar from it, and `freddie` is the pre-existing witness: under the
@@ -1281,7 +1281,7 @@ class TestChordSlots(unittest.TestCase):
         fewer.
 
         **Bars 32 and 35 still get no thumb note, and that is a different issue.**
-        `_place_bass` refuses them for the reason `docs/open-issues.md` **item 2** measures
+        `place_bass` refuses them for the reason `docs/open-issues.md` **item 2** measures
         as dominant - no octave of the walk's pitch below the shape - and it refuses them
         identically under `chord:freddie`, before and after this change. Asserting a thumb note
         in bar 32 would be asserting item 2's fix, which is deliberately not built. So the

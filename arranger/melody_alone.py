@@ -19,7 +19,7 @@ from musthe import Note
 
 from . import cost as _cost
 from . import grips as _grips
-from .bass import _Slot
+from .bass import Slot
 from .bass_merge import _attach_bass
 from .decisions import is_bass_only
 from .tuning import ArrangementStep, Palette, Voicing, _note_name
@@ -91,7 +91,7 @@ def _melody_alone_shape(
 
 def _rescue_melody_alone(
     arrangements: List[ArrangementStep],
-    slot: _Slot,
+    slot: Slot,
     *,
     name: str,
     note_str: str,
@@ -167,7 +167,7 @@ def _rescue_melody_alone(
 
 def _demoted_to_melody_alone(
     arrangements: List[ArrangementStep],
-    slot: _Slot,
+    slot: Slot,
     *,
     name: str,
     note_str: str,

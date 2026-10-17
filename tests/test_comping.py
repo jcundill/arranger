@@ -1066,7 +1066,7 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
     def test_the_walked_beats_reach_the_part(self):
         """The union is built on this route now, so a walk invents its own beats.
 
-        `_walking_slots` unions the melody grid with the walked beats. It was never
+        `walking_slots` unions the melody grid with the walked beats. It was never
         called here, because the refusal made `has_thumb` False first - so this is the
         observable consequence of the fix rather than of the axis: a bar the melody
         barely visits still carries four quarters, and the part has more steps than the

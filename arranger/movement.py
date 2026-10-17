@@ -29,10 +29,10 @@ from .bass import (
     BASS_STYLE_AUTO,
     BASS_STYLE_NONE,
     BASS_STYLE_WALK,
-    _Slot,
-    _walking_slots,
+    Slot,
     bass_allowed,
     parse_bass_style,
+    walking_slots,
 )
 from .bass_merge import _attach_bass, _next_resolution_melody
 from .chords import (
@@ -567,7 +567,7 @@ class _Policies:
     has_thumb: bool
     harmony_family: str
     grid_pattern: str
-    slots: Optional[List[_Slot]]
+    slots: Optional[List[Slot]]
 
 
 def _resolve_policies(
@@ -639,15 +639,15 @@ def _resolve_policies(
     # melody-bearing arrangement rather than doing nothing there.
     grid_pattern = _resolve_grid(grid, beats_per_bar)
 
-    slots: Optional[List[_Slot]] = None
+    slots: Optional[List[Slot]] = None
     if has_thumb:
         # Decision B: the union is built here, before the melody loop, so the
-        # loop's index still indexes the skeleton it was given. `_walking_slots`
+        # loop's index still indexes the skeleton it was given. `walking_slots`
         # is shared with `slots.arrange_slots`, so an imported head and a
         # hand-built progression cannot walk a different line from this one - see
         # its docstring for why that duplication has already cost this project one
         # bug.
-        slots = _walking_slots(
+        slots = walking_slots(
             progression, timings, beats_per_bar, beat_type, bass
         )
 
@@ -826,7 +826,7 @@ def _bass_group(
 
 def _harmonised_step(
     arrangements: List[ArrangementStep],
-    slot: _Slot,
+    slot: Slot,
     *,
     progression: Sequence[Tuple[Optional[str], str, str]],
     index: int,
@@ -1229,7 +1229,7 @@ class _SlotPlan:
 
 def _slot_state(
     car: _Carried,
-    slot: _Slot,
+    slot: Slot,
     *,
     progression: Sequence[Tuple[Optional[str], str, str]],
     texture: str,
@@ -1610,7 +1610,7 @@ def arrange_progression(
     # The walking bass is computed here, over the **walked beats** rather than
     # over the slots, and it yields a pitch *class* rather than a pitch and a
     # string: neither the octave nor the string can be decided before an upper
-    # voicing exists, and only this function is downstream of one. `_place_bass`
+    # voicing exists, and only this function is downstream of one. `place_bass`
     # resolves both together, after selection.
 
     _p = _resolve_policies(
@@ -1664,10 +1664,10 @@ def arrange_progression(
             duration,
         )
 
-    loop: List[_Slot] = (
+    loop: List[Slot] = (
         slots if slots is not None
         else [
-            _Slot(index=index, bar=bar, beat=beat, duration=duration)
+            Slot(index=index, bar=bar, beat=beat, duration=duration)
             for index, (bar, beat, duration) in enumerate(
                 _timing(i) for i in range(len(progression))
             )

@@ -539,7 +539,7 @@ def _bass_refusal_clause(step: ArrangementStep) -> str:
     shape's own lowest note, or a fifth fret for four fingers. Measured over the
     committed heads the middle one is almost the whole of it
     (`docs/open-issues.md` item 2), which is not the intuitive answer - so the
-    list is the honest form. A per-cause spelling would need `_place_bass` to
+    list is the honest form. A per-cause spelling would need `place_bass` to
     return its reason, and that is the follow-on rather than the clause.
 
     Not suppressed on a hold, and it cannot be one: `bass_only` restates nothing
