@@ -945,73 +945,342 @@ def _beat_from_onset(onset: float, divisions: int, beat_type: int) -> float:
     return 1.0 + (onset / divisions) * (beat_type / 4.0)
 
 
-def _flush_group(
-    group: List[Tuple[int, int]],
-    notes: List[HeadNote],
-    bar: int,
-    onset: int,
-    divisions: int,
-    beat_type: int,
-    chord: str,
-    quality: Optional[str],
-    bass: Optional[str],
-    tie_stop: bool = False,
-    lyrics: Tuple[str, ...] = (),
-    tuplet: bool = False,
-) -> None:
-    """Emit one melody note from a finished `<chord>` group.
+@dataclass
+class _NotesWalk:
+    """One part's walk, and everything it remembers between elements.
 
-    The group holds `(pitch, length)` for every note sharing an onset. The melody
-    is the **highest** of them, because MusicXML does not order a group by pitch -
-    only its first member is unmarked, and in a chord-melody part that first member
-    is the *lowest* note of the shape, being the first string struck. Taking the
-    maximum is what makes the reduction independent of how the writer ordered them.
+    The importer's read is a single pass with a lot of carried state: the chord in
+    force, the `<chord>` group being assembled, the cursor, the measure numbers, the
+    things skipped. Those are fields here rather than locals because each stage -
+    the measure header, one `<harmony>`, one `<note>`, the flush - reads and writes
+    most of them, and a stage that had to thread fourteen values in and out would be
+    harder to read than the one function they came from.
 
-    A note whose group carries a tie-stop extends the previous note instead of
-    becoming a second one. That is the whole reason this is a flush and not an
-    append per `<note>`: a tie crosses a bar line, so the two halves are read in
-    different measures and cannot be joined at read time.
-
-    **The merge must NOT be restricted to this bar.** Adding `and notes[-1].bar == bar`
-    looks like a fix - `notes[-1]` is the last note *read*, not the last note in this
-    measure - but it does the opposite, because a `tie type="stop"` in a new bar is
-    precisely the continuation the merge exists to absorb: restricting the merge turns
-    every cross-barline tie into a *second* note at the same pitch. The premise that
-    prompted it, that merging across a barline ate a new bar's downbeat, confused
-    *merged* with *lost*: bar 2's A4 eighth and bar 3's A4 half are one note of 3.5 beats,
-    so bar 3 has no downbeat note because its downbeat is still sounding the one written
-    in bar 2. `tests/test_headxml.py` states this rule directly, and
-    `docs/open-issues.md` item 1 holds the measurement.
+    The order of the fields is the order the walk fills them, so the value reads as
+    the state rather than as a bag.
     """
-    if not group:
-        return
-    pitch, length = max(group, key=lambda item: item[0])
-    if tie_stop and notes and notes[-1].pitch == pitch:
-        notes[-1].duration += length / divisions / 4.0
-        return
-    notes.append(
-        HeadNote(
-            bar=bar,
-            # The written measure number, captured at read time. It equals `bar` for a
-            # head with no repeat; `_expand_play_order` rewrites `bar` to the absolute
-            # play-order position afterwards and this keeps the score's own numbering.
-            written_bar=bar,
-            # Beat *within* the bar, in notated beats, through the one conversion that
-            # is right for every metre: `onset/divisions` is quarters and a beat is
-            # `4 / beat_type` of them. That single factor is what makes a 2/2 bar two
-            # beats wide - its quarter note is on beat 1.5, not beat 3 - *and* what puts
-            # a 3/4 bar's six eighths on 1.0 … 3.5 instead of squeezing them into 2.25
-            # beats. See `_beat_from_onset`.
-            beat=_beat_from_onset(onset, divisions, beat_type),
-            pitch=pitch,
-            duration=length / divisions / 4.0,
-            tuplet=tuplet,
-            chord=chord,
-            quality=quality,
-            bass=bass,
-            lyrics=lyrics,
-        )
+
+    part: ElementTree.Element
+    head: Head
+    transposition: int = 0
+
+    beat_type: int = 0
+    # The chord in force: a `<harmony>` holds until the next one replaces it.
+    chord: str = NO_CHORD
+    quality: Optional[str] = NO_CHORD
+    bass: Optional[str] = None
+    unmapped: List[str] = field(default_factory=list)
+    skipped: Dict[str, int] = field(default_factory=dict)
+    notes: List[HeadNote] = field(default_factory=list)
+    # The chord timeline, built as the document is walked so `cursor` is the position
+    # each `<harmony>` occupies. Separate from `notes` because a `<harmony>` can
+    # precede nothing at all - see `HeadChange` and open-issues item 1.
+    changes: List[HeadChange] = field(default_factory=list)
+    # The `<chord>` group being assembled at the current cursor: (pitch, length),
+    # together with the onset it started at, whether it ends a tie, and the lyrics
+    # on its first member. Flushed when the next unmarked note - or the bar line -
+    # proves the group is complete.
+    group: List[Tuple[int, int]] = field(default_factory=list)
+    group_onset: int = 0
+    group_tie: bool = False
+    group_tuplet: bool = False
+    group_chord: str = NO_CHORD
+    group_quality: Optional[str] = NO_CHORD
+    group_bass: Optional[str] = None
+    group_lyrics: Tuple[str, ...] = ()
+    divisions: int = 1
+    bar: int = 1
+    bar_index: int = 1
+    cursor: int = 0
+    # Every measure number walked, in document order, so `Head.bars` is a fact about
+    # the file rather than about the melody (§9.3 step A'). The first and last are
+    # what `bars` reports; a chords-only head has no notes to derive them from.
+    measure_numbers: List[int] = field(default_factory=list)
+    # Barline instructions (repeats and volta endings) keyed by the measure's
+    # **document position**, not its written number: a score's measure numbers can be
+    # non-contiguous, and the expansion walks positions in order. Consumed by
+    # `_expand_repeats` after the walk; empty for a score with no barlines of interest,
+    # which is every committed head but the three that carry a repeat.
+    raw_markers: Dict[int, List[Tuple[str, Tuple[int, ...], int]]] = field(
+        default_factory=dict
     )
+    position: int = 0
+
+    def __post_init__(self) -> None:
+        self.beat_type = int(self.head.beat_type)
+
+    def run(self) -> None:
+        """Walk every measure, then fill the head and report what was left out."""
+        for measure in self.part.findall("measure"):
+            self.measure(measure)
+
+        head = self.head
+        head.notes = self.notes
+        head.chords = self.changes
+        # The file's measure extent, so `Head.bars` reports the file's length rather
+        # than the melody's - which is what makes a chords-only head arrangeable at
+        # all (§9.3 step A'). Recorded here because this is the one place the measures
+        # are walked.
+        if self.measure_numbers:
+            head.measure_range = (self.measure_numbers[0], self.measure_numbers[-1])
+        # A bar the melody never enters and a bar with no notes at all are still
+        # walked, so their barlines are read too. Expand the repeat now that every
+        # measure, marker, note and change is in hand: `_expand_repeats` rewrites
+        # `bar` to the absolute play-order position, sets `Head.markers` and updates
+        # `measure_range`. It is a no-op (byte-identical) on a score with no repeat,
+        # which is every head but three.
+        _expand_repeats(head, self.measure_numbers, self.raw_markers)
+        head.unmapped = tuple(dict.fromkeys(self.unmapped))
+        head.skipped = tuple(
+            f"{count} {reason}" for reason, count in sorted(self.skipped.items())
+        )
+        report: List[str] = []
+        if self.unmapped:
+            report.append(
+                f"{len(self.unmapped)} chord(s) this library cannot voice were left out: "
+                + ", ".join(sorted(set(self.unmapped)))
+            )
+        report.extend(head.skipped)
+        head.report = tuple(report)
+
+    def skip(self, reason: str) -> None:
+        """Count one skipped element, by reason, for the head's report."""
+        self.skipped[reason] = self.skipped.get(reason, 0) + 1
+
+
+    def measure(self, measure: ElementTree.Element) -> None:
+        """Read one measure: its header, its elements, and the group it leaves open.
+
+        The cursor runs in **divisions** and is converted on the way out, because
+        `divisions` is stated per measure and a score may change it; a single running
+        total in quarters would drift the moment it did. `<backup>` and `<forward>`
+        move the cursor without sounding anything and are honoured, so a part with
+        several voices does not desync - the melody is read at the position the file
+        says it is at, whatever the other voices do.
+
+        A measure number that is not an integer ("12a", a pickup numbered "0") is not
+        discarded: the measure is read at its running index and reported, because
+        losing a bar of a head over a label is a poor trade.
+        """
+        for attributes in measure.findall("attributes"):
+            stated = attributes.findtext("divisions")
+            if stated:
+                self.divisions = max(1, _number(stated, self.divisions))
+
+        number = (measure.get("number") or "").strip()
+        if re.match(r"^-?\d+$", number):
+            self.bar = self.bar_index = int(number)
+        else:
+            self.bar = self.bar_index
+            if number:
+                self.skip(f'measures not numbered with an integer ("{number}")')
+        self.measure_numbers.append(self.bar)
+
+        for barline in measure.findall("barline"):
+            for kind, numbers, times in _parse_barline(barline):
+                self.raw_markers.setdefault(self.position, []).append(
+                    (kind, numbers, times)
+                )
+
+        self.cursor = 0
+        self.group.clear()
+        for child in measure:
+            self.element(child)
+        # A group still open at the end of a bar is closed by the bar line. The
+        # MusicXML it came from is malformed, but reading the notes is better than
+        # losing the last chord of the bar.
+        self.flush()
+        self.group.clear()
+        self.position += 1
+        self.bar_index = self.bar + 1
+
+    def element(self, child: ElementTree.Element) -> None:
+        """Dispatch one child of a measure: cursor moves, a chord symbol, or a note."""
+        if child.tag == "backup":
+            self.cursor = max(0, self.cursor - _number(child.findtext("duration")))
+        elif child.tag == "forward":
+            self.cursor += _number(child.findtext("duration"))
+        elif child.tag == "harmony":
+            self.harmony(child)
+        elif child.tag == "note":
+            self.note(child)
+
+    def harmony(self, child: ElementTree.Element) -> None:
+        """Read one `<harmony>`: the chord in force, and a change on the timeline."""
+        root_name, parsed_quality, parsed_bass = parse_musicxml_chord(child)
+        if root_name is None or parsed_quality is None:
+            # Counted, never guessed: a wrong chord under a good melody is
+            # worse than a gap the user can see reported.
+            self.unmapped.append(_chord_symbol(child))
+            return
+        self.chord = f"{root_name}{parsed_quality}"
+        self.quality = parsed_quality
+        self.bass = parsed_bass
+        # **Recorded as well as held.** The fields above are the forward fill the
+        # melody path reads, and they are correct; what they cannot do is describe a
+        # `<harmony>` no note ever reaches, because the only place they are written
+        # out is `group_chord` on the next note. This append is the whole of phase 1:
+        # the timeline exists, and nothing consumes it yet.
+        #
+        # **The beat conversion is `_beat_from_onset`'s, not `cursor / divisions`.**
+        # `cursor/divisions` is quarters and a beat is `4 / beat_type` of them, and the
+        # one function is called from both places so a `<harmony>` and the note it
+        # precedes can never disagree about which beat they are on. It must use
+        # `beat_type`, not `beats_per_bar` - the denominator trap, which is invisible
+        # while the numerator and the denominator happen to be equal.
+        #
+        # `cursor` rather than `group_onset`, because the element sits *before*
+        # whatever follows it: a `<harmony>` after the bar's last note is recorded on
+        # the beat it occupies and in force into the next bar.
+        #
+        # 6 of the 154 `<harmony>` elements on the committed scores are followed by no
+        # note at all, so this is a real loss and not an edge case. See `HeadChange`
+        # and `docs/open-issues.md` item 1.
+        self.changes.append(
+            HeadChange(
+                bar=self.bar,
+                written_bar=self.bar,
+                beat=_beat_from_onset(self.cursor, self.divisions, self.beat_type),
+                chord=self.chord,
+                quality=self.quality,
+                bass=self.bass,
+            )
+        )
+
+
+    def note(self, child: ElementTree.Element) -> None:
+        """Read one `<note>`: time only, or a pitch that may open a `<chord>` group."""
+        if child.find("grace") is not None:
+            self.skip("grace notes")
+            # A grace note has no `<duration>` of its own - it borrows the
+            # length of the note it decorates - so it occupies no cursor time
+            # and must *not* be added here or it would be counted twice.
+            return
+        if child.find("cue") is not None:
+            self.skip("cue notes")
+            if child.find("chord") is None:
+                self.cursor += _duration_in_divisions(child, self.divisions)
+            return
+        # A rest is not a melody note, but it is still *time*: the cursor has to
+        # move past it or every note after it is read too early - bar 1 of "But
+        # Not For Me" is a quarter rest followed by three quarter notes, so dropping
+        # the rest's length moves the whole head a beat early and fills a bar a rest
+        # should have shared. Every skip below leaves the cursor alone only where the
+        # element really occupies no time; a rest, a grace note and a cue note all do. `docs/renderers.md` §"A rest is not a note, but it is time"
+        # holds the worked example.
+        pitch_element = child.find("pitch")
+        if pitch_element is None:
+            self.skip("rests and unpitched notes")
+            # Not a `<chord>` member, so it advances the cursor in its own right.
+            if child.find("chord") is None:
+                self.cursor += _duration_in_divisions(child, self.divisions)
+            return
+        written = _midi(pitch_element)
+        if written is None:
+            self.skip("notes with an unreadable pitch")
+            return
+        # Written pitch to sounding: `<transpose>` is what is added to a written
+        # note to get the sounding one, so a guitar part - octave-change -1 - is
+        # read a whole octave below its notation. See `_transposition`.
+        pitch = written + self.transposition
+
+        length = _duration_in_divisions(child, self.divisions)
+        onset = self.cursor
+        if child.find("chord") is not None:
+            # A member of a `<chord>` group: the same onset, the same length.
+            # MusicXML does **not** order a group by pitch - only the first
+            # note of the group is unmarked, and the rest may be written in
+            # any order - so the melody is the group's *highest* note, found
+            # by taking the maximum rather than by trusting the position. A
+            # chord-melody part's top line is the tune and the rest is the
+            # arrangement under it, so the reduction is the point, not a loss.
+            self.skip("lower voices of a chord group")
+            self.group.append((pitch, length))
+            return
+        # An unmarked note ends whatever group was open: its own group starts
+        # here, and the previous one is complete. The flush is therefore
+        # *before* this note joins - emitting after would take the group's first
+        # member as the melody, which is its lowest in a descending shape.
+        #
+        # The harmony is captured with the group rather than read at flush time,
+        # because a `<harmony>` between the group's last member and the next
+        # unmarked note would otherwise be applied one note early. The chord a
+        # note sounds is the one in force where the note is, not the one in
+        # force where the reader happened to finish reading it.
+        if self.group:
+            self.flush()
+            self.group.clear()
+        self.group.append((pitch, length))
+        self.group_onset = onset
+        self.group_tie = _stops_a_tie(child)
+        self.group_tuplet = _is_tuplet(child)
+        self.group_chord, self.group_quality, self.group_bass = (
+            self.chord, self.quality, self.bass,
+        )
+        self.group_lyrics = tuple(
+            (lyric.findtext("text") or "").strip()
+            for lyric in child.findall("lyric")
+        )
+        self.cursor += length
+
+
+    def flush(self) -> None:
+        """Emit one melody note from a finished `<chord>` group.
+
+        The group holds `(pitch, length)` for every note sharing an onset. The melody
+        is the **highest** of them, because MusicXML does not order a group by pitch -
+        only its first member is unmarked, and in a chord-melody part that first member
+        is the *lowest* note of the shape, being the first string struck. Taking the
+        maximum is what makes the reduction independent of how the writer ordered them.
+
+        A note whose group carries a tie-stop extends the previous note instead of
+        becoming a second one. That is the whole reason this is a flush and not an
+        append per `<note>`: a tie crosses a bar line, so the two halves are read in
+        different measures and cannot be joined at read time.
+
+        **The merge must NOT be restricted to this bar.** Adding `and notes[-1].bar == bar`
+        looks like a fix - `notes[-1]` is the last note *read*, not the last note in this
+        measure - but it does the opposite, because a `tie type="stop"` in a new bar is
+        precisely the continuation the merge exists to absorb: restricting the merge turns
+        every cross-barline tie into a *second* note at the same pitch. The premise that
+        prompted it, that merging across a barline ate a new bar's downbeat, confused
+        *merged* with *lost*: bar 2's A4 eighth and bar 3's A4 half are one note of 3.5 beats,
+        so bar 3 has no downbeat note because its downbeat is still sounding the one written
+        in bar 2. `tests/test_headxml.py` states this rule directly, and
+        `docs/open-issues.md` item 1 holds the measurement.
+        """
+        if not self.group:
+            return
+        pitch, length = max(self.group, key=lambda item: item[0])
+        if self.group_tie and self.notes and self.notes[-1].pitch == pitch:
+            self.notes[-1].duration += length / self.divisions / 4.0
+            return
+        self.notes.append(
+            HeadNote(
+                bar=self.bar,
+                # The written measure number, captured at read time. It equals `bar` for
+                # a head with no repeat; `_expand_play_order` rewrites `bar` to the
+                # absolute play-order position afterwards and this keeps the score's own
+                # numbering.
+                written_bar=self.bar,
+                # Beat *within* the bar, in notated beats, through the one conversion that
+                # is right for every metre: `onset/divisions` is quarters and a beat is
+                # `4 / beat_type` of them. That single factor is what makes a 2/2 bar two
+                # beats wide - its quarter note is on beat 1.5, not beat 3 - *and* what
+                # puts a 3/4 bar's six eighths on 1.0 … 3.5 instead of squeezing them
+                # into 2.25 beats. See `_beat_from_onset`.
+                beat=_beat_from_onset(
+                    self.group_onset, self.divisions, self.beat_type
+                ),
+                pitch=pitch,
+                duration=length / self.divisions / 4.0,
+                tuplet=self.group_tuplet,
+                chord=self.group_chord,
+                quality=self.group_quality,
+                bass=self.group_bass,
+                lyrics=self.group_lyrics,
+            )
+        )
 
 
 def load_musicxml(path: Union[str, Path], part: Optional[str] = None) -> Head:
@@ -1321,236 +1590,11 @@ def _read_notes(
     added to every written pitch so the melody is read at **sounding** pitch. It is 0
     for a concert-pitch part, which is every committed head.
 
-    The cursor runs in **divisions** and is converted on the way out, because
-    `divisions` is stated per measure and a score may change it; a single running
-    total in quarters would drift the moment it did. `<backup>` and `<forward>`
-    move the cursor without sounding anything and are honoured, so a part with
-    several voices does not desync - the melody is read at the position the file
-    says it is at, whatever the other voices do.
-
-    A measure number that is not an integer ("12a", a pickup numbered "0") is not
-    discarded: the measure is read at its running index and reported, because
-    losing a bar of a head over a label is a poor trade.
+    The walk itself is `_NotesWalk` - one value carrying the cursor, the chord in
+    force, the `<chord>` group being assembled and the things skipped, because every
+    stage of the read touches most of them.
     """
-    beat_type = int(head.beat_type)
-    # The chord in force: a `<harmony>` holds until the next one replaces it.
-    chord = NO_CHORD
-    quality: Optional[str] = NO_CHORD
-    bass: Optional[str] = None
-    unmapped: List[str] = []
-    skipped: Dict[str, int] = {}
-    notes: List[HeadNote] = []
-    # The chord timeline, built as the document is walked so `cursor` is the position
-    # each `<harmony>` occupies. Separate from `notes` because a `<harmony>` can
-    # precede nothing at all - see `HeadChange` and open-issues item 1.
-    changes: List[HeadChange] = []
-    # The `<chord>` group being assembled at the current cursor: (pitch, length),
-    # together with the onset it started at, whether it ends a tie, and the lyrics
-    # on its first member. Flushed when the next unmarked note - or the bar line -
-    # proves the group is complete.
-    group: List[Tuple[int, int]] = []
-    group_onset = 0
-    group_tie = False
-    group_tuplet = False
-    group_chord = NO_CHORD
-    group_quality: Optional[str] = NO_CHORD
-    group_bass: Optional[str] = None
-    group_lyrics: Tuple[str, ...] = ()
-    divisions = 1
-    bar_index = 1
-    # Every measure number walked, in document order, so `Head.bars` is a fact about
-    # the file rather than about the melody (§9.3 step A'). The first and last are
-    # what `bars` reports; a chords-only head has no notes to derive them from.
-    measure_numbers: List[int] = []
-
-    def skip(reason: str) -> None:
-        skipped[reason] = skipped.get(reason, 0) + 1
-
-    # Barline instructions (repeats and volta endings) keyed by the measure's
-    # **document position**, not its written number: a score's measure numbers can be
-    # non-contiguous, and the expansion walks positions in order. Consumed by
-    # `_expand_repeats` after the walk; empty for a score with no barlines of interest,
-    # which is every committed head but the three that carry a repeat.
-    raw_markers: Dict[int, List[Tuple[str, Tuple[int, ...], int]]] = {}
-    position = 0
-
-    for measure in part.findall("measure"):
-        for attributes in measure.findall("attributes"):
-            stated = attributes.findtext("divisions")
-            if stated:
-                divisions = max(1, _number(stated, divisions))
-
-        number = (measure.get("number") or "").strip()
-        if re.match(r"^-?\d+$", number):
-            bar = bar_index = int(number)
-        else:
-            bar = bar_index
-            if number:
-                skip(f'measures not numbered with an integer ("{number}")')
-        measure_numbers.append(bar)
-
-        for barline in measure.findall("barline"):
-            for kind, numbers, times in _parse_barline(barline):
-                raw_markers.setdefault(position, []).append((kind, numbers, times))
-
-        cursor = 0
-        group.clear()
-        for child in measure:
-            if child.tag == "backup":
-                cursor = max(0, cursor - _number(child.findtext("duration")))
-                continue
-            if child.tag == "forward":
-                cursor += _number(child.findtext("duration"))
-                continue
-            if child.tag == "harmony":
-                root_name, parsed_quality, parsed_bass = parse_musicxml_chord(child)
-                if root_name is None or parsed_quality is None:
-                    # Counted, never guessed: a wrong chord under a good melody is
-                    # worse than a gap the user can see reported.
-                    unmapped.append(_chord_symbol(child))
-                    continue
-                chord, quality, bass = f"{root_name}{parsed_quality}", parsed_quality, parsed_bass
-                # **Recorded as well as held.** The locals above are the forward fill
-                # the melody path reads, and they are correct; what they cannot do is
-                # describe a `<harmony>` no note ever reaches, because the only place
-                # they are written out is `group_chord` on the next note. This append
-                # is the whole of phase 1: the timeline exists, and nothing consumes it
-                # yet.
-                #
-                # **The beat conversion is `_beat_from_onset`'s, not `cursor / divisions`.**
-                # `cursor/divisions` is quarters and a beat is `4 / beat_type` of them,
-                # and the one function is called from both places so a `<harmony>` and the
-                # note it precedes can never disagree about which beat they are on. It must
-                # use `beat_type`, not `beats_per_bar` - the denominator trap, which is
-                # invisible while the numerator and the denominator happen to be equal.
-                #
-                # `cursor` rather than `group_onset`, because the element sits *before*
-                # whatever follows it: a `<harmony>` after the bar's last note is recorded
-                # on the beat it occupies and in force into the next bar.
-                #
-                # 6 of the 154 `<harmony>` elements on the committed scores are followed
-                # by no note at all, so this is a real loss and not an edge case. See
-                # `HeadChange` and `docs/open-issues.md` item 1.
-                changes.append(
-                    HeadChange(
-                        bar=bar,
-                        written_bar=bar,
-                        beat=_beat_from_onset(cursor, divisions, beat_type),
-                        chord=chord,
-                        quality=quality,
-                        bass=bass,
-                    )
-                )
-                continue
-            if child.tag != "note":
-                continue
-            if child.find("grace") is not None:
-                skip("grace notes")
-                # A grace note has no `<duration>` of its own - it borrows the
-                # length of the note it decorates - so it occupies no cursor time
-                # and must *not* be added here or it would be counted twice.
-                continue
-            if child.find("cue") is not None:
-                skip("cue notes")
-                if child.find("chord") is None:
-                    cursor += _duration_in_divisions(child, divisions)
-                continue
-            # A rest is not a melody note, but it is still *time*: the cursor has to
-            # move past it or every note after it is read too early - bar 1 of "But
-            # Not For Me" is a quarter rest followed by three quarter notes, so dropping
-            # the rest's length moves the whole head a beat early and fills a bar a rest
-            # should have shared. Every skip below is `continue`-with-no-cursor-move only
-            # where the element really occupies no time; a rest, a grace note and a cue
-            # note all do. `docs/renderers.md` §"A rest is not a note, but it is time"
-            # holds the worked example.
-            pitch_element = child.find("pitch")
-            if pitch_element is None:
-                skip("rests and unpitched notes")
-                # Not a `<chord>` member, so it advances the cursor in its own right.
-                if child.find("chord") is None:
-                    cursor += _duration_in_divisions(child, divisions)
-                continue
-            written = _midi(pitch_element)
-            if written is None:
-                skip("notes with an unreadable pitch")
-                continue
-            # Written pitch to sounding: `<transpose>` is what is added to a written
-            # note to get the sounding one, so a guitar part - octave-change -1 - is
-            # read a whole octave below its notation. See `_transposition`.
-            pitch = written + transposition
-
-            length = _duration_in_divisions(child, divisions)
-            onset = cursor
-            if child.find("chord") is not None:
-                # A member of a `<chord>` group: the same onset, the same length.
-                # MusicXML does **not** order a group by pitch - only the first
-                # note of the group is unmarked, and the rest may be written in
-                # any order - so the melody is the group's *highest* note, found
-                # by taking the maximum rather than by trusting the position. A
-                # chord-melody part's top line is the tune and the rest is the
-                # arrangement under it, so the reduction is the point, not a loss.
-                skip("lower voices of a chord group")
-                group.append((pitch, length))
-                continue
-            # An unmarked note ends whatever group was open: its own group starts
-            # here, and the previous one is complete. The flush is therefore
-            # *before* this note joins - emitting after would take the group's first
-            # member as the melody, which is its lowest in a descending shape.
-            #
-            # The harmony is captured with the group rather than read at flush time,
-            # because a `<harmony>` between the group's last member and the next
-            # unmarked note would otherwise be applied one note early. The chord a
-            # note sounds is the one in force where the note is, not the one in
-            # force where the reader happened to finish reading it.
-            if group:
-                _flush_group(group, notes, bar, group_onset, divisions, beat_type,
-                             group_chord, group_quality, group_bass,
-                             tie_stop=group_tie, lyrics=group_lyrics,
-                             tuplet=group_tuplet)
-                group.clear()
-            group.append((pitch, length))
-            group_onset = onset
-            group_tie = _stops_a_tie(child)
-            group_tuplet = _is_tuplet(child)
-            group_chord, group_quality, group_bass = chord, quality, bass
-            group_lyrics = tuple(
-                (lyric.findtext("text") or "").strip()
-                for lyric in child.findall("lyric")
-            )
-            cursor += length
-        # A group still open at the end of a bar is closed by the bar line. The
-        # MusicXML it came from is malformed, but reading the notes is better than
-        # losing the last chord of the bar.
-        _flush_group(group, notes, bar, group_onset, divisions, beat_type,
-                     group_chord, group_quality, group_bass,
-                     tie_stop=group_tie, lyrics=group_lyrics, tuplet=group_tuplet)
-        group.clear()
-        position += 1
-        bar_index = bar + 1
-
-    head.notes = notes
-    head.chords = changes
-    # The file's measure extent, so `Head.bars` reports the file's length rather than
-    # the melody's - which is what makes a chords-only head arrangeable at all (§9.3
-    # step A'). Recorded here because this is the one place the measures are walked.
-    if measure_numbers:
-        head.measure_range = (measure_numbers[0], measure_numbers[-1])
-    # A bar the melody never enters and a bar with no notes at all are still walked, so
-    # their barlines are read too. Expand the repeat now that every measure, marker,
-    # note and change is in hand: `_expand_repeats` rewrites `bar` to the absolute
-    # play-order position, sets `Head.markers` and updates `measure_range`. It is a
-    # no-op (byte-identical) on a score with no repeat, which is every head but three.
-    _expand_repeats(head, measure_numbers, raw_markers)
-    head.unmapped = tuple(dict.fromkeys(unmapped))
-    head.skipped = tuple(f"{count} {reason}" for reason, count in sorted(skipped.items()))
-    report: List[str] = []
-    if unmapped:
-        report.append(
-            f"{len(unmapped)} chord(s) this library cannot voice were left out: "
-            + ", ".join(sorted(set(unmapped)))
-        )
-    report.extend(head.skipped)
-    head.report = tuple(report)
+    _NotesWalk(part=part, head=head, transposition=transposition).run()
 
 
 # ---------------------------------------------------------------------------
