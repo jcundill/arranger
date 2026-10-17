@@ -314,7 +314,42 @@ no `ALLOWED_EDGES` entry is needed. The payoff is the edge this deletes:
 `render` stops importing `slots`, so presentation no longer depends on the
 arrangement pipeline.
 
-## Phase 12 — Split `grips` at the placement seam (planned)
+## Phase 12 — Split `grips` at the placement seam (measured, not started)
+
+The seam was verified by an AST closure before any text moved, and it holds: the
+closure of `supported_string_sets`, `grip_pluck_count`, `thumb_safe_grips`,
+`finger_skip_count`, `stated_tones`, `comping_string_sets`, `INTERVAL_NAMES`,
+`GRIP_PREFERENCE`, `GRIP_STRING_SETS`, `TONE_PRIORITY`, `SHELL_DEGREES`,
+`RIGHT_HAND_STRINGS`, `THUMB_REACH_STRINGS`, `_BOTTOM_FOUR`,
+`SINGLE_NOTE_STRING_SETS` and `BASS_VOICE_STRING_SETS` contains **only those
+names** - not one reference reaches a template rule, a family generator or a
+placement helper. So `grip_tables.py` can be lifted out whole, and the two
+private string-set tables (`SINGLE_NOTE_STRING_SETS`, `BASS_VOICE_STRING_SETS`)
+are theirs rather than `grips`'s.
+
+Two findings from that measurement:
+
+- **`_INTERVAL_CLASSES` and `INTERVAL_NAMES` were each defined twice**, identically,
+  the second copy sitting after `_place_template` - so the first was dead and no
+  test could see it. The duplicate is deleted, and `tests/test_structure.py` now
+  carries a fourth meter (`TestTheSingleDefinition`) that fails on any top-level
+  name bound twice in one module. It is the guard a *copy-instead-of-cut* split
+  needs, which is why it landed before the split.
+- **`best_voicing` was not deleted.** The earlier handoff said `docs/engine.md`
+  named a function that no longer exists; it does exist as
+  `cost.best_voicing`, which `melody_alone` calls. The stale name is
+  `VoiceLeadingEngine._best_voicing`, and both `docs/engine.md` and `tuning.py`
+  already say the loop no longer calls it. **Nothing to fix in Phase 15's doc
+  half** - do not invent the edit.
+
+The split itself is the next session's first task and wants a full context: it
+moves ~450 lines and updates every importer of the table names
+(`__init__`, `texture`, `bass`, `cost`, `decisions`, `harmony`, `render`,
+`movement`, `steps`, `options`, `grip_chart`, `fingers`, twelve test files). Do
+it as one commit that changes `test_package_dag.ORDER` and the AGENTS module map
+in the same edit. `build/`, `dist/`, `*.egg-info/` and `wjazzd.db` were deleted
+from the working copy, so a grep no longer finds stale copies of these modules
+under `build/lib`.
 
 `grip_tables.py` (string sets, spans, tone tables, `supported_string_sets`,
 `thumb_safe_grips`, `comping_string_sets`, `INTERVAL_NAMES`) and
