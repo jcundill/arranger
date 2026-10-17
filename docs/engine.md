@@ -357,9 +357,11 @@ you whether a change is an improvement or a different library.
 published facade and delegates to it. The loop has two halves, and the seam between them
 is where most of this document's rules are decided.
 
-**Once per arrangement**, `_resolve_knobs` reconciles `options=` with the keywords and
-validates the spellings, and `_resolve_policies` resolves the five axes and builds the
-walked-beat union when a thumb line is running. Both run before any slot is looked at,
+**Once per arrangement**, `resolve_knobs` reconciles `options=` with the keywords and
+validates the spellings, and `resolve_policies` resolves the five axes and builds the
+walked-beat union when a thumb line is running. Both live in **`resolution.py`**, which
+`movement.py` calls: the sentinels and spellings are answered there so the loop reads a
+concrete value on every axis. Both run before any slot is looked at,
 because the band does not change halfway through a tune and a spelling nobody recognises
 has to be reported **once** rather than never.
 

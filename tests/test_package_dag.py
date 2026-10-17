@@ -52,6 +52,7 @@ ORDER = [
     "bass",         # the walking-bass thumb line
     "bass_merge",   # merging the walk into a chosen step; the next resolution melody
     "options",      # the knobs, as one value
+    "resolution",   # what the caller asked for, resolved once: the six resolvers
     "decisions",    # the decisions both step loops share
     "melody_alone", # where a lone note is fretted: the tune alone, with or without harmony
     "routes",       # the route handlers: rest, fill, NC and the comping route
