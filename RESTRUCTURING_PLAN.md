@@ -263,10 +263,17 @@ Next: 9.7, the importers — three of its four targets have landed.
 **Budget after 9.7 so far:** `headxml.py` 29/239/12 → **17/125/10**;
 `tabgp.py` 27/223 → **19/151**.
 
-**What is left in 9.7:** `tabxml.score_events` (168 / CC 24) and `_build_part`
-(176 / CC 12) — the same two shapes as above, a per-event dispatch and a
-per-bar builder; `tabgp._apply_repeat_markers` (64 / CC 19) is now that module's
-worst and is the one to look at after `tabxml`.
+- `tabxml.score_events` (168 / CC 24) is four named rules — `_placed_steps`,
+  `_group_span`, `_capped_span`, `_group_shares` — because the loop body had been
+  one paragraph where place / span / cap / divide / floor / give-the-floor-back /
+  leftover-as-rest interleaved, and none could be checked against the others.
+
+**9.7 is DONE.** Budgets after it: `headxml.py` 17/125/10, `tabgp.py` 19/151/13,
+`tabxml.py` 12/176/12. `tabxml`'s ceiling is `_build_part`, `tabgp`'s is
+`_apply_repeat_markers` (64 / CC 19) — both ordinary now rather than outliers, so
+neither needs a 9.7-style cut. `tabxml._build_part` (176 lines, CC 12) is the
+longest function left in the tree; if a later phase touches the MusicXML writer,
+that is where to start.
 
 **Then:** 9.7's `tabxml` half, and Phases 11–15 as listed below — the
 `slots` → `chords` move, the `grips` split, the `bass`/`movement` splits (with
@@ -373,8 +380,8 @@ Round 2:
 - Phase 7: DONE (two commits).
 - Phase 8: DONE (five commits). 1107 tests OK (skipped=2), ruff 0, pyright 0/0,
   `make demo` byte-identical, `make chart-audit` clean.
-- Phase 9: 9.1–9.7 landed (sixteen commits) — the engine's worst functions, both
-  tab renderers, and three of the four importer targets. Remaining: `tabxml`.
+- Phase 9: DONE (seventeen commits) — 9.1–9.6 the engine and both tab
+  renderers, 9.7 the three importers. No module's ceiling is an outlier any more.
 - Phase 10: DONE (moved before 9.3). 1107 tests OK, ruff 0, pyright 0/0,
   demo byte-identical.
 - Phases 11-15: planned, in the order above.
