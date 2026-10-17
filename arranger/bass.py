@@ -874,6 +874,203 @@ def _bass_slots(
     return slots
 
 
+_Harmony = Tuple[int, Tuple[int, ...]]
+_HarmonyKey = Optional[Tuple[Optional[str], Optional[str]]]
+
+
+def _located_onsets(
+    onsets: Optional[Sequence[Optional[Tuple[int, float]]]],
+) -> List[Tuple[int, float, int]]:
+    """The (bar, beat, progression index) of every slot that has a position."""
+    return (
+        [
+            (onset[0], onset[1], index)
+            for index, onset in enumerate(onsets)
+            if onset is not None
+        ]
+        if onsets is not None
+        else []
+    )
+
+
+def _anchor_only_line(
+    chords: Sequence[Tuple[Optional[str], str, str]],
+) -> List[BassNote]:
+    """The line when there is no beat grid: one anchor per slot."""
+    notes: List[BassNote] = []
+    for root, quality, _name in chords:
+        harmony = _bass_harmony(root, quality)
+        if harmony is None:
+            continue
+        notes.append(BassNote(None, None, harmony[0], BASS_ROLE_ANCHOR))
+    return notes
+
+
+def _walked_beats(
+    located: Sequence[Tuple[int, float, int]], beats_per_bar: int
+) -> List[Tuple[int, float]]:
+    """One beat per quarter of every bar the melody touches."""
+    # One walked beat per quarter of every bar the melody touches. Signed bars sort
+    # correctly, and a bar whose melody is a single whole note still yields four
+    # notes - the grid, not the melody, is what the line is written on.
+    bars = sorted({bar for bar, _beat, _index in located})
+    return [
+        (bar, float(beat)) for bar in bars for beat in range(1, beats_per_bar + 1)
+    ]
+
+
+def _filled_harmony(
+    walked: Sequence[Tuple[int, float]],
+    chords: Sequence[Tuple[Optional[str], str, str]],
+    located: Sequence[Tuple[int, float, int]],
+) -> Tuple[List[Optional[_Harmony]], List[_HarmonyKey]]:
+    """The harmony in force at each walked beat, by forward fill.
+
+    An `NC` slot ends the harmony rather than continuing it; a slot this library
+    cannot voice leaves the previous harmony in force.
+    """
+    # The harmony in force at each walked beat, by forward fill on the (bar, beat)
+    # tuple - the same rule the corpus loader and the MusicXML importer apply, and
+    # the same one the left hand reads. An `NC` slot **ends** the harmony rather than
+    # continuing it, and a bar with no harmony behind it yet gets no notes at all.
+    #
+    # The end is a derivation, not a rule about chordless bars: a part whose notes are
+    # chosen from a chord cannot state anything where there is no chord
+    # (docs/history/parts.md §4). So `carried` is cleared rather than left standing, which is
+    # what keeps the *bass* part out of an `NC` bar: the forward fill below is the only
+    # thing that would otherwise hand it the previous chord's root, and the emission
+    # then skips every beat whose harmony is None. "No chord here" and "a chord this
+    # library cannot voice" are different facts, and only the first ends the harmony -
+    # an untranslatable symbol, counted in `Head.unmapped`, leaves the chord in force,
+    # because its harmony is still the music's.
+    onsets_sorted = sorted(located)
+    harmonies: List[Optional[_Harmony]] = []
+    keys: List[_HarmonyKey] = []
+    cursor = 0
+    carried: Optional[_Harmony] = None
+    carried_key: _HarmonyKey = None
+    for bar, beat in walked:
+        while (
+            cursor < len(onsets_sorted)
+            and (onsets_sorted[cursor][0], onsets_sorted[cursor][1]) <= (bar, beat)
+        ):
+            root, quality, name = chords[min(onsets_sorted[cursor][2], len(chords) - 1)]
+            if name == NO_CHORD:
+                carried = None
+                carried_key = None
+                cursor += 1
+                continue
+            parsed = _bass_harmony(root, quality)
+            if parsed is not None:
+                carried = parsed
+                carried_key = normalised_harmony(f"{root}{quality}")
+            # Otherwise the slot is unspeakable, and `carried` holds unchanged: the
+            # chord is in force even where this library cannot voice it.
+            cursor += 1
+        harmonies.append(carried)
+        keys.append(carried_key)
+    return harmonies, keys
+
+
+def _anchor_flags(
+    walked: Sequence[Tuple[int, float]],
+    harmonies: Sequence[Optional[_Harmony]],
+    keys: Sequence[_HarmonyKey],
+    beats_per_bar: int,
+) -> List[bool]:
+    """Every downbeat, plus a strong beat whose harmony is not already stated."""
+    # An anchor is every downbeat, plus any strong beat whose harmony is not already
+    # stated. The second clause is the mid-bar change, and it is the *same* predicate
+    # `roles_for_slot` already applies to the left hand - strong beat, and a harmony
+    # differing from the previous target's - so the thumb and the fingers fire on one
+    # slot by construction rather than by a second mechanism kept in step by hand.
+    is_anchor: List[bool] = []
+    previous_anchor: _HarmonyKey = None
+    for index, (bar, beat) in enumerate(walked):
+        if harmonies[index] is None:
+            is_anchor.append(False)
+            continue
+        strong = metric_weight(bar, beat, beats_per_bar) > 0
+        downbeat = abs(beat - 1.0) <= BEAT_EPSILON
+        anchor = downbeat or (strong and keys[index] != previous_anchor)
+        is_anchor.append(anchor)
+        if anchor:
+            previous_anchor = keys[index]
+    return is_anchor
+
+
+def _next_anchor_pitches(
+    walked: Sequence[Tuple[int, float]],
+    harmonies: Sequence[Optional[_Harmony]],
+    is_anchor: Sequence[bool],
+) -> List[Optional[int]]:
+    """The next anchor's pitch class after each beat, by a backwards scan.
+
+    This backwards pass is the lookahead: `approach` and `enclosure` are chosen
+    against a note that has not been emitted yet.
+    """
+    next_anchor: List[Optional[int]] = [None] * len(walked)
+    upcoming: Optional[int] = None
+    for index in range(len(walked) - 1, -1, -1):
+        next_anchor[index] = upcoming
+        harmony = harmonies[index]
+        if is_anchor[index] and harmony is not None:
+            upcoming = harmony[0]
+    return next_anchor
+
+
+def _walk_note(
+    permitted: Tuple[int, ...],
+    root_pc: int,
+    anchor_pc: Optional[int],
+    previous_pc: Optional[int],
+    beat: float,
+    beats_per_bar: int,
+) -> Tuple[int, str]:
+    """The candidate set for one non-anchor beat, and the cost's choice from it.
+
+    The order of `candidates` is load-bearing: `min` returns the first of equal
+    costs, so this is where the tie-break lives.
+    """
+    is_last_beat = abs(beat - beats_per_bar) <= BEAT_EPSILON
+    is_penultimate = abs(beat - (beats_per_bar - 1)) <= BEAT_EPSILON
+
+    candidates: List[Tuple[int, str]] = [
+        (pitch_class, BASS_ROLE_CONNECT) for pitch_class in permitted
+    ]
+    if previous_pc is not None:
+        candidates.append((previous_pc, BASS_ROLE_HOLD))
+    if anchor_pc is not None:
+        # A chromatic approach to the next root. This is how a connective note
+        # reaches a pitch that is neither a chord tone nor a nameable extension,
+        # and it is a large part of why the walk needs no key model: the
+        # "diatonic" movement of a real line (G-A-Bb) is extensions of the chord
+        # it sits under, and the one genuinely chromatic note is exactly this.
+        candidates.append(((anchor_pc + 1) % 12, BASS_ROLE_CONNECT))
+        candidates.append(((anchor_pc - 1) % 12, BASS_ROLE_CONNECT))
+        candidates.append(((anchor_pc + 7) % 12, BASS_ROLE_CONNECT))
+        if is_last_beat:
+            # The approach role is offered the half step above, the half step
+            # below and the fourth below / fifth above, and `bass_cost` ranks a
+            # half step first. Nothing here decides the note; the cost does, so
+            # the same rule holds whichever chord is on either side.
+            candidates.append(((anchor_pc + 1) % 12, BASS_ROLE_APPROACH))
+            candidates.append(((anchor_pc - 1) % 12, BASS_ROLE_APPROACH))
+            candidates.append(((anchor_pc + 7) % 12, BASS_ROLE_APPROACH))
+        elif is_penultimate:
+            # Half step above the next anchor, so the beat after it can take the
+            # half step below: the simplest form of an enclosure, and the only
+            # one in scope.
+            candidates.append(((anchor_pc + 1) % 12, BASS_ROLE_ENCLOSURE))
+
+    return min(
+        candidates,
+        key=lambda candidate: bass_cost(
+            candidate[0], candidate[1], previous_pc, anchor_pc, root_pc, permitted
+        ),
+    )
+
+
 def _walking_bass_line(
     # `Sequence` rather than `List`, for the reason `bass_line_for` gives: invariance
     # would reject a caller whose chords are a narrower tuple type than this signature
@@ -918,163 +1115,31 @@ def _walking_bass_line(
     if not chords:
         return []
 
-    located = (
-        [
-            (onset[0], onset[1], index)
-            for index, onset in enumerate(onsets)
-            if onset is not None
-        ]
-        if onsets is not None
-        else []
-    )
-
+    located = _located_onsets(onsets)
     if not located:
-        # No beat grid: one note per slot, and every slot is an anchor.
-        notes: List[BassNote] = []
-        for root, quality, _name in chords:
-            harmony = _bass_harmony(root, quality)
-            if harmony is None:
-                continue
-            notes.append(BassNote(None, None, harmony[0], BASS_ROLE_ANCHOR))
-        return notes
+        return _anchor_only_line(chords)
 
-    # One walked beat per quarter of every bar the melody touches. Signed bars sort
-    # correctly, and a bar whose melody is a single whole note still yields four
-    # notes - the grid, not the melody, is what the line is written on.
-    bars = sorted({bar for bar, _beat, _index in located})
-    walked: List[Tuple[int, float]] = [
-        (bar, float(beat)) for bar in bars for beat in range(1, beats_per_bar + 1)
-    ]
+    walked = _walked_beats(located, beats_per_bar)
+    harmonies, keys = _filled_harmony(walked, chords, located)
+    is_anchor = _anchor_flags(walked, harmonies, keys, beats_per_bar)
+    next_anchor = _next_anchor_pitches(walked, harmonies, is_anchor)
 
-    # The harmony in force at each walked beat, by forward fill on the (bar, beat)
-    # tuple - the same rule the corpus loader and the MusicXML importer apply, and
-    # the same one the left hand reads. An `NC` slot **ends** the harmony rather than
-    # continuing it, and a bar with no harmony behind it yet gets no notes at all.
-    #
-    # The end is a derivation, not a rule about chordless bars: a part whose notes are
-    # chosen from a chord cannot state anything where there is no chord
-    # (docs/history/parts.md §4). So `carried` is cleared rather than left standing, which is
-    # what keeps the *bass* part out of an `NC` bar: the forward fill below is the only
-    # thing that would otherwise hand it the previous chord's root, and the emission
-    # then skips every beat whose harmony is None. "No chord here" and "a chord this
-    # library cannot voice" are different facts, and only the first ends the harmony -
-    # an untranslatable symbol, counted in `Head.unmapped`, leaves the chord in force,
-    # because its harmony is still the music's.
-    onsets_sorted = sorted(located)
-    harmonies: List[Optional[Tuple[int, Tuple[int, ...]]]] = []
-    keys: List[Optional[Tuple[Optional[str], Optional[str]]]] = []
-    cursor = 0
-    carried: Optional[Tuple[int, Tuple[int, ...]]] = None
-    carried_key: Optional[Tuple[Optional[str], Optional[str]]] = None
-    for bar, beat in walked:
-        while (
-            cursor < len(onsets_sorted)
-            and (onsets_sorted[cursor][0], onsets_sorted[cursor][1]) <= (bar, beat)
-        ):
-            root, quality, name = chords[min(onsets_sorted[cursor][2], len(chords) - 1)]
-            if name == NO_CHORD:
-                carried = None
-                carried_key = None
-                cursor += 1
-                continue
-            parsed = _bass_harmony(root, quality)
-            if parsed is not None:
-                carried = parsed
-                carried_key = normalised_harmony(f"{root}{quality}")
-            # Otherwise the slot is unspeakable, and `carried` holds unchanged: the
-            # chord is in force even where this library cannot voice it.
-            cursor += 1
-        harmonies.append(carried)
-        keys.append(carried_key)
-
-    # An anchor is every downbeat, plus any strong beat whose harmony is not already
-    # stated. The second clause is the mid-bar change, and it is the *same* predicate
-    # `roles_for_slot` already applies to the left hand - strong beat, and a harmony
-    # differing from the previous target's - so the thumb and the fingers fire on one
-    # slot by construction rather than by a second mechanism kept in step by hand.
-    is_anchor: List[bool] = []
-    previous_anchor: Optional[Tuple[Optional[str], Optional[str]]] = None
-    for index, (bar, beat) in enumerate(walked):
-        if harmonies[index] is None:
-            is_anchor.append(False)
-            continue
-        strong = metric_weight(bar, beat, beats_per_bar) > 0
-        downbeat = abs(beat - 1.0) <= BEAT_EPSILON
-        anchor = downbeat or (strong and keys[index] != previous_anchor)
-        is_anchor.append(anchor)
-        if anchor:
-            previous_anchor = keys[index]
-
-    # The next anchor after each walked beat, which is what `approach` and
-    # `enclosure` are chosen *against*. This backwards scan is the lookahead.
-    next_anchor: List[Optional[int]] = [None] * len(walked)
-    upcoming: Optional[int] = None
-    for index in range(len(walked) - 1, -1, -1):
-        next_anchor[index] = upcoming
-        harmony = harmonies[index]
-        if is_anchor[index] and harmony is not None:
-            upcoming = harmony[0]
-
-    # One note per walked beat, with the previous note carried forward so the cost
-    # can measure motion. `previous_pc` is the only state the pass keeps, which is
-    # what makes a single forward pass enough: the lookahead is already resolved
-    # above, into `next_anchor`.
-    notes = []
+    notes: List[BassNote] = []
     previous_pc: Optional[int] = None
     for index, (bar, beat) in enumerate(walked):
         harmony = harmonies[index]
         if harmony is None:
-            # No harmony has sounded yet: nothing to anchor and nothing to walk
-            # under. Skipping rather than guessing is the rule this module keeps
-            # everywhere else.
             continue
         root_pc, permitted = harmony
-        anchor_pc = next_anchor[index]
         if is_anchor[index]:
             notes.append(BassNote(bar, beat, root_pc, BASS_ROLE_ANCHOR))
             previous_pc = root_pc
             continue
-
-        is_last_beat = abs(beat - beats_per_bar) <= BEAT_EPSILON
-        is_penultimate = abs(beat - (beats_per_bar - 1)) <= BEAT_EPSILON
-
-        candidates: List[Tuple[int, str]] = [
-            (pitch_class, BASS_ROLE_CONNECT) for pitch_class in permitted
-        ]
-        if previous_pc is not None:
-            candidates.append((previous_pc, BASS_ROLE_HOLD))
-        if anchor_pc is not None:
-            # A chromatic approach to the next root. This is how a connective note
-            # reaches a pitch that is neither a chord tone nor a nameable extension,
-            # and it is a large part of why the walk needs no key model: the
-            # "diatonic" movement of a real line (G-A-Bb) is extensions of the chord
-            # it sits under, and the one genuinely chromatic note is exactly this.
-            candidates.append(((anchor_pc + 1) % 12, BASS_ROLE_CONNECT))
-            candidates.append(((anchor_pc - 1) % 12, BASS_ROLE_CONNECT))
-            candidates.append(((anchor_pc + 7) % 12, BASS_ROLE_CONNECT))
-            if is_last_beat:
-                # The approach role is offered the half step above, the half step
-                # below and the fourth below / fifth above, and `bass_cost` ranks a
-                # half step first. Nothing here decides the note; the cost does, so
-                # the same rule holds whichever chord is on either side.
-                candidates.append(((anchor_pc + 1) % 12, BASS_ROLE_APPROACH))
-                candidates.append(((anchor_pc - 1) % 12, BASS_ROLE_APPROACH))
-                candidates.append(((anchor_pc + 7) % 12, BASS_ROLE_APPROACH))
-            elif is_penultimate:
-                # Half step above the next anchor, so the beat after it can take the
-                # half step below: the simplest form of an enclosure, and the only
-                # one in scope.
-                candidates.append(((anchor_pc + 1) % 12, BASS_ROLE_ENCLOSURE))
-
-        best_pc, best_role = min(
-            candidates,
-            key=lambda candidate: bass_cost(
-                candidate[0], candidate[1], previous_pc, anchor_pc, root_pc, permitted
-            ),
+        best_pc, best_role = _walk_note(
+            permitted, root_pc, next_anchor[index], previous_pc, beat, beats_per_bar
         )
         notes.append(BassNote(bar, beat, best_pc, best_role))
         previous_pc = best_pc
-
     return notes
 
 

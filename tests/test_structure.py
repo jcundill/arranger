@@ -66,7 +66,7 @@ class Budget:
 BUDGETS: Dict[str, Budget] = {
     "arranger/__init__.py": Budget(14, 151, 1),
     "arranger/__main__.py": Budget(5, 10, 2),
-    "arranger/bass.py": Budget(31, 202, 6),
+    "arranger/bass.py": Budget(25, 159, 6),
     "arranger/bass_merge.py": Budget(6, 66, 3),
     "arranger/chords.py": Budget(17, 46, 5),
     "arranger/cli.py": Budget(13, 131, 11),
