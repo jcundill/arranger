@@ -9,9 +9,12 @@ had already begun to drift.
 
 What is **not** here, deliberately:
 
-* a helper two files both want but which reads better in one of them - the walked
-  line's `names(chords, onsets)` in `test_bass` and a step's thumb note in
-  `test_walking_bass` share a name and nothing else, so both stay local;
+* a helper two files both want but which reads better in one of them. The case this
+  bullet was written for has moved: `test_bass`'s `names(chords, onsets)` and the
+  walking-bass suite's "the thumb's pitch class" were two functions sharing one name,
+  and splitting that suite across three files left the second wanted by two of them.
+  It is here as `bass_name`, renamed because a bare `support.names` would have been the
+  same collision with a wider blast radius;
 
 Every fixture here builds a value by hand rather than by running the engine, which
 is the point: a test that arranges a progression and then asserts on the result is
@@ -30,11 +33,15 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from musthe import Note
 
+import arranger
 from arranger import (
+    BASS_STYLE_WALK,
     PITCH_CLASS_NAMES,
     SHELL_DEGREES,
+    STANDARD_TUNING,
     ArrangementStep,
     ChordParser,
+    VoiceLeadingEngine,
     Voicing,
     get_comping_voicings,
 )
@@ -573,3 +580,57 @@ def arranged(path: str, **kwargs: Any) -> Any:
 def clear_arrangements() -> None:
     """Forget every remembered arrangement - the seam a patched-seam test needs."""
     _ARRANGEMENTS.clear()
+
+
+def walk(
+    progression: List[Tuple[str, str, str]],
+    onsets: Optional[List[Tuple[int, float]]] = None,
+) -> List[arranger.ArrangementStep]:
+    """A walking-bass arrangement of `progression`, with or without a beat grid.
+
+    `texture="targets"` rather than a `chordN` row, and that is the load-bearing part:
+    the metre decides the roles, so a strong beat states the chord and the beats the
+    bass grid invents between them hold the tune under the thumb. A fixed-arity row
+    makes **every** slot a target, which would re-strike the chord on every walked
+    beat - a walking line with a chord on all four beats is a different arrangement.
+    """
+    # Annotated rather than inferred, because `Tuple` is invariant: a list of
+    # `(int, float, None)` triples is not a `List[Tuple[int, float, Optional[float]]]`,
+    # and pyright rejects it for exactly that reason. Assigned in a statement of its
+    # own for the second half of the same trap: a conditional expression does not carry
+    # the declared type into the comprehension beside it, so the annotation has to be
+    # on the assignment the comprehension is. Same spelling as `BUT_NOT_FOR_ME_TIMINGS`
+    # in test_texture.py.
+    timings: Optional[List[Tuple[int, float, Optional[float]]]] = None
+    if onsets is not None:
+        timings = [(bar, beat, None) for bar, beat in onsets]
+    return VoiceLeadingEngine.arrange_progression(
+        progression, timings=timings, texture="targets", bass=BASS_STYLE_WALK,
+        grid="melody:every_note,bass:walk",
+    )
+
+
+def upper_pitches(step: arranger.ArrangementStep) -> List[int]:
+    """The upper voices alone: every sounding pitch except the thumb's.
+
+    Walked from the fret vector rather than by comparing string indices, because the
+    two hands do not have to agree about which string is lower - a 5-3-2 shell's
+    A-string note sounds below its G-string note, which is the whole reason the
+    sounding-order filter in `place_bass` cannot be a tie-break. The thumb's string
+    is dropped by **fret-vector index**, never by position in a filtered list, which
+    is the mistake that would silently compare a string number against a list offset.
+    """
+    voicing = step.voicing
+    bass_string = voicing.bass_string
+    return sorted(
+        STANDARD_TUNING[index].midi_note() + fret
+        for index, fret in enumerate(voicing.frets)
+        if fret >= 0 and index != bass_string
+    )
+
+
+def bass_name(step: arranger.ArrangementStep) -> str:
+    """The thumb's pitch class by name, or '-' when the step carries no bass."""
+    if step.bass is None:
+        return "-"
+    return PITCH_CLASS_NAMES[step.bass % 12]
