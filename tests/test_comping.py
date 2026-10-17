@@ -287,7 +287,7 @@ class TestTheCompingPaletteIsRemembered(unittest.TestCase):
         """The memo may not hand one object out twice, because the engine writes into it.
 
         The comping route is where this bites hardest: `decisions.select_step_voicing`
-        returns one of the palette's **own objects**, and `movement._attach_bass` then
+        returns one of the palette's **own objects**, and `bass_merge._attach_bass` then
         merges the walked thumb into its fret vector and `bass_pc`. A shared object would
         let one step's bass line become the next step's palette, silently and only in the
         tab, so the identity assertion is the witness: it is the *sharing* that is

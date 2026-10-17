@@ -479,7 +479,7 @@ class ArrangementStep:
     # tab cannot supply - the fret vector has no thumb, so a reader cannot derive
     # which note went missing. `render._bass_refusal_clause` phrases it.
     #
-    # Set by `movement._attach_bass`, at the one point the refusal is known, and
+    # Set by `bass_merge._attach_bass`, at the one point the refusal is known, and
     # read by the renderer alone: `bass` above is a derived view of
     # `voicing.bass_midi`, so this is a fact the voicing does not own - it is
     # about a note that is *not* sounding.

@@ -27,6 +27,7 @@ from .bass import (
     BASS_STYLE_AUTO,
     BassNote,
 )
+from .bass_merge import _attach_bass
 from .chords import (
     NON_CHORD_TONE_EXTENSIONS,
     NON_CHORD_TONE_STRATEGIES,
@@ -40,7 +41,6 @@ from .grips import (
 from .harmony import HARMONY_AUTO
 from .movement import (
     StepPreparation,
-    _attach_bass,
     arrange_progression,
     prepare_step,
 )
@@ -328,7 +328,7 @@ class VoiceLeadingEngine:
         note: Optional[BassNote],
         arrangements: List[ArrangementStep],
     ) -> None:
-        """See `movement._attach_bass` - the full docstring is there."""
+        """See `bass_merge._attach_bass` - the full docstring is there."""
         return _attach_bass(step, note, arrangements)
 
     @classmethod

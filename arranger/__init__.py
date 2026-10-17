@@ -50,6 +50,7 @@ from typing import TYPE_CHECKING, Any, List
 from musthe import Note  # re-exported: `from arranger import Note` is used by tests
 
 from . import (
+    bass_merge,
     cli,
     cost,
     decisions,
@@ -542,6 +543,7 @@ __all__ = [
     "bass_allowed",
     "bass_cost",
     "bass_line_for",
+    "bass_merge",
     "parse_bass_style",
     "chords",
     "comping_capacity",

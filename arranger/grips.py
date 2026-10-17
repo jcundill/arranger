@@ -1550,7 +1550,7 @@ def get_comping_voicings(
 
     **A fresh list of fresh `Voicing`s on every call**, which is why this is a wrapper
     around the memo rather than the memoised function itself: `decisions.select_step_voicing`
-    hands one of these objects back and `movement._attach_bass` then writes the walked
+    hands one of these objects back and `bass_merge._attach_bass` then writes the walked
     thumb into its fret vector and `bass_pc`. Returning the stored objects would let one
     step's bass line rewrite the palette the next step is offered.
 
@@ -1795,7 +1795,7 @@ def _search_shape(
 
 #: Everything a `Voicing` carries, with the fret vector as a tuple: what `_searched_shape`
 #: and `_comping_palette` store. A result is snapshotted rather than stored as a `Voicing`
-#: so that no caller can write through a memo - `movement._attach_bass` merges the walking
+#: so that no caller can write through a memo - `bass_merge._attach_bass` merges the walking
 #: bass by writing into the chosen shape's fret vector and `bass_pc`.
 _ShapeSnapshot = Tuple[
     Tuple[int, ...], int, float, str, Optional[int], str, Optional[int], Optional[int]
@@ -1861,7 +1861,7 @@ def _place_shape(
     The one shape `placement` asks for, answered through the memo.
 
     **A fresh `Voicing` with a fresh fret vector on every call.** The engine writes into
-    the shape it chose - `movement._attach_bass` sets `frets[string]` and `bass_pc` for the
+    the shape it chose - `bass_merge._attach_bass` sets `frets[string]` and `bass_pc` for the
     walking bass - so returning the stored object would let one step's thumb line rewrite
     the shape the next step is handed.
 

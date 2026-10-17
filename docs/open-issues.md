@@ -470,7 +470,7 @@ print('added: %d over %d heads' % (total, len(paths)))
 
 
 Item 2's counts are re-measured the same way (no committed script — `AGENTS.md` trap 8): wrap
-`bass._place_bass` and `movement._attach_bass`, load each `tests/data/` head over the four rows
+`bass._place_bass` and `bass_merge._attach_bass`, load each `tests/data/` head over the four rows
 that place a thumb note under a texture that has one (`texture` in `targets`/`uniform` ×
 `bass` in `root`/`root,5th,approach,nearest`), and count a refusal wherever `_place_bass` returns `None`.
 

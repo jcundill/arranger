@@ -63,19 +63,24 @@ the one edge that genuinely points down (`decisions`).
 
 Validation: 1098 tests OK (skipped=2), ruff 0, pyright 0/0.
 
-## Phase 3 — Split `movement.py` by route (NEXT)
+## Phase 3 — Split `movement.py` by route (IN PROGRESS)
 
-`movement.py` (2526 lines) = step loop + all route handlers. Extract each
-route into its own module; `movement.arrange_progression` becomes a thin
-dispatcher.
+`movement.py` (2526 lines) = step loop + all route handlers. Extracted so far:
+
+- **`arranger/bass_merge.py`** — `_attach_bass` (merges the walked thumb into a
+  chosen step after selection) and `_next_resolution_melody`. It imports only
+  `bass`, `chords` and `tuning`, so it sits directly above `bass` in `ORDER`.
+  `movement` and `steps` import it from there.
+
+Remaining work: extract the lone-note route (`_melody_alone_shape`,
+`_rescue_melody_alone`, `_demoted_to_melody_alone`, `_promoted_fill`) and the
+route handlers still in `movement.py`.
 
 | New module | Contents |
 |---|---|
-| `arranger/comping.py` | `_comping_step` + non-chord-tone routing |
-| `arranger/texture_step.py` (name TBD) | `_texture_step` / fill logic |
-| `arranger/no_chord.py` | `_no_chord_step` |
-| `arranger/melody_alone.py` | `_melody_alone_shape`, `_melody_alone_step` |
-| `arranger/bass_merge.py` | `_attach_bass`, `_place_bass` consumers |
+| `arranger/bass_merge.py` | `_attach_bass`, `_next_resolution_melody` (DONE) |
+| `arranger/melody_alone.py` | `_melody_alone_shape`, `_rescue_melody_alone`, `_demoted_to_melody_alone`, `_promoted_fill` |
+| `arranger/routes.py` | `_rest_step`, `_texture_fill_step`, `_no_chord_step`, `_comping_step`, `_harmonised_step` |
 
 Each route's guards local and testable in isolation (addresses trap 12).
 Five routes, `melody_alone_case` kinds, `SLASH_BASS_SATISFIED`,
@@ -115,6 +120,6 @@ versa, consistently. Verify no cycle introduced (`slots` is after
 ## Status
 
 - Phase 1: DONE (committed 903694b).
-- Phase 2: DONE (pending commit).
+- Phase 2: DONE (committed c6ed08a).
 - Phase 3: next.
 - Phases 4-6: not started.

@@ -464,7 +464,7 @@ the snapshot. Three things make it safe rather than merely fast, and
   `STANDARD_TUNING`, `supported_string_sets()`) are fixed when the module is imported, so
   **reassigning one at runtime is the single thing that would leave a stale answer behind.**
 - **A caller cannot write through it.** The fret vector is stored as a tuple and a fresh
-  `Voicing` is built per call, because `movement._attach_bass` writes the walked thumb *into*
+  `Voicing` is built per call, because `bass_merge._attach_bass` writes the walked thumb *into*
   the chosen shape. A memo handing out the stored object would let one step's thumb line
   rewrite the shape the next step is handed - silently, and only in the tab.
 - **It is read.** A hit and a miss are counted, so a memo nothing reaches cannot pass by

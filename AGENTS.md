@@ -136,6 +136,7 @@ arranger/
 │   ├── grid.py          #   when each part sounds
 │   ├── texture.py       #   how many notes the chord part states; metric roles
 │   ├── bass.py          #   the walking-bass thumb line
+│   ├── bass_merge.py    #   merges the walk into a chosen step; the next resolution melody
 │   ├── options.py       #   ArrangeOptions - the knobs as one value
 │   ├── decisions.py     #   decisions both step loops share
 │   ├── movement.py      #   the step loop: arrange_progression, prepare_step
@@ -172,7 +173,7 @@ now a package of focused modules in a strict dependency order:
 ```
 tuning -> fingers -> chords -> grips -> cost -> parts -> harmony -> grid -> texture
                                                                                  |
-                            bass <- options -------------------------------------+
+                                      bass -> bass_merge -> options -------------+
                                                    |
                                           movement -> steps -> slots -> render -> cli
                                                         |              |

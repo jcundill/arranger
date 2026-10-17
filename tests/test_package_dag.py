@@ -46,6 +46,7 @@ ORDER = [
     "grid",         # the grid axis: when each part sounds
     "texture",      # the texture axis: how many notes the chord part states
     "bass",         # the walking-bass thumb line
+    "bass_merge",   # merging the walk into a chosen step; the next resolution melody
     "options",      # the knobs, as one value
     "decisions",    # the decisions both step loops share
     "movement",     # the step loop: one progression in, one arrangement out

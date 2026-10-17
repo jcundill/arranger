@@ -413,7 +413,7 @@ def arranged(path: str, **kwargs: Any) -> Any:
     Three things a caller has to know:
 
     - **the steps are shared**, so a test must not write into a step or its voicing. Nothing
-      does, because `movement._attach_bass` writes the walking bass during the arrangement
+      does, because `bass_merge._attach_bass` writes the walking bass during the arrangement
       rather than after it;
     - a test that **monkeypatches an engine seam** must call `headxml.arrange_xml_head`
       itself or `clear_arrangements()` first - an entry made before the patch was made with
