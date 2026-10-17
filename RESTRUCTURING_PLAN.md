@@ -494,22 +494,31 @@ tests. Classes moved by AST span, AST-identical to their originals, count unchan
 100 in that file's three parts.
 
 The plan's guess was `route / harmony / grid`, and the classes said otherwise:
-`test_comping` contains **no grid class at all** (the grid tests live in
-`test_tab_rendering`), and the largest coherent group after the route was `parts=`. So
+`test_comping` contains **no grid class at all** - the grid tests are in
+`tests/test_grid.py`, a file the plan never mentioned - and the largest coherent group
+after the route was `parts=`. So
 the cluster names in the table below are a guess until the class list is read - read it
 first, as the rule, and treat the table as a starting point. Six module-level fixtures
 were shared by two or three of the new files (`PROGRESSION`, `VOICES_ARG` and four
 chord-name helpers) and went to `support`; `PARTS_WITH_BASS` and `bass_comping` had one
 user each and stayed.
 
-Then the four remaining monoliths, by the class clusters that already exist:
+**Second split landed: `test_tab_rendering` -> one-line / staff / html.** 2195 lines and
+16 classes over three renderers whose only shared content was an import block, now 687 /
+1253 / 289 lines and 47 / 71 / 25 tests. No fixture was shared between the three, so
+`support` gained nothing. It did give up something: the file carried `HEADS`, a sorted
+glob of the committed heads referenced nowhere in the tree, deleted rather than moved
+because `support.SWEEP_HEADS` is the spelling the other files use. **Nothing flags an
+unused module-level constant**, which is why it outlived its user by however many
+commits.
+
+Then the three remaining monoliths, by the class clusters that already exist:
 
 | file | lines | split (a guess - read the classes) |
 |---|---|---|
 | `test_headxml` | 3290 | parse / timeline / repeats / cli |
 | `test_grips` | 2409 | families / palette / playability |
 | `test_walking_bass` | 2403 | line / placement / capacity |
-| `test_tab_rendering` | 2195 | step / ascii / html / explanations (grid lives here) |
 
 A split moves `unittest.TestCase` classes and nothing else: no assertion changes, no
 fixture re-typing, and the test count is the meter (1108 before and after each file).
