@@ -13,7 +13,7 @@ from arranger import (
     format_progression,
     supported_string_sets,
 )
-from arranger.grips import TONE_PRIORITY, _drop2_template_for
+from arranger.grips import TONE_PRIORITY, drop2_template_for
 from tests.support import WITNESS
 
 
@@ -516,7 +516,7 @@ class TestTriadSusAndAlteredQualities(unittest.TestCase):
         degree too, which is a *third* shape - the palette's job, not this one's."""
         def shapes(quality):
             return {
-                tuple(_drop2_template_for(quality, degree))
+                tuple(drop2_template_for(quality, degree))
                 for degree in WITNESS[quality]
             }
 

@@ -37,7 +37,7 @@ from headxml import (
     parse_musicxml_chord,
 )
 from tabstaff import format_tab_staff, write_tab_html
-from tabxml import _events, _substitute_steps
+from tabxml import score_events, substitute_steps
 from tests.support import arranged, sweep_head_paths
 
 # The real scores the importer's tests read, in `tests/data/`. They are committed
@@ -1934,7 +1934,7 @@ class TestReductionAndArranging(unittest.TestCase):
 
         The defect was invisible in the tab and glaring in the score. `head_skeleton`
         emitted six-place-rounded beats, which made the gap between two triplet notes
-        longer than the notes in it; `tabxml._events` caps a note at the length the
+        longer than the notes in it; `tabxml.score_events` caps a note at the length the
         file wrote, so the surplus became a **rest of about 1e-06 quarters** - a
         length MusicXML cannot express, and which music21 inflates to a whole
         triplet note. Measured on `i_was_doing_all_right.mxl`: **13 such rests and
@@ -1954,10 +1954,10 @@ class TestReductionAndArranging(unittest.TestCase):
         steps, _rescued, _notes = arrange_slots(
             [s[0] for s in slots], [(s[1], s[2], s[3]) for s in slots]
         )
-        events, _pickup = _events(_substitute_steps(steps), head.beats_per_bar, True,
+        events, _pickup = score_events(substitute_steps(steps), head.beats_per_bar, True,
                                   head.beat_type)
         # Every rest is a real one: at least a sixteenth. The sixteenth is the
-        # shortest event `_events` will write (`_MIN_EVENT_LENGTH`), so anything
+        # shortest event `score_events` will write (`_MIN_EVENT_LENGTH`), so anything
         # shorter is a rounding artefact rather than silence the score contains.
         unexpressible = [
             length for step, _strikes, length in events
@@ -2063,8 +2063,8 @@ class TestReductionAndArranging(unittest.TestCase):
         self.assertEqual((first.bar, first.beat), (1, 1.5))
         # A head that starts part-way into its first bar has a pickup, which is what
         # makes the renderers write that bar short rather than inventing a downbeat.
-        events, pickup = _events(
-            _substitute_steps(
+        events, pickup = score_events(
+            substitute_steps(
                 arrange_xml_head(BUT_NOT_FOR_ME)[0]
             ),
             head.beats_per_bar,

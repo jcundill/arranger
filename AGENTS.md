@@ -20,7 +20,7 @@ gate and the conventions — not the explanation.
 | the drop-2 rule, a grip, `GRIP_MAX_SPAN`, `voicing_cost` | [docs/engine.md](docs/engine.md) | `arranger/grips.py`, `arranger/cost.py` |
 | how a shape is placed on its strings — a family that *searches* versus one that computes a layout, `_Placement`, `_candidate`, the placement memo (`_search_shape` / `_searched_shape` / `_place_shape`) | [docs/history/generated-grips.md](docs/history/generated-grips.md) §4 | `arranger/grips.py`, `tests/test_placement.py` |
 | where a **lone note** is fretted — a fill, an `NC` bar, a rescued melody, a span demotion (`get_melody_only_voicings`, `_melody_alone_shape`) | [docs/engine.md](docs/engine.md) | `arranger/grips.py`, `arranger/melody_alone.py`, `arranger/routes.py`, `tests/test_non_chord_tones.py` |
-| which chord tones a shape states — `TONE_PRIORITY`, the tone a four-voice shape gives up, the palette a melody with no degree to match is offered, or the order that was not taken | [docs/history/generated-grips.md](docs/history/generated-grips.md) | `arranger/grips.py` (`TONE_PRIORITY`, `stated_tones`, `_drop2_template_for`, `_drop2_palette`), `tests/test_generated_grips.py`, `tests/support.py` (`WITNESS`) |
+| which chord tones a shape states — `TONE_PRIORITY`, the tone a four-voice shape gives up, the palette a melody with no degree to match is offered, or the order that was not taken | [docs/history/generated-grips.md](docs/history/generated-grips.md) | `arranger/grips.py` (`TONE_PRIORITY`, `stated_tones`, `drop2_template_for`, `_drop2_palette`), `tests/test_generated_grips.py`, `tests/support.py` (`WITNESS`) |
 | the trailing annotation a step carries, why a shape is thin, or what **must** be explained when a choice is added (`ArrangementStep.palette`, `cost.VOICING_COST_CRITERIA`, `tests/test_explanations.py`) | [docs/engine.md](docs/engine.md) | `arranger/render.py`, `arranger/movement.py` |
 | `texture=`, target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/texture.py`, `arranger/routes.py`, `arranger/bass.py`, `arranger/decisions.py` |
 | non-chord melody notes, a new chord quality | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` |
@@ -463,7 +463,7 @@ gate, and a snapshot mechanism would let a regression pass by regenerating itsel
 ## Adding a new chord quality
 
 1. Add the quality's tones to `TONE_PRIORITY`, most defining first. **That row is the
-   drop-2 rule** — `_drop2_template_for` builds each shape from it and `_drop2_palette` is
+   drop-2 rule** — `drop2_template_for` builds each shape from it and `_drop2_palette` is
    that rule read at every degree — so there is no list of interval numbers to write down.
    Its first two entries are the quality's `SHELL_DEGREES` pair, and the tail **ranks which
    tone a four-voice shape gives up** when the chord has more tones than voices — the nearer

@@ -139,7 +139,7 @@ Two new test modules, no production change.
 (decision points, with nested closures measured where they are defined), length
 and parameter count - and seeds a per-module ceiling at today's worst. It also
 enforces encapsulation in both directions: 41 private imports across 29 names
-are the recorded debt (including `render._print_step` and `tuning._MUTED_CELL`
+are the recorded debt (including `render.print_step` and `tuning._MUTED_CELL`
 reached from the facade), and an entry that stops being used fails too.
 `arranger/options.py` has no function, which is why the table requires an entry
 for every module rather than defaulting: a default is a ceiling nobody chose.
@@ -153,16 +153,30 @@ modules and `py-modules` to the four shipped names.
 Validation: 1107 tests OK (skipped=2), ruff 0, pyright 0/0; `make demo`
 untouched.
 
-## Phase 8 — Publicise the cross-module surface (planned)
+## Phase 8 — Publicise the cross-module surface (DONE)
 
-Rename the 29 names the allowlist records, in five commits: `bass` first
-(`Slot`, `walking_slots`, `place_bass`, `held_shape`, `previous_bass`), then the
-route/rescue helpers, then `tuning`'s (`note_name`, `cells_from_frets`,
-`MUTED_CELL`, `STAFF_CELL_WIDTH` - which also deletes `tabstaff.py`'s duplicate
-constant), then the axis/grip names, then the three outside edges (`tabgp` →
-`tabxml`, `tabstaff` → `tuning`, `grip_chart` → `grips`). Empty the allowlist in
-the last commit. Renames are word-boundary/AST edits, not retyping (trap 7), and
-pyright runs after each.
+Five commits, 41 imported private names → 0. Nothing moved and no behaviour
+changed; the names said what the import graph already depended on.
+
+- `bass`: `Slot`, `walking_slots`, `place_bass`, `held_shape`, `previous_bass`.
+- `routes`/`melody_alone`/`bass_merge`: `comping_step`, `rest_step`,
+  `texture_fill_step`, `no_chord_step`, `last_sounding_step`,
+  `rescue_melody_alone`, `demoted_to_melody_alone`, `melody_alone_shape`,
+  `sounding_melody`, `attach_bass`, `next_resolution_melody`.
+- `tuning`: `note_name`, `cells_from_frets`, `MUTED_CELL`, `STAFF_CELL_WIDTH`.
+  `tabstaff`'s duplicate width constant is deleted rather than renamed twice, and
+  the facade's `MUTED_CELL` re-export went with it: no caller used it through
+  `arranger`, and a rendering detail is not API.
+- axes/grips: `metric_weight`, `roles_for_slot`, `BEAT_EPSILON`,
+  `comping_string_sets`, `INTERVAL_NAMES`.
+- front ends: `score_events` (**not** `events` - 46 existing identifiers would
+  have been shadowed), `substitute_steps`, `drop2_template_for`, `print_step`.
+  The facade imports the last one as `_print_step` so the demo does not widen the
+  public surface, and `tests/test_non_chord_tones.py` now takes it from its home.
+
+`ALLOWED_PRIVATE_IMPORTS` is empty, and the test still fails in both directions.
+Validation: 1107 tests OK (skipped=2), ruff 0, pyright 0/0, `make demo`
+byte-identical, `make chart-audit` clean.
 
 ## Phase 9 — Decompose the high-complexity functions (planned)
 
@@ -172,7 +186,7 @@ in `bass_cost`, and generation order is the cost tuple's tie-break). Order:
 `movement._harmonised_step` (359 lines, 22 parameters) and `_slot_state`;
 `routes._comping_step` (228 lines, 23 parameters); `tabstaff.format_tab_staff`
 (396 lines) and `format_tab_html`; `headxml._read_notes` (239),
-`_expand_repeats`, `_expand_play_order`; `tabxml._events`/`_build_part`;
+`_expand_repeats`, `_expand_play_order`; `tabxml.score_events`/`_build_part`;
 `tabgp._build_song`. Lower that module's budget in the same commit. Oracle: the
 pinned tab strings, `test_step_loop_equivalence.py`, the MusicXML/GP5 round
 trips, and a byte-identical `make demo`.
@@ -258,5 +272,7 @@ Round 1:
 - Final gate: 1098 tests OK (skipped=2), ruff 0, pyright 0/0.
 
 Round 2:
-- Phase 7: DONE (two commits). 1107 tests OK (skipped=2), ruff 0, pyright 0/0.
-- Phases 8-15: planned, in the order above.
+- Phase 7: DONE (two commits).
+- Phase 8: DONE (five commits). 1107 tests OK (skipped=2), ruff 0, pyright 0/0,
+  `make demo` byte-identical, `make chart-audit` clean.
+- Phases 9-15: planned, in the order above.

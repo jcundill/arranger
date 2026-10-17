@@ -52,7 +52,7 @@ from .tuning import (
     note_name,
 )
 
-__all__ = ["MUTED_CELL", "STAFF_CELL_WIDTH", "format_progression"]
+__all__ = ["MUTED_CELL", "STAFF_CELL_WIDTH", "format_progression", "print_step"]
 
 
 #: The width `format_progression` lays a step's explanation out to. A line breaks only
@@ -978,7 +978,7 @@ def format_progression(
     )
 
 
-def _print_step(step: ArrangementStep) -> None:
+def print_step(step: ArrangementStep) -> None:
     """Prints one arranged step, including which string carries the melody."""
     melody_string = 6 - step.voicing.soprano_string()  # guitar string number, 1 = high E
     print(

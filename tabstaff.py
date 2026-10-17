@@ -369,7 +369,7 @@ def _staff_rhythm(
     a column with no new attack, and they mean opposite things.
 
     **A column's length runs to the next column that has a step on it**, which is
-    the same rule `tabxml._events` applies to a score - a note lasts until the next
+    the same rule `tabxml.score_events` applies to a score - a note lasts until the next
     sound - and the `None` columns in between are *not* the next sound. They are
     rests `_staff_columns` invented to fill a gap, and treating the first of them
     as an ending is what made this print a quarter note where the score writes a
@@ -386,8 +386,8 @@ def _staff_rhythm(
       because the note it belongs to began in an earlier column. `tabxml` writes
       that as a `<tie>` and `tabgp` as `NoteType.tie`; this is the same event.
 
-    It is computed from the **column grid**, not from `tabxml._events`, because the
-    two grids are deliberately different: `_events` keeps every step sharing an
+    It is computed from the **column grid**, not from `tabxml.score_events`, because the
+    two grids are deliberately different: `score_events` keeps every step sharing an
     onset and divides the span between them, while `_staff_columns` gives the column
     to the first and drops the rest. Sharing the tuple would be lossy in one
     direction or the other. What is shared is the *rule* above - and where a step

@@ -30,13 +30,13 @@ round trip exactly, with no post-processing at all. So the two renderers divide 
 work by what each format can actually do - notation here, tab there - while the
 placement of every step is still shared, so a head lands on the same beats in both.
 
-The placement is its own, in `_events`, and deliberately does **not** reuse
+The placement is its own, in `score_events`, and deliberately does **not** reuse
 `tabstaff._staff_columns`. That column grid is lossy - two steps on one onset collapse
 into one column - which is right for a fixed-width ASCII staff and wrong for a score,
 where the second chord is a note the reader must see. The eighth-note skeleton puts
 two steps on the last beat of most bars, so sharing the grid would drop a chord from
 every bar of a head. What *is* shared is the semantics: absolute onsets with signed
-bars, and collapse on unchanged sounding pitches. See `_events`.
+bars, and collapse on unchanged sounding pitches. See `score_events`.
 
 `music21` is an **optional extra** (`pip install 'jazz-arranger[xml]'`) and is
 imported inside the functions, not at the top of the module. The library must keep
@@ -53,7 +53,7 @@ from xml.etree import ElementTree
 from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES, ArrangementStep, GuitarFretboard
 
 # The shortest event MusicXML can write, in quarter lengths: a sixteenth. See the
-# duration floor in `_events`.
+# duration floor in `score_events`.
 _MIN_EVENT_LENGTH = 0.25
 
 # Guitar sounds an octave below its written pitch, so a score is written an octave
@@ -180,7 +180,7 @@ def _sounding(step: ArrangementStep) -> List[int]:
 
 
 
-def _events(
+def score_events(
     steps: List[ArrangementStep],
     beats_per_bar: int,
     rhythm: bool,
@@ -890,7 +890,7 @@ def _downgrade_kinds(root: ElementTree.Element) -> None:
             kind.text = "other"
 
 
-def _substitute_steps(steps: List[ArrangementStep]) -> List[ArrangementStep]:
+def substitute_steps(steps: List[ArrangementStep]) -> List[ArrangementStep]:
     """
     The harmony a step is *sounding*, as a step carrying that chord name.
 
@@ -989,8 +989,8 @@ def format_musicxml(
     # The sounding harmony is settled here rather than inside the note builder,
     # because a substitution is a property of the *step* - it changes the chord name
     # printed above the shape, not the pitches of the shape.
-    events, pickup = _events(
-        _substitute_steps(steps), beats_per_bar, rhythm and collapse, beat_type
+    events, pickup = score_events(
+        substitute_steps(steps), beats_per_bar, rhythm and collapse, beat_type
     )
     if not any(step is not None for step, _, _ in events):
         return ""

@@ -11,12 +11,11 @@ from arranger import (
     ChordParser,
     VoiceLeadingEngine,
     Voicing,
-    _print_step,
     format_progression,
 )
-from arranger.grips import _drop2_template_for
+from arranger.grips import drop2_template_for
 from arranger.melody_alone import melody_alone_shape
-from arranger.render import _step_annotation
+from arranger.render import _step_annotation, print_step
 
 
 class TestMelodyOnlyVoicing(unittest.TestCase):
@@ -383,7 +382,7 @@ class TestExtendedExtensionMappings(unittest.TestCase):
                 # "Can top it" is now the shape itself rather than a degree list: the rule
                 # answers for every chord tone, so asking for one proves the substitution can
                 # be voiced with the melody on top.
-                topped = _drop2_template_for(target, degree % 12)
+                topped = drop2_template_for(target, degree % 12)
                 self.assertTrue(topped, (quality, degree, target))
                 self.assertEqual(topped[0], 0, (quality, degree, target))
 
@@ -711,12 +710,12 @@ class TestNoChordSteps(unittest.TestCase):
         self.assertEqual(step.melody, "D2")
 
     def test_annotation_is_shared_by_both_renderings(self):
-        """format_progression and _print_step report the same text.
+        """format_progression and print_step report the same text.
 
         The second assertion used to be the `vertical=True` block, which printed the
         same annotation over a six-line header. That renderer is gone, and the two
         consumers of `_step_annotation` that remain are `format_progression` and
-        `_print_step` - the compact line and the demo's one-line summary. They share
+        `print_step` - the compact line and the demo's one-line summary. They share
         the function precisely so a melody-only step cannot read one way in the
         library and another in `make demo`.
 
@@ -730,7 +729,7 @@ class TestNoChordSteps(unittest.TestCase):
         self.assertIn(expected, format_progression(steps))
         printed = io.StringIO()
         with contextlib.redirect_stdout(printed):
-            _print_step(steps[0])
+            print_step(steps[0])
         self.assertIn(expected, printed.getvalue())
 
     def test_ordinary_step_annotation_names_the_degree(self):

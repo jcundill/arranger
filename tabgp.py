@@ -6,8 +6,8 @@ GP5 is a *tab* format: it stores a fret number and a string for every note nativ
 so a chord shape survives the round trip exactly. `tabxml` writes no TAB staff, because
 `music21` cannot write one a notation program renders correctly - it emits neither the
 six `<staff-lines>` nor a fret and string per note. So the two renderers divide the work
-by what each format can do: **notation in MusicXML, tab here**, with `_events` and
-`_substitute_steps` shared so a head lands on the same beats in both files.
+by what each format can do: **notation in MusicXML, tab here**, with `score_events` and
+`substitute_steps` shared so a head lands on the same beats in both files.
 
 What it writes is one guitar track of shapes, on the written rhythm, with a held
 shape written as one longer note rather than a re-strike. Each chord is labelled
@@ -18,7 +18,7 @@ shape written as one longer note rather than a re-strike. Each chord is labelled
 format, so it is read by *tab* programs - Guitar Pro 5 and later that read GP5, TuxGuitar,
 and the browser and mobile readers that import it - while MusicXML remains the way into
 Sibelius, MuseScore and Final. What the two share is the *placement*: both call
-`tabxml._events`, so a head lands on the same beats in both files and the two
+`tabxml.score_events`, so a head lands on the same beats in both files and the two
 renderings cannot drift apart. Where they genuinely differ is bar lines - see
 `_measures`.
 
@@ -60,7 +60,7 @@ import io
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from arranger.tuning import NO_CHORD, ArrangementStep
-from tabxml import _events, _substitute_steps
+from tabxml import score_events, substitute_steps
 
 # The GP file version written. (5, 1, 0) is the 5.1 format, which Guitar Pro 5 and
 # every later release read. PyGuitarPro writes GP3/GP4/GP5/TGP from the same model,
@@ -756,8 +756,8 @@ def format_gp5(
     # The substitution pass is shared with the MusicXML renderer, so a step that
     # is sounding a different chord from the one written is named the same way in
     # both files rather than only in the one that remembered to ask.
-    events, pickup = _events(
-        _substitute_steps(steps), beats_per_bar, rhythm and collapse, beat_type
+    events, pickup = score_events(
+        substitute_steps(steps), beats_per_bar, rhythm and collapse, beat_type
     )
     if not any(step is not None for step, _, _ in events):
         return b""

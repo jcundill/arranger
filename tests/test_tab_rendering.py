@@ -1209,7 +1209,7 @@ class TestStaffRhythmAgreesWithTheScore(unittest.TestCase):
     """The rhythm row and the score writers must agree where their grids overlap.
 
     `_staff_rhythm` is computed from the column grid rather than from
-    `tabxml._events`, because the two grids are deliberately different - the column
+    `tabxml.score_events`, because the two grids are deliberately different - the column
     grid gives a column to the first of several steps on one onset, and the score
     keeps them all. That is a real difference and it is not tested away here.
 
@@ -1228,7 +1228,7 @@ class TestStaffRhythmAgreesWithTheScore(unittest.TestCase):
         and those onsets are exactly where the two grids are *meant* to differ. A
         fixture with a note on every beat is the case where they must not.
         """
-        from tabxml import _events, _substitute_steps
+        from tabxml import score_events, substitute_steps
 
         steps = _timed(
             ["Dm7", "G7", "Cmaj7"],
@@ -1247,8 +1247,8 @@ class TestStaffRhythmAgreesWithTheScore(unittest.TestCase):
             for (_onset, step, strikes), (label, _kind) in zip(columns, values)
             if step is not None and strikes
         ]
-        # `_events` returns (events, pickup); the pickup is not what is compared.
-        score_events, _pickup = _events(_substitute_steps(steps), 4, True, 4)
+        # `score_events` returns (events, pickup); the pickup is not what is compared.
+        score_events, _pickup = score_events(substitute_steps(steps), 4, True, 4)
         score_lengths = [
             length for step, _strikes, length in score_events if step is not None
         ]
@@ -1258,13 +1258,13 @@ class TestStaffRhythmAgreesWithTheScore(unittest.TestCase):
 
     def test_the_duration_cap_is_the_same_rule_in_both(self):
         """A quarter written under a two-beat gap is a quarter in both renderings."""
-        from tabxml import _events
+        from tabxml import score_events
 
         steps = _timed(
             ["Dm7", "G7"], beats=[(0, 1.0), (1, 1.0)], durations=[0.25, None],
             frets=_TWO_SHAPES,
         )
-        score_events, _pickup = _events(steps, 4, True, 4)
+        score_events, _pickup = score_events(steps, 4, True, 4)
         self.assertEqual(
             [length for step, _s, length in score_events if step][0], 1.0
         )

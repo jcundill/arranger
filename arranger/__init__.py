@@ -157,7 +157,11 @@ from .parts import (
     parts_have_melody,
     resolve_parts,
 )
-from .render import _print_step, format_progression
+
+# `print_step` is the demo's one-line writer, imported under a private alias so
+# the facade does not publish it as API: `main()` is its only user here.
+from .render import format_progression
+from .render import print_step as _print_step
 from .slots import arrange_slots, parse_bar_range, unresolved_steps
 from .steps import StepPreparation, VoiceLeadingEngine
 from .texture import (

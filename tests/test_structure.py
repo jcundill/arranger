@@ -24,8 +24,10 @@ up, that is a decision to state in the commit - which is exactly what a budget
 is for: it makes the decision visible instead of letting it pass quietly.
 
 The second test here is the other half of encapsulation. A name another module
-imports is public, whatever its spelling says; the allowlist below is the debt
-from before that rule, and Phase 8 of the restructuring plan empties it.
+imports is public, whatever its spelling says. The allowlist that held the debt
+from before that rule is empty now; it stays as the place a deliberate exception
+has to be written down, and the test fails in both directions - a new private
+import is caught, and an entry that is no longer used cannot rot there.
 """
 
 from __future__ import annotations
@@ -93,15 +95,10 @@ BUDGETS: Dict[str, Budget] = {
 }
 
 # Importing a `_`-prefixed name from a sibling is the coupling this test exists to
-# retire. Each entry is a name that has to be made public (the import site does not
-# care about the spelling; the next reader does) or that genuinely belongs to the
-# module that imports it. Keys read `importer -> home.name`.
-ALLOWED_PRIVATE_IMPORTS: Set[str] = {
-    "__init__ -> render._print_step",
-    "grip_chart -> grips._drop2_template_for",
-    "tabgp -> tabxml._events",
-    "tabgp -> tabxml._substitute_steps",
-}
+# retire, and the list is now empty: every name another module reads is public.
+# The test still fails in both directions, so a new private import is caught and a
+# deleted one cannot leave a stale entry behind.
+ALLOWED_PRIVATE_IMPORTS: Set[str] = set()
 
 
 FunctionNode = Union[ast.FunctionDef, ast.AsyncFunctionDef]

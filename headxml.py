@@ -1894,7 +1894,7 @@ def head_skeleton(
     # the first DOWN and the second UP, so the gap between them grows from a third
     # to a third plus 6.7e-07.
     #
-    # That surplus is not noise downstream. `tabxml._events` caps each note at the
+    # That surplus is not noise downstream. `tabxml.score_events` caps each note at the
     # length the file wrote, so the extra becomes a **rest of 6.7e-07 quarters** -
     # a length MusicXML cannot express, which music21 rounds up to a whole triplet
     # note. Bar 1 of "Trouble in Mind" came out with four notes under one `3`

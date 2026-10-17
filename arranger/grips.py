@@ -247,7 +247,7 @@ GRIP_STRING_SETS: Dict[str, Tuple[Tuple[Tuple[int, ...], int], ...]] = {
 # voices states the melody's tone and then the next `voices - 1` entries of the row, so a
 # four-note drop-2, a three-note shell and a two-note duo are this one rule at three
 # arities. It is the rule the hand-written drop-2 tables encoded, and it is now the source
-# as well as the rule: `_drop2_template_for` reads one degree out of a row, and the 119
+# as well as the rule: `drop2_template_for` reads one degree out of a row, and the 119
 # templates the tables held are kept as the witness the rule is asserted against
 # (`tests/support.py`, read by `tests/test_generated_grips.py`). The reasoning, the
 # measurements and the order that was *not* taken are in `docs/history/generated-grips.md`.
@@ -553,7 +553,7 @@ def stated_tones(
 
     The melody's degree is returned whether or not it is a chord tone, because the
     melody is the caller's note and is never rewritten. Degrees are pitch classes
-    relative to the chord's root, which is the unit `_drop2_template_for` is asked in.
+    relative to the chord's root, which is the unit `drop2_template_for` is asked in.
 
     Every degree of a quality's row is one of its chord tones, so the drop-2 generator
     only ever asks for one of those - a tone with no place in the row would have no shape
@@ -1021,7 +1021,7 @@ def _templates_for(
         if root_pc is not None and tones:
             degree = (melody_midi - root_pc) % 12
             if degree in {t % 12 for t in tones}:
-                shape = _drop2_template_for(canonical, degree)
+                shape = drop2_template_for(canonical, degree)
                 return [shape] if shape else []
         return _drop2_palette(canonical)
     return _interval_set_for_grip(grip, tones, melody_midi, root_pc)
@@ -1098,7 +1098,7 @@ INTERVAL_NAMES: Dict[int, str] = {3: "3rd", 8: "b6", 9: "6th"}
 # of the chord's tones a shape states; these two say what the shape *is*.
 
 
-def _drop2_template_for(quality: str, degree: int) -> List[int]:
+def drop2_template_for(quality: str, degree: int) -> List[int]:
     """
     The textbook drop-2 of the tones `degree` states, as offsets below the soprano.
 
@@ -1156,7 +1156,7 @@ def _drop2_palette(quality: str) -> List[List[int]]:
     return [
         shape
         for degree in TONE_PRIORITY.get(quality, ())
-        if (shape := _drop2_template_for(quality, degree))
+        if (shape := drop2_template_for(quality, degree))
     ]
 
 
@@ -1889,7 +1889,7 @@ def get_grip_voicings(
     produces exactly what that method always has. The other families differ in what
     they carry rather than in where they sit:
 
-      drop2   four voices, from the tone-priority rule (`_drop2_template_for`)
+      drop2   four voices, from the tone-priority rule (`drop2_template_for`)
       drop3   four voices, a close stack with the third voice dropped
       drop24  four voices, a close stack with the second *and* fourth dropped
       closed  four voices in close position under the melody

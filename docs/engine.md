@@ -121,7 +121,7 @@ you whether a change is an improvement or a different library.
   (100 columns, or whatever `width=` asks for) continues on the lines below the step,
   indented to the column the explanation starts in, and `width=None` gives one line per
   step at any length. Every step is annotated through the
-  shared `_step_annotation()` helper, which `_print_step()` also uses so the two
+  shared `_step_annotation()` helper, which `print_step()` also uses so the two
   renderings cannot drift: a chord tone names the degree it is (`(harmony under b7)`), a
   non-chord tone names its substitution, and a partial shape names what it leaves out.
   Where the shape sounds **two or more voices**, the annotation also names them and the
@@ -251,7 +251,7 @@ you whether a change is an improvement or a different library.
   and
   `get_chord_tones(quality, chord_name=None)` -> every pitch class in the chord.
   `CHORD_TONES_FROM_ROOT` is the full tone set per quality, and is what
-  `grips._drop2_template_for` reads, so the root of a rootless `7b9` still counts
+  `grips.drop2_template_for` reads, so the root of a rootless `7b9` still counts
   as a chord tone and every tone of the chord can carry the melody.
 - `VoiceLeadingEngine` — the core engine:
   - `get_drop2_voicings(melody_note, chord_type, chord_name=None, top_string=5)`
@@ -402,7 +402,7 @@ list, degree list or interval number to write down.
    and a duo read. Its **first two entries are `SHELL_DEGREES`' pair**, and its tail is
    which tone a four-voice shape gives up when the chord has more tones than voices: the
    root goes first, then the natural 5th, and a name-given extension is never the one
-   dropped. `_drop2_template_for` then builds each shape from the row, and
+   dropped. `drop2_template_for` then builds each shape from the row, and
    `_drop2_palette` offers them for a melody with no degree to match.
    `tests/test_generated_grips.py` holds the row to the hand-written witness for every
    quality, and `tests/test_voicings.py::TestQualityTableInvariants` checks the row is a
@@ -428,7 +428,7 @@ list, degree list or interval number to write down.
    table entry naming an unvoiceable quality fails the suite.
 
 A quality with a tone set but **no** `TONE_PRIORITY` row is offered no drop-2 shapes at
-all — `[]` rather than a guess — which is what `_drop2_template_for` returns for it, and
+all — `[]` rather than a guess — which is what `drop2_template_for` returns for it, and
 what `tests/test_generated_grips.py` asserts.
 
 ## Grips, and the position-aware selector
@@ -644,7 +644,7 @@ Five decisions in here were each forced by something measurable:
 
 - **drop-2's shapes are generated, and the decision the tables encoded is a tone
   priority.** `TONE_PRIORITY` says which of a chord's tones a shape states, most defining
-  first, and `_drop2_template_for` builds the shape for one degree from it — there is no
+  first, and `drop2_template_for` builds the shape for one degree from it — there is no
   table left to read. The 119 hand-written templates are kept as the witness the rule is
   asserted against (`tests/support.py::WITNESS`, read by `tests/test_generated_grips.py`)
   rather than trusted. The extended qualities
