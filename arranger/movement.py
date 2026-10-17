@@ -113,7 +113,7 @@ class StepPreparation:
     chord and changing that would move the library's published output.
     """
 
-    candidates: List["Voicing"]
+    candidates: List[Voicing]
     written_melody: str
     melody: str
     original_melody: Optional[str]
