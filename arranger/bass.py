@@ -389,6 +389,123 @@ def held_shape(
     return None
 
 
+def _thumb_frame(
+    upper: Voicing,
+    held: Optional[Tuple[Sequence[int], Optional[int]]],
+) -> Optional[Tuple[int, List[int], List[int], float]]:
+    """The geometry a thumb note is placed against.
+
+    Returns the lowest note the thumb must sound below, the strings that already
+    speak, the frets the fingers must cover, and the hand's position. None means
+    the upper voicing sounds nothing, so there is no shape to place a bass under.
+    """
+    upper_midis = upper.midi_notes()
+    if not upper_midis:
+        return None
+    lowest_upper = min(upper_midis)
+    active = upper.active_frets()
+    if not active:
+        return None
+    hand_fret = float(min(active))
+
+    # The held shape widens "is this string free" and "what is the lowest note
+    # sounding", and supplies the hand position, because the melody alone is up an
+    # octave from where the fingers are.
+    #
+    # One note in the held vector is *not* structure: the thumb's own previous note.
+    # A target folds the thumb into its fret vector, so the shape being held already
+    # carries the last bass note, and treating it as a voice to stay beneath and not
+    # share a string with would forbid every repeated and ascending walk note - a
+    # walking bass is mostly repeated and ascending notes. It is excluded by pitch,
+    # which is unambiguous, and the hand position still counts it: the thumb is part
+    # of the hand whatever it last played.
+    sounding_frets = list(upper.frets)
+    # What the fingers must actually cover, which is **not** `sounding_frets`: see the
+    # fret-budget filter in the loop below. Without a held shape the current voicing is
+    # the shape, so the two start the same.
+    hand_base = list(upper.frets)
+    if held is not None:
+        held_frets, held_thumb = held
+        structure = [
+            -1 if index == held_thumb else fret
+            for index, fret in enumerate(held_frets)
+        ]
+        structure_midis = [
+            STANDARD_TUNING[index].midi_note() + fret
+            for index, fret in enumerate(structure)
+            if 0 <= index < len(STANDARD_TUNING) and fret >= 0
+        ]
+        if structure_midis:
+            lowest_upper = min(lowest_upper, min(structure_midis))
+        held_active = [fret for fret in held_frets if fret >= 0]
+        if held_active:
+            hand_fret = float(min(held_active))
+        sounding_frets = [
+            upper.frets[index] if upper.frets[index] >= 0 else (
+                structure[index] if index < len(structure) else -1
+            )
+            for index in range(len(upper.frets))
+        ]
+        # The hand covers the **whole** held vector, including the note the thumb last
+        # played: that string is still ringing, so it is still fretted. `structure` is the
+        # base the three questions above need, because it excludes that note - right for
+        # harmony, wrong for fingers. Measured on the committed heads the two readings give
+        # the same answer, so this one is chosen on the physics rather than on a count.
+        hand_base = list(held_frets)
+    return lowest_upper, sounding_frets, hand_base, hand_fret
+
+
+def _best_thumb_fret(
+    pitch_class: int,
+    previous_bass: Optional[int],
+    lowest_upper: int,
+    sounding_frets: Sequence[int],
+    hand_base: Sequence[int],
+    hand_fret: float,
+) -> Optional[Tuple[int, int, int]]:
+    """Every free string's octaves of `pitch_class`, filtered and ranked.
+
+    The filters reject a placement that would be wrong; the key is the
+    preference: nearest the hand, then continuity with the previous thumb note,
+    then the lower pitch.
+    """
+    best: Optional[Tuple[Tuple[float, int, int], Tuple[int, int, int]]] = None
+    for string_index in BASS_STRING_INDICES:
+        if 0 <= string_index < len(sounding_frets) and sounding_frets[string_index] >= 0:
+            continue  # the upper shape already speaks on this string
+        open_midi = STANDARD_TUNING[string_index].midi_note()
+        # Every fret on this string that sounds the wanted pitch class: the class
+        # recurs every octave, so the candidates are a fixed offset plus twelves.
+        first = (pitch_class - open_midi) % 12
+        for fret in range(first, 19, 12):
+            midi = open_midi + fret
+            if midi >= lowest_upper:
+                continue  # the thumb must sound below the structure it supports
+            # Four fingers, four frets - and this loop is the one place a fifth can appear.
+            # The hand is the shape still **ringing**, not this step's own vector and not
+            # `sounding_frets`: under a `bass_only` step nothing above the thumb strikes at
+            # all, so a melody carried on a string the held shape does not use is a note the
+            # hand is not holding - it is already sounding elsewhere, which is the item-4
+            # mistake made backwards. What the fingers cover is `hand_base` (the previous
+            # strike, thumb note and all) with the thumb's own string replaced by the fret
+            # chosen here. It is a filter rather than a preference because the alternative is
+            # not a worse placement but an unplayable one, and `fingers.can_fret` is what
+            # answers it.
+            hand = list(hand_base)
+            hand[string_index] = fret
+            if not can_fret(hand):
+                continue
+            # Nearest the hand first; then continuity with the previous thumb note,
+            # so a line does not leap octaves for no reason; then the lower pitch.
+            key = (
+                abs(float(fret) - hand_fret),
+                0 if previous_bass is None or abs(midi - previous_bass) <= 4 else 1,
+                midi,
+            )
+            candidate = (key, (midi, string_index, fret))
+            if best is None or candidate[0] < best[0]:
+                best = candidate
+    return None if best is None else best[1]
 def place_bass(
     upper: Voicing,
     pitch_class: int,
@@ -457,97 +574,13 @@ def place_bass(
     is the "penalty, never a filter" argument the neck window already makes: a step
     is never dropped because the thumb could not reach it.
     """
-    upper_midis = upper.midi_notes()
-    if not upper_midis:
+    frame = _thumb_frame(upper, held)
+    if frame is None:
         return None
-    lowest_upper = min(upper_midis)
-    active = upper.active_frets()
-    if not active:
-        return None
-    hand_fret = float(min(active))
-
-    # The held shape widens "is this string free" and "what is the lowest note
-    # sounding", and supplies the hand position, because the melody alone is up an
-    # octave from where the fingers are.
-    #
-    # One note in the held vector is *not* structure: the thumb's own previous note.
-    # A target folds the thumb into its fret vector, so the shape being held already
-    # carries the last bass note, and treating it as a voice to stay beneath and not
-    # share a string with would forbid every repeated and ascending walk note - a
-    # walking bass is mostly repeated and ascending notes. It is excluded by pitch,
-    # which is unambiguous, and the hand position still counts it: the thumb is part
-    # of the hand whatever it last played.
-    sounding_frets = list(upper.frets)
-    # What the fingers must actually cover, which is **not** `sounding_frets`: see the
-    # fret-budget filter in the loop below. Without a held shape the current voicing is
-    # the shape, so the two start the same.
-    hand_base = list(upper.frets)
-    if held is not None:
-        held_frets, held_thumb = held
-        structure = [
-            -1 if index == held_thumb else fret
-            for index, fret in enumerate(held_frets)
-        ]
-        structure_midis = [
-            STANDARD_TUNING[index].midi_note() + fret
-            for index, fret in enumerate(structure)
-            if 0 <= index < len(STANDARD_TUNING) and fret >= 0
-        ]
-        if structure_midis:
-            lowest_upper = min(lowest_upper, min(structure_midis))
-        held_active = [fret for fret in held_frets if fret >= 0]
-        if held_active:
-            hand_fret = float(min(held_active))
-        sounding_frets = [
-            upper.frets[index] if upper.frets[index] >= 0 else (
-                structure[index] if index < len(structure) else -1
-            )
-            for index in range(len(upper.frets))
-        ]
-        # The hand covers the **whole** held vector, including the note the thumb last
-        # played: that string is still ringing, so it is still fretted. `structure` is the
-        # base the three questions above need, because it excludes that note - right for
-        # harmony, wrong for fingers. Measured on the committed heads the two readings give
-        # the same answer, so this one is chosen on the physics rather than on a count.
-        hand_base = list(held_frets)
-
-    best: Optional[Tuple[Tuple[float, int, int], Tuple[int, int, int]]] = None
-    for string_index in BASS_STRING_INDICES:
-        if 0 <= string_index < len(sounding_frets) and sounding_frets[string_index] >= 0:
-            continue  # the upper shape already speaks on this string
-        open_midi = STANDARD_TUNING[string_index].midi_note()
-        # Every fret on this string that sounds the wanted pitch class: the class
-        # recurs every octave, so the candidates are a fixed offset plus twelves.
-        first = (pitch_class - open_midi) % 12
-        for fret in range(first, 19, 12):
-            midi = open_midi + fret
-            if midi >= lowest_upper:
-                continue  # the thumb must sound below the structure it supports
-            # Four fingers, four frets - and this loop is the one place a fifth can appear.
-            # The hand is the shape still **ringing**, not this step's own vector and not
-            # `sounding_frets`: under a `bass_only` step nothing above the thumb strikes at
-            # all, so a melody carried on a string the held shape does not use is a note the
-            # hand is not holding - it is already sounding elsewhere, which is the item-4
-            # mistake made backwards. What the fingers cover is `hand_base` (the previous
-            # strike, thumb note and all) with the thumb's own string replaced by the fret
-            # chosen here. It is a filter rather than a preference because the alternative is
-            # not a worse placement but an unplayable one, and `fingers.can_fret` is what
-            # answers it.
-            hand = list(hand_base)
-            hand[string_index] = fret
-            if not can_fret(hand):
-                continue
-            # Nearest the hand first; then continuity with the previous thumb note,
-            # so a line does not leap octaves for no reason; then the lower pitch.
-            key = (
-                abs(float(fret) - hand_fret),
-                0 if previous_bass is None or abs(midi - previous_bass) <= 4 else 1,
-                midi,
-            )
-            candidate = (key, (midi, string_index, fret))
-            if best is None or candidate[0] < best[0]:
-                best = candidate
-    return None if best is None else best[1]
+    lowest_upper, sounding_frets, hand_base, hand_fret = frame
+    return _best_thumb_fret(
+        pitch_class, previous_bass, lowest_upper, sounding_frets, hand_base, hand_fret
+    )
 
 
 @dataclass
