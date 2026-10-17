@@ -26,15 +26,17 @@ from . import chords as _chords
 from . import cost as _cost
 from . import grips as _grips
 from .bass import (
-    BASS_STYLE_AUTO,
-    BASS_STYLE_NONE,
-    BASS_STYLE_WALK,
     Slot,
-    bass_allowed,
-    parse_bass_style,
     walking_slots,
 )
 from .bass_merge import attach_bass, next_resolution_melody
+from .bass_rules import (
+    BASS_STYLE_AUTO,
+    BASS_STYLE_NONE,
+    BASS_STYLE_WALK,
+    bass_allowed,
+    parse_bass_style,
+)
 from .chords import (
     NON_CHORD_TONE_STRATEGIES,
     ChordParser,

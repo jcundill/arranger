@@ -48,6 +48,7 @@ ORDER = [
     "harmony",      # the harmony axis: which degrees the chord part states
     "grid",         # the grid axis: when each part sounds
     "texture",      # the texture axis: how many notes the chord part states
+    "bass_rules",   # the bass vocabulary, capacities and refusals
     "bass",         # the walking-bass thumb line
     "bass_merge",   # merging the walk into a chosen step; the next resolution melody
     "options",      # the knobs, as one value

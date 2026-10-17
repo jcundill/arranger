@@ -40,7 +40,9 @@ import unittest
 from typing import List, Optional, Tuple
 
 from arranger import VoiceLeadingEngine, slots
-from arranger.bass import BASS_STYLE_WALK
+from arranger.bass_rules import (
+    BASS_STYLE_WALK,
+)
 
 # (melody, quality, name) triples chosen to cover the decision points rather than to
 # be a tune: a chord tone, a 9th the extension strategy absorbs, a note with no route

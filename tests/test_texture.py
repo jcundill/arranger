@@ -42,7 +42,10 @@ from arranger import (
     supported_string_sets,
     texture_palette,
 )
-from arranger.bass import BASS_RULES, parse_bass_style
+from arranger.bass_rules import (
+    BASS_RULES,
+    parse_bass_style,
+)
 
 # Imported from where they live rather than through the package facade, for the reason
 # `test_walking_bass` gives for the private `bass` helpers: these are the rule's own

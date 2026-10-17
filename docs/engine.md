@@ -1167,6 +1167,11 @@ thumb under it would double it.
 All the equivalences are asserted byte-for-byte against the rendered tab, so nothing moved
 when the axis was separated out.
 
+The **vocabulary** lives in `arranger/bass_rules.py`: `BASS_RULES`, the `BASS_ROLE_*` and
+`BASS_STYLE_*` names, `parse_bass_style`, and the questions asked of the hands
+(`thumb_capacity`, `comping_capacity`, `bass_allowed`). `arranger/bass.py` owns the line
+itself - its slots, its placement, and `bass_cost`.
+
 **The style names note rules, and the set of rules is a registry, not a flag**, because
 it is open and is meant to stay that way. `BASS_RULE_ROLES` maps each rule to the
 `BASS_ROLE_*` values it admits, and `bass_line_for` resolves a style's rule list into

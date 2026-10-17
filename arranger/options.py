@@ -21,7 +21,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Callable, Container, Mapping, Optional, Sequence, Tuple
 
-from .bass import BASS_STYLE_AUTO
+from .bass_rules import (
+    BASS_STYLE_AUTO,
+)
 from .grid import GRID_DEFAULT
 from .harmony import HARMONY_AUTO
 from .parts import PARTS_AUTO

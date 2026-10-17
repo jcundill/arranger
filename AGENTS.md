@@ -22,7 +22,7 @@ gate and the conventions — not the explanation.
 | where a **lone note** is fretted — a fill, an `NC` bar, a rescued melody, a span demotion (`get_melody_only_voicings`, `_melody_alone_shape`) | [docs/engine.md](docs/engine.md) | `arranger/grips.py`, `arranger/melody_alone.py`, `arranger/routes.py`, `tests/test_non_chord_tones.py` |
 | which chord tones a shape states — `TONE_PRIORITY`, the tone a four-voice shape gives up, the palette a melody with no degree to match is offered, or the order that was not taken | [docs/history/generated-grips.md](docs/history/generated-grips.md) | `arranger/grip_tables.py` (`TONE_PRIORITY`, `stated_tones`), `arranger/grips.py` (`drop2_template_for`, `_drop2_palette`), `tests/test_generated_grips.py`, `tests/support.py` (`WITNESS`) |
 | the trailing annotation a step carries, why a shape is thin, or what **must** be explained when a choice is added (`ArrangementStep.palette`, `cost.VOICING_COST_CRITERIA`, `tests/test_explanations.py`) | [docs/engine.md](docs/engine.md) | `arranger/render.py`, `arranger/movement.py` |
-| `texture=`, target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/texture.py`, `arranger/routes.py`, `arranger/bass.py`, `arranger/decisions.py` |
+| `texture=`, target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/texture.py`, `arranger/routes.py`, `arranger/bass_rules.py`, `arranger/bass.py`, `arranger/decisions.py` |
 | non-chord melody notes, a new chord quality | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` |
 | the step loop, `arrange_progression` | [docs/engine.md](docs/engine.md) | `arranger/movement.py` |
 | tab staff, HTML, MusicXML, GP5, or the MusicXML importer | [docs/renderers.md](docs/renderers.md) | `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py` |
@@ -59,7 +59,7 @@ ruff **0 errors**. If your change moves any of those numbers, that is the signal
 the absence of an error message. A quiet run is not evidence; a moved count is.
 
 **Five axes, not one.** `texture=` (how many chord tones the part states, `TEXTURE_STYLES`),
-`bass=` (the note rules the thumb states, `BASS_RULES`), `parts=` (which of melody / bass /
+`bass=` (the note rules the thumb states, `BASS_RULES` in `bass_rules`),, `parts=` (which of melody / bass /
 chord the guitar takes, `PART_NAMES`), `harmony=` (which *degrees* the part states when it is
 not singing, `HARMONY_STYLES`) and `grid=` (*when each part sounds* in the bar, `GRID_STYLES`)
 are **orthogonal**, and a band setting is a combination rather than a mode:
@@ -138,6 +138,7 @@ arranger/
 │   ├── harmony.py       #   which degrees the chord part states
 │   ├── grid.py          #   when each part sounds
 │   ├── texture.py       #   how many notes the chord part states; metric roles
+│   ├── bass_rules.py    #   the bass vocabulary, capacities and refusals
 │   ├── bass.py          #   the walking-bass thumb line
 │   ├── bass_merge.py    #   merges the walk into a chosen step; the next resolution melody
 │   ├── options.py       #   ArrangeOptions - the knobs as one value
@@ -177,13 +178,11 @@ now a package of focused modules in a strict dependency order:
 
 ```
 tuning -> fingers -> chords -> grip_tables -> grip_place -> grips -> cost -> parts -> harmony
-                             -> grid -> texture
-                                                                                 |
-                                      bass -> bass_merge -> options -------------+
-                                                   |
+                             -> grid -> texture -> bass_rules -> bass -> bass_merge -> options
+                                                                    |
                        melody_alone -> routes -> movement -> steps -> slots -> render -> cli
-                                                        |              |
-                                                      (facade) <-------+
+                                                                    |              |
+                                                                  (facade) <-------+
 ```
 
 `fingers` — which finger holds which fret — hangs off `tuning` alone, so it is drawn

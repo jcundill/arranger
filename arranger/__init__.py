@@ -51,6 +51,7 @@ from musthe import Note  # re-exported: `from arranger import Note` is used by t
 
 from . import (
     bass_merge,
+    bass_rules,
     cli,
     context,
     cost,
@@ -68,6 +69,11 @@ from . import (
     texture,
 )
 from .bass import (
+    BassNote,
+    bass_cost,
+    bass_line_for,
+)
+from .bass_rules import (
     BASS_ROLE_ANCHOR,
     BASS_ROLE_APPROACH,
     BASS_ROLE_CONNECT,
@@ -84,10 +90,7 @@ from .bass import (
     BASS_STYLE_AUTO,
     BASS_STYLE_NONE,
     BASS_STYLE_WALK,
-    BassNote,
     bass_allowed,
-    bass_cost,
-    bass_line_for,
     comping_capacity,
     parse_bass_style,
     thumb_capacity,
@@ -549,6 +552,7 @@ __all__ = [
     "VoiceLeadingEngine",
     "Voicing",
     "bass",
+    "bass_rules",
     "bass_allowed",
     "bass_cost",
     "bass_line_for",

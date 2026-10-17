@@ -62,13 +62,15 @@ from arranger import (
 # surface for the benefit of one test file. `test_bass.py` covers them directly for
 # the same reason.
 from arranger.bass import (
-    BASS_RULES,
     _beat_offset,
     _melody_in_force,
     _melody_timeline,
-    parse_bass_style,
     place_bass,
     walking_slots,
+)
+from arranger.bass_rules import (
+    BASS_RULES,
+    parse_bass_style,
 )
 from arranger.parts import PART_NAMES
 from arranger.render import _step_annotation

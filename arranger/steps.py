@@ -24,10 +24,12 @@ from . import chords as _chords
 from . import cost as _cost
 from . import grips as _grips
 from .bass import (
-    BASS_STYLE_AUTO,
     BassNote,
 )
 from .bass_merge import attach_bass
+from .bass_rules import (
+    BASS_STYLE_AUTO,
+)
 from .chords import (
     NON_CHORD_TONE_EXTENSIONS,
     NON_CHORD_TONE_STRATEGIES,
