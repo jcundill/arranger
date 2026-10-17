@@ -44,7 +44,7 @@ Files changed: `arranger/__init__.py`, `tests/test_bass.py`,
 Validation: 1098 OK (skipped=2), ruff 0, pyright 0/0. No `arranger._<private>`
 accesses remain.
 
-## Phase 2 — Split `textures.py` by axis (DONE)
+## Phase 2 — Split `textures.py` by axis (DONE, committed c6ed08a)
 
 `textures.py` (1129 lines) has been replaced by four focused modules. Each
 imports only what sits above it in the DAG.
@@ -86,7 +86,7 @@ Each route's guards local and testable in isolation (addresses trap 12).
 Five routes, `melody_alone_case` kinds, `SLASH_BASS_SATISFIED`,
 `_attach_bass` semantics, `Palette`/`inside_window` recording unchanged.
 
-## Phase 4 — Encapsulate module internals (DONE, pending commit)
+## Phase 4 — Encapsulate module internals (DONE, committed 5ad9fe1)
 
 - `cost._best_voicing` was the selector's private argmin, imported by `decisions`.
   Renamed to **`cost.best_voicing`** (public); `decisions`, `movement` and
@@ -105,7 +105,7 @@ Selection rule (`voicing_cost` tuple order) unchanged.
 library has one cost rule and it is an invariant, so a protocol would add an
 indirection with no caller. Revisit only when a second selector is needed.
 
-## Phase 6 — Consolidate import style (DONE, pending commit)
+## Phase 6 — Consolidate import style (DONE, committed 1517073)
 
 `slots.py` was the only engine module using absolute imports. Converted to
 relative imports, which also makes its dependencies visible to
@@ -127,5 +127,8 @@ up, so no `ALLOWED_EDGES` entry is needed.
   route handlers stay in `movement.py` because `_promoted_fill` calls
   `prepare_step` and `_sounding_melody` is shared by every route, so a full
   split needs a dependency break first.
-- Phase 4: DONE (pending commit).
-- Phases 5-6: not started.
+- Phase 4: DONE (committed 5ad9fe1).
+- Phase 5: NOT REQUIRED (YAGNI).
+- Phase 6: DONE (committed 1517073).
+- Final gate: `make check` green at **1098 tests OK (skipped=2), ruff 0,
+  pyright 0 errors 0 warnings** — identical to the baseline.
