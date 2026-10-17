@@ -512,13 +512,27 @@ because `support.SWEEP_HEADS` is the spelling the other files use. **Nothing fla
 unused module-level constant**, which is why it outlived its user by however many
 commits.
 
-Then the three remaining monoliths, by the class clusters that already exist:
+**Third split landed: `test_walking_bass` -> line / placement / rendering.** 2403 lines
+and 21 classes whose only shared content was an import block, now 995 / 1139 / 282 lines
+and 40 / 34 / 11 tests. It is the first split that had to move fixtures: `walk`,
+`upper_pitches` and the thumb's pitch-class helper are each wanted by two or three of
+the new files, so all three went to `support` - and the last was renamed `bass_name` on
+the way, because `support.names` would have been the collision `support`'s docstring
+already describes, with a wider blast radius. **That bullet had to be rewritten**; it
+existed to say why those two functions stayed local, and after the split one of them no
+longer does. A split that moves a fixture therefore edits the *reason* the fixture was
+local, not just the code.
+
+Two smaller things the move settled: the `_STRING_ROW` staff-row regex went with the one
+file that reads a staff row, and the rendering class lost a `"Phase 6:"` docstring prefix
+- narrative of the kind AGENTS.md's docstring rule says to delete, which no test can see.
+
+Then the two remaining monoliths, by the class clusters that already exist:
 
 | file | lines | split (a guess - read the classes) |
 |---|---|---|
 | `test_headxml` | 3290 | parse / timeline / repeats / cli |
 | `test_grips` | 2409 | families / palette / playability |
-| `test_walking_bass` | 2403 | line / placement / capacity |
 
 A split moves `unittest.TestCase` classes and nothing else: no assertion changes, no
 fixture re-typing, and the test count is the meter (1108 before and after each file).
