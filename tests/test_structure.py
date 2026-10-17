@@ -92,7 +92,7 @@ BUDGETS: Dict[str, Budget] = {
     "grip_chart.py": Budget(14, 84, 5),
     "tabgp.py": Budget(19, 151, 13),
     "tabstaff.py": Budget(17, 195, 13),
-    "tabxml.py": Budget(24, 176, 12),
+    "tabxml.py": Budget(12, 176, 12),
 }
 
 # Importing a `_`-prefixed name from a sibling is the coupling this test exists to

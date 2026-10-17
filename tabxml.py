@@ -235,25 +235,8 @@ def score_events(
         # and `format_gp5` both place through this seam.
         return [], 0.0
     beat_in_quarters = 4.0 / float(beat_type)
-    timed = bool(rhythm) and bool(steps) and all(step.has_timing for step in steps)
-
-    if timed:
-        # Absolute beat, exactly as NoteEvent.beat_position computes it, so a pickup
-        # in a negative bar sorts before bar 0 with no special case.
-        placed = [
-            (step.bar * beats_per_bar + (step.beat - 1.0), step)  # type: ignore[operator]
-            for step in steps
-        ]
-    else:
-        # No timing, or `rhythm=False`: one chord per beat, reproducing the uniform
-        # grid the other two renderers fall back to.
-        placed = [(float(index), step) for index, step in enumerate(steps)]
-    placed.sort(key=lambda item: item[0])
-
-    # How far the first note sits past the bar line before it. Zero when the head
-    # starts on a downbeat, which is the usual case; the first written bar is then a
-    # full bar rather than a pickup.
-    pickup = (placed[0][0] % beats_per_bar) * beat_in_quarters
+    timed = bool(rhythm) and all(step.has_timing for step in steps)
+    placed, pickup = _placed_steps(steps, beats_per_bar, beat_type, rhythm)
 
     events: List[Tuple[Optional[ArrangementStep], bool, float]] = []
     index = 0
@@ -264,71 +247,18 @@ def score_events(
         while index < len(placed) and abs(placed[index][0] - onset) < 1e-9:
             group.append(placed[index][1])
             index += 1
-        # The group lasts until the next distinct onset, so the written rhythm
-        # survives: a triplet transcription exports as triplets, without this module
-        # ever having to know what a triplet is.
-        if index < len(placed):
-            span = (placed[index][0] - onset) * beat_in_quarters
-        else:
-            # The last group has no next onset to measure against, so it runs to the
-            # end of its own bar. The transcribed `duration` is not used for the span:
-            # it is the length of the *last melody note*, a fraction of a whole note
-            # that MusicXML cannot always express (music21 raises
-            # MusicXMLExportException), and losing the tail of a head to that would be
-            # a poor trade. `_build_part` pads the closing bar.
-            bar_end = (int(onset // beats_per_bar) + 1) * beats_per_bar
-            span = max(bar_end - onset, 1.0) * beat_in_quarters
+        # The group lasts until the next distinct onset; `_group_span` holds why that
+        # is measured to the next *sound* and not from the transcribed `duration`.
+        span = _group_span(placed, index, onset, beats_per_bar, beat_in_quarters)
 
         # Several steps can share one onset - the eighth-note skeleton puts two on the
-        # last beat of most bars - and they divide the time up to the next onset
-        # equally. The transcribed `duration` is deliberately not used as a weight
-        # here: it is the length of the *melody note* that step came from, which
-        # extends past this onset, and the corpus's own values are arbitrary fractions
-        # of a whole note. Scaling by them produces note values MusicXML cannot
-        # express, and music21 refuses the whole export rather than rounding one. Two
-        # eighths on the last beat of a bar are two eighths, which is what dividing the
-        # beat gives.
-        # **A gap is a rest, and a note is only as long as it is written.** The
-        # gap-to-next-onset rule above says how long a group has until the *next
-        # sound*, which is not the same as how long it *sounds*: bar 4 of "But Not
-        # For Me" is one whole note and bar 5 opens with a quarter rest, so the gap
-        # from the note to the next onset is five quarters and the note is held over
-        # the rest into the next bar. In GP5 that reads as a tie, so the bar opens
-        # with a held chord where the score says silence. `duration` is the melody
-        # note's own length in whole notes, so it caps the span - and it is capped
-        # rather than used as the span because it is *not* always expressible, which
-        # is why the gap rule exists at all. Only ever a cap: a `duration` longer than
-        # the gap is ignored, so nothing is stretched, and a note with no duration
-        # keeps the gap exactly as before.
-        #
-        # Only applied when there *is* a next onset. The last group runs to the end
-        # of its own bar by definition, so there is no gap to represent and a cap
-        # would only invent a rest at the end of the head.
+        # last beat of most bars - and they divide up the time equally, capped and
+        # floored by `_capped_span` and `_group_shares`, which hold the two rules:
+        # a gap is a rest rather than a held note, and the sixteenth floor gives way
+        # to the bar it would overrun.
         gap = span
-        if timed and index < len(placed) and any(s.duration for s in group):
-            longest = max(s.duration or 0.0 for s in group) * 4.0
-            span = longest if longest + 1e-9 < gap else gap
-        else:
-            span = gap
-
-        # Divided after the cap, so the group shares the time it actually occupies
-        # and the silence is left over rather than being shared out with the notes.
-        #
-        # The sixteenth floor can push the shares past the gap they came from - three
-        # steps in a quarter of a bar is three sixteenths, not a quarter - and a
-        # group that overruns its own bar is the one thing a reader rejects outright
-        # ("voice 1 is too long"). So the floor is given up when it would do that: the
-        # gap is what the score says, and it wins.
-        share = span / len(group)
-        lengths = [max(share, _MIN_EVENT_LENGTH) for _ in group]
-        if sum(lengths) > gap + 1e-9:
-            lengths = [share] * len(group)
-
-        # The silence is what the group *did not* fill, measured after the floor
-        # rather than from `span` - the floor can make a group longer than the cap,
-        # and taking the rest from the cap rather than from what was written would
-        # then add the two together and run the bar past its signature.
-        rest_length = max(gap - sum(lengths), 0.0)
+        span = _capped_span(span, group, timed, index < len(placed))
+        lengths, rest_length = _group_shares(span, gap, len(group))
 
         for step, length in zip(group, lengths):
             if _is_hold(step, events):
@@ -349,6 +279,113 @@ def score_events(
             events.append((None, False, rest_length))
     return events, pickup
 
+
+def _placed_steps(
+    steps: List[ArrangementStep],
+    beats_per_bar: int,
+    beat_type: int,
+    rhythm: bool,
+) -> Tuple[List[Tuple[float, ArrangementStep]], float]:
+    """Each step's absolute onset, sorted, and how long the first bar is as a pickup.
+
+    The onset is the bar's downbeat plus the beat within the bar, with signed bars so
+    a pickup in a negative bar sorts before bar 0 with no special case - exactly what
+    `NoteEvent.beat_position` computes. Without timing (or with `rhythm=False`) the
+    steps fall back to the uniform one-chord-per-beat grid the other two renderers
+    also use.
+
+    The pickup is how far the first note sits past the bar line **before** it, which
+    is why it is a modulo of the bar length: the onsets are counted from zero at the
+    first note, so the bar lines are not at multiples of the bar length, and this
+    offset is what recovers the real metre.
+    """
+    beat_in_quarters = 4.0 / float(beat_type)
+    if rhythm and all(step.has_timing for step in steps):
+        placed = [
+            (step.bar * beats_per_bar + (step.beat - 1.0), step)  # type: ignore[operator]
+            for step in steps
+        ]
+    else:
+        placed = [(float(index), step) for index, step in enumerate(steps)]
+    placed.sort(key=lambda item: item[0])
+    pickup = (placed[0][0] % beats_per_bar) * beat_in_quarters
+    return placed, pickup
+
+
+def _group_span(
+    placed: Sequence[Tuple[float, ArrangementStep]],
+    next_index: int,
+    onset: float,
+    beats_per_bar: int,
+    beat_in_quarters: float,
+) -> float:
+    """How long the group starting at `onset` lasts, up to the next distinct onset.
+
+    Measuring to the next onset is what makes the written rhythm survive: a triplet
+    transcription exports as triplets without this module ever knowing what a triplet
+    is.
+
+    The last group has no next onset, so it runs to the end of its own bar. The
+    transcribed `duration` is **not** used for that span: it is the length of the last
+    melody note, a fraction of a whole note MusicXML cannot always express, and music21
+    refuses the whole export over one (`MusicXMLExportException`). Losing the tail of a
+    head to that would be a poor trade; `_build_part` pads the closing bar instead.
+    """
+    if next_index < len(placed):
+        return (placed[next_index][0] - onset) * beat_in_quarters
+    bar_end = (int(onset // beats_per_bar) + 1) * beats_per_bar
+    return max(bar_end - onset, 1.0) * beat_in_quarters
+
+
+def _capped_span(
+    span: float,
+    group: Sequence[ArrangementStep],
+    timed: bool,
+    has_next: bool,
+) -> float:
+    """`span`, capped by the melody's own written length - and only ever a cap.
+
+    **A gap is a rest, and a note is only as long as it is written.** The gap-to-next-
+    onset rule says how long a group has until the next *sound*, which is not the same
+    as how long it *sounds*: bar 4 of "But Not For Me" is one whole note and bar 5 opens
+    with a quarter rest, so the gap is five quarters and the note is held over the rest
+    into the next bar - a tie in GP5, where the score says silence. `duration` is the
+    melody note's own length in whole notes, so it caps the span.
+
+    Capped rather than used as the span, because it is not always expressible - which
+    is why the gap rule exists at all. A `duration` longer than the gap is ignored, so
+    nothing is stretched, and a note with no duration keeps the gap exactly.
+
+    Not applied to the last group: it runs to the end of its bar by definition, so
+    there is no gap to represent and a cap would only invent a rest at the end.
+    """
+    if not (timed and has_next and any(step.duration for step in group)):
+        return span
+    longest = max(step.duration or 0.0 for step in group) * 4.0
+    return longest if longest + 1e-9 < span else span
+
+
+def _group_shares(span: float, gap: float, count: int) -> Tuple[List[float], float]:
+    """Divide `span` between `count` steps, and say how much silence is left over.
+
+    Divided **after** the cap, so the group shares the time it actually occupies and
+    the silence is left over rather than handed out with the notes.
+
+    The sixteenth floor can push the shares past the gap they came from - three steps
+    in a quarter of a bar is three sixteenths, not a quarter - and a group that
+    overruns its own bar is the one thing a reader rejects outright ("voice 1 is too
+    long"). So the floor is given up when it would do that: the gap is what the score
+    says, and it wins.
+
+    The rest is measured from what was *written* rather than from the cap, because the
+    floor can make a group longer than the cap; taking it from the cap would add the
+    two together and run the bar past its signature.
+    """
+    share = span / count
+    lengths = [max(share, _MIN_EVENT_LENGTH) for _ in range(count)]
+    if sum(lengths) > gap + 1e-9:
+        lengths = [share] * count
+    return lengths, max(gap - sum(lengths), 0.0)
 
 def _is_hold(
     step: ArrangementStep,
