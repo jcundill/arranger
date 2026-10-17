@@ -54,7 +54,14 @@ from arranger.decisions import (
     is_repeated_step,
     resolve_texture_grips,
 )
-from arranger.grips import RIGHT_HAND_STRINGS, _interval_offsets, grip_pluck_count, thumb_safe_grips
+from arranger.grip_tables import (
+    RIGHT_HAND_STRINGS,
+    grip_pluck_count,
+    thumb_safe_grips,
+)
+from arranger.grips import (
+    _interval_offsets,
+)
 from arranger.texture import (
     FILL_THINNING,
     THIN_ENTRIES,

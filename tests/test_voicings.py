@@ -13,7 +13,12 @@ from arranger import (
     format_progression,
     supported_string_sets,
 )
-from arranger.grips import TONE_PRIORITY, drop2_template_for
+from arranger.grip_tables import (
+    TONE_PRIORITY,
+)
+from arranger.grips import (
+    drop2_template_for,
+)
 from tests.support import WITNESS
 
 

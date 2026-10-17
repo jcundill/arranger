@@ -28,7 +28,11 @@ from typing import Callable, Container, List, Optional, Sequence, Tuple
 
 from .chords import sounding_harmony
 from .cost import best_voicing
-from .grips import GRIP_MAX_SPAN, GRIP_PREFERENCE, thumb_safe_grips
+from .grip_tables import (
+    GRIP_MAX_SPAN,
+    GRIP_PREFERENCE,
+    thumb_safe_grips,
+)
 from .tuning import NO_CHORD, ROLE_FILL, ROLE_TARGET, ArrangementStep, Voicing
 
 # The three answers to "how is this slot played". Named rather than a bool because

@@ -123,15 +123,17 @@ from .grid import (
     parse_grid,
     resolve_grid,
 )
-from .grips import (
-    BASS_DEGREES_6432,
-    DUO_DEGREES,
+from .grip_tables import (
     GRIP_MAX_SPAN,
     GRIP_PREFERENCE,
     GRIP_STRING_SETS,
     SHELL_DEGREES,
-    get_comping_voicings,
     supported_string_sets,
+)
+from .grips import (
+    BASS_DEGREES_6432,
+    DUO_DEGREES,
+    get_comping_voicings,
 )
 from .harmony import (
     HARMONY_AUTO,
@@ -565,6 +567,7 @@ __all__ = [
     "format_tab_staff",
     "get_comping_voicings",
     "grid",
+    "grip_tables",
     "grips",
     "harmony",
     "main",

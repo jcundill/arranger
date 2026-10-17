@@ -1287,7 +1287,9 @@ def thumb_capacity(
     # package order, so a top-level import would be legal but would make `bass` read as
     # depending on the grip tables for its own sake - it does not, and only this one
     # capacity question does.
-    from .grips import GRIP_STRING_SETS
+    from .grip_tables import (
+        GRIP_STRING_SETS,
+    )
     from .parts import PART_NAMES
     from .texture import texture_palette
 
@@ -1365,7 +1367,9 @@ def comping_capacity(notes: int, bass_voice: bool = False) -> int:
     # Imported here for the reason `thumb_capacity` gives: `grips` sits above `bass` in
     # the package order, and this - like that one - is the only question in this module
     # that needs the grip tables.
-    from .grips import comping_string_sets
+    from .grip_tables import (
+        comping_string_sets,
+    )
 
     return _worst_free_capacity(comping_string_sets(notes, bass_voice))
 

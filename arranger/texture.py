@@ -24,7 +24,11 @@ from __future__ import annotations
 
 from typing import Dict, List, Optional, Tuple
 
-from .grips import GRIP_PREFERENCE, GRIP_STRING_SETS, RIGHT_HAND_STRINGS
+from .grip_tables import (
+    GRIP_PREFERENCE,
+    GRIP_STRING_SETS,
+    RIGHT_HAND_STRINGS,
+)
 from .parts import PART_MELODY, parts_have_melody
 from .tuning import ROLE_FILL, ROLE_TARGET
 

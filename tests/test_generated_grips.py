@@ -26,11 +26,13 @@ import unittest
 from musthe import Note
 
 from arranger import SHELL_DEGREES, ChordParser, VoiceLeadingEngine
-from arranger.grips import (
+from arranger.grip_tables import (
     TONE_PRIORITY,
+    stated_tones,
+)
+from arranger.grips import (
     _drop2_palette,
     drop2_template_for,
-    stated_tones,
 )
 from tests.support import WITNESS
 

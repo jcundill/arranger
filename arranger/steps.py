@@ -33,8 +33,10 @@ from .chords import (
     NON_CHORD_TONE_STRATEGIES,
 )
 from .grid import GRID_DEFAULT
-from .grips import (
+from .grip_tables import (
     GRIP_PREFERENCE,
+)
+from .grips import (
     MELODY_STRING_CHOICES,
     MELODY_STRING_CHOICES_FULL,
 )

@@ -30,12 +30,14 @@ from arranger import (
     format_progression,
     supported_string_sets,
 )
+from arranger.grip_tables import (
+    THUMB_REACH_STRINGS,
+    finger_skip_count,
+)
 from arranger.grips import (
     _LAYOUT_GRIPS,
     _SEARCHED_GRIPS,
-    THUMB_REACH_STRINGS,
     _string_sets_for,
-    finger_skip_count,
 )
 from tests.support import note_name
 

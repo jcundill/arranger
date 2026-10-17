@@ -38,7 +38,9 @@ from .chords import (
     slash_bass_cost,
 )
 from .cost import SPAN_CRITERION, VOICING_COST_CRITERIA
-from .grips import INTERVAL_NAMES
+from .grip_tables import (
+    INTERVAL_NAMES,
+)
 from .tuning import (
     MUTED_CELL,
     NECK_FRET_MAX,

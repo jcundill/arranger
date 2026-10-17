@@ -62,11 +62,13 @@ from arranger import (
     resolve_parts,
     supported_string_sets,
 )
+from arranger.grip_tables import (
+    comping_string_sets,
+)
 from arranger.grips import (
     _comping_palette,
     _search_comping_voicings,
     _snapshot,
-    comping_string_sets,
 )
 from arranger.options import ArrangeOptions
 from arranger.render import _step_cells

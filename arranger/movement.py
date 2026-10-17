@@ -58,9 +58,11 @@ from .decisions import (
     should_promote_fill,
 )
 from .grid import GRID_DEFAULT, on_grid, parse_grid, resolve_grid
-from .grips import (
+from .grip_tables import (
     GRIP_MAX_SPAN,
     GRIP_PREFERENCE,
+)
+from .grips import (
     MELODY_STRING_CHOICES_FULL,
 )
 from .harmony import (
