@@ -383,6 +383,45 @@ def resolve_non_chord_tone(
 
     return None
 
+
+def resolve_substitute_harmony(
+    melody_note: Note,
+    chord_type: str,
+    name: str,
+    strategy: str,
+    next_melody: Optional[str] = None,
+) -> Optional[Tuple[str, str, str]]:
+    """The `(quality, name, strategy)` that makes a non-chord melody note a chord tone.
+
+    Shared by both routes: the melody route pins the note and
+    re-voices a substituted chord around it; the comping route never sounds the note
+    but must still *state* the chord the horn's line implies, so the two have to make
+    the same decision the same way - otherwise `--non-chord-tone` means one thing on
+    one route and another on the other, which is the split this codebase keeps having
+    to close.
+
+    Returns `None` when the note is already a chord tone, when the chord is outside
+    `CHORD_TONES_FROM_ROOT` (nothing to substitute against), when `name` is empty, or
+    when `resolve_non_chord_tone` finds no route for the strategy. `sustain` is
+    deliberately excluded up front: it holds the *previous shape's* inner voices,
+    which is a melody-route move with no meaning where the generator builds a fresh
+    comping shape on every slot.
+    """
+    if strategy == "sustain" or not name:
+        return None
+    canonical = ChordParser.canonical_quality(chord_type)
+    if canonical not in ChordParser.CHORD_TONES_FROM_ROOT:
+        return None
+    if is_chord_tone(melody_note, chord_type, name):
+        return None
+    resolved = resolve_non_chord_tone(
+        melody_note, chord_type, name, strategy, next_melody=next_melody
+    )
+    if resolved is None:
+        return None
+    return resolved[0], resolved[1], strategy
+
+
 def _resolution_pitch_class(
     melody_note: Note,
     root_str: str,

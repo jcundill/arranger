@@ -3,15 +3,15 @@
 This module is a **facade**. The engine is a package of modules with a strict
 dependency order, and nothing above imports anything below it by accident:
 
-    tuning -> chords -> grips -> cost
-                 |         |        |
+    tuning -> fingers -> chords -> grips -> cost
+                 |
               parts -> harmony/grid/texture
-                                        |
-                                     bass
-                                        |
-                                     options
-                                        |
-                                     steps -> render -> (this module)
+                              |
+                             bass -> bass_merge -> options
+                                         |
+                            decisions -> melody_alone -> routes
+                                                       |
+                                              movement -> steps -> slots -> render -> cli
 
 `fingers` is a second edge off `tuning`, and the diagram above omits it: it is the
 left-hand fingering module of `docs/history/fingering.md`, and `bass` is the one engine reader
@@ -57,9 +57,11 @@ from . import (
     fingers,
     grid,
     harmony,
+    melody_alone,
     movement,
     options,
     parts,
+    routes,
     slots,
     texture,
 )
@@ -561,11 +563,13 @@ __all__ = [
     "grips",
     "harmony",
     "main",
+    "melody_alone",
     "normalised_harmony",
     "movement",
     "options",
     "parts",
     "render",
+    "routes",
     "slots",
     "sounding_harmony",
     "steps",

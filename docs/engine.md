@@ -336,7 +336,7 @@ you whether a change is an improvement or a different library.
   palette, or `None` if it is empty: the convenience a caller wants when it has no previous
   shape to weigh the alternatives against. Every lone-note route in the engine asks for the
   list instead and lets `cost.voicing_cost` choose, so a lone note is placed by the same
-  neck-window and hand-travel criteria a chord is (see `movement._melody_alone_shape`).
+  neck-window and hand-travel criteria a chord is (see `melody_alone._melody_alone_shape`).
 - `ArrangementStep.melody_only` — defaulted flag set on NC steps.
 - `ArrangementStep.chord_unvoiced` — defaulted flag set when the palette could not
   voice the step's chord **at all**, so the melody sounds alone. Distinct from
@@ -917,8 +917,9 @@ that `ArrangementStep.repeated` is set, and the renderers honour it.
   annotation is shared with `format_progression`, so the two cannot disagree.
 
 **The hole that is left, named rather than assumed away.** The narrowing happens on the
-melody-bearing route. The four melody-alone helpers (`_rescue_melody_alone`,
-`_demoted_to_melody_alone`, `_texture_fill_step`, `_no_chord_step`) still choose their
+melody-bearing route. The four melody-alone helpers (`melody_alone._rescue_melody_alone`,
+`melody_alone._demoted_to_melody_alone`, `routes._texture_fill_step`,
+`routes._no_chord_step`) still choose their
 string from the caller's `top_strings`, so a repeat reaching one of them keeps the old
 behaviour — re-stated rather than held, and never marked `repeated`, because
 `is_repeated_step` refuses a step whose predecessor sounds a single note. Counted over the

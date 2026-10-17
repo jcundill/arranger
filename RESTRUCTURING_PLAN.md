@@ -63,28 +63,28 @@ the one edge that genuinely points down (`decisions`).
 
 Validation: 1098 tests OK (skipped=2), ruff 0, pyright 0/0.
 
-## Phase 3 — Split `movement.py` by route (IN PROGRESS)
+## Phase 3 — Split `movement.py` by route (DONE, pending commit)
 
-`movement.py` (2526 lines) = step loop + all route handlers. Extracted so far:
+`movement.py` (2526 lines) was the step loop plus every route handler. Two modules
+split out, plus one helper whose home was the wrong file:
 
-- **`arranger/bass_merge.py`** — `_attach_bass` (merges the walked thumb into a
-  chosen step after selection) and `_next_resolution_melody`. It imports only
-  `bass`, `chords` and `tuning`, so it sits directly above `bass` in `ORDER`.
-  `movement` and `steps` import it from there.
+- **`arranger/bass_merge.py`** (committed cb86f65) — `_attach_bass`,
+  `_next_resolution_melody`.
+- **`arranger/melody_alone.py`** — `_sounding_melody`, `_melody_alone_shape`,
+  `_rescue_melody_alone`, `_demoted_to_melody_alone`: every route that sounds the tune
+  by itself picks its position here.
+- **`arranger/routes.py`** — `_last_sounding_step`, `_rest_step`,
+  `_texture_fill_step`, `_no_chord_step`, `_comping_step`. `_harmonised_step` stays in
+  `movement` because it is the orchestrating route and retries through `prepare_step`;
+  moving it beside the handlers would need `routes` -> `movement`, a cycle.
+- **`_resolve_substitute_harmony`** moved to `chords.py` as the public
+  `resolve_substitute_harmony`: it composes `is_chord_tone` and
+  `resolve_non_chord_tone`, so its home is the module that owns them, and both the
+  melody route and the comping route import it from there.
 
-Remaining work: extract the lone-note route (`_melody_alone_shape`,
-`_rescue_melody_alone`, `_demoted_to_melody_alone`, `_promoted_fill`) and the
-route handlers still in `movement.py`.
-
-| New module | Contents |
-|---|---|
-| `arranger/bass_merge.py` | `_attach_bass`, `_next_resolution_melody` (DONE) |
-| `arranger/melody_alone.py` | `_melody_alone_shape`, `_rescue_melody_alone`, `_demoted_to_melody_alone`, `_promoted_fill` |
-| `arranger/routes.py` | `_rest_step`, `_texture_fill_step`, `_no_chord_step`, `_comping_step`, `_harmonised_step` |
-
-Each route's guards local and testable in isolation (addresses trap 12).
-Five routes, `melody_alone_case` kinds, `SLASH_BASS_SATISFIED`,
-`_attach_bass` semantics, `Palette`/`inside_window` recording unchanged.
+`movement.py` is 1762 lines (from 2526). The five routes, `melody_alone_case` kinds,
+`SLASH_BASS_SATISFIED`, `_attach_bass` semantics and `Palette`/`inside_window`
+recording are unchanged — the moved bodies are byte-for-byte slices of the original.
 
 ## Phase 4 — Encapsulate module internals (DONE, committed 5ad9fe1)
 
@@ -123,10 +123,8 @@ up, so no `ALLOWED_EDGES` entry is needed.
 
 - Phase 1: DONE (committed 903694b).
 - Phase 2: DONE (committed c6ed08a).
-- Phase 3: PARTIAL — `bass_merge.py` extracted (committed cb86f65); the remaining
-  route handlers stay in `movement.py` because `_promoted_fill` calls
-  `prepare_step` and `_sounding_melody` is shared by every route, so a full
-  split needs a dependency break first.
+- Phase 3: DONE — `bass_merge.py` (committed cb86f65), `melody_alone.py` and
+  `routes.py`; `resolve_substitute_harmony` moved to `chords.py`.
 - Phase 4: DONE (committed 5ad9fe1).
 - Phase 5: NOT REQUIRED (YAGNI).
 - Phase 6: DONE (committed 1517073).

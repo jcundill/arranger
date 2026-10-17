@@ -1,7 +1,7 @@
 """The package is a DAG, and this is what holds it to that.
 
-`arranger.py` was one 4290-line module. It is now eleven modules, and the
-*structure* carries an invariant the comments used to carry in prose: a module may
+`arranger.py` was one 4290-line module. It is now a package of focused modules, and
+the *structure* carries an invariant the comments used to carry in prose: a module may
 import only the ones below it. That is worth enforcing mechanically precisely
 because the maintainers here are LLM agents, which edit what they can find and
 cannot infer that a decision documented in one place is duplicated in another - so
@@ -49,6 +49,8 @@ ORDER = [
     "bass_merge",   # merging the walk into a chosen step; the next resolution melody
     "options",      # the knobs, as one value
     "decisions",    # the decisions both step loops share
+    "melody_alone", # where a lone note is fretted: the tune alone, with or without harmony
+    "routes",       # the route handlers: rest, fill, NC and the comping route
     "movement",     # the step loop: one progression in, one arrangement out
     "steps",        # the engine's published facade - delegates, incl. to `movement`
     "slots",        # the slot layer: triples to steps, the one pre-pass over them

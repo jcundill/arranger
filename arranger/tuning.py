@@ -466,7 +466,7 @@ class ArrangementStep:
     # lets the line say *why* instead of guessing from an all-muted fret vector,
     # where "the grid placed no chord", "there is no chord to comp" and "no string
     # reaches the melody" are indistinguishable. Set by the route that declines to
-    # play (`movement._rest_step`); defaulted, so a hand-built step and every
+    # play (`routes._rest_step`); defaulted, so a hand-built step and every
     # existing construction are unaffected.
     silence: Optional[str] = None
     # The pitch class of a bass note the left hand **could not place**, or None

@@ -15,7 +15,7 @@ from arranger import (
     format_progression,
 )
 from arranger.grips import _drop2_template_for
-from arranger.movement import _melody_alone_shape
+from arranger.melody_alone import _melody_alone_shape
 from arranger.render import _step_annotation
 
 
@@ -151,7 +151,7 @@ class TestMelodyOnlyPalette(unittest.TestCase):
 class TestTheLoneNoteIsPlacedLikeAChord(unittest.TestCase):
     """The lone note's position is the cost tuple's, not the highest string's.
 
-    `movement._melody_alone_shape` is the seam every lone-note route goes through, and it
+    `melody_alone._melody_alone_shape` is the seam every lone-note route goes through, and it
     scores the palette against the shape the hand is holding. Without that, F4 after a
     chord at frets 6-8 came back on the high E at fret 1 - below the preferred window and
     six frets away from the hand - because the generator's preference order put it there.
