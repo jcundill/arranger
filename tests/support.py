@@ -26,9 +26,18 @@ fixture built by the engine is a defect; a share of the engine's own output is n
 from __future__ import annotations
 
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
-from arranger import PITCH_CLASS_NAMES, ArrangementStep, Voicing
+from musthe import Note
+
+from arranger import (
+    PITCH_CLASS_NAMES,
+    SHELL_DEGREES,
+    ArrangementStep,
+    ChordParser,
+    Voicing,
+    get_comping_voicings,
+)
 
 #: The committed MusicXML fixtures. Defined once because four test modules build paths
 #: from it, and a second spelling of the same directory is a second source for one fact.
@@ -282,6 +291,68 @@ WITNESS: Dict[str, Dict[int, List[int]]] = {
     },
 }
 
+
+
+# The four bars the comping, parts and harmony tests all arrange. Shared because the
+# three files assert different things about the same progression.
+PROGRESSION: List[Tuple[str, str, str]] = [
+    ("D5", "m7", "Dm7"),
+    ("C5", "maj7", "Cmaj7"),
+    ("A4", "7", "A7"),
+    ("G4", "maj7", "Gmaj7"),
+]
+
+# The two selections these tests are about, spelled **the way a caller passes them**,
+# because that is the surface `voices` actually has. `VOICES_NONE` and `PART_NAMES` are the
+# same data as canonical tuples; these are the strings, and the tests would not catch a
+# parser that could not read what its own documentation tells a user to type.
+VOICES_ARG = "chord"
+
+
+def quality_of(name: str) -> str:
+    """The quality half of a chord name, which is what the generators want."""
+    return ChordParser.parse_chord_name(name)[1] or ""
+
+def guide_pcs(name: str) -> set:
+    """The two guide tones of a chord as absolute pitch classes.
+
+    Raises rather than returning None for a chord with no guide tones or no readable
+    root, because every caller wants them and a `None` would have to be narrowed away
+    at each one - and pyright does not narrow through `assertIsNotNone`, so that
+    narrowing would have to be an `assert` in every test as well.
+    """
+    root, quality = ChordParser.parse_chord_name(name)
+    degrees = SHELL_DEGREES.get(ChordParser.canonical_quality(quality or ""))
+    if not root or degrees is None:
+        raise ValueError(f"{name} has no guide tones to state")
+    root_pc = Note(f"{root}4").midi_note() % 12
+    return {(root_pc + degree) % 12 for degree in degrees}
+
+def chord_pcs(name: str) -> set:
+    """Every tone a chord allows, as absolute pitch classes."""
+    root, quality = ChordParser.parse_chord_name(name)
+    root_pc = Note(f"{root}4").midi_note() % 12 if root else 0
+    return {(root_pc + tone) % 12 for tone in ChordParser.get_chord_tones(quality or "")}
+
+def comping(name: str):
+    """Every comping candidate for a chord name."""
+    return get_comping_voicings(quality_of(name), name)
+
+def bass_comping(name: str):
+    """Every candidate for a chord name as a **lone bass voice**."""
+    return get_comping_voicings(quality_of(name), name, notes=1, bass_voice=True)
+
+def root_of(name: str) -> int:
+    """A chord name's root as an absolute pitch class, or raise.
+
+    The bass-voice tests are about *which* note sounds, which cannot be said without the
+    root, so this raises rather than guessing a default the way `chord_pcs` does: a wrong
+    root here would make a correct arrangement look wrong instead of failing loudly.
+    """
+    root, _quality = ChordParser.parse_chord_name(name)
+    if not root:
+        raise ValueError(f"{name} has no readable root")
+    return Note(f"{root}4").midi_note() % 12
 
 def make_voicing(
     frets: List[int],
