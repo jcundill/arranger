@@ -76,8 +76,8 @@ you whether a change is an improvement or a different library.
   [Texture: chords on the beats, fills between](#texture-chords-on-the-beats-fills-between).
 - `ROLE_TARGET` / `ROLE_FILL`, `TEXTURE_STYLES`, `TARGET_BEATS`, `TEXTURE_ARITY` —
   the metric layer's whole vocabulary. `TARGET_BEATS = (1, 3)` names *beats*, not
-  an absolute onset, so the rule reads the metre it is given; `_metric_weight` and
-  `_roles_for_slot` are the two functions that apply it. `TEXTURE_ARITY` is the
+  an absolute onset, so the rule reads the metre it is given; `metric_weight` and
+  `roles_for_slot` are the two functions that apply it. `TEXTURE_ARITY` is the
   chord part's arity per texture — `None` for `uniform` and `targets`, which are
   the parts arithmetic (`texture.derived_arity`).
 - `NECK_FRET_MIN` / `NECK_FRET_MAX` — `2` and `13`. A strong preference, never a
@@ -754,7 +754,7 @@ to what may be played**, never as a change to what is preferred.
 `uniform` is **derived, not listed**: it is the most notes the arithmetic allows at that
 position — with the tune on top and no thumb that is three, the four-note shape this library
 has always built, and with a thumb under it the budget gives two, which is the shell.
-`TARGET_BEATS` and `_metric_weight` stay **rules the policy reads** rather than data, which
+`TARGET_BEATS` and `metric_weight` stay **rules the policy reads** rather than data, which
 is what makes `targets` a texture rather than a per-position literal.
 
 Five decisions are load-bearing:
@@ -767,8 +767,8 @@ Five decisions are load-bearing:
   texture → the chord part's arity, `texture_palette` turns that into the families a
   role may use at this position, and `arrange_progression` passes the role's tuple to
   the generator. Generation and selection stay separate exactly as they already were.
-- **"No timing" is not "a weak note".** `_metric_weight` returns **-1** when `bar` or
-  `beat` is `None`, and `_roles_for_slot` treats anything below zero as a target. This
+- **"No timing" is not "a weak note".** `metric_weight` returns **-1** when `bar` or
+  `beat` is `None`, and `roles_for_slot` treats anything below zero as a target. This
   is the single line that makes the feature opt-in: with `timings=None` every slot is a
   target and the output is byte-identical to what it always was.
   `tests/test_texture.py::TestBackwardCompatibility` pins that against the exact tab
@@ -776,9 +776,9 @@ Five decisions are load-bearing:
   changed so every later step is checked against pre-existing output.
 - **A beat is a counting position, not a quarter note.** `TARGET_BEATS = (1, 3)` names
   beats, and `beats_per_bar` decides which exist, so a 3/4 head targets 1 and 3 while
-  a 2/2 head has only the downbeat. The comparison uses `_BEAT_EPSILON` because a
+  a 2/2 head has only the downbeat. The comparison uses `BEAT_EPSILON` because a
   notated beat is a float — a 3/4 bar's second beat is 1.666… — and the earlier draft
-  of `_metric_weight` compared the *tuple index* against `beats_per_bar`, which let a
+  of `metric_weight` compared the *tuple index* against `beats_per_bar`, which let a
   2/2 bar inherit 4/4's second target. `headxml.arrange_xml_head` passes
   `head.beats_per_bar` through for this reason, and three of the five committed scores
   are in cut time — `The_Jitterbug_Waltz.musicxml` is the 3/4 one, and it is the reason
@@ -1080,7 +1080,7 @@ melodic interval.
   - **The target-note rule is a fixed `(1, 3)`.** There is no way to say "chords on
     beat 1 only", or "fills on beat 2 as well", or to mark a bar that is all target
     notes — a cadenza or a shout chorus, say. The rule lives in one function
-    (`_roles_for_slot`) and one table (`TARGET_BEATS`), which is where a change would
+    (`roles_for_slot`) and one table (`TARGET_BEATS`), which is where a change would
     go, but neither is configurable per call.
   - **A fill that cannot be filled becomes a target.** Measured over melid 218, 2 of
     30 weak slots take this path, so a `targets` arrangement is not uniformly thin: a
@@ -1530,7 +1530,7 @@ position* rather than a beat number — `final_and` is 2.5 in 2/2, 3.5 in 3/4 an
 4/4 from one row. `eighths` is an **integer count of eighths**, not a float, because a
 notated position is a float in practice (a 3/4 bar's second beat is 1.666...) and
 comparing floats for equality is a comparison that will eventually be false for the wrong
-reason — the same argument as `_BEAT_EPSILON`. The subdivision is
+reason — the same argument as `BEAT_EPSILON`. The subdivision is
 `grid.TICKS_PER_BEAT = 24` — a beat in whole twenty-fourths, integer on purpose — so a
 position is a tick number and never a rounding of one.
 
@@ -1568,7 +1568,7 @@ against a temporary row. `tests/test_grid.py::test_no_shipped_row_is_a_mismatch_
 exists to keep that fact from being forgotten — a check no input can fail proves nothing.
 
 **`beat=None` is on the grid.** A slot nobody located has no position to be off, the same
-rule `_metric_weight` follows with its `-1`. Without it a hand-written progression — which
+rule `metric_weight` follows with its `-1`. Without it a hand-written progression — which
 carries no timings — would lose every chord the moment a grid was passed, which is the
 opposite of an opt-in.
 

@@ -418,7 +418,7 @@ class ArrangementStep:
     # beat, and **-1 when the step carries no timing at all**. The -1 matters: it
     # separates "we know this note is weak" from "we were never told where it falls",
     # and it is what keeps a progression with no rhythm on the default path.
-    # See `_metric_weight`.
+    # See `metric_weight`.
     metric_weight: int = 0
     # --- Walking bass (a `bass=` style, or a `bass:walk` grid row) ---
     #

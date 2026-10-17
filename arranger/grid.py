@@ -144,13 +144,13 @@ def on_grid(beat: Optional[float], grid: str, beats_per_bar: int) -> bool:
         return True
     target = float(beat)
     return any(
-        abs(target - position) <= _BEAT_EPSILON
+        abs(target - position) <= BEAT_EPSILON
         for _number, positions in grid_positions(grid, beats_per_bar)
         for position in positions
     )
 
 
-_BEAT_EPSILON = 1e-6
+BEAT_EPSILON = 1e-6
 
 
 def grid_allowed(grid: str, beats_per_bar: int) -> Tuple[bool, str]:

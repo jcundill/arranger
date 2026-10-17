@@ -199,10 +199,10 @@ def texture_palette(
     return families_up_to_with_thin(arity - FILL_THINNING)
 
 
-_BEAT_EPSILON = 1e-6
+BEAT_EPSILON = 1e-6
 
 
-def _metric_weight(
+def metric_weight(
     bar: Optional[int], beat: Optional[float], beats_per_bar: int = 4
 ) -> int:
     """How metrically strong a slot is: 2 on beat 1, 1 on beat 3, 0 on any other beat.
@@ -219,7 +219,7 @@ def _metric_weight(
     and 3 are targets exactly as they are in 4/4. `headxml`'s onset conversion and
     `bass._melody_timeline` honour the same denominator.
 
-    A beat is compared with `_BEAT_EPSILON` because a notated beat is a float and a
+    A beat is compared with `BEAT_EPSILON` because a notated beat is a float and a
     tune rarely lands only on the integers: the middle note of a triplet inside beat 1
     of a 3/4 bar is at 1.333..., and a note a third of a beat away from a target is not
     the target. An exact comparison would call almost no real note a downbeat.
@@ -229,12 +229,12 @@ def _metric_weight(
     for index, target in enumerate(TARGET_BEATS):
         if target > beats_per_bar:
             break
-        if abs(float(beat) - target) <= _BEAT_EPSILON:
+        if abs(float(beat) - target) <= BEAT_EPSILON:
             return 2 - index
     return 0
 
 
-def _roles_for_slot(
+def roles_for_slot(
     weight: int,
     texture: str,
     harmony_changed: bool = True,
@@ -270,7 +270,7 @@ def _roles_for_slot(
     `targets` the second bar of a two-bar chord is a fill, so a player who re-articulates
     the melody on that downbeat gets no chord under it. `TARGET_BEATS` alone cannot say
     either of those things, which is why the extra test lives here rather than in
-    `_metric_weight`.
+    `metric_weight`.
 
     Both arguments are ignored by every other texture, so `uniform` and `targets`
     stay byte-identical.

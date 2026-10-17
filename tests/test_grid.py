@@ -323,7 +323,7 @@ class TestTheDefaultIsInert(unittest.TestCase):
     def test_an_unlocated_slot_is_on_the_grid(self):
         """`beat=None` has no position to be off.
 
-        The rule `_metric_weight` already follows with its `-1`: not being told
+        The rule `metric_weight` already follows with its `-1`: not being told
         where a note falls is not being told it is weak. Without this, a
         hand-written progression - which carries no timings at all - would lose
         every chord the moment someone passed a grid, which is the opposite of an

@@ -283,7 +283,7 @@ def arrange_slots(
     returned in the notes.
 
     `texture` is the chord part's **arity policy**, applied by the engine's own
-    `_metric_weight` and `_roles_for_slot`, so every caller is textured identically: a
+    `metric_weight` and `roles_for_slot`, so every caller is textured identically: a
     `targets` slot states the most notes the arithmetic allows on a strong beat and
     a thinner shape between them, `chord1`/`chord2`/`chord3` state that many
     everywhere, and `uniform` (the default) states the maximum everywhere.

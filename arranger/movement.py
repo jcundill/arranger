@@ -87,9 +87,9 @@ from .routes import (
 )
 from .texture import (
     TEXTURE_STYLES,
-    _metric_weight,
-    _roles_for_slot,
     derived_arity,
+    metric_weight,
+    roles_for_slot,
     texture_palette,
 )
 from .tuning import (
@@ -1266,12 +1266,12 @@ def _slot_state(
             # being refused, which is why they fall through to the comping
             # branch below.
             bar, beat, duration = slot.bar, slot.beat, slot.duration
-            weight = _metric_weight(bar, beat, beats_per_bar)
+            weight = metric_weight(bar, beat, beats_per_bar)
             # The role the slot would have had, read without committing to
             # `car`: a refused slot must not move the target or the tracked
             # pitch that a later slot is judged against, so the two `car`
             # writes further down stay where they are.
-            role = _roles_for_slot(
+            role = roles_for_slot(
                 weight,
                 texture,
                 harmony_changed=(
@@ -1328,8 +1328,8 @@ def _slot_state(
     # onto the step, because a caller that supplied the rhythm wants to read it
     # back off the result rather than have to correlate two lists.
     bar, beat, duration = slot.bar, slot.beat, slot.duration
-    weight = _metric_weight(bar, beat, beats_per_bar)
-    # _roles_for_slot re-validates the texture, which is harmless: the table was
+    weight = metric_weight(bar, beat, beats_per_bar)
+    # roles_for_slot re-validates the texture, which is harmless: the table was
     # already checked before the loop, so this cannot raise here.
     #
     # Under `targets` a strong beat is only a target when something new
@@ -1348,7 +1348,7 @@ def _slot_state(
         and (car.previous_melody_midi is None
              or melody_note.midi_note() != car.previous_melody_midi)
     )
-    role = _roles_for_slot(
+    role = roles_for_slot(
         weight,
         texture,
         harmony_changed=(car.last_target_harmony is None

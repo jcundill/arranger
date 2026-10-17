@@ -1015,7 +1015,7 @@ class TestABassOnlyStepIsNeverATarget(unittest.TestCase):
     are contradictory ones: the first means "nothing above the thumb strikes, the
     upper voices are held from the last shape", the second means "a full chord
     states the harmony here". A walk-invented downbeat the melody moves onto is
-    promoted to a target by `_roles_for_slot`, so a slot could arrive carrying both,
+    promoted to a target by `roles_for_slot`, so a slot could arrive carrying both,
     and the engine voiced a real `shell` or `melody` on it that every renderer then
     suppressed. The chord of the tune was in the arrangement and in none of the
     output.

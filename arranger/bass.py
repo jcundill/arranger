@@ -34,9 +34,9 @@ from musthe import Note
 
 from .chords import NON_CHORD_TONE_EXTENSIONS, ChordParser, normalised_harmony
 from .fingers import can_fret
-from .grid import _BEAT_EPSILON
+from .grid import BEAT_EPSILON
 from .parts import parts_have_bass
-from .texture import TEXTURE_STYLES, _metric_weight
+from .texture import TEXTURE_STYLES, metric_weight
 from .tuning import NO_CHORD, ROLE_FILL, ROLE_TARGET, STANDARD_TUNING, ArrangementStep, Voicing
 
 # --- Walking bass ---
@@ -686,10 +686,10 @@ def _melody_in_force(
     latest = -1
     sounding = -1
     for onset, end, index in timeline:
-        if onset > at + _BEAT_EPSILON:
+        if onset > at + BEAT_EPSILON:
             break
         latest = index
-        if at < end - _BEAT_EPSILON:
+        if at < end - BEAT_EPSILON:
             sounding = index
     return sounding if sounding >= 0 else latest
 
@@ -824,7 +824,7 @@ def _bass_slots(
         key = (bar, float(beat))
         bass = next((note for note in bass_line
                      if note.bar == bar and note.beat is not None
-                     and abs(note.beat - float(beat)) <= _BEAT_EPSILON), None)
+                     and abs(note.beat - float(beat)) <= BEAT_EPSILON), None)
         entries.append((key, index, bass, False))
 
     # The walked beats with no melody slot. Each takes the melody **in force** at its
@@ -989,7 +989,7 @@ def _walking_bass_line(
 
     # An anchor is every downbeat, plus any strong beat whose harmony is not already
     # stated. The second clause is the mid-bar change, and it is the *same* predicate
-    # `_roles_for_slot` already applies to the left hand - strong beat, and a harmony
+    # `roles_for_slot` already applies to the left hand - strong beat, and a harmony
     # differing from the previous target's - so the thumb and the fingers fire on one
     # slot by construction rather than by a second mechanism kept in step by hand.
     is_anchor: List[bool] = []
@@ -998,8 +998,8 @@ def _walking_bass_line(
         if harmonies[index] is None:
             is_anchor.append(False)
             continue
-        strong = _metric_weight(bar, beat, beats_per_bar) > 0
-        downbeat = abs(beat - 1.0) <= _BEAT_EPSILON
+        strong = metric_weight(bar, beat, beats_per_bar) > 0
+        downbeat = abs(beat - 1.0) <= BEAT_EPSILON
         anchor = downbeat or (strong and keys[index] != previous_anchor)
         is_anchor.append(anchor)
         if anchor:
@@ -1035,8 +1035,8 @@ def _walking_bass_line(
             previous_pc = root_pc
             continue
 
-        is_last_beat = abs(beat - beats_per_bar) <= _BEAT_EPSILON
-        is_penultimate = abs(beat - (beats_per_bar - 1)) <= _BEAT_EPSILON
+        is_last_beat = abs(beat - beats_per_bar) <= BEAT_EPSILON
+        is_penultimate = abs(beat - (beats_per_bar - 1)) <= BEAT_EPSILON
 
         candidates: List[Tuple[int, str]] = [
             (pitch_class, BASS_ROLE_CONNECT) for pitch_class in permitted
@@ -1173,7 +1173,7 @@ def _worst_free_capacity(string_sets: Sequence[Tuple[int, ...]]) -> int:
     The shared arithmetic of `thumb_capacity` and `comping_capacity`, factored so the
     two cannot drift: both answer "how bad could the left hand get", and they differ
     only in **where the string sets come from** - the role's grip palette on the
-    melody-bearing route, `_comping_string_sets` on the comping one.
+    melody-bearing route, `comping_string_sets` on the comping one.
 
     Worst case across the sets, deliberately, and for the reason `bass_allowed` gives:
     a thumb line with gaps in it is worse than no thumb line, so the question is
@@ -1202,7 +1202,7 @@ def comping_capacity(notes: int, bass_voice: bool = False) -> int:
     **Derived from the generator rather than listed**, on the rule `harmony_allowed`
     follows and for the same reason: a family that can be voiced is not a list of
     combinations somebody has to remember to extend. The worst case over the
-    sets `_comping_string_sets` may pick at each arity:
+    sets `comping_string_sets` may pick at each arity:
 
         1 note (an inner voice)   3 free
         1 note (`bass_voice`)     2 free
@@ -1226,9 +1226,9 @@ def comping_capacity(notes: int, bass_voice: bool = False) -> int:
     # Imported here for the reason `thumb_capacity` gives: `grips` sits above `bass` in
     # the package order, and this - like that one - is the only question in this module
     # that needs the grip tables.
-    from .grips import _comping_string_sets
+    from .grips import comping_string_sets
 
-    return _worst_free_capacity(_comping_string_sets(notes, bass_voice))
+    return _worst_free_capacity(comping_string_sets(notes, bass_voice))
 
 
 def bass_allowed(

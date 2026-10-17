@@ -64,9 +64,9 @@ from arranger import (
 )
 from arranger.grips import (
     _comping_palette,
-    _comping_string_sets,
     _search_comping_voicings,
     _snapshot,
+    comping_string_sets,
 )
 from arranger.options import ArrangeOptions
 from arranger.render import _step_cells
@@ -458,13 +458,13 @@ class TestTheCompingArrangement(unittest.TestCase):
         """No soprano is reserved for the tune, because there is no tune to pin.
 
         Checked over the corpus, where the stronger per-step claim fails. The sets are
-        the **comping** ones - the same `_comping_string_sets` the generator builds
+        the **comping** ones - the same `comping_string_sets` the generator builds
         from - because the comping part is not a truncated grip palette: `(0, 2)` is a
         pair no `supported_string_sets()` entry lists, and truncating a shell set is
         how it would get into the tab.
         """
         comping_sets = {
-            frozenset(s) for s in _comping_string_sets(3)
+            frozenset(s) for s in comping_string_sets(3)
         }
         for step in self.comped():
             active = frozenset(
@@ -1333,7 +1333,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
     - **The voice identity was discarded.** `steps` passed `notes=len(voices)`, so
       `alto`, `tenor` and `bass` - all three one-note selections - produced *identical*
       arrangements. Arity cannot tell a bass from a tenor; they ask for the same count.
-    - **The low register was unreachable.** `_comping_string_sets(1)` offered only the
+    - **The low register was unreachable.** `comping_string_sets(1)` offered only the
       *top* string of each `duo` pair - indices 5, 4 and 3, the high E, B and G - so all
       80 steps landed in the middle of the neck. Re-ranking cannot fix an unavailable
       position; the string sets had to change.

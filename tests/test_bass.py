@@ -647,7 +647,7 @@ class TestCompingCapacity(unittest.TestCase):
     """
 
     def test_the_capacity_is_measured_at_every_arity(self):
-        """Derived from `_comping_string_sets`, so a new arity is covered by this.
+        """Derived from `comping_string_sets`, so a new arity is covered by this.
 
         The numbers rather than a bare `>= 1`, because "never zero" is the finding and
         a regression should say *which* arity changed rather than fail on a boolean.

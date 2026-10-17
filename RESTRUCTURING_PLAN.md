@@ -42,8 +42,8 @@ the two god modules (`textures`, `movement`) by axis and route.
 
 Removed the 8 private-name re-exports from `arranger/__init__.py`:
 `_bass_harmony`, `_comping_no_room_reason`, `_place_bass`,
-`_walking_bass_line`, `_interval_offsets`, `_metric_weight`,
-`_roles_for_slot`, `_step_annotation`. Privates now imported from home
+`_walking_bass_line`, `_interval_offsets`, `metric_weight`,
+`roles_for_slot`, `_step_annotation`. Privates now imported from home
 modules by tests; facade re-exports public surface only.
 
 Files changed: `arranger/__init__.py`, `tests/test_bass.py`,
@@ -63,7 +63,7 @@ imports only what sits above it in the DAG.
 | `arranger/parts.py` | `PARTS_AUTO`, `PART_*`, `PART_NAMES`, `parse_parts`, `resolve_parts`, `parts_have_*`, `parts_has_melody_only` |
 | `arranger/harmony.py` | `HARMONY_*`, `parse_harmony`, `resolve_harmony`, `harmony_allowed`, `HARMONY_AUTO_POLICIES` |
 | `arranger/grid.py` | `GRID_*`, `GridPattern`, `grid_resolutions`, `parse_grid`, `resolve_grid`, `on_grid`, `grid_allowed`, `grid_defers_to_melody`, `TICKS_PER_BEAT`, `SUB`, `LAST`, `ALL` |
-| `arranger/texture.py` | `TEXTURE_STYLES`, `TEXTURE_ARITY`, `TARGET_BEATS`, `FILL_THINNING`, `THIN_ENTRIES`, `FILL_ONLY_EXCLUDED`, `families_*`, `texture_arity`, `derived_arity`, `comping_arity`, `texture_palette`, `_metric_weight`, `_roles_for_slot` |
+| `arranger/texture.py` | `TEXTURE_STYLES`, `TEXTURE_ARITY`, `TARGET_BEATS`, `FILL_THINNING`, `THIN_ENTRIES`, `FILL_ONLY_EXCLUDED`, `families_*`, `texture_arity`, `derived_arity`, `comping_arity`, `texture_palette`, `metric_weight`, `roles_for_slot` |
 
 Consumers repointed: `options`, `movement`, `bass`, `slots`, `cli`, `steps`,
 `__init__`, plus `tests/test_texture.py` and `tests/test_walking_bass.py`.

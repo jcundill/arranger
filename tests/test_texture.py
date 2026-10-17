@@ -58,10 +58,10 @@ from arranger.grips import RIGHT_HAND_STRINGS, _interval_offsets, grip_pluck_cou
 from arranger.texture import (
     FILL_THINNING,
     THIN_ENTRIES,
-    _metric_weight,
-    _roles_for_slot,
     families_up_to_arity,
     families_up_to_with_thin,
+    metric_weight,
+    roles_for_slot,
 )
 
 # The library's own demonstration cadences. These are the progressions whose tab is
@@ -148,16 +148,16 @@ class TestMetricWeight(unittest.TestCase):
 
     def test_beat_one_is_the_strongest(self):
         """Beat 1 weighs 2 - it is the downbeat the whole bar is built from."""
-        self.assertEqual(_metric_weight(0, 1.0), 2)
+        self.assertEqual(metric_weight(0, 1.0), 2)
 
     def test_beat_three_in_four_four_weighs_one(self):
         """Beat 3 weighs 1: the second half-note pulse of a 4/4 bar."""
-        self.assertEqual(_metric_weight(0, 3.0), 1)
+        self.assertEqual(metric_weight(0, 3.0), 1)
 
     def test_the_other_beats_weigh_nothing(self):
         """Beats 2 and 4 are connecting notes, so they weigh 0."""
-        self.assertEqual(_metric_weight(0, 2.0), 0)
-        self.assertEqual(_metric_weight(0, 4.0), 0)
+        self.assertEqual(metric_weight(0, 2.0), 0)
+        self.assertEqual(metric_weight(0, 4.0), 0)
 
     def test_no_timing_weighs_minus_one(self):
         """
@@ -167,9 +167,9 @@ class TestMetricWeight(unittest.TestCase):
         where this note falls" is not "we were told it is weak". Collapsing the two
         would thin out every hand-written progression.
         """
-        self.assertEqual(_metric_weight(None, 1.0), -1)
-        self.assertEqual(_metric_weight(0, None), -1)
-        self.assertEqual(_metric_weight(None, None), -1)
+        self.assertEqual(metric_weight(None, 1.0), -1)
+        self.assertEqual(metric_weight(0, None), -1)
+        self.assertEqual(metric_weight(None, None), -1)
 
     def test_a_three_four_bar_still_has_a_second_target(self):
         """
@@ -178,9 +178,9 @@ class TestMetricWeight(unittest.TestCase):
         A waltz states its harmony on the downbeat and the third beat, so the rule
         has to read the metre it is given rather than assuming 4/4.
         """
-        self.assertEqual(_metric_weight(0, 1.0, beats_per_bar=3), 2)
-        self.assertEqual(_metric_weight(0, 3.0, beats_per_bar=3), 1)
-        self.assertEqual(_metric_weight(0, 2.0, beats_per_bar=3), 0)
+        self.assertEqual(metric_weight(0, 1.0, beats_per_bar=3), 2)
+        self.assertEqual(metric_weight(0, 3.0, beats_per_bar=3), 1)
+        self.assertEqual(metric_weight(0, 2.0, beats_per_bar=3), 0)
 
     def test_a_two_two_bar_has_no_third_beat(self):
         """
@@ -190,8 +190,8 @@ class TestMetricWeight(unittest.TestCase):
         A count without a denominator is not a metre: reading 2/2 as if it had four
         beats would put a target on beat 3 of every bar of a cut-time head.
         """
-        self.assertEqual(_metric_weight(0, 1.0, beats_per_bar=2), 2)
-        self.assertEqual(_metric_weight(0, 3.0, beats_per_bar=2), 0)
+        self.assertEqual(metric_weight(0, 1.0, beats_per_bar=2), 2)
+        self.assertEqual(metric_weight(0, 3.0, beats_per_bar=2), 0)
 
     def test_a_float_beat_is_not_read_as_a_downbeat(self):
         """
@@ -200,10 +200,10 @@ class TestMetricWeight(unittest.TestCase):
         Without a tolerance an exact comparison would call no real note a downbeat,
         because notated beats are floats.
         """
-        self.assertEqual(_metric_weight(0, 1.5), 0)
-        self.assertEqual(_metric_weight(0, 2.5), 0)
-        self.assertEqual(_metric_weight(0, 1.0 + 5e-7, beats_per_bar=3), 2)
-        self.assertEqual(_metric_weight(0, 3.0 - 5e-7, beats_per_bar=3), 1)
+        self.assertEqual(metric_weight(0, 1.5), 0)
+        self.assertEqual(metric_weight(0, 2.5), 0)
+        self.assertEqual(metric_weight(0, 1.0 + 5e-7, beats_per_bar=3), 2)
+        self.assertEqual(metric_weight(0, 3.0 - 5e-7, beats_per_bar=3), 1)
 
     def test_the_bar_number_does_not_change_the_weight(self):
         """
@@ -212,8 +212,8 @@ class TestMetricWeight(unittest.TestCase):
         Otherwise a weak note in bar 40 would be treated differently from the same
         beat in bar 1, and the rule would not be a metric rule at all.
         """
-        self.assertEqual(_metric_weight(0, 1.0), _metric_weight(39, 1.0))
-        self.assertEqual(_metric_weight(-3, 2.0), _metric_weight(7, 2.0))
+        self.assertEqual(metric_weight(0, 1.0), metric_weight(39, 1.0))
+        self.assertEqual(metric_weight(-3, 2.0), metric_weight(7, 2.0))
 
 
 class TestRoles(unittest.TestCase):
@@ -222,16 +222,16 @@ class TestRoles(unittest.TestCase):
     def test_uniform_makes_every_slot_a_target(self):
         """`uniform` is the historical behaviour, for every weight including 0."""
         for weight in (-1, 0, 1, 2):
-            self.assertEqual(_roles_for_slot(weight, "uniform"), [ROLE_TARGET])
+            self.assertEqual(roles_for_slot(weight, "uniform"), [ROLE_TARGET])
 
     def test_targets_gives_a_full_chord_to_a_strong_beat(self):
         """Beats 1 and 3 are targets under the `targets` texture."""
-        self.assertEqual(_roles_for_slot(2, "targets"), [ROLE_TARGET])
-        self.assertEqual(_roles_for_slot(1, "targets"), [ROLE_TARGET])
+        self.assertEqual(roles_for_slot(2, "targets"), [ROLE_TARGET])
+        self.assertEqual(roles_for_slot(1, "targets"), [ROLE_TARGET])
 
     def test_targets_makes_an_ordinary_beat_a_fill(self):
         """Beat 2 and beat 4 are fills - the guide's 'fill the gaps'."""
-        self.assertEqual(_roles_for_slot(0, "targets"), [ROLE_FILL])
+        self.assertEqual(roles_for_slot(0, "targets"), [ROLE_FILL])
 
     def test_a_slot_with_no_timing_is_still_a_target(self):
         """
@@ -240,12 +240,12 @@ class TestRoles(unittest.TestCase):
         This is the single most important line in the feature: it is what makes
         `targets` a no-op on a progression that carries no rhythm.
         """
-        self.assertEqual(_roles_for_slot(-1, "targets"), [ROLE_TARGET])
+        self.assertEqual(roles_for_slot(-1, "targets"), [ROLE_TARGET])
 
     def test_an_unknown_texture_is_rejected(self):
         """A typo must be reported, not silently arranged as `uniform`."""
         with self.assertRaises(ValueError) as caught:
-            _roles_for_slot(2, "sorcery")
+            roles_for_slot(2, "sorcery")
         self.assertIn("sorcery", str(caught.exception))
         self.assertIn("targets", str(caught.exception))
 
@@ -1155,7 +1155,7 @@ class TestTargetsTexture(unittest.TestCase):
         correlate two parallel lists, and `has_timing` becomes true as a side effect.
         """
         for step, (bar, beat, _) in zip(self.steps, self.TIMINGS):
-            self.assertEqual(step.metric_weight, _metric_weight(bar, beat))
+            self.assertEqual(step.metric_weight, metric_weight(bar, beat))
             self.assertEqual(step.bar, bar)
             self.assertEqual(step.beat, beat)
             self.assertTrue(step.has_timing)

@@ -231,7 +231,7 @@ def is_bass_only(slot_bass_only: bool, role: str) -> bool:
     is a statement about where the beat came from, not about what the left hand
     plays, and the two come apart.
 
-    A **target** is the case that matters. `_roles_for_slot` promotes a strong beat to
+    A **target** is the case that matters. `roles_for_slot` promotes a strong beat to
     a target when the melody moves onto it, and under a thumb line the walk
     invents downbeats the melody grid never had - so a slot can arrive with
     `bass_only=True` *and* `role == ROLE_TARGET` at the same time. Those two flags

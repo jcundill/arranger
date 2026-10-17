@@ -32,7 +32,7 @@ from musthe import Note
 
 from .chords import ChordParser, melody_degree_name
 from .cost import SPAN_CRITERION, VOICING_COST_CRITERIA
-from .grips import _INTERVAL_NAMES
+from .grips import INTERVAL_NAMES
 from .slots import bass_pitch_class, slash_bass, slash_bass_cost
 from .tuning import (
     MUTED_CELL,
@@ -183,7 +183,7 @@ def _step_annotation(step: ArrangementStep) -> str:
             upper = sorted(step.voicing.upper_midi_notes())
             size = (upper[-1] - upper[0]) % 12 if len(upper) == 2 else 0
             return _annotate(
-                step, f"interval fill - {_INTERVAL_NAMES.get(size, '2 notes')}, partial"
+                step, f"interval fill - {INTERVAL_NAMES.get(size, '2 notes')}, partial"
             )
         if step.grip == "duo":
             # Name the pair from the notes that actually sound, as the interval branch

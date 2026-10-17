@@ -98,12 +98,6 @@ BUDGETS: Dict[str, Budget] = {
 # module that imports it. Keys read `importer -> home.name`.
 ALLOWED_PRIVATE_IMPORTS: Set[str] = {
     "__init__ -> render._print_step",
-    "bass -> grid._BEAT_EPSILON",
-    "bass -> grips._comping_string_sets",
-    "bass -> texture._metric_weight",
-    "movement -> texture._metric_weight",
-    "movement -> texture._roles_for_slot",
-    "render -> grips._INTERVAL_NAMES",
     "grip_chart -> grips._drop2_template_for",
     "tabgp -> tabxml._events",
     "tabgp -> tabxml._substitute_steps",

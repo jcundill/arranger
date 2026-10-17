@@ -1559,7 +1559,7 @@ def _read_notes(
 
 # How far inside its bar a note's beat is kept, so it cannot collide with the next
 # bar's downbeat. A 2/2 bar is two beats wide, so its last quarter is beat 2.5.
-_BEAT_EPSILON = 1e-6
+BEAT_EPSILON = 1e-6
 
 
 def chord_at(
@@ -1689,7 +1689,7 @@ def _tick_key(bar: int, beat: float) -> Tuple[int, int]:
     The union of the melody's slots with the grid's needs to ask whether two producers mean
     the same instant, and that is the only question this answers. A beat is a float in
     practice - an eighth-note triplet's members land on 1.3333333333333333 and
-    1.6666666666666665 - so comparing them directly is the comparison `_BEAT_EPSILON` and
+    1.6666666666666665 - so comparing them directly is the comparison `BEAT_EPSILON` and
     `head_skeleton`'s own rounding both exist to avoid. Rounding to a `1/24` beat makes it
     integer equality, and every position either producer emits is already on that lattice.
 

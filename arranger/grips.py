@@ -806,7 +806,7 @@ _INTERVAL_CLASSES = (3, 9, 8)
 # How those intervals are named in a printed annotation. Keyed by the size in
 # semitones, modulo 12, so a 10th reads as the 3rd it is a compound form of - which is
 # what a player calls it. "2 notes" is the fallback for a size not in here.
-_INTERVAL_NAMES: Dict[int, str] = {3: "3rd", 8: "b6", 9: "6th"}
+INTERVAL_NAMES: Dict[int, str] = {3: "3rd", 8: "b6", 9: "6th"}
 
 
 def _interval_offsets(
@@ -1088,7 +1088,7 @@ _INTERVAL_CLASSES = (3, 9, 8)
 # How those intervals are named in a printed annotation. Keyed by the size in
 # semitones, modulo 12, so a 10th reads as the 3rd it is a compound form of - which is
 # what a player calls it. "2 notes" is the fallback for a size not in here.
-_INTERVAL_NAMES: Dict[int, str] = {3: "3rd", 8: "b6", 9: "6th"}
+INTERVAL_NAMES: Dict[int, str] = {3: "3rd", 8: "b6", 9: "6th"}
 
 
 
@@ -1471,7 +1471,7 @@ def _search_comping_voicings(
     lo = max(0, fret_min - limit)
 
     valid: List[Voicing] = []
-    for used in _comping_string_sets(notes, bass_voice):
+    for used in comping_string_sets(notes, bass_voice):
         best: Optional[Tuple[Tuple[int, float], Voicing]] = None
         for frets in _frets_in_span(used, lo, hi, limit):
             midis = sorted(
@@ -1572,7 +1572,7 @@ def get_comping_voicings(
     ]
 
 
-def _comping_string_sets(
+def comping_string_sets(
     notes: int, bass_voice: bool = False
 ) -> List[Tuple[int, ...]]:
     """The string sets a comping shape of `notes` voices may occupy, most preferred first.
