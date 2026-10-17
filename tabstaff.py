@@ -19,6 +19,7 @@ except for the public re-exports at the bottom - see the note there.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from arranger.tuning import MUTED_CELL, STAFF_CELL_WIDTH, STRING_NAMES, ArrangementStep
@@ -602,6 +603,138 @@ def _staff_breaks(
     }
 
 
+def _marker_columns(
+    bars: List[int],
+    markers: Sequence[Any],
+) -> Tuple[Dict[int, str], Dict[int, str]]:
+    """The repeat/ending signs, keyed by the column a bar opens at.
+
+    **Repeat and ending signs are keyed by the global column a bar opens at.** A
+    repeated head has had its bars expanded by the importer, so the arrangement already
+    contains every bar a player plays; these markers put the `|:` / `:|` and `1.` / `2.`
+    back on the page so a reader can see the repeat rather than only its effects.
+    `_staff_bars` counts in the same bar numbers the steps carry (`onset = bar *
+    beats_per_bar + ...`, so bar N is the value N), which is what makes a marker's bar
+    the key to find its column. A bar opens with `|:` when a repeat starts there and
+    `:|` when the bar before it was the repeat's end; an ending's number is a label on
+    its opening bar.
+
+    Returns `(barline_token, volta_at)`, both empty when there is nothing to draw.
+    """
+    open_column: Dict[int, int] = {}
+    for index, value in enumerate(bars):
+        open_column.setdefault(value, index)
+    barline_token: Dict[int, str] = {}
+    volta_at: Dict[int, str] = {}
+    for marker in markers:
+        if marker.kind == "repeat_start":
+            index = open_column.get(marker.bar)
+            if index is not None:
+                barline_token[index] = "|:"
+        elif marker.kind == "repeat_end":
+            # The `:|` is drawn where the *next* bar opens - the end of this one.
+            index = open_column.get(marker.bar + 1)
+            if index is not None:
+                barline_token[index] = ":|"
+        elif marker.kind == "ending_start":
+            index = open_column.get(marker.bar)
+            if index is not None:
+                volta_at[index] = ",".join(str(n) for n in marker.numbers) + "."
+    return barline_token, volta_at
+
+
+@dataclass(frozen=True)
+class _StaffGrid:
+    """The rules a row of the staff is drawn by, as one value.
+
+    The row builders still close over the laid-out columns; what lives here is the
+    part that is a *property of the grid* - how wide its cells are, what a fret cell
+    says, and where the metre goes. `columns` and the flags are what those three
+    questions need, and nothing else is carried.
+    """
+
+    columns: List[Tuple[float, Optional[ArrangementStep], bool]]
+    values: List[Tuple[str, str]]
+    volta_at: Dict[int, str]
+    beats_per_bar: int
+    beat_type: int
+    show_chords: bool
+    show_melody: bool
+    show_mutes: bool
+    show_timing: bool
+
+    def cell(
+        self, step: Optional[ArrangementStep], string_index: int, strikes: bool,
+    ) -> str:
+        """One fret cell: a fret number or a mute marker, or empty for a held voice."""
+        if step is None or not strikes:
+            return ""
+        if not _strikes_here(step, string_index):
+            return ""
+        fret = step.voicing.frets[string_index]
+        if fret < 0:
+            return MUTED_CELL if (self.show_mutes or step.melody_only) else ""
+        return str(fret)
+
+    def system_width(self, system: List[int]) -> int:
+        """
+        The cell width for one system: the widest label among **its own** columns.
+
+        Every row of a system shares one column width, and the grid widens to the
+        longest label rather than letting the chord line push itself out of step with
+        the frets underneath it. The metre and the note values go through the same
+        calculation: a `4/4` or a `0.67q` fallback is wider than a fret, and
+        truncating either would print a note value that is not the one being played.
+
+        **Only labels that are actually drawn count.** The chord name counts under
+        `show_chords` and the melody note under `show_melody`, because a label that is
+        not printed cannot knock the grid out of alignment - and counting one anyway
+        makes turning that row off print a tab *wider* than leaving it on, which is
+        the opposite of what the flag says.
+
+        **Per system, not per progression.** Computing it once over every column would
+        let a single two-digit fret anywhere in the piece set the width for the whole
+        arrangement, so a bar of nothing but single-digit frets would be drawn two
+        characters per cell because some other bar held a `13`. TuxGuitar's export sizes
+        its bars independently. Per system is the finest granularity that keeps the
+        invariant the alignment tests exist to protect, since two bars drawn on one
+        system have to share a grid or a fret stops lining up across the six strings.
+        Per *bar* would match the export more closely and would break it.
+        """
+        width = STAFF_CELL_WIDTH
+        for index in system:
+            step = self.columns[index][1]
+            label = self.volta_at.get(index)
+            if label:
+                # A volta's `1.` is a label like any other and must not knock the grid
+                # out of alignment - the same rule the chord and melody rows obey.
+                width = max(width, len(label))
+            if step is None:
+                continue
+            if self.show_chords:
+                width = max(width, len(step.chord))
+            if self.show_melody:
+                width = max(width, len(step.melody or ""))
+        if self.show_timing:
+            width = max(width, len(_meter_label(self.beats_per_bar, self.beat_type)))
+            for label, _kind in self.values:
+                if label:
+                    width = max(width, len(label))
+        return width
+
+    def meter_cells(self, count: int) -> List[str]:
+        """The metre in the first column and nothing elsewhere.
+
+        A time signature is written once, at the head of the staff, and the
+        signature holds until it changes - so printing it over every bar would say
+        something the score does not. That is the same decision `tabxml` makes when
+        it writes `<time>` in the first measure only, and for the same reason: a
+        signature over every bar reads as a new one at each, and the bar stops
+        reading as a continuation of the one before.
+        """
+        return [_meter_label(self.beats_per_bar, self.beat_type)] + [""] * (count - 1)
+
+
 def format_tab_staff(
     steps: List[ArrangementStep],
     beats_per_bar: int = 4,
@@ -702,33 +835,9 @@ def format_tab_staff(
     bar_marks = _staff_barlines(bars)
     breaks = _staff_breaks(columns, beats_per_bar, measures_per_line)
 
-    # **Repeat and ending signs, keyed by the global column a bar opens at.** A repeated
-    # head has had its bars expanded by the importer, so the arrangement already contains
-    # every bar a player plays; these markers put the `|:` / `:|` and `1.` / `2.` back on
-    # the page so a reader can see the repeat rather than only its effects. `_staff_bars`
-    # counts in the same bar numbers the steps carry (`onset = bar * beats_per_bar + ...`,
-    # so bar N is the value N), which is what makes a marker's bar the key to find its
-    # column. A bar opens with `|:` when a repeat starts there and `:|` when the bar
-    # before it was the repeat's end; an ending's number is a label on its opening bar.
-    open_column: Dict[int, int] = {}
-    for index, value in enumerate(bars):
-        open_column.setdefault(value, index)
-    barline_token: Dict[int, str] = {}
-    volta_at: Dict[int, str] = {}
-    for marker in markers:
-        if marker.kind == "repeat_start":
-            index = open_column.get(marker.bar)
-            if index is not None:
-                barline_token[index] = "|:"
-        elif marker.kind == "repeat_end":
-            # The `:|` is drawn where the *next* bar opens - the end of this one.
-            index = open_column.get(marker.bar + 1)
-            if index is not None:
-                barline_token[index] = ":|"
-        elif marker.kind == "ending_start":
-            index = open_column.get(marker.bar)
-            if index is not None:
-                volta_at[index] = ",".join(str(n) for n in marker.numbers) + "."
+    # Repeat and ending signs, keyed by the column the bar they belong to opens at -
+    # see `_marker_columns`.
+    barline_token, volta_at = _marker_columns(bars, markers)
 
     # The rhythm row and the column grid go through one predicate, so the row can
     # never claim a written rhythm the columns were not laid out by.
@@ -745,74 +854,17 @@ def format_tab_staff(
         if timed else [1] * len(columns)
     )
 
-    def cell(step: Optional[ArrangementStep], string_index: int, strikes: bool) -> str:
-        """One fret cell: a fret number or a mute marker, or empty for a held voice."""
-        if step is None or not strikes:
-            return ""
-        if not _strikes_here(step, string_index):
-            return ""
-        fret = step.voicing.frets[string_index]
-        if fret < 0:
-            return MUTED_CELL if (show_mutes or step.melody_only) else ""
-        return str(fret)
-
-    def system_width(system: List[int]) -> int:
-        """
-        The cell width for one system: the widest label among **its own** columns.
-
-        Every row of a system shares one column width, and the grid widens to the
-        longest label rather than letting the chord line push itself out of step with
-        the frets underneath it. The metre and the note values go through the same
-        calculation: a `4/4` or a `0.67q` fallback is wider than a fret, and
-        truncating either would print a note value that is not the one being played.
-
-        **Only labels that are actually drawn count.** The chord name counts under
-        `show_chords` and the melody note under `show_melody`, because a label that is
-        not printed cannot knock the grid out of alignment - and counting one anyway
-        makes turning that row off print a tab *wider* than leaving it on, which is
-        the opposite of what the flag says.
-
-        **Per system, not per progression.** Computing it once over every column would
-        let a single two-digit fret anywhere in the piece set the width for the whole
-        arrangement, so a bar of nothing but single-digit frets would be drawn two
-        characters per cell because some other bar held a `13`. TuxGuitar's export sizes
-        its bars independently. Per system is the finest granularity that keeps the
-        invariant the alignment tests exist to protect, since two bars drawn on one
-        system have to share a grid or a fret stops lining up across the six strings.
-        Per *bar* would match the export more closely and would break it.
-        """
-        width = STAFF_CELL_WIDTH
-        for index in system:
-            step = columns[index][1]
-            label = volta_at.get(index)
-            if label:
-                # A volta's `1.` is a label like any other and must not knock the grid
-                # out of alignment - the same rule the chord and melody rows obey.
-                width = max(width, len(label))
-            if step is None:
-                continue
-            if show_chords:
-                width = max(width, len(step.chord))
-            if show_melody:
-                width = max(width, len(step.melody or ""))
-        if show_timing:
-            width = max(width, len(_meter_label(beats_per_bar, beat_type)))
-            for label, _kind in values:
-                if label:
-                    width = max(width, len(label))
-        return width
-
-    def _meter_cells(count: int) -> List[str]:
-        """The metre in the first column and nothing elsewhere.
-
-        A time signature is written once, at the head of the staff, and the
-        signature holds until it changes - so printing it over every bar would say
-        something the score does not. That is the same decision `tabxml` makes when
-        it writes `<time>` in the first measure only, and for the same reason: a
-        signature over every bar reads as a new one at each, and the bar stops
-        reading as a continuation of the one before.
-        """
-        return [_meter_label(beats_per_bar, beat_type)] + [""] * (count - 1)
+    grid = _StaffGrid(
+        columns=columns,
+        values=values,
+        volta_at=volta_at,
+        beats_per_bar=beats_per_bar,
+        beat_type=beat_type,
+        show_chords=show_chords,
+        show_melody=show_melody,
+        show_mutes=show_mutes,
+        show_timing=show_timing,
+    )
 
     def line(width: int, system: List[int], text_for: Any, when_struck: bool,
              dedupe: bool = False, cells: Optional[Sequence[str]] = None,
@@ -931,7 +983,7 @@ def format_tab_staff(
             # and the dashes after the fret are the note sounding on.
             _, step, strikes = columns[index]
             out.append(
-                cell(step, string_index, strikes).ljust(width * slots[index], "-")
+                grid.cell(step, string_index, strikes).ljust(width * slots[index], "-")
             )
         out.append("|")
         # The highest string is labelled with a lowercase 'e', the usual tab
@@ -957,7 +1009,7 @@ def format_tab_staff(
         # One width for every row of this system. See `system_width` - per system,
         # because two bars drawn on one line have to share a grid or a fret stops
         # lining up across the six strings.
-        width = system_width(system)
+        width = grid.system_width(system)
         if volta_at:
             # The `1.` / `2.` bracket numbers, over the bars the endings span, where a
             # printed score puts them. Above everything else so the bracket reads as a
@@ -974,7 +1026,7 @@ def format_tab_staff(
                 # The cells are addressed by global column index, so the metre row is
                 # blank on every column but the very first of the first system.
                 cells=(
-                    _meter_cells(len(system)) if position == 0
+                    grid.meter_cells(len(system)) if position == 0
                     else [""] * len(system)
                 ),
             )[0])
