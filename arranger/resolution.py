@@ -26,6 +26,11 @@ from .chords import (
     NON_CHORD_TONE_STRATEGIES,
 )
 from .grid import parse_grid, resolve_grid
+from .grouping import (
+    GROUPING_AUTO,
+    parse_grouping,
+    resolve_grouping,
+)
 from .harmony import (
     parse_harmony,
     resolve_harmony,
@@ -162,7 +167,11 @@ def _resolve_harmony(
     return resolve_harmony(parse_harmony(harmony), parts)
 
 
-def _resolve_grid(grid: str, beats_per_bar: int) -> str:
+def _resolve_grid(
+    grid: str,
+    beats_per_bar: int,
+    grouping: Tuple[int, ...],
+) -> str:
     """The grid to place chords on: parsed, `auto` resolved, validated.
 
     The same two-step shape as `_resolve_melody` and `_resolve_harmony` above,
@@ -171,10 +180,23 @@ def _resolve_grid(grid: str, beats_per_bar: int) -> str:
 
     **Takes the metre rather than a texture**, and that is what distinguishes it from
     `harmony`. Whether a rhythm fits is a property of the metre - `final_and` is the
-    upbeat of the last beat whatever the arrangement is doing - so it is resolved
-    against `beats_per_bar` and nothing else.
+    upbeat of the last felt beat whatever the arrangement is doing - so it is
+    resolved against the count, the denominator and the grouping, and nothing else.
     """
-    return resolve_grid(parse_grid(grid), beats_per_bar)
+    return resolve_grid(parse_grid(grid), beats_per_bar, grouping)
+
+
+def _resolve_grouping(
+    grouping: str, beats_per_bar: int, beat_type: int
+) -> Tuple[int, ...]:
+    """The grouping to feel the bar in: parsed, `auto` derived, validated.
+
+    The same two-step shape again, and resolved here for the same reason: a spelling
+    nobody recognises has to be reported once, before any voicing work, and the
+    derived value is then a concrete tuple the metric layer can read without
+    deciding anything.
+    """
+    return resolve_grouping(parse_grouping(grouping), beats_per_bar, beat_type)
 
 
 @dataclass(frozen=True)
@@ -200,6 +222,7 @@ class _Knobs:
     grid: str
     beats_per_bar: int
     beat_type: int
+    grouping: Tuple[int, ...]
     melody_onsets: Optional[Container[int]]
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]]
     bass_pcs: Optional[Mapping[int, Optional[int]]]
@@ -220,6 +243,7 @@ def resolve_knobs(
     grid: str,
     beats_per_bar: int,
     beat_type: int,
+    grouping: str = GROUPING_AUTO,
     melody_onsets: Optional[Container[int]],
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
 ) -> _Knobs:
@@ -260,6 +284,7 @@ def resolve_knobs(
                 ("grid", grid),
                 ("beats_per_bar", beats_per_bar),
                 ("beat_type", beat_type),
+                ("grouping", grouping),
                 ("melody_onsets", melody_onsets),
             )
             if value != ArrangeOptions.__dataclass_fields__[name].default
@@ -280,6 +305,7 @@ def resolve_knobs(
         grid = options.grid
         beats_per_bar = options.beats_per_bar
         beat_type = options.beat_type
+        grouping = options.grouping
         melody_onsets = options.melody_onsets
         if options.timings is not None:
             timings = list(options.timings)
@@ -299,6 +325,7 @@ def resolve_knobs(
     # raises rather than degrading to a value the caller did not ask for, so what a
     # caller sees is the refusal rather than an arrangement answering a different
     # question.
+    resolved_grouping = _resolve_grouping(grouping, beats_per_bar, beat_type)
 
     return _Knobs(
         top_strings=top_strings,
@@ -312,6 +339,7 @@ def resolve_knobs(
         grid=grid,
         beats_per_bar=beats_per_bar,
         beat_type=beat_type,
+        grouping=resolved_grouping,
         melody_onsets=melody_onsets,
         timings=timings,
         bass_pcs=bass_pcs,
@@ -337,6 +365,7 @@ class _Policies:
     has_thumb: bool
     harmony_family: str
     grid_pattern: str
+    grouping: Tuple[int, ...]
     slots: Optional[List[Slot]]
 
 
@@ -350,6 +379,7 @@ def resolve_policies(
     grid: str,
     beats_per_bar: int,
     beat_type: int,
+    grouping: Tuple[int, ...],
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
 ) -> _Policies:
     """The axes resolved once per arrangement, plus the walked-beat union.
@@ -407,7 +437,7 @@ def resolve_policies(
     # question about the part whether the guitar is singing it or comping under a
     # horn, so scoping it to one route would make `grid=` silently inert on a
     # melody-bearing arrangement rather than doing nothing there.
-    grid_pattern = _resolve_grid(grid, beats_per_bar)
+    grid_pattern = _resolve_grid(grid, beats_per_bar, grouping)
 
     slots: Optional[List[Slot]] = None
     if has_thumb:
@@ -418,7 +448,12 @@ def resolve_policies(
         # its docstring for why that duplication has already cost this project one
         # bug.
         slots = walking_slots(
-            progression, timings, beats_per_bar, beat_type, bass
+            progression,
+            timings,
+            beats_per_bar,
+            beat_type,
+            grouping=grouping,
+            bass=bass,
         )
 
     return _Policies(
@@ -429,5 +464,6 @@ def resolve_policies(
         has_thumb=has_thumb,
         harmony_family=harmony_family,
         grid_pattern=grid_pattern,
+        grouping=grouping,
         slots=slots,
     )

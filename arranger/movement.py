@@ -59,6 +59,7 @@ from .grip_tables import (
 from .grips import (
     MELODY_STRING_CHOICES_FULL,
 )
+from .grouping import GROUPING_AUTO
 from .harmony import (
     HARMONY_AUTO,
 )
@@ -977,6 +978,10 @@ def arrange_progression(
     # hand-built progression - which has no notated metre to state - keeps the
     # arithmetic it had.
     beat_type: int = 4,
+    # The metre's **grouping**: `3+3+3+3` or `3+2`, with `auto` deriving threes for a
+    # compound metre and one group per beat otherwise, so every simple metre is
+    # unchanged. See `grouping.py`.
+    grouping: str = GROUPING_AUTO,
     # The progression indexes whose melody note articulates, for the §9.2
     # reharmonise rule on the comping route (§9.3 step C). `None` means every slot
     # is an onset - the correct answer for a hand-built progression with no
@@ -1055,7 +1060,9 @@ def arrange_progression(
     `beat_type` is the metre's other half: `beats_per_bar` says which beats exist,
     `beat_type` how long one lasts. The walking bass is the one rule that reads it -
     a slot's `duration` is in whole notes, and a whole note is `beat_type` beats -
-    so a head passes both. Every other caller may leave it at 4.
+    so a head passes both. Every other caller may leave it at 4. `grouping` is the
+    metre's third fact - which units are felt as one beat; `auto` derives threes for a
+    compound metre and one per beat otherwise. See `grouping.py`.
 
     A `timings` list shorter than `progression` is not an error: the unlocated
     trailing steps are simply treated as principal notes, which is the same
@@ -1113,6 +1120,7 @@ def arrange_progression(
         grid=grid,
         beats_per_bar=beats_per_bar,
         beat_type=beat_type,
+        grouping=grouping,
         melody_onsets=melody_onsets,
         timings=timings,
     )
@@ -1128,6 +1136,7 @@ def arrange_progression(
     grid = _k.grid
     beats_per_bar = _k.beats_per_bar
     beat_type = _k.beat_type
+    resolved_grouping = _k.grouping
     melody_onsets = _k.melody_onsets
     timings = _k.timings
     bass_pcs = _k.bass_pcs
@@ -1156,6 +1165,7 @@ def arrange_progression(
         grid=grid,
         beats_per_bar=beats_per_bar,
         beat_type=beat_type,
+        grouping=resolved_grouping,
         timings=timings,
     )
     # Unpacked into the names the loop below has always used, so the extraction
@@ -1187,6 +1197,7 @@ def arrange_progression(
         harmony_family=harmony_family,
         grid_pattern=grid_pattern,
         beats_per_bar=beats_per_bar,
+        grouping=resolved_grouping,
         fret_min=fret_min,
         fret_max=fret_max,
         non_chord_tone=non_chord_tone,

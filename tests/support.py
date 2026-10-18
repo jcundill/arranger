@@ -31,7 +31,7 @@ from __future__ import annotations
 import os
 import tempfile
 import zipfile
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from musthe import Note
 
@@ -532,7 +532,7 @@ def nearest_reach_for_note(
 SWEEP_HEADS: List[str] = [
     "synthetic_cut_time.mxl",  # 2/2 cut time, ties over barlines, a one-beat pickup rest
     "synthetic_common_8.musicxml",  # 4/4 common time, a melody-less last bar
-    "synthetic_waltz.musicxml",  # 3/4 - the only odd beat_type in the corpus
+    "synthetic_waltz.musicxml",  # 3/4 - the only simple triple in the sweep
 ]
 
 #: The one committed head with chords and no melody at all, for the chords-only route.
@@ -719,12 +719,20 @@ def a_shape_on(strings):
 #   synthetic_pickup_cut.musicxml 2/2, an incomplete first bar with `light-light`
 #   synthetic_pickup_common.musicxml 4/4, the same shape without the bar line
 #   synthetic_chords_only.musicxml four bars, six <harmony> symbols, no pitched notes
+#   synthetic_five_four.musicxml 5/4, a `3+2` direction
+#   synthetic_seven_four.musicxml 7/4, eighths beamed 2+2+3
+#   synthetic_twelve_eight.musicxml 12/8, eighths beamed 4+4+4
 #   Trouble_in_Mind_Blues.musicxml a 4/4 blues with ties across barlines, the case
 #                                `TestAHeldNoteIsOneNoteAcrossABarline` pins
 COMMON_8 = os.path.join(DATA, "synthetic_common_8.musicxml")
 RAINY_DAY = os.path.join(DATA, "synthetic_repeat_slash.musicxml")
 TROUBLE_IN_MIND = os.path.join(DATA, "Trouble_in_Mind_Blues.musicxml")
 WALTZ = os.path.join(DATA, "synthetic_waltz.musicxml")
+# The grouped metres: 5/4 states `3+2` in a direction, 7/4 states 2+2+3 by its
+# beaming, and 12/8 states 4+4+4 by its beaming rather than the automatic threes.
+FIVE_FOUR = os.path.join(DATA, "synthetic_five_four.musicxml")
+SEVEN_FOUR = os.path.join(DATA, "synthetic_seven_four.musicxml")
+TWELVE_EIGHT = os.path.join(DATA, "synthetic_twelve_eight.musicxml")
 TENOR_MADNESS = os.path.join(DATA, "synthetic_tab_export.musicxml")
 I_WAS_DOING_ALL_RIGHT = os.path.join(DATA, "synthetic_triplets.mxl")
 # An **incomplete first bar**: bar 1 is a single quarter note in 2/2, closed by the
@@ -763,21 +771,61 @@ def score(
     test can state a transposing instrument: a guitar notated an octave above its
     sound, or a Bb horn a tone above it.
     """
+    return score_bars(
+        [measures],
+        divisions=divisions,
+        beats=beats,
+        beat_type=beat_type,
+        part_id=part_id,
+        fifths=fifths,
+        mode=mode,
+        transpose=transpose,
+    )
+
+
+def score_bars(
+    bars: Sequence[str],
+    divisions: int = 4,
+    beats: int = 4,
+    beat_type: int = 4,
+    part_id: str = "P1",
+    fifths: Optional[int] = None,
+    mode: str = "",
+    transpose: str = "",
+) -> str:
+    """A score of several measures, one per entry in `bars`.
+
+    The metre and the attributes are stated once, on the first bar, because that is
+    what an exporter writes and what the importer's first-measure path expects. A
+    one-bar score is `score`, which is this function with a single entry - the odd
+    metres need two bars to show that a metre is not a one-bar accident.
+    """
     key = "" if fifths is None else f"<key><fifths>{fifths}</fifths>{mode}</key>"
+    measures = []
+    for index, contents in enumerate(bars):
+        attributes = ""
+        if index == 0:
+            attributes = (
+                "      <attributes>\n"
+                f"        <divisions>{divisions}</divisions>\n"
+                f"        {key}\n"
+                f"        <time><beats>{beats}</beats><beat-type>{beat_type}</beat-type></time>\n"
+                f"        {transpose}\n"
+                "      </attributes>\n"
+            )
+        measures.append(
+            f'    <measure number="{index + 1}">\n'
+            f"{attributes}"
+            f"      {contents}\n"
+            "    </measure>"
+        )
+    body = "\n".join(measures)
     return f"""<?xml version="1.0" encoding="UTF-8"?>
 <score-partwise version="3.1">
   <work><work-title>Test</work-title></work>
   <part-list><score-part id="{part_id}"><part-name>Voice</part-name></score-part></part-list>
   <part id="{part_id}">
-    <measure number="1">
-      <attributes>
-        <divisions>{divisions}</divisions>
-        {key}
-        <time><beats>{beats}</beats><beat-type>{beat_type}</beat-type></time>
-        {transpose}
-      </attributes>
-      {measures}
-    </measure>
+{body}
   </part>
 </score-partwise>
 """
@@ -812,7 +860,7 @@ def degree(value: int, alter: int = 0, kind_type: str = "alter") -> str:
 
 def note(step: str, octave: int = 4, duration: int = 4, alter: Optional[int] = None,
          chord: bool = False, tie: str = "", tuplet: bool = False,
-         lyric: Optional[str] = None) -> str:
+         lyric: Optional[str] = None, beam: str = "") -> str:
     """One `<note>` element.
 
     ``lyric`` states a single syllable. It is here for the importer's lyric test,
@@ -830,8 +878,28 @@ def note(step: str, octave: int = 4, duration: int = 4, alter: Optional[int] = N
         + (f"<tie type=\"{tie}\"/>" if tie else "")
         + ("<time-modification><actual-notes>3</actual-notes>"
            "<normal-notes>2</normal-notes></time-modification>" if tuplet else "")
+        + (f'<beam number="1">{beam}</beam>' if beam else "")
         + (f"<lyric><text>{lyric}</text></lyric>" if lyric is not None else "")
         + "</note>"
+    )
+
+
+def words(text: str) -> str:
+    """A direction carrying a ``<words>`` mark, as a lead sheet writes ``3+2``."""
+    return (
+        "<direction><direction-type><words>"
+        + text
+        + "</words></direction-type></direction>"
+    )
+
+
+def metronome(unit: str = "quarter", *, dotted: bool = False) -> str:
+    """A metronome direction naming a pulse, with an optional dot."""
+    dot = "<beat-unit-dot/>" if dotted else ""
+    return (
+        "<direction><direction-type><metronome>"
+        f"<beat-unit>{unit}</beat-unit>{dot}<per-minute>60</per-minute>"
+        "</metronome></direction-type></direction>"
     )
 
 

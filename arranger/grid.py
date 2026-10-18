@@ -6,8 +6,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
+from .grouping import group_offbeat, group_starts
 from .parts import PART_BASS, PART_CHORD, PART_MELODY
 
 GRID_EVERY_NOTE = "every_note"
@@ -113,31 +114,76 @@ def parse_grid(argument: str) -> str:
     return ",".join(f"{part}:{rows[part]}" for part in sorted(rows))
 
 
-def grid_positions(grid: str, beats_per_bar: int) -> Tuple[Tuple[int, Tuple[float, ...]], ...]:
+def grid_positions(
+    grid: str,
+    beats_per_bar: int,
+    grouping: Optional[Sequence[int]] = None,
+) -> Tuple[Tuple[int, Tuple[float, ...]], ...]:
+    """The positions `grid` names, as `(felt beat, positions)` rows.
+
+    The first number is a **felt beat** - a group index, not a denominator unit - and
+    the positions are absolute beat numbers. With no grouping every unit is its own
+    group, which is the table this library shipped with; a 12/8 bar's `freddie` is
+    four stabs on beats 1, 4, 7 and 10 rather than twelve on every eighth.
+
+    `SUB` is the group's **offbeat** (`group_offbeat`): half a beat for a one-beat
+    group, the last unit for a longer one. That is what keeps `charleston`, `joe_pass`
+    and `final_and` musically right in a compound metre without changing a single
+    position in a simple one.
+    """
     pattern = grid_chord_pattern(grid)
     row = GRID_PATTERNS.get(pattern)
     if row is None:
         return ()
+    lengths = tuple(grouping) if grouping else (1,) * beats_per_bar
+    starts = group_starts(beats_per_bar, lengths)
+    return _group_positions(lengths, starts, row)
+
+
+def _group_indices(group: int, count: int) -> Tuple[int, ...]:
+    """The zero-based group indices one table row names."""
+    if group == ALL:
+        return tuple(range(count))
+    if group == LAST:
+        return (count - 1,)
+    # A literal group the metre does not have is dropped rather than clamped:
+    # clamping would silently turn `charleston` asked of a 2/2 bar into a
+    # *different* figure that happens to fit.
+    return (group - 1,) if 1 <= group <= count else ()
+
+
+def _position_offset(ticks: int, length: int) -> float:
+    """A row's second number as beats from its group's start."""
+    return group_offbeat(length) if ticks == SUB else ticks / TICKS_PER_BEAT
+
+
+def _group_positions(
+    lengths: Tuple[int, ...],
+    starts: Tuple[float, ...],
+    row: "GridPattern",
+) -> Tuple[Tuple[int, Tuple[float, ...]], ...]:
+    """One pattern's rows, expressed on the felt-beat grid.
+
+    Split from `grid_positions` so the rules for `ALL`, `LAST`, a literal group and
+    `SUB` are three short functions rather than a branchy loop inside a public one.
+    """
     beats: Dict[int, List[float]] = {}
-    for beat, ticks in row.positions:
-        if beat == ALL:
-            numbers: Tuple[int, ...] = tuple(range(1, beats_per_bar + 1))
-        elif beat == LAST:
-            numbers = (beats_per_bar,)
-        else:
-            # A literal beat the metre does not have is dropped rather than clamped:
-            # clamping would silently turn `charleston` asked of a 2/2 bar into a
-            # *different* figure that happens to fit.
-            numbers = (beat,) if 1 <= beat <= beats_per_bar else ()
-        for number in numbers:
-            beats.setdefault(number, []).append(number + ticks / TICKS_PER_BEAT)
+    for group, ticks in row.positions:
+        for index in _group_indices(group, len(lengths)):
+            offset = _position_offset(ticks, lengths[index])
+            beats.setdefault(index + 1, []).append(starts[index] + offset)
     return tuple(
         (number, tuple(sorted(set(positions))))
         for number, positions in sorted(beats.items())
     )
 
 
-def on_grid(beat: Optional[float], grid: str, beats_per_bar: int) -> bool:
+def on_grid(
+    beat: Optional[float],
+    grid: str,
+    beats_per_bar: int,
+    grouping: Optional[Sequence[int]] = None,
+) -> bool:
     if beat is None or grid_defers_to_melody(grid):
         return True
     if grid_chord_pattern(grid) in GRID_TIMELINE_PATTERNS:
@@ -145,7 +191,7 @@ def on_grid(beat: Optional[float], grid: str, beats_per_bar: int) -> bool:
     target = float(beat)
     return any(
         abs(target - position) <= BEAT_EPSILON
-        for _number, positions in grid_positions(grid, beats_per_bar)
+        for _number, positions in grid_positions(grid, beats_per_bar, grouping)
         for position in positions
     )
 
@@ -169,30 +215,39 @@ def beat_offset(bar: int, beat: float, beats_per_bar: int) -> float:
     return (bar - 1) * beats_per_bar + (beat - 1.0)
 
 
-def grid_allowed(grid: str, beats_per_bar: int) -> Tuple[bool, str]:
+def grid_allowed(
+    grid: str,
+    beats_per_bar: int,
+    grouping: Optional[Sequence[int]] = None,
+) -> Tuple[bool, str]:
     pattern = grid_chord_pattern(grid)
     if grid_defers_to_melody(grid) or pattern in GRID_TIMELINE_PATTERNS:
         return True, ""
-    if grid_positions(grid, beats_per_bar):
+    if grid_positions(grid, beats_per_bar, grouping):
         return True, ""
     row = GRID_PATTERNS[pattern]
     if row.bar_relative:
         return False, (
-            f"grid=chord:{pattern} places no chord in a {beats_per_bar}-beat bar, and "
-            f"it is a bar-relative pattern, which should resolve in any metre - so "
-            f"this is a defect in the pattern rather than a mismatch with the metre"
+            f"grid=chord:{pattern} places no chord in a bar of {beats_per_bar} "
+            f"beats, and it is a bar-relative pattern, which should resolve in any "
+            f"metre - so this is a defect in the pattern rather than a mismatch with "
+            f"the metre"
         )
     return False, (
         f"grid=chord:{pattern} is a metre-relative figure and places no chord in "
-        f"{beats_per_bar}/4: it is right, or it is a figure of another metre asked "
-        f"of this one. Try a bar-relative pattern such as 'freddie' or "
+        f"a bar of {beats_per_bar} beats: it is right, or it is a figure of another "
+        f"metre asked of this one. Try a bar-relative pattern such as 'freddie' or "
         f"'final_and', or grid=melody:every_note"
     )
 
 
-def resolve_grid(grid: str, beats_per_bar: int) -> str:
+def resolve_grid(
+    grid: str,
+    beats_per_bar: int,
+    grouping: Optional[Sequence[int]] = None,
+) -> str:
     parsed = parse_grid(grid)
-    allowed, reason = grid_allowed(parsed, beats_per_bar)
+    allowed, reason = grid_allowed(parsed, beats_per_bar, grouping)
     if not allowed:
         raise ValueError(reason)
     return parsed

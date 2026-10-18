@@ -91,6 +91,7 @@ class SlotInputs:
     harmony_family: str
     grid_pattern: str
     beats_per_bar: int
+    grouping: Tuple[int, ...]
     fret_min: int
     fret_max: int
     non_chord_tone: str
@@ -132,7 +133,7 @@ def _slot_context(
         beat=slot.beat,
         duration=slot.duration,
         role=role,
-        weight=metric_weight(slot.bar, slot.beat, inputs.beats_per_bar),
+        weight=metric_weight(slot.bar, slot.beat, inputs.beats_per_bar, inputs.grouping),
     )
 
 
@@ -156,7 +157,7 @@ def _tune_silent_plan(
     rather than being refused, which is why those fall through in `slot_state`.
     """
     bar, beat = slot.bar, slot.beat
-    weight = metric_weight(bar, beat, inputs.beats_per_bar)
+    weight = metric_weight(bar, beat, inputs.beats_per_bar, inputs.grouping)
     # The role the slot would have had, read without committing to `car`: a refused
     # slot must not move the target or the tracked pitch that a later slot is judged
     # against, so the two `car` writes stay in `_carried_role`.
@@ -303,7 +304,7 @@ def slot_state(
     # onto the step, because a caller that supplied the rhythm wants to read it
     # back off the result rather than have to correlate two lists.
     bar, beat = slot.bar, slot.beat
-    weight = metric_weight(bar, beat, inputs.beats_per_bar)
+    weight = metric_weight(bar, beat, inputs.beats_per_bar, inputs.grouping)
     role = _carried_role(car, weight, name, melody_note, inputs)
     slot_grips = _texture_grips(role, slot, inputs)
 

@@ -8,13 +8,13 @@ Takes `(melody note, chord quality, chord name)` triples, builds voicings in sev
 - **Melody pinned to soprano**, on high E, B or G string — low melody still harmonised in position.
 - **Playable or absent.** Frets 0–18, span ≤5 (4 for duos), real string set, ≤4 fingers, no fifth fret from a held shape. Neck window is *preference, not filter* — losing a chord of the tune beats a fret out of position.
 - **Non-chord melody notes**: extension, Barry Harris 6/dim7 substitution, or chord held under a passing tone ([non-chord melody notes](#non-chord-melody-notes)).
-- **Five orthogonal axes**: how thick the chord part is, who plays the bottom, which parts the guitar takes, which degrees a non-singing part states, when each part sounds ([the five axes](#the-five-axes)).
+- **Six orthogonal axes**: how thick the chord part is, who plays the bottom, which parts the guitar takes, which degrees a non-singing part states, when each part sounds, and how a compound metre is felt ([the six axes](#the-six-axes)).
 - **Heads from real sources** — MusicXML score, read as harmony *timeline*.
 - **Dependency-light**: Python 3.11+ and [musthe](https://pypi.org/project/musthe/) only. MusicXML head *reading* needs no extra; MusicXML export and Guitar Pro export each behind own optional extra.
 
 > The **distribution** is `jazz-arranger` (PyPI name `arranger` taken by unrelated project). **Import** name is `arranger`.
 
-Why lives in [`docs/`](docs/): [engine.md](docs/engine.md) (the selector, the five axes, the cost tuple), [renderers.md](docs/renderers.md) (tab, MusicXML, GP5), and [open-issues.md](docs/open-issues.md) (the open bugs, each with its measurement). The plan documents that built this — parts, comping styles, generated grips, fingering, `voices=` — are in [`docs/history/`](docs/history/).
+Why lives in [`docs/`](docs/): [engine.md](docs/engine.md) (the selector, the six axes, the cost tuple), [renderers.md](docs/renderers.md) (tab, MusicXML, GP5), and [open-issues.md](docs/open-issues.md) (the open bugs, each with its measurement). The plan documents that built this — parts, comping styles, generated grips, fingering, `voices=` — are in [`docs/history/`](docs/history/).
 
 ## Installation
 
@@ -121,7 +121,7 @@ python -m arranger head tests/data/synthetic_triplets.mxl --bars 1-3 --html head
 | `--bars-per-line` | `4` | with `--tab staff`: bars per staff line |
 | `--html` / `--musicxml` / `--gp5` | off | also write head to file — see [rendering](#rendering) |
 
-Five of those flags are the library's own axes — `--texture`, `--bass-style`, `--parts`, `--harmony` and `--grid` — described once in [the five axes](#the-five-axes).
+Five of those flags expose the library's axes — `--texture`, `--bass-style`, `--parts`, `--harmony` and `--grid` — described once in [the six axes](#the-six-axes). The sixth, `grouping`, is read from the score rather than passed on the command line: a lead sheet already states it in a `3+2` direction, in its beaming, or in a dotted metronome mark.
 
 **Every written note sounds.** No reduction: `arranger head` plays tune as written, one step per note, each on written beat. Where *chords* fall is separate — the `grid=` axis — a note never quantised onto grid and dropped for sharing a slot.
 
@@ -290,9 +290,9 @@ Every run on committed score in `tests/data/`, each one flag changed. Output sho
 | tune on its own | `--parts melody` | [who plays which part](#who-plays-which-part-bass-and-parts) |
 | reduced chord where nothing else fits | `--fallback diminished` | [non-chord melody notes](#non-chord-melody-notes) |
 
-## The five axes
+## The six axes
 
-`texture=`, `bass=`, `parts=`, `harmony=` and `grid=` answer five different questions, **orthogonal** — a band setting is a combination, not a mode: `--bass-style none --parts chord` is a bassist on the root, a horn on the melody, guitar comping between them.
+`texture=`, `bass=`, `parts=`, `harmony=`, `grid=` and `grouping=` answer six different questions, **orthogonal** — a band setting is a combination, not a mode: `--bass-style none --parts chord` is a bassist on the root, a horn on the melody, guitar comping between them.
 
 | axis | the question it answers | values |
 |---|---|---|
@@ -301,8 +301,11 @@ Every run on committed score in `tests/data/`, each one flag changed. Output sho
 | `parts=` | which of melody, bass and chord the guitar takes | any subset of `melody`, `bass`, `chord` |
 | `harmony=` | which **degrees** a part states when not singing | `full`, `guide`, `shell_root`, `root` |
 | `grid=` | when each part sounds | `PART:PATTERN` rows — `melody:every_note,chord:freddie` |
+| `grouping=` | which denominator units are felt as one beat | the score's `N+N+…` (a direction or its beaming), or `auto`; the library takes `grouping=` for a hand-built progression |
 
-**Each inert until asked.** `texture` defaults `uniform`, `bass` follows the parts selection, `parts` `auto` (all three — the historical chord-melody), `harmony` `auto` (= `guide`), `grid` `melody:every_note` — all what library already did. Nothing moves until named.
+**Each inert until asked.** `texture` defaults `uniform`, `bass` follows the parts selection, `parts` `auto` (all three — the historical chord-melody), `harmony` `auto` (= `guide`), `grid` `melody:every_note`, `grouping` `auto` (the score's statement, or threes for a compound metre and one per beat otherwise) — all what the library already did. Nothing moves until named.
+
+`grouping` is the metre's **third fact**. A count says how many denominator units a bar has and the denominator how long one lasts, but neither says that 12/8 is felt as four dotted-quarter beats rather than twelve eighths. **The score states it**, and the importer reads it in this order: an `N+N` direction (a 5/4 marked `3+2`), the primary beaming (a 7/4 beamed 2+2+3, a 12/8 beamed 4+4+4), then a metronome pulse (a dotted quarter in 12/8). `auto` falls back to the metre's convention — threes for 6/8, 9/8 and 12/8; one per beat otherwise — and a conventional simple metre ignores its beaming, because a notation program's beam pairs restate the beat rather than group it. `grouping=` remains on the library for a progression built without a file. It moves the `targets` beats, the walking bass and the named grid figures together — in 12/8 a `freddie` comp is four stabs, not twelve.
 
 Two need a caveat. `harmony=full` is whole-chord chord-melody, which ordinary grip route voices; comping route has no implementation — asking there answered with `guide` today ([open issue 3](docs/open-issues.md)). And `texture=` changes which shapes are on the table, not their cost: the arity is a **ceiling** the palette is built to, so "play fewer notes here" does not compete against "stay in position" — it changes what may be chosen at all, not a term in the cost tuple.
 
@@ -394,7 +397,7 @@ Step with unplayable bass note keeps upper voicing and says so rather than writi
 | `guide` (default) | 3rd and 7th — notes that say major or minor | two notes |
 | `shell_root` | both guide tones **and** root or 5th underneath | three notes |
 | `root` | root, or 5th where root unreachable — bass note alone | `--parts bass` alone |
-| `full` | whole chord | ordinary chord-melody route — see [the five axes](#the-five-axes) |
+| `full` | whole chord | ordinary chord-melody route — see [the six axes](#the-six-axes) |
 
 `--harmony shell_root --parts bass,chord` = horn on tune, guitar stating quality *and* root underneath. A degree order named for a part the selection leaves out is **refused outright** (`ValueError`), not quietly thinned — `--harmony guide --parts melody` asks degrees of a part the guitar is not playing. Where guitar *is* singing, `--harmony` does nothing — the shell a chord-melody is voiced with is a **grip** the selector picks, not a degree family, and the melody stays pinned to the top string.
 

@@ -42,6 +42,7 @@ from .grips import (
     MELODY_STRING_CHOICES,
     MELODY_STRING_CHOICES_FULL,
 )
+from .grouping import GROUPING_AUTO
 from .harmony import HARMONY_AUTO
 from .movement import (
     StepPreparation,
@@ -341,6 +342,10 @@ class VoiceLeadingEngine:
         # hand-built progression - which has no notated metre to state - keeps the
         # arithmetic it had.
         beat_type: int = 4,
+        # The metre's grouping: which denominator units are felt as one beat. `auto`
+        # derives threes for a compound metre and one per beat otherwise, so this is
+        # inert on every simple metre. See `grouping.py`.
+        grouping: str = GROUPING_AUTO,
         # The progression indexes whose melody note articulates, for the §9.2
         # reharmonise rule on the comping route (§9.3 step C). `None` means every slot
         # is an onset - the correct answer for a hand-built progression with no
@@ -364,6 +369,7 @@ class VoiceLeadingEngine:
             grid=grid,
             beats_per_bar=beats_per_bar,
             beat_type=beat_type,
+            grouping=grouping,
             melody_onsets=melody_onsets,
             options=options,
         )

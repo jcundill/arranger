@@ -65,6 +65,7 @@ flowchart TB
         bass_rules["bass_rules"]
         texture["texture"]
         harmony["harmony"]
+        grouping["grouping"]
         grid["grid"]
         parts["parts"]
         bass_merge --> bass
@@ -72,7 +73,9 @@ flowchart TB
         bass --> grid
         bass_rules --> texture
         texture --> parts
+        texture --> grouping
         harmony --> parts
+        grid --> grouping
         grid --> parts
     end
 

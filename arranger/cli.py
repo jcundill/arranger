@@ -132,9 +132,9 @@ HEAD_HELP = CommonHelp(
     mutes="with --tab staff, spell out the unsounded strings",
     tab="'staff' lays the head on one six-line staff, spaced on its real rhythm",
     texture=(
-        "'targets' states a full chord on beats 1 and 3 of the notated bar and "
-        "fills the notes between with a shell, a 3rd/6th or the melody alone; "
-        "'uniform' (the default) voices every note in full"
+        "'targets' states a full chord on the bar's first and third felt beats - "
+        "beats 1 and 3 of a simple metre - and fills the notes between with a shell, "
+        "a 3rd/6th or the melody alone; 'uniform' (the default) voices every note in full"
     ),
 )
 
@@ -222,7 +222,7 @@ def add_common_arguments(
             "note - and a row overrides one part: chord:every_note|freddie|joe_pass|"
             "final_and|charleston, bass:every_note|walk|anchors. So "
             "'melody:every_note,bass:walk' is a chord under the tune with the thumb "
-            "walking every beat, and 'bass:anchors' walks only where the harmony "
+            "walking every felt beat, and 'bass:anchors' walks only where the harmony "
             "changes. Positions are bar-relative, so final_and is the same musical "
             "idea in 2/2, 3/4 and 4/4. Where the guitar is singing, a note with no "
             "chord on it sounds alone; where it is comping, the guitar rests"

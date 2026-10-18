@@ -22,13 +22,14 @@ and `parts_have_melody` from `parts`.
 
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from .grip_tables import (
     GRIP_PREFERENCE,
     GRIP_STRING_SETS,
     RIGHT_HAND_STRINGS,
 )
+from .grouping import group_starts
 from .parts import PART_MELODY, parts_have_melody
 from .tuning import ROLE_FILL, ROLE_TARGET
 
@@ -48,6 +49,10 @@ TEXTURE_ARITY: Dict[str, Optional[int]] = {
     "chord3": 3,
 }
 
+#: The felt beats a target lands on, as **group indices**, not beat numbers. With
+#: `grouping` of one beat per group - every simple metre - this is beats 1 and 3, the
+#: rule the library shipped with. In a grouped metre it is the first and third felt
+#: beats: beats 1 and 7 of 12/8, and the downbeat alone of 6/8 or 2/2.
 TARGET_BEATS: Tuple[int, ...] = (1, 3)
 
 FILL_THINNING = 1
@@ -207,9 +212,12 @@ BEAT_EPSILON = 1e-6
 
 
 def metric_weight(
-    bar: Optional[int], beat: Optional[float], beats_per_bar: int = 4
+    bar: Optional[int],
+    beat: Optional[float],
+    beats_per_bar: int = 4,
+    grouping: Optional[Sequence[int]] = None,
 ) -> int:
-    """How metrically strong a slot is: 2 on beat 1, 1 on beat 3, 0 on any other beat.
+    """How metrically strong a slot is: 2 on the first felt beat, 1 on the third.
 
     Returns **-1 when there is no timing at all** (`bar` or `beat` is None), which is
     the load-bearing part. A caller that does not know where its notes fall has not
@@ -218,10 +226,11 @@ def metric_weight(
     -1 is what keeps the default behaviour byte-identical.
 
     `beats_per_bar` is honoured rather than assumed, because a count without a
-    denominator is not a metre. `TARGET_BEATS` names *beats*, so in 2/2 (two notated
-    beats) beat 3 does not exist and only the downbeat is a target; in 3/4 beats 1
-    and 3 are targets exactly as they are in 4/4. `headxml`'s onset conversion and
-    `bass._melody_timeline` honour the same denominator.
+    denominator is not a metre. `grouping` is the third fact: `TARGET_BEATS` indexes
+    **felt beats**, so a 12/8 bar's targets are beats 1 and 7 (its first and third
+    groups of three eighths) rather than 1 and 3. With no grouping - every simple
+    metre - each denominator unit is its own group and the rule is beats 1 and 3. In
+    2/2 or 6/8 the third felt beat does not exist, so only the downbeat is a target.
 
     A beat is compared with `BEAT_EPSILON` because a notated beat is a float and a
     tune rarely lands only on the integers: the middle note of a triplet inside beat 1
@@ -230,10 +239,11 @@ def metric_weight(
     """
     if bar is None or beat is None:
         return -1
+    starts = group_starts(beats_per_bar, grouping)
     for index, target in enumerate(TARGET_BEATS):
-        if target > beats_per_bar:
+        if target > len(starts):
             break
-        if abs(float(beat) - target) <= BEAT_EPSILON:
+        if abs(float(beat) - starts[target - 1]) <= BEAT_EPSILON:
             return 2 - index
     return 0
 

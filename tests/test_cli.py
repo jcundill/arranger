@@ -5,12 +5,12 @@ silently missed in another - but a copy can be pasted, and so can a function edi
 place and left alone in another. So these tests assert the property directly rather than
 trusting the structure:
 
-- **the flag count** (20, counted rather than derived), a tripwire for a flag appearing or
+- **the flag count** (19, counted rather than derived), a tripwire for a flag appearing or
   vanishing unnoticed;
-- **every flag reaches the parser** - the twenty are named, so a flag registered without a
-  decision behind it fails;
+- **every flag reaches the parser** - the nineteen are named, so a flag registered without
+  a decision behind it fails;
 - **the help text is not one shared string**: eleven flags take their prose from
-  `CommonHelp` and nine are written inline, and every declared field reaches its flag with
+  `CommonHelp` and eight are written inline, and every declared field reaches its flag with
   that text, which catches a field added to the dataclass and never passed to
   `add_argument`.
 
@@ -120,18 +120,13 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         parser there is nothing to disagree with, so what the count is for changes:
         it is now a tripwire for a flag appearing or vanishing unnoticed.
 
-        **19, and it was 20 before `--grips` was withdrawn.** The flag named a grip
-        family to pin, and a family is the chord part's *internal search space* rather
-        than a choice - `parts=`, `texture=` and the neck window decide it - so the
-        option was deleted rather than deprecated (`docs/history/parts.md` §6 item 6). The
-        count moved by exactly one, which is the tripwire working: the earlier step
-        that removed `--skeleton` and `--pick` left it at 20, because those were
-        `add_common_arguments` parameters gated on a vocabulary the one real caller
-        never passed, so no flag a user could type was ever removed by them. See
-        `test_the_reduction_flags_are_gone`.
-
-        `_actions` already drops `help`, so this is the length of the mapping and
-        not the parser's action count.
+        **19, and the grouping flag that briefly made it 20 is gone.** The metre's
+        third fact - which denominator units are felt as one beat - is the score's
+        own: the importer reads an `N+N` direction, the beaming or a metronome pulse,
+        and the library keeps `grouping=` for a hand-built progression. A flag could
+        only override the file, which is the wrong direction for a fact the file
+        states. `--grips` was the last flag removed before it, and it went with the
+        grip-family axis.
         """
         flags = self.parser()
         self.assertEqual(len(flags), 19, "the flag count moved; remeasure")
@@ -187,7 +182,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         self.assertEqual(parsed.file, "head.musicxml")
 
     def test_the_help_text_is_not_one_shared_string(self):
-        """Eleven flags take their prose from `CommonHelp`, and nine are written inline.
+        """Eleven flags take their prose from `CommonHelp`, and eight are written inline.
 
         Measured before `arranger/cli.py` existed: of the seventeen shared flags,
         all seventeen agreed on every field of *meaning*, and eleven disagreed on

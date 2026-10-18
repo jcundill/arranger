@@ -302,6 +302,74 @@ class TestPositionsAreBarRelative(unittest.TestCase):
                 )
 
 
+class TestTheGroupingDecidesTheFeltBeats(unittest.TestCase):
+    """A grouped bar's figures are counted in felt beats, not denominator units.
+
+    In 12/8 the felt beat is a dotted quarter, so `freddie` is four stabs rather than
+    twelve and `joe_pass` answers on each pulse's third eighth. The simple-metre table
+    is unchanged, which is what makes the axis inert by default.
+    """
+
+    def test_freddie_is_every_felt_beat(self):
+        self.assertEqual(
+            grid_positions(_chord(GRID_FREDDIE), 12, (3, 3, 3, 3)),
+            ((1, (1.0,)), (2, (4.0,)), (3, (7.0,)), (4, (10.0,))),
+        )
+
+    def test_joe_pass_is_each_groups_last_eighth(self):
+        self.assertEqual(
+            grid_positions(_chord(GRID_JOE_PASS), 12, (3, 3, 3, 3)),
+            ((1, (3.0,)), (2, (6.0,)), (3, (9.0,)), (4, (12.0,))),
+        )
+
+    def test_final_and_is_the_last_groups_offbeat(self):
+        self.assertEqual(
+            grid_positions(_chord(GRID_FINAL_AND), 12, (3, 3, 3, 3)),
+            ((4, (12.0,)),),
+        )
+
+    def test_charleston_answers_in_the_second_group(self):
+        """The downbeat, then the offbeat of group 2 - beat 6 in 12/8."""
+        self.assertEqual(
+            grid_positions(_chord(GRID_CHARLESTON), 12, (3, 3, 3, 3)),
+            ((1, (1.0,)), (2, (6.0,))),
+        )
+
+    def test_a_five_four_bar_named_three_plus_two(self):
+        grouping = (3, 2)
+        self.assertEqual(
+            grid_positions(_chord(GRID_FREDDIE), 5, grouping),
+            ((1, (1.0,)), (2, (4.0,))),
+        )
+        self.assertEqual(
+            grid_positions(_chord(GRID_JOE_PASS), 5, grouping),
+            ((1, (3.0,)), (2, (5.0,))),
+        )
+        self.assertEqual(
+            grid_positions(_chord(GRID_FINAL_AND), 5, grouping),
+            ((2, (5.0,)),),
+        )
+
+    def test_a_group_the_bar_does_not_have_is_dropped(self):
+        """3/8 is one group of three, so `charleston` has no second group to answer in."""
+        self.assertEqual(
+            grid_positions(_chord(GRID_CHARLESTON), 3, (3,)),
+            ((1, (1.0,)),),
+        )
+
+    def test_a_simple_metre_is_unchanged(self):
+        for pattern in (GRID_FREDDIE, GRID_JOE_PASS, GRID_FINAL_AND, GRID_CHARLESTON):
+            with self.subTest(pattern=pattern):
+                self.assertEqual(
+                    grid_positions(_chord(pattern), 4),
+                    grid_positions(_chord(pattern), 4, (1, 1, 1, 1)),
+                )
+
+    def test_on_grid_reads_the_felt_beats(self):
+        self.assertTrue(on_grid(7.0, _chord(GRID_FREDDIE), 12, (3, 3, 3, 3)))
+        self.assertFalse(on_grid(2.0, _chord(GRID_FREDDIE), 12, (3, 3, 3, 3)))
+
+
 class TestTheDefaultIsInert(unittest.TestCase):
     """`every_note` is the default and is on everywhere, which is what "no change" means."""
 

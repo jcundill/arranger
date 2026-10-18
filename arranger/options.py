@@ -25,6 +25,7 @@ from .bass_rules import (
     BASS_STYLE_AUTO,
 )
 from .grid import GRID_DEFAULT
+from .grouping import GROUPING_AUTO
 from .harmony import HARMONY_AUTO
 from .parts import PARTS_AUTO
 from .tuning import MELODY_STRING_CHOICES_FULL, NECK_FRET_MAX, NECK_FRET_MIN
@@ -132,6 +133,15 @@ class ArrangeOptions:
     # and the denominator are equal (4/4, 2/2), and made every span a quarter short in a
     # 3/4 head. See `_melody_timeline`.
     beat_type: int = 4
+    # The metre's **grouping**: which denominator units the player feels as one
+    # beat, e.g. "3+3+3+3" for 12/8 or "3+2" for a 5/4 that leans on a dotted
+    # quarter. The default is the sentinel `GROUPING_AUTO`, which derives threes for
+    # a compound metre and one group per beat for a simple one - so the axis is
+    # inert on every metre this library shipped with. Neither the count nor the
+    # denominator can say this (12/8 and 12/4 have the same count and two different
+    # metres), and MusicXML does not state it, so it is a request rather than a
+    # parsed fact. See `grouping.py`.
+    grouping: str = GROUPING_AUTO
     # `Sequence`, not `List`, and that is load-bearing rather than stylistic: the
     # library and the corpus hold *different* timing types - `Tuple[int, float, ...]`
     # against `Tuple[Optional[int], ...]` placeholders for slots it could not place.

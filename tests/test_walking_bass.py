@@ -169,6 +169,81 @@ class TestTheUnion(unittest.TestCase):
         """
 
 
+class TestTheWalkFollowsTheFeltBeats(unittest.TestCase):
+    """A grouped metre walks its **pulses**, not every denominator unit.
+
+    The union is unchanged: a held melody still sounds one soprano note over several
+    thumb notes. What moves is how many notes the metre asks for - four in 12/8, not
+    twelve - and where the approach falls.
+    """
+
+    @staticmethod
+    def walked(
+        beats_per_bar: int,
+        beat_type: int,
+        grouping: Optional[str] = None,
+    ) -> List[arranger.ArrangementStep]:
+        timings: List[Tuple[int, float, Optional[float]]] = [(0, 1.0, None)]
+        return VoiceLeadingEngine.arrange_progression(
+            [("F5", "maj7", "Fmaj7")],
+            timings=timings,
+            texture="targets",
+            bass=BASS_STYLE_WALK,
+            grid="melody:every_note,bass:walk",
+            beats_per_bar=beats_per_bar,
+            beat_type=beat_type,
+            grouping=grouping if grouping is not None else "auto",
+        )
+
+    def test_a_twelve_eight_bar_walks_its_four_pulses(self):
+        steps = self.walked(12, 8)
+        self.assertEqual([step.beat for step in steps], [1.0, 4.0, 7.0, 10.0])
+        self.assertEqual([step.bass is not None for step in steps], [True] * 4)
+        self.assertEqual([step.bass_only for step in steps], [False, True, True, True])
+
+    def test_a_nine_eight_bar_walks_three(self):
+        self.assertEqual(
+            [step.beat for step in self.walked(9, 8)], [1.0, 4.0, 7.0]
+        )
+
+    def test_a_six_eight_bar_walks_two(self):
+        self.assertEqual([step.beat for step in self.walked(6, 8)], [1.0, 4.0])
+
+    def test_a_simple_five_four_bar_still_walks_every_beat(self):
+        """`auto` does not guess a grouping for 5/4, so it stays five beats."""
+        self.assertEqual(
+            [step.beat for step in self.walked(5, 4)],
+            [1.0, 2.0, 3.0, 4.0, 5.0],
+        )
+
+    def test_a_five_four_bar_named_three_plus_two_walks_two(self):
+        self.assertEqual(
+            [step.beat for step in self.walked(5, 4, "3+2")], [1.0, 4.0]
+        )
+
+    def test_the_approach_lands_on_the_last_felt_beat(self):
+        """12/8's approach is on beat 10, not on the twelfth eighth."""
+        timings: List[Tuple[int, float, Optional[float]]] = [
+            (0, 1.0, None),
+            (1, 1.0, None),
+        ]
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("F5", "maj7", "Fmaj7"), ("F5", "maj7", "Fmaj7")],
+            timings=timings,
+            texture="targets",
+            bass=BASS_STYLE_WALK,
+            grid="melody:every_note,bass:walk",
+            beats_per_bar=12,
+            beat_type=8,
+        )
+        last_of_first = next(
+            step
+            for step in steps
+            if step.bar == 0 and abs((step.beat or 0.0) - 10.0) < 1e-9
+        )
+        self.assertEqual(last_of_first.bass_role, BASS_ROLE_APPROACH)
+
+
 class TestFillsAreTheMelodyAlone(unittest.TestCase):
     """Decision C, and the two ways it can be undone."""
 
