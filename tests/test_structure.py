@@ -112,10 +112,11 @@ BUDGETS: Dict[str, Budget] = {
     # parameter is the compatibility spelling, not a new decision.
     #
     # The metre axis added a word to three entry points and a line to the facade:
-    # `movement` and `steps` take `grouping=` beside `beat_type`, and `headxml`
-    # takes it beside `grid`. Those increases are the axis's own spelling, not a
-    # function that grew a second job; `head_cli`'s branches moved into
-    # `_print_metre_notes` rather than raising its budget.
+    # `movement` and `steps` take `time_signature=` in place of the count and
+    # denominator pair, and `headxml` takes `grouping=` beside `grid`. Those
+    # increases are the axis's own spelling, not a function that grew a second job;
+    # `head_cli`'s branches moved into `_print_metre_notes` rather than raising its
+    # budget.
     "headxml.py": Budget(17, 125, 12),
     "grip_chart.py": Budget(14, 84, 5),
     "tabgp.py": Budget(19, 151, 13),

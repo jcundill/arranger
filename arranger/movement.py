@@ -59,7 +59,7 @@ from .grip_tables import (
 from .grips import (
     MELODY_STRING_CHOICES_FULL,
 )
-from .grouping import GROUPING_AUTO
+from .grouping import COMMON_TIME, TimeSignature
 from .harmony import (
     HARMONY_AUTO,
 )
@@ -971,17 +971,11 @@ def arrange_progression(
     parts: str = PARTS_AUTO,
     harmony: str = HARMONY_AUTO,
     grid: str = GRID_DEFAULT,
-    beats_per_bar: int = 4,
-    # The metre's denominator, read by the walking bass's melody timeline alone: a
-    # slot's `duration` is in whole notes and one whole note is `beat_type` beats
-    # (`4 / beat_type` quarters to the beat). Defaulted rather than required, so a
-    # hand-built progression - which has no notated metre to state - keeps the
-    # arithmetic it had.
-    beat_type: int = 4,
-    # The metre's **grouping**: `3+3+3+3` or `3+2`, with `auto` deriving threes for a
-    # compound metre and one group per beat otherwise, so every simple metre is
-    # unchanged. See `grouping.py`.
-    grouping: str = GROUPING_AUTO,
+    # The metre as one value: the count, the denominator and the grouping, validated
+    # together when the signature is built. A hand-built progression that declares
+    # none gets `COMMON_TIME` (4/4), which is the metre every bare call had; a bar
+    # that is not common time says so here rather than by setting half a metre.
+    time_signature: TimeSignature = COMMON_TIME,
     # The progression indexes whose melody note articulates, for the §9.2
     # reharmonise rule on the comping route (§9.3 step C). `None` means every slot
     # is an onset - the correct answer for a hand-built progression with no
@@ -1051,18 +1045,19 @@ def arrange_progression(
 
     `texture="targets"` uses the timing to arrange the way the guide describes:
     a full four-note chord on beats 1 and 3 of the bar, and a shell, a 3rd/6th
-    interval or the melody alone in between. `beats_per_bar` is what the rule
+    interval or the melody alone in between. `time_signature` is what the rule
     reads to decide which beats exist, so a 3/4 or 2/2 head is not treated as
     4/4 (see TARGET_BEATS). The rule changes *which grips are offered*, never
     the cost tuple, so the selection order and the engine's determinism are
     untouched.
 
-    `beat_type` is the metre's other half: `beats_per_bar` says which beats exist,
-    `beat_type` how long one lasts. The walking bass is the one rule that reads it -
-    a slot's `duration` is in whole notes, and a whole note is `beat_type` beats -
-    so a head passes both. Every other caller may leave it at 4. `grouping` is the
-    metre's third fact - which units are felt as one beat; `auto` derives threes for a
-    compound metre and one per beat otherwise. See `grouping.py`.
+    The signature carries the metre's denominator and its felt grouping as well:
+    `beats_per_bar` says which beats exist, `beat_type` how long one lasts, and
+    `grouping` which units are felt as one beat. The walking bass reads the
+    denominator - a slot's `duration` is in whole notes, and a whole note is
+    `beat_type` beats - so a head passes the score's own signature. `auto` grouping
+    derives threes for a compound metre and one per beat otherwise. See
+    `grouping.py`.
 
     A `timings` list shorter than `progression` is not an error: the unlocated
     trailing steps are simply treated as principal notes, which is the same
@@ -1118,9 +1113,7 @@ def arrange_progression(
         parts=parts,
         harmony=harmony,
         grid=grid,
-        beats_per_bar=beats_per_bar,
-        beat_type=beat_type,
-        grouping=grouping,
+        time_signature=time_signature,
         melody_onsets=melody_onsets,
         timings=timings,
     )

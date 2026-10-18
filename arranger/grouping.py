@@ -1,17 +1,19 @@
 """The metre's third fact: which denominator units the player feels as one beat.
 
-`beats_per_bar` says how many denominator units a bar has, `beat_type` says how long
-one lasts, and `grouping` says how they are felt: 12/8 is four groups of three
-eighths, while 5/4 named `3+2` is two groups. `auto` derives the compound reading -
-threes for an eighth-or-finer denominator whose bar divides by three - and leaves a
-simple metre one group per beat, so it is inert on the metres this library shipped
-with.
+`TimeSignature` is the whole metre - the count, the denominator and the grouping -
+and it is what a hand-built arrangement declares. `beats_per_bar` says how many
+denominator units a bar has, `beat_type` says how long one lasts, and `grouping` says
+how they are felt: 12/8 is four groups of three eighths, while 5/4 named `3+2` is two
+groups. `auto` derives the compound reading - threes for an eighth-or-finer
+denominator whose bar divides by three - and leaves a simple metre one group per beat,
+so it is inert on the metres this library shipped with.
 
 No sibling imports: this module is metre arithmetic and pure predicates.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Optional, Sequence, Tuple, Union
 
 GROUPING_AUTO = "auto"
@@ -19,6 +21,59 @@ GROUPING_SEPARATOR = "+"
 
 #: A parsed grouping: the sentinel, or one group length per felt beat.
 ParsedGrouping = Union[str, Tuple[int, ...]]
+
+
+@dataclass(frozen=True)
+class TimeSignature:
+    """A metre: its count, its denominator and how its units are felt.
+
+    The one declaration a hand-built arrangement makes. `beats_per_bar` alone is
+    not a metre, because 12/8 and 12/4 share a count and are different bars, and
+    `grouping` is validated against the count at construction rather than later.
+
+    `grouping` may be the `auto` sentinel, a written spelling such as ``3+2``, or
+    the parsed tuple; a written grouping is canonicalised to its one spelling.
+    """
+
+    beats_per_bar: int
+    beat_type: int
+    grouping: ParsedGrouping = GROUPING_AUTO
+
+    def __post_init__(self) -> None:
+        if self.beats_per_bar < 1:
+            raise ValueError(
+                f"beats_per_bar must be at least 1, got {self.beats_per_bar!r}"
+            )
+        if self.beat_type < 1:
+            raise ValueError(
+                f"beat_type must be at least 1, got {self.beat_type!r}"
+            )
+        parsed = (
+            parse_grouping(self.grouping)
+            if isinstance(self.grouping, str)
+            else tuple(self.grouping)
+        )
+        # Resolving here is what makes construction the validation point: a
+        # grouping that does not partition this bar has no arrangement to reach.
+        resolve_grouping(parsed, self.beats_per_bar, self.beat_type)
+        if parsed != GROUPING_AUTO:
+            # `parse_grouping` has already turned every accepted spelling into a
+            # tuple; only the sentinel remains a string here.
+            assert isinstance(parsed, tuple)
+            object.__setattr__(self, "grouping", format_grouping(parsed))
+
+    @property
+    def resolved_grouping(self) -> Tuple[int, ...]:
+        """The felt beats, with `auto` derived from the metre."""
+        parsed = (
+            parse_grouping(self.grouping)
+            if isinstance(self.grouping, str)
+            else tuple(self.grouping)
+        )
+        return resolve_grouping(parsed, self.beats_per_bar, self.beat_type)
+
+    def __str__(self) -> str:
+        return f"{self.beats_per_bar}/{self.beat_type}"
 
 
 def format_grouping(grouping: Sequence[int]) -> str:
@@ -125,6 +180,10 @@ def resolve_grouping(
     if not allowed:
         raise ValueError(reason)
     return resolved
+
+
+#: The metre a hand-built arrangement has when it declares none.
+COMMON_TIME = TimeSignature(4, 4)
 
 
 def group_starts(

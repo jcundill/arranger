@@ -872,13 +872,29 @@ carrying four voices.
 
 A count says how many denominator units a bar has, the denominator says how long one
 lasts, and neither says how the player **feels** them. 12/8 is twelve eighths wide and
-four felt beats; 12/4 is twelve quarters wide and twelve felt beats. `grouping=` is that
+four felt beats; 12/4 is twelve quarters wide and twelve felt beats. `grouping` is that
 third fact. A loaded head takes it from the score, and `auto` falls back to the metre's
 convention: an eighth-or-finer denominator whose bar divides by three is grouped in
 threes (6/8, 9/8, 12/8 read as two, three and four beats), and every other metre is one
 group per unit. 5/8 and 7/8 are **not guessed** from their count; the score has to state
-them, and `grouping=3+2` or `2+2+3` is the library override for a progression built
-without a file.
+them.
+
+A hand-built progression declares the whole metre as one value:
+
+```python
+from arranger import TimeSignature
+
+steps = engine.arrange_progression(
+    progression,
+    time_signature=TimeSignature(5, 4, grouping="3+2"),
+)
+```
+
+`TimeSignature(beats_per_bar, beat_type, grouping)` validates the grouping against the
+bar when it is built, so a `3+2` on a 4/4 signature is refused before any voicing work.
+Omitting it means `COMMON_TIME` (`TimeSignature(4, 4)`), the metre every bare call had.
+The three facts are one field rather than three keywords so they cannot disagree:
+`beats_per_bar=12` alone is 12/4, not 12/8.
 
 The three metre-driven rules read the grouping and nothing else:
 
@@ -912,7 +928,8 @@ for "the score said nothing") and printed by the CLI, because "3+2 from a direct
 grouped by their count, and notation programs beam eighths in whatever pairs or fours fit
 the beat; reading that as a grouping would turn a half-bar beam in 4/4 into two felt
 beats. Compound and asymmetric metres are where beaming carries information the count
-cannot, so it is read there. A caller's explicit `grouping=` still overrides the score.
+cannot, so it is read there. A caller's explicit `TimeSignature(..., grouping=...)` still
+overrides the score's statement.
 
 `auto` is one group per beat on every metre the library shipped with, which is why the
 **pre-existing** committed corpus is byte-identical with the axis present (the grouped

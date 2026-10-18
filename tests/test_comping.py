@@ -22,6 +22,7 @@ from arranger import (
     PART_CHORD,
     PART_MELODY,
     ChordParser,
+    TimeSignature,
     VoiceLeadingEngine,
     format_progression,
     get_comping_voicings,
@@ -604,7 +605,7 @@ class TestCompingMelodyIndependence(unittest.TestCase):
             options=ArrangeOptions(
                 parts=parts,
                 grid=grid,
-                beats_per_bar=head.beats_per_bar,
+                time_signature=TimeSignature(head.beats_per_bar, head.beat_type),
                 non_chord_tone=non_chord_tone,
             ),
             onsets=onsets,

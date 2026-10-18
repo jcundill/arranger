@@ -123,10 +123,10 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         **19, and the grouping flag that briefly made it 20 is gone.** The metre's
         third fact - which denominator units are felt as one beat - is the score's
         own: the importer reads an `N+N` direction, the beaming or a metronome pulse,
-        and the library keeps `grouping=` for a hand-built progression. A flag could
-        only override the file, which is the wrong direction for a fact the file
-        states. `--grips` was the last flag removed before it, and it went with the
-        grip-family axis.
+        and a hand-built progression declares the whole metre as a `TimeSignature`. A
+        flag could only override the file, which is the wrong direction for a fact the
+        file states. `--grips` was the last flag removed before it, and it went with
+        the grip-family axis.
         """
         flags = self.parser()
         self.assertEqual(len(flags), 19, "the flag count moved; remeasure")

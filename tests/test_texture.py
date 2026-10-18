@@ -24,6 +24,7 @@ import arranger
 from arranger import (
     BASS_STRING_INDICES,
     BASS_STYLE_WALK,
+    COMMON_TIME,
     GRIP_MAX_SPAN,
     GRIP_PREFERENCE,
     GRIP_STRING_SETS,
@@ -942,7 +943,7 @@ class TestBackwardCompatibility(unittest.TestCase):
         """
         plain = VoiceLeadingEngine.arrange_progression(MINOR_CADENCE)
         explicit = VoiceLeadingEngine.arrange_progression(
-            MINOR_CADENCE, timings=None, texture="uniform", beats_per_bar=4
+            MINOR_CADENCE, timings=None, texture="uniform", time_signature=COMMON_TIME
         )
         self.assertEqual(
             [s.tab_line() for s in plain], [s.tab_line() for s in explicit]

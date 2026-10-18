@@ -10,8 +10,11 @@ from __future__ import annotations
 
 import unittest
 
+from arranger import BASS_STYLE_WALK, VoiceLeadingEngine
 from arranger.grouping import (
+    COMMON_TIME,
     GROUPING_AUTO,
+    TimeSignature,
     default_grouping,
     format_grouping,
     group_offbeat,
@@ -20,6 +23,7 @@ from arranger.grouping import (
     parse_grouping,
     resolve_grouping,
 )
+from arranger.options import ArrangeOptions
 
 
 class TestTheVocabulary(unittest.TestCase):
@@ -128,6 +132,64 @@ class TestTheFeltBeats(unittest.TestCase):
     def test_a_zero_length_group_is_refused(self):
         with self.assertRaises(ValueError):
             group_offbeat(0)
+
+
+class TestTimeSignature(unittest.TestCase):
+    """The one value a hand-built arrangement declares, and its validation."""
+
+    def test_common_time_is_four_four_and_resolves_to_four_beats(self):
+        self.assertEqual(COMMON_TIME, TimeSignature(4, 4))
+        self.assertEqual(COMMON_TIME.grouping, GROUPING_AUTO)
+        self.assertEqual(COMMON_TIME.resolved_grouping, (1, 1, 1, 1))
+        self.assertEqual(str(COMMON_TIME), "4/4")
+
+    def test_a_compound_metre_derives_its_groups_of_three(self):
+        self.assertEqual(TimeSignature(12, 8).resolved_grouping, (3, 3, 3, 3))
+        self.assertEqual(TimeSignature(5, 8).resolved_grouping, (1, 1, 1, 1, 1))
+
+    def test_a_written_grouping_is_canonicalised_and_must_fit_the_bar(self):
+        signature = TimeSignature(5, 4, " 3 + 2 ")
+        self.assertEqual(signature.grouping, "3+2")
+        self.assertEqual(signature.resolved_grouping, (3, 2))
+        with self.assertRaises(ValueError):
+            TimeSignature(4, 4, "3+2")
+
+    def test_the_count_and_the_denominator_are_both_required(self):
+        for beats, beat_type in ((0, 4), (4, 0), (-1, 4), (4, -1)):
+            with self.subTest(metre=f"{beats}/{beat_type}"):
+                with self.assertRaises(ValueError):
+                    TimeSignature(beats, beat_type)
+
+
+class TestTheHandBuiltMetre(unittest.TestCase):
+    """A hand-built progression declares one metre, and omitting it is 4/4."""
+
+    PROGRESSION = [("F5", "maj7", "Fmaj7")]
+
+    def test_omitting_the_signature_is_common_time(self):
+        """The default is a real declaration, not half of one."""
+        self.assertEqual(ArrangeOptions().time_signature, COMMON_TIME)
+        steps = VoiceLeadingEngine.arrange_progression(
+            self.PROGRESSION,
+            timings=[(0, 1.0, None)],
+            texture="targets",
+            bass=BASS_STYLE_WALK,
+            grid="melody:every_note,bass:walk",
+        )
+        self.assertEqual([step.beat for step in steps], [1.0, 2.0, 3.0, 4.0])
+
+    def test_a_seven_four_signature_moves_every_part_with_its_groups(self):
+        """2+2+3 is three felt beats, so the targets, the walk and `freddie` agree."""
+        steps = VoiceLeadingEngine.arrange_progression(
+            self.PROGRESSION,
+            timings=[(0, 1.0, None)],
+            texture="targets",
+            bass=BASS_STYLE_WALK,
+            grid="chord:freddie,bass:walk",
+            time_signature=TimeSignature(7, 4, "2+2+3"),
+        )
+        self.assertEqual([step.beat for step in steps], [1.0, 3.0, 5.0])
+        self.assertEqual([step.bass is not None for step in steps], [True] * 3)
 
 
 if __name__ == "__main__":  # pragma: no cover

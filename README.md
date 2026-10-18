@@ -292,7 +292,7 @@ Every run on committed score in `tests/data/`, each one flag changed. Output sho
 
 ## The six axes
 
-`texture=`, `bass=`, `parts=`, `harmony=`, `grid=` and `grouping=` answer six different questions, **orthogonal** — a band setting is a combination, not a mode: `--bass-style none --parts chord` is a bassist on the root, a horn on the melody, guitar comping between them.
+`texture=`, `bass=`, `parts=`, `harmony=`, `grid=` and the metre (`TimeSignature`) answer six different questions, **orthogonal** — a band setting is a combination, not a mode: `--bass-style none --parts chord` is a bassist on the root, a horn on the melody, guitar comping between them.
 
 | axis | the question it answers | values |
 |---|---|---|
@@ -301,11 +301,11 @@ Every run on committed score in `tests/data/`, each one flag changed. Output sho
 | `parts=` | which of melody, bass and chord the guitar takes | any subset of `melody`, `bass`, `chord` |
 | `harmony=` | which **degrees** a part states when not singing | `full`, `guide`, `shell_root`, `root` |
 | `grid=` | when each part sounds | `PART:PATTERN` rows — `melody:every_note,chord:freddie` |
-| `grouping=` | which denominator units are felt as one beat | the score's `N+N+…` (a direction or its beaming), or `auto`; the library takes `grouping=` for a hand-built progression |
+| `grouping` | which denominator units are felt as one beat | the score's `N+N+…` (a direction or its beaming), or `auto`; a hand-built progression states it in `TimeSignature` |
 
 **Each inert until asked.** `texture` defaults `uniform`, `bass` follows the parts selection, `parts` `auto` (all three — the historical chord-melody), `harmony` `auto` (= `guide`), `grid` `melody:every_note`, `grouping` `auto` (the score's statement, or threes for a compound metre and one per beat otherwise) — all what the library already did. Nothing moves until named.
 
-`grouping` is the metre's **third fact**. A count says how many denominator units a bar has and the denominator how long one lasts, but neither says that 12/8 is felt as four dotted-quarter beats rather than twelve eighths. **The score states it**, and the importer reads it in this order: an `N+N` direction (a 5/4 marked `3+2`), the primary beaming (a 7/4 beamed 2+2+3, a 12/8 beamed 4+4+4), then a metronome pulse (a dotted quarter in 12/8). `auto` falls back to the metre's convention — threes for 6/8, 9/8 and 12/8; one per beat otherwise — and a conventional simple metre ignores its beaming, because a notation program's beam pairs restate the beat rather than group it. `grouping=` remains on the library for a progression built without a file. It moves the `targets` beats, the walking bass and the named grid figures together — in 12/8 a `freddie` comp is four stabs, not twelve.
+`grouping` is the metre's **third fact**. A count says how many denominator units a bar has and the denominator how long one lasts, but neither says that 12/8 is felt as four dotted-quarter beats rather than twelve eighths. **The score states it**, and the importer reads it in this order: an `N+N` direction (a 5/4 marked `3+2`), the primary beaming (a 7/4 beamed 2+2+3, a 12/8 beamed 4+4+4), then a metronome pulse (a dotted quarter in 12/8). `auto` falls back to the metre's convention — threes for 6/8, 9/8 and 12/8; one per beat otherwise — and a conventional simple metre ignores its beaming, because a notation program's beam pairs restate the beat rather than group it. **A progression built without a file declares the metre as one `TimeSignature`**: `engine.arrange_progression(progression, time_signature=TimeSignature(5, 4, grouping="3+2"))`. Omitting it means common time, and the signature validates the grouping against the bar when it is built. It moves the `targets` beats, the walking bass and the named grid figures together — in 12/8 a `freddie` comp is four stabs, not twelve.
 
 Two need a caveat. `harmony=full` is whole-chord chord-melody, which ordinary grip route voices; comping route has no implementation — asking there answered with `guide` today ([open issue 3](docs/open-issues.md)). And `texture=` changes which shapes are on the table, not their cost: the arity is a **ceiling** the palette is built to, so "play fewer notes here" does not compete against "stay in position" — it changes what may be chosen at all, not a term in the cost tuple.
 

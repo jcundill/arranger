@@ -42,7 +42,7 @@ from .grips import (
     MELODY_STRING_CHOICES,
     MELODY_STRING_CHOICES_FULL,
 )
-from .grouping import GROUPING_AUTO
+from .grouping import COMMON_TIME, TimeSignature
 from .harmony import HARMONY_AUTO
 from .movement import (
     StepPreparation,
@@ -335,17 +335,10 @@ class VoiceLeadingEngine:
         parts: str = PARTS_AUTO,
         harmony: str = HARMONY_AUTO,
         grid: str = GRID_DEFAULT,
-        beats_per_bar: int = 4,
-        # The metre's denominator, read by the walking bass's melody timeline alone: a
-        # slot's `duration` is in whole notes and one whole note is `beat_type` beats
-        # (`4 / beat_type` quarters to the beat). Defaulted rather than required, so a
-        # hand-built progression - which has no notated metre to state - keeps the
-        # arithmetic it had.
-        beat_type: int = 4,
-        # The metre's grouping: which denominator units are felt as one beat. `auto`
-        # derives threes for a compound metre and one per beat otherwise, so this is
-        # inert on every simple metre. See `grouping.py`.
-        grouping: str = GROUPING_AUTO,
+        # The metre as one value: count, denominator and felt grouping, validated
+        # together. Omitting it means `COMMON_TIME` (4/4). See
+        # `movement.arrange_progression`.
+        time_signature: TimeSignature = COMMON_TIME,
         # The progression indexes whose melody note articulates, for the §9.2
         # reharmonise rule on the comping route (§9.3 step C). `None` means every slot
         # is an onset - the correct answer for a hand-built progression with no
@@ -367,9 +360,7 @@ class VoiceLeadingEngine:
             parts=parts,
             harmony=harmony,
             grid=grid,
-            beats_per_bar=beats_per_bar,
-            beat_type=beat_type,
-            grouping=grouping,
+            time_signature=time_signature,
             melody_onsets=melody_onsets,
             options=options,
         )

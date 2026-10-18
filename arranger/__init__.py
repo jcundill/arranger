@@ -146,9 +146,11 @@ from .grips import (
     get_comping_voicings_for,
 )
 from .grouping import (
+    COMMON_TIME,
     GROUPING_AUTO,
     GROUPING_SEPARATOR,
     ParsedGrouping,
+    TimeSignature,
     default_grouping,
     format_grouping,
     group_offbeat,
@@ -488,6 +490,7 @@ __all__ = [
     "BassNote",
     "DUO_DEGREES",
     "GRIP_MAX_SPAN",
+    "COMMON_TIME",
     "ALL",
     "GRID_ANCHORS",
     "GRID_CHARLESTON",
@@ -529,6 +532,7 @@ __all__ = [
     "GROUPING_AUTO",
     "GROUPING_SEPARATOR",
     "ParsedGrouping",
+    "TimeSignature",
     "default_grouping",
     "format_grouping",
     "group_offbeat",

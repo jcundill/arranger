@@ -26,11 +26,7 @@ from .chords import (
     NON_CHORD_TONE_STRATEGIES,
 )
 from .grid import parse_grid, resolve_grid
-from .grouping import (
-    GROUPING_AUTO,
-    parse_grouping,
-    resolve_grouping,
-)
+from .grouping import COMMON_TIME, TimeSignature
 from .harmony import (
     parse_harmony,
     resolve_harmony,
@@ -186,26 +182,13 @@ def _resolve_grid(
     return resolve_grid(parse_grid(grid), beats_per_bar, grouping)
 
 
-def _resolve_grouping(
-    grouping: str, beats_per_bar: int, beat_type: int
-) -> Tuple[int, ...]:
-    """The grouping to feel the bar in: parsed, `auto` derived, validated.
-
-    The same two-step shape again, and resolved here for the same reason: a spelling
-    nobody recognises has to be reported once, before any voicing work, and the
-    derived value is then a concrete tuple the metric layer can read without
-    deciding anything.
-    """
-    return resolve_grouping(parse_grouping(grouping), beats_per_bar, beat_type)
-
-
 @dataclass(frozen=True)
 class _Knobs:
     """The call's knobs, after `options=` and the keywords are reconciled.
 
-    `arrange_progression` takes thirteen knobs twice over - once as keywords and
-    once as `ArrangeOptions` fields - and has to decide between them, validate
-    them and validate them
+    `arrange_progression` takes its knobs twice over - once as keywords and once as
+    `ArrangeOptions` fields - and has to decide between them, validate them and
+    validate them
     before the loop can start. That prologue is this function's job; the loop then
     unpacks the result straight back into the names it has always used, so the
     extraction changed nothing downstream of it.
@@ -241,9 +224,7 @@ def resolve_knobs(
     parts: str,
     harmony: str,
     grid: str,
-    beats_per_bar: int,
-    beat_type: int,
-    grouping: str = GROUPING_AUTO,
+    time_signature: TimeSignature = COMMON_TIME,
     melody_onsets: Optional[Container[int]],
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
 ) -> _Knobs:
@@ -282,9 +263,7 @@ def resolve_knobs(
                 ("parts", parts),
                 ("harmony", harmony),
                 ("grid", grid),
-                ("beats_per_bar", beats_per_bar),
-                ("beat_type", beat_type),
-                ("grouping", grouping),
+                ("time_signature", time_signature),
                 ("melody_onsets", melody_onsets),
             )
             if value != ArrangeOptions.__dataclass_fields__[name].default
@@ -303,9 +282,7 @@ def resolve_knobs(
         parts = options.parts
         harmony = options.harmony
         grid = options.grid
-        beats_per_bar = options.beats_per_bar
-        beat_type = options.beat_type
-        grouping = options.grouping
+        time_signature = options.time_signature
         melody_onsets = options.melody_onsets
         if options.timings is not None:
             timings = list(options.timings)
@@ -324,8 +301,11 @@ def resolve_knobs(
     # Resolved once, here, and passed down: an axis that cannot honour the request
     # raises rather than degrading to a value the caller did not ask for, so what a
     # caller sees is the refusal rather than an arrangement answering a different
-    # question.
-    resolved_grouping = _resolve_grouping(grouping, beats_per_bar, beat_type)
+    # question. The signature validated itself at construction; this reads the
+    # concrete felt beats the metric layer consumes.
+    beats_per_bar = time_signature.beats_per_bar
+    beat_type = time_signature.beat_type
+    resolved_grouping = time_signature.resolved_grouping
 
     return _Knobs(
         top_strings=top_strings,

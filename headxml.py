@@ -70,6 +70,7 @@ from arranger import (
 )
 from arranger.bass_rules import BASS_STYLE_AUTO
 from arranger.chords import midi_to_note_name, promote_slash_chord
+from arranger.grouping import TimeSignature
 from arranger.harmony import HARMONY_AUTO
 from arranger.options import ArrangeOptions
 from arranger.parts import PARTS_AUTO
@@ -2712,11 +2713,16 @@ def _head_request(
             raise ValueError(
                 "pass either options= or the individual arrangement knobs, not both"
             )
+        # The head owns the metre; only its grouping is a caller override.
         return replace(
             options,
-            beats_per_bar=head.beats_per_bar,
-            beat_type=head.beat_type,
-            grouping=options.grouping if options.grouping != GROUPING_AUTO else stated,
+            time_signature=TimeSignature(
+                head.beats_per_bar,
+                head.beat_type,
+                options.time_signature.grouping
+                if options.time_signature.grouping != GROUPING_AUTO
+                else stated,
+            ),
         )
     return ArrangeOptions(
         non_chord_tone=non_chord_tone,
@@ -2725,9 +2731,11 @@ def _head_request(
         parts=parts,
         harmony=harmony,
         grid=grid,
-        beats_per_bar=head.beats_per_bar,
-        beat_type=head.beat_type,
-        grouping=grouping if grouping != GROUPING_AUTO else stated,
+        time_signature=TimeSignature(
+            head.beats_per_bar,
+            head.beat_type,
+            grouping if grouping != GROUPING_AUTO else stated,
+        ),
     )
 
 
@@ -2797,9 +2805,7 @@ def arrange_xml_head(
     # sees it: `_merge_chord_slots` generates the comping positions, and the engine
     # resolves the same request again for the step loop. One pure function, two
     # calls, so the two cannot disagree.
-    resolved_grouping = resolve_grouping(
-        parse_grouping(options.grouping), head.beats_per_bar, head.beat_type
-    )
+    resolved_grouping = options.time_signature.resolved_grouping
     slots = head_skeleton(head, section)
     # **The comping union is gated on whether the guitar comps at all, not on the
     # route.** `parts=chord` is the ensemble answer: the guitar states the chord while
