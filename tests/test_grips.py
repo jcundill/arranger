@@ -1,0 +1,1428 @@
+"""The grip families: what each one builds, and what it states.
+
+A family is asked for by name and answered by a shape - shell, duo, the 5-3-2 and 6-4-3
+shells and their high-E variants, the 6-4-3-2, the guide tones, the close-position stack
+- and two things are asserted about each: the exact fingering, and the invariants every
+generated voicing obeys (its strings are one `supported_string_sets()` entry, its span
+is within `GRIP_MAX_SPAN`, every sounding pitch is a chord tone, the melody is the
+soprano note).
+
+The drop-2 path itself stays pinned by `tests/test_voicings.py`, which must keep passing
+unmodified - that is what proves the general generator is a faithful superset of the
+hand-authored tables rather than a replacement for them.
+
+The questions asked of the tables rather than of a shape are `test_grip_tables.py`, and
+the selector's ranking is `test_grip_selection.py`.
+"""
+
+import unittest
+
+from musthe import Note
+
+import arranger as package
+from arranger import (
+    BASS_DEGREES_6432,
+    GRIP_MAX_SPAN,
+    GRIP_PREFERENCE,
+    GRIP_STRING_SETS,
+    MELODY_STRING_CHOICES_FULL,
+    SHELL_DEGREES,
+    ChordParser,
+    GuitarFretboard,
+    VoiceLeadingEngine,
+    format_progression,
+    supported_string_sets,
+)
+from arranger.grip_tables import (
+    finger_skip_count,
+)
+from tests.support import (
+    QUALITIES,
+    a_shape_on,
+    every_chord_tone,
+    note_name,
+    root_midi_of,
+)
+
+
+class TestGripGeneration(unittest.TestCase):
+    """Every candidate is a playable shape sounding only chord tones."""
+
+    def setUp(self):
+        self.engine = VoiceLeadingEngine()
+
+    def test_every_grip_obeys_the_playability_invariants(self):
+        """Chord tones only, a known string set, the melody on top, a hand's span."""
+        seen = set()
+        for chord_name, quality in QUALITIES:
+            for melody in every_chord_tone(chord_name, quality):
+                candidates = self.engine.get_all_grip_voicings(
+                    Note(melody), quality, chord_name=chord_name
+                )
+                self.assertTrue(candidates, f"{chord_name} {melody}")
+                tones = set(ChordParser.get_chord_tones(quality, chord_name))
+                for v in candidates:
+                    where = f"{chord_name} {melody} {v.grip} {v.tab_string()}"
+                    self.assertTrue(set(v.pitch_classes()) <= tones, where)
+                    self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN[v.grip], where)
+                    self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()), where)
+                    self.assertEqual(max(v.midi_notes()), Note(melody).midi_note(), where)
+                    self.assertEqual(v.soprano_string(), max(v.active_strings), where)
+                    self.assertIn(frozenset(v.active_strings), supported_string_sets(), where)
+                    seen.add(v.grip)
+
+        # Every family the selector prefers has to be reachable, or a preference entry
+        # would be dead weight that silently never applies.
+        for grip in GRIP_PREFERENCE:
+            self.assertIn(grip, seen, f"no {grip} candidate is ever generated")
+
+    def testcandidate_generation_does_not_filter_by_position(self):
+        """No window, no repositioning: generation is pure and selection comes later.
+
+        This is what keeps the grip families and the octave-down rescue independent of
+        each other, and it is asserted rather than assumed because a generator that
+        filtered here would break that rescue without any visible failure.
+        """
+        # G5 is fret 15 and A5 fret 17: playable, but above the comfortable window, so
+        # they are generated and the *selector* decides what to do with them.
+        for melody in ("G5", "A5"):
+            self.assertTrue(
+                self.engine.get_all_grip_voicings(
+                    Note(melody), "m7", chord_name="Dm7"
+                ),
+                melody,
+            )
+
+    def test_a_voicing_carries_its_grip_and_its_lowest_sounding_pitch(self):
+        for v in self.engine.get_grip_voicings(
+            Note("Bb3"), "m7", chord_name="Gm7", top_string=3
+        ):
+            self.assertIn(v.grip, GRIP_PREFERENCE)
+            self.assertEqual(v.bass_pc, min(v.midi_notes()) % 12)
+
+
+class TestShellVoicings(unittest.TestCase):
+    """A shell states the chord's guide tones and nothing that could contradict them."""
+
+    def setUp(self):
+        self.engine = VoiceLeadingEngine()
+
+    def test_a_seventh_chord_shell_sounds_its_third_and_seventh(self):
+        # Each chord is asked for with a melody that is a genuine chord tone of it: a
+        # shell cannot be built under a note that is not in the chord.
+        for chord_name, quality in (
+            ("Cmaj7", "maj7"), ("Am7", "m7"), ("G7", "7"),
+        ):
+            root_pc = root_midi_of(chord_name) % 12
+            third, seventh = SHELL_DEGREES[quality]
+            wanted = {(root_pc + third) % 12, (root_pc + seventh) % 12}
+            melody = note_name(root_midi_of(chord_name) + third)
+            shells = [
+                v
+                for v in self.engine.get_all_grip_voicings(
+                    Note(melody), quality, chord_name=chord_name
+                )
+                if v.grip == "shell"
+            ]
+            self.assertTrue(shells, chord_name)
+            for v in shells:
+                self.assertEqual(len(v.active_frets()), 3, v.tab_string())
+                self.assertTrue(wanted <= set(v.pitch_classes()), v.tab_string())
+
+    def test_a_shell_is_never_four_notes(self):
+        """The point of a shell is that it stops short of the complete chord."""
+        for chord_name, quality in QUALITIES:
+            for melody in every_chord_tone(chord_name, quality):
+                for v in self.engine.get_all_grip_voicings(
+                    Note(melody), quality, chord_name=chord_name
+                ):
+                    if v.grip != "shell":
+                        continue
+                    self.assertEqual(len(v.active_frets()), 3, v.tab_string())
+
+    def test_a_quality_with_no_shell_gets_none(self):
+        """An unlisted quality has no shell rather than a guessed one."""
+        self.assertNotIn("unknown-quality", SHELL_DEGREES)
+        self.assertEqual(
+            self.engine.get_grip_voicings(
+                Note("C5"), "unknown-quality", chord_name="Cunknown-quality",
+                grips=("shell",),
+            ),
+            [],
+        )
+
+
+class TestDuoSecondVoice(unittest.TestCase):
+    """A duo sounds the chord's own guide tone beneath the melody, whatever the melody is.
+
+    This class replaced one that asserted the opposite. `DUO_DEGREES` used to gate the
+    whole family on a root or a 5th in the *melody*, on the reasoning that a 3rd or a 7th
+    there is "the entire definition of the chord's function" and a bare pair under it
+    sounds like a mistake. That does not hold against a duo built from the guide tone:
+    the guide tone *beneath* a 3rd or a 7th is what states the function, and it is the
+    clearest possible statement that the two notes are this chord and not two passing
+    notes. The old test is therefore **inverted rather than deleted** - it still guards
+    the same risk, which is a duo sounding two arbitrary chord tones.
+
+    The pitch-class subset check in TestGripGeneration cannot see that risk, because such
+    a duo is made of genuine chord tones and would pass it. So these assertions are about
+    *which* chord tones sound, not merely that they are chord tones.
+    """
+
+    def setUp(self):
+        self.engine = VoiceLeadingEngine()
+
+    def duos(self, melody, quality, chord_name):
+        return self.engine.get_all_grip_voicings(
+            Note(melody), quality, chord_name=chord_name, grips=("duo",)
+        )
+
+    def test_a_duo_is_generated_under_any_chord_tone(self):
+        """The melody gate is gone: every chord tone admits a duo.
+
+        Including the 3rd and the 7th, which the old rule refused outright.
+
+        The melody is placed at the chord's own octave (`root4`), not from
+        `get_chord_tones`, which returns *absolute* pitch classes: adding those to the
+        root would step the melody up an octave for a chord whose root is not C, and a
+        ninth would then arrive as a non-chord tone - which the engine resolves through
+        the non-chord-tone strategies rather than voicing as written here.
+        """
+        for chord_name, quality in (("Cmaj7", "maj7"), ("G7", "7"), ("Dm7", "m7")):
+            root_pc = root_midi_of(chord_name) % 12
+            tones = set(ChordParser.get_chord_tones(quality, chord_name))
+            degrees = {(pc - root_pc) % 12 for pc in tones}
+            for degree in sorted(degrees):
+                melody = note_name(root_midi_of(chord_name) + degree)
+                duos = self.duos(melody, quality, chord_name)
+                self.assertTrue(duos, f"{chord_name} {melody} should admit a duo")
+                for v in duos:
+                    self.assertEqual(len(v.active_frets()), 2, v.tab_string())
+                    self.assertTrue(set(v.pitch_classes()) <= tones, v.tab_string())
+
+    def test_the_second_voice_is_this_quality_s_own_guide_tone(self):
+        """The pair is the melody plus a guide tone, never two arbitrary chord tones."""
+        for chord_name, quality in (("Cmaj7", "maj7"), ("G7", "7"), ("Dm7", "m7")):
+            root_pc = root_midi_of(chord_name) % 12
+            guide = set(SHELL_DEGREES[quality])
+            for melody in every_chord_tone(chord_name, quality):
+                for v in self.duos(melody, quality, chord_name):
+                    degrees = {(p - root_pc) % 12 for p in v.midi_notes()}
+                    self.assertTrue(
+                        degrees & guide,
+                        f"{v.tab_string()} sounds {sorted(degrees)}, no guide tone "
+                        f"of {quality} in {sorted(guide)}",
+                    )
+
+    def test_a_suspended_chord_uses_its_fourth_and_not_a_third(self):
+        """The 4th is a sus chord's guide tone, and it is what a duo must sound.
+
+        `sus4`, `sus2` and `7sus4` admitted **no duo at all** before the second voice was
+        read from SHELL_DEGREES: the hand-written `(4, 3, 0)` scan listed no sus degree,
+        and its root fallback was unreachable besides. These three are that regression.
+        """
+        for chord_name, quality in (
+            ("Csus4", "sus4"),
+            ("Csus2", "sus2"),
+            ("C7sus4", "7sus4"),
+        ):
+            self.assertTrue(
+                self.duos("C4", quality, chord_name),
+                f"{chord_name} should admit a duo under its root",
+            )
+        for v in self.duos("C4", "sus4", "Csus4"):
+            self.assertIn(5, {p % 12 for p in v.midi_notes()}, v.tab_string())
+        for v in self.duos("C4", "sus2", "Csus2"):
+            self.assertIn(2, {p % 12 for p in v.midi_notes()}, v.tab_string())
+
+    def test_every_quality_in_shell_degrees_can_voice_a_duo(self):
+        """No quality listed for a shell is left without one.
+
+        The 25 that already worked and the 3 that did not are covered by one assertion,
+        which is why the two tables cannot drift apart again.
+        """
+        missing = [
+            quality
+            for quality in SHELL_DEGREES
+            if not self.duos("C5", quality, "C" + quality)
+        ]
+        self.assertEqual(missing, [], "qualities with a shell but no duo under a root")
+
+    def test_a_duo_is_never_a_second_under_the_melody(self):
+        """A 2nd in two voices is where they fight; the guide tone drops an octave instead.
+
+        This is the rule that made the skipped-string pairs necessary, so it is asserted
+        as an invariant over every reachable duo rather than on one example.
+        """
+        checked = 0
+        for chord_name, quality in QUALITIES:
+            for melody in every_chord_tone(chord_name, quality):
+                for v in self.duos(melody, quality, chord_name):
+                    upper = sorted(v.midi_notes())
+                    self.assertGreaterEqual(
+                        upper[-1] - upper[0],
+                        3,
+                        f"{chord_name} {melody} {v.tab_string()} is a 2nd",
+                    )
+                    checked += 1
+        self.assertGreater(checked, 0, "no duo was checked")
+
+    def test_a_second_is_displaced_to_a_ninth_where_it_can_be_fretted(self):
+        """The displacement is not merely arithmetic - it produces a playable 9th.
+
+        The guide tone is a whole tone below the melody for several common pairs - a b6
+        over a chord a semitone away, a 4th under a sus4 - so the 2nd is not a corner case.
+        On the adjacent pairs the octave-displaced 9th cannot be fretted inside
+        GRIP_MAX_SPAN["duo"], which is why the duo owns the skipped (3,1) pair; that pair
+        appears below.
+        """
+        # Swept rather than illustrated: any reachable 9th must be on the skipped pair,
+        # because no adjacent pair can hold one inside the span cap.
+        ninths = [
+            v
+            for quality in SHELL_DEGREES
+            for pc in ChordParser.get_chord_tones(quality, "C" + quality)
+            for octave in range(3, 6)
+            for v in self.duos(
+                note_name(12 * octave + pc), quality, "C" + quality
+            )
+            if sorted(v.midi_notes())[-1] - sorted(v.midi_notes())[0] >= 12
+        ]
+        self.assertGreater(len(ninths), 0, "no 9th duos at all")
+        for v in ninths:
+            self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["duo"], v.tab_string())
+            # `active_strings` reads low-to-high where GRIP_STRING_SETS stores it
+            # high-to-low, so compare against the table's own spelling sorted.
+            self.assertEqual(
+                tuple(sorted(v.active_strings)),
+                (1, 3),
+                f"{v.tab_string()} voiced a 9th on an adjacent pair",
+            )
+
+    def test_the_only_cases_that_admit_no_duo_are_named(self):
+        """Two melodies still have no duo, and they are pinned rather than left silent.
+
+        A sus4's 5th at G3, the bottom of the register: the 4th below it is a 2nd, and the
+        9th that would replace it is out of reach even on the skipped (3,1) pair - the A
+        string cannot sound a note that low with the hand anywhere near the G. Returning
+        nothing is the intended outcome; the alternative is the 2nd the rule exists to
+        avoid. Both a `sus4` and a `7sus4` fail there, at the same G3, and the QUALITIES
+        sample carries only the latter - which is why this sweeps SHELL_DEGREES instead.
+        Swept over every quality and every chord-tone melody in G3-Bb5 these two are the
+        **only** melodies with no duo at all.
+        """
+        unreachable = []
+        # Every quality, not the QUALITIES sample: the sample carries C7sus4 but not
+        # Csus4, and the two fail for the same reason at different octaves.
+        for quality in SHELL_DEGREES:
+            chord_name = "C" + quality
+            for pc in ChordParser.get_chord_tones(quality, chord_name):
+                for octave in range(1, 5):
+                    midi = 12 * (octave + 1) + pc
+                    if not Note("G3").midi_note() <= midi <= Note("Bb5").midi_note():
+                        continue
+                    melody = note_name(midi)
+                    if not self.duos(melody, quality, chord_name):
+                        unreachable.append((chord_name, melody))
+        self.assertEqual(
+            unreachable,
+            [("C7sus4", "G3"), ("Csus4", "G3")],
+            "the set of melodies with no duo changed - re-measure before editing this",
+        )
+
+    def test_a_duo_still_carries_the_third(self):
+        """
+        The second voice is the 3rd, so the pair is never an empty fifth - which would
+        leave the chord's quality genuinely unstated.
+        """
+        for v in self.engine.get_all_grip_voicings(
+            Note("C5"), "maj7", chord_name="Cmaj7", grips=("duo",)
+        ):
+            pcs = set(v.pitch_classes())
+            self.assertIn(0, pcs, v.tab_string())   # the root, which is the melody
+            self.assertIn(4, pcs, f"{v.tab_string()} is missing the 3rd")
+
+
+class TestFiveThreeTwoShell(unittest.TestCase):
+    """The 5-3-2 grip: A, G and B, with the D string deliberately skipped."""
+
+    def setUp(self):
+        self.engine = VoiceLeadingEngine()
+
+    def five_three_two(self, melody, quality, chord_name):
+        return [
+            v
+            for v in self.engine.get_grip_voicings(
+                Note(melody), quality, chord_name=chord_name, top_string=4,
+                grips=("shell",),
+            )
+            if v.active_strings == [1, 3, 4]
+        ]
+
+    def test_it_produces_the_textbook_shape(self):
+        """
+        F7 with its seventh in the melody is x-3-x-2-4-x in 5-3-2. The D string is
+        skipped, which puts ten semitones of tuning between the A and the G - so the
+        frets are nowhere near monotonic in the pitch order (3, 2, 4), and a model
+        that assigns the voices by descending pitch across the skipped string gets
+        the shape wrong. That is why the placement is a search and not a stack.
+        """
+        found = self.five_three_two("Eb4", "7", "F7")
+        self.assertTrue(found, "F7 should have a 5-3-2 shell under Eb4")
+        v = found[0]
+        self.assertEqual(v.tab_string(), "x-3-x-2-4-x")
+        self.assertEqual(v.active_strings, [1, 3, 4])
+        # The D string is left alone, which is what makes this a 5-3-2 and not a 5-4-3.
+        self.assertEqual(v.frets[2], -1)
+        self.assertEqual(sorted(v.pitch_classes()), [0, 3, 9])
+        self.assertEqual(max(v.midi_notes()), Note("Eb4").midi_note())
+        self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN[v.grip])
+
+    def test_the_melody_rides_no_higher_than_the_alternatives(self):
+        """
+        The grip's value is melodic position. Every candidate here carries the melody
+        on the B string, and 5-3-2 puts it as low as any of them - the same chord, an
+        octave-position further down the neck. It ties the 4-3-2 shell on this
+        example; the selector breaks the tie on the remaining cost terms, so the
+        point of the assertion is that it is never *worse* on position.
+        """
+        shells = self.engine.get_grip_voicings(
+            Note("Eb4"), "7", chord_name="F7", top_string=4, grips=("shell",)
+        )
+        by_set = {tuple(v.active_strings): v for v in shells}
+        self.assertIn((1, 3, 4), by_set)
+        chosen = by_set[(1, 3, 4)]
+        self.assertEqual(chosen.soprano_string(), 4)
+        self.assertEqual(chosen.frets[4], 4)
+        for strings, v in by_set.items():
+            if strings == (1, 3, 4):
+                continue
+            self.assertLessEqual(
+                v.frets[4], chosen.frets[4] + 1,
+                f"{v.tab_string()} puts the melody far lower than the 5-3-2 does",
+            )
+
+    def test_it_is_offered_for_a_b_string_melody(self):
+        """A B-string soprano now has five shell shapes available, not four."""
+        shells = self.engine.get_grip_voicings(
+            Note("G4"), "maj7", chord_name="Cmaj7", top_string=4, grips=("shell",)
+        )
+        self.assertTrue(shells)
+        self.assertTrue(
+            any(v.active_strings == [1, 3, 4] for v in shells), "no 5-3-2 offered"
+        )
+        for v in shells:
+            self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["shell"], v.tab_string())
+
+    def test_it_is_never_offered_under_a_non_chord_melody(self):
+        """
+        A shell states this chord's guide tones, so a melody that is not a chord tone
+        cannot be voiced in one. Db4 over F7 is a b9 and belongs to an altered
+        substitution, not to a shell carrying a b9.
+        """
+        self.assertEqual(self.five_three_two("Db4", "7", "F7"), [])
+
+
+class TestSixFourThreeShell(unittest.TestCase):
+    """The 6-4-3 grip: low E, D and G, with the A string deliberately skipped."""
+
+    def setUp(self):
+        self.engine = VoiceLeadingEngine()
+
+    def six_four_three(self, melody, quality, chord_name):
+        return [
+            v
+            for v in self.engine.get_grip_voicings(
+                Note(melody), quality, chord_name=chord_name, top_string=3,
+                grips=("shell",),
+            )
+            if v.active_strings == [0, 2, 3]
+        ]
+
+    def test_it_produces_the_textbook_shape(self):
+        """
+        Gm7 in 6-4-3 is 3-x-3-3-x-x: the fingers line up, and the low E plays a
+        *higher* note than the D string beside it. That inversion is the whole reason
+        this grip needs its own placement - a model that stacks the voices by pitch gets
+        it backwards and lands the fingers eight frets apart.
+        """
+        found = self.six_four_three("Bb3", "m7", "Gm7")
+        self.assertTrue(found, "Gm7 should have a 6-4-3 shell")
+        v = found[0]
+        self.assertEqual(v.tab_string(), "3-x-3-3-x-x")
+        self.assertEqual(v.active_strings, [0, 2, 3])
+        # The A string is left alone, which is what makes this a 6-4-3 and not a 6-5-4.
+        self.assertEqual(v.frets[1], -1)
+        self.assertEqual(sorted(v.pitch_classes()), [5, 7, 10])
+        self.assertEqual(max(v.midi_notes()), Note("Bb3").midi_note())
+
+    def test_a_g_string_shell_can_sound_either_shape(self):
+        """5-4-3 and 6-4-3 are different grips, and both are offered when they fit."""
+        shells = self.engine.get_grip_voicings(
+            Note("C4"), "maj7", chord_name="Cmaj7", top_string=3, grips=("shell",)
+        )
+        self.assertTrue(shells)
+        self.assertTrue(any(v.active_strings == [0, 2, 3] for v in shells), "no 6-4-3")
+        for v in shells:
+            self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["shell"], v.tab_string())
+
+    def test_it_is_never_offered_under_a_non_chord_melody(self):
+        """
+        A shell states this chord's guide tones, so a melody that is not a chord tone
+        cannot be voiced in one. G4 over Dm7 is an 11th and belongs to a 7sus4
+        substitution, not to a shell with an 11th in it.
+        """
+        self.assertEqual(self.six_four_three("G4", "m7", "Dm7"), [])
+
+
+class TestFiveThreeTwoHighEShell(unittest.TestCase):
+    """
+    The (5,3,2) shell: high E, G and D, with the B string deliberately skipped.
+
+    The *other* 5-3-2 - TestFiveThreeTwoShell covers the (1,3,4) one, which skips the D
+    string going down. This one skips the B going up, and it exists to close an
+    asymmetry rather than for a grip-specific reason: counting the shell sets by soprano,
+    the high E had exactly one shape while the B and the G had two each, and the high E
+    is the most-used soprano of all.
+
+    It is also the three-layer split a walking bass wants, which is why the walking-bass
+    fixture asserts the upper voices really do land on {5,3,2} rather than being
+    approximated with the contiguous shell.
+    """
+
+    def setUp(self):
+        self.engine = VoiceLeadingEngine()
+
+    def shells(self, melody, quality, chord_name, top_string=5):
+        return [
+            v
+            for v in self.engine.get_grip_voicings(
+                Note(melody), quality, chord_name=chord_name, top_string=top_string,
+                grips=("shell",),
+            )
+            if v.active_strings == [2, 3, 5]
+        ]
+
+    def test_it_produces_the_textbook_shape(self):
+        """
+        Fmaj7 under its 5th is x-x-7-9-x-8: the 3rd (A) on the D string, the 7th (E) on
+        the G, the melody (C) on the high E. Both guide tones sound and the root does
+        not, which is what a shell is - so the omission of F is correct, not a gap.
+        """
+        found = self.shells("C5", "maj7", "Fmaj7")
+        self.assertTrue(found, "Fmaj7 should have a (5,3,2) shell under C5")
+        v = found[0]
+        self.assertEqual(v.tab_string(), "x-x-7-9-x-8")
+        self.assertEqual(v.active_strings, [2, 3, 5])
+        # The B string is left alone, which is what makes this a 5-3-2 and not a 5-4-3.
+        self.assertEqual(v.frets[4], -1)
+        # A and E are Fmaj7's 3rd and 7th; the root is deliberately absent.
+        self.assertEqual(sorted(v.pitch_classes()), [0, 4, 9])
+        self.assertEqual(max(v.midi_notes()), Note("C5").midi_note())
+
+    def test_it_is_reachable_across_the_shell_qualities(self):
+        """
+        A tabulated-but-unreachable set is the failure mode the other 5-3-2's own
+        comment warns about, so this sweeps the qualities the library has shells for
+        rather than asserting one lucky example.
+        """
+        found = []
+        for chord_name, quality in QUALITIES:
+            for melody in every_chord_tone(chord_name, quality):
+                for v in self.shells(melody, quality, chord_name):
+                    found.append((chord_name, melody, v.tab_string()))
+        self.assertTrue(found, "no (5,3,2) shell is reachable anywhere")
+
+    def test_every_shape_it_produces_obeys_the_invariant(self):
+        """
+        A non-contiguous set is held to exactly the same contract as a contiguous one:
+        a supported string set, the melody on the soprano and highest, a span within
+        GRIP_MAX_SPAN, and nothing sounding outside the chord.
+        """
+        checked = 0
+        for chord_name, quality in QUALITIES:
+            allowed = set(ChordParser.get_chord_tones(quality, chord_name))
+            for melody in every_chord_tone(chord_name, quality):
+                for v in self.shells(melody, quality, chord_name):
+                    checked += 1
+                    label = f"{chord_name} {melody} {v.tab_string()}"
+                    self.assertEqual(len(v.active_frets()), 3, label)
+                    self.assertIn(
+                        frozenset(v.active_strings), supported_string_sets(), label
+                    )
+                    self.assertEqual(v.soprano_string(), 5, label)
+                    self.assertEqual(max(v.midi_notes()), Note(melody).midi_note(), label)
+                    self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["shell"], label)
+                    self.assertTrue(set(v.pitch_classes()) <= allowed, label)
+        self.assertGreater(checked, 0, "the sweep proved nothing")
+
+    def test_it_is_offered_for_a_high_e_melody(self):
+        """
+        The set is keyed on soprano 5, so a high-E shell now has two shapes to choose
+        between instead of one.
+        """
+        shells = self.engine.get_grip_voicings(
+            Note("C5"), "maj7", chord_name="Fmaj7", top_string=5, grips=("shell",)
+        )
+        self.assertTrue(shells)
+        self.assertTrue(
+            any(v.active_strings == [2, 3, 5] for v in shells), "no (5,3,2) offered"
+        )
+        for v in shells:
+            self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["shell"], v.tab_string())
+
+    def test_it_is_not_offered_for_a_b_or_g_melody(self):
+        """
+        The set is keyed on soprano 5, so it must not leak onto the other two sopranos -
+        otherwise a shape generated for a B-string melody would put the melody on the
+        high E, which is a different grip entirely.
+        """
+        for top_string in (4, 3):
+            for chord_name, quality in QUALITIES:
+                for melody in every_chord_tone(chord_name, quality):
+                    for v in self.engine.get_grip_voicings(
+                        Note(melody), quality, chord_name=chord_name,
+                        top_string=top_string, grips=("shell",),
+                    ):
+                        self.assertNotEqual(
+                            v.active_strings, [2, 3, 5],
+                            f"(5,3,2) offered for top_string={top_string}: "
+                            f"{v.tab_string()}",
+                        )
+
+    def test_it_is_never_offered_under_a_non_chord_melody(self):
+        """
+        A shell states this chord's guide tones, so a melody that is not a chord tone
+        cannot be voiced in one. Db5 over Fmaj7 is its b13 and belongs to an altered
+        substitution, not to a shell with a b13 in it.
+        """
+        self.assertEqual(self.shells("Db5", "maj7", "Fmaj7"), [])
+
+    def test_the_high_e_soprano_is_no_longer_the_only_poorly_served_one(self):
+        """
+        The asymmetry that motivated the set, asserted on the table so a later removal
+        cannot pass unnoticed: before it, soprano 5 had one shell shape while the B and
+        the G sopranos had two each.
+        """
+        by_soprano = {}
+        for strings, soprano in GRIP_STRING_SETS["shell"]:
+            by_soprano.setdefault(soprano, []).append(frozenset(strings))
+        # Compared as sets: the table stores each one low-to-high, and sorting frozensets
+        # would order them by size rather than by content.
+        self.assertEqual(
+            set(by_soprano[5]), {frozenset((2, 3, 5)), frozenset((3, 4, 5))}
+        )
+        self.assertIn(frozenset((2, 3, 5)), supported_string_sets())
+        self.assertEqual(len(by_soprano[4]), 2)
+        self.assertEqual(len(by_soprano[3]), 2)
+
+
+class TestSixFourThreeTwo(unittest.TestCase):
+    """
+    6-4-3-2: low E, D, G and B, with the A string skipped so the bass can be a root.
+
+    This is the one default four-note set that reaches the low E. With 5-4-3-2 the lowest
+    sounding note is always on the A string, so a root bass is a consequence of the
+    string set rather than a decision; here it is chosen, and BASS_DEGREES_6432 is the
+    rule that chooses it.
+    """
+
+    def setUp(self):
+        self.engine = VoiceLeadingEngine()
+
+    def shapes(self, melody, quality, chord_name, grip="drop2_6432"):
+        return [
+            v
+            for v in self.engine.get_grip_voicings(
+                Note(melody), quality, chord_name=chord_name,
+                top_string=4, grips=(grip,),
+            )
+            if v.active_strings == [0, 2, 3, 4]
+        ]
+
+    def test_it_produces_the_textbook_shape(self):
+        """
+        Am7 under an E4 melody on the B string is 5-x-5-5-5-x: A2, G3, C4, E4.
+
+        The A string being absent is the whole point of the shape - it is what frees the
+        low E to play the root - and the four fingers line up, so span is zero.
+        """
+        found = self.shapes("E4", "m7", "Am7")
+        self.assertTrue(found, "Am7 should have a 6-4-3-2 under E4")
+        self.assertEqual(found[0].tab_string(), "5-x-5-5-5-x")
+        self.assertEqual(found[0].frets[1], -1)
+        self.assertEqual(found[0].fret_span(), 0)
+        self.assertEqual(
+            [note_name(m) for m in found[0].midi_notes()], ["A2", "G3", "C4", "E4"]
+        )
+
+    def test_the_bass_rule_holds_everywhere(self):
+        """
+        The low E always carries the chord's root or its 5th, never a 3rd or a 7th.
+
+        Swept across the qualities the library knows, in four roots so the rule is not
+        pinned to one transposition. The lowest voice is what *defines* the chord, so
+        this is the difference between voicing this harmony and sounding a different one.
+        """
+        seen = 0
+        for quality in sorted(ChordParser.CHORD_TONES_FROM_ROOT):
+            canonical = ChordParser.canonical_quality(quality)
+            tones = ChordParser.CHORD_TONES_FROM_ROOT[canonical]
+            for root in ("C", "F#", "Bb", "Eb"):
+                root_pc = Note(root + "4").midi_note() % 12
+                for degree in tones:
+                    for midi in range(48, 76):
+                        if midi % 12 != (root_pc + degree) % 12:
+                            continue
+                        melody = note_name(midi)
+                        chord_name = root + canonical
+                        for v in self.shapes(melody, canonical, chord_name):
+                            seen += 1
+                            bass_pc = GuitarFretboard.fret_to_midi(0, v.frets[0]) % 12
+                            self.assertIn(
+                                (bass_pc - root_pc) % 12, BASS_DEGREES_6432,
+                                f"{chord_name} {melody} {v.tab_string()}",
+                            )
+        self.assertGreater(seen, 100, "the sweep found almost nothing to check")
+
+    def test_it_obeys_every_playability_invariant(self):
+        """
+        The known string set, the melody on the B and on top, a hand's span, and only
+        chord tones - checked over the same sweep, so no single case is special.
+        """
+        for chord_name, quality in QUALITIES:
+            root_pc = root_midi_of(chord_name) % 12
+            allowed = set(ChordParser.get_chord_tones(quality, chord_name))
+            for degree in ChordParser.CHORD_TONES_FROM_ROOT[quality]:
+                for midi in range(48, 76):
+                    if midi % 12 != (root_pc + degree) % 12:
+                        continue
+                    melody = note_name(midi)
+                    for v in self.shapes(melody, quality, chord_name):
+                        where = f"{chord_name} {melody} {v.tab_string()}"
+                        self.assertEqual(v.active_strings, [0, 2, 3, 4], where)
+                        self.assertEqual(v.soprano_string(), 4, where)
+                        self.assertEqual(max(v.midi_notes()), midi, where)
+                        self.assertLessEqual(
+                            v.fret_span(), GRIP_MAX_SPAN["drop2_6432"], where
+                        )
+                        self.assertTrue(set(v.pitch_classes()) <= allowed, where)
+                        self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()), where)
+                        self.assertIn(
+                            frozenset(v.active_strings), supported_string_sets(), where
+                        )
+
+
+    def test_the_search_picks_the_shape_a_player_would(self):
+        """
+        Ties are broken by fret spread, then by position - so the answer is the tightest
+        hand position, not the first one the search reaches.
+
+        This is not cosmetic. An unranked search returns the low-E-first combination it
+        happens to meet, which puts the low E at fret 0-1, below the neck window; ranked
+        properly the same generator answers `5-x-5-5-5-x`. The earlier "0 of 22, never
+        selected" measurement was that bug, not a property of the shape.
+        """
+        for chord_name, quality, melody, expected in (
+            ("Am7", "m7", "E4", "5-x-5-5-5-x"),
+            ("Cmaj7", "maj7", "E4", "3-x-5-4-5-x"),
+            ("Fm7", "m7", "Eb4", "1-x-1-1-4-x"),
+        ):
+            found = self.shapes(melody, quality, chord_name)
+            self.assertTrue(found, chord_name)
+            self.assertEqual(found[0].tab_string(), expected, chord_name)
+
+    def test_it_reaches_melodies_the_contiguous_block_cannot(self):
+        """
+        A B3 melody over Cmaj7, and a C5 over Fm7, are both voicable on 6-4-3-2 and
+        neither is voicable on 5-4-3-2 - the A string at the same position would have to
+        sit outside the span. So the new set is not only a different bass, it is
+        additional coverage.
+        """
+        for chord_name, quality, melody in (
+            ("Cmaj7", "maj7", "B3"),
+            ("Fm7", "m7", "C5"),
+        ):
+            self.assertTrue(self.shapes(melody, quality, chord_name), chord_name)
+            self.assertEqual(
+                [
+                    v
+                    for v in self.engine.get_grip_voicings(
+                        Note(melody), quality, chord_name=chord_name,
+                        top_string=4, grips=("drop2",),
+                    )
+                    if v.active_strings == [0, 2, 3, 4]
+                ],
+                [],
+                chord_name,
+            )
+
+    def test_where_no_root_fits_the_contiguous_block_is_used_instead(self):
+        """
+        A melody the new set cannot serve must cost the step nothing.
+
+        F#4 over Cmaj7 is neither the root nor the 5th, so no low E pitch is legal in
+        any position: the placement returns None and 5-4-3-2 voices the chord as before.
+        This is the negative case that keeps the grip from becoming a filter.
+        """
+        self.assertEqual(self.shapes("F#4", "maj7", "Cmaj7"), [])
+        contig = self.engine.get_grip_voicings(
+            Note("F#4"), "maj7", chord_name="Cmaj7", top_string=4, grips=("drop2",)
+        )
+        self.assertTrue(contig, "the contiguous block must still serve this melody")
+        # Each candidate is a legitimate drop-2 string set. The A string may now carry
+        # the bass - a four-note shape is allowed to skip to a lower string - so this
+        # asserts membership of a supported set rather than one exact block, which was
+        # only true while every four-note shape had to be contiguous.
+        supported = set(supported_string_sets())
+        for v in contig:
+            self.assertIn(frozenset(v.active_strings), supported, v.tab_string())
+
+    def test_a_rootless_chord_gets_nothing(self):
+        """
+        The rule is measured from the root, so a chord with no root to measure against
+        cannot place one - and guessing would be putting an arbitrary note in the bass.
+        """
+        self.assertEqual(
+            self.engine.get_grip_voicings(
+                Note("E4"), "m7", chord_name=None, top_string=4,
+                grips=("drop2_6432",),
+            ),
+            [],
+        )
+
+    def test_it_is_reachable_through_the_public_entry_point(self):
+        """
+        The family needs no bespoke wrapper: `get_grip_voicings(grips=...)` is the same
+        public surface every other family is reached through.
+        """
+        voicings = self.engine.get_all_grip_voicings(
+            Note("E4"), "m7", chord_name="Am7", top_strings=(4,),
+            grips=("drop2_6432",),
+        )
+        self.assertEqual([v.tab_string() for v in voicings], ["5-x-5-5-5-x"])
+        self.assertEqual(voicings[0].grip, "drop2_6432")
+
+
+class TestGuideTones(unittest.TestCase):
+    """
+    Which two notes each chord must state, asserted once for the whole library.
+
+    A four-note voicing sounds the chord's 3rd and 7th; where the chord has no 3rd it
+    is the 4th, and where it has neither 3rd nor 7th it is the note standing in for
+    them. Three places have to agree on that pair - the hand-authored drop-2 tables, the
+    shell guide degrees, and `_guide_tones`, which the fallback consults - and this is
+    where they are checked against each other.
+
+    The sus cases are the reason. Dsus7 is 1 4 5 b7: a lookup for a 3rd finds nothing,
+    and the note that makes it a *sus* chord is the 4th. An earlier `_guide_tones`
+    reported no third at all for 7sus4 and called sus2 empty, while `SHELL_DEGREES` had
+    `(4, b7)` and `(9, 5)` all along.
+    """
+
+    # quality -> the pair, read off SHELL_DEGREES where it has one.
+    SUS_CASES = (
+        ("7sus4", (5, 10)),   # 4th and b7 - the note that makes it sus4, not a 3rd
+        ("sus4", (5,)),       # 4th; a triad, so no 7th
+        ("sus2", (2,)),       # 9th; sus2's defining tone is the 9th, not the 2nd
+    )
+
+    def test_a_sus_chord_states_its_fourth_not_a_third(self):
+        """
+        A suspended chord has no 3rd, so its guide tone is the 4th.
+
+        This is the case the general rule gets wrong by omission: asking "where is the
+        3rd?" of Dsus7 returns nothing, which reads as *this chord needs no third
+        preserved* rather than *the third is the fourth*.
+        """
+        from arranger.grips import _guide_tones
+
+        for quality, expected in self.SUS_CASES:
+            tones = ChordParser.CHORD_TONES_FROM_ROOT[quality]
+            found = _guide_tones(tones, 0)
+            self.assertEqual(
+                found[:1], expected[:1],
+                f"{quality} guide tone is {found}, shell table says {expected}",
+            )
+
+    def test_guide_tones_agree_with_the_shell_table(self):
+        """
+        Every quality names the same first guide tone in both places.
+
+        `_guide_tones` reads the tone set and the shell table is hand-authored, so they
+        could drift. They are two answers to one question - which note says what the
+        chord is - and a shell that preserves a note the fallback discards would be a
+        shell voicing a different chord.
+        """
+        from arranger.grips import _guide_tones
+
+        for quality, shell in SHELL_DEGREES.items():
+            tones = ChordParser.CHORD_TONES_FROM_ROOT.get(quality)
+            assert tones is not None, f"{quality} has no tone set"
+            found = _guide_tones(tones, 0)
+            self.assertTrue(found, f"{quality} names no guide tone at all")
+            self.assertEqual(
+                found[0] % 12, shell[0] % 12,
+                f"{quality}: fallback keeps degree {found[0]}, "
+                f"the shell keeps {shell[0]}",
+            )
+
+    def test_every_drop2_voicing_states_both_guide_tones(self):
+        """
+        The rule keeps both, for every chord tone, and so does every placement of it.
+
+        This is the property the retired fallback existed to preserve. It used to be checked
+        against the hand-authored tables, which no longer exist; checked here on what the
+        engine actually offers, which is the stronger claim - a shape the rule builds still
+        has to be fretted on a string set, and a placement is where a note could go missing.
+        """
+        from arranger.grips import _guide_tones
+
+        checked = 0
+        for chord_name, quality in QUALITIES:
+            tones = ChordParser.CHORD_TONES_FROM_ROOT.get(quality)
+            if not tones:
+                continue
+            guide = _guide_tones(tones, 0)
+            if not guide:
+                continue
+            root_pc = root_midi_of(chord_name) % 12
+            for melody in every_chord_tone(chord_name, quality):
+                for top_string in (5, 4):
+                    for voicing in VoiceLeadingEngine.get_drop2_voicings(
+                        Note(melody), quality, chord_name=chord_name,
+                        top_string=top_string,
+                    ):
+                        sounding = {
+                            (pc - root_pc) % 12 for pc in voicing.pitch_classes()
+                        }
+                        for want in guide:
+                            checked += 1
+                            self.assertIn(
+                                want % 12, sounding,
+                                f"{chord_name} {melody} {voicing.tab_string()}: "
+                                f"missing degree {want}",
+                            )
+        self.assertGreater(checked, 100, "the check covered almost nothing")
+
+
+class TestDerivedGripShapes(unittest.TestCase):
+    """
+    drop-3 and close position, asserted as *music* rather than as offsets.
+
+    Both are in `GRIP_PREFERENCE`, and both were unreachable at the default span limit
+    for a long time, which is what let two defects survive: the string order
+    `string_sets_for` returned, and the voice drop-3 actually dropped. Both are
+    invisible in a generated tab - the pitches are right either way - so they are pinned
+    here against the definition rather than against a previous output.
+
+    The definition, for a close stack v1 v2 v3 v4 from the top:
+
+        close position    v1  v2  v3  v4
+        drop 2            v1  v3  v4  (v2 an octave down)
+        drop 3            v1  v2  v4  (v3 an octave down)
+
+    In both cases the dropped voice ends up **lowest**, so it is the last note of the
+    template. That ordering is the whole content of the drop-3 case: dropping the right
+    voice into the wrong slot produces four pitches that are a permutation of a chord
+    tone set and not a drop-3 of anything.
+    """
+
+    # (chord, quality, melody) with a close stack under the melody of exactly four
+    # voices, spread widely enough that the assertion below is not a near miss.
+    CASES = (
+        ("Cmaj7", "maj7", "C5", ("C5", "B4", "G4", "E4")),
+        ("Cmaj7", "maj7", "E5", ("E5", "C5", "B4", "G4")),
+        ("G7", "7", "G4", ("G4", "F4", "D4", "B3")),
+    )
+
+    @staticmethod
+    def _close_stack(chord_name, quality, melody):
+        """
+        The four pitches `_close_stack_offsets` derives under `melody`.
+
+        The tones come from `chord_context`, which yields them as **degrees from the
+        root** and is what every grip builder reads - not
+        `ChordParser.get_chord_tones`, which returns absolute pitch classes once a chord
+        name is supplied. The two disagree for any non-C chord: G7 is degrees
+        (0, 4, 7, 10) but absolute classes (2, 5, 7, 11), and walking down from G4
+        looking for absolute class 2 finds C4, so the "G7" comes out as a C-something.
+        That is the whole reason `chord_context` exists and documents itself as being
+        deliberately not `get_chord_tones`.
+        """
+        from arranger.grips import _close_stack_offsets, chord_context
+
+        _canonical, root_pc, tones = chord_context(quality, chord_name)
+        offsets = _close_stack_offsets(tones, Note(melody).midi_note(), root_pc)
+        return [Note(melody).midi_note() + offset for offset in offsets]
+
+    def _template(self, grip, chord_name, quality, melody):
+        """The one interval template `grip` builds for `melody`, as absolute pitches."""
+        from arranger.grips import _interval_set_for_grip, chord_context
+
+        _canonical, root_pc, tones = chord_context(quality, chord_name)
+        melody_midi = Note(melody).midi_note()
+        templates = _interval_set_for_grip(
+            grip, tones, melody_midi, root_pc,
+        )
+        self.assertEqual(len(templates), 1, f"{chord_name} under {melody}")
+        return [melody_midi + offset for offset in templates[0]], templates[0]
+
+    def test_the_close_stack_under_a_melody_is_the_one_named(self):
+        """
+        The fixtures above state the close stack each melody is expected to sit on.
+
+        Stated rather than computed, because the whole point of the drop-3 assertion is
+        to compare the engine against the textbook definition - deriving the expectation
+        from the same helper the engine uses would make the test agree with any bug the
+        helper happens to have.
+        """
+        for chord_name, quality, melody, expected in self.CASES:
+            actual = [note_name(p) for p in self._close_stack(chord_name, quality, melody)]
+            self.assertEqual(actual, list(expected), f"{chord_name} under {melody}")
+
+    def test_a_drop3_drops_the_third_voice_and_puts_it_last(self):
+        """
+        The generated drop-3 template is the close stack with v3 lowered an octave.
+
+        Checked on the template rather than on a tab, because a tab cannot show *which*
+        string carried the dropped voice - and the defect this pins put the right pitch
+        on the wrong string, which reads identically once the frets are written out.
+        """
+        for chord_name, quality, melody, _expected in self.CASES:
+            stack = self._close_stack(chord_name, quality, melody)
+            pitches, _offsets = self._template("drop3", chord_name, quality, melody)
+            self.assertEqual(
+                pitches,
+                [stack[0], stack[1], stack[3], stack[2] - 12],
+                f"{chord_name} under {melody}: drop-3 must be v1 v2 v4 (v3 down an octave)",
+            )
+
+    def test_a_drop24_drops_the_second_and_fourth_and_puts_them_last(self):
+        """
+        Drop-2 & 4 lowers the second *and* fourth voices an octave each.
+
+        The shape is where the variable names lie: in `_, v1, v2, v3 = stack`, `v1` is
+        the **second** voice, so the two that drop are `v1` and `v3`, and `v2` is the one
+        that stays beside the melody. Getting that backwards gives `[0, v1, v2 - 12,
+        v3 - 12]`, which keeps the second voice where the stack had it and sounds
+        `C5 B4 G3 E3` for a Cmaj7 rather than `C5 G4 B3 E3`. Both are four chord tones,
+        so a tone-purity check passes on the wrong one.
+        """
+        for chord_name, quality, melody, _expected in self.CASES:
+            stack = self._close_stack(chord_name, quality, melody)
+            second, third, fourth = stack[1], stack[2], stack[3]
+            pitches, _offsets = self._template("drop24", chord_name, quality, melody)
+            self.assertEqual(
+                pitches,
+                [stack[0], third, second - 12, fourth - 12],
+                f"{chord_name} under {melody}: drop-2&4 must be v1 v3 (v2 down) (v4 down)",
+            )
+
+    def test_a_drop24_keeps_a_triads_doubled_root_in_place(self):
+        """
+        The same root-doubled triad case as drop-3: the doubled root is not dropped.
+
+        A triad's fourth voice is the root an octave below the stack, and lowering it a
+        further octave puts the chord's identity where the rest of the shape does not
+        support it. Ebmaj under G4 stacks G4 Eb4 Bb3 G3; dropping the second voice as
+        well gives G4 Bb3 G3 Eb3 - a b3 and a b7 against a major triad, which sounds as
+        Eb minor. The root stays where the stack put it.
+        """
+        stack = self._close_stack("Ebmaj", "maj", "G4")
+        self.assertEqual(
+            [note_name(p) for p in stack], ["G4", "Eb4", "Bb3", "G3"],
+            "the fixture this claim rests on",
+        )
+        pitches, _offsets = self._template("drop24", "Ebmaj", "maj", "G4")
+        tones = {t % 12 for t in ChordParser.CHORD_TONES_FROM_ROOT["maj"]}
+        sounded = {(p - 3) % 12 for p in pitches}   # 3 = Eb, the root of Ebmaj
+        self.assertIn(0, sounded, f"the root must sound: {pitches}")
+        self.assertLessEqual(sounded, tones, f"Eb major sounding {sorted(sounded)}")
+
+    def test_a_drop24_is_offered_only_on_sets_no_finger_has_to_cross(self):
+        """
+        The shape is still reachable, and no set it takes needs a finger to reach over one.
+
+        Twenty semitones from the melody to the bass cannot sit on four neighbouring
+        strings inside a five-fret span - the low voice lands below where a contiguous
+        block can reach - and the answer is the **bass taking a lower string**, never a
+        finger skipping an inner one. The four sets that made an inner gap frettable were
+        removed for exactly that (crossing the G, the B, the D and the G again), at a
+        measured cost of 260 of 1,204 selections with no pool emptied; the table's comment
+        holds the full price.
+
+        This assertion was **inverted rather than deleted**. It used to demand that
+        `(5,4,2,1)` and `(4,3,1,0)` - this family's two measured winners - be *present*.
+        What survives the change is the reason they are gone, so the check is against the
+        rule rather than against a list, and a set edited back in without the reasoning
+        fails here rather than in a comment nobody re-reads.
+        """
+        # The table stores string *indices* high to low, like every entry in it, so the
+        # conventional set names read 1-2-4-5 as (5, 4, 2, 1) and 2-3-5-6 as (4, 3, 1, 0).
+        sets = {frozenset(strings) for strings, _s in GRIP_STRING_SETS["drop24"]}
+        self.assertNotIn(frozenset((5, 4, 2, 1)), sets, "1-2-4-5, which crossed the G")
+        self.assertNotIn(frozenset((4, 3, 1, 0)), sets, "2-3-5-6, which crossed the B")
+        for strings, soprano in GRIP_STRING_SETS["drop24"]:
+            self.assertEqual(
+                finger_skip_count(a_shape_on(strings)), 0,
+                f"drop24 {tuple(strings)} puts a finger over an unplucked string",
+            )
+            self.assertEqual(soprano, max(strings), "the soprano is the top of the set")
+
+        produced = [
+            v
+            for melody in ("C5", "G4", "Eb5")
+            for v in VoiceLeadingEngine.get_grip_voicings(
+                Note(melody), "maj7", chord_name="Cmaj7", top_string=5,
+                grips=("drop24",),
+            )
+        ]
+        self.assertTrue(produced, "drop-2&4 generated nothing")
+        for v in produced:
+            self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN["drop24"])
+            self.assertIn(
+                frozenset(v.active_strings), supported_string_sets(), v.tab_string(),
+            )
+
+    def test_a_drop24_only_sounds_chord_tones_under_a_chord_tone_melody(self):
+        """
+        Under a melody that is a chord tone, every voice it builds is a chord tone.
+
+        Scoped to chord-tone melodies, and the scope is the point. A melody outside the
+        chord is placed in the top voice unchanged - it is the caller's note and the
+        engine does not rewrite it - and `_close_stack_offsets` starts its walk *from*
+        that melody, so the note is carried into the shape as well. G7 under F#5 gives
+        `Gb5 D5 F4 B3`, with the F# as the melody and a Gb beside it. That is pre-existing
+        and identical in `drop3`, measured at HEAD before this family existed; it is the
+        quality-only fallback case the README already documents, not something drop-2 & 4
+        introduces. Asserting it here would pin a defect into both families.
+        """
+        checked = 0
+        for chord_name, quality in QUALITIES:
+            tones = {t % 12 for t in ChordParser.get_chord_tones(quality, chord_name)}
+            for melody in every_chord_tone(chord_name, quality):
+                for v in VoiceLeadingEngine.get_grip_voicings(
+                    Note(melody), quality, chord_name=chord_name,
+                    top_string=5, grips=("drop24",),
+                ):
+                    checked += 1
+                    self.assertLessEqual(
+                        {p % 12 for p in v.midi_notes()}, tones,
+                        f"{chord_name} {melody} -> {v.tab_string()}",
+                    )
+        # The bound is "not nothing" rather than "many": this family kept four of its eight
+        # sets, so a melody counts here only if the quality has a template for it *and* the
+        # shape fits one of the four that remain under a high-E soprano - measured, two
+        # voicings. It used to be more than twenty, which is why the guard is stated as a
+        # property rather than a remembered number.
+        self.assertGreater(checked, 0, "the check covered nothing at all")
+
+    def test_a_drop3_is_wider_than_the_close_stack_it_comes_from(self):
+        """
+        Drop-3 trades a dropped voice for reach: its lowest note is an octave below the
+        close stack's, so the shape spans more.
+
+        This is the musical consequence that separates the two families, and it is what
+        makes drop-3 unusable inside this library's five-fret budget: the spread is
+        structural, not a matter of where the shape is placed. Asserted as a relation
+        between the two templates rather than as an absolute width, so it holds for any
+        melody and any register.
+        """
+        for chord_name, quality, melody, _expected in self.CASES:
+            stack = self._close_stack(chord_name, quality, melody)
+            drop3, _offsets = self._template("drop3", chord_name, quality, melody)
+            closed, _c_offsets = self._template("closed", chord_name, quality, melody)
+
+            self.assertEqual(
+                min(drop3), stack[2] - 12,
+                f"{chord_name} under {melody}: drop-3 bass is not the third voice "
+                f"lowered an octave",
+            )
+            # Close position keeps v4 as its bass; drop-3 puts v3 an octave below v2,
+            # so it reaches lower and the span from the melody grows by construction.
+            self.assertLess(
+                min(drop3), min(closed),
+                f"{chord_name} under {melody}: drop-3 does not reach below close position",
+            )
+
+    def test_close_position_keeps_every_voice_where_the_stack_put_it(self):
+        """
+        `closed` is the close stack itself - no voice moves, so it is its own inverse.
+
+        Asserted because the two families share one stack and one placement path, so a
+        change to either is a change to both; this pins the one that must not move.
+        """
+        for chord_name, quality, melody, _expected in self.CASES:
+            pitches, _offsets = self._template("closed", chord_name, quality, melody)
+            self.assertEqual(
+                pitches, self._close_stack(chord_name, quality, melody),
+                f"{chord_name} under {melody}",
+            )
+
+
+class TestClosePosition(unittest.TestCase):
+    """
+    Close position (`closed`): the traditional shapes, and the family behind them.
+
+    A close-position four-note chord is the tightest voicing there is - no voice is
+    dropped - and it sits **second** in `GRIP_PREFERENCE`, behind only drop-2, so that
+    where a melody *can* fret it it beats every other four-note family on a tie. Most
+    melodies cannot: a close stack under a melody is a seventh or more of pitch on four
+    strings only four or five semitones apart in tuning, so it is simply never generated
+    there rather than offered and rejected. The two shapes below are the ones a player
+    learns; they are pinned as tabs because the pitches alone do not distinguish close
+    position from a drop voicing of the same chord, and the *strings* are the whole
+    content of the shape.
+    """
+
+    def setUp(self):
+        self.engine = VoiceLeadingEngine()
+
+    # (chord, quality, melody, soprano string, tab). The first is the D-G-B-E close
+    # position with the major 7th on top; the second the A-D-G-B form with the melody on
+    # the B string, which is the one a low melody reaches.
+    SHAPES = (
+        ("Gmaj7", "maj7", "F#4", 5, "x-x-5-4-3-2"),
+        ("Dmaj7", "maj7", "C#4", 4, "x-5-4-2-2-x"),
+    )
+
+    def test_the_two_traditional_close_position_shapes(self):
+        """Each shape is a close stack under the melody with no voice displaced."""
+        for chord_name, quality, melody, top_string, tab in self.SHAPES:
+            voicings = self.engine.get_grip_voicings(
+                Note(melody), quality, chord_name=chord_name,
+                top_string=top_string, grips=("closed",),
+            )
+            self.assertEqual(
+                [v.tab_string() for v in voicings], [tab],
+                f"{chord_name} under {melody}",
+            )
+
+    def test_the_family_covers_minor_dominant_and_half_diminished(self):
+        """
+        The family is derived from the chord's own tones, so it is not maj7-only.
+
+        A minor 7th, a dominant 7th and a half-diminished share the same soprano degree
+        (the b7), so the three shapes sit on the same frets and differ only in the third
+        and fifth - which is exactly what a close stack should do.
+        """
+        expected = {
+            ("m7", "Gm7"): "x-x-5-3-3-1",
+            ("7", "G7"): "x-x-5-4-3-1",
+            ("m7b5", "Gm7b5"): "x-x-5-3-2-1",
+        }
+        for (quality, chord_name), tab in expected.items():
+            voicings = self.engine.get_grip_voicings(
+                Note("F4"), quality, chord_name=chord_name, top_string=5,
+                grips=("closed",),
+            )
+            self.assertEqual(
+                [v.tab_string() for v in voicings], [tab], chord_name
+            )
+
+    def test_a_close_position_voicing_is_a_complete_chord_on_the_melody(self):
+        """Every generated shape is a chord tone set with the melody on top, in span."""
+        count = 0
+        for chord_name, quality in QUALITIES:
+            tones = set(ChordParser.get_chord_tones(quality, chord_name))
+            for melody in every_chord_tone(chord_name, quality):
+                for top_string in MELODY_STRING_CHOICES_FULL:
+                    for v in self.engine.get_grip_voicings(
+                        Note(melody), quality, chord_name=chord_name,
+                        top_string=top_string, grips=("closed",),
+                    ):
+                        count += 1
+                        where = f"{chord_name} {melody} {v.tab_string()}"
+                        self.assertEqual(v.grip, "closed", where)
+                        self.assertTrue(set(v.pitch_classes()) <= tones, where)
+                        self.assertLessEqual(
+                            v.fret_span(), GRIP_MAX_SPAN["closed"], where
+                        )
+                        self.assertIn(
+                            frozenset(v.active_strings),
+                            supported_string_sets(), where,
+                        )
+                        self.assertEqual(
+                            max(v.midi_notes()), Note(melody).midi_note(), where
+                        )
+        # Reachable per melody rather than never, and not for every melody either: the
+        # guard is "not nothing", never a remembered count.
+        self.assertGreater(count, 0, "no close-position shape was generated at all")
+
+    def test_close_position_is_offered_and_can_win_a_default_arrangement(self):
+        """
+        `closed` is in `GRIP_PREFERENCE`, and the selector reaches it on its merits.
+
+        A triad under its 3rd has no drop-2 shape as tight as the close stack, so span
+        decides and the close voicing wins. Asserting the *chosen* grip is what makes
+        this the acceptance gate for offering the family at all - a generator that
+        cannot be selected is dead weight.
+        """
+        self.assertIn("closed", GRIP_PREFERENCE)
+        step = VoiceLeadingEngine.arrange_progression(
+            [("E4", "maj", "Cmaj")]
+        )[0]
+        self.assertEqual(step.grip, "closed")
+        self.assertEqual(step.voicing.tab_string(), "x-7-5-5-5-x")
+
+    def test_an_exact_tie_goes_to_the_earlier_family_in_the_order(self):
+        """
+        The order *is* the tie-break: no criterion names a family, so the order decides.
+
+        `Cmaj` under a `C4` or `G4` melody on the B string is the live case. Close
+        position and the drop-2 & 4 reading tie on every element of the cost tuple -
+        including bass function, because one states the root underneath and the other the
+        5th, and `BASS_DEGREES_6432` scores those the same - so the position of `closed`
+        in `GRIP_PREFERENCE` is what picks between them. **That order is the engine's
+        now**: it is the internal search space rather than a caller's preference list
+        (`docs/history/parts.md` §4), so there is no second spelling to assert and the claim is
+        one-directional - the shipped order decides, and `closed` holds its place because
+        it is generated before `drop2_6432`.
+        """
+        self.assertEqual(GRIP_PREFERENCE.index("closed"), 1)
+        self.assertLess(
+            GRIP_PREFERENCE.index("closed"), GRIP_PREFERENCE.index("drop2_6432")
+        )
+        for melody, closed_tab in (("C4", "x-3-2-0-1-x"), ("G4", "x-10-10-9-8-x")):
+            with self.subTest(melody=melody):
+                chosen = VoiceLeadingEngine.arrange_progression(
+                    [(melody, "maj", "Cmaj")], top_strings=(4,)
+                )[0]
+                self.assertEqual(
+                    (chosen.grip, chosen.voicing.tab_string()), ("closed", closed_tab)
+                )
+
+
+class TestTheFamilyIsNotASpelling(unittest.TestCase):
+    """There is no `--grips` and no `parse_grips`: a family is not a choice.
+
+    The families are the chord part's *internal search space* (`docs/history/parts.md` §4):
+    `parts=` says which parts sound, `texture=` says how many notes the chord part
+    states, and `TONE_PRIORITY` plus the neck window decide which family states
+    them. So the spelling this class used to test - a comma-separated list of
+    families, in the order the caller ranked them - is deleted rather than
+    deprecated, and what is asserted here is that it stays deleted.
+    """
+
+    def test_the_flag_and_the_parser_are_both_gone(self):
+        """A surviving alias would keep the collision addressable (`§8`)."""
+        self.assertFalse(hasattr(package, "parse_grips"))
+        for module in (package, package.cli):
+            with self.subTest(module=module.__name__):
+                self.assertNotIn("parse_grips", getattr(module, "__all__", []))
+
+    def test_the_palette_is_still_the_generation_order(self):
+        """`GRIP_PREFERENCE` survives as the order candidates are generated in.
+
+        It is no longer a caller's preference list, but an exact tie between two
+        candidates still goes to the family generated first - so the tuple is the
+        ranking and `cost.best_voicing` is its argmin.
+        """
+        self.assertEqual(
+            tuple(sorted(GRIP_PREFERENCE, key=GRIP_PREFERENCE.index)), GRIP_PREFERENCE
+        )
+
+
+class TestPartialHarmonisation(unittest.TestCase):
+    """A partial shape is reported, because the chord name alone would overstate it."""
+
+    def test_a_partial_step_is_flagged_and_annotated(self):
+        """
+        F5 over F7 high on the neck used to resolve to a two-note duo, and the
+        renderers said so, because a chord name above a duo describes a harmony that is
+        not fully sounding.
+
+        `drop24` in the palette then gave F7 under F5 a complete four-note chord -
+        `x-12-13-x-13-13` - where only the duo fitted before, so this test asserted that
+        nothing in the progression was partial any more. It is no longer four notes.
+
+        **That is the ban's cost, and it is asserted rather than re-pinned away.**
+        `x-12-13-x-13-13` was one of the four inner-skip `drop24` sets, removed because a
+        finger had to reach over the unplucked G to fret it (`docs/history/fingering.md` §4.4), and
+        F5 at fret 13 leaves nothing else a four-fret hand can hold: the only candidate
+        left is the five-fret `x-12-x-8-13-13`, which the budget refuses. So the step plays
+        the melody alone and the *diagnostic* says why - note that it is not marked
+        `partial`, because a melody with no chord under it is the melody-only shape rather
+        than a chord that failed to complete.
+
+        The rule this test exists for is still asserted on both sides: the steps that can
+        carry four notes do, and a genuinely partial harmonisation is still reported for a
+        melody low enough that no four-note block exists.
+        """
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("A5", "m7", "Dm7"), ("G5", "maj7", "Cmaj7"), ("F5", "7", "F7")]
+        )
+        self.assertEqual(
+            [s.tab_line() for s in steps],
+            ["10-x-10-10-10-x", "8-x-9-9-8-x", "x-x-x-x-x-13"],
+            "the F7 step is the one the ban cost",
+        )
+        for step in steps[:2]:
+            self.assertEqual(len(step.voicing.active_frets()), 4, step.tab_line())
+        self.assertEqual(steps[2].grip, "melody")
+        self.assertEqual(
+            [note_name(n) for n in steps[2].voicing.midi_notes()], ["F5"],
+            "the melody sounds and the chord does not",
+        )
+        self.assertNotIn("partial", format_progression(steps))
+
+        # A partial harmonisation is still reachable - a melody low enough that no
+        # four-note shape fits it - and is still reported. A G3 melody has no four-note
+        # block: the low strings are below it and the contiguous ones run out of board,
+        # so G7 resolves to a three-note shell. That is the case the annotation exists
+        # for, and it is why the rule is asserted here rather than only its absence in
+        # the progression above.
+        shell_steps = VoiceLeadingEngine.arrange_progression(
+            [("G3", "7", "G7"), ("G3", "maj7", "Cmaj7")]
+        )
+        self.assertTrue(all(s.grip == "shell" for s in shell_steps),
+                        [s.tab_line() for s in shell_steps])
+        for step in shell_steps:
+            self.assertTrue(step.partial, step.tab_line())
+            self.assertLess(len(step.voicing.active_frets()), 4)
+            self.assertIn("partial", format_progression([step]))
+
+    def test_a_full_chord_is_preferred_wherever_one_fits(self):
+        """
+        A partial harmonisation is a fallback, not a style: where a complete chord can
+        be played, it wins even if the shell would have held the position better.
+        """
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("C5", "m7b5", "Am7b5"), ("C5", "7b9", "D7b9"), ("Bb4", "m6", "Gm6")]
+        )
+        self.assertTrue(steps)
+        self.assertFalse(any(s.partial for s in steps), [s.tab_line() for s in steps])
+
+    def test_a_full_four_note_step_is_not_flagged(self):
+        step = VoiceLeadingEngine.arrange_progression(
+            [("D5", "m7", "Dm7")], top_strings=(5,)
+        )[0]
+        self.assertFalse(step.partial)
+        self.assertEqual(step.grip, "drop2")
+        self.assertEqual(len(step.voicing.active_frets()), 4)
+
+    def test_the_grip_is_carried_onto_the_step_and_its_voicing(self):
+        for step in VoiceLeadingEngine.arrange_progression(
+            [("D4", "m7", "Dm7"), ("D4", "7", "G7"), ("C4", "maj7", "Cmaj7")]
+        ):
+            self.assertEqual(step.grip, step.voicing.grip)
+            self.assertIn(step.grip, GRIP_PREFERENCE)
+
+    def test_step_grip_is_one_fact_with_one_home(self):
+        """
+        `step.grip` is a derived view of `voicing.grip`, not a second field.
+
+        It used to be a stored mirror, and on a no-chord step the two disagreed
+        - the step said "drop2" while the voicing said "melody" - which is the
+        defect `docs/history/one-fact.md` commit 1 exists to make impossible. The
+        proof is the assignment: a view that cannot be written cannot disagree
+        with the fact it reads, and assigning to it raises.
+        """
+        step = VoiceLeadingEngine.arrange_progression(
+            [("D4", "m7", "Dm7")]
+        )[0]
+        self.assertEqual(step.grip, step.voicing.grip)
+        self.assertIn(step.grip, GRIP_PREFERENCE)
+        with self.assertRaises(AttributeError):
+            step.grip = "shell"  # type: ignore[assignment]

@@ -1,0 +1,117 @@
+name: CI
+
+# `make check` on every push, across every Python version the package claims to
+# support, with **both optional extras installed** - see the note under the
+# install step below, because getting this wrong is how a real defect shipped
+# silently.
+#
+# ONE JOB, AND IT IS THE WHOLE GATE. There used to be a second `corpus` job here,
+# manual-dispatch only, gated on a repository variable holding a download URL for
+# the 42 MB Weimar Jazz Database. It existed because the database could not be
+# committed, so on a clean clone most of the suite's tests were SKIPPED and a green
+# run did not mean the corpus path had been exercised - a caveat that had to be
+# restated in the header and in `AGENTS.md`.
+#
+# The database and its loader are gone, so the caveat is gone with them: there is
+# nothing here that a clean clone cannot run, and a green check here means the
+# whole suite ran - not merely the part of it a runner can reach. The only guards
+# left are the optional-extra ones, and this job installs both extras precisely so
+# those do not skip either.
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege, stated at the root so it applies to every job that does not
+# override it. Without this the run inherits the repository (or organization)
+# default, which for anything created before February 2023 is read-write on
+# every scope - so a workflow that only reads the tree would hold a token that
+# can push to it, open pull requests against it and publish packages from it.
+#
+# `contents: read` is what `actions/checkout` needs and all this workflow does:
+# both jobs check out, install, and run `make check`. Nothing here writes to
+# the repository, comments on a pull request, or touches a release, so there is
+# no scope to escalate - and writing it down is the point, because the default
+# can change and this file can be copied to a repository with stricter ones.
+permissions:
+  contents: read
+
+# Cancel superseded runs on the same ref: the suite takes ~45s locally and
+# several minutes across five versions, so a five-commit push would otherwise
+# spend most of its time re-running work already superseded.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: check (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      # A failure on one version is the interesting signal; cancelling the rest
+      # loses the information about *which* versions are affected.
+      fail-fast: false
+      matrix:
+        # `requires-python = ">=3.11"` and the classifiers say 3.11-3.14, so the
+        # matrix is exactly that range. `3.14` is the version the local
+        # development virtualenv runs, which is how the claim was ever made.
+        # 3.10 was dropped from the metadata, so it is dropped here too.
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      # One editable install carrying all three extras. `make install-extra`
+      # and `install-extra-gp` are separate targets on purpose (PyGuitarPro is
+      # LGPL-3.0, so a developer who only needs MusicXML should not pull it in),
+      # but **a CI run wants every combination exercised**, so that separation is
+      # not reproduced here.
+      #
+      # The extras are the point of the job, not an optimisation. Without them
+      # every `skipUnless(HAS_MUSIC21)` and `skipUnless(HAS_GUITARPRO)` guard
+      # silently skips, and the MusicXML 3.1 `kind` problem this repository
+      # documents having shipped is precisely the class of defect that was
+      # invisible to a round trip. The other half of the asymmetry - that a
+      # *missing* extra must be a reported usage error rather than a crash - is
+      # asserted by stubbing the writer, so it runs with or without them.
+      #
+      # `dev` is the third: `make check` is lint + typecheck + test, and the first
+      # two run `ruff` and `pyright` by bare name. Without the extra those targets
+      # exit with the Makefile's own "needs pyright/ruff" message, so the job
+      # would fail before a single test ran.
+      - name: Install the package with every extra
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e '.[xml,gp,dev]'
+
+      # `make check` is lint + typecheck + test, in that order, so a lint failure
+      # is reported before the suite is spent. The Makefile's defaults point at
+      # `.venv/bin/...`, which does not exist on a runner, so all three variables
+      # are overridden. There is no venv on a runner, and creating one purely to
+      # satisfy a path would be a second thing to keep in sync.
+      #
+      # **`PYTHON` is passed as an absolute path, and that is not incidental.**
+      # `make typecheck` runs `pyright --pythonpath $(PYTHON)`, and pyright
+      # treats that argument as a *filesystem path* to an interpreter - it does
+      # not resolve a bare name through `PATH`. Passing `PYTHON=python`, which
+      # works perfectly well for actually running the tests, therefore makes
+      # pyright blind to every installed package: measured here, 37 spurious
+      # `reportMissingImports` errors, all of them `musthe` / `music21` /
+      # `guitarpro` for packages that were installed and importing fine.
+      #
+      # That is trap #2 from AGENTS.md reproduced by the very workflow written to
+      # enforce the gate, and it is worth the extra `command -v`: a CI job that
+      # reports 37 import errors on a clean tree teaches everyone to ignore it.
+      # `PYRIGHT` and `RUFF` *are* bare names, because they are executed through
+      # a shell and `PATH` resolution is correct there.
+      - name: make check
+        run: make check PYTHON="$(command -v python)" PYRIGHT=pyright RUFF=ruff
+
+      # Printed so a matrix job's interpreter is never a guess from the job name.
+      - name: Report the interpreter
+        if: always()
+        run: python -VV

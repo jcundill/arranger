@@ -1,0 +1,974 @@
+"""MusicXML export for a whole arranged progression.
+
+`tabstaff` renders an arrangement for a human to read - characters in a terminal, a
+table in a browser. This module renders the same arrangement as **MusicXML**, the
+interchange format every notation program reads, so a head can go on to Sibelius,
+MuseScore or Final without being retyped.
+
+What it writes is a real score rather than a note list:
+
+- a **notation staff** of the music, in the treble clef a chord-melody part is
+  written in and **an octave above** what it sounds (guitar's own transposition,
+  declared on the part so playback is not raised with the notation), and
+- the **chord symbols** on each chord change, on
+- the **written rhythm**: each step is a note or chord of the length it occupies, an
+  unchanged shape is written as one longer note rather than a re-strike, and an event
+  that runs across a bar line is tied rather than stretched, and
+- the **key signature**, once, in the first measure: without it a three-flat tune is
+  written as a C-major score, which means an accidental on every note of its own scale.
+
+**There is no TAB staff here, deliberately.** music21 cannot produce a TAB staff that a
+real reader renders correctly: it writes neither the `<staff-lines>6</staff-lines>` a
+tab staff needs nor a fret and string for each note *inside* a chord - music21 issue
+1534 puts them all on the chord's first note - so both would have to be patched into
+the finished XML afterwards, and the patched document still does not display correctly
+in MuseScore 3. A workaround that does not work costs more than not shipping it.
+
+Fretting belongs to the renderer whose format stores it natively. `tabgp` writes a
+Guitar Pro 5 file, which is a *tab* format: a fret and a string per note survive the
+round trip exactly, with no post-processing at all. So the two renderers divide the
+work by what each format can actually do - notation here, tab there - while the
+placement of every step is still shared, so a head lands on the same beats in both.
+
+The placement is its own, in `tabscore.score_events`, and deliberately does **not** reuse
+`tabstaff._staff_columns`. That column grid is lossy - two steps on one onset collapse
+into one column - which is right for a fixed-width ASCII staff and wrong for a score,
+where the second chord is a note the reader must see. The eighth-note skeleton puts
+two steps on the last beat of most bars, so sharing the grid would drop a chord from
+every bar of a head. What *is* shared is the semantics: absolute onsets with signed
+bars, and collapse on unchanged sounding pitches. See `tabscore.score_events`.
+
+`music21` is an **optional extra** (`pip install 'jazz-arranger[xml]'`) and is
+imported inside the functions, not at the top of the module. The library must keep
+working - and keep importing - with it absent, so nothing here may run at import
+time.
+"""
+
+from __future__ import annotations
+
+import re
+from typing import Any, Dict, List, Optional, Sequence, Tuple
+from xml.etree import ElementTree
+
+from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES, ArrangementStep, GuitarFretboard
+from tabscore import score_events, substitute_steps
+
+# Guitar sounds an octave below its written pitch, so a score is written an octave
+# higher than the arrangement sounds. The shift is applied to the written pitches and
+# **declared on the part** (the guitar transposition in `format_musicxml`), so a reader
+# notates the notes up the staff and still plays them back at concert pitch.
+_WRITTEN_OCTAVE_SHIFT = 12
+
+
+# The MusicXML 3.1 `kind-value` enumeration, transcribed from the 3.1 schema.
+#
+# `kind` is a **closed** enumeration, so a value outside it is a fatal import error in
+# any 3.1-era reader, not a warning. MusicXML 4.0 added values to it -
+# `suspended-fourth-seventh` among them - and music21 writes 4.0: MuseScore 3 rejects
+# the file outright with
+#
+#     Content of element kind does not match its type definition:
+#     String content is not listed in the enumeration facet.
+#
+# and `converter.parse()` does not notice, because music21 both wrote the value and
+# reads it back. 3.1 rather than 4.0 deliberately: it is a strict subset, so a
+# 3.1-legal document is also 4.0-legal. That keeps the DOCTYPE honest while making
+# the file importable by as many readers as possible.
+_READABLE_KINDS = frozenset(
+    {
+        "major",
+        "minor",
+        "augmented",
+        "diminished",
+        "dominant",
+        "major-seventh",
+        "minor-seventh",
+        "diminished-seventh",
+        "augmented-seventh",
+        "half-diminished",
+        "major-minor",
+        "major-sixth",
+        "minor-sixth",
+        "dominant-ninth",
+        "major-ninth",
+        "minor-ninth",
+        "dominant-11th",
+        "major-11th",
+        "minor-11th",
+        "dominant-13th",
+        "major-13th",
+        "minor-13th",
+        "suspended-second",
+        "suspended-fourth",
+        "Neapolitan",
+        "Italian",
+        "French",
+        "German",
+        "pedal",
+        "power",
+        "Tristan",
+        "other",
+        "none",
+    }
+)
+
+# The MusicXML 4.0 `kind` values that 3.1 lacks, and how each is spelled in 3.1:
+# the base kind it becomes, plus the degrees to `add` to carry the part the new value
+# folded into its name. MusicXML has no 3.1 kind for a sus chord with another interval
+# in the name, but it does have the `<degree>` idiom for a harmony expressed as a base
+# kind plus alterations - which is the case 3.1 was designed to cover, so a 7sus4 still
+# arrives as a real chord symbol rather than as text.
+_SUS_KINDS = {
+    "suspended-fourth-seventh": ("suspended-fourth", (7,)),
+    "suspended-second-seventh": ("suspended-second", (7,)),
+    "suspended-fourth-ninth": ("suspended-fourth", (9,)),
+    "suspended-second-ninth": ("suspended-second", (9,)),
+}
+
+def _music21() -> Any:
+    """
+    Imports music21 on demand, with a message that says how to get it.
+
+    music21 is the library's only optional dependency and it is a large one, so it
+    is not installed with the base package. Importing it lazily is what keeps
+    `import arranger` (and therefore `import tabstaff` and `from arranger import *`)
+    working on a machine that has never heard of it - the same lazy-import
+    discipline `arranger.main()` uses for the head importer, for the same reason.
+    """
+    try:
+        import music21  # noqa: F401  (imported for the side effect of availability)
+    except ImportError as error:  # pragma: no cover - depends on the environment
+        raise ImportError(
+            "MusicXML export needs music21, which is an optional extra. "
+            "Install it with: pip install 'jazz-arranger[xml]'"
+        ) from error
+    return music21
+
+
+def _pitch(midi: int) -> Tuple[str, int]:
+    """
+    Spells a MIDI number as (step, octave) for music21, flats preferred.
+
+    Flats because that is the convention the rest of the library prints in
+    (`PITCH_CLASS_NAMES`, `arranger.note_name`): a `Bb7` that came out of the
+    Weimar database as a flat should not be re-spelled sharp on its way into a
+    score a player reads.
+    """
+    return PITCH_CLASS_NAMES[midi % 12], midi // 12 - 1
+
+
+def _sounding(step: ArrangementStep) -> List[int]:
+    """
+    The pitches a step actually sounds, as MIDI numbers, lowest string first.
+
+    A repeated melody is a **single note**: the renderers show the soprano alone and
+    leave the inner voices blank, because the held shape belongs to the chord the
+    hold began on and the player is not re-fingering it. Honoured here rather than
+    taken from the full voicing, so the score says the same thing the tab says.
+    """
+    voicing = step.voicing
+    soprano = voicing.soprano_string()
+    strings = [index for index, fret in enumerate(voicing.frets) if fret >= 0]
+    if step.repeated and soprano >= 0:
+        strings = [soprano]
+    return [
+        GuitarFretboard.fret_to_midi(index, voicing.frets[index]) for index in strings
+    ]
+
+
+def _build_note(step: ArrangementStep, length: float) -> Any:
+    """
+    One step as a music21 `Chord`, a single `Note`, or a `Rest`.
+
+    A one-pitch step becomes a `Note` rather than a one-note `Chord`, so a repeated
+    melody exports as the single note it is played as, and a melody-only (no chord)
+    step does the same. Anything else is a `Chord` carrying one note per sounding
+    string, written as **pitches only**: the staff is notation, and a `<fret>` or a
+    `<string>` on a notation staff is information no reader can use. Fretting is
+    written by `tabgp` - see the module docstring.
+    """
+    from music21 import chord, note
+
+    sounding = _sounding(step)
+    if not sounding:
+        return note.Rest(quarterLength=length)
+
+    pitches = []
+    for midi in sounding:
+        # Written an octave higher than it sounds, as guitar music is. The
+        # transposition is declared on the part, so the reader plays it back down -
+        # see `_WRITTEN_OCTAVE_SHIFT`.
+        step_name, octave = _pitch(midi + _WRITTEN_OCTAVE_SHIFT)
+        pitches.append(f"{step_name}{octave}")
+    if len(pitches) == 1:
+        return note.Note(pitches[0], quarterLength=length)
+
+    built: Any = chord.Chord(pitches, quarterLength=length)
+    # A guitar shape is played with the fingers on the frets it is written on, so
+    # the stems point down however high the top note is - the top note of a drop-2
+    # voicing is often the *lowest* sounding voice inverted on the high string.
+    built.stemDirection = "down"
+    return built
+
+
+def _build_part(
+    events: Sequence[Tuple[Optional[ArrangementStep], bool, float]],
+    title: str,
+    beats_per_bar: int,
+    pickup: float = 0.0,
+    show_chords: bool = True,
+    beat_type: int = 4,
+    fifths: int = 0,
+    mode: str = "",
+) -> Any:
+    """
+    The staff of the score: a `Part` of measures, in reading order.
+
+    A new `Measure` is started at every bar line, because music21 exports the
+    measures a stream actually has: given one measure holding a whole head, it
+    writes a whole head as one overfull measure. The first measure may be short -
+    a head selected from a pickup bar starts part-way through a bar - so it is
+    marked as an anacrusis, and the last one is padded with a rest, rather than
+    either being quietly stretched to fill its bar.
+
+    `beat_type` is the denominator of the written signature, and it is not always
+    4: a head notated in cut time is 2/2, and writing that as 2/4 states a metre
+    the tune is not in. It also fixes the bar's *length*, which is
+    `beats_per_bar` beats of `4 / beat_type` quarters - a half note to the beat in
+    2/2 and a quarter in 4/4, so **both bars are four quarters** and only the
+    counting differs. Treating the count as a quarter count is what wrote a 32-bar
+    cut-time head as 64 bars; inverting the fraction is what then made each of
+    them a quarter note long.
+
+    `fifths` / `mode` state the **key signature**, once, in the first measure, on
+    the same reasoning as the metre: MusicXML says a signature holds until it
+    changes, so writing it in every bar is legal but reads as a new one at each.
+    It is not decoration. music21 writes an explicit `<accidental>` for any note the
+    signature does not already account for, so a head whose key was dropped is not
+    merely unlabelled - every diatonic note of the real key is written with an
+    accidental the signature had already said. See `_key_signature`.
+    """
+    from music21 import clef, meter, stream
+
+    bar_length = float(beats_per_bar) * (4.0 / float(beat_type))
+    part = stream.Part()
+    part.partName = title
+    part.append(clef.TrebleClef())
+
+    # Offsets run from zero, so a head picked up part-way through a bar simply starts
+    # the first written bar as a short one - which is what it is.
+    number = 1
+    in_force: Optional[str] = None
+    offset = 0.0
+    # `state` tracks where the writing has got to: the measure being filled, where
+    # that measure begins on the score's timeline (offsets inside a measure count
+    # from the bar line, so the second bar's first note is at 0.0 and not 4.0), its
+    # number, and how long that measure may be - the first is short when there is a
+    # pickup, the rest are full bars.
+    state: dict = {
+        "measure": None, "start": 0.0, "number": number,
+        "length": bar_length - pickup,
+    }
+    # The time signature is written once, in the first measure. MusicXML says a
+    # signature holds until it changes, so repeating it in every bar is legal but
+    # reads as a new one at each: MuseScore 3 draws a 4/4 over every bar of the head.
+    # `state["signature"]` is the flag, rather than a local, because `new_measure`
+    # has to see it and the alternative is a second piece of mutable state. The key
+    # signature goes in the same place and on the same terms.
+    state["signature"] = False
+
+    def new_measure() -> Any:
+        """Appends an empty, numbered, timed measure and returns it."""
+        built = stream.Measure(number=state["number"])
+        if not state["signature"]:
+            state["signature"] = True
+            # Only the first measure. music21 fills each measure from the signature
+            # already in force - the one this writes - so the later bars need none,
+            # and `makeRests` still has a `barDuration` to pad and tie against.
+            built.timeSignature = meter.TimeSignature(f"{beats_per_bar}/{beat_type}")
+            # A signature of zero is still written: MusicXML's default when `<key>`
+            # is absent is exactly no sharps and no flats, so stating it says what
+            # C major says and leaves nothing for a reader to assume.
+            built.keySignature = _key_signature(fifths, mode)
+        part.append(built)
+        return built
+
+    state["measure"] = new_measure()
+
+    def write_symbol(name: str) -> None:
+        # On the change, and *at* the change: only on the change, the way a lead sheet
+        # spells a chord held over several slots, and at its own offset, because a
+        # symbol pinned to the bar line names the wrong chord for every chord after
+        # the first.
+        state["measure"].insert(offset - state["start"], _chord_symbol(name))
+
+    def write_event(step: Optional[ArrangementStep], length: float) -> None:
+        """
+        Writes one event, cutting it at a bar line and tying the halves.
+
+        A note cannot cross a bar line in MusicXML, and a measure holding more than
+        its time signature is not a measure. So an event that runs across one becomes
+        two notes tied together - which is what an engraver does too, and it keeps
+        the written rhythm: a transcription whose phrasing disagrees with the metre
+        comes out as the player heard it rather than silently straightened.
+        """
+        nonlocal offset
+        from music21 import tie as tie_module
+
+        # Cut the event into the pieces each measure can hold, opening a new measure
+        # wherever one fills up. The offsets are recorded as they are decided, because
+        # a piece's offset is measured from the bar line it lands in.
+        pieces: List[Tuple[Any, float, float]] = []
+        remaining = length
+        while remaining > 1e-9:
+            room = state["length"] - (offset - state["start"])
+            if room <= 1e-9:
+                # The measure is already full and the event continues past it. Opening
+                # the next bar *before* measuring the piece matters: a zero-length
+                # piece would be written as a note of default length, quietly adding a
+                # beat to the bar it was meant to end at the end of.
+                state["number"] += 1
+                state["measure"] = new_measure()
+                state["start"] = offset
+                state["length"] = bar_length
+                continue
+            piece = min(remaining, room)
+            pieces.append((state["measure"], offset - state["start"], piece))
+            offset += piece
+            remaining -= piece
+
+        for index, (where, at, piece) in enumerate(pieces):
+            built = _rest(piece) if step is None else _build_note(step, piece)
+            if len(pieces) > 1:
+                built.tie = tie_module.Tie(
+                    "start" if index == 0
+                    else "stop" if index == len(pieces) - 1
+                    else "continue"
+                )
+            where.insert(at, built)
+
+    for step, _, length in events:
+        if step is not None and show_chords and step.chord != in_force:
+            in_force = step.chord
+            if in_force and in_force != NO_CHORD:
+                write_symbol(in_force)
+        write_event(step, length)
+
+    measures = list(part.getElementsByClass(stream.Measure))
+    if measures:
+        # A short first measure is a pickup and a short last one is where the head
+        # stops; both are written as they are, which is what `<implicit>` and the
+        # closing rest are for.
+        first, last = measures[0], measures[-1]
+        # The test is "is there a pickup", not "is this measure short". They are not
+        # the same thing: a head that starts on the third beat fills its two-beat
+        # pickup *exactly*, so the measure is complete and still an anacrusis. Testing
+        # the length alone would write it as a normal bar, and a reader would expect a
+        # downbeat that is not there.
+        #
+        # Two separate music21 levers, because they do different jobs:
+        # `padAsAnacrusis` says the bar is incomplete and must be padded when the
+        # stream is re-barred, while `showNumber` is what music21 actually writes into
+        # `<measure implicit="...">` - `padAsAnacrusis` on its own changes nothing in
+        # the output. It is a method rather than a flag, so assigning to it would
+        # silently do nothing at all.
+        if pickup > 1e-9:
+            first.padAsAnacrusis(True)
+            first.showNumber = stream.enums.ShowNumber.NEVER
+        last.padAsAnacrusis(False)
+        # `last` and `first` can be the same measure - an arrangement that fits in one
+        # bar - and the pickup flag must not then be overwritten by the closing one.
+        # A lone pickup bar stays implicit: it is still a pickup.
+        if last is not first:
+            last.showNumber = stream.enums.ShowNumber.ALWAYS
+        # The closing bar is a full one, unless the whole arrangement is the pickup.
+        closing = bar_length if len(measures) > 1 else bar_length - pickup
+        shortfall = closing - last.duration.quarterLength
+        if shortfall > 1e-9:
+            last.insert(last.duration.quarterLength, _rest(shortfall))
+    return part
+
+
+def _key_signature(fifths: int, mode: str = "") -> Any:
+    """
+    The music21 key signature for `fifths` sharps-or-flats, with `mode` when known.
+
+    music21 suppresses an explicit `<accidental>` on any note the signature already
+    accounts for, which is the point: an Eb-major tune exported in C major needs a
+    flat written on **every** note of its own scale. "But Not For Me" is 32 bars in
+    Eb, and the accidentals that assumption produced numbered 201 - 137 of them
+    flats that the key already said.
+
+    `mode` is carried by `asKey`, which returns the same signature with a mode
+    attached. That is preferable to assigning `mode` on the signature, which music21
+    does not type as a settable attribute and which a future release may not accept;
+    and it is preferable to building a `key.Key` from a tonic name, because the tonic
+    is not what this library was given. It is handed the signature's own two numbers
+    and never has to know that -3 is Eb major rather than C minor.
+
+    An unrecognised mode is left unset rather than guessed, so a file that stated no
+    mode gets `<fifths>` alone - exactly what it said.
+    """
+    from music21 import key
+
+    signature = key.KeySignature(fifths)
+    if mode:
+        signature = signature.asKey(mode)
+    return signature
+
+
+def _rest(length: float) -> Any:
+    """A rest of `length` quarter lengths, for a gap in the arrangement."""
+    from music21 import note
+
+    return note.Rest(quarterLength=length)
+
+
+def _drop_empty_inversions(root: ElementTree.Element) -> None:
+    """
+    Removes the `<inversion>-1</inversion>` that a text-only chord symbol carries.
+
+    music21 writes an inversion for a `ChordSymbol` that has no pitches, and -1 is
+    its way of saying "there is none". MusicXML makes `<inversion>` optional, so the
+    element is dropped rather than left as a number no reader can act on.
+    """
+    for inversion in root.iter("inversion"):
+        if inversion.text is None or inversion.text.strip().startswith("-"):
+            for harmony_node in root.iter("harmony"):
+                if inversion in list(harmony_node):
+                    harmony_node.remove(inversion)
+                    break
+
+
+# The XML declaration and the MusicXML DTD that music21 writes ahead of the root
+# element. `ElementTree` keeps neither when it serialises, and the DOCTYPE is what
+# tells a reader which MusicXML version the file claims to be, so both are carried
+# over from the document music21 produced rather than re-invented here.
+_DOCTYPE_PATTERN = re.compile(r"<!DOCTYPE[^>]*>")
+
+
+def _document_prologue(document: str) -> str:
+    """
+    The XML declaration and DOCTYPE music21 wrote, or an empty string without them.
+
+    A MusicXML file is written before the root element rather than inside it, so
+    `ElementTree` cannot carry these through a parse/serialise round trip: the DOCTYPE
+    is the declaration of the MusicXML 4.0 DTD, which is how a reader knows which
+    version the file is claiming. It is captured from the text music21 emitted, so a
+    future music21 that declares a different version is carried through rather than
+    overridden.
+    """
+    prologue = '<?xml version="1.0" encoding="UTF-8"?>'
+    match = _DOCTYPE_PATTERN.search(document)
+    if match:
+        prologue += "\n" + match.group(0)
+    return prologue + "\n"
+
+
+def _barline_element(
+    location: str, markers: Sequence[Any]
+) -> ElementTree.Element:
+    """A `<barline>` carrying the repeat and ending signs the markers name.
+
+    Child order is MusicXML's: `<ending>` before `<repeat>`, and both after any
+    `<bar-style>` a merge kept. A `repeat_end` states its `times` so a reader loops the
+    section the right number of times; a `repeat_start` does not (MusicXML takes it from
+    the matching backward repeat). The ending `number` is a comma-joined list, which is
+    how MusicXML spells a bracket taken on more than one pass.
+    """
+    barline = ElementTree.Element("barline", {"location": location})
+    for marker in markers:
+        kind = getattr(marker, "kind", "")
+        if kind in ("ending_start", "ending_stop"):
+            ending = ElementTree.SubElement(barline, "ending")
+            ending.set("number", ",".join(str(n) for n in marker.numbers) or "1")
+            ending.set("type", "start" if kind == "ending_start" else "stop")
+        elif kind == "repeat_start":
+            ElementTree.SubElement(barline, "repeat").set("direction", "forward")
+        elif kind == "repeat_end":
+            repeat = ElementTree.SubElement(barline, "repeat")
+            repeat.set("direction", "backward")
+            repeat.set("times", str(marker.times))
+    return barline
+
+
+def _apply_repeat_markers(
+    root: ElementTree.Element, markers: Sequence[Any]
+) -> None:
+    """Writes the head's repeats and endings into the exported score.
+
+    Markers are keyed on the head's **absolute** bars, which are the measure numbers
+    `_build_part` writes when the arrangement starts on bar 1 with no pickup - the case
+    every repeated head is. A left sign (`repeat_start`, `ending_start`) goes near the
+    top of its measure and a right one (`repeat_end`, `ending_stop`) at the end; a
+    measure carrying both (the 1st ending's single bar in `synthetic_triplets`) gets
+    one of each.
+
+    A `<barline>` music21 already wrote for the same location is **reused rather than
+    duplicated**, so a final `light-heavy` at the last bar survives and the `<ending>`
+    merges into it. A marker for a bar the score does not have (a renumbered pickup,
+    say) is dropped rather than guessed onto a neighbour.
+    """
+    by_bar: Dict[int, List[Any]] = {}
+    for marker in markers:
+        by_bar.setdefault(marker.bar, []).append(marker)
+    if not by_bar:
+        return
+    for measure in root.iter("measure"):
+        number = measure.get("number")
+        if number is None or not number.strip().lstrip("-").isdigit():
+            continue
+        group = by_bar.get(int(number))
+        if not group:
+            continue
+        left = [m for m in group if m.kind in ("repeat_start", "ending_start")]
+        right = [m for m in group if m.kind in ("repeat_end", "ending_stop")]
+        if left:
+            _merge_barline(measure, "left", left, at_start=True)
+        if right:
+            _merge_barline(measure, "right", right, at_start=False)
+
+
+# The words a reader sees for each resolved navigation kind. The **kind** is the
+# decision `headxml._expand_play_order` made - whether a D.C. ends at a Fine or a
+# Coda - so a writer only chooses the spelling, never the form.
+_NAVIGATION_WORDS = {
+    "segno": "Segno",
+    "coda": "Coda",
+    "fine": "Fine",
+    "to_coda": "To Coda",
+    "da_capo": "D.C.",
+    "da_capo_al_fine": "D.C. al Fine",
+    "da_capo_al_coda": "D.C. al Coda",
+    "da_segno": "D.S.",
+    "da_segno_al_fine": "D.S. al Fine",
+    "da_segno_al_coda": "D.S. al Coda",
+}
+
+# Destinations open their measure; a jump, a Fine or a To Coda closes one. That is
+# where a printed score puts them, and it is what keeps a reader from taking the jump
+# before the bar it ends.
+_NAVIGATION_STARTS = ("segno", "coda")
+
+
+def _navigation_direction(marker: Any) -> ElementTree.Element:
+    """One `<direction>` carrying both the sign a reader sees and the `<sound>` a
+    player follows.
+
+    The two are written together on purpose. A file that carries only `<words>` would
+    be played correctly by a human and not by this importer (which reads `<sound>`);
+    one that carries only `<sound>` would be played correctly and show nothing on the
+    page. MusicXML's own channel is the `<sound>` element, so that is what the
+    importer reads and what the exporter writes.
+    """
+    kind = marker.kind
+    name = getattr(marker, "name", "") or (
+        "segno" if kind.startswith("da_segno") else "coda"
+    )
+    direction = ElementTree.Element("direction", {"placement": "above"})
+    direction_type = ElementTree.SubElement(direction, "direction-type")
+    if kind == "segno":
+        ElementTree.SubElement(direction_type, "segno")
+    elif kind == "coda":
+        ElementTree.SubElement(direction_type, "coda")
+    else:
+        ElementTree.SubElement(direction_type, "words").text = _NAVIGATION_WORDS[kind]
+    sound = ElementTree.SubElement(direction, "sound")
+    if kind == "segno":
+        sound.set("segno", name)
+    elif kind == "coda":
+        sound.set("coda", name)
+    elif kind == "fine":
+        sound.set("fine", "yes")
+    elif kind == "to_coda":
+        sound.set("tocoda", name)
+    elif kind == "da_capo" or kind.startswith("da_capo_"):
+        sound.set("dacapo", "yes")
+    elif kind.startswith("da_segno"):
+        sound.set("dalsegno", name)
+    return direction
+
+
+def _apply_navigation_markers(
+    root: ElementTree.Element, markers: Sequence[Any]
+) -> None:
+    """Writes the head's Segno, Coda, Fine and D.C. / D.S. directions.
+
+    The marker's `kind` is already the **resolved** instruction - `da_capo_al_coda`
+    rather than a bare `da_capo` - because the expansion is the one place that can
+    tell which form the return path makes. This writer only spells it.
+
+    A destination (`segno`, `coda`) opens its measure, where the sign belongs; a
+    `fine`, a `to_coda` and every jump close theirs. A bar the exported score does not
+    have is dropped rather than guessed onto a neighbour, exactly as for the barline
+    signs.
+    """
+    by_bar: Dict[int, List[Any]] = {}
+    for marker in markers:
+        if getattr(marker, "kind", "") in _NAVIGATION_WORDS:
+            by_bar.setdefault(marker.bar, []).append(marker)
+    if not by_bar:
+        return
+    for measure in root.iter("measure"):
+        number = measure.get("number")
+        if number is None or not number.strip().lstrip("-").isdigit():
+            continue
+        group = by_bar.get(int(number))
+        if not group:
+            continue
+        for marker in group:
+            direction = _navigation_direction(marker)
+            if marker.kind in _NAVIGATION_STARTS:
+                index = 0
+                for position, child in enumerate(measure):
+                    if child.tag in ("print", "attributes", "direction", "sound"):
+                        index = position + 1
+                measure.insert(index, direction)
+            else:
+                measure.append(direction)
+
+
+def _merge_barline(
+    measure: ElementTree.Element,
+    location: str,
+    markers: Sequence[Any],
+    at_start: bool,
+) -> None:
+    """Inserts or extends the `<barline location=...>` of one measure.
+
+    A new element is placed where MusicXML expects it: a left barline right after any
+    leading `<print>` / `<attributes>` and a right barline at the very end, so the
+    signs bracket the bar's own notes rather than landing inside them.
+    """
+    for existing in measure.findall("barline"):
+        if existing.get("location") == location:
+            for child in _barline_element(location, markers):
+                existing.append(child)
+            return
+    barline = _barline_element(location, markers)
+    if at_start:
+        index = 0
+        for position, child in enumerate(measure):
+            if child.tag in ("print", "attributes", "direction", "sound"):
+                index = position + 1
+        measure.insert(index, barline)
+    else:
+        measure.append(barline)
+
+
+def _apply_pickup_barline(root: ElementTree.Element) -> None:
+    """Closes a short first measure with the thin double bar line of an anacrusis.
+
+    A first measure shorter than its time signature is a pickup, and engravers close
+    it with a `light-light` bar line: it marks where the pickup ends and the main body
+    of the tune begins, without implying a repeat or a final bar. It is what a reader
+    expects after an incomplete first bar, and it is why `tabscore.score_events`
+    reports the pickup at all.
+
+    The first `<measure>` in document order is the one written short - `_build_part`
+    always opens it with `pickup` subtracted - so this does not need its number. An
+    existing right bar line (from a repeat, say) is extended rather than duplicated,
+    and `<bar-style>` goes first in it because that is MusicXML's child order.
+    """
+    part = root.find("part")
+    if part is None:
+        return
+    first_measure = part.find("measure")
+    if first_measure is None:
+        return
+    for existing in first_measure.findall("barline"):
+        if existing.get("location") == "right":
+            style = existing.find("bar-style")
+            if style is None:
+                style = ElementTree.Element("bar-style")
+                existing.insert(0, style)
+            style.text = "light-light"
+            return
+    barline = ElementTree.Element("barline", {"location": "right"})
+    style = ElementTree.SubElement(barline, "bar-style")
+    style.text = "light-light"
+    first_measure.append(barline)
+
+
+def _chord_symbol(name: str) -> Any:
+    """
+    A chord symbol for the score, or a text-only one when music21 cannot read the name.
+
+    music21 knows most of the qualities this library voices, but not all of them:
+    `mMaj7`, `maj9` and `7alt` are among the ones it rejects, and the Weimar
+    Database's own notation produces a few more. A symbol that cannot be parsed is
+    not a reason to lose the chord, so it is written as `<kind text="...">other</kind>`
+    with the root still parsed out by the library - which is how MusicXML spells a
+    chord symbol whose type the writer does not recognise. The chord still reads
+    correctly; it just is not classified.
+
+    The exception is deliberately broad: this is a formatting fallback for names
+    from an external database, and a new music21 release should degrade the symbol
+    rather than fail the export.
+
+    The symbol's **pitches are dropped**, which is not cosmetic. music21 writes the
+    symbol as `<harmony>` only - `writeAsChord = False` - so its pitches never reach
+    the document, but they remain in the stream and are still counted when music21
+    decides which notes need an `<accidental>`. Their effect is to mark notes the key
+    signature already accounts for: with a symbol present, an Eb-major head wrote 139
+    accidentals, and without one the same music wrote 27. Clearing them is what makes
+    the accidentals that remain mean "this note is out of the key" rather than "this
+    note is in the key, and the key was not read".
+    """
+    from music21 import harmony
+
+    try:
+        symbol = harmony.ChordSymbol(name)
+    except Exception:
+        from arranger.chords import ChordParser
+
+        root, _ = ChordParser.parse_chord_name(name)
+        symbol = harmony.ChordSymbol()
+        if root:
+            symbol.root(root)
+        symbol.chordKind = "other"
+        symbol.chordKindStr = name
+    symbol.writeAsChord = False
+    # The pitches are never written - see the docstring - so they are dropped here,
+    # on both the parsed and the fallback path, rather than left to distort the
+    # accidental pass. `[]` rather than `None`: music21 treats a missing/None
+    # `pitches` as "figure it out again from the figure string".
+    symbol.pitches = []
+    return symbol
+
+
+def _unique_instrument_ids(root: ElementTree.Element) -> None:
+    """
+    Gives every `<score-instrument>` in the part list an id of its own.
+
+    The instrument ids live in the `<part-list>`, not in the parts, and music21 writes
+    the *same* one into every `<score-part>` when the parts share a single
+    `instrument.Guitar()`. The score has one part now, so this is a no-op on the
+    document this renderer writes; it is kept because the ids are minted by music21
+    rather than by this renderer, and MusicXML requires them to be unique within the
+    part list regardless. MuseScore refuses to open the file outright when they are
+    not:
+
+        Fatal error: ID value 'I56a9...' is not unique.
+
+    Each `<score-instrument>` is paired with a `<midi-instrument>` of the same id, and
+    that pairing is what identifies "this part plays this instrument", so the two are
+    renumbered together and a part's `<score-instrument>` and `<midi-instrument>` keep
+    matching. Nothing else refers to these ids: an `<midi-device>` would, and a
+    part-list written this way has none.
+    """
+    for index, score_part in enumerate(root.findall("part-list/score-part"), start=1):
+        renumbered = f"P{index}-I"
+        for instrument in score_part.findall("score-instrument"):
+            instrument.set("id", renumbered)
+        for instrument in score_part.findall("midi-instrument"):
+            instrument.set("id", renumbered)
+
+
+def _add_degrees(harmony: ElementTree.Element, values: Sequence[int]) -> None:
+    """
+    Appends one `add` `<degree>` per value to a `<harmony>`, in schema order.
+
+    A `<harmony>` is a sequence - root, kind, inversion, bass, then the degrees - so
+    these are appended rather than inserted, which puts them after everything music21
+    already wrote and in the right order among the degrees themselves.
+    """
+    for value in values:
+        degree = ElementTree.SubElement(harmony, "degree")
+        for tag, text in (
+            ("degree-value", str(value)),
+            ("degree-alter", "0"),
+            ("degree-type", "add"),
+        ):
+            node = ElementTree.SubElement(degree, tag)
+            node.text = text
+
+
+def _downgrade_kinds(root: ElementTree.Element) -> None:
+    """
+    Rewrites any `<kind>` value MusicXML 3.1 does not have, so a 3.1-era reader can
+    open the file.
+
+    music21 writes MusicXML 4.0, and 4.0 extended the closed `kind-value` enumeration -
+    `suspended-fourth-seventh` among the additions. A reader that validates against 3.1
+    rejects the whole document, so the cost of one chord is the whole file. Two
+    rewrites, in this order of preference:
+
+    1. **The spec's own spelling.** `suspended-fourth-seventh` becomes
+       `suspended-fourth` plus a `<degree>` adding the 7th. MusicXML 3.1 has no kind
+       for the combination, but it does have the `add`-degree idiom for a harmony
+       expressed as a base kind plus alterations, so the chord still arrives as a
+       classified symbol rather than as loose text. The other 4.0-only sus kinds get
+       the same treatment, with the degree each one folded in.
+    2. **`other` with the name text.** Anything else unknown becomes
+       `<kind text="...">other</kind>` - the same fallback `_chord_symbol` already uses
+       for a name music21 cannot parse. Guaranteed to import; not classified.
+
+    The `<root>` is untouched: a sus chord's root is not what is in question. This is a
+    no-op on a document that only uses 3.1 kinds, which is the overwhelmingly common
+    case, and it runs last so that it sees the finished document rather than an
+    intermediate one.
+    """
+    for harmony in root.iter("harmony"):
+        kind = harmony.find("kind")
+        if kind is None:
+            continue
+        text = (kind.text or "").strip()
+        if text in _READABLE_KINDS:
+            continue
+        downgrade = _SUS_KINDS.get(text)
+        if downgrade is not None:
+            base, degrees = downgrade
+            kind.text = base
+            _add_degrees(harmony, degrees)
+        else:
+            # Unknown to 3.1. `text` is the attribute MusicXML 3.1 defines on `kind`
+            # for a chord it has no type for, which is precisely this case.
+            kind.set("text", text)
+            kind.text = "other"
+
+
+def format_musicxml(
+    steps: List[ArrangementStep],
+    title: str = "Chord-melody arrangement",
+    subtitle: str = "",
+    composer: str = "",
+    beats_per_bar: int = 4,
+    beat_type: int = 4,
+    fifths: int = 0,
+    mode: str = "",
+    rhythm: bool = True,
+    collapse: bool = True,
+    show_chords: bool = True,
+    markers: Optional[Sequence[Any]] = None,
+) -> str:
+    """
+    Renders a whole progression as a MusicXML (score-partwise) document.
+
+    The document is a **notation staff** in the treble clef a chord-melody part is
+    written in, with the **chord symbols** on each change and the **written rhythm**:
+    a shape that is held rather than restruck is one longer note, and a step whose
+    melody repeats under an unchanged harmony is a single struck note.
+
+    There is no TAB staff. music21 cannot write one that a notation program renders
+    correctly, so the fretting is written by `tabgp` as a Guitar Pro 5 file instead -
+    see the module docstring for why the two renderers divide the work that way.
+
+    Args:
+        steps: arranged steps, typically from `arrange_progression()`.
+        title: the score title.
+        subtitle: an optional line under it, e.g. the performer.
+        composer: an optional composer credit.
+        beats_per_bar: beats in a bar, used for the time signature and the bars.
+        beat_type: the denominator of that signature. Pass the notated value, so a
+            head in cut time is written 2/2 rather than restated as 2/4; the bar
+            length is identical either way and only the displayed metre differs.
+        fifths: the key signature's count of sharps (positive) or flats (negative),
+            so -3 is Eb major or C minor. Defaults to 0, which is C major - the
+            assumption every format makes in the absence of a signature, so a
+            progression that was never in a key exports as it always did.
+        mode: "major", "minor", or "" where the key is not one of those two modes.
+            Written as MusicXML's `<mode>` when given, and omitted otherwise.
+        rhythm: space the steps on their real beats. Falls back to a uniform
+            one-chord-per-beat grid when the steps carry no timing, exactly as
+            `format_tab_staff` does, so a hand-written progression still exports.
+        collapse: write a held shape as one longer note instead of restriking it.
+        show_chords: write the chord symbols.
+        markers: the head's repeat and ending instructions (`headxml.BarMarker`s), or
+            `None` for none. Each carries the **absolute** bar it sits on, so the signs
+            land on the measures a repeated head expanded to. Written as MusicXML
+            `<barline>` `<repeat>` and `<ending>` elements.
+
+    Returns:
+        A complete MusicXML document as a string, or "" for no steps. Pure: nothing
+        is printed and no file is written, so the caller stays in control. Needs the
+        optional `music21` extra; see `_music21` for the error raised without it.
+
+    Raises:
+        ValueError: if `beats_per_bar` is below 1, or `fifths` is outside -7..7.
+    """
+    _music21()
+    if beats_per_bar < 1:
+        raise ValueError(f"beats_per_bar must be at least 1, got {beats_per_bar!r}")
+    if not -7 <= fifths <= 7:
+        # MusicXML's `<fifths>` is unbounded in the schema, but no conventional
+        # signature goes past seven of either, and a reader outside -7..7 is
+        # displaying something this library did not mean to ask for. Rejected
+        # rather than clamped: a wrong key is a wrong score, and a caller holding
+        # an out-of-range number has a bug worth hearing about.
+        raise ValueError(f"fifths must be between -7 and 7, got {fifths!r}")
+    if not steps:
+        return ""
+
+    from music21 import instrument, interval, metadata, musicxml, stream
+
+    # The sounding harmony is settled here rather than inside the note builder,
+    # because a substitution is a property of the *step* - it changes the chord name
+    # printed above the shape, not the pitches of the shape.
+    events, pickup = score_events(
+        substitute_steps(steps), beats_per_bar, rhythm and collapse, beat_type
+    )
+    if not any(step is not None for step, _, _ in events):
+        return ""
+
+    score = stream.Score()
+    # Guitar sounds an octave below its written pitch, so the instrument is declared
+    # **transposing** rather than left at concert pitch. music21 writes this as a
+    # `<transpose>` with octave-change -1 in the first measure, which is what tells a
+    # reader to play the octave-higher notation back an octave down. Writing the notes
+    # an octave up without this would notate the staff correctly and play it a whole
+    # octave too high.
+    guitar = instrument.Guitar()
+    guitar.transposition = interval.Interval("P-8")
+    score.insert(0, guitar)
+    score.insert(0, metadata.Metadata(title=title, composer=composer or None))
+    if subtitle:
+        score.metadata.movementName = subtitle
+
+    score.insert(
+        0,
+        _build_part(
+            events, title, beats_per_bar, pickup=pickup, show_chords=show_chords,
+            beat_type=beat_type, fifths=fifths, mode=mode,
+        ),
+    )
+
+    document = musicxml.m21ToXml.GeneralObjectExporter().parse(score).decode("utf-8")
+
+    # What music21's own output still needs, applied to the parsed tree rather than
+    # by editing the text. None of it is about tab any more.
+    root = ElementTree.fromstring(document)
+    _unique_instrument_ids(root)
+    _drop_empty_inversions(root)
+    # The head's repeats, endings and navigation signs, before the compatibility
+    # filter so the filter sees a finished document (the signs carry no `<kind>`, so
+    # the order is immaterial to it - but this keeps "downgrade runs last" true).
+    if pickup > 1e-9:
+        _apply_pickup_barline(root)
+    if markers:
+        _apply_repeat_markers(root, markers)
+        _apply_navigation_markers(root, markers)
+    # A compatibility filter, so it runs last: it sees the finished document, and
+    # nothing below it can put a 4.0-only value back.
+    _downgrade_kinds(root)
+    return _document_prologue(document) + ElementTree.tostring(root, encoding="unicode")
+
+
+def write_musicxml(steps: List[ArrangementStep], path: str, **kwargs: Any) -> str:
+    """
+    Renders `format_musicxml` to a file and returns the path written.
+
+    The only function in this module that touches the filesystem, which is what lets
+    every renderer stay pure. Writing is separated from rendering so a caller who
+    only wants the string never creates a file by accident.
+    """
+    document = format_musicxml(steps, **kwargs)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(document)
+    return str(path)
+
+
+# Re-exported from `tabstaff` (and through it from `arranger`) for the same reason
+# that module's renderers are: `tabxml` imports both, so a top-level import in
+# either direction would be a cycle. The names are resolved on first access.
+__all__ = ["format_musicxml", "write_musicxml"]

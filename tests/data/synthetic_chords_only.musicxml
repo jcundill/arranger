@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="3.1">
+<work><work-title>Synthetic Chords Only</work-title></work>
+<movement-title>Synthetic Chords Only</movement-title>
+<identification><creator type="composer">Fixture Generator</creator></identification>
+<part-list><score-part id="P1"><part-name>Lead Sheet</part-name></score-part></part-list>
+<part id="P1"><measure number="1"><attributes><divisions>4</divisions><key><fifths>0</fifths><mode>major</mode></key><time><beats>4</beats><beat-type>4</beat-type></time><clef><sign>G</sign><line>2</line></clef></attributes><harmony><root><root-step>D</root-step></root><kind text="m7">minor-seventh</kind></harmony><note><rest/><duration>16</duration><voice>1</voice><type>whole</type></note></measure><measure number="2"><harmony><root><root-step>C</root-step></root><kind text="maj7">major-seventh</kind></harmony><note><rest/><duration>8</duration><voice>1</voice><type>half</type></note><harmony><root><root-step>G</root-step></root><kind text="7">dominant</kind></harmony><note><rest/><duration>8</duration><voice>1</voice><type>half</type></note></measure><measure number="3"><harmony><root><root-step>F</root-step></root><kind text="maj7">major-seventh</kind></harmony><note><rest/><duration>8</duration><voice>1</voice><type>half</type></note><harmony><root><root-step>B</root-step></root><kind text="7">dominant</kind></harmony><note><rest/><duration>8</duration><voice>1</voice><type>half</type></note></measure><measure number="4"><harmony><root><root-step>E</root-step></root><kind text="maj7">major-seventh</kind></harmony><note><rest/><duration>16</duration><voice>1</voice><type>whole</type></note></measure></part>
+</score-partwise>

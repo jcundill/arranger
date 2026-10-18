@@ -1,0 +1,120 @@
+[build-system]
+# 77+ for the PEP 639 `license` / `license-files` metadata in [project].
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "jazz-arranger"
+dynamic = ["version"]
+description = "Generate playable jazz guitar chord-melody arrangements from a chord progression."
+readme = "README.md"
+requires-python = ">=3.11"
+# PEP 639. setuptools>=77 understands the SPDX expression and the license-files
+# list; older versions want the legacy {file = "LICENSE"} table and the
+# "License :: OSI Approved :: MIT License" classifier instead. The classifier is
+# deliberately absent - it is deprecated once the SPDX expression is present, and
+# this project builds with 77+.
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = ["jazz", "guitar", "chord-melody", "drop-2", "voicing", "music-theory"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Multimedia :: Sound/Audio",
+]
+dependencies = ["musthe>=1.0.0"]
+
+# MusicXML export is the one thing the library cannot do with the standard library,
+# and it is opt-in for exactly that reason: a plain `pip install jazz-arranger` pulls
+# in musthe alone, and `pip install 'jazz-arranger[xml]'` adds the renderer. The
+# import inside tabxml is lazy, so everything else in the package works without it.
+#
+# Guitar Pro export is opt-in on the same grounds. PyGuitarPro is LGPL-3.0, which is
+# why it is an extra and never a runtime dependency: a plain install must not pull it
+# in. `tabgp` imports it lazily too, so both extras are independently absent-safe.
+[project.optional-dependencies]
+xml = ["music21>=9.1"]
+gp = ["PyGuitarPro>=0.11"]
+# Dev-only, and deliberately not reachable from a plain install: these are the two
+# tools the contributing workflow runs (`make check`). Kept out of `dependencies`
+# so a `pip install jazz-arranger` can never pull a type checker or a linter.
+dev = ["pyright>=1.1", "ruff>=0.6"]
+
+[project.scripts]
+jazz-arranger = "arranger:main"
+
+[tool.setuptools]
+# `arranger` is a **package** (Phase 5): the engine was one 4290-line module and is
+# now a dependency-ordered package of focused modules, re-exported through
+# `arranger/__init__.py`. `packages` must be listed explicitly here, or a clean
+# install ships no engine at all - the same failure `diagnostics` had once.
+#
+# The remaining top-level modules are the renderers and the two front ends.
+# `tabstaff` holds the whole-progression staff renderers and imports `arranger`,
+# so it is listed after it. `tabxml` and `tabgp` each import both, and are
+# independent of one another. `headxml` is the MusicXML *importer* and imports
+# `arranger`; it is stdlib-only, so unlike `tabxml` it needs no optional extra
+# to work.
+#
+# `arranger.options` holds the knobs the engine reads and `arranger.decisions` the
+# step-loop decisions the engine shares. Both are runtime
+# modules *of* the distribution, not optional extras alongside it.
+packages = ["arranger"]
+py-modules = [
+    "tabscore",
+    "tabstaff",
+    "tabxml",
+    "tabgp",
+    "headxml",
+]
+
+[tool.setuptools.dynamic]
+# Single source of truth: the version lives in arranger.__version__.
+version = {attr = "arranger.__version__"}
+
+# Linting and formatting. Dev-only, like pyright - never a runtime dependency.
+#
+# The rule selection is deliberately NARROWER than ruff's defaults, and each
+# exclusion is a decision rather than an oversight:
+#
+#   UP* is off. AGENTS.md mandates the `typing.List` / `Optional[...]` style
+#   consistently across the file, so enabling pyupgrade would demand rewriting
+#   ~770 annotations in a codebase whose stated convention is the opposite. That
+#   is a house style, not a defect, and a linter that fights the documented
+#   convention gets disabled within a week.
+#   E501 is off. The formatter owns line length; a linter that re-reports what
+#   `ruff format` already fixed is noise.
+#   B905 is off. `zip(strict=...)` would be a *behaviour* change - it turns a
+#   silent length mismatch into a ValueError - and several call sites here
+#   deliberately zip a candidate list against a cost list. Not a lint decision.
+#   SIM102/SIM117 are stylistic collapses that reduce readability in the long
+#   explanatory branches that are the point of this codebase.
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# The venv, the build tree and the export artefacts the CLIs write are not source.
+extend-exclude = [".venv", "build", "dist", "*.egg-info", "__pycache__"]
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "SIM"]
+ignore = ["E501", "B905", "SIM102", "SIM117"]
+
+[tool.ruff.lint.per-file-ignores]
+# `tests/test_guitarpro.py` imports PyGuitarPro lazily inside the guarded
+# classes, which is what lets the suite run on a fresh clone with no
+# optional extra installed.
+# `arranger/__init__.py` is a facade, so most of what it imports is a
+# re-export rather than a use. F401 is the rule that says "you imported
+# something and never mentioned it again", which is precisely what a re-export
+# is - so the whole module is exempt rather than carrying a `noqa` on each of
+# the ~40 names. The DAG test `test_the_facade_reexports_the_public_surface`
+# is what holds this honest instead: it asserts each public name resolves *and*
+# is the same object as its home module, so a stale re-export fails there rather
+# than sitting here unnoticed. Adding a name to `__all__` still updates it.
+"arranger/__init__.py" = ["F401"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["arranger", "tabstaff", "tabxml", "tabgp", "headxml", "grip_chart", "tests"]

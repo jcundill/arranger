@@ -1,0 +1,44 @@
+# Local virtualenv
+.venv/
+
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+
+# Build artefacts
+build/
+dist/
+*.egg-info/
+
+
+# Editor settings
+.vscode/
+
+# Weimar Jazz Database (42 MB, downloaded from jazzomat.hfm-weimar.de; see
+# CORPUS_PLAN.md). Not part of the source tree.
+*.db
+
+# Renderer and export output from the corpus CLI. Regenerate rather than commit:
+# the HTML renders are per-tune debugging aids and the exports are snapshots of
+# whatever the renderer produced at the time, so a stale one in the tree is worse
+# than none. .gp5 in particular is checked by opening it in a notation program.
+#
+# `tests/data/` is the exception, and deliberately so: those are the *inputs* the
+# MusicXML importer's tests read, written by music21, MuseScore and this library
+# rather than by a renderer here. A hand-built fixture proves the parser agrees
+# with itself; only a real file proves it reads what a notation program wrote. The
+# exception is spelled out rather than left implicit, so a future export dropped
+# in `tests/data/` still needs a deliberate change to be committed.
+*.html
+*.musicxml
+*.mxl
+*.gp5
+!tests/data/*.musicxml
+!tests/data/*.mxl
+leadsheet_export.json
+
+*.pdf
+
+# Local helper for running long commands in the background with a completion
+# sentinel; used during development only.
+.bg.sh
