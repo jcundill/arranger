@@ -153,6 +153,22 @@ def on_grid(beat: Optional[float], grid: str, beats_per_bar: int) -> bool:
 BEAT_EPSILON = 1e-6
 
 
+def beat_offset(bar: int, beat: float, beats_per_bar: int) -> float:
+    """One position on a single absolute beat line, so two bars' beats can be compared.
+
+    A `(bar, beat)` pair orders correctly against another pair, but a *duration*
+    cannot be compared against one: a note running past a barline ends at
+    `(bar, 3.5)` in a 2/2 bar, which is before `(bar + 1, 1.0)` and after `(bar, 2.0)`,
+    and no amount of tuple comparison says so. One number in beats-from-the-start does,
+    and signed bars fall out of the arithmetic rather than needing a case.
+
+    `beats_per_bar` is the *count* - how many beats a bar has - and not how long one
+    lasts. A caller converting a duration in whole notes needs `beat_type` as well;
+    the two are different numbers in every metre but 4/4.
+    """
+    return (bar - 1) * beats_per_bar + (beat - 1.0)
+
+
 def grid_allowed(grid: str, beats_per_bar: int) -> Tuple[bool, str]:
     pattern = grid_chord_pattern(grid)
     if grid_defers_to_melody(grid) or pattern in GRID_TIMELINE_PATTERNS:

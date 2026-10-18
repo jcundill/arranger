@@ -458,24 +458,26 @@ class TestChordSlots(unittest.TestCase):
         )
         self.assertEqual(positions, [(1.0, "Am7"), (2.0, "D9")])
 
-    def test_the_default_grid_adds_a_bar_the_melody_never_enters(self):
+    def test_the_default_grid_adds_the_silent_position_in_a_melody_less_bar(self):
         """**The melody-less bar, and the first half of open-issues item 1's fix.**
 
-        A bar the melody never enters contributes no melody slot, so every slot in one is
-        the union's - and `every_note` is melody-anchored, meaning it names no positions
-        of its own to copy from. The unit of generation for such a bar is therefore the
-        beat (`_bar_resolution` has no onsets to fit), which is the rule this test pins.
+        A bar the melody never enters contributes no melody slot of its own, so every
+        position in one is the union's - and `every_note` is melody-anchored, meaning
+        it names no positions of its own to copy from. The unit of generation for such
+        a bar is therefore the beat (`_bar_resolution` has no onsets to fit), which is
+        the rule this test pins.
 
-        Bar 6 is the case the old behaviour got wrong: no notes at all, two changes, and
-        **no part produced** - not quiet, absent - on every export path. Under the default
-        grid it now sounds both chords. Measured on a 2/2 head, so the assertion is two
-        steps and not four, which is also the count-with-a-denominator rule of AGENTS.md
-        trap 9.
+        Bar 6 is the case the old behaviour got wrong: no written notes and two
+        changes, and **no part produced** - not quiet, absent - on every export path.
+        It is not *entirely* silent under the corrected metre, though: bar 5's G4 is
+        held through beat 1.5, so only beat 2.0 is a position the tune has left. The
+        default grid adds that one and withholds the held one, which is §9.2's rule
+        applied inside a bar with no onsets of its own.
         """
         steps, _head, _notes = arranged(RAINY_DAY)
         silent = [s for s in steps if s.bar == 6]
         silent.sort(key=lambda step: (step.bar or 0, step.beat or 0.0))
-        self.assertEqual([(s.beat, s.chord) for s in silent], [(1.0, "Am7"), (2.0, "D9")])
+        self.assertEqual([(s.beat, s.chord) for s in silent], [(2.0, "D9")])
         for step in silent:
             self.assertIsNone(step.melody, step.tab_line())
             self.assertFalse(step.melody_voiced, step.tab_line())
@@ -530,7 +532,7 @@ class TestChordSlots(unittest.TestCase):
                         continue
                     checked += 1
                     self.assertEqual(
-                        melody_state(head.notes, bar, beat),
+                        melody_state(head, bar, beat),
                         "silent",
                         f"bar {bar} beat {beat} was added under a "
                         f"sounding note: {step.tab_line()}",
@@ -587,10 +589,12 @@ class TestChordSlots(unittest.TestCase):
 
         `walking_slots` walks the bars the *timings* touch, and the union writes its
         added slots into those timings - so the bass half of item 1 was already correct
-        wherever a named grid ran. The default grid's silence was the only thing
-        withholding the bar from it, and `freddie` is the pre-existing witness: under the
-        default the walk now reaches **exactly** the bars `freddie` reaches, no more and no
-        fewer.
+        wherever a named grid ran. `freddie` is the pre-existing witness. Under the
+        default the walk now reaches every bar `freddie` reaches **where the tune is
+        silent**; the one bar it withholds is bar 12, where the default grid adds no
+        position at all because bar 11's F4 is still held through it. That is §9.2, not
+        a default withholding a bar it should walk - `freddie` comps under the held note
+        because a *named* grid states its figure whatever the tune is doing.
 
         **Bars 6 and 7 still get no thumb note, and that is a different issue.**
         `place_bass` refuses them for the reason `docs/open-issues.md` **item 2** measures
@@ -609,7 +613,9 @@ class TestChordSlots(unittest.TestCase):
         melody_bars = {n.bar for n in head.notes}
         every = walked("chord:every_note")
         named = walked("chord:freddie")
-        self.assertEqual(every, named, "the default withholds a bar the named grid walks")
+        self.assertLessEqual(every, named, "the default walks a bar no named grid reaches")
+        self.assertEqual(every - melody_bars, {6})
+        self.assertEqual(named - melody_bars, {6, 12})
         for bar in every - melody_bars:
             self.assertNotIn(bar, melody_bars)
 
@@ -714,8 +720,12 @@ class TestChordSlots(unittest.TestCase):
         30 real `C4` slots across the fixtures sat on genuinely written C4s, which is why
         equality against a sentinel could pass for the wrong reason (§9.3 step B).
         """
-        slots = [s for s in chord_slots(self.rainy, grid="chord:freddie") if s[3] == 6]
-        self.assertTrue(slots, "bar 6 must place its chords")
+        slots = [
+            s
+            for s in chord_slots(self.rainy, grid="chord:freddie")
+            if s[3] == 6 and abs(s[4] - 2.0) < 1e-9
+        ]
+        self.assertTrue(slots, "bar 6 beat 2 must place its chord")
         for melody, _quality, _name, _bar, _beat, _duration in slots:
             self.assertIsNone(melody)
 
@@ -740,32 +750,100 @@ class TestMelodyState(unittest.TestCase):
     def test_a_written_onset_reports_onset(self):
         """A position a note begins at is its onset - the note's own `key`."""
         note = self._integer_onset()
-        self.assertEqual(melody_state(self.notes, note.bar, note.beat), "onset")
+        self.assertEqual(melody_state(self.head, note.bar, note.beat), "onset")
+
+    def test_a_note_written_across_a_barline_is_still_sounding_on_the_far_side(self):
+        """A cut-time tie is one note, and bar 3's downbeat is inside it.
+
+        `synthetic_cut_time.mxl` ends bar 2 with an E♭4 tied to bar 3's first eighth;
+        the importer merges the halves into one `HeadNote` at bar 2 beat 2.5 with a
+        duration of 0.5 whole notes. A 2/2 beat is a minim, so that note ends at bar 3
+        beat 1.5 - not at bar 2 beat 4.0, which is what `duration * 4` read in the
+        starting bar claimed. The old answer made bar 3's downbeat *silent*, and the
+        comping union put a fresh Cm7 shape there: the re-strike this test forbids.
+        """
+        head = load_musicxml(BUT_NOT_FOR_ME)
+        self.assertEqual((head.beats_per_bar, head.beat_type), (2, 2))
+        self.assertEqual(melody_state(head, 2, 2.5), "onset")
+        self.assertEqual(melody_state(head, 3, 1.0), "held")
+        self.assertEqual(melody_state(head, 3, 1.5), "onset")
+
+    def test_a_tie_read_as_one_note_crosses_the_barline_at_its_own_length(self):
+        """The merged note ends in the bar it reaches, not in the bar it began.
+
+        Two half notes in 2/2 tied across the bar line are one whole note: from bar 1
+        beat 2.0 to bar 2 beat 2.0. Every position in between is `held`, including the
+        downbeat of bar 2, and the position after the end is `silent`.
+        """
+        measures = (
+            f"{rest(8)}{note('E', duration=8, tie='start')}"
+            "</measure>"
+            f'<measure number="2">{note("E", duration=8, tie="stop")}'
+        )
+        path = write_score(score(measures, divisions=4, beats=2, beat_type=2))
+        self.addCleanup(os.unlink, path)
+        head = load_musicxml(path)
+        self.assertEqual(len(head.notes), 1)
+        self.assertEqual(head.notes[0].duration, 1.0)
+        for beat in (1.0, 1.5, 2.0):
+            with self.subTest(beat=beat):
+                self.assertEqual(melody_state(head, 2, beat), "held")
+        self.assertEqual(melody_state(head, 3, 1.0), "silent")
+
+    def test_the_release_instant_counts_as_held_until_the_next_position(self):
+        """The end is inclusive: the note still sounds *at* its release instant.
+
+        `docs/open-issues.md` item 6 records the unresolved question; this pins the
+        answer the code gives, so changing it is a decision rather than a drift. A half
+        note in 2/2 ends at beat 2.0, where a rest begins: beat 2.0 is held and 2.1 is
+        silent.
+        """
+        path = write_score(
+            score(
+                f"{harmony('C', 'major')}{note('E', duration=8)}{rest(8)}",
+                divisions=4,
+                beats=2,
+                beat_type=2,
+            )
+        )
+        self.addCleanup(os.unlink, path)
+        head = load_musicxml(path)
+        self.assertEqual(melody_state(head, 1, 2.0), "held")
+        self.assertEqual(melody_state(head, 1, 2.1), "silent")
 
     def test_a_position_inside_a_sounding_note_reports_held(self):
         """A probe between a note's onset and its end inherits that note.
 
-        The probe is the note's own midpoint (`duration * 2` in beats, half of the
-        `duration * 4` that `melody_at` adds), so where no other note begins and this
-        one is in force the answer must be "held" - asserted as *some* position on the
-        fixture qualifying, because one colliding with a later onset merely drops out.
+        The probe is the note's own midpoint: half of `duration * beat_type` beats,
+        which is half of the length `melody_at` adds. The multiplication by
+        `beat_type` rather than by four is the same rule the function itself now
+        follows - in 4/4 the two agree, and in 2/2 `duration * 2` is the whole note, so
+        a probe written as `duration * 2` would land on the release instead of inside
+        it. Asserted as *some* position on the fixture qualifying, because one
+        colliding with a later onset merely drops out.
         """
         probes = [
-            (written.bar, round(written.beat + written.duration * 2.0, 6))
+            (written.bar, round(written.beat + written.duration * self.head.beat_type / 2.0, 6))
             for written in self.notes
             if written.duration > 0
         ]
         held = [
             (bar, beat) for bar, beat in probes
-            if melody_state(self.notes, bar, beat) == "held"
+            if melody_state(self.head, bar, beat) == "held"
         ]
         self.assertTrue(held, "no position inside a sounding note reports held")
 
-    def test_a_bar_after_the_melody_ends_reports_silent(self):
-        """Bar 6 of `synthetic_repeat_slash` has chords and no tune over them."""
-        for beat in (1.0, 1.5, 2.0):
-            with self.subTest(beat=beat):
-                self.assertEqual(melody_state(self.notes, 6, beat), "silent")
+    def test_a_position_the_melody_has_left_reports_silent(self):
+        """A position after a sounding note stops is silent, not a forever-hold.
+
+        Bar 6 of `synthetic_repeat_slash` has no written note of its own, but it is
+        not silent at its start: bar 5's G4 (0.75 whole notes, 1.5 beats in 2/2) is
+        held through beat 1.5. The first position the tune has actually left is beat
+        2.0, and that is the one this pins.
+        """
+        self.assertEqual(melody_state(self.head, 6, 1.0), "held")
+        self.assertEqual(melody_state(self.head, 6, 1.5), "held")
+        self.assertEqual(melody_state(self.head, 6, 2.0), "silent")
 
     def test_the_onset_test_rounds_the_beat_like_head_note_key(self):
         """A beat differing in the seventh decimal is the same position, not a new one.
@@ -777,7 +855,7 @@ class TestMelodyState(unittest.TestCase):
         exists to forbid.
         """
         note = self._integer_onset()
-        self.assertEqual(melody_state(self.notes, note.bar, note.beat + 1e-7), "onset")
+        self.assertEqual(melody_state(self.head, note.bar, note.beat + 1e-7), "onset")
 
 
 class TestSilentSlotsCarryNoMelody(unittest.TestCase):
@@ -797,14 +875,26 @@ class TestSilentSlotsCarryNoMelody(unittest.TestCase):
         return arranged(RAINY_DAY, parts="chord", grid="chord:freddie")
 
     def test_a_slot_where_the_melody_stopped_carries_none(self):
-        """Bar 6 sits under a chord and over no note; the step says so plainly."""
+        """The silent position in bar 6 sits under a chord and over no note."""
         steps, _head, _notes = self._arrange()
-        silent = [s for s in steps if s.bar == 6]
-        self.assertTrue(silent, "bar 6 must place its chords")
+        silent = [
+            step
+            for step in steps
+            if step.bar == 6 and abs((step.beat or 0.0) - 2.0) < 1e-9
+        ]
+        self.assertEqual(len(silent), 1, "bar 6 beat 2 must place its chord")
         for step in silent:
             self.assertIsNone(step.melody, step.tab_line())
             self.assertNotIn("C4", step.tab_line())
             self.assertNotIn("None", step.tab_line())
+        # The position the tune is still holding is the contrast: it keeps the note
+        # in force rather than inventing one or dropping it.
+        held = [
+            step
+            for step in steps
+            if step.bar == 6 and abs((step.beat or 0.0) - 1.0) < 1e-9
+        ]
+        self.assertEqual([step.melody for step in held], ["G4"])
 
     def test_every_step_carries_the_note_actually_in_force(self):
         """The invariant the placeholder could not state: `step.melody` *is* `melody_at`.
@@ -822,7 +912,7 @@ class TestSilentSlotsCarryNoMelody(unittest.TestCase):
                 continue
             self.assertEqual(
                 step.melody,
-                melody_at(head.notes, step.bar, step.beat),
+                melody_at(head, step.bar, step.beat),
                 f"bar {step.bar} beat {step.beat}: {step.tab_line()}",
             )
 

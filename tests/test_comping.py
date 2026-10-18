@@ -596,7 +596,7 @@ class TestCompingMelodyIndependence(unittest.TestCase):
         onsets = {
             index
             for index, slot in enumerate(slots)
-            if melody_state(head.notes, slot[1], slot[2]) == "onset"
+            if melody_state(head, slot[1], slot[2]) == "onset"
         }
         steps, _, _ = arrange_slots(
             [slot[0] for slot in slots],
@@ -779,7 +779,7 @@ class TestTheSopranoIsPerSlotNotPerRoute(unittest.TestCase):
                 continue
             self.assertIsNone(step.melody, step.tab_line())
             self.assertEqual(
-                melody_state(head.notes, bar, beat),
+                melody_state(head, bar, beat),
                 "silent",
                 step.tab_line(),
             )

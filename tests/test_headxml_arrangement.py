@@ -592,11 +592,18 @@ class TestTheMetreHasADenominator(unittest.TestCase):
         produced no steps in a bar the melody never entered - the silence
         `docs/open-issues.md` item 1 measures. Those bars are arranged now, and the
         exporter has always written a comping step as a note: `freddie` and `joe_pass`
-        already round-tripped **22 and 27** extra beats on this head before this change,
-        `every_note` **5**. The claim that actually matters is the one the assertion was a
-        proxy for - every written beat comes back at the same beat - and that still holds
-        exactly. What is asserted instead is that **every extra is a position the tune is
-        silent at**, which is now also true inside a bar the tune occupies.
+        already round-tripped **22 and 27** extra beats on this head before this change.
+        The claim that actually matters is the one the assertion was a proxy for - every
+        written beat comes back at the same beat - and that still holds exactly. What is
+        asserted instead is that **every extra is a position the tune is silent at**.
+
+        **The set is empty on this head now, and that is the corrected metre.** The one
+        position the default grid added in a later bar was bar 7 beat 1.0, the release
+        instant of bar 6's D4: reading the duration as `duration * 4` in the starting bar
+        put the end before the bar line, so the grid called it silent. A 3/4 beat is a
+        quarter, the note ends exactly at bar 7 beat 1.0, and the release instant is
+        still held - so there is nothing to add. The loop remains because the *rule* is
+        what the test states, not the count.
         """
         try:
             import music21  # noqa: F401
@@ -632,13 +639,42 @@ class TestTheMetreHasADenominator(unittest.TestCase):
         surviving = {(n.bar, round(n.beat, 6)) for n in reread}
         self.assertTrue(original <= surviving, sorted(original - surviving)[:5])
         # And every extra is a position the tune is silent at - the rule the default grid
-        # generates by, restated through a round trip.
-        self.assertTrue(surviving - original, "the default grid reached no extra position")
+        # generates by, restated through a round trip. Empty on this head is a pass: the
+        # one position it used to add was a release instant, now correctly held.
         for bar, beat in sorted(surviving - original):
             self.assertIsNone(
-                melody_at(head.notes, bar, beat),
+                melody_at(head, bar, beat),
                 f"bar {bar} beat {beat} gained a beat under a sounding note",
             )
+
+
+class TestANoteHeldAcrossABarLine(unittest.TestCase):
+    """A tie into the next bar is one note, so the next bar's downbeat holds it.
+
+    `synthetic_cut_time.mxl` ends bar 2 with an E♭4 tied to bar 3's first eighth. The
+    importer merges the halves into one `HeadNote`, but the default grid still names
+    bar 3's downbeat as a position - and the comping union used to call the tune silent
+    there and fill it with a fresh Cm7 shape. That is a re-strike of a note the left
+    hand is still holding, which is what `But_Not_for_Me` demonstrated.
+    """
+
+    def test_the_held_note_is_not_restruck_at_the_next_downbeat(self):
+        steps, head, _notes = arrange_xml_head(BUT_NOT_FOR_ME)
+        self.assertEqual((head.beats_per_bar, head.beat_type), (2, 2))
+        at = {
+            (step.bar, round(step.beat or 0.0, 6)): step
+            for step in steps
+            if step.bar is not None and step.beat is not None
+        }
+        self.assertNotIn((3, 1.0), at, "the held note was re-struck at bar 3")
+        held = at[(2, 2.5)]
+        self.assertEqual(held.melody, "Eb4")
+        self.assertIsNotNone(held.duration)
+        # The note reaches an eighth into bar 3, so its written length is more than
+        # the gap to the bar line (0.25 whole notes in cut time).
+        self.assertGreater(held.duration or 0.0, 0.25)
+        # The next written note is still there: the hold did not swallow the tune.
+        self.assertEqual(at[(3, 1.5)].melody, "F4")
 
 
 class TestHeadTexture(unittest.TestCase):

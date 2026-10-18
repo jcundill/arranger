@@ -795,6 +795,13 @@ bar therefore reports a pickup of three quarters and drops the trailing rest tha
 have filled the bar. A source `<bar-style>` is not needed - the incompleteness is the
 cause - and the three renderers spell the same decision differently:
 
+**An imported head also carries the source's own statement.** `Head.first_bar_implicit`
+is true when the score marks measure 1 `implicit="yes"` (or numbers it 0), and
+`headxml._merge_chord_slots` withholds the default grid's positions in that bar. A
+comping chord in the short bar would fill it, `score_events` would read a full first
+bar, and the pickup would be erased - which is why the accompaniment starts in bar 2
+while the written melody keeps the anacrusis.
+
 - `tabxml._build_part` writes a **short first measure** - the pickup's music is the
   whole of it - marks it `implicit="yes"`, and `_apply_pickup_barline` closes it with
   the `light-light` bar line an engraver puts after an anacrusis.

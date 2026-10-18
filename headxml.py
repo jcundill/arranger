@@ -48,6 +48,7 @@ from arranger import (
     TICKS_PER_BEAT,
     ArrangementStep,
     ChordParser,
+    beat_offset,
     grid_defers_to_melody,
     grid_positions,
     grid_resolutions,
@@ -518,7 +519,8 @@ class Head:
 
     `title`, `composer` and `part` identify the source for the CLI header, and
     `beats_per_bar` is the notated bar length in beats, so a cut-time head is
-    rendered two beats to the bar rather than four.
+    rendered two beats to the bar rather than four. `first_bar_implicit` is the source's
+    own statement that bar 1 is an anacrusis, which the arrangement must not fill.
 
     `key_fifths` / `key_mode` are the key signature, so a renderer can state the key
     the tune is in instead of falling back to the format's default of C major. See
@@ -541,6 +543,11 @@ class Head:
     # `beats_per_bar` alone cannot say which - a 2/2 and a 2/4 bar are both two
     # beats wide, and printing one as the other misstates the metre.
     beat_type: int = 4
+    # True when the score marks its first measure `implicit="yes"` (or numbers it 0):
+    # the measure is an anacrusis, so its missing time is a pickup and not comping
+    # space. Carried because a generated accompaniment position in that short bar
+    # would fill it, and the renderers infer the pickup from the bar's content.
+    first_bar_implicit: bool = False
     # The key signature as MusicXML states it: `key_fifths` counts sharps (positive)
     # or flats (negative), so -3 is Eb major or C minor, and `key_mode` is which -
     # "major", "minor", or "" where the score did not say. Kept as the format's own
@@ -1113,6 +1120,13 @@ class _NotesWalk:
             self.bar = self.bar_index
             if number:
                 self.skip(f'measures not numbered with an integer ("{number}")')
+        if not self.measure_numbers:
+            # The source's own statement that bar 1 is an anacrusis. A pickup
+            # numbered 0 says the same thing in the older spelling.
+            self.head.first_bar_implicit = (
+                (measure.get("implicit") or "").strip().lower() == "yes"
+                or self.bar == 0
+            )
         self.measure_numbers.append(self.bar)
 
         for barline in measure.findall("barline"):
@@ -2081,7 +2095,7 @@ def chord_at(
     return found
 
 
-def melody_at(notes: Sequence[HeadNote], bar: int, beat: float) -> Optional[str]:
+def melody_at(head: Head, bar: int, beat: float) -> Optional[str]:
     """The written note sounding at `(bar, beat)`, by forward fill, or `None`.
 
     **The note-path twin of `chord_at`, and the reason `chord_slots` can carry a
@@ -2096,30 +2110,41 @@ def melody_at(notes: Sequence[HeadNote], bar: int, beat: float) -> Optional[str]
     distinction between an onset and a hold.
 
     **A note that has stopped is not in force.** `duration` is in whole notes, so the end
-    is the onset plus that length in quarters; this is why the function returns `None`
+    is the onset plus that length in **beats**; this is why the function returns `None`
     for a position after the melody ends rather than carrying the last note forever.
+
+    **The end is computed on one absolute beat line, and a beat is not a quarter.** A
+    note may end in a later bar than it began, so the onset and the probe are both
+    placed by `grid.beat_offset` before they are compared; a `(bar, beat)` pair cannot
+    express a duration that crosses a barline. And a whole note is `beat_type` beats,
+    not four: in 2/2 a beat is a minim, so `duration * 4` would end a note written to
+    the barline halfway through the next bar and re-strike it there.
+
+    `head` rather than a bare note list because both numbers are the head's: the bar
+    length, which places a position, and the beat value, which converts the duration.
+    A caller that has only the notes has lost the metre, and guessing 4/4 for it is the
+    defect this signature makes impossible.
 
     `None` before the melody starts for the same reason: nothing is sounding, and a step
     naming a note that has not begun is a claim about music that is not there.
     """
     position = (bar, round(beat, 6))
     found: Optional[HeadNote] = None
-    for note in notes:
+    for note in head.notes:
         if note.key > position:
             continue
         if found is None or note.key >= found.key:
             found = note
     if found is None:
         return None
-    # `duration` is in whole notes and a beat is a quarter, so the end of the note is
-    # its onset plus `duration * 4` beats, still in this bar's beat numbering.
-    end_beat = found.beat + found.duration * 4.0
-    if position > (found.bar, round(end_beat, 6)):
+    beats_per_bar = head.beats_per_bar
+    end = beat_offset(found.bar, found.beat, beats_per_bar) + found.duration * head.beat_type
+    if beat_offset(bar, beat, beats_per_bar) > round(end, 6):
         return None
     return found.note_name
 
 
-def melody_state(notes: Sequence[HeadNote], bar: int, beat: float) -> str:
+def melody_state(head: Head, bar: int, beat: float) -> str:
     """Whether a melody note **articulates**, still **sounds**, or is absent at `(bar, beat)`.
 
     The three-way sibling of `melody_at`, for the question its two-way answer cannot
@@ -2144,11 +2169,15 @@ def melody_state(notes: Sequence[HeadNote], bar: int, beat: float) -> str:
 
     A plain `str` rather than an enum: nothing branches on the answer yet — step C's
     reharmonise table is what will read it.
+
+    `head` rather than a bare note list for the same reason `melody_at` takes it: the
+    metre decides whether a note crossing a barline is still sounding on the far side,
+    and a note list cannot carry it.
     """
-    if melody_at(notes, bar, beat) is None:
+    if melody_at(head, bar, beat) is None:
         return "silent"
     position = (bar, round(beat, 6))
-    return "onset" if any(note.key == position for note in notes) else "held"
+    return "onset" if any(note.key == position for note in head.notes) else "held"
 
 
 def _tick_key(bar: int, beat: float) -> Tuple[int, int]:
@@ -2319,7 +2348,7 @@ def chord_slots(
         root_name, _ = ChordParser.parse_chord_name(change.chord)
         promoted = promote_slash_chord(root_name or "", change.quality, change.bass)
         name = f"{change.chord}/{change.bass}" if change.bass else change.chord
-        note = melody_at(head.notes, bar, beat)
+        note = melody_at(head, bar, beat)
         slots.append((note, promoted, name, bar, beat, length))
     return slots
 
@@ -2538,7 +2567,7 @@ def arrange_xml_head(
     onsets = {
         index
         for index, slot in enumerate(slots)
-        if melody_state(head.notes, slot[1], slot[2]) == "onset"
+        if melody_state(head, slot[1], slot[2]) == "onset"
     }
     # Both halves of the metre are in `options`: the count says which beats exist,
     # the denominator says how long one lasts, and `arrange_xml_head` took them from
@@ -2583,6 +2612,11 @@ def _merge_chord_slots(
     A **named** grid contributes its figure's positions in every bar, and the melody-less
     bar it may add is the case `chord_slots` has always covered.
 
+    **A pickup bar is the one place no grid contributes.** `Head.first_bar_implicit` is
+    the source's statement that bar 1 is an anacrusis, so its short bar is not space for
+    an accompaniment: filling it would erase the pickup the renderers infer from the
+    bar's content. The written melody slots stay, because they are what the pickup is.
+
     **Order is `(bar, beat)`, which is what both producers already emit.** Sorting is
     done here rather than trusted from either, because the step loop indexes the melody
     and a `bass_only`-style union that arrived out of order would attribute the wrong
@@ -2591,6 +2625,14 @@ def _merge_chord_slots(
     grid_policy = resolve_grid(parse_grid(grid), head.beats_per_bar)
 
     extra = chord_slots(head, section, grid_policy)
+    if head.first_bar_implicit and extra:
+        # **A pickup bar is not comping space.** Its missing time is the anacrusis the
+        # renderers infer from the bar's content; a generated chord there fills the
+        # short bar, erases the pickup, and (because the bar is no longer short) moves
+        # the whole head to a different downbeat. The melody's own slots stay - they
+        # are what the pickup *is* - and the accompaniment starts in bar 2.
+        first = head.bars[0]
+        extra = [slot for slot in extra if slot[3] != first]
     if grid_defers_to_melody(grid_policy):
         # **§9.2, and the whole of what the melody-anchored case holds back.** The
         # positions `_generated_beats` produced are candidates for slots, and the tune's
@@ -2604,7 +2646,7 @@ def _merge_chord_slots(
         extra = [
             slot
             for slot in extra
-            if melody_state(head.notes, slot[3], slot[4]) != "held"
+            if melody_state(head, slot[3], slot[4]) != "held"
         ]
     if not extra:
         return slots

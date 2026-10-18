@@ -20,6 +20,7 @@ from tabxml import (
 )
 from tests.support import (
     BLUE_MOON,
+    BUT_NOT_FOR_ME,
     I_WAS_DOING_ALL_RIGHT,
     MISTY,
     make_step,
@@ -795,6 +796,7 @@ class TestAnacrusisPickup(unittest.TestCase):
         """Synthetic Pickup Cut's 2/2 bar holds one quarter, so the pickup is three."""
         head, (events, pickup) = self._pickup(BLUE_MOON)
         self.assertEqual((head.beats_per_bar, head.beat_type), (2, 2))
+        self.assertTrue(head.first_bar_implicit, "the source marks measure 1 implicit")
         self.assertEqual(pickup, 3.0)
         # The trailing rest is dropped, so the first event is the note alone and
         # the next is bar 2's whole note.
@@ -809,7 +811,8 @@ class TestAnacrusisPickup(unittest.TestCase):
 
     def test_a_full_first_bar_has_no_pickup(self):
         """The control: Synthetic Triplets fills its first bar."""
-        _head, (_events, pickup) = self._pickup(I_WAS_DOING_ALL_RIGHT)
+        head, (_events, pickup) = self._pickup(I_WAS_DOING_ALL_RIGHT)
+        self.assertFalse(head.first_bar_implicit)
         self.assertEqual(pickup, 0.0)
 
 
@@ -1030,5 +1033,63 @@ class TestMusicXMLRepeatMarkers(MusicXMLTestCase):
             ),
             [("da_capo_al_fine", 5), ("fine", 4)],
         )
+
+
+@requires_music21
+class TestACrossBarHoldIsWrittenAsATie(unittest.TestCase):
+    """A note held over a bar line is one note in the document, joined by `<tie>`.
+
+    The importer merges the source's tie, but the arrangement used to re-strike the
+    note at the next downbeat, so the exporter had nothing to tie and wrote no `<tie>`
+    at all. With the hold preserved, bar 2's event starts the tie and bar 3's first
+    event stops it.
+    """
+
+    def test_the_held_note_is_a_tie_not_a_second_attack(self):
+        from arranger import format_musicxml
+        from headxml import arrange_xml_head
+
+        steps, head, _notes = arrange_xml_head(BUT_NOT_FOR_ME)
+        root = ElementTree.fromstring(
+            format_musicxml(
+                steps,
+                beats_per_bar=head.beats_per_bar,
+                beat_type=head.beat_type,
+            )
+        )
+        measures = root.findall("part")[0].findall("measure")
+        self.assertGreaterEqual(len(measures), 3)
+
+        def first_group(measure):
+            notes = [n for n in measure.iter("note")]
+            start = next(i for i, n in enumerate(notes) if n.find("chord") is None)
+            end = next(
+                (i for i in range(start + 1, len(notes)) if notes[i].find("chord") is None),
+                len(notes),
+            )
+            return notes[start:end]
+
+        def last_group(measure):
+            notes = [n for n in measure.iter("note")]
+            start = max(i for i, n in enumerate(notes) if n.find("chord") is None)
+            return notes[start:]
+
+        def tie_types(notes):
+            return [
+                n.find("tie").get("type") if n.find("tie") is not None else None
+                for n in notes
+            ]
+
+        held = last_group(measures[1])
+        continuation = first_group(measures[2])
+        self.assertEqual(tie_types(held), ["start"] * len(held))
+        self.assertEqual(tie_types(continuation), ["stop"] * len(continuation))
+        # The same pitches on both sides, which is what makes it a tie rather than a
+        # slur. The document writes the guitar an octave above its sound, so the
+        # melody's Eb4 is Eb5 here - and it is the top voice on both sides.
+        self.assertEqual([_midi(n) for n in held], [_midi(n) for n in continuation])
+        self.assertEqual(_midi(held[-1]), 75)
+        # And the continuation restates no chord symbol: it is the same harmony.
+        self.assertFalse(any(n.find("harmony") is not None for n in continuation))
 
 

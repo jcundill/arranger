@@ -433,13 +433,16 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
 
         `Trouble_in_Mind_Blues` has `Am7/D` steps whose shapes state the b3, the 5 and the
         b7 and no D at all: the partition prefers the written bass and cannot reach it, so
-        the reader is handed a symbol asking for a note the tab does not contain. Measured
-        over the committed corpus: 53 of 127 slash-chord steps, in both the melody-bearing
-        and the comping routes.
+        the reader is handed a symbol asking for a note the tab does not contain. The
+        witness is a **named** grid, because the default now withholds a position the
+        tune is still holding (§9.2) and those `Am7/D` bars are a hold; `freddie` states
+        its figure regardless, which is what keeps the loss visible.
         """
         from headxml import arrange_xml_head
 
-        steps, _head, _notes = arrange_xml_head("tests/data/Trouble_in_Mind_Blues.musicxml")
+        steps, _head, _notes = arrange_xml_head(
+            "tests/data/Trouble_in_Mind_Blues.musicxml", grid="chord:freddie"
+        )
         lost = [
             step for step in steps
             if "/" in step.chord and "the written bass" in step_annotation(step)

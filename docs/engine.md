@@ -1425,6 +1425,15 @@ that produced the rule, **274 of 1,146** grid positions carry a held note rather
 articulation — a quarter, so the middle state is not an edge case; `melody_at` keeps its
 two-way answer for callers that only need "is a note sounding".
 
+**A note that crosses a barline is held on the far side.** `melody_at` converts a note's
+whole-note duration to beats with `beat_type` and compares it to the probe on one absolute
+beat line (`grid.beat_offset`): `duration * 4` is right only in 4/4, and a `(bar, beat)` pair
+cannot express a note that ends in a later bar. A 2/2 note written to the barline is therefore
+still sounding at the next bar's downbeat, and the default grid does not re-strike it there.
+The end instant is inclusive — the release is still held — and that boundary is the open
+decision [docs/open-issues.md](open-issues.md) item 6 records, pinned by
+`tests/test_headxml_timeline.py::TestMelodyState::test_the_release_instant_counts_as_held_until_the_next_position`.
+
 **The arity is the length of the selection, and it is honoured.** `notes` says how many
 voices the guitar was asked for, and a two-voice request is **two notes**. The first
 version of this generator always built a three-note shell, so `--texture chord1` and

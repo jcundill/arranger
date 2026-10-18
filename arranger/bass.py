@@ -47,7 +47,7 @@ from .bass_rules import (
 )
 from .chords import NON_CHORD_TONE_EXTENSIONS, ChordParser, normalised_harmony
 from .fingers import can_fret
-from .grid import BEAT_EPSILON
+from .grid import BEAT_EPSILON, beat_offset
 from .texture import metric_weight
 from .tuning import NO_CHORD, STANDARD_TUNING, ArrangementStep, Voicing
 
@@ -544,18 +544,6 @@ def walking_slots(
     return _bass_slots(progression, timings, bass_line, beats_per_bar, beat_type)
 
 
-def _beat_offset(bar: int, beat: float, beats_per_bar: int) -> float:
-    """One position on a single absolute beat line, so two bars' beats can be compared.
-
-    A `(bar, beat)` pair orders correctly against another pair, but a *duration*
-    cannot be compared against one: a note running past a barline ends at
-    `(bar, 3.5)` in a 2/2 bar, which is before `(bar + 1, 1.0)` and after `(bar, 2.0)`,
-    and no amount of tuple comparison says so. One number in beats-from-the-start does,
-    and signed bars fall out of the arithmetic rather than needing a case.
-    """
-    return (bar - 1) * beats_per_bar + (beat - 1.0)
-
-
 def _melody_in_force(
     timeline: Sequence[Tuple[float, float, int]], at: float
 ) -> int:
@@ -608,7 +596,7 @@ def _melody_timeline(
     short. It is written as `duration * beat_type` rather than left, because the next
     metre-sensitive rule would inherit the error.
 
-    `beats_per_bar` is still here and still the *count*: `_beat_offset` places a
+    `beats_per_bar` is still here and still the *count*: `beat_offset` places a
     `(bar, beat)` pair with it, and that is a question about how many beats a bar has
     and not about how long one lasts. Both numbers are needed, and they are not
     interchangeable.
@@ -622,11 +610,11 @@ def _melody_timeline(
     return sorted(
         (
             (
-                _beat_offset(bar, beat, beats_per_bar),
+                beat_offset(bar, beat, beats_per_bar),
                 (
                     float("inf")
                     if duration is None
-                    else _beat_offset(bar, beat, beats_per_bar)
+                    else beat_offset(bar, beat, beats_per_bar)
                     + duration * beat_type
                 ),
                 index,
@@ -723,7 +711,7 @@ def _bass_only_entries(
         if key in melody_at:
             continue
         in_force = _melody_in_force(
-            timeline, _beat_offset(note.bar, float(note.beat), beats_per_bar)
+            timeline, beat_offset(note.bar, float(note.beat), beats_per_bar)
         )
         # Index 0 when the melody has not started yet, which is the pre-existing
         # fallback: something has to be named, and the opening slot is the least

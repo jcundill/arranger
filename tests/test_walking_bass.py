@@ -34,16 +34,17 @@ from arranger import (
     ROLE_FILL,
     ROLE_TARGET,
     VoiceLeadingEngine,
+    beat_offset,
 )
 from arranger.annotation import step_annotation
 
-# The precedence rule `bass._melody_in_force` implements. Imported from where it
-# lives rather than through the package facade, because these are private to
-# `arranger.bass` and re-exporting them would put four internals into the public
-# surface for the benefit of one test file. `test_bass.py` covers them directly for
-# the same reason.
+# The precedence rule `bass._melody_in_force` implements. The two private helpers are
+# imported from where they live rather than through the package facade, because
+# re-exporting them would put internals into the public surface for the benefit of one
+# test file. `test_bass.py` covers them directly for the same reason. `beat_offset` is
+# not private any more: `headxml` reads the same rule for a note held across a barline,
+# so it is public in `grid` and reached through the facade above.
 from arranger.bass import (
-    _beat_offset,
     _melody_in_force,
     _melody_timeline,
     walking_slots,
@@ -421,7 +422,7 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
         self.assertEqual(_melody_in_force([], 0.0), -1)
         # One note starting after the beat asked about: still nothing in force.
         timeline = _melody_timeline([(0, 2, 1.0, 1.0)], beats_per_bar=4)
-        self.assertEqual(_melody_in_force(timeline, _beat_offset(1, 1.0, 4)), -1)
+        self.assertEqual(_melody_in_force(timeline, beat_offset(1, 1.0, 4)), -1)
 
     def test_a_durations_span_is_measured_in_beats_not_in_bars(self):
         """A slot's `duration` becomes `duration * beat_type` beats, not `* beats_per_bar`.
@@ -504,11 +505,11 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
             texture="chord2", bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk",
             beats_per_bar=4,
         )
-        first_onset = _beat_offset(2, 1.0, 4)
+        first_onset = beat_offset(2, 1.0, 4)
         for step in steps:
             if step.bass_only and step.bar is not None and step.beat is not None:
                 self.assertGreater(
-                    _beat_offset(step.bar, float(step.beat), 4),
+                    beat_offset(step.bar, float(step.beat), 4),
                     first_onset,
                     "the walk invented a beat before the melody starts",
                 )
@@ -645,7 +646,7 @@ class TestEveryHeadCarriesTheMelodyInForce(unittest.TestCase):
                     )
                     if slot.bar is None or slot.beat is None:
                         continue
-                    at = _beat_offset(slot.bar, float(slot.beat), head.beats_per_bar)
+                    at = beat_offset(slot.bar, float(slot.beat), head.beats_per_bar)
                     in_force = _melody_in_force(timeline, at)
                     self.assertGreaterEqual(
                         in_force,

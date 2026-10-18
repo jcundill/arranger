@@ -602,7 +602,7 @@ class TestTheExplanationWraps(unittest.TestCase):
     def test_the_number_of_steps_that_wrap(self):
         """A count, because a step that stops wrapping is silent.
 
-        Measured over this sweep: **92** of the steps it renders carry an explanation too
+        Measured over this sweep: **93** of the steps it renders carry an explanation too
         long for the width, so each of them continues below the step. A clause that stopped
         being printed, or a width that stopped being honoured, would move this number.
         """
@@ -611,7 +611,7 @@ class TestTheExplanationWraps(unittest.TestCase):
         wrapped = sum(
             len(_format_step(step, self.WIDTH)) > 1 for _head, step in self.rendered_steps()
         )
-        self.assertEqual(wrapped, 92, "the number of steps that wrap moved")
+        self.assertEqual(wrapped, 93, "the number of steps that wrap moved")
 
 
 class TestOneLineColumns(unittest.TestCase):

@@ -250,10 +250,25 @@ class TestRepeats(_ScoreCase):
         written_steps, written_markers = _as_written(
             steps, head.markers, head.written_bars
         )
-        bars = sorted(
-            {bar for bar in (step.bar for step in written_steps) if bar is not None}
+        # **A bar is covered, not merely started.** The play order's last bar - written
+        # bar 8 - has no step *starting* in it: the F4 at absolute bar 11 is held for
+        # four beats and runs through it. The notation writer splits that step at the
+        # bar line, so the written bar exists even though no step begins there; asking
+        # for the set of start bars would report a missing bar the document has.
+        covered = set()
+        for step in steps:
+            if step.bar is None or step.beat is None:
+                continue
+            end = step.beat + (step.duration or 0.0) * head.beat_type
+            last = step.bar + int((end - 1.0 - 1e-9) // head.beats_per_bar)
+            for absolute in range(step.bar, last + 1):
+                written = head.written_bars.get(absolute)
+                if written is not None:
+                    covered.add(written)
+        self.assertEqual(sorted(covered), list(range(1, 9)))
+        self.assertTrue(
+            all(step.bar in range(1, 9) for step in written_steps if step.bar is not None)
         )
-        self.assertEqual(bars, list(range(1, 9)))
         self.assertEqual(
             [(m.bar, m.kind) for m in written_markers],
             [

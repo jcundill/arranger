@@ -22,6 +22,7 @@ from arranger import (
     BASS_STYLE_ANCHORS,
     BASS_STYLE_WALK,
     GRIP_MAX_SPAN,
+    PITCH_CLASS_NAMES,
     ROLE_FILL,
     ROLE_TARGET,
     STANDARD_TUNING,
@@ -203,27 +204,20 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
         )
 
     def test_no_anchor_is_left_without_its_thumb_note(self):
-        """
-        The cost of the fix, asserted so it cannot be paid silently — and it is now **zero**.
+        """The set of anchors with no thumb note is the claim, and it has one member.
 
-        Telling the thumb about the held shape removes candidate strings, so a naive
-        version of the reach fix loses thumb notes - and a walking bass with a gap in it is
-        not a walking bass. The set was `[(3, 1.0), (19, 1.0), (23, 1.0)]` when it was
-        written, and item 1's generated positions dissolved it: those downbeats read the
-        melody in force as `Ebmaj` over `F4`, so the anchor's note *was* the lowest note of
-        the shell and there was no free string below it for the thumb. The tune is **silent**
-        at them now, so the guitar comps them at `comping_arity` - a shape whose bottom note
-        sits higher - and the thumb has room. So the assertion stays an **exact set** rather
-        than a property, and the empty one is the claim: a new entry here means this change
-        cost a note.
+        Bar 3's downbeat is a *held* melody step whose own shell states the root C as
+        its lowest voice, so the walk's root has no octave below the shape to take.
+        The note is not missing from the line - it is already the bottom of the chord -
+        and the annotation says so. Every other anchor carries its thumb; a new entry
+        here means a change cost a note rather than moved one.
 
         The anchors are selected by `bass_role` alone, and deliberately **not** by
         `bass_only` as well. They used to be filtered by both, and that was wrong: a
-        walk-invented downbeat the melody moves onto
-        is a **target**, so it stopped being `bass_only` while remaining an anchor -
-        and the filter quietly dropped it from this assertion, turning the test into
-        one that could not fail. An anchor is an anchor whether or not the left hand
-        holds across it, which is what makes `bass_role` the honest population.
+        walk-invented downbeat the melody moves onto is a **target**, so it stopped
+        being `bass_only` while remaining an anchor - and the filter quietly dropped it
+        from this assertion, turning the test into one that could not fail. An anchor is
+        an anchor whether or not the left hand holds across it.
         """
         steps = self._arrangement()
         anchors = [
@@ -234,39 +228,47 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
         self.assertGreater(len(anchors), 0)
         missing = [(step.bar, step.beat) for step in anchors if step.bass is None]
         self.assertEqual(
-            [],
             missing,
+            [(3, 1.0)],
             "the set of anchors with no thumb note changed",
         )
 
     def test_every_anchor_carries_a_thumb_note_below_its_upper_shape(self):
-        """
-        Why the gap set above is empty, asserted over the **whole** population instead.
+        """Why the gap set above has one member, asserted over the **whole** population.
 
-        A thumb note must sound strictly below the structure it supports, so an anchor can
-        only fail to place when **the structure already sounds that pitch class** and every
-        string below it is occupied. That is the diagnosis the gap set used to need, and the
-        gaps are gone, so stating it over the gaps would be a loop over nothing - a test that
-        cannot fail. It is stated over all 31 anchors for that reason, and a future gap
-        therefore has to explain itself here rather than only being absorbed into a list.
+        A thumb note must sound strictly below the structure it supports, so an anchor
+        can only fail to place when **the structure already sounds that pitch class**
+        and every string below it is occupied. Bar 3 is exactly that: the held melody's
+        shell states the root C as its lowest voice. It is allowed to fail *for that
+        reason only*, asserted against the pitch it refused, and it is not a loop over
+        nothing - every other anchor is checked here, so a future gap has to explain
+        itself rather than being absorbed into a list.
 
-        The chord's root is asserted too, because it is the pitch the thumb was reaching for
-        and it is what the step has to state: `ChordParser` resolves the name rather than the
-        test slicing characters out of it.
+        The chord's root is asserted too, because it is the pitch the thumb was reaching
+        for and it is what the step has to state: `ChordParser` resolves the name rather
+        than the test slicing characters out of it.
         """
         steps = self._arrangement()
         anchors = [step for step in steps if step.bass_role == arranger.BASS_ROLE_ANCHOR]
         self.assertGreater(len(anchors), 0, "no anchors were checked")
         for step in anchors:
             bass = step.bass
-            self.assertIsNotNone(bass, f"bar {step.bar}: the anchor has no thumb note")
-            assert bass is not None
             sounding = {
                 STANDARD_TUNING[index].midi_note() + fret
                 for index, fret in enumerate(step.voicing.frets)
                 if fret >= 0
             }
             self.assertTrue(sounding, f"bar {step.bar}: an anchor sounds nothing at all")
+            if bass is None:
+                # The one admissible refusal: the root the walk wanted is the lowest
+                # voice the shape already sounds, so no thumb can be below it.
+                self.assertEqual((step.bar, step.beat), (3, 1.0))
+                self.assertEqual(
+                    step.bass_refused,
+                    PITCH_CLASS_NAMES[min(sounding) % 12],
+                    f"bar {step.bar}: the refused bass is not the shape's lowest voice",
+                )
+                continue
             # The thumb is the bottom voice, so everything above it starts higher.
             upper = sorted(
                 STANDARD_TUNING[index].midi_note() + fret

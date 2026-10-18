@@ -24,7 +24,7 @@ they are this document's own business, and the gate is not keyed to these items.
    with the selector-side lever left unbuilt.
 6. **A position falling on a note's release is not generated** — `melody_at` keeps a note in
    force through its end instant, so §9.2 declines a position the tune has already stopped
-   holding; measured, and nothing pins the boundary.
+   holding; measured, and the boundary is pinned by a test while the reading stays open.
 
 Reproduce the measurements with the commands in [Reproducing](#reproducing).
 
@@ -47,10 +47,7 @@ melody slots — can only *keep* or *drop* a slot and can never *create* one.
 - ~~A bar whose melody is entirely rests produces **no part at all**~~ — **fixed at the level
   of the bar.** `_merge_chord_slots` unions a melody-anchored grid's positions for a bar
   `head_skeleton` never touched, so `synthetic_chords_only` now arranges **16 steps** under
-  every grid, and **36 steps** were added across four of the ten committed heads. Per head:
-  `Trouble_in_Mind_Blues` 12, `synthetic_chords_only` 16, `synthetic_common_8` 4,
-  `synthetic_repeat_slash` 4. The other six have no melody-less bar and are untouched,
-  which is what keeps the change a fix rather than a behaviour change.
+  every grid. The scale of the addition over all ten heads is the candidate count below.
 - ~~A chords-only lead sheet is silent on every export path~~ — **fixed.** It arranges all
   four bars under the default grid and 16 under `freddie`. The one route still silent is a
   **melody-only selection** (`soprano`, `soprano,bass`), which is a different claim: it plays
@@ -58,7 +55,9 @@ melody slots — can only *keep* or *drop* a slot and can never *create* one.
 - ~~The walking bass shares the limit one level down~~ — **was already fixed wherever a named
   grid ran**, and the default grid's silence was the only thing withholding the bar from it.
   `walking_slots` walks the bars the *timings* touch, and the union writes its added slots
-  into those timings, so the default now reaches **exactly** the bars `freddie` reaches.
+  into those timings. The default now reaches every bar `freddie` reaches **where the tune is
+  silent**; a bar whose every position is *held* is withheld by §9.2, and a named grid still
+  comps it (`synthetic_repeat_slash` bar 12 is the case).
 - ~~The case is structurally inexpressible~~ — **the field half was already done** before this
   item was last measured: `(None, quality, name)` is a legal triple, and `chord_slots` emits
   exactly that shape.
@@ -72,11 +71,16 @@ melody slots — can only *keep* or *drop* a slot and can never *create* one.
   the sixteenth this library floors at), and the union takes those positions wherever the
   tune is **silent**. §9.2 still refuses a position the tune is *holding*, so a bar whose
   silence is a held note rather than a gap is a different claim.
-  The change is measured rather than guessed: **150 positions** are added by the default
-  grid across the ten committed heads. Per head: `Trouble_in_Mind_Blues` 66,
-  `synthetic_chords_only` 16, `synthetic_waltz` 20, `synthetic_repeat_slash` 12,
-  `synthetic_common_8` 10, `synthetic_pickup_common` 8, `synthetic_cut_time` 7,
-  `synthetic_tab_export` 6, `synthetic_pickup_cut` 3, `synthetic_triplets` 2.
+  The candidates are measured rather than guessed: **153 positions** where no note is
+  written are named by the default grid across the ten committed heads. Per head:
+  `Trouble_in_Mind_Blues` 66, `synthetic_chords_only` 16, `synthetic_waltz` 20,
+  `synthetic_repeat_slash` 12, `synthetic_common_8` 10, `synthetic_tab_export` 9,
+  `synthetic_pickup_common` 8, `synthetic_cut_time` 7, `synthetic_pickup_cut` 3,
+  `synthetic_triplets` 2. **25** of them become steps once §9.2 and the chord-in-force rule
+  have spoken: `synthetic_chords_only` 16, `Trouble_in_Mind_Blues` 4,
+  `synthetic_common_8` 3, `synthetic_repeat_slash` 1, `synthetic_waltz` 1, and nothing on
+  the other five. The rest are a position the tune is still holding (the majority), one
+  with no chord in force, or a position in a pickup bar.
 - **Partly open: a stab's duration belongs to the producer that made the step, not to the
   grid.** `chord_slots` sets a length from the following **grid** position, capped at the
   barline, and `head_skeleton` from the **melody note**, and the union merges the two — so a
@@ -84,8 +88,9 @@ melody slots — can only *keep* or *drop* a slot and can never *create* one.
   note's own length, shorter than that distance where the tune's own notes overlap and longer
   where the grid subdivides finer than the note. Measured with `parts=chord` under the default
   grid: all **16** of `synthetic_chords_only`'s steps match their own grid gap, while
-  `synthetic_repeat_slash` has **2** of its 30 steps whose length differs from the distance
-  to the next step, both of them a written onset held across the following bar. `docs/history/comping-styles.md` §9.6's "the grid owns the
+  `synthetic_repeat_slash` has **1** of its 27 steps whose length differs from the distance
+  to the next step: bar 5's G4, a written onset held across the following bar. (Bar 11's
+  F4 is the last step, so it has no following gap to differ from.) `docs/history/comping-styles.md` §9.6's "the grid owns the
   rhythm" would give a written onset the grid's answer; nothing implements that for it, and
   §9.4 is where the axis that would own it is proposed.
 
@@ -131,22 +136,22 @@ left room for the thumb in the first place.
 phrases it on the tab line, so the omission is reported on the part rather than in a collector.
 
 **The problem.** Over the ten committed heads × the four rows that place a thumb note under a
-texture that has one (`targets`/`uniform` × `root`/`root,5th,approach,nearest`; **690**
-`place_bass` calls) refusals number **96** today. `targets` and `uniform` are the two textures
+texture that has one (`targets`/`uniform` × `root`/`root,5th,approach,nearest`; **674**
+`place_bass` calls) refusals number **76** today. `targets` and `uniform` are the two textures
 that carry a thumb line; the walk itself is the bass part's grid row rather than a texture, which
 is why the rows are two textures × two rule sets. Attributed by cause:
 
 | cause | refusals |
 |---|---|
 | no free string | **0** |
-| **no octave of the walk's pitch below the shape** | **96** |
+| **no octave of the walk's pitch below the shape** | **76** |
 | five frets for four fingers | **0** |
 
 The middle row is the common case, and it is the one the clause names — but note it is a
 *replica* of `place_bass`'s three filters that names it, not the engine, because the field
-carries the wanted pitch and not the reason it could not be placed. 44 of the 96 are a
+carries the wanted pitch and not the reason it could not be placed. 49 of the 76 are a
 *doubling*: the walk's pitch class is the shape's own bottom class an octave up, so the thumb
-would restate what the chord already sounds. The other 52 are a pitch the shape has no octave of
+would restate what the chord already sounds. The other 27 are a pitch the shape has no octave of
 beneath it.
 
 **Why the levers do not pay.** All three filters are right, and dropping the note is deliberate
@@ -285,34 +290,39 @@ commit's measurement: hand travel over the same row falls **3070 → 1728** fret
 
 ## 6. A position falling on a note's release is not generated
 
-**Status: open, diagnosed.** §9.2's hold rule is *inclusive* at its edge, so the instant a note
-stops sounding is treated as one it still holds, and the grid declines that position.
+**Status: open, diagnosed, and the boundary is pinned.** §9.2's hold rule is *inclusive* at its
+edge, so the instant a note stops sounding is treated as one it still holds, and the grid declines
+that position. The reading is a decision; the arithmetic that finds the edge is not, and it now
+uses the head's own metre.
 
-**The issue.** `melody_at` keeps a note in force while `position <= onset + duration * 4` — the
-test is `if position > (found.bar, round(end_beat, 6)): return None`, so the **end instant
+**The issue.** `melody_at` keeps a note in force while `position <= end`, where the position and
+the end are both on one absolute beat line and the end is
+`beat_offset(note.bar, note.beat, beats_per_bar) + duration * beat_type`. The test is
+`if beat_offset(bar, beat, beats_per_bar) > round(end, 6): return None`, so the **end instant
 itself** still returns the note. `melody_state` then answers `held` there rather than `silent`,
 and §9.2's rule that a held position is not a slot declines it. A position where the tune has
 *stopped* is therefore treated exactly like one where it is still sounding.
 
 **The problem.** Positions the grid names produce nothing. Measured by patching that boundary
-alone — a `held` answer whose exact beat is some note's end becomes `silent` — and re-arranging
-all ten committed heads under the default grid: **9** steps are added, 379 → 388. Per head:
-`synthetic_repeat_slash` **+3**, `synthetic_cut_time` **+2**, `synthetic_triplets` **+2**,
-`synthetic_pickup_common` **+1** and `synthetic_tab_export` **+1**, with nothing on the other
-five. `synthetic_pickup_common` bar 1 is the simplest shape of it: a single quarter note, so the
-position at its release is reported `held` and the bar yields one step fewer than the grid names.
+alone — a `held` answer whose in-force note ends at that exact position becomes `silent` — and
+re-arranging all ten committed heads under the default grid: **9** steps are added, 334 → 343.
+Per head: `Trouble_in_Mind_Blues` **+3**, `synthetic_cut_time` **+2**, `synthetic_triplets` **+2**,
+`synthetic_common_8` **+1** and `synthetic_waltz` **+1**, with nothing on the other five.
+`synthetic_common_8` bar 8 is the simplest shape of it: the last bar's downbeat is the release of
+the tune's final note, so the position is reported `held` and the bar yields one step fewer than
+the grid names.
 
 **Why it exists.** Two readings of "sounds here" are both defensible and the code implements one
 without recording which: a note covering `[onset, end]` sounds *through* its release, or it
-sounds over `[onset, end)` and the release is already silence. The first is what is built. The
-distinction is musical rather than clerical, because a comp on the release coincides with the
-note's own release — the chord beneath it was decided where the note began, which is §9.2's own
-reason for declining a hold — while a comping player reading the same bar sees a rest and
-strikes. Changing it is a decision, not a repair, and it is **not** local: `bass._melody_in_force`
-asks the same question of the same timeline, though it falls back to the note that most recently
-started where the score writes silence, so it need not move with it. Nothing pins the boundary
-today — the tests probe a note's *midpoint* rather than its end — which is why the figure and the
-test are what this item lands first.
+sounds over `[onset, end)` and the release is already silence. The first is what is built, and
+`tests/test_headxml_timeline.py::TestMelodyState::test_the_release_instant_counts_as_held_until_the_next_position`
+pins it, so changing it is a decision rather than a drift. The distinction is musical rather than
+clerical, because a comp on the release coincides with the note's own release — the chord beneath
+it was decided where the note began, which is §9.2's own reason for declining a hold — while a
+comping player reading the same bar sees a rest and strikes. Changing it is a decision, not a
+repair, and it is **not** local: `bass._melody_in_force` asks the same question of the same
+timeline, though it falls back to the note that most recently started where the score writes
+silence, so it need not move with it.
 
 ---
 
@@ -332,7 +342,10 @@ lo, hi = head.bars                     # (first, last + 1) - the file's measure 
 print('bars arranged:', len(bars), 'of', hi - lo)
 print('bar 6 (no notes at all):', [(s.beat, s.chord) for s in steps if s.bar == 6])
 "
-# bars arranged: 12 of 12, and bar 6 sounds Am7 then D9 - it used to be absent entirely.
+# bars arranged: 11 of 12 - and bar 12 is not missing: bar 11's F4 is held through it,
+# so a step that began in bar 11 sounds the bar. Bar 6 has no notes of its own, and its
+# downbeat is held from bar 5, so the grid states only the position the tune has left:
+# [(2.0, 'D9')] - it used to be absent entirely.
 
 # the chords-only lead sheet: the extreme case, now arranged under the default grid
 .venv/bin/python -c "
@@ -347,9 +360,11 @@ steps, _head, _notes = arrange_xml_head('tests/data/synthetic_chords_only.musicx
 print('steps:', len(steps))   # 0 - a melody-only selection has no tune to play
 "
 
-# the 36 across four heads: count the slots the union adds, i.e. the grid's positions in the
-# bars `head_skeleton` never touched. Nothing is monkeypatched and no 'before' tree is needed -
-# a bar the melody never enters contributes no melody slot, so every slot in one is the union's.
+# the 36 candidates the bar-level rule names, over four heads: count the grid's positions
+# in the bars `head_skeleton` never touched. Nothing is monkeypatched and no 'before' tree is
+# needed - a bar the melody never enters contributes no melody slot, so every candidate in one
+# is the union's. These are *candidates*: §9.2 and the chord-in-force rule decide how many
+# become steps (the 25 in the bullet above).
 .venv/bin/python -c "
 import glob, os
 import headxml as H
@@ -362,8 +377,8 @@ for path in sorted(glob.glob('tests/data/*.musicxml')) + sorted(glob.glob('tests
     print('%-32s added=%d' % (os.path.basename(path), len(added)))
 print('total added:', total)
 "
-# 12, 16, 4, 4 in the order the heads are read, and five zeros for the heads with no
-# melody-less bar - 36 across the corpus.
+# 12, 16, 4, 4 in the order the heads are read, and six zeros for the heads with no
+# melody-less bar - 36 candidates across the corpus.
 
 # what is still open, and now the item's whole remaining scope: the LIBRARY entry point
 # takes its harmony per melody note, so a hand-built progression with no slot in bar 2
@@ -409,30 +424,44 @@ for path in heads:
     same += len(tabs) == 1
 print('inert rows: %d of %d heads identical' % (same, len(heads)))
 "
-# inert rows: 10 of 10 heads identical - and all four spellings give 104, 16, 32, 13, 8,
-# 35, 29, 57, 23, 112 steps, so the row is a no-op rather than an accident of one head.
+# inert rows: 10 of 10 heads identical - and all four spellings give 83, 16, 32, 13, 8,
+# 33, 28, 57, 23, 112 steps, so the row is a no-op rather than an accident of one head.
 
 # 6. a position on a note's release is not generated: `melody_at` keeps a note in force
 # through its own end instant, so `melody_state` answers held where the tune has already
-# stopped and §9.2 declines the position. Patch only that boundary and re-arrange every head:
+# stopped and §9.2 declines the position. Patch only that boundary and re-arrange every head.
+# The end is on one absolute beat line: `beat_offset` places the bar, and `beat_type` is how
+# many beats a whole note spans.
 .venv/bin/python -c "
-import contextlib, glob, io, os
+import glob, os
 import headxml as H
+from arranger import beat_offset
 
 original = H.melody_state
 
-def at_release(notes, bar, beat):
-    state = original(notes, bar, beat)
+def at_release(head, bar, beat):
+    state = original(head, bar, beat)
     if state != 'held':
         return state
-    for note in notes:
-        if note.bar == bar and abs(note.beat + note.duration * 4 - beat) < 1e-9:
-            return 'silent'
+    position = (bar, round(beat, 6))
+    found = None
+    for note in head.notes:
+        if note.key > position:
+            continue
+        if found is None or note.key >= found.key:
+            found = note
+    if found is None:
+        return state
+    end = (
+        beat_offset(found.bar, found.beat, head.beats_per_bar)
+        + found.duration * head.beat_type
+    )
+    if abs(beat_offset(bar, beat, head.beats_per_bar) - end) < 1e-9:
+        return 'silent'
     return state
 
 def arrange(path):
-    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
-        return H.arrange_xml_head(path)[0]
+    return H.arrange_xml_head(path)[0]
 
 paths = sorted(glob.glob('tests/data/*.musicxml')) + sorted(glob.glob('tests/data/*.mxl'))
 total = 0
@@ -445,9 +474,9 @@ for path in paths:
     print('%-40s %+d' % (os.path.basename(path), len(after) - len(before)))
 print('added: %d over %d heads' % (total, len(paths)))
 "
-# synthetic_repeat_slash +3, synthetic_cut_time +2, synthetic_triplets +2,
-# synthetic_pickup_common +1, synthetic_tab_export +1 and the other five 0 -
-# and `added: 9 over 10 heads`, which is 379 steps becoming 388. The two readings of sounds
+# Trouble_in_Mind_Blues +3, synthetic_cut_time +2, synthetic_triplets +2,
+# synthetic_common_8 +1, synthetic_waltz +1 and the other five 0 -
+# and `added: 9 over 10 heads`, which is 334 steps becoming 343. The two readings of sounds
 # here are both defensible; what the patch cannot say is which one the library should hold.
 ```
 
@@ -462,7 +491,7 @@ step, and that is a limitation worth stating: `ArrangementStep.bass_refused` car
 pitch class, not the reason it could not be placed. Rebuild the free-string set, the octaves of
 the wanted pitch below the shape's own lowest note, and the `fingers.can_fret` four-fret budget,
 in that order, and the first of the three that comes back empty is the cause. The replica is
-validated by agreement rather than by inspection — over all 690 calls it agrees with the real
-`place_bass` on every outcome, which is what makes the `0 / 96 / 0` split a measurement and not
+validated by agreement rather than by inspection — over all 674 calls it agrees with the real
+`place_bass` on every outcome, which is what makes the `0 / 76 / 0` split a measurement and not
 a description of the code. Recording the cause on the field would remove the replica; that is a
 change to the engine, not to this document.

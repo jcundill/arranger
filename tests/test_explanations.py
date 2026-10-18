@@ -455,15 +455,15 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
             omitted, 99, "the number of steps owing an omitted-tone clause moved"
         )
         # The same reasoning for the voice list, which is the clause most steps carry:
-        # measured over this sweep, **1020** of the steps it arranges sound two or more
+        # measured over this sweep, **1023** of the steps it arranges sound two or more
         # upper voices on a route that sings the tune - so a change that thinned the
         # default palette, or that stopped the clause firing, moves this number.
-        self.assertEqual(named, 1020, "the number of steps naming their voices moved")
+        self.assertEqual(named, 1023, "the number of steps naming their voices moved")
         # And for the comping part, whose voices are the only harmony the line can show:
-        # measured over this sweep, **1248** of the steps it arranges state a comping shape
+        # measured over this sweep, **1095** of the steps it arranges state a comping shape
         # and name each of its voices, so the reading of a thin line cannot quietly become
         # a list of degrees again.
-        self.assertEqual(comping, 1248, "the number of comping lines naming a voice moved")
+        self.assertEqual(comping, 1095, "the number of comping lines naming a voice moved")
 
     def test_the_slash_bass_clause_is_not_a_tautology(self):
         """The one decision the witness table cannot hold, pinned in both directions.
@@ -472,9 +472,14 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         witness that recomputed it would be the clause agreeing with itself. Asserted against
         the head that exercises it instead: `Am7/D` loses its D and must say so, `Gmaj/D`
         sounds its F# and must stay quiet about it.
+
+        The witness is a **named** grid. The default grid now withholds a position the
+        tune is still holding (§9.2), and the `Am7/D` bars are exactly such a hold, so
+        the default arrangement no longer states them at all. `freddie` states its figure
+        whatever the tune is doing, which is what keeps the slash-bass question asked.
         """
         steps, _head, _notes = arranged(
-            "tests/data/Trouble_in_Mind_Blues.musicxml"
+            "tests/data/Trouble_in_Mind_Blues.musicxml", grid="chord:freddie"
         )
         lost = [
             step for step in steps

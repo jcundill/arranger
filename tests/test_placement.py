@@ -576,20 +576,25 @@ class TestTheGripDistribution(unittest.TestCase):
                 grip = step.voicing.grip
                 counts[grip] = counts.get(grip, 0) + 1
 
-        self.assertEqual(total, 379)
+        self.assertEqual(total, 334)
         self.assertEqual(
             counts,
             {
                 "drop3": 93,
                 "drop2_6432": 84,
-                "drop2": 90,
-                "shell": 78,
+                "drop2": 91,
+                "shell": 32,
                 "closed": 13,
                 "melody": 8,
                 "drop24": 9,
                 "duo": 4,
             },
         )
+        # The shell count is the comping steps the default grid no longer states under a
+        # note the tune is still holding (§9.2); a named grid still states them, which is
+        # why this table moves when the timeline does. `melody` is the one key that is not
+        # a family - a step whose chord nothing could voice - and the set assertion below
+        # is what keeps the table a distribution rather than a list of survivors.
         # Every family in the default preference wins somewhere over these heads, so the
         # table above is a distribution rather than a list of what happened to survive.
         # The one key that is not a family is `melody`, which names a step whose chord
