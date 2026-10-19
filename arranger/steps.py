@@ -45,12 +45,14 @@ from .grips import (
 from .grouping import COMMON_TIME, TimeSignature
 from .harmony import HARMONY_AUTO
 from .movement import (
-    StepPreparation,
     arrange_progression,
-    prepare_step,
 )
 from .options import ArrangeOptions
 from .parts import PARTS_AUTO
+from .step_prepare import (
+    StepPreparation,
+    prepare_step,
+)
 from .tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
@@ -305,7 +307,7 @@ class VoiceLeadingEngine:
         fret_max: int = NECK_FRET_MAX,
         grips: Tuple[str, ...] = GRIP_PREFERENCE,
     ) -> Optional[StepPreparation]:
-        """See `movement.prepare_step` - the full docstring is there."""
+        """See `step_prepare.prepare_step` - the full docstring is there."""
         return prepare_step(
             progression,
             index,

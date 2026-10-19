@@ -383,11 +383,18 @@ so the tab keeps the bar. The plan then goes to **one** of five routes:
 
 | route | when |
 |---|---|
-| `_rest_step` | the guitar is **silent**, for the reason `step.silence` names: off the grid, an `NC` bar under a comping selection, a position nothing can voice, or a melody-only selection with no tune |
-| `_texture_fill_step` | the guitar sings the note and the texture thins the slot to it - a fill, a target no shell can sound, or an off-grid note |
-| `_no_chord_step` | an `NC` bar the guitar *is* singing: the melody, and no harmony to state |
-| `_comping_step` | the guitar does **not** sing this slot, so it comps under the horn |
-| `_harmonised_step` | the guitar sings: pin the tune, and voice the chord beneath it |
+| `rest_step` | the guitar is **silent**, for the reason `step.silence` names: off the grid, an `NC` bar under a comping selection, a position nothing can voice, or a melody-only selection with no tune |
+| `texture_fill_step` | the guitar sings the note and the texture thins the slot to it - a fill, a target no shell can sound, or an off-grid note |
+| `no_chord_step` | an `NC` bar the guitar *is* singing: the melody, and no harmony to state |
+| `comping_step` | the guitar does **not** sing this slot, so it comps under the horn |
+| `harmonised_step` | the guitar sings: pin the tune, and voice the chord beneath it |
+
+`_route_slot` is the dispatch and stays in `movement.py`, so the loop is still one
+module. The four other routes live in **`routes.py`**. `harmonised_step` - prepare,
+select, demote, or rest - lives in **`harmonised_route.py`**, and the candidates it
+selects among are built by `prepare_step` in **`step_prepare.py`**, which is also what
+the facade reaches for a single step. That split is why the loop reads as dispatch
+rather than as a 250-line handler.
 
 **The order is load-bearing**, and `AGENTS.md`'s trap 12 is what reordering it costs: the
 same slot can reach three of the five depending on its plan, and every ordering is right
@@ -398,7 +405,7 @@ different claims, and only the first is a rest.
 
 Each route takes what it needs as named arguments rather than reaching into one shared
 context. The exceptions are `arrangements`, which they append to, and the two values one
-step tells the next, which live on a small `_Carried`.
+step tells the next, which live on a small `Carried` in `slot_plan.py`.
 
 ### Adding a new chord quality
 

@@ -1,7 +1,7 @@
 """The route handlers: one function per way a slot can become a step.
 
 The rest, the thinned fill, the `NC` bar and the comping route each build their step
-without re-entering the step loop; `_harmonised_step` stays in `movement` because it is
+without re-entering the step loop; `harmonised_step` is in `harmonised_route` because it is
 the orchestrating route, retrying through `prepare_step`. `last_sounding_step` lives
 here because a route reads the arrangement it is appending to, and
 `resolve_substitute_harmony` lives in `chords`, where the non-chord-tone routing it
@@ -53,6 +53,17 @@ def last_sounding_step(
         if step.silence is None:
             return step
     return None
+
+
+def previous_shape(arrangements: List[ArrangementStep]) -> Optional[Voicing]:
+    """The voicing of the last sounding step, or None.
+
+    A rest carries an all-muted voicing, so asking the last step directly would
+    hand the selector a shape nobody held; the melody may also have ended, in
+    which case there is nothing to hold at all.
+    """
+    previous = last_sounding_step(arrangements)
+    return previous.voicing if previous is not None else None
 
 
 def rest_step(

@@ -24,8 +24,8 @@ gate and the conventions — not the explanation.
 | the trailing annotation a step carries, why a shape is thin, or what **must** be explained when a choice is added (`ArrangementStep.palette`, `cost.VOICING_COST_CRITERIA`, `tests/test_explanations.py`) | [docs/engine.md](docs/engine.md) | `arranger/annotation.py`, `arranger/render.py`, `arranger/movement.py` |
 | `texture=`, target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/texture.py`, `arranger/routes.py`, `arranger/bass_rules.py`, `arranger/bass.py`, `arranger/decisions.py` |
 | non-chord melody notes, a new chord quality | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` |
-| the step loop, `arrange_progression` | [docs/engine.md](docs/engine.md) | `arranger/movement.py`, `arranger/resolution.py`, `arranger/slot_plan.py` |
-| a step route's arguments - `SlotContext`, one slot's request as a value rather than twenty parameters | [docs/engine.md](docs/engine.md) | `arranger/context.py`, `arranger/movement.py`, `arranger/routes.py` |
+| the step loop, `arrange_progression` | [docs/engine.md](docs/engine.md) | `arranger/movement.py`, `arranger/harmonised_route.py`, `arranger/step_prepare.py`, `arranger/resolution.py`, `arranger/slot_plan.py` |
+| a step route's arguments - `SlotContext`, one slot's request as a value rather than twenty parameters | [docs/engine.md](docs/engine.md) | `arranger/context.py`, `arranger/movement.py`, `arranger/harmonised_route.py`, `arranger/routes.py` |
 | tab staff, HTML, MusicXML, GP5, or the MusicXML importer | [docs/renderers.md](docs/renderers.md) | `tabscore.py`, `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py` |
 | an imported head's **repeats, volta endings or jumps** — why it is longer than the file's measure count, or the `|:` / `:|` / `1.` / `2.` / `D.C.` / `D.S.` / `Coda` / `Fine` the writers draw | [docs/renderers.md](docs/renderers.md) | `headxml.py` (`_parse_barline`, `_parse_direction`, `_parse_sound`, `_expand_play_order`, `expand_repeats`, `BarInstruction`, `BarMarker`, `Head.markers`, `HeadNote.written_bar`); each writer's `markers=` parameter |
 | the slot layer: triples to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
@@ -170,7 +170,9 @@ arranger/
 │   ├── melody_alone.py  #   where a lone note is fretted: the tune alone, chord or not
 │   ├── routes.py        #   the route handlers: rest, fill, NC and the comping route
 │   ├── slot_plan.py     #   one slot's plan: `slot_state` and the value it returns
-│   ├── movement.py      #   the step loop: arrange_progression, prepare_step
+│   ├── step_prepare.py  #   one slot's candidates: prepare_step and its preparation
+│   ├── harmonised_route.py #  the melody-bearing route: prepare, select, demote, emit
+│   ├── movement.py      #   the step loop: _route_slot, _loop_slots, arrange_progression
 │   ├── steps.py         #   VoiceLeadingEngine - the published facade
 │   ├── slots.py         #   the slot layer: triples to steps, the one pre-pass
 │   ├── render.py        #   format_progression and per-step rendering
@@ -207,9 +209,9 @@ tuning -> fingers -> chords -> grip_tables -> grip_place -> grips -> cost -> ann
                              -> grouping -> grid -> texture -> bass_rules -> bass -> bass_merge
                              -> options -> resolution
                                                                     |
-                       melody_alone -> routes -> slot_plan -> movement -> steps -> slots -> render -> cli
-                                                                    |              |
-                                                                  (facade) <-------+
+                       melody_alone -> routes -> slot_plan -> step_prepare -> harmonised_route
+                                                                                    |
+                                 movement -> steps -> slots -> render -> cli
 ```
 
 `fingers` — which finger holds which fret — hangs off `tuning` alone, so it is drawn

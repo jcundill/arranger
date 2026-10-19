@@ -1,6 +1,6 @@
 """One slot's request, as a value both step routes can share.
 
-`_harmonised_step` and `comping_step` take the same seventeen facts about a slot
+`harmonised_step` and `comping_step` take the same seventeen facts about a slot
 and differ only in the three or four that name their own policy. This is the
 shared part, so a route signature says what it *adds* rather than repeating the
 request - and the stage helpers each route is split into can take one context

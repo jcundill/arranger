@@ -40,12 +40,19 @@ flowchart TB
     subgraph layer_loop["the step loop"]
         direction TB
         movement["movement"]
+        harmonised_route["harmonised_route"]
+        step_prepare["step_prepare"]
         routes["routes"]
         slot_plan["slot_plan"]
         melody_alone["melody_alone"]
         decisions["decisions"]
+        movement --> harmonised_route
         movement --> routes
         movement --> slot_plan
+        harmonised_route --> step_prepare
+        harmonised_route --> routes
+        harmonised_route --> slot_plan
+        harmonised_route --> melody_alone
         routes --> melody_alone
         melody_alone --> decisions
         slot_plan --> decisions
@@ -122,9 +129,14 @@ What the drawing makes visible:
   `context` is one slot's request; `parts` is the parts vocabulary. Because nothing
   is below them, every other module can depend on them without narrowing what may
   import it.
-- **`movement` is the hub.** It reaches the axes, the request and the grips, and is
-  the surface's one way into the loop. A new axis is normally wired through
-  `options` and `resolution` first, which is why both sit between it and the axes.
+- **`movement` is the loop, and `harmonised_route` is the route it usually takes.**
+  `movement` owns the slot loop and dispatches; `harmonised_route` is the
+  melody-bearing branch - prepare the candidates, select one, demote to the tune
+  alone, or emit a rest - and `step_prepare` is the shared "what can this slot
+  sound" step beneath it. They reach the axes, the request and the grips; the
+  surfaces' one way into the loop is still `movement`. A new axis is normally
+  wired through `options` and `resolution` first, which is why both sit between
+  it and the axes.
 - **The surfaces do not feed back.** `steps`, `slots`, `render` and `cli` sit at the
   top and import downwards; no layer below imports them.
 

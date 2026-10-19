@@ -360,7 +360,7 @@ def holds_the_shape(
     arithmetic.
 
     This is the half the two callers share: `is_repeated_step` asks it of the shape it
-    is about to write, and `movement._harmonised_step` asks it of the candidates while
+    is about to write, and `harmonised_route.harmonised_step` asks it of the candidates while
     there is still a choice left to narrow.
     """
     if previous_step is None or previous_step.melody_only:
@@ -381,7 +381,7 @@ def hold_the_melody_string(
 ) -> List[Voicing]:
     """The candidates that re-strike the melody where the hand already is.
 
-    Used by `movement._harmonised_step` when `holds_the_shape` says the note did not
+    Used by `harmonised_route.harmonised_step` when `holds_the_shape` says the note did not
     move, so the selector may only choose a shape that keeps it. Changing the chord
     under a held note is a change of *voicing*; moving the finger that is sounding the
     tune is not part of it.

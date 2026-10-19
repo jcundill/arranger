@@ -60,6 +60,7 @@ from . import (
     fingers,
     grid,
     grip_place,
+    harmonised_route,
     harmony,
     melody_alone,
     movement,
@@ -69,6 +70,7 @@ from . import (
     routes,
     slot_plan,
     slots,
+    step_prepare,
     texture,
 )
 from .bass import (
@@ -610,6 +612,7 @@ __all__ = [
     "grid",
     "grouping",
     "grip_place",
+    "harmonised_route",
     "grip_tables",
     "grips",
     "harmony",
@@ -623,6 +626,7 @@ __all__ = [
     "resolution",
     "routes",
     "slot_plan",
+    "step_prepare",
     "slots",
     "sounding_harmony",
     "steps",
