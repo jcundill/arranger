@@ -21,7 +21,7 @@ from typing import Container, List, Optional, Sequence, Tuple
 from musthe import Note
 
 from . import chords as _chords
-from .bass import BassNote, held_shape, place_bass, previous_bass
+from .bass_place import BassNote, held_shape, place_bass, previous_bass
 from .tuning import PITCH_CLASS_NAMES, ArrangementStep
 
 

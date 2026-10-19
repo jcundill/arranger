@@ -41,7 +41,7 @@ from arranger import (
 # `arranger.bass` and re-exporting them would put four internals into the public
 # surface for the benefit of one test file. `test_bass.py` covers them directly for
 # the same reason.
-from arranger.bass import (
+from arranger.bass_place import (
     place_bass,
 )
 from arranger.parts import PART_NAMES

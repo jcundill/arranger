@@ -53,6 +53,7 @@ ORDER = [
     "grid",         # the grid axis: when each part sounds
     "texture",      # the texture axis: how many notes the chord part states
     "bass_rules",   # the bass vocabulary, capacities and refusals
+    "bass_place",   # the thumb's octave and string: the cost and `place_bass`
     "bass",         # the walking-bass thumb line
     "bass_merge",   # merging the walk into a chosen step; the next resolution melody
     "options",      # the knobs, as one value
@@ -231,7 +232,7 @@ class TestPackageDag(unittest.TestCase):
             ("Voicing", "tuning", "Voicing"),
             ("ArrangementStep", "tuning", "ArrangementStep"),
             ("GuitarFretboard", "tuning", "GuitarFretboard"),
-            ("bass_cost", "bass", "bass_cost"),
+            ("bass_cost", "bass_place", "bass_cost"),
             ("format_progression", "render", "format_progression"),
             ("supported_string_sets", "grip_tables", "supported_string_sets"),
         ]:

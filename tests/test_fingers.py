@@ -449,7 +449,7 @@ class TestTheFourFretBudget(unittest.TestCase):
     """§4.3's left-hand half: five distinct frets is not a hard shape, it is an impossible one.
 
     Asserted on a bare vector rather than on a `Voicing` because that is the level the refusal
-    lives at: `bass.place_bass` asks *before* it picks a string, and the shape it asks about
+    lives at: `bass_place.place_bass` asks *before* it picks a string, and the shape it asks about
     is one the hand is **already holding** with the candidate fret added, which is not a
     `Voicing` anyone builds.
     """
@@ -503,7 +503,7 @@ class TestTheEngineUsesItForOneQuestion(unittest.TestCase):
     """
 
     def test_the_only_engine_caller_is_the_walking_bass(self) -> None:
-        """`bass` imports `fingers` for the fret budget, and no other engine module does.
+        """`bass_place` imports `fingers` for the fret budget, and no other engine module does.
 
         Read from the AST rather than from `sys.modules`, for the reason
         `test_package_dag._imports_of` gives: a function-local import shows up here, which is
@@ -525,8 +525,8 @@ class TestTheEngineUsesItForOneQuestion(unittest.TestCase):
                     importers.add(path.stem)
         self.assertEqual(
             importers,
-            {"bass"},
-            "the set of engine modules reading fingers changed; it was exactly `bass`",
+            {"bass_place"},
+            "the set of engine modules reading fingers changed; it was exactly `bass_place`",
         )
 
     def test_the_facade_binds_it_as_a_public_path(self) -> None:

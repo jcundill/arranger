@@ -1261,7 +1261,8 @@ when the axis was separated out.
 The **vocabulary** lives in `arranger/bass_rules.py`: `BASS_RULES`, the `BASS_ROLE_*` and
 `BASS_STYLE_*` names, `parse_bass_style`, and the questions asked of the hands
 (`thumb_capacity`, `comping_capacity`, `bass_allowed`). `arranger/bass.py` owns the line
-itself - its slots, its placement, and `bass_cost`.
+itself - its slots and its walk - while `arranger/bass_place.py` owns the thumb's
+placement and `bass_cost`.
 
 **The style names note rules, and the set of rules is a registry, not a flag**, because
 it is open and is meant to stay that way. `BASS_RULE_ROLES` maps each rule to the
@@ -1407,7 +1408,7 @@ sets are built on. A gap crossed by the **middle or ring** finger is a real reac
 rather than by the selector - the four `drop24` sets that carried a skip were removed.
 
 The left hand's budget is **four frets**, and unlike the four-string rule it is stated over a
-*step*: `fingers.can_fret` is the check and `bass._place_bass` is its only engine caller, so
+*step*: `fingers.can_fret` is the check and `bass_place.place_bass` is its only engine caller, so
 a bass note that would need a fifth fret is refused there rather than inside a shape.
 `AGENTS.md`'s playability invariants hold both.
 

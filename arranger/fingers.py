@@ -6,7 +6,7 @@ that remain about fingering are empirical (that document's §2.4 and §4.3) and 
 answered by code that exists.
 
 **Exactly one engine call reaches this module, and it is §4.3's left-hand half.**
-`can_fret` is the four-frets-for-four-fingers check, and `bass.place_bass` is its caller:
+`can_fret` is the four-frets-for-four-fingers check, and `bass_place.place_bass` is its caller:
 on a `bass_only` step the thumb is merged into a shape the hand is still *holding*, so the
 fret it adds joins frets that are not this step's own. Nothing else in the engine reads
 this module - `voicing_cost` does not, `decisions` does not, and every renderer is
@@ -44,7 +44,7 @@ Nothing here decides playability. `GRIP_MAX_SPAN` is still the span bound and
 *which* finger - and returns `None` rather than guessing when no assignment exists. The one
 shape it can refuse, five distinct frets, is not reachable from a generated grip at all: it
 is the *merged* walking-bass step of §4.3, which is why the refusal is a return value the
-check reads - `can_fret`, called from `bass.place_bass` - rather than an exception or a
+check reads - `can_fret`, called from `bass_place.place_bass` - rather than an exception or a
 silently crossed fingering.
 """
 
@@ -181,7 +181,7 @@ def can_fret(frets: Iterable[int]) -> bool:
     holds one fret and no finger holds two, so five distinct frets is not a hard shape but
     an impossible one, and no monotonising score can rescue it.
 
-    `bass.place_bass` is the caller, and it is the only one. Under a `bass_only` step the
+    `bass_place.place_bass` is the caller, and it is the only one. Under a `bass_only` step the
     thumb is merged into the shape the hand is still **holding**, so its fret joins frets
     that are not this step's own - which is the one way a fifth can appear in an engine
     whose every generated grip sounds at most four strings.

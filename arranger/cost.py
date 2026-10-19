@@ -5,8 +5,8 @@ not a weighted sum, with its order asserted positionally by
 `tests/test_grip_selection.py::TestVoicingCost` - and `best_voicing` is its argmin. **No
 criterion names a grip family**: a tie that runs off the end of the tuple is broken by
 generation order, which is `grips.GRIP_PREFERENCE`. `bass_cost` deliberately lives in
-`bass` instead, next to the `BASS_ROLE_*` vocabulary it ranks over, because importing it
-here would make `cost` import `bass` and `bass` import `cost`.
+`bass_place` instead, next to the `BASS_ROLE_*` vocabulary it ranks over, which sits above
+`cost` in the dependency order.
 """
 
 from __future__ import annotations

@@ -7,15 +7,15 @@ dependency order, and nothing above imports anything below it by accident:
                  |
               parts -> harmony/grid/texture
                               |
-                             bass -> bass_merge -> options
+                             bass_place -> bass -> bass_merge -> options
                                          |
                             decisions -> melody_alone -> routes
                                                        |
                                               movement -> steps -> slots -> render -> cli
 
 `fingers` is a second edge off `tuning`, and the diagram above omits it: it is the
-left-hand fingering module of `docs/history/fingering.md`, and `bass` is the one engine reader
-that reaches it - it calls `fingers.can_fret` for the four-fret budget of a merged
+left-hand fingering module of `docs/history/fingering.md`, and `bass_place` is the one engine
+reader that reaches it - it calls `fingers.can_fret` for the four-fret budget of a merged
 `bass_only` step, which is why the facade binds the module. `tests/test_fingers.py` holds
 that caller set. It is in `test_package_dag.ORDER`, because a module missing from that
 list is unconstrained by the layering.
@@ -52,6 +52,7 @@ from musthe import Note  # re-exported: `from arranger import Note` is used by t
 from . import (
     annotation,
     bass_merge,
+    bass_place,
     bass_rules,
     cli,
     context,
@@ -74,9 +75,11 @@ from . import (
     texture,
 )
 from .bass import (
+    bass_line_for,
+)
+from .bass_place import (
     BassNote,
     bass_cost,
-    bass_line_for,
 )
 from .bass_rules import (
     BASS_ROLE_ANCHOR,
@@ -593,6 +596,7 @@ __all__ = [
     "bass_cost",
     "bass_line_for",
     "bass_merge",
+    "bass_place",
     "parse_bass_style",
     "chords",
     "comping_capacity",

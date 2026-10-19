@@ -131,7 +131,7 @@ position inside it.
 [docs/history/fingering.md](history/fingering.md) §4.3 leaves hanging: whether the **selector** should have
 left room for the thumb in the first place.
 
-**The issue.** `_place_bass` refuses a candidate and the step keeps its upper voicing.
+**The issue.** `place_bass` refuses a candidate and the step keeps its upper voicing.
 `ArrangementStep.bass_refused` records the wanted pitch class and `annotation._bass_refusal_clause`
 phrases it on the tab line, so the omission is reported on the part rather than in a collector.
 
@@ -243,7 +243,7 @@ a behaviour worth asserting, and when the reader lands, the item and its row go 
 **Status: diagnosed, not fixed — the lever is [docs/history/fingering.md](history/fingering.md) §4.3's question**,
 and it is the same question item 2 leaves open, seen from the other side.
 
-**The issue.** `_place_bass` ranks the thumb's candidates by proximity to the hand but never
+**The issue.** `place_bass` ranks the thumb's candidates by proximity to the hand but never
 *bounds* the reach: a pitch with no position inside the hand's span is still played, because "a
 step is never dropped because the thumb could not reach it". A `bass_only` step can therefore
 sound a bass note several frets away from the shape the fingers are holding, with no nearer option
@@ -258,7 +258,7 @@ now asserts instead of excusing. The wide reach is therefore the **walk's regist
 line decided to play has no position nearer the held shape, and the placement took the nearest one
 there is (`tests.support.nearest_reach_for_note` is the replica that says so, and the engine's own
 choice must equal it). The note itself is chosen by the walk's own ordering — proximity first, then
-continuity with the previous bass note, then the lower pitch (`bass._place_bass` spells the three
+continuity with the previous bass note, then the lower pitch (`bass_place.place_bass` spells the three
 out) — so a register the hand can reach is not something the placement can fix.
 
 The same sweep over `c5dde40` — before the lone-note placement landed, so with the tune's single
@@ -277,7 +277,7 @@ commit's measurement: hand travel over the same row falls **3070 → 1728** fret
   measuring rather than adopting (item 2's counts).
 - **the walk's register** — playing the same pitch class an octave up, where the hand is — is the
   one lever that needs nothing from the selector, but it fights the line's own continuity: the
-  third key of `_place_bass`'s ordering only breaks a proximity tie, precisely so a walking bass
+  third key of `place_bass`'s ordering only breaks a proximity tie, precisely so a walking bass
   does not leap octaves for no reason. Measured on the four cases above, every one of them is a
   register the hand would have to travel to.
 - **refusing the note** would bound the reach at the cost of the note — the step above — and
@@ -482,11 +482,11 @@ print('added: %d over %d heads' % (total, len(paths)))
 
 
 Item 2's counts are re-measured the same way (no committed script — `AGENTS.md` trap 8): wrap
-`bass._place_bass` and `bass_merge._attach_bass`, load each `tests/data/` head over the four rows
+`bass_place.place_bass` and `bass_merge._attach_bass`, load each `tests/data/` head over the four rows
 that place a thumb note under a texture that has one (`texture` in `targets`/`uniform` ×
-`bass` in `root`/`root,5th,approach,nearest`), and count a refusal wherever `_place_bass` returns `None`.
+`bass` in `root`/`root,5th,approach,nearest`), and count a refusal wherever `place_bass` returns `None`.
 
-Naming the *cause* needs a replica of `_place_bass`'s three filters rather than a reading of the
+Naming the *cause* needs a replica of `place_bass`'s three filters rather than a reading of the
 step, and that is a limitation worth stating: `ArrangementStep.bass_refused` carries the wanted
 pitch class, not the reason it could not be placed. Rebuild the free-string set, the octaves of
 the wanted pitch below the shape's own lowest note, and the `fingers.can_fret` four-fret budget,

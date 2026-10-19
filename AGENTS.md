@@ -22,7 +22,7 @@ gate and the conventions — not the explanation.
 | where a **lone note** is fretted — a fill, an `NC` bar, a rescued melody, a span demotion (`get_melody_only_voicings`, `_melody_alone_shape`) | [docs/engine.md](docs/engine.md) | `arranger/grips.py`, `arranger/melody_alone.py`, `arranger/routes.py`, `tests/test_non_chord_tones.py` |
 | which chord tones a shape states — `TONE_PRIORITY`, the tone a four-voice shape gives up, the palette a melody with no degree to match is offered, or the order that was not taken | [docs/history/generated-grips.md](docs/history/generated-grips.md) | `arranger/grip_tables.py` (`TONE_PRIORITY`, `stated_tones`), `arranger/grips.py` (`drop2_template_for`, `_drop2_palette`), `tests/test_generated_grips.py`, `tests/support.py` (`WITNESS`) |
 | the trailing annotation a step carries, why a shape is thin, or what **must** be explained when a choice is added (`ArrangementStep.palette`, `cost.VOICING_COST_CRITERIA`, `tests/test_explanations.py`) | [docs/engine.md](docs/engine.md) | `arranger/annotation.py`, `arranger/render.py`, `arranger/movement.py` |
-| `texture=`, target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/texture.py`, `arranger/routes.py`, `arranger/bass_rules.py`, `arranger/bass.py`, `arranger/decisions.py` |
+| `texture=`, target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/texture.py`, `arranger/routes.py`, `arranger/bass_rules.py`, `arranger/bass_place.py`, `arranger/bass.py`, `arranger/decisions.py` |
 | non-chord melody notes, a new chord quality | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` |
 | the step loop, `arrange_progression` | [docs/engine.md](docs/engine.md) | `arranger/movement.py`, `arranger/harmonised_route.py`, `arranger/step_prepare.py`, `arranger/resolution.py`, `arranger/slot_plan.py` |
 | a step route's arguments - `SlotContext`, one slot's request as a value rather than twenty parameters | [docs/engine.md](docs/engine.md) | `arranger/context.py`, `arranger/movement.py`, `arranger/harmonised_route.py`, `arranger/routes.py` |
@@ -32,7 +32,7 @@ gate and the conventions — not the explanation.
 | the MusicXML **importer's chord timeline**, or a bar the melody skips | [docs/open-issues.md](docs/open-issues.md) item 1 | `headxml.py` (`chord_at`, `chord_slots`, `_merge_chord_slots`, `_generated_beats`, `_bar_resolution`, `_tick_key`) and `grid.py` (`grid_resolutions`, `TICKS_PER_BEAT`) — **built in full**: the default grid generates a chord at each bar's own subdivision, the union takes those positions wherever the tune is *silent*, and §9.2 refuses the ones it is still **holding**. The item carries the candidate and step counts. The fifth `melody_alone_case` kind the item predicted proved **not to be owed** — §9.3 step D already routes a note-less grid position through the comping branch. **Item 6 is the edge of that refusal** — the instant a note *stops* sounding counts as one it still holds, so the grid declines a position the tune has left (`headxml.melody_at`, `melody_state`; the item carries the measurement) |
 | an open bug, with its measurement | [docs/open-issues.md](docs/open-issues.md) | — the figures and the behaviour are that document's own business; no test compares them with the prose or is keyed to these items |
 | a **note held over a bar line**, when the melody's end is reached, or a pickup bar (`Head.first_bar_implicit`) | [docs/engine.md](docs/engine.md) | `headxml.py` (`melody_at`, `melody_state`, `_merge_chord_slots`), `arranger/grid.py` (`beat_offset`), `tests/test_headxml_timeline.py` |
-| which finger frets which string, or a per-finger cost criterion; which strings the right hand's `p-i-m-a` pluck, the gaps between them, and how far the thumb reaches | [docs/history/fingering.md](docs/history/fingering.md) | `arranger/fingers.py` (not inert any more: `bass` reads `can_fret` for the four-fret budget — `tests/test_fingers.py` holds the caller set to exactly `{bass}`; no per-finger cost yet). Its §4.3 measurement landed a *right-hand* rule first (`grip_tables.thumb_safe_grips`, read by `decisions.resolve_texture_grips`) and then a *left-hand* one (`fingers.can_fret`, read by `bass._place_bass`); its **§4.4 finger-skip half is now built**, not recorded: the four `drop24` sets that carried the skip were removed from `GRIP_STRING_SETS` (`grip_tables.finger_skip_count` is the rule and `tests/test_grip_tables.py` holds the tables to it), at a price counted in chords, and the three rejected forms of the same lever are in §4.4 rather than here. Its thumb's-reach half still changes no count (`tests/test_texture.py::TestTheThumbReach` pins the reach), and §4.3's follow-on (should the *selector* leave room for the thumb?) is measured and unbuilt, and its numbers are in §4.3 and [docs/open-issues.md](docs/open-issues.md) item 2 rather than here: that item is where they are re-measured by hand, so a figure repeated in this table would be a second source for one fact. Its **fourth lever — the walk's own pitch — costs the tuple nothing** and is the cheapest of the four; **item 5** of that document is the same §4.3 question asked from the lone-note end, where the walk's register is what leaves the hand's reach |
+| which finger frets which string, or a per-finger cost criterion; which strings the right hand's `p-i-m-a` pluck, the gaps between them, and how far the thumb reaches | [docs/history/fingering.md](docs/history/fingering.md) | `arranger/fingers.py` (not inert any more: `bass_place` reads `can_fret` for the four-fret budget — `tests/test_fingers.py` holds the caller set to exactly `{bass_place}`; no per-finger cost yet). Its §4.3 measurement landed a *right-hand* rule first (`grip_tables.thumb_safe_grips`, read by `decisions.resolve_texture_grips`) and then a *left-hand* one (`fingers.can_fret`, read by `bass_place.place_bass`); its **§4.4 finger-skip half is now built**, not recorded: the four `drop24` sets that carried the skip were removed from `GRIP_STRING_SETS` (`grip_tables.finger_skip_count` is the rule and `tests/test_grip_tables.py` holds the tables to it), at a price counted in chords, and the three rejected forms of the same lever are in §4.4 rather than here. Its thumb's-reach half still changes no count (`tests/test_texture.py::TestTheThumbReach` pins the reach), and §4.3's follow-on (should the *selector* leave room for the thumb?) is measured and unbuilt, and its numbers are in §4.3 and [docs/open-issues.md](docs/open-issues.md) item 2 rather than here: that item is where they are re-measured by hand, so a figure repeated in this table would be a second source for one fact. Its **fourth lever — the walk's own pitch — costs the tuple nothing** and is the cheapest of the four; **item 5** of that document is the same §4.3 question asked from the lone-note end, where the walk's register is what leaves the hand's reach |
 | `parts=`, which of melody / bass / chord the guitar plays | [docs/engine.md](docs/engine.md) | `arranger/parts.py` (`PART_NAMES`, `parse_parts`, `parts_have_melody`, `parts_has_melody_only`) |
 | the harmonisation axes (`parts=`, `texture=`, `harmony=`, `bass=`, `grid=`, the metre) — the four-string arithmetic, and what replaced `voices=` and the grip-family axis | [docs/engine.md](docs/engine.md) | `arranger/parts.py`, `arranger/harmony.py`, `arranger/grid.py`, `arranger/grouping.py`, `arranger/texture.py`, `arranger/bass.py`, `arranger/resolution.py`, `arranger/grips.py` |
 | how a **compound metre is felt** — `time_signature=`, `TimeSignature`, `TARGET_BEATS` as felt beats, a walk on the pulses, grid figures in groups, the `n+n+…` refusal, and the direction / beaming / metronome channels a lead sheet states it through | [docs/engine.md](docs/engine.md) | `arranger/grouping.py` (`TimeSignature`, `COMMON_TIME`), `arranger/texture.py`, `arranger/grid.py`, `arranger/bass.py`, `headxml.py` (`Head.grouping`, `Head.grouping_source`, `_score_grouping`, `_beam_partition`, `_grouping_hint`, `_metronome_pulse`), `tests/test_grouping.py`, `tests/test_headxml_arrangement.py` |
@@ -149,7 +149,7 @@ arranger/
 │   ├── __main__.py      #   `python -m arranger`
 │   ├── tuning.py        #   STANDARD_TUNING, Voicing, ArrangementStep
 │   ├── context.py       #   one slot's request, shared by the two step routes
-│   ├── fingers.py       #   which finger holds which fret; read by bass for the fret budget
+│   ├── fingers.py       #   which finger holds which fret; read by bass_place for the fret budget
 │   ├── chords.py        #   ChordParser, non-chord-tone routing
 │   ├── grip_tables.py   #   the grip tables and the questions asked of them
 │   ├── grip_place.py    #   where a shape is placed on its strings, and the memo
@@ -162,6 +162,7 @@ arranger/
 │   ├── grid.py          #   when each part sounds
 │   ├── texture.py       #   how many notes the chord part states; metric roles
 │   ├── bass_rules.py    #   the bass vocabulary, capacities and refusals
+│   ├── bass_place.py    #   the thumb's octave and string: the cost and `place_bass`
 │   ├── bass.py          #   the walking-bass thumb line
 │   ├── bass_merge.py    #   merges the walk into a chosen step; the next resolution melody
 │   ├── options.py       #   ArrangeOptions - the knobs as one value
@@ -206,7 +207,7 @@ now a package of focused modules in a strict dependency order:
 
 ```
 tuning -> fingers -> chords -> grip_tables -> grip_place -> grips -> cost -> annotation -> parts -> harmony
-                             -> grouping -> grid -> texture -> bass_rules -> bass -> bass_merge
+                             -> grouping -> grid -> texture -> bass_rules -> bass_place -> bass -> bass_merge
                              -> options -> resolution
                                                                     |
                        melody_alone -> routes -> slot_plan -> step_prepare -> harmonised_route
@@ -215,13 +216,13 @@ tuning -> fingers -> chords -> grip_tables -> grip_place -> grips -> cost -> ann
 ```
 
 `fingers` — which finger holds which fret — hangs off `tuning` alone, so it is drawn
-separately rather than as a branch of that chain. It is **not inert**: `bass` reads
+separately rather than as a branch of that chain. It is **not inert**: `bass_place` reads
 `fingers.can_fret` for the four-fret budget of the playability invariants below, which is
 an *upward* import and so legal. `docs/history/fingering.md` §5 step 3 — a per-finger cost
 criterion — is still open.
 
 ```
-tuning -> fingers   (step 1 of docs/history/fingering.md; `bass` reads can_fret for §4.3)
+tuning -> fingers   (step 1 of docs/history/fingering.md; `bass_place` reads can_fret for §4.3)
 ```
 
 A module may import only what is *below* it, and
@@ -379,7 +380,7 @@ correct:
   *step* rather than a shape, because that is the only level at which it can fail. A
   generated grip sounds at most four strings and so spans at most four frets; a
   `bass_only` step, though, merges the thumb into a shape the hand is still **holding**,
-  where its fret can be a fifth. `fingers.can_fret` is the check and `bass._place_bass`
+  where its fret can be a fifth. `fingers.can_fret` is the check and `bass_place.place_bass`
   is its one caller: a candidate needing five frets is refused, so the step keeps its
   upper voicing and the omission is reported, exactly as when no string is free.
   Measured over the committed heads: **1** such step before the fix, **0** after.

@@ -455,7 +455,7 @@ def nearest_reach_for_note(
     """How near the hand the walk could have placed *this note*, or None if nowhere.
 
     The answer to "was this wide reach the placement's doing, or the note's?" - and a
-    **replica**, deliberately: it writes out `bass.place_bass`'s filters - the string must
+    **replica**, deliberately: it writes out `bass_place.place_bass`'s filters - the string must
     be free in what the hand is holding, the note must sound below all of it, and the merged
     step must fit the four-fret budget (`fingers.can_fret`) - and then returns the
     proximity the engine ranks on, so a test can ask the question without asking the engine
@@ -463,7 +463,7 @@ def nearest_reach_for_note(
 
     `held_frets` is the shape still ringing and `held_thumb` its bass string, because the
     walking line reuses its own string: that string is fretted but does **not** reserve the
-    string for the next note (`bass.place_bass` spells the same rule out), while
+    string for the next note (`bass_place.place_bass` spells the same rule out), while
     `can_fret` is asked about the whole ringing hand, which is what the engine does.
 
     The **note**, not the pitch class: this asks where the engine could have put the note it

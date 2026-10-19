@@ -69,6 +69,7 @@ flowchart TB
         direction TB
         bass_merge["bass_merge"]
         bass["bass"]
+        bass_place["bass_place"]
         bass_rules["bass_rules"]
         texture["texture"]
         harmony["harmony"]
@@ -76,7 +77,9 @@ flowchart TB
         grid["grid"]
         parts["parts"]
         bass_merge --> bass
-        bass --> bass_rules
+        bass --> bass_place
+        bass_place --> bass_rules
+        bass_place --> fingers
         bass --> grid
         bass_rules --> texture
         texture --> parts

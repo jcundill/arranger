@@ -23,10 +23,10 @@ from musthe import Note
 from . import chords as _chords
 from . import cost as _cost
 from . import grips as _grips
-from .bass import (
+from .bass_merge import attach_bass
+from .bass_place import (
     BassNote,
 )
-from .bass_merge import attach_bass
 from .bass_rules import (
     BASS_STYLE_AUTO,
 )
