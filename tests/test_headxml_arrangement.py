@@ -8,6 +8,7 @@ parsed document. Reading the document is `test_headxml.py`.
 import os
 import tempfile
 import unittest
+from typing import List, Tuple
 
 import arranger
 from arranger import NO_CHORD
@@ -16,6 +17,7 @@ from arranger.slots import arrange_slots
 from headxml import (
     Head,
     arrange_xml_head,
+    chord_slots,
     head_skeleton,
     load_musicxml,
     melody_at,
@@ -23,15 +25,21 @@ from headxml import (
 from tabscore import score_events, substitute_steps
 from tests.support import (
     BUT_NOT_FOR_ME,
+    FIVE_FOUR,
     I_WAS_DOING_ALL_RIGHT,
     RAINY_DAY,
+    SEVEN_FOUR,
     TENOR_MADNESS,
     TROUBLE_IN_MIND,
+    TWELVE_EIGHT,
     WALTZ,
     harmony,
+    metronome,
     note,
     rest,
     score,
+    score_bars,
+    words,
     write_score,
 )
 
@@ -833,3 +841,280 @@ class TestANarrowPaletteNeverLosesTheTune(unittest.TestCase):
                     [s.bar for s in steps if s.chord_unvoiced], [],
                     f"texture={texture} left a chord unstated",
                 )
+
+
+class TestOddMetres(unittest.TestCase):
+    """5/4 and 7/4: the count is general, and only coverage was missing.
+
+    The metre is already two numbers in the engine, so these bars need no new rule.
+    What is pinned is that they reach the *arrangement* - one slot per notated beat,
+    a walk on each of them, and the targets the count allows - rather than merely
+    parsing. The second bar is deliberate: a one-bar score cannot show that the
+    metre survives a barline.
+    """
+
+    @staticmethod
+    def bars(beats: int, unit: int) -> List[str]:
+        names = ("C", "E", "G", "C", "E", "G", "C")
+        return [
+            harmony("C", "major")
+            + "".join(note(names[index], duration=unit) for index in range(beats))
+            for _bar in range(2)
+        ]
+
+    def load(self, beats: int, unit: int) -> Tuple[Head, str]:
+        path = write_score(
+            score_bars(self.bars(beats, unit), divisions=unit, beats=beats, beat_type=4)
+        )
+        self.addCleanup(os.unlink, path)
+        return load_musicxml(path), path
+
+    def test_a_five_four_head_counts_five_beats(self):
+        head, path = self.load(5, 4)
+        self.assertEqual((head.beats_per_bar, head.beat_type), (5, 4))
+        self.assertEqual(
+            [n.beat for n in head.notes if n.bar == 1], [1.0, 2.0, 3.0, 4.0, 5.0]
+        )
+        steps = arrange_xml_head(path)[0]
+        self.assertEqual([s.bar for s in steps].count(1), 5)
+        self.assertEqual([s.bar for s in steps].count(2), 5)
+
+    def test_a_seven_four_head_counts_seven_beats(self):
+        head, path = self.load(7, 4)
+        self.assertEqual((head.beats_per_bar, head.beat_type), (7, 4))
+        self.assertEqual(
+            [n.beat for n in head.notes if n.bar == 1],
+            [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0],
+        )
+        steps = arrange_xml_head(path)[0]
+        self.assertEqual([s.bar for s in steps].count(1), 7)
+        self.assertEqual([s.bar for s in steps].count(2), 7)
+
+    def test_the_targets_are_beats_one_and_three_in_both(self):
+        """`auto` leaves 5/4 and 7/4 simple, so `TARGET_BEATS` is unchanged."""
+        for beats in (5, 7):
+            with self.subTest(beats=beats):
+                _head, path = self.load(beats, 4)
+                steps = arrange_xml_head(path, texture="targets")[0]
+                weights = {
+                    (step.bar, step.beat): step.metric_weight
+                    for step in steps
+                    if step.beat in (1.0, 3.0)
+                }
+                self.assertEqual(weights[(1, 1.0)], 2)
+                self.assertEqual(weights[(1, 3.0)], 1)
+                self.assertEqual(
+                    [s.role for s in steps if s.beat == 2.0], ["fill"] * 2
+                )
+
+    def test_a_walk_puts_one_note_on_every_beat(self):
+        for beats in (5, 7):
+            with self.subTest(beats=beats):
+                _head, path = self.load(beats, 4)
+                steps = arrange_xml_head(
+                    path, texture="targets", bass="root,5th,approach,nearest"
+                )[0]
+                self.assertEqual(sum(1 for s in steps if s.bass is not None), beats * 2)
+                self.assertEqual(
+                    [s.beat for s in steps if s.bass is not None][:beats],
+                    [float(beat) for beat in range(1, beats + 1)],
+                )
+
+
+class TestCompoundMetres(unittest.TestCase):
+    """9/8 and 12/8: the arithmetic was right, the felt beats were not.
+
+    A bar is still twelve denominator units wide, so the importer's beat numbers and
+    the renderers are untouched. What `grouping=` adds is the fact that the player
+    feels four dotted-quarter pulses, and the rules that read a beat read those.
+    """
+
+    @staticmethod
+    def bars() -> List[str]:
+        """Two 12/8 bars written in dotted-quarter beats: 4 notes each."""
+        names = ("C", "E", "G", "C")
+        return [
+            harmony("C", "major")
+            + "".join(note(names[index], duration=12) for index in range(4))
+            for _bar in range(2)
+        ]
+
+    def load(self) -> Tuple[Head, str]:
+        path = write_score(score_bars(self.bars(), divisions=8, beats=12, beat_type=8))
+        self.addCleanup(os.unlink, path)
+        return load_musicxml(path), path
+
+    def test_the_bar_is_twelve_eighths_wide(self):
+        head, _path = self.load()
+        self.assertEqual((head.beats_per_bar, head.beat_type), (12, 8))
+        self.assertEqual(
+            [n.beat for n in head.notes if n.bar == 1], [1.0, 4.0, 7.0, 10.0]
+        )
+
+    def test_the_generated_grid_is_the_four_pulses(self):
+        """The bar's own rhythm is dotted quarters, so the default grid follows it."""
+        head, _path = self.load()
+        positions = [
+            round(slot[4], 6) for slot in chord_slots(head, (1, 2), "melody:every_note")
+        ]
+        self.assertEqual(positions, [1.0, 4.0, 7.0, 10.0])
+
+    def test_targets_are_the_first_and_third_pulses(self):
+        _head, path = self.load()
+        steps = arrange_xml_head(path, texture="targets")[0]
+        bar_one = [s for s in steps if s.bar == 1]
+        self.assertEqual([s.beat for s in bar_one], [1.0, 4.0, 7.0, 10.0])
+        self.assertEqual([s.role for s in bar_one], ["target", "fill", "target", "fill"])
+        self.assertEqual([s.metric_weight for s in bar_one], [2, 0, 1, 0])
+
+    def test_a_walk_is_one_note_per_pulse(self):
+        _head, path = self.load()
+        steps = arrange_xml_head(
+            path, texture="targets", bass="root,5th,approach,nearest"
+        )[0]
+        self.assertEqual(sum(1 for s in steps if s.bass is not None), 8)
+        self.assertEqual(
+            [s.beat for s in steps if s.bass is not None and s.bar == 1],
+            [1.0, 4.0, 7.0, 10.0],
+        )
+
+    def test_an_explicit_grouping_is_honoured(self):
+        """12/8 as 4+4+4 is three four-eighth groups: targets on beats 1 and 9."""
+        _head, path = self.load()
+        steps = arrange_xml_head(
+            path, texture="targets", grid="chord:freddie", grouping="4+4+4"
+        )[0]
+        self.assertEqual(
+            [s.beat for s in steps if s.bar == 1 and s.role == "target"],
+            [1.0, 9.0],
+        )
+        self.assertEqual(
+            [s.beat for s in steps if s.bar == 1 and s.bass_only], []
+        )
+
+    def test_auto_and_the_explicit_compound_grouping_agree(self):
+        _head, path = self.load()
+        auto = arrange_xml_head(path, texture="targets")[0]
+        explicit = arrange_xml_head(path, texture="targets", grouping="3+3+3+3")[0]
+        self.assertEqual(
+            [step.tab_line() for step in auto], [step.tab_line() for step in explicit]
+        )
+
+    def test_a_grouping_that_does_not_fill_the_bar_is_refused(self):
+        _head, path = self.load()
+        with self.assertRaises(ValueError):
+            arrange_xml_head(path, grouping="4+4")
+
+    def test_the_two_spellings_cannot_be_combined(self):
+        _head, path = self.load()
+        with self.assertRaises(ValueError):
+            arrange_xml_head(path, grouping="3+3+3+3", options=ArrangeOptions())
+
+
+class TestGroupingFromTheScore(unittest.TestCase):
+    """The score states its grouping; `grouping=` is only an override.
+
+    A written mark, the beaming and a metronome pulse are the three channels a
+    MusicXML lead sheet has for the metre's third fact. The first two are committed
+    fixtures; the metronome, the precedence rule and the fallback are built here so
+    "the file said so" stays distinguishable from "the metre's convention".
+    """
+
+    def test_a_direction_states_an_asymmetric_grouping(self):
+        head = load_musicxml(FIVE_FOUR)
+        self.assertEqual((head.grouping, head.grouping_source), ((3, 2), "text"))
+
+    def test_beaming_states_an_asymmetric_grouping(self):
+        head = load_musicxml(SEVEN_FOUR)
+        self.assertEqual((head.grouping, head.grouping_source), ((2, 2, 3), "beams"))
+
+    def test_beaming_states_a_compound_grouping(self):
+        head = load_musicxml(TWELVE_EIGHT)
+        self.assertEqual((head.grouping, head.grouping_source), ((4, 4, 4), "beams"))
+
+    def test_a_conventional_simple_metre_ignores_its_beaming(self):
+        """The retained 4/4 blues is beamed; its beams must not make it two beats."""
+        head = load_musicxml(TROUBLE_IN_MIND)
+        self.assertEqual((head.grouping, head.grouping_source), ((), ""))
+
+    def test_the_score_grouping_reaches_the_arrangement(self):
+        """5/4 as 3+2 has two felt beats, so only the downbeat is a full target."""
+        steps = arrange_xml_head(FIVE_FOUR, texture="targets")[0]
+        bar = [s for s in steps if s.bar == 1]
+        self.assertEqual(
+            [s.role for s in bar], ["target", "fill", "fill", "fill", "fill"]
+        )
+        self.assertEqual([s.metric_weight for s in bar], [2, 0, 0, 0, 0])
+
+    def test_a_compound_score_sets_targets_on_its_own_pulses(self):
+        steps = arrange_xml_head(TWELVE_EIGHT, texture="targets")[0]
+        self.assertEqual(
+            [s.beat for s in steps if s.bar == 1 and s.role == "target"],
+            [1.0, 9.0],
+        )
+
+    def test_a_caller_still_overrides_the_score(self):
+        """The 12/8 file beams 4+4+4; asking for threes moves the targets to 1 and 7."""
+        steps = arrange_xml_head(
+            TWELVE_EIGHT, texture="targets", grouping="3+3+3+3"
+        )[0]
+        self.assertEqual(
+            [s.beat for s in steps if s.bar == 1 and s.role == "target"],
+            [1.0, 7.0],
+        )
+
+    def test_an_unbeamed_score_falls_back_to_the_metre(self):
+        bars = [
+            harmony("C", "maj")
+            + "".join(note(name, duration=12) for name in ("C", "E", "G", "C"))
+            for _bar in range(2)
+        ]
+        path = write_score(score_bars(bars, divisions=8, beats=12, beat_type=8))
+        self.addCleanup(os.unlink, path)
+        head = load_musicxml(path)
+        self.assertEqual((head.grouping, head.grouping_source), ((), ""))
+
+    def test_a_metronome_pulse_states_a_grouping(self):
+        names = ("C", "E", "G", "C", "B", "G", "E", "C", "D", "F", "A", "C")
+        bars = [
+            metronome("quarter", dotted=True)
+            + harmony("C", "maj")
+            + "".join(note(name, duration=2) for name in names)
+            for _bar in range(2)
+        ]
+        path = write_score(score_bars(bars, divisions=4, beats=12, beat_type=8))
+        self.addCleanup(os.unlink, path)
+        head = load_musicxml(path)
+        self.assertEqual(
+            (head.grouping, head.grouping_source), ((3, 3, 3, 3), "metronome")
+        )
+
+    def test_a_written_mark_beats_the_beaming(self):
+        """5/8 beamed 2+3, marked 3+2: the player's written instruction wins."""
+        names = ("C", "E", "G", "A", "G")
+        marks = ("begin", "end", "begin", "continue", "end")
+        contents = (
+            words("3+2")
+            + harmony("C", "maj")
+            + "".join(
+                note(name, duration=2, beam=mark)
+                for name, mark in zip(names, marks)
+            )
+        )
+        path = write_score(
+            score_bars([contents, contents], divisions=4, beats=5, beat_type=8)
+        )
+        self.addCleanup(os.unlink, path)
+        head = load_musicxml(path)
+        self.assertEqual((head.grouping, head.grouping_source), ((3, 2), "text"))
+
+    def test_a_mark_that_does_not_fill_the_bar_is_ignored(self):
+        contents = words("4+4") + harmony("C", "maj") + "".join(
+            note(name, duration=4) for name in ("C", "E", "G", "A", "G")
+        )
+        path = write_score(
+            score_bars([contents, contents], divisions=4, beats=5, beat_type=4)
+        )
+        self.addCleanup(os.unlink, path)
+        head = load_musicxml(path)
+        self.assertEqual((head.grouping, head.grouping_source), ((), ""))

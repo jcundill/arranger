@@ -576,17 +576,20 @@ class TestTheGripDistribution(unittest.TestCase):
                 grip = step.voicing.grip
                 counts[grip] = counts.get(grip, 0) + 1
 
-        self.assertEqual(total, 334)
+        # The three grouped fixtures add 62 steps - one per written note - and the
+        # pre-existing heads' distribution is unchanged. A moved count here still
+        # means a shape moved; the fixture delta is the only expected difference.
+        self.assertEqual(total, 396)
         self.assertEqual(
             counts,
             {
-                "drop3": 93,
-                "drop2_6432": 84,
-                "drop2": 91,
-                "shell": 32,
-                "closed": 13,
+                "drop3": 107,
+                "drop2_6432": 98,
+                "drop2": 102,
+                "shell": 39,
+                "closed": 26,
                 "melody": 8,
-                "drop24": 9,
+                "drop24": 12,
                 "duo": 4,
             },
         )

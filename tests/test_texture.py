@@ -24,6 +24,7 @@ import arranger
 from arranger import (
     BASS_STRING_INDICES,
     BASS_STYLE_WALK,
+    COMMON_TIME,
     GRIP_MAX_SPAN,
     GRIP_PREFERENCE,
     GRIP_STRING_SETS,
@@ -176,6 +177,49 @@ class TestMetricWeight(unittest.TestCase):
         """
         self.assertEqual(metric_weight(0, 1.0), metric_weight(39, 1.0))
         self.assertEqual(metric_weight(-3, 2.0), metric_weight(7, 2.0))
+
+
+class TestGroupedMetricWeight(unittest.TestCase):
+    """`TARGET_BEATS` indexes felt beats, and a grouping is what supplies them."""
+
+    def test_a_twelve_eight_bar_targets_its_first_and_third_pulses(self):
+        """12/8 is four groups of three eighths, so the targets are beats 1 and 7."""
+        grouping = (3, 3, 3, 3)
+        self.assertEqual(metric_weight(0, 1.0, 12, grouping), 2)
+        self.assertEqual(metric_weight(0, 7.0, 12, grouping), 1)
+        self.assertEqual(metric_weight(0, 4.0, 12, grouping), 0)
+        self.assertEqual(metric_weight(0, 10.0, 12, grouping), 0)
+
+    def test_a_nine_eight_bar_targets_its_first_and_last_pulses(self):
+        grouping = (3, 3, 3)
+        self.assertEqual(metric_weight(0, 1.0, 9, grouping), 2)
+        self.assertEqual(metric_weight(0, 7.0, 9, grouping), 1)
+        self.assertEqual(metric_weight(0, 4.0, 9, grouping), 0)
+
+    def test_a_six_eight_bar_has_only_two_pulses_so_one_target(self):
+        """The same arithmetic that leaves 2/2 with only a downbeat."""
+        grouping = (3, 3)
+        self.assertEqual(metric_weight(0, 1.0, 6, grouping), 2)
+        self.assertEqual(metric_weight(0, 4.0, 6, grouping), 0)
+
+    def test_an_explicit_asymmetric_grouping_is_honoured(self):
+        """7/4 as 2+2+3 targets the first and third groups: beats 1 and 5."""
+        grouping = (2, 2, 3)
+        self.assertEqual(metric_weight(0, 1.0, 7, grouping), 2)
+        self.assertEqual(metric_weight(0, 5.0, 7, grouping), 1)
+        self.assertEqual(metric_weight(0, 3.0, 7, grouping), 0)
+
+    def test_a_two_group_bar_has_no_third_group(self):
+        """5/4 as 3+2 is a two-beat bar, so only its downbeat is a target."""
+        grouping = (3, 2)
+        self.assertEqual(metric_weight(0, 1.0, 5, grouping), 2)
+        self.assertEqual(metric_weight(0, 4.0, 5, grouping), 0)
+
+    def test_no_grouping_keeps_the_shipped_rule(self):
+        """Every simple metre is one group per beat, so nothing moved."""
+        self.assertEqual(metric_weight(0, 1.0, 4), 2)
+        self.assertEqual(metric_weight(0, 3.0, 4), 1)
+        self.assertEqual(metric_weight(0, 2.0, 4), 0)
 
 
 class TestRoles(unittest.TestCase):
@@ -899,7 +943,7 @@ class TestBackwardCompatibility(unittest.TestCase):
         """
         plain = VoiceLeadingEngine.arrange_progression(MINOR_CADENCE)
         explicit = VoiceLeadingEngine.arrange_progression(
-            MINOR_CADENCE, timings=None, texture="uniform", beats_per_bar=4
+            MINOR_CADENCE, timings=None, texture="uniform", time_signature=COMMON_TIME
         )
         self.assertEqual(
             [s.tab_line() for s in plain], [s.tab_line() for s in explicit]

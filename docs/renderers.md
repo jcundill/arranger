@@ -303,6 +303,32 @@ length means measuring it, a length is measured in quarters, and quarters come f
 `4 / beat_type`. So `beat_type` is now a parameter of `format_tab_staff` and
 `format_tab_html` too, and `head_cli` passes it to all four renderers.
 
+### Grouping is read from the score, but not written back
+
+The importer reads `<beats>` and `<beat-type>`, and then the **grouping** — which
+denominator units are felt as one beat — from the score's own channels: an `N+N` mark in
+a direction, the primary beaming, or a metronome pulse (see
+[engine.md](engine.md#grouping-the-metres-third-fact)). A score that states none of them
+falls back to `auto` (threes for a compound metre, one per beat otherwise).
+
+The **writers do not put the source's channel back verbatim**. `tabxml` writes no `N+N`
+direction and only the navigation `<words>` it draws, but music21 *does* compose
+`<beam>` elements from the exported rhythm, so a MusicXML round trip re-derives a grouping
+from those beams. That grouping is music21's conventional beaming, not necessarily the
+source's: a 12/8 score beamed 4+4+4 comes back beamed 3+3+3+3 and is read as four
+dotted-quarter beats, and a 5/4 marked `3+2` comes back with no mark (its quarter-note
+melody has no beams) and falls back to `auto`. GP5's time signature carries the count and
+the denominator and nothing else. A caller's explicit non-standard grouping is therefore a
+property of the run rather than of the file, and the exact grouping is lost when the
+arrangement is written out and read back. The importer can read the fact; the writers do
+not preserve the channel that stated it.
+
+A generation of the default comping grid does read it, though: `headxml._bar_resolution`
+offers a **group-length** candidate ahead of the beat, so a 12/8 bar written in four
+dotted quarters generates four positions rather than twelve. The beat remains the
+fallback for a bar mixing subdivisions that no single finer resolution holds, so a busy
+bar is still generated on its beats rather than on an arbitrary one of them.
+
 ### What the staff's timing rows are, and what they are not
 
 `show_timing` (on by default) adds two rows above the chord names:

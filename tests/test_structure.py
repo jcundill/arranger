@@ -83,28 +83,41 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/cost.py": Budget(12, 140, 7),
     "arranger/decisions.py": Budget(11, 137, 9),
     "arranger/fingers.py": Budget(10, 41, 2),
-    "arranger/grid.py": Budget(9, 25, 3),
+    # The grouping axis added one word to each entry point that names the metre:
+    # `arrange_progression` and its facade (15 -> 16 parameters), `resolve_knobs`
+    # (14 -> 15), `on_grid` (3 -> 4) and `arrange_xml_head` (11 -> 12). The three
+    # length rises are the comments and the `grouping` line those parameters carry;
+    # no function gained a second job.
+    "arranger/grid.py": Budget(9, 25, 4),
     "arranger/grip_tables.py": Budget(7, 39, 3),
     "arranger/grip_place.py": Budget(19, 66, 5),
     "arranger/grips.py": Budget(22, 128, 9),
+    "arranger/grouping.py": Budget(6, 45, 3),
     "arranger/harmony.py": Budget(4, 21, 2),
     "arranger/melody_alone.py": Budget(6, 74, 14),
-    "arranger/resolution.py": Budget(9, 111, 14),
+    "arranger/resolution.py": Budget(9, 116, 15),
     "arranger/slot_plan.py": Budget(6, 89, 5),
-    "arranger/movement.py": Budget(9, 251, 15),
+    "arranger/movement.py": Budget(9, 256, 16),
     # `ArrangeOptions` is a flat dataclass of knobs with no methods today.
     "arranger/options.py": Budget(5, 30, 3),
     "arranger/parts.py": Budget(9, 45, 1),
     "arranger/render.py": Budget(11, 64, 2),
     "arranger/routes.py": Budget(6, 97, 12),
     "arranger/slots.py": Budget(9, 136, 12),
-    "arranger/steps.py": Budget(1, 49, 15),
+    "arranger/steps.py": Budget(1, 54, 16),
     "arranger/texture.py": Budget(11, 57, 6),
     "arranger/tuning.py": Budget(5, 28, 2),
     # `arrange_xml_head` keeps the keyword spellings as an adapter beside
     # `options=`; the object path is what the CLI and the tests use. The extra
     # parameter is the compatibility spelling, not a new decision.
-    "headxml.py": Budget(17, 125, 11),
+    #
+    # The metre axis added a word to three entry points and a line to the facade:
+    # `movement` and `steps` take `time_signature=` in place of the count and
+    # denominator pair, and `headxml` takes `grouping=` beside `grid`. Those
+    # increases are the axis's own spelling, not a function that grew a second job;
+    # `head_cli`'s branches moved into `_print_metre_notes` rather than raising its
+    # budget.
+    "headxml.py": Budget(17, 125, 12),
     "grip_chart.py": Budget(14, 84, 5),
     "tabgp.py": Budget(19, 151, 13),
     "tabscore.py": Budget(10, 98, 5),

@@ -448,22 +448,25 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         self.assertGreater(checked, 500, "the sweep stopped arranging anything")
         self.assertEqual(missing[:10], [], f"{len(missing)} unexplained steps")
         # A count, because a clause that stops firing is silent: measured over this sweep,
-        # **99** of the steps it arranges give up a chord tone, and every one of them is
-        # asked about above. A corpus, grip table or rule that stops reaching the clause
-        # would otherwise leave every assertion here passing on its absence.
+        # **139** of the steps it arranges give up a chord tone, and every one of them is
+        # asked about above. The three grouped fixtures (5/4, 7/4, 12/8) account for the
+        # last 40: they are melody-dense and every note carries a chord. A corpus, grip
+        # table or rule that stops reaching the clause would otherwise leave every
+        # assertion here passing on its absence.
         self.assertEqual(
-            omitted, 99, "the number of steps owing an omitted-tone clause moved"
+            omitted, 139, "the number of steps owing an omitted-tone clause moved"
         )
         # The same reasoning for the voice list, which is the clause most steps carry:
-        # measured over this sweep, **1023** of the steps it arranges sound two or more
+        # measured over this sweep, **1375** of the steps it arranges sound two or more
         # upper voices on a route that sings the tune - so a change that thinned the
-        # default palette, or that stopped the clause firing, moves this number.
-        self.assertEqual(named, 1023, "the number of steps naming their voices moved")
+        # default palette, or that stopped the clause firing, moves this number. The
+        # grouped fixtures add 352, all of them from notes the old corpus did not have.
+        self.assertEqual(named, 1375, "the number of steps naming their voices moved")
         # And for the comping part, whose voices are the only harmony the line can show:
-        # measured over this sweep, **1095** of the steps it arranges state a comping shape
+        # measured over this sweep, **1897** of the steps it arranges state a comping shape
         # and name each of its voices, so the reading of a thin line cannot quietly become
-        # a list of degrees again.
-        self.assertEqual(comping, 1095, "the number of comping lines naming a voice moved")
+        # a list of degrees again. The grouped fixtures add 802.
+        self.assertEqual(comping, 1897, "the number of comping lines naming a voice moved")
 
     def test_the_slash_bass_clause_is_not_a_tautology(self):
         """The one decision the witness table cannot hold, pinned in both directions.

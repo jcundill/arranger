@@ -99,6 +99,7 @@ def note(
     tuplet: Optional[Tuple[int, int]] = None,
     voice: int = 1,
     staff: Optional[int] = None,
+    beam: Optional[str] = None,
 ) -> str:
     """One pitched ``<note>``.
 
@@ -117,6 +118,7 @@ def note(
             f"<normal-notes>{normal}</normal-notes></time-modification>"
         )
     staff_xml = f"<staff>{staff}</staff>" if staff is not None else ""
+    beam_xml = f'<beam number="1">{beam}</beam>' if beam else ""
     return (
         "<note>"
         + ("<chord/>" if chord else "")
@@ -126,6 +128,7 @@ def note(
         + f"<voice>{voice}</voice>"
         + tuplet_xml
         + staff_xml
+        + beam_xml
         + (f"<notations>{tied_xml}</notations>" if tied_xml else "")
         + "</note>"
     )
@@ -144,6 +147,43 @@ def rest(
         f"<note>{rest_xml}<duration>{duration}</duration><voice>{voice}</voice>"
         f"{staff_xml}</note>"
     )
+
+
+def direction(text: str) -> str:
+    """One ``<direction>`` carrying a ``<words>`` mark, as a lead sheet writes ``3+2``."""
+    return (
+        "<direction><direction-type><words>"
+        + _xml(text)
+        + "</words></direction-type></direction>"
+    )
+
+
+def beamed(
+    names: Sequence[str], duration: int, groups: Sequence[int]
+) -> List[str]:
+    """A run of notes whose primary beams are split at ``groups`` (in notes).
+
+    The final note of each group is its ``end`` and the notes between are
+    ``continue``; the generator refuses a one-note group, which has no beam in
+    practice.
+    """
+    out: List[str] = []
+    index = 0
+    for size in groups:
+        if size < 2:
+            raise ValueError("a beam group needs at least two notes")
+        for offset in range(size):
+            if offset == 0:
+                mark = "begin"
+            elif offset == size - 1:
+                mark = "end"
+            else:
+                mark = "continue"
+            out.append(note(names[index], duration, beam=mark))
+            index += 1
+    if index != len(names):
+        raise ValueError("the beam groups do not cover the melody")
+    return out
 
 
 def _musical_type(quarters: Fraction) -> Tuple[str, int]:
@@ -204,6 +244,8 @@ def _add_note_types(contents: Iterable[str], divisions: int) -> List[str]:
         position = fragment.find("<time-modification>")
         if position < 0:
             position = fragment.find("<staff>")
+        if position < 0:
+            position = fragment.find("<beam")
         if position < 0:
             position = fragment.find("<notations>")
         if position < 0:
@@ -900,6 +942,90 @@ def pickup_common() -> str:
     )
 
 
+def five_four() -> str:
+    """2 bars of 5/4 with ``3+2`` written as a direction.
+
+    The melody is in quarters, so the bar has no beaming to group: the direction is
+    the score's only channel for the asymmetric feel, and the fixture is what proves
+    the importer reads it rather than guessing every quarter as a felt beat.
+    """
+    d = 4
+    bars = [
+        [
+            direction("3+2"),
+            harmony("C", "maj"),
+            note("C4", 4),
+            note("E4", 4),
+            note("G4", 4),
+            note("A4", 4),
+            note("G4", 4),
+        ],
+        [
+            harmony("F", "maj"),
+            note("F4", 4),
+            note("A4", 4),
+            note("C5", 4),
+            note("D5", 4),
+            note("C5", 4),
+        ],
+    ]
+    measures = _measures(bars, divisions=d, beats=5, beat_type=4, fifths=0)
+    return document(
+        "Synthetic Five Four",
+        [("P1", "Voice", measures)],
+        composer="Fixture Generator",
+    )
+
+
+def seven_four() -> str:
+    """2 bars of 7/4 beamed 2+2+3: 14 eighths in groups of 4, 4 and 6.
+
+    The grouping comes from the beaming alone; the metre's own count cannot say
+    which side of the bar is long.
+    """
+    d = 4
+    names = (
+        "C4", "D4", "E4", "F4", "G4", "A4", "B4",
+        "C5", "B4", "A4", "G4", "F4", "E4", "D4",
+    )
+    groups = (4, 4, 6)
+    bars = [
+        [harmony("C", "maj7")] + beamed(names, 2, groups),
+        [harmony("F", "maj7")] + beamed(tuple(reversed(names)), 2, groups),
+    ]
+    measures = _measures(bars, divisions=d, beats=7, beat_type=4, fifths=0)
+    return document(
+        "Synthetic Seven Four",
+        [("P1", "Voice", measures)],
+        composer="Fixture Generator",
+    )
+
+
+def twelve_eight() -> str:
+    """2 bars of 12/8 beamed 4+4+4: three four-eighth groups, not four threes.
+
+    The beaming is the score's own statement that the bar is felt in three, which
+    is exactly the case `grouping.auto` cannot derive from 12/8's count.
+    """
+    d = 4
+    names = (
+        "C4", "E4", "G4", "C5",
+        "B4", "G4", "E4", "C4",
+        "D4", "F4", "A4", "C5",
+    )
+    groups = (4, 4, 4)
+    bars = [
+        [harmony("C", "maj")] + beamed(names, 2, groups),
+        [harmony("G", "7")] + beamed(tuple(reversed(names)), 2, groups),
+    ]
+    measures = _measures(bars, divisions=d, beats=12, beat_type=8, fifths=0)
+    return document(
+        "Synthetic Twelve Eight",
+        [("P1", "Voice", measures)],
+        composer="Fixture Generator",
+    )
+
+
 def chords_only() -> str:
     """Four bars, six changes and no pitched note.
 
@@ -932,6 +1058,9 @@ SCORES: Dict[str, str] = {
     "synthetic_tab_export.musicxml": tab_export(),
     "synthetic_triplets.mxl": triplets(),
     "synthetic_waltz.musicxml": waltz(),
+    "synthetic_five_four.musicxml": five_four(),
+    "synthetic_seven_four.musicxml": seven_four(),
+    "synthetic_twelve_eight.musicxml": twelve_eight(),
     "synthetic_chords_only.musicxml": chords_only(),
 }
 

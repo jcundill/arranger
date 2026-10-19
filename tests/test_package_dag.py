@@ -49,6 +49,7 @@ ORDER = [
     "annotation",   # the trailing explanation a step carries, as composed clauses
     "parts",        # the parts axis: which of melody / bass / chord the guitar takes
     "harmony",      # the harmony axis: which degrees the chord part states
+    "grouping",     # the metre's third fact: which denominator units are felt as a beat
     "grid",         # the grid axis: when each part sounds
     "texture",      # the texture axis: how many notes the chord part states
     "bass_rules",   # the bass vocabulary, capacities and refusals

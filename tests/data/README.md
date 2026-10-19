@@ -24,6 +24,9 @@ deliberate exception.
 | `synthetic_tab_export.musicxml` | a notation part and a TAB part, chord groups, triplets |
 | `synthetic_triplets.mxl` | 2/2 in 10080 divisions, triplets, a repeat, a gcd-1 onset |
 | `synthetic_waltz.musicxml` | 3/4, a repeat with two endings, eighths |
+| `synthetic_five_four.musicxml` | 5/4, a `3+2` direction, the score's own asymmetric grouping |
+| `synthetic_seven_four.musicxml` | 7/4, eighths beamed 2+2+3 |
+| `synthetic_twelve_eight.musicxml` | 12/8, eighths beamed 4+4+4 rather than the automatic threes |
 | `synthetic_chords_only.musicxml` | four bars, six `<harmony>` symbols, no pitched notes |
 
 ## Regenerating

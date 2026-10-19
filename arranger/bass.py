@@ -48,6 +48,7 @@ from .bass_rules import (
 from .chords import NON_CHORD_TONE_EXTENSIONS, ChordParser, normalised_harmony
 from .fingers import can_fret
 from .grid import BEAT_EPSILON, beat_offset
+from .grouping import group_starts
 from .texture import metric_weight
 from .tuning import NO_CHORD, STANDARD_TUNING, ArrangementStep, Voicing
 
@@ -498,6 +499,11 @@ def walking_slots(
     # whole-note `duration` to beats, which needs this. See `_melody_timeline`.
     beat_type: int = 4,
     bass: str = BASS_STYLE_WALK,
+    # The metre's felt beats, as group lengths. `None` means one per denominator
+    # unit, the reading this function had before grouping existed. The walk invents
+    # one note per **felt** beat, so 12/8 walks four dotted-quarter pulses rather
+    # than twelve eighths.
+    grouping: Optional[Sequence[int]] = None,
 ) -> List[Slot]:
     """
     The walking-bass slot union: the melody grid plus the walked beats.
@@ -540,7 +546,7 @@ def walking_slots(
             (bar, float(beat)) if bar is not None and beat is not None else None
         )
 
-    bass_line = bass_line_for(bass, chords, onsets, beats_per_bar)
+    bass_line = bass_line_for(bass, chords, onsets, beats_per_bar, grouping)
     return _bass_slots(progression, timings, bass_line, beats_per_bar, beat_type)
 
 
@@ -833,16 +839,20 @@ def _anchor_only_line(
 
 
 def _walked_beats(
-    located: Sequence[Tuple[int, float, int]], beats_per_bar: int
+    located: Sequence[Tuple[int, float, int]],
+    beats_per_bar: int,
+    grouping: Optional[Sequence[int]] = None,
 ) -> List[Tuple[int, float]]:
-    """One beat per quarter of every bar the melody touches."""
-    # One walked beat per quarter of every bar the melody touches. Signed bars sort
-    # correctly, and a bar whose melody is a single whole note still yields four
-    # notes - the grid, not the melody, is what the line is written on.
+    """One beat per **felt beat** of every bar the melody touches.
+
+    The grid is the grouping, not the melody: a 12/8 bar whose tune is a whole note
+    still yields four thumb notes, one on each dotted-quarter pulse, and a 4/4 bar
+    yields four. With no grouping every denominator unit is its own group, which is
+    the reading this function had before grouping existed.
+    """
+    starts = group_starts(beats_per_bar, grouping)
     bars = sorted({bar for bar, _beat, _index in located})
-    return [
-        (bar, float(beat)) for bar in bars for beat in range(1, beats_per_bar + 1)
-    ]
+    return [(bar, beat) for bar in bars for beat in starts]
 
 
 def _filled_harmony(
@@ -903,6 +913,7 @@ def _anchor_flags(
     harmonies: Sequence[Optional[_Harmony]],
     keys: Sequence[_HarmonyKey],
     beats_per_bar: int,
+    grouping: Optional[Sequence[int]] = None,
 ) -> List[bool]:
     """Every downbeat, plus a strong beat whose harmony is not already stated."""
     # An anchor is every downbeat, plus any strong beat whose harmony is not already
@@ -916,7 +927,7 @@ def _anchor_flags(
         if harmonies[index] is None:
             is_anchor.append(False)
             continue
-        strong = metric_weight(bar, beat, beats_per_bar) > 0
+        strong = metric_weight(bar, beat, beats_per_bar, grouping) > 0
         downbeat = abs(beat - 1.0) <= BEAT_EPSILON
         anchor = downbeat or (strong and keys[index] != previous_anchor)
         is_anchor.append(anchor)
@@ -951,15 +962,18 @@ def _walk_note(
     anchor_pc: Optional[int],
     previous_pc: Optional[int],
     beat: float,
-    beats_per_bar: int,
+    starts: Sequence[float],
 ) -> Tuple[int, str]:
     """The candidate set for one non-anchor beat, and the cost's choice from it.
 
     The order of `candidates` is load-bearing: `min` returns the first of equal
     costs, so this is where the tie-break lives.
+
+    `starts` are the bar's **felt** beats, so the last and penultimate are the
+    dotted-quarter pulses of a 12/8 bar rather than its last two eighths.
     """
-    is_last_beat = abs(beat - beats_per_bar) <= BEAT_EPSILON
-    is_penultimate = abs(beat - (beats_per_bar - 1)) <= BEAT_EPSILON
+    is_last_beat = abs(beat - starts[-1]) <= BEAT_EPSILON
+    is_penultimate = len(starts) > 1 and abs(beat - starts[-2]) <= BEAT_EPSILON
 
     candidates: List[Tuple[int, str]] = [
         (pitch_class, BASS_ROLE_CONNECT) for pitch_class in permitted
@@ -1004,6 +1018,7 @@ def _walking_bass_line(
     chords: Sequence[Tuple[Optional[str], str, str]],
     onsets: Optional[Sequence[Optional[Tuple[int, float]]]],
     beats_per_bar: int = 4,
+    grouping: Optional[Sequence[int]] = None,
 ) -> List[BassNote]:
     """
     The bass line for a progression: one `BassNote` per **walked beat**.
@@ -1045,10 +1060,11 @@ def _walking_bass_line(
     if not located:
         return _anchor_only_line(chords)
 
-    walked = _walked_beats(located, beats_per_bar)
+    walked = _walked_beats(located, beats_per_bar, grouping)
     harmonies, keys = _filled_harmony(walked, chords, located)
-    is_anchor = _anchor_flags(walked, harmonies, keys, beats_per_bar)
+    is_anchor = _anchor_flags(walked, harmonies, keys, beats_per_bar, grouping)
     next_anchor = _next_anchor_pitches(walked, harmonies, is_anchor)
+    starts = group_starts(beats_per_bar, grouping)
 
     notes: List[BassNote] = []
     previous_pc: Optional[int] = None
@@ -1062,7 +1078,12 @@ def _walking_bass_line(
             previous_pc = root_pc
             continue
         best_pc, best_role = _walk_note(
-            permitted, root_pc, next_anchor[index], previous_pc, beat, beats_per_bar
+            permitted,
+            root_pc,
+            next_anchor[index],
+            previous_pc,
+            beat,
+            starts,
         )
         notes.append(BassNote(bar, beat, best_pc, best_role))
         previous_pc = best_pc
@@ -1078,6 +1099,7 @@ def bass_line_for(
     chords: Sequence[Tuple[Optional[str], str, str]],
     onsets: Optional[Sequence[Optional[Tuple[int, float]]]],
     beats_per_bar: int = 4,
+    grouping: Optional[Sequence[int]] = None,
 ) -> List[BassNote]:
     """The bass line for one style: `_walking_bass_line`, filtered by the roles its rules admit.
 
@@ -1108,6 +1130,6 @@ def bass_line_for(
             raise ValueError(
                 f"Unknown bass rule {rule!r}; expected any of {BASS_RULES}"
             ) from None
-    line = _walking_bass_line(chords, onsets, beats_per_bar)
+    line = _walking_bass_line(chords, onsets, beats_per_bar, grouping)
     return [note for note in line if note.role in admitted]
 

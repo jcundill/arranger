@@ -12,8 +12,9 @@ It provides:
 * `MUSICXML_KIND_QUALITIES` / `parse_musicxml_chord` - the format's own chord
   notation translated into the library's chord qualities, with untranslatable
   chords reported rather than guessed.
-* `load_musicxml` - a file to a `Head`: the melody, its timing, the key it is in,
-  and the chord in force under each note.
+* `load_musicxml` - a file to a `Head`: the melody, its timing, the metre (count,
+  denominator and the grouping the score states), the key it is in, and the chord in
+  force under each note.
 * `head_skeleton` / `arrange_xml_head` - the reduction and the arrangement.
 * `head_cli` - the `arranger head FILE` command.
 
@@ -37,29 +38,39 @@ from __future__ import annotations
 import re
 import zipfile
 from dataclasses import dataclass, field, replace
+from fractions import Fraction
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 from xml.etree import ElementTree
 
 from arranger import (
     GRID_DEFAULT,
+    GROUPING_AUTO,
     NO_CHORD,
     PITCH_CLASS_NAMES,
+    TARGET_BEATS,
     TICKS_PER_BEAT,
     ArrangementStep,
     ChordParser,
     beat_offset,
+    default_grouping,
+    format_grouping,
     grid_defers_to_melody,
     grid_positions,
     grid_resolutions,
+    group_starts,
+    grouping_allowed,
     parse_grid,
+    parse_grouping,
     parse_parts,
     parts_has_melody_only,
     resolve_grid,
+    resolve_grouping,
     resolve_parts,
 )
 from arranger.bass_rules import BASS_STYLE_AUTO
 from arranger.chords import midi_to_note_name, promote_slash_chord
+from arranger.grouping import TimeSignature
 from arranger.harmony import HARMONY_AUTO
 from arranger.options import ArrangeOptions
 from arranger.parts import PARTS_AUTO
@@ -543,6 +554,17 @@ class Head:
     # `beats_per_bar` alone cannot say which - a 2/2 and a 2/4 bar are both two
     # beats wide, and printing one as the other misstates the metre.
     beat_type: int = 4
+    # The score's own statement of the **grouping** - which denominator units are
+    # felt as one beat - in those units, and the channel that stated it: "text" (an
+    # `N+N` direction), "beams" (the primary beaming), "metronome" (a pulse mark),
+    # or "" when the file says nothing. Empty is "not stated", not "one per beat":
+    # an unbeamed score and a hand-built `Head` both take `grouping.auto`, and the
+    # engine resolves that from `beats_per_bar` and `beat_type`.
+    #
+    # A tuple rather than the string the engine takes, because this is the file's
+    # fact and `ArrangeOptions` is the request. `_head_request` converts it.
+    grouping: Tuple[int, ...] = ()
+    grouping_source: str = ""
     # True when the score marks its first measure `implicit="yes"` (or numbers it 0):
     # the measure is an anacrusis, so its missing time is a pickup and not comping
     # space. Carried because a generated accompaniment position in that short bar
@@ -821,6 +843,162 @@ def _key_signature(part: ElementTree.Element) -> Tuple[int, str]:
     return fifths, mode
 
 
+#: A metronome's beat-unit as a length in quarter notes, so a dotted-quarter pulse
+#: in 12/8 can be compared with the bar's own denominator.
+_BEAT_UNIT_QUARTERS: Dict[str, Fraction] = {
+    "whole": Fraction(4),
+    "half": Fraction(2),
+    "quarter": Fraction(1),
+    "eighth": Fraction(1, 2),
+    "16th": Fraction(1, 4),
+    "32nd": Fraction(1, 8),
+    "64th": Fraction(1, 16),
+    "128th": Fraction(1, 32),
+    "256th": Fraction(1, 64),
+}
+
+#: A written grouping in a direction: `3+2`, `2 + 2 + 3`, and nothing looser. The
+#: lookarounds keep it from matching the tail of a longer number.
+_GROUPING_TEXT = re.compile(r"(?<!\d)(\d+(?:\s*\+\s*\d+)+)(?!\d)")
+
+
+def _grouping_hint(direction: ElementTree.Element) -> Optional[str]:
+    """The first `N+N` a direction writes, from a `<words>` or `<rehearsal>` mark.
+
+    A lead sheet can state a grouping in prose when the beaming cannot: a 5/4
+    written in quarters has no beams to group, and "3+2" is how a player is told
+    which side of the bar is long. Read at the direction layer so the mark reaches
+    the walk even when it precedes no note; `_score_grouping` validates it against
+    the bar before using it.
+    """
+    for direction_type in direction.findall("direction-type"):
+        for child in direction_type:
+            if child.tag not in ("words", "rehearsal"):
+                continue
+            text = " ".join(child.itertext()).strip()
+            match = _GROUPING_TEXT.search(text)
+            if match is not None:
+                return match.group(1).strip()
+    return None
+
+
+def _metronome_pulse(direction: ElementTree.Element) -> Optional[Fraction]:
+    """The pulse a `<metronome>` mark states, in quarter notes, dots included.
+
+    A dotted-quarter mark in 12/8 is the score saying "feel this in four" in the
+    one other channel that can state it when the notes are not beamed. Only the
+    beat unit is read; the tempo is not this library's business.
+    """
+    for metronome in direction.iter("metronome"):
+        unit = (metronome.findtext("beat-unit") or "").strip().lower()
+        pulse = _BEAT_UNIT_QUARTERS.get(unit)
+        if pulse is None:
+            continue
+        for _dot in metronome.findall("beat-unit-dot"):
+            pulse *= Fraction(3, 2)
+        return pulse
+    return None
+
+
+def _starts_a_beam(note: ElementTree.Element) -> bool:
+    """True when the note begins a primary (number-1) beam."""
+    for beam in note.findall("beam"):
+        if (beam.get("number") or "1") != "1":
+            continue
+        if (beam.text or "").strip() == "begin":
+            return True
+    return False
+
+
+def _beam_partition(
+    offsets: Sequence[float], beats: int
+) -> Optional[Tuple[int, ...]]:
+    """The grouping a bar's primary-beam starts state, if they partition it.
+
+    `offsets` are beat offsets from the bar's start, one per beam group that begins
+    there. A group lasts until the next group begins, and the last until the bar
+    ends. Anything that does not give whole, positive group lengths adding to the
+    bar is not a statement about the metre - a beam that starts mid-bar, crosses a
+    bar line, or follows a rest - and is refused rather than rounded into one.
+    """
+    unique = sorted({round(offset, 6) for offset in offsets})
+    if not unique or abs(unique[0]) > 1e-6:
+        return None
+    positions = unique + [float(beats)]
+    lengths = [later - earlier for earlier, later in zip(positions, positions[1:])]
+    rounded = tuple(int(round(length)) for length in lengths)
+    if any(abs(length - whole) > 1e-6 for length, whole in zip(lengths, rounded)):
+        return None
+    if any(length <= 0 for length in rounded):
+        return None
+    if sum(rounded) != beats:
+        return None
+    return rounded
+
+
+def _beams_decide(beats: int, beat_type: int) -> bool:
+    """Whether the score's beaming can outrank the metre's own convention.
+
+    A conventional simple metre - 2/4, 3/4, 4/4, 2/2 - is already grouped by its
+    count, and notation programs beam eighths in whatever pairs or fours fit the
+    beat. Reading that as a grouping would turn a half-bar beam in 4/4 into two
+    felt beats. A compound or asymmetric metre is where beaming carries
+    information the count cannot, so it is read there.
+    """
+    return not (beat_type <= 4 and beats in (2, 3, 4))
+
+
+def _score_grouping(
+    beats: int,
+    beat_type: int,
+    hints: Sequence[str],
+    beam_starts: Dict[Tuple[int, int], List[float]],
+    pulses: Sequence[Fraction],
+    skip_bar: Optional[int] = None,
+) -> Tuple[Tuple[int, ...], str]:
+    """The grouping the score states, and the channel that stated it.
+
+    Precedence is the written mark, then the beaming, then a metronome pulse. Each
+    candidate is used only if it partitions the bar; an unreadable one falls
+    through, because a stray `3+2` in a lyric or a mark on a bar of another metre
+    is not a broken score. No candidate leaves `((), "")`, which the engine reads
+    as `auto`.
+    """
+    for hint in hints:
+        try:
+            grouping = parse_grouping(hint)
+        except ValueError:
+            continue
+        if isinstance(grouping, tuple) and grouping_allowed(grouping, beats)[0]:
+            return grouping, "text"
+    if _beams_decide(beats, beat_type):
+        # The same grouping should recur in most bars; a single unusual bar's
+        # beams do not redefine the tune. Ties go to the earliest bar.
+        counts: Dict[Tuple[int, ...], int] = {}
+        first: Dict[Tuple[int, ...], int] = {}
+        for (bar, _voice), offsets in beam_starts.items():
+            if bar == skip_bar:
+                # A pickup is short by design, so its last beam would run to a bar
+                # line that is not there; the full bars after it state the metre.
+                continue
+            partition = _beam_partition(offsets, beats)
+            if partition is None:
+                continue
+            counts[partition] = counts.get(partition, 0) + 1
+            first.setdefault(partition, bar)
+        if counts:
+            chosen = max(counts, key=lambda item: (counts[item], -first[item]))
+            return chosen, "beams"
+    for pulse in pulses:
+        pulse_units = pulse * beat_type / 4
+        if pulse_units.denominator != 1:
+            continue
+        length = int(pulse_units)
+        if length > 0 and beats % length == 0:
+            return (length,) * (beats // length), "metronome"
+    return (), ""
+
+
 def _transposition(part: ElementTree.Element) -> int:
     """The part's `<transpose>` in semitones, or 0 when it declares none.
 
@@ -1050,6 +1228,12 @@ class _NotesWalk:
     # of interest, which is every committed head but the three that carry a repeat.
     raw_markers: Dict[int, List[BarInstruction]] = field(default_factory=dict)
     position: int = 0
+    # The score's own grouping evidence, in the order `_score_grouping` weighs it:
+    # `N+N` marks from directions, then the beat offset of every primary-beam
+    # start keyed by (written bar, voice), then metronome pulses in quarter notes.
+    grouping_hints: List[str] = field(default_factory=list)
+    beam_starts: Dict[Tuple[int, int], List[float]] = field(default_factory=dict)
+    metronome_pulses: List[Fraction] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         self.beat_type = int(self.head.beat_type)
@@ -1062,6 +1246,18 @@ class _NotesWalk:
         head = self.head
         head.notes = self.notes
         head.chords = self.changes
+        head.grouping, head.grouping_source = _score_grouping(
+            head.beats_per_bar,
+            int(head.beat_type),
+            self.grouping_hints,
+            self.beam_starts,
+            self.metronome_pulses,
+            skip_bar=(
+                self.measure_numbers[0]
+                if head.first_bar_implicit and self.measure_numbers
+                else None
+            ),
+        )
         # The file's measure extent, so `Head.bars` reports the file's length rather
         # than the melody's - which is what makes a chords-only head arrangeable at
         # all (§9.3 step A'). Recorded here because this is the one place the measures
@@ -1164,6 +1360,12 @@ class _NotesWalk:
         elif child.tag == "note":
             self.note(child)
         elif child.tag == "direction":
+            hint = _grouping_hint(child)
+            if hint is not None:
+                self.grouping_hints.append(hint)
+            pulse = _metronome_pulse(child)
+            if pulse is not None:
+                self.metronome_pulses.append(pulse)
             for instruction in _parse_direction(child):
                 self.raw_markers.setdefault(self.position, []).append(instruction)
         elif child.tag == "sound":
@@ -1251,6 +1453,12 @@ class _NotesWalk:
 
         length = _duration_in_divisions(child, self.divisions)
         onset = self.cursor
+        if _starts_a_beam(child):
+            voice = _number(child.findtext("voice"), 1)
+            offset = _beat_from_onset(
+                onset, self.divisions, self.beat_type
+            ) - 1.0
+            self.beam_starts.setdefault((self.bar, voice), []).append(offset)
         if child.find("chord") is not None:
             # A member of a `<chord>` group: the same onset, the same length.
             # MusicXML does **not** order a group by pitch - only the first
@@ -2196,7 +2404,9 @@ def _tick_key(bar: int, beat: float) -> Tuple[int, int]:
     return (bar, round(beat * TICKS_PER_BEAT))
 
 
-def _bar_resolution(head: Head, bar: int, beat_type: int) -> int:
+def _bar_resolution(
+    head: Head, bar: int, beat_type: int, grouping: Optional[Sequence[int]] = None
+) -> int:
     """The coarsest subdivision of a beat that holds every note this bar's melody writes.
 
     The bar's own rhythm is the grid it is generated on, which is what makes a generated
@@ -2217,17 +2427,32 @@ def _bar_resolution(head: Head, bar: int, beat_type: int) -> int:
         if note.bar == bar
     ]
     resolutions = grid_resolutions(beat_type)
+    # **A group is a candidate only when it divides the bar.** A 12/8 bar's generated
+    # positions are its dotted-quarter pulses when the tune is written on them, which
+    # is the coarsest reading of the bar's own rhythm; a mixed grouping (3+2) does not
+    # divide the bar, so it is not offered and the beat remains the fallback. The
+    # fallback stays `resolutions[0]` - the beat - rather than a group, so a bar mixing
+    # a sixteenth with a triplet is still generated on its beats.
+    group_ticks = TICKS_PER_BEAT * grouping[0] if grouping else 0
+    span = head.beats_per_bar * TICKS_PER_BEAT
+    coarse: Tuple[int, ...] = (
+        (group_ticks,)
+        if group_ticks > TICKS_PER_BEAT and span % group_ticks == 0
+        else ()
+    )
     return next(
         (
             resolution
-            for resolution in resolutions
+            for resolution in coarse + resolutions
             if all(onset % resolution == 0 for onset in onsets)
         ),
         resolutions[0],
     )
 
 
-def _generated_beats(head: Head, bar: int, beat_type: int) -> Tuple[float, ...]:
+def _generated_beats(
+    head: Head, bar: int, beat_type: int, grouping: Optional[Sequence[int]] = None
+) -> Tuple[float, ...]:
     """Every position the default grid generates in one bar, at that bar's own resolution.
 
     Positioned from beat 1 so the first is the downbeat in any metre, and stepping by the
@@ -2236,14 +2461,31 @@ def _generated_beats(head: Head, bar: int, beat_type: int) -> Tuple[float, ...]:
     holding, and `chord_slots` drops the ones with no chord in force.
     """
     span = head.beats_per_bar * TICKS_PER_BEAT
-    stride = _bar_resolution(head, bar, beat_type)
+    stride = _bar_resolution(head, bar, beat_type, grouping)
     return tuple(1.0 + tick / TICKS_PER_BEAT for tick in range(0, span, stride))
+
+
+def _chord_grouping(
+    head: Head, grouping: Optional[Sequence[int]]
+) -> Sequence[int]:
+    """The grouping `chord_slots` generates on: the caller's, or the head's own.
+
+    A loaded head carries what its score stated (a direction, its beaming or a
+    metronome); an unbeamed score and a hand-built head state nothing, and the
+    metre's convention is the fallback.
+    """
+    if grouping is not None:
+        return grouping
+    if head.grouping:
+        return head.grouping
+    return default_grouping(head.beats_per_bar, int(head.beat_type))
 
 
 def chord_slots(
     head: Head,
     section: Optional[Tuple[int, int]] = None,
     grid: str = GRID_DEFAULT,
+    grouping: Optional[Sequence[int]] = None,
 ) -> List[Tuple[Optional[str], str, str, int, float, float]]:
     """Every position `grid` names, as slots, **including positions no melody note has**.
 
@@ -2304,6 +2546,10 @@ def chord_slots(
     beat_type = int(head.beat_type)
     if beats_per_bar <= 0:
         return []
+    # The head states the count and the denominator; `auto` is the grouping that
+    # follows from them. A direct caller that wants the simple reading passes
+    # `(1,) * beats_per_bar`.
+    grouping = _chord_grouping(head, grouping)
 
     # Every position the grid names, in `(bar, beat)` order. Resolved through
     # `grid_positions` because it is the one function that knows `ALL`, `LAST` and `SUB`,
@@ -2322,9 +2568,12 @@ def chord_slots(
     positions: List[Tuple[int, float]] = []
     for bar in range(lo, hi):
         if grid_defers_to_melody(grid):
-            positions.extend((bar, beat) for beat in _generated_beats(head, bar, beat_type))
+            positions.extend(
+                (bar, beat)
+                for beat in _generated_beats(head, bar, beat_type, grouping)
+            )
             continue
-        for _marker, beats in grid_positions(grid, beats_per_bar):
+        for _marker, beats in grid_positions(grid, beats_per_bar, grouping):
             for beat in beats:
                 positions.append((bar, float(beat)))
     if not positions:
@@ -2437,13 +2686,19 @@ def _head_request(
     parts: str,
     harmony: str,
     grid: str,
+    grouping: str,
 ) -> ArrangeOptions:
     """The arrangement request for a loaded head, from either spelling.
 
     The head owns the metre: a caller supplying `options` cannot know it before the
     file is read, so the score's own count and denominator replace the object's.
     Passing both spellings is a caller bug and raises rather than silently choosing.
+
+    The head also owns the **grouping** where its score states one, so `auto` means
+    "use what the file says, and the metre's convention if it says nothing". An
+    explicit `grouping=` - either spelling - is the caller's override.
     """
+    stated = format_grouping(head.grouping) if head.grouping else GROUPING_AUTO
     if options is not None:
         explicit_knobs = (
             non_chord_tone != "extension"
@@ -2452,15 +2707,22 @@ def _head_request(
             or parts != PARTS_AUTO
             or harmony != HARMONY_AUTO
             or grid != GRID_DEFAULT
+            or grouping != GROUPING_AUTO
         )
         if explicit_knobs:
             raise ValueError(
                 "pass either options= or the individual arrangement knobs, not both"
             )
+        # The head owns the metre; only its grouping is a caller override.
         return replace(
             options,
-            beats_per_bar=head.beats_per_bar,
-            beat_type=head.beat_type,
+            time_signature=TimeSignature(
+                head.beats_per_bar,
+                head.beat_type,
+                options.time_signature.grouping
+                if options.time_signature.grouping != GROUPING_AUTO
+                else stated,
+            ),
         )
     return ArrangeOptions(
         non_chord_tone=non_chord_tone,
@@ -2469,8 +2731,11 @@ def _head_request(
         parts=parts,
         harmony=harmony,
         grid=grid,
-        beats_per_bar=head.beats_per_bar,
-        beat_type=head.beat_type,
+        time_signature=TimeSignature(
+            head.beats_per_bar,
+            head.beat_type,
+            grouping if grouping != GROUPING_AUTO else stated,
+        ),
     )
 
 
@@ -2485,6 +2750,7 @@ def arrange_xml_head(
     parts: str = "auto",
     harmony: str = "auto",
     grid: str = GRID_DEFAULT,
+    grouping: str = GROUPING_AUTO,
     options: Optional[ArrangeOptions] = None,
 ) -> Tuple[List[ArrangementStep], Head, List[str]]:
     """Loads a MusicXML head, reduces it and arranges it, end to end.
@@ -2512,9 +2778,16 @@ def arrange_xml_head(
     without a denominator is not a metre.
 
     `head.beat_type` goes with it, and it is not a duplicate: the count says which beats
-    exist, the denominator says how long one lasts. Only the walking bass reads the
-    second, converting each slot's whole-note `duration` into beats, and the one
-    committed 3/4 head is where passing the count in its place shows up.
+    exist, the denominator says how long one lasts. The walking bass converts each
+    slot's whole-note `duration` into beats with it, and the one committed 3/4 head is
+    where passing the count in its place shows up.
+
+    `grouping` is the metre's third fact - which denominator units are felt as one beat.
+    `auto` reads the score's own statement: an `N+N` direction, then the primary
+    beaming, then a metronome pulse, and finally the metre's convention (threes for
+    6/8, 9/8 and 12/8; one per beat otherwise). An explicit `3+2` overrides the file.
+    A conventional simple metre ignores its beaming, because a notation program's
+    beam pairs restate the beat rather than group it.
     """
     head = load_musicxml(path, part)
     options = _head_request(
@@ -2526,7 +2799,13 @@ def arrange_xml_head(
         parts=parts,
         harmony=harmony,
         grid=grid,
+        grouping=grouping,
     )
+    # Resolved once here, because this layer needs the tuple **before** the engine
+    # sees it: `_merge_chord_slots` generates the comping positions, and the engine
+    # resolves the same request again for the step loop. One pure function, two
+    # calls, so the two cannot disagree.
+    resolved_grouping = options.time_signature.resolved_grouping
     slots = head_skeleton(head, section)
     # **The comping union is gated on whether the guitar comps at all, not on the
     # route.** `parts=chord` is the ensemble answer: the guitar states the chord while
@@ -2555,7 +2834,9 @@ def arrange_xml_head(
     # question), which is why it is imported rather than re-tested.
     resolved_parts = resolve_parts(parse_parts(options.parts))
     if not parts_has_melody_only(resolved_parts):
-        slots = _merge_chord_slots(slots, head, section, options.grid) or slots
+        slots = _merge_chord_slots(
+            slots, head, section, options.grid, resolved_grouping
+        ) or slots
     triples = [slot[0] for slot in slots]
     timings = [(slot[1], slot[2], slot[3]) for slot in slots]
     # §9.3 step C: which slots the melody **articulates** on. On the note path every
@@ -2587,6 +2868,7 @@ def _merge_chord_slots(
     head: Head,
     section: Optional[Tuple[int, int]],
     grid: str,
+    grouping: Optional[Sequence[int]] = None,
 ) -> List[Tuple[Tuple[Optional[str], str, str], int, float, float]]:
     """`head_skeleton`'s slots plus `chord_slots`', in one ordered list.
 
@@ -2622,9 +2904,9 @@ def _merge_chord_slots(
     and a `bass_only`-style union that arrived out of order would attribute the wrong
     note to the wrong beat, reached from a new direction.
     """
-    grid_policy = resolve_grid(parse_grid(grid), head.beats_per_bar)
+    grid_policy = resolve_grid(parse_grid(grid), head.beats_per_bar, grouping)
 
-    extra = chord_slots(head, section, grid_policy)
+    extra = chord_slots(head, section, grid_policy, grouping)
     if head.first_bar_implicit and extra:
         # **A pickup bar is not comping space.** Its missing time is the anacrusis the
         # renderers infer from the bar's content; a generated chord there fills the
@@ -2732,6 +3014,47 @@ def _print_play_order(head: Head) -> None:
     )
 
 
+def _print_metre_notes(head: Head, args: Any) -> None:
+    """The header's grouping line, and the beats `targets` fills.
+
+    The grouping is the score's own where it states one (`Head.grouping`), and the
+    metre's convention otherwise, so the line cannot name a felt beat the arrangement
+    does not use. Its provenance is printed because "3+2" from a direction and "3+2"
+    from the metre's convention are different claims about the file. Printed only
+    when it is not one group per beat, because that is the shipped reading and
+    saying it on every 4/4 head would be noise.
+    """
+    grouping = resolve_grouping(
+        head.grouping if head.grouping else GROUPING_AUTO,
+        head.beats_per_bar,
+        head.beat_type,
+    )
+    starts = group_starts(head.beats_per_bar, grouping)
+    if grouping != (1,) * head.beats_per_bar:
+        source = {
+            "text": "from the score's text",
+            "beams": "from beaming",
+            "metronome": "from the metronome",
+        }.get(head.grouping_source, "auto: the metre's convention")
+        print(
+            f"  grouping: {format_grouping(grouping)} ({source}; "
+            f"felt beats {', '.join(f'{beat:g}' for beat in starts)})"
+        )
+    if args.texture != "targets":
+        return
+    # Named in the output because the metre is what the rule reads, and the metre is
+    # not 4/4 in three of the four committed scores. The beats are the **felt**
+    # beats: a 2/2 head has one target and a 12/8 head's second target is beat 7.
+    targets = [starts[index - 1] for index in TARGET_BEATS if index <= len(starts)]
+    label = "beat" if len(targets) == 1 else "beats"
+    named = " and ".join(f"{beat:g}" for beat in targets)
+    print(
+        f"  texture: targets - a full chord on {label} {named} of "
+        f"{head.beats_per_bar}/{head.beat_type}, a shell, a 3rd/6th or the "
+        f"melody alone elsewhere"
+    )
+
+
 def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     """The `head` command: arrange a MusicXML file as chord-melody.
 
@@ -2760,7 +3083,7 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     parser.add_argument(
         "--part", default=None, help="score-part id to read (default: the melody part)"
     )
-    # The sixteen flags both commands take, with `head`'s own help wording.
+    # The seventeen flags both commands take, with `head`'s own help wording.
     add_common_arguments(
         parser,
         HEAD_HELP,
@@ -2812,13 +3135,7 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
         _print_play_order(head)
     for note in notes:
         print(f"  note: {note}")
-    if args.texture == "targets":
-        # Named in the output because the metre is what the rule reads, and the
-        # metre is not 4/4 in three of the four committed scores.
-        print(
-            f"  texture: targets - a full chord on beats 1 and 3 of {head.beats_per_bar}/"
-            f"{head.beat_type}, a shell, a 3rd/6th or the melody alone elsewhere"
-        )
+    _print_metre_notes(head, args)
     if not steps:
         print("  nothing could be voiced from this file")
         return 1

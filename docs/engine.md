@@ -76,11 +76,13 @@ you whether a change is an improvement or a different library.
   family for a different reason — it is a texture rather than a harmony; see
   [Texture: chords on the beats, fills between](#texture-chords-on-the-beats-fills-between).
 - `ROLE_TARGET` / `ROLE_FILL`, `TEXTURE_STYLES`, `TARGET_BEATS`, `TEXTURE_ARITY` —
-  the metric layer's whole vocabulary. `TARGET_BEATS = (1, 3)` names *beats*, not
-  an absolute onset, so the rule reads the metre it is given; `metric_weight` and
-  `roles_for_slot` are the two functions that apply it. `TEXTURE_ARITY` is the
-  chord part's arity per texture — `None` for `uniform` and `targets`, which are
-  the parts arithmetic (`texture.derived_arity`).
+  the metric layer's whole vocabulary. `TARGET_BEATS = (1, 3)` names **felt beats**,
+  not absolute onsets: a group index into the bar's grouping, so the rule reads the
+  metre it is given. With no grouping every denominator unit is its own felt beat,
+  which is beats 1 and 3 of 4/4; in 12/8 the felt beats are 1, 4, 7 and 10 and the
+  targets are 1 and 7. `metric_weight` and `roles_for_slot` are the two functions
+  that apply it. `TEXTURE_ARITY` is the chord part's arity per texture — `None` for
+  `uniform` and `targets`, which are the parts arithmetic (`texture.derived_arity`).
 - `NECK_FRET_MIN` / `NECK_FRET_MAX` — `2` and `13`. A strong preference, never a
   filter; see the selector below.
 - `HIGH_FRET_LIMIT` — `13`. A melody whose only available position sits above this
@@ -316,7 +318,7 @@ you whether a change is an improvement or a different library.
     `select_step_voicing`. The knobs are **not** transcribed here - they are the
     signature, every one of them defaulted, and `ArrangeOptions` carries the same set
     as one value. (A copy used to live here and had already drifted: it still showed
-    the nine knobs `arrange_progression` had before the five axes existed, and
+    the nine knobs `arrange_progression` had before the axis layer existed, and
     named `_best_voicing`, which the loop no longer calls.) Two promises it does make:
     an unknown strategy or axis spelling raises `ValueError` before any voicing work,
     and `grips=("drop2",)` with `top_strings=MELODY_STRING_CHOICES` reproduces the
@@ -364,7 +366,7 @@ published facade and delegates to it. The loop has two halves, and the seam betw
 is where most of this document's rules are decided.
 
 **Once per arrangement**, `resolve_knobs` reconciles `options=` with the keywords and
-validates the spellings, and `resolve_policies` resolves the five axes and builds the
+validates the spellings, and `resolve_policies` resolves the six axes and builds the
 walked-beat union when a thumb line is running. Both live in **`resolution.py`**, which
 `movement.py` calls: the sentinels and spellings are answered there so the loop reads a
 concrete value on every axis. Both run before any slot is looked at,
@@ -789,10 +791,11 @@ Five decisions are load-bearing:
   of the library's own demo cadences, and it was written *before* any behaviour
   changed so every later step is checked against pre-existing output.
 - **A beat is a counting position, not a quarter note.** `TARGET_BEATS = (1, 3)` names
-  beats, and `beats_per_bar` decides which exist, so a 3/4 head targets 1 and 3 while
-  a 2/2 head has only the downbeat. The comparison uses `BEAT_EPSILON` because a
-  notated beat is a float — a 3/4 bar's second beat is 1.666… — and the earlier draft
-  of `metric_weight` compared the *tuple index* against `beats_per_bar`, which let a
+  felt beats, and `beats_per_bar` and `grouping` decide which exist: a 3/4 head targets
+  1 and 3, a 2/2 head has only the downbeat, and a 12/8 bar's grouping `(3,3,3,3)` puts
+  its targets on beats 1 and 7. The comparison uses `BEAT_EPSILON` because a notated
+  beat is a float — a 3/4 bar's second beat is 1.666… — and the earlier draft of
+  `metric_weight` compared the *tuple index* against `beats_per_bar`, which let a
   2/2 bar inherit 4/4's second target. `headxml.arrange_xml_head` passes
   `head.beats_per_bar` through for this reason, and the committed corpus spans cut,
   common and waltz time — `synthetic_waltz.musicxml` is the 3/4 one, and it is the reason
@@ -864,6 +867,75 @@ and 96.6% → 48.3%. The ~50% ceiling is `TARGET_BEATS` itself — two of four b
 the small number of fills that fall back. That is the trade the guide describes: the
 chord is stated where it counts and the rest of the bar moves, instead of every note
 carrying four voices.
+
+## Grouping: the metre's third fact
+
+A count says how many denominator units a bar has, the denominator says how long one
+lasts, and neither says how the player **feels** them. 12/8 is twelve eighths wide and
+four felt beats; 12/4 is twelve quarters wide and twelve felt beats. `grouping` is that
+third fact. A loaded head takes it from the score, and `auto` falls back to the metre's
+convention: an eighth-or-finer denominator whose bar divides by three is grouped in
+threes (6/8, 9/8, 12/8 read as two, three and four beats), and every other metre is one
+group per unit. 5/8 and 7/8 are **not guessed** from their count; the score has to state
+them.
+
+A hand-built progression declares the whole metre as one value:
+
+```python
+from arranger import TimeSignature
+
+steps = engine.arrange_progression(
+    progression,
+    time_signature=TimeSignature(5, 4, grouping="3+2"),
+)
+```
+
+`TimeSignature(beats_per_bar, beat_type, grouping)` validates the grouping against the
+bar when it is built, so a `3+2` on a 4/4 signature is refused before any voicing work.
+Omitting it means `COMMON_TIME` (`TimeSignature(4, 4)`), the metre every bare call had.
+The three facts are one field rather than three keywords so they cannot disagree:
+`beats_per_bar=12` alone is 12/4, not 12/8.
+
+The three metre-driven rules read the grouping and nothing else:
+
+- `metric_weight` treats `TARGET_BEATS` as **group indices**, so a 12/8 bar's targets
+  are beats 1 and 7 rather than 1 and 3; a bar with two groups (6/8, 2/2) has only a
+  downbeat target.
+- the walking bass invents one note per **felt beat** and takes its approach on the last
+  one — four notes in 12/8, not twelve.
+- the named grid figures are group-relative. `freddie` is one stab per felt beat;
+  `joe_pass` and `final_and` answer on a group's **last unit** (the third eighth of a
+  dotted quarter, the `and` of a simple beat), so the simple-metre table is unchanged
+  and the compound one is musically placed. A group index the bar does not have is
+  dropped, never clamped.
+
+**The score states the grouping, in three channels, and the importer reads them in this
+order:**
+
+1. a written `N+N` mark in a `<direction>`'s `<words>` or `<rehearsal>` — how a 5/4 that
+   leans on a dotted quarter is actually annotated;
+2. the **primary beaming**: a beam group begins at a `begin`, and the group lengths are
+   the distances between starts, with the last running to the bar line;
+3. a `<metronome>` pulse, dots included — a dotted quarter in 12/8 is the score saying
+   "feel this in four".
+
+Each candidate is used only if it partitions the bar; an unreadable one falls through.
+The source is recorded on `Head.grouping_source` (`text`, `beams`, `metronome`, or empty
+for "the score said nothing") and printed by the CLI, because "3+2 from a direction" and
+"3+2 from the metre's convention" are different claims about the file.
+
+**A conventional simple metre ignores its beaming.** 2/4, 3/4, 4/4 and 2/2 are already
+grouped by their count, and notation programs beam eighths in whatever pairs or fours fit
+the beat; reading that as a grouping would turn a half-bar beam in 4/4 into two felt
+beats. Compound and asymmetric metres are where beaming carries information the count
+cannot, so it is read there. A caller's explicit `TimeSignature(..., grouping=...)` still
+overrides the score's statement.
+
+`auto` is one group per beat on every metre the library shipped with, which is why the
+**pre-existing** committed corpus is byte-identical with the axis present (the grouped
+fixtures are new). `tests/test_grouping.py` owns
+the algebra; `tests/test_headxml_arrangement.py` the end-to-end 5/4, 7/4 and 12/8 claims
+and the precedence between the channels.
 
 ## Repeated melodies hold the shape
 

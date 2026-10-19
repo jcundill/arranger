@@ -29,6 +29,7 @@ from arranger import (
     ArrangementStep,
     BassNote,
     ChordParser,
+    TimeSignature,
     VoiceLeadingEngine,
     Voicing,
     format_progression,
@@ -975,7 +976,7 @@ class TestASingleNoteStepHasNothingToHold(unittest.TestCase):
             ],
             timings=[(2, 1.0, 0.5), (2, 2.0, 0.25), (2, 2.5, 0.375), (3, 1.0, 0.375), (3, 1.5, 0.25)],
             texture="targets", bass=BASS_STYLE_WALK, grid="melody:every_note,bass:walk",
-            beats_per_bar=2,
+            time_signature=TimeSignature(2, 4),
         )
 
     def test_a_repeat_is_not_claimed_when_the_previous_step_sounded_one_note(self):
