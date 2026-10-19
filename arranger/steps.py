@@ -1,14 +1,14 @@
 """The engine's published facade: `VoiceLeadingEngine`.
 
 This module is the class the library spells `VoiceLeadingEngine.get_drop2_voicings`
-and forty test call sites depend on. Every method is a one-line forwarder to the
-module that owns the body - `grips`, `cost`, `chords`, and, for the two entry
-points, `movement`.
+and the test suite's call sites depend on. Every method is a one-line forwarder to
+the module that owns the body - `grips`, `cost`, `chords`, `bass_merge`, and, for
+the two entry points, `movement` and `step_prepare`.
 
 **The step loop is not here** - it is in `movement`, which imports this module's
-collaborators directly and does not import this module. The two methods below
-forward to it, so the published spelling is unchanged and there is one loop rather
-than two.
+collaborators directly and does not import this module. `arrange_progression` below
+forwards to it and `prepare_step` to `step_prepare`, so the published spelling is
+unchanged and there is one loop rather than two.
 
 `StepPreparation` is re-exported for the same reason: it is the value
 `prepare_step` returns, and callers reach it as `arranger.steps.StepPreparation`.
