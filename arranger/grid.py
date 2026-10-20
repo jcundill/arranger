@@ -459,3 +459,28 @@ def felt_beat(
             break
     return index + 1.0 + (beat - starts[index]) / lengths[index]
 
+
+def rhythm_beats(
+    rhythm: Rhythm,
+    beats_per_bar: int,
+    grouping: Optional[Sequence[int]] = None,
+) -> Tuple[float, ...]:
+    """The bar-relative beats a rhythm names, on this metre's grid.
+
+    The inverse of `felt_beat`: a position is a felt-beat number, and the beat it
+    falls on is its group's start plus the fraction of that group's length. So
+    `1&` is beat 1.5 of a 4/4 bar and beat 2.5 of a 6/8 one - one request, and the
+    metre decides where it lands. A position naming a felt beat this bar does not
+    have is dropped rather than clamped; `parse_rhythm` refuses it at the door, so
+    this is the read-back of an already-validated value.
+    """
+    lengths = tuple(grouping) if grouping else (1,) * beats_per_bar
+    starts = group_starts(beats_per_bar, lengths)
+    beats: List[float] = []
+    for position in rhythm.positions:
+        index = int(position) - 1
+        if index >= len(starts):
+            continue
+        beats.append(starts[index] + (position - index - 1) * lengths[index])
+    return tuple(sorted(set(beats)))
+

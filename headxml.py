@@ -53,6 +53,7 @@ from arranger import (
     TICKS_PER_BEAT,
     ArrangementStep,
     ChordParser,
+    Rhythm,
     beat_offset,
     default_grouping,
     format_grouping,
@@ -67,7 +68,7 @@ from arranger import (
     parts_has_melody_only,
     resolve_grid,
     resolve_grouping,
-    resolve_parts,
+    rhythm_beats,
 )
 from arranger.chords import midi_to_note_name, promote_slash_chord
 from arranger.grouping import TimeSignature
@@ -2585,6 +2586,41 @@ def chord_slots(
         return []
     positions.sort()
 
+    return _slots_at(head, positions, beat_type, beats_per_bar)
+
+
+def rhythm_slots(
+    head: Head,
+    rhythm: Rhythm,
+    section: Optional[Tuple[int, int]] = None,
+    grouping: Optional[Sequence[int]] = None,
+) -> List[Tuple[Optional[str], str, str, int, float, float]]:
+    """Every position `rhythm` names, as slots, including positions no note has.
+
+    The complement of `head_skeleton` for a **requested** chord rhythm: `1&` in a
+    4/4 bar is beat 1.5 of every bar in the section, and a position the tune merely
+    holds through is still one the chord attacks on - a stab under a held note is
+    wanted, so unlike the melody-anchored union there is no hold filter here.
+    """
+    lo, hi = section if section is not None else head.bars
+    grouping = _chord_grouping(head, grouping)
+    beats = rhythm_beats(rhythm, head.beats_per_bar, grouping)
+    positions = [(bar, beat) for bar in range(lo, hi) for beat in beats]
+    return _slots_at(head, positions, int(head.beat_type), head.beats_per_bar)
+
+
+def _slots_at(
+    head: Head,
+    positions: List[Tuple[int, float]],
+    beat_type: int,
+    beats_per_bar: int,
+) -> List[Tuple[Optional[str], str, str, int, float, float]]:
+    """One slot per position the caller resolved, with the harmony in force there.
+
+    Shared by the two position sources - a named grid's figure and a rhythm's
+    felt beats - so the harmony lookup, the slash-bass promotion and the
+    "distance to the next position" duration cannot differ between them.
+    """
     slots: List[Tuple[Optional[str], str, str, int, float, float]] = []
     for index, (bar, beat) in enumerate(positions):
         change = chord_at(head.chords, bar, beat)
@@ -2681,6 +2717,34 @@ def head_skeleton(
     return slots
 
 
+def _melodyless(
+    head: Head, options: ArrangeOptions
+) -> Tuple[ArrangeOptions, Optional[str]]:
+    """A chord chart, with the melody-anchored default answered as comping.
+
+    `chord-on=melody` attaches the chord to the written tune, and a file with **no
+    melody notes** has none to attach it to. The rhythm becomes `every-beat` - the
+    same default `--no-melody` uses - and the substitution is returned as a note,
+    because a request quietly rewritten is what the annotation invariant exists to
+    prevent. `None` means the request was left alone.
+    """
+    if len(head):
+        return options, None
+    rhythm = resolve_request(
+        options.request, head.beats_per_bar, _chord_grouping(head, None)
+    ).chord_rhythm
+    if not rhythm.wants_melody or rhythm.positions:
+        return options, None
+    return (
+        replace(
+            options,
+            request=replace(options.request, chord_on=RHYTHM_EVERY_BEAT),
+        ),
+        "the head has no melody notes, so the chord comps on every felt beat "
+        "(chord-on=every-beat) - it is a chord chart rather than a tune",
+    )
+
+
 def _head_request(
     head: Head,
     options: Optional[ArrangeOptions],
@@ -2693,7 +2757,7 @@ def _head_request(
     grid: Optional[str],
     request: Request,
     grouping: str,
-) -> ArrangeOptions:
+) -> Tuple[ArrangeOptions, Optional[str]]:
     """The arrangement request for a loaded head, from either spelling.
 
     The head owns the metre: a caller supplying `options` cannot know it before the
@@ -2746,33 +2810,7 @@ def _head_request(
                 grouping if grouping != GROUPING_AUTO else stated,
             ),
         )
-    return _resolve_axes(options)
-
-
-def _resolve_axes(options: ArrangeOptions) -> ArrangeOptions:
-    """Fill the implementation axes from the request, keeping a caller's override.
-
-    The head layer reads `parts` **before** the engine sees the request - the
-    comping union is gated on it - so the derivation cannot wait for
-    `resolve_knobs`. An axis spelled on the options is the engine's own spelling
-    and wins, which is what keeps `arrange_xml_head(..., parts="melody")` meaning
-    what it says.
-    """
-    axes = resolve_axes(
-        options.request,
-        options.texture,
-        options.bass,
-        options.parts,
-        options.harmony,
-        options.time_signature,
-    )
-    return replace(
-        options,
-        texture=axes.texture,
-        bass=axes.bass,
-        parts=axes.parts,
-        harmony=axes.harmony,
-    )
+    return _melodyless(head, options)
 
 
 def _head_slots(
@@ -2792,16 +2830,45 @@ def _head_slots(
     holds the measurement.
     """
     slots = head_skeleton(head, section)
-    resolved_parts = resolve_parts(parse_parts(options.parts or ""))
-    if parts_has_melody_only(resolved_parts):
+    # The parts gate reads the **derivation**, so a request spelling and an axis
+    # spelling cannot disagree about whether the guitar has a tune.
+    axes = resolve_axes(
+        options.request,
+        options.texture,
+        options.bass,
+        options.parts,
+        options.harmony,
+        options.time_signature,
+    )
+    if parts_has_melody_only(parse_parts(axes.parts)):
         return slots
-    # `None` is the request deciding, and the merge's job is the projected chord
-    # positions, so the melody-anchored union is its default for now -
-    # `docs/rhythm-request-redesign.md` Stage 2 replaces this gate with the request's
-    # own positions.
-    return _merge_chord_slots(
-        slots, head, section, options.grid or GRID_DEFAULT, grouping
-    ) or slots
+    # A **spelled axis** is the engine's own spelling, so the union keeps the
+    # melody-anchored behaviour those axes have always documented: a named preset
+    # when `grid=` says which, and `every_note` otherwise. Only a pure request is
+    # answered by its own `chord-on` rhythm - that is what makes `head FILE` the
+    # melody and nothing added.
+    if any(
+        value is not None
+        for value in (
+            options.texture, options.bass, options.parts,
+            options.harmony, options.grid,
+        )
+    ):
+        return _merge_chord_slots(
+            slots, head, section, options.grid or GRID_DEFAULT, grouping
+        )
+    rhythm = resolve_request(
+        options.request, head.beats_per_bar, grouping
+    ).chord_rhythm
+    if rhythm.wants_melody and not rhythm.positions:
+        # The default adds nothing: the skeleton already has one chord per written
+        # melody note, and no position is invented in the tune's rests. A chord
+        # chart never reaches here - `_melodyless_request` answers it before the
+        # slots are built.
+        return slots
+    if rhythm.is_none:
+        return slots
+    return _merge_rhythm_slots(slots, head, section, rhythm, grouping)
 
 
 def arrange_xml_head(
@@ -2856,7 +2923,7 @@ def arrange_xml_head(
     beam pairs restate the beat rather than group it.
     """
     head = load_musicxml(path, part)
-    options = _head_request(
+    options, melodyless = _head_request(
         head,
         options,
         non_chord_tone=non_chord_tone,
@@ -2897,7 +2964,10 @@ def arrange_xml_head(
         onsets=onsets,
         options=options,
     )
-    return steps, head, list(head.report) + notes
+    report = list(head.report) + notes
+    if melodyless:
+        report.insert(0, melodyless)
+    return steps, head, report
 
 
 def _merge_chord_slots(
@@ -2967,17 +3037,56 @@ def _merge_chord_slots(
             for slot in extra
             if melody_state(head, slot[3], slot[4]) != "held"
         ]
+    return _unioned(slots, extra)
+
+
+def _unioned(
+    slots: List[Tuple[Tuple[Optional[str], str, str], int, float, float]],
+    extra: List[Tuple[Optional[str], str, str, int, float, float]],
+) -> List[Tuple[Tuple[Optional[str], str, str], int, float, float]]:
+    """The skeleton with `extra` positions added, one step per `(bar, beat)`.
+
+    A position the melody already has a slot on keeps the skeleton's - it is the
+    longer of the two, because it runs for the note's written duration - and the
+    result is in `(bar, beat)` order, which is the order the step loop indexes.
+    """
     if not extra:
         return slots
-
     existing = {_tick_key(bar, beat) for _triple, bar, beat, _dur in slots}
-    merged: List[Tuple[Tuple[Optional[str], str, str], int, float, float]] = list(slots)
+    merged = list(slots)
     for melody, quality, name, bar, beat, length in extra:
         if _tick_key(bar, beat) in existing:
             continue
         merged.append(((melody, quality, name), bar, beat, length))
     merged.sort(key=lambda slot: (slot[1], slot[2]))
     return merged
+
+
+def _merge_rhythm_slots(
+    slots: List[Tuple[Tuple[Optional[str], str, str], int, float, float]],
+    head: Head,
+    section: Optional[Tuple[int, int]],
+    rhythm: Rhythm,
+    grouping: Tuple[int, ...],
+) -> List[Tuple[Tuple[Optional[str], str, str], int, float, float]]:
+    """A **requested** chord rhythm unioned into the melody's slots.
+
+    This is the request's half of the comping union, and it is deliberately not
+    the melody-anchored one: it adds exactly the positions `--chord-on` names, so
+    a bar the tune never enters gets a chord through a position the caller asked
+    for rather than through a grid figure. A position the tune *holds* through is
+    kept - a stab under a held note is what `1&` asks for - and a `None` melody at
+    one means the tune is silent, which the comping route reports rather than
+    inventing a note.
+
+    **A pickup bar is still not comping space**, for the reason
+    `_merge_chord_slots` gives: the anacrusis is inferred from a short first bar,
+    and a generated chord there fills it and moves the head's downbeat.
+    """
+    extra = rhythm_slots(head, rhythm, section, grouping)
+    if head.first_bar_implicit:
+        extra = [slot for slot in extra if slot[3] != head.bars[0]]
+    return _unioned(slots, extra)
 
 
 # ---------------------------------------------------------------------------

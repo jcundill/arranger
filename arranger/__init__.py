@@ -142,6 +142,7 @@ from .grid import (
     parse_grid,
     parse_rhythm,
     resolve_grid,
+    rhythm_beats,
 )
 from .grip_tables import (
     GRIP_MAX_SPAN,
@@ -566,6 +567,7 @@ __all__ = [
     "parse_grid",
     "parse_rhythm",
     "resolve_grid",
+    "rhythm_beats",
     "HARMONY_AUTO",
     "HARMONY_AUTO_POLICIES",
     "HARMONY_LENGTH",

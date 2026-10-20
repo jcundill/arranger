@@ -4,16 +4,21 @@
 routing table. This file records the problem, the options considered and the
 recommended design. The decision points at the end are still open.
 
-**Progress:** Stage 0 (`Rhythm`, `parse_rhythm`) and Stage 1 (the `Request` value,
-`resolve_request`, the CLI flags and the run header) have landed. `arranger head`
-offers `--no-melody`, `--chord-on`, `--chord-notes`, `--bass-on` and `--bass-notes`,
-and the five old flags are gone; the staff flag is `--note-names`. The internal axes
-remain spellable on `ArrangeOptions` as the engine's implementation, and Stage 8
-retires them from the public surface. Two consequences of the staging are worth
-knowing while reading this document: a chord position **thins** the harmonisation
-where it is off the grid (the per-slot gate below is live), but it does not yet
-**add** an attack where no slot exists - that is Stage 2 - and `--chord-fills` is a
-request field with no flag until Stage 2b gives it behaviour.
+**Progress:** Stages 0-2 have landed. Stage 0 is the `Rhythm` grammar; Stage 1 is the
+`Request` value, `resolve_request`, the CLI flags and the run header; Stage 2 is the
+slot union. `arranger head` offers `--no-melody`, `--chord-on`, `--chord-notes`,
+`--bass-on` and `--bass-notes`, and the five old flags are gone; the staff flag is
+`--note-names`. The internal axes remain spellable on `ArrangeOptions` as the
+engine's implementation, and Stage 8 retires them from the public surface.
+
+What that means for the rest of this document: `head FILE` now adds nothing - one
+chord per written melody note, no position invented in the tune's rests - and
+`--chord-on POSITIONS` both **thins** the harmonisation where a slot is off the grid
+and **adds** an attack at its positions, under a held note included. A file with no
+melody notes is answered as a chord chart: the rhythm falls back to `every-beat` and
+the substitution is reported in the loader's notes. Still to land: 2b (rest fills),
+3 (bass positions), 4 (the bass-only route and the rest answer), 5 (durations),
+6 (staff moved thumb), 7 (comping and lone bass), 8 (docs and clean-up).
 
 **Settled in review:** `--chord-fills {none,hold,comp}` is the chord's policy in
 a **notated melody rest** — not a thin chord under a melody note. The bass

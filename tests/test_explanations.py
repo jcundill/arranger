@@ -457,16 +457,16 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
             omitted, 139, "the number of steps owing an omitted-tone clause moved"
         )
         # The same reasoning for the voice list, which is the clause most steps carry:
-        # measured over this sweep, **1375** of the steps it arranges sound two or more
+        # measured over this sweep, **1377** of the steps it arranges sound two or more
         # upper voices on a route that sings the tune - so a change that thinned the
         # default palette, or that stopped the clause firing, moves this number. The
         # grouped fixtures add 352, all of them from notes the old corpus did not have.
-        self.assertEqual(named, 1375, "the number of steps naming their voices moved")
+        self.assertEqual(named, 1377, "the number of steps naming their voices moved")
         # And for the comping part, whose voices are the only harmony the line can show:
-        # measured over this sweep, **1897** of the steps it arranges state a comping shape
+        # measured over this sweep, **1711** of the steps it arranges state a comping shape
         # and name each of its voices, so the reading of a thin line cannot quietly become
         # a list of degrees again. The grouped fixtures add 802.
-        self.assertEqual(comping, 1897, "the number of comping lines naming a voice moved")
+        self.assertEqual(comping, 1711, "the number of comping lines naming a voice moved")
 
     def test_the_slash_bass_clause_is_not_a_tautology(self):
         """The one decision the witness table cannot hold, pinned in both directions.
