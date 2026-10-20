@@ -42,8 +42,11 @@ beat and no further, and a thumb note rings until something replaces it - carrie
 the steps that follow as `bass_held`, so the tab, the staff, the score and the GP5 file
 all say the string sounds without being plucked.
 
-Still to land: 6 (staff moved thumb), 7 (the lone-bass line's defaults and
-`--no-melody` measurements), 8 (docs and clean-up).
+Stage 6 fixed a renderer's outlier: a **held column whose thumb moves** is a hold for the
+shape and a new attack for the bass, and the ASCII staff and the HTML drew neither.
+
+Still to land: 7 (the lone-bass line's defaults and `--no-melody` measurements), 8
+(docs and clean-up).
 
 ## The problem in one paragraph
 
@@ -671,6 +674,21 @@ route fills. Nothing carried here crosses it.
   test records that the staff was the outlier.
 - This is the old "Phase 1" bug. It is independent of the vocabulary redesign
   and can land first if desired.
+
+**Landed as:** `_moved_thumb` compares `(bass_midi, bass_string)` - by value, not by
+role, because a thumb can move to another octave of the same pitch class and that is a
+note being plucked. `_draws` is the single predicate both renderers now ask: a strike
+column follows `_strikes_here`, a hold column draws nothing, and a hold column whose
+thumb has moved draws **that string**. `_StaffGrid.cell` gained the previous step for
+it, and `_html_string_row` tints such a column with the bass class.
+
+The comparison is also what keeps Stage 5's ring from being drawn twice: a **carried**
+thumb compares equal to the note it is still ringing from, so it is not a new attack
+here. The plan's guess at the fixture was wrong, and the real one is recorded instead:
+swept over the committed heads, the shape occurs with `--chord-on 1,1& --bass-on
+1&`/`every-beat` on the cut-time head at bars 2, 4 and 8 beat 1.5, and at bar 7 beat 3 of
+`synthetic_common_8`, which is the one `tests/test_staff_thumb.py` pins because its
+fret is unambiguous on the row it is drawn on.
 
 ### Stage 7: comping and lone bass
 

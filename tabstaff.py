@@ -225,6 +225,55 @@ def _fill_rests(
     return filled
 
 
+def _moved_thumb(
+    step: Optional[ArrangementStep], previous: Optional[ArrangementStep]
+) -> bool:
+    """True when this column's thumb is a **new attack** under a shape it does not restate.
+
+    `_collapse_holds` compares the *upper* voices, deliberately: a walking bass changes
+    the lowest pitch every beat, so including it would mark every column a strike and
+    turn the arrangement back into the chord list. The cost of that choice is that a
+    column whose shape is held and whose thumb **moves** is drawn as a hold - and a
+    hold draws nothing, so the new bass note vanished from the ASCII staff and the HTML
+    while the one-line tab and the MusicXML both had it. This is the comparison that
+    puts it back.
+
+    Compared as `(bass_midi, bass_string)`, not by role: a thumb note can move to a
+    different octave of the same pitch class (`--bass-on every-beat` does exactly that
+    at a chord change), and a note that has changed octave is a note that is plucked.
+    A **carried** thumb compares equal to the note it is still ringing from
+    (`ArrangementStep.bass_held`), so it is not drawn again - which is this function's
+    other half, and the reason the two features have to agree here.
+    """
+    if step is None or previous is None or step.voicing.bass_midi is None:
+        return False
+    return (step.voicing.bass_midi, step.voicing.bass_string) != (
+        previous.voicing.bass_midi,
+        previous.voicing.bass_string,
+    )
+
+
+def _draws(
+    step: Optional[ArrangementStep],
+    previous: Optional[ArrangementStep],
+    string_index: int,
+    strikes: bool,
+) -> bool:
+    """Whether this column draws a fret on this string.
+
+    Three answers, and the third is the one the two halves of a hold need: a **strike**
+    column follows `_strikes_here` (which knows about `repeated` and `bass_only`), a
+    **hold** column draws nothing - except the thumb, when it has moved. Both renderers
+    ask this one function, so the ASCII staff and the HTML cannot disagree about a
+    column the way they did about the moved thumb.
+    """
+    if step is None:
+        return False
+    if string_index == step.voicing.bass_string and _moved_thumb(step, previous):
+        return True
+    return strikes and _strikes_here(step, string_index)
+
+
 def _collapse_holds(
     filled: List[Tuple[float, Optional[ArrangementStep]]],
 ) -> List[Tuple[float, Optional[ArrangementStep], bool]]:
@@ -244,6 +293,12 @@ def _collapse_holds(
     back into the chord list the 0.7.0 collapse behaviour exists to prevent.
     `Voicing.upper_midi_notes` does the exclusion, by the recorded bass string
     rather than a constant index, because the thumb moves between strings.
+
+    What that exclusion costs is a **held column whose thumb moves**: it is a hold for
+    the shape and a new attack for the bass, and a hold draws nothing at all - so the
+    new note used to vanish from this renderer and from the HTML while the one-line tab
+    and the score both had it. `_moved_thumb` is that fact, and `_draws` is the one
+    place both renderers act on it.
     """
     collapsed: List[Tuple[float, Optional[ArrangementStep], bool]] = []
     held: Optional[Tuple[int, ...]] = None
@@ -797,12 +852,18 @@ class _StaffGrid:
     show_timing: bool
 
     def cell(
-        self, step: Optional[ArrangementStep], string_index: int, strikes: bool,
+        self,
+        step: Optional[ArrangementStep],
+        string_index: int,
+        strikes: bool,
+        previous: Optional[ArrangementStep] = None,
     ) -> str:
-        """One fret cell: a fret number or a mute marker, or empty for a held voice."""
-        if step is None or not strikes:
-            return ""
-        if not _strikes_here(step, string_index):
+        """One fret cell: a fret number or a mute marker, or empty for a held voice.
+
+        `previous` is the step before this one, which is what says whether a **held**
+        column's thumb has moved - see `_moved_thumb`.
+        """
+        if step is None or not _draws(step, previous, string_index, strikes):
             return ""
         fret = step.voicing.frets[string_index]
         if fret < 0:
@@ -899,8 +960,9 @@ class _StaffGrid:
             # slot is one fret cell, so a note two slots long is drawn two cells wide
             # and the dashes after the fret are the note sounding on.
             _, step, strikes = self.columns[index]
+            previous = self.columns[index - 1][1] if index else None
             out.append(
-                self.cell(step, string_index, strikes).ljust(
+                self.cell(step, string_index, strikes, previous).ljust(
                     width * self.slots[index], "-"
                 )
             )
@@ -1538,29 +1600,51 @@ def _html_string_row(
     ]
     for index in measure:
         _, step, strikes = columns[index]
-        if step is None or not strikes:
-            cells.append(_html_cell())
-            continue
-        # A `repeated` or `bass_only` column sounds only some of its strings, and the
-        # rest stay empty. The whole column is tinted by that single class either way,
-        # which is what keeps such a column visible as deliberate rather than as a gap
-        # in the music. Which strings sound is `_strikes_here`'s decision - the same
-        # one the ASCII cell makes - so the two renderings cannot disagree.
-        partial_column = step.repeated or step.bass_only
-        column_class = _CLASS_REPEAT if step.repeated else _CLASS_BASS
-        if partial_column and not _strikes_here(step, string_index):
-            cells.append(_html_cell(class_name=column_class))
-            continue
-        fret = step.voicing.frets[string_index]
-        if fret < 0:
-            cells.append(
-                _html_cell("x", _CLASS_MUTE)
-                if (show_mutes or step.melody_only)
-                else _html_cell(column_class if partial_column else "")
-            )
-        else:
-            cells.append(_html_cell(str(fret), column_class if partial_column else ""))
+        # The step before this column, which is what says whether a **held** column's
+        # thumb has moved (`_moved_thumb`) - the case that used to vanish here.
+        previous = columns[index - 1][1] if index else None
+        cells.append(_html_fret_cell(step, previous, string_index, strikes, show_mutes))
     return _html_row(_CLASS_STRING, cells)
+
+
+def _html_fret_cell(
+    step: Optional[ArrangementStep],
+    previous: Optional[ArrangementStep],
+    string_index: int,
+    strikes: bool,
+    show_mutes: bool,
+) -> str:
+    """One fret cell of the HTML staff: its text, and the tint of its column.
+
+    A `repeated`, a `bass_only` column and a **held column whose thumb has moved** each
+    sound only some of their strings - the last because the shape is held while the bass
+    attacks - and the whole column is tinted by one class so it reads as deliberate
+    rather than as a gap in the music. Which strings of it sound is `_draws`'s answer,
+    the same one the ASCII cell asks, so the two renderings cannot disagree.
+    """
+    partial = step is not None and _partial_column(step, previous)
+    if step is None or not _draws(step, previous, string_index, strikes):
+        return _html_cell(class_name=_tint(step, partial))
+    fret = step.voicing.frets[string_index]
+    if fret < 0:
+        if show_mutes or step.melody_only:
+            return _html_cell("x", _CLASS_MUTE)
+        return _html_cell(class_name=_tint(step, partial))
+    return _html_cell(str(fret), _tint(step, partial))
+
+
+def _partial_column(
+    step: ArrangementStep, previous: Optional[ArrangementStep]
+) -> bool:
+    """Whether this column sounds only some of its strings."""
+    return step.repeated or step.bass_only or _moved_thumb(step, previous)
+
+
+def _tint(step: Optional[ArrangementStep], partial: bool) -> str:
+    """The class that tints a partial column, or nothing for a full one."""
+    if step is not None and step.repeated:
+        return _CLASS_REPEAT
+    return _CLASS_BASS if partial else ""
 
 
 def _html_head(
