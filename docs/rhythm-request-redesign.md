@@ -24,9 +24,17 @@ at the rest's end. A rest under `NC` gets nothing, `--no-melody` refuses the fla
 a file with no melody notes is answered as a chord chart (rhythm `every-beat`, the
 substitution reported in the loader's notes).
 
-Still to land: 3 (bass at requested positions), 4 (the bass-only route and the
-`chord_here` per-slot pass, of which the fills half is built), 5 (durations and
-ties), 6 (staff moved thumb), 7 (comping and lone bass), 8 (docs and clean-up).
+Stage 3 is the bass at the requested positions: `bass_on` reaches the line as a
+rhythm, the first position of a bar is the anchor (not the downbeat, which a sparse
+rhythm may not name), the last position of a bar is what an approach is measured
+against, and `root`/`root-5th` state a note at **every** requested position - the
+root as an `anchor` where it marks the bar and a `pedal` elsewhere, the 5th as
+`fifth` when the style alternates. The `bass=` axis keeps its anchors-only meaning
+until Stage 8 retires it.
+
+Still to land: 4 (the bass-only route and the `chord_here` per-slot pass, of which
+the fills half is built), 5 (durations and ties), 6 (staff moved thumb), 7 (comping
+and lone bass), 8 (docs and clean-up).
 
 ## The problem in one paragraph
 

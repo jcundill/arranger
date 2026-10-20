@@ -39,15 +39,22 @@ from .bass_rules import (
     BASS_ROLE_APPROACH,
     BASS_ROLE_CONNECT,
     BASS_ROLE_ENCLOSURE,
+    BASS_ROLE_FIFTH,
     BASS_ROLE_HOLD,
+    BASS_ROLE_PEDAL,
+    BASS_RULE_5TH,
+    BASS_RULE_APPROACH,
+    BASS_RULE_NEAREST,
     BASS_RULE_ROLES,
+    BASS_RULE_ROOT,
     BASS_RULES,
     BASS_STYLE_NONE,
     BASS_STYLE_WALK,
     parse_bass_style,
 )
 from .chords import NON_CHORD_TONE_EXTENSIONS, ChordParser, normalised_harmony
-from .grid import BEAT_EPSILON, beat_offset
+from .grid import BEAT_EPSILON, Rhythm, beat_offset, rhythm_beats
+from .grips import BASS_DEGREES_6432
 from .grouping import group_starts
 from .texture import metric_weight
 from .tuning import NO_CHORD
@@ -145,24 +152,27 @@ def walking_slots(
     # one note per **felt** beat, so 12/8 walks four dotted-quarter pulses rather
     # than twelve eighths.
     grouping: Optional[Sequence[int]] = None,
+    # The bass's **positions**, when the caller named them. `None` means the metre's
+    # own felt beats - the reading every caller had before a request could name a
+    # rhythm - so a sparse `--bass-on 1` walks beat 1 and nothing else.
+    rhythm: Optional[Rhythm] = None,
 ) -> List[Slot]:
     """
     The walking-bass slot union: the melody grid plus the walked beats.
 
-    `bass` names the style from the note-rule vocabulary. The full `root,5th,approach,nearest`
-    writes a note on every beat, which is what makes the line a *walk*; `root` alone keeps
-    only the beats that already carry an anchor, which needs far less room under the left
-    hand and so works under textures the walk is refused for. The union is built the same
-    way either way - the grid is the grid - so a sparser style is sparser and nothing else.
+    `bass` names the style from the note-rule vocabulary, and what each note is *for*
+    is the style's business: the full `root,5th,approach,nearest` writes a note at
+    every position, and `root` keeps the beats that already carry an anchor - which
+    needs far less room under the left hand and so works under textures the walk is
+    refused for. The union is built the same way either way.
 
-    **The one place the union is built.** The step loop reaches it -
-    `VoiceLeadingEngine.arrange_progression` - because a
-    second copy is exactly the failure this module documents having had once already:
-    the corpus path was built separately, drifted from the library, and shipped a
-    voiced `Am7` under a written `Bbm7` for twenty-five transcriptions before anyone
-    noticed. Walking bass is the same trap with the same stakes, since it is the
-    texture whose whole output is the thumb line: a path that arranged the shells but
-    not the walk would look plausible and be wrong.
+    `rhythm` replaces that grid. A request names its own positions, so
+    `--bass-on every-beat` and `--bass-on 1,3` are one spelling of "where the thumb
+    sounds" and the metre fills the beats in; with no rhythm the felt beats stand.
+
+    **The one place the union is built**: the reason is in the module docstring, and
+    it is that a path which arranged the shells but not the walk would look plausible
+    and be wrong.
 
     Reads harmony only, never the melody pitches - the melody is read when the slot is
     voiced, and a slot's `index` says which melody is sounding under it. That is what
@@ -187,7 +197,9 @@ def walking_slots(
             (bar, float(beat)) if bar is not None and beat is not None else None
         )
 
-    bass_line = bass_line_for(bass, chords, onsets, beats_per_bar, grouping)
+    bass_line = bass_line_for(
+        bass, chords, onsets, beats_per_bar, grouping, rhythm
+    )
     return _bass_slots(progression, timings, bass_line, beats_per_bar, beat_type)
 
 
@@ -483,17 +495,50 @@ def _walked_beats(
     located: Sequence[Tuple[int, float, int]],
     beats_per_bar: int,
     grouping: Optional[Sequence[int]] = None,
+    rhythm: Optional[Rhythm] = None,
 ) -> List[Tuple[int, float]]:
-    """One beat per **felt beat** of every bar the melody touches.
+    """One beat per **requested position** in every bar the melody touches.
 
     The grid is the grouping, not the melody: a 12/8 bar whose tune is a whole note
     still yields four thumb notes, one on each dotted-quarter pulse, and a 4/4 bar
     yields four. With no grouping every denominator unit is its own group, which is
     the reading this function had before grouping existed.
+
+    `rhythm` replaces the felt beats with the positions a request named. A sparse
+    `--bass-on 1,3` walks two notes in every bar, and the bars are unchanged - the
+    melody's own span is what says how much music there is.
     """
-    starts = group_starts(beats_per_bar, grouping)
+    starts = (
+        rhythm_beats(rhythm, beats_per_bar, grouping)
+        if rhythm is not None and not rhythm.is_none and not rhythm.wants_melody
+        else group_starts(beats_per_bar, grouping)
+    )
     bars = sorted({bar for bar, _beat, _index in located})
     return [(bar, beat) for bar in bars for beat in starts]
+
+
+def _walked_harmony(
+    chords: Sequence[Tuple[Optional[str], str, str]],
+    onsets: Optional[Sequence[Optional[Tuple[int, float]]]],
+    beats_per_bar: int,
+    grouping: Optional[Sequence[int]] = None,
+    rhythm: Optional[Rhythm] = None,
+) -> Tuple[
+    List[Tuple[int, float]], List[Optional[_Harmony]], List[_HarmonyKey]
+]:
+    """Where the line sounds, and the harmony in force at each of those positions.
+
+    The one place "which positions are walked" and "what chord is under them" are
+    answered together, so the walking line and the simple root/5th line cannot
+    disagree about either. Empty `walked` means there is no beat grid at all - the
+    documented `timings=None` case.
+    """
+    located = _located_onsets(onsets)
+    if not located:
+        return [], [], []
+    walked = _walked_beats(located, beats_per_bar, grouping, rhythm)
+    harmonies, keys = _filled_harmony(walked, chords, located)
+    return walked, harmonies, keys
 
 
 def _filled_harmony(
@@ -556,24 +601,37 @@ def _anchor_flags(
     beats_per_bar: int,
     grouping: Optional[Sequence[int]] = None,
 ) -> List[bool]:
-    """Every downbeat, plus a strong beat whose harmony is not already stated."""
-    # An anchor is every downbeat, plus any strong beat whose harmony is not already
-    # stated. The second clause is the mid-bar change, and it is the *same* predicate
-    # `roles_for_slot` already applies to the left hand - strong beat, and a harmony
-    # differing from the previous target's - so the thumb and the fingers fire on one
-    # slot by construction rather than by a second mechanism kept in step by hand.
+    """The first position of a bar, plus a strong beat whose harmony is new."""
+    # An anchor is the first walked position of a bar, plus any strong beat whose
+    # harmony is not already stated. The second clause is the mid-bar change, and it is
+    # the *same* predicate `roles_for_slot` already applies to the left hand - strong
+    # beat, and a harmony differing from the previous target's - so the thumb and the
+    # fingers fire on one slot by construction rather than by a second mechanism kept
+    # in step by hand.
+    #
+    # **The first position, not beat 1**, because a rhythm may not name the downbeat:
+    # `--bass-on 2,4` still needs a root to mark each bar, and a `downbeat` test would
+    # leave every note in the line connective with no anchor to approach. On the full
+    # felt-beat grid the two readings are the same position, so this is the same rule
+    # written where a sparse line can keep it.
     is_anchor: List[bool] = []
     previous_anchor: _HarmonyKey = None
+    # The last bar the line has stated a chord in, so "the first position of a bar"
+    # means the first one the bar's harmony has *reached*: a bar whose downbeat is
+    # before the first chord change has no note there at all, and its anchor is the
+    # first position that does state one.
+    stated_bar: Optional[int] = None
     for index, (bar, beat) in enumerate(walked):
         if harmonies[index] is None:
             is_anchor.append(False)
             continue
         strong = metric_weight(bar, beat, beats_per_bar, grouping) > 0
-        downbeat = abs(beat - 1.0) <= BEAT_EPSILON
-        anchor = downbeat or (strong and keys[index] != previous_anchor)
+        first_in_bar = stated_bar != bar
+        anchor = first_in_bar or (strong and keys[index] != previous_anchor)
         is_anchor.append(anchor)
         if anchor:
             previous_anchor = keys[index]
+        stated_bar = bar
     return is_anchor
 
 
@@ -603,18 +661,21 @@ def _walk_note(
     anchor_pc: Optional[int],
     previous_pc: Optional[int],
     beat: float,
-    starts: Sequence[float],
+    positions: Sequence[float],
 ) -> Tuple[int, str]:
     """The candidate set for one non-anchor beat, and the cost's choice from it.
 
     The order of `candidates` is load-bearing: `min` returns the first of equal
     costs, so this is where the tie-break lives.
 
-    `starts` are the bar's **felt** beats, so the last and penultimate are the
-    dotted-quarter pulses of a 12/8 bar rather than its last two eighths.
+    `positions` are the bar's **walked** positions - its felt beats on the full
+    grid, so the last two are the dotted-quarter pulses of a 12/8 bar rather than
+    its last two eighths; and on a sparse rhythm they are the positions the caller
+    asked for, so the last note of a `--bass-on 1,3` bar is the approach to the next
+    bar's anchor rather than an untouched connective note.
     """
-    is_last_beat = abs(beat - starts[-1]) <= BEAT_EPSILON
-    is_penultimate = len(starts) > 1 and abs(beat - starts[-2]) <= BEAT_EPSILON
+    is_last_beat = abs(beat - positions[-1]) <= BEAT_EPSILON
+    is_penultimate = len(positions) > 1 and abs(beat - positions[-2]) <= BEAT_EPSILON
 
     candidates: List[Tuple[int, str]] = [
         (pitch_class, BASS_ROLE_CONNECT) for pitch_class in permitted
@@ -660,6 +721,7 @@ def _walking_bass_line(
     onsets: Optional[Sequence[Optional[Tuple[int, float]]]],
     beats_per_bar: int = 4,
     grouping: Optional[Sequence[int]] = None,
+    rhythm: Optional[Rhythm] = None,
 ) -> List[BassNote]:
     """
     The bass line for a progression: one `BassNote` per **walked beat**.
@@ -697,16 +759,35 @@ def _walking_bass_line(
     if not chords:
         return []
 
-    located = _located_onsets(onsets)
-    if not located:
+    walked, harmonies, keys = _walked_harmony(
+        chords, onsets, beats_per_bar, grouping, rhythm
+    )
+    if not walked:
         return _anchor_only_line(chords)
 
-    walked = _walked_beats(located, beats_per_bar, grouping)
-    harmonies, keys = _filled_harmony(walked, chords, located)
     is_anchor = _anchor_flags(walked, harmonies, keys, beats_per_bar, grouping)
     next_anchor = _next_anchor_pitches(walked, harmonies, is_anchor)
-    starts = group_starts(beats_per_bar, grouping)
+    # The walked positions of each bar, which is what "the last note of the bar"
+    # means to `_walk_note`. On the full grid these are the bar's felt beats.
+    in_bar: Dict[int, List[float]] = {}
+    for bar, beat in walked:
+        in_bar.setdefault(bar, []).append(beat)
+    return _walk_notes(walked, harmonies, is_anchor, next_anchor, in_bar)
 
+
+def _walk_notes(
+    walked: Sequence[Tuple[int, float]],
+    harmonies: Sequence[Optional[_Harmony]],
+    is_anchor: Sequence[bool],
+    next_anchor: Sequence[Optional[int]],
+    in_bar: Dict[int, List[float]],
+) -> List[BassNote]:
+    """One note per walked position: the anchor's root, or `_walk_note`'s choice.
+
+    Split from `_walking_bass_line` because the setup and the emission are two jobs -
+    one reads the harmony timeline, the other picks a pitch - and the two are chunked
+    by different facts (bars and chords versus the notes around one position).
+    """
     notes: List[BassNote] = []
     previous_pc: Optional[int] = None
     for index, (bar, beat) in enumerate(walked):
@@ -724,11 +805,76 @@ def _walking_bass_line(
             next_anchor[index],
             previous_pc,
             beat,
-            starts,
+            in_bar[bar],
         )
         notes.append(BassNote(bar, beat, best_pc, best_role))
         previous_pc = best_pc
     return notes
+
+
+def _simple_bass_line(
+    chords: Sequence[Tuple[Optional[str], str, str]],
+    onsets: Optional[Sequence[Optional[Tuple[int, float]]]],
+    beats_per_bar: int,
+    grouping: Optional[Sequence[int]],
+    rhythm: Optional[Rhythm],
+    alternate: bool,
+) -> List[BassNote]:
+    """The `root` and `root-5th` lines: one note at **every** walked position.
+
+    A note rule is not a rhythm, so `--bass-notes root` on every requested position
+    has to state *something* at each of them; the walk's vocabulary cannot, because it
+    has no note for a position that is not an anchor. So the two simple rules build
+    their own line, and the role says which case a note is: the root on the bar's
+    first position marks the bar (`anchor`), and the root anywhere else is a `pedal` -
+    the same pitch restated, which is what a pedal *is*.
+
+    `alternate` is `root-5th`: the anchor takes the root and each following position
+    takes the 5th, alternating with the root as the line goes. `BASS_DEGREES_6432`
+    names the interval rather than this function spelling `7`, for the reason that
+    table exists - the root's partner in the low register is one fact.
+
+    The line reads the same `_walked_harmony` the walk does, so where the positions are
+    and which chord is under each cannot differ between the two.
+    """
+    if not chords:
+        return []
+    walked, harmonies, keys = _walked_harmony(
+        chords, onsets, beats_per_bar, grouping, rhythm
+    )
+    if not walked:
+        return _anchor_only_line(chords)
+    is_anchor = _anchor_flags(walked, harmonies, keys, beats_per_bar, grouping)
+    notes: List[BassNote] = []
+    previous: Optional[int] = None
+    for index, (bar, beat) in enumerate(walked):
+        harmony = harmonies[index]
+        if harmony is None:
+            continue
+        root_pc = harmony[0]
+        fifth_pc = (root_pc + BASS_DEGREES_6432[1]) % 12
+        if is_anchor[index]:
+            pitch, role = root_pc, BASS_ROLE_ANCHOR
+        elif alternate and previous != fifth_pc:
+            pitch, role = fifth_pc, BASS_ROLE_FIFTH
+        else:
+            pitch, role = root_pc, BASS_ROLE_PEDAL
+        notes.append(BassNote(bar, beat, pitch, role))
+        previous = pitch
+    return notes
+
+
+def _simple_style(rules: Sequence[str]) -> bool:
+    """Whether these rules ask for a simple line rather than the walk.
+
+    Derived from the rules rather than listed: `root` and `root-5th` name no
+    connective rule, so what they ask for is the root (and the 5th) at the positions
+    the rhythm names. A style naming `approach` or `nearest` is the walk, and is
+    filtered by role exactly as it always was.
+    """
+    return BASS_RULE_ROOT in rules and not (
+        {BASS_RULE_APPROACH, BASS_RULE_NEAREST} & set(rules)
+    )
 
 
 def bass_line_for(
@@ -741,6 +887,7 @@ def bass_line_for(
     onsets: Optional[Sequence[Optional[Tuple[int, float]]]],
     beats_per_bar: int = 4,
     grouping: Optional[Sequence[int]] = None,
+    rhythm: Optional[Rhythm] = None,
 ) -> List[BassNote]:
     """The bass line for one style: `_walking_bass_line`, filtered by the roles its rules admit.
 
@@ -751,11 +898,17 @@ def bass_line_for(
 
     A style names an ordered list of note rules (`parse_bass_style` owns the vocabulary);
     the roles those rules admit come from `BASS_RULE_ROLES`, and the walked line keeps a
-    note when its role is admitted by **any** named rule. So `root` alone is the old
-    `anchors` (the anchor beats only), and the full `root,5th,approach,nearest` is the old
-    `walk` (every beat). The harmonic reasoning - what a walking note is *for* - is
-    written once in `_walking_bass_line` and every style inherits it; a sparser style is
-    sparser and nothing else.
+    note when its role is admitted by **any** named rule. The full
+    `root,5th,approach,nearest` is the walk (a note at every position). The harmonic
+    reasoning - what a walking note is *for* - is written once in `_walking_bass_line`
+    and every connective style inherits it; a sparser style is sparser and nothing else.
+
+    `root` and `root-5th` are **not** the walk filtered, when a rhythm was named: they
+    ask for one note at every position the rhythm names, which the walk's vocabulary has
+    no role for, so `_simple_bass_line` builds them. With **no** rhythm - the `bass=`
+    axis, which is the engine's own spelling - `root` keeps its documented anchors-only
+    meaning: there, the polyphony *is* the grid's, and the walk's own beats are the
+    metre's felt beats rather than a caller's positions.
 
     A style naming a rule with no entry in `BASS_RULE_ROLES` raises rather than
     defaulting, on the same rule the rest of the library follows: a spelling nobody
@@ -763,14 +916,25 @@ def bass_line_for(
     """
     if bass == BASS_STYLE_NONE:
         return []
+    rules = parse_bass_style(bass)
+    named_positions = rhythm is not None and not rhythm.is_none
+    if named_positions and _simple_style(rules):
+        return _simple_bass_line(
+            chords,
+            onsets,
+            beats_per_bar,
+            grouping,
+            rhythm,
+            alternate=BASS_RULE_5TH in rules,
+        )
     admitted: FrozenSet[str] = frozenset()
-    for rule in parse_bass_style(bass):
+    for rule in rules:
         try:
             admitted |= BASS_RULE_ROLES[rule]
         except KeyError:  # pragma: no cover - the parser refuses unknown rules first
             raise ValueError(
                 f"Unknown bass rule {rule!r}; expected any of {BASS_RULES}"
             ) from None
-    line = _walking_bass_line(chords, onsets, beats_per_bar, grouping)
+    line = _walking_bass_line(chords, onsets, beats_per_bar, grouping, rhythm)
     return [note for note in line if note.role in admitted]
 

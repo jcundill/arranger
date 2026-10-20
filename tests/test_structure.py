@@ -76,7 +76,14 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/annotation.py": Budget(18, 130, 2),
     "arranger/bass_place.py": Budget(16, 79, 6),
     "arranger/bass_rules.py": Budget(10, 82, 6),
-    "arranger/bass.py": Budget(10, 78, 6),
+    # `walking_slots` takes a seventh parameter at Stage 3 of
+    # `docs/rhythm-request-redesign.md`: `rhythm=` is the bass's **positions**, which
+    # the metre's three facts cannot express (a sparse `1,3` is not a grouping).
+    # Deliberate rather than an accident of growth - the metre's own three are one
+    # grouping already, and the rhythm is a fourth fact rather than a second spelling
+    # of one. The body did not grow past its length budget: the pitch emission moved
+    # out to `_walk_notes`.
+    "arranger/bass.py": Budget(10, 78, 7),
     "arranger/bass_merge.py": Budget(6, 66, 3),
     "arranger/chords.py": Budget(17, 46, 5),
     "arranger/cli.py": Budget(13, 131, 11),

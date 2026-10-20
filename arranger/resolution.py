@@ -520,6 +520,7 @@ def resolve_policies(
             beat_type,
             grouping=grouping,
             bass=bass,
+            rhythm=bass_rhythm,
         )
 
     return _Policies(
