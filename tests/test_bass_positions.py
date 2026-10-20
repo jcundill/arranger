@@ -23,6 +23,11 @@ from arranger.bass import bass_line_for
 from arranger.options import resolve_request
 from tests.support import arranged
 
+
+def _attacks(step) -> bool:
+    """Whether this step *plucks* the thumb, rather than letting it ring on."""
+    return step.bass is not None and not step.bass_held
+
 CHORDS = [("C", "maj7", "Cmaj7")]
 
 #: The vocabulary a walking note may carry. A sparse walk still has to choose from
@@ -202,7 +207,9 @@ class TestTheStepsCarryTheLine(unittest.TestCase):
             section=(2, 3),
             request=Request(chord_on="none", bass_on="every-beat", bass_notes="root"),
         )
-        self.assertEqual(len([step for step in steps if step.bass is not None]), 3)
+        # Attacks, not notes: the ring carries each one forward, so counting
+        # `step.bass` would count the bar rather than the line.
+        self.assertEqual(len([step for step in steps if _attacks(step)]), 3)
 
     def test_a_sparse_position_becomes_a_step_of_its_own(self):
         """The beat the melody merely holds through still gets its thumb note.
@@ -219,7 +226,7 @@ class TestTheStepsCarryTheLine(unittest.TestCase):
             section=(1, 2),
             request=Request(chord_on="none", bass_on="1&", bass_notes="root"),
         )
-        rings = [(step.bar, step.beat) for step in steps if step.bass is not None]
+        rings = [(step.bar, step.beat) for step in steps if _attacks(step)]
         self.assertEqual(rings, [(1, 1.5)])
 
 

@@ -37,8 +37,13 @@ that does not name it, or a selection with no chord part - is played as the thum
 alone when the guitar has no melody to sing there, instead of being a rest. A shape
 still ringing is held under it; nothing ringing and the line says "the thumb alone".
 
-Still to land: 5 (durations and ties), 6 (staff moved thumb), 7 (the lone-bass line's
-defaults and `--no-melody` measurements), 8 (docs and clean-up).
+Stage 5 is when a request's rhythms become **lengths**: a chord attack rings its felt
+beat and no further, and a thumb note rings until something replaces it - carried into
+the steps that follow as `bass_held`, so the tab, the staff, the score and the GP5 file
+all say the string sounds without being plucked.
+
+Still to land: 6 (staff moved thumb), 7 (the lone-bass line's defaults and
+`--no-melody` measurements), 8 (docs and clean-up).
 
 ## The problem in one paragraph
 
@@ -622,6 +627,38 @@ that rule exists for cannot arise there.
 - `tabxml`: tie a held bass or fill; `tabscore._is_hold` and the one-line/staff/
   GP5 renderers must agree on what is a new attack.
 - Test on a 2/2 bar with a bass on beat 1 and a melody note at 1.5.
+
+**Landed as two halves.**
+
+*The stab.* `headxml._stab_length` caps a requested chord attack at the end of the
+**felt beat** it sits in, read from the grouping rather than the denominator (a 6/8
+pulse, a half bar in 2/2), and the next requested position still caps it: two attacks
+inside one beat are two stabs. `tabscore._capped_span` already treated `duration` as a
+cap, so the beats a stab does not fill are written as a rest with no change there. The
+fill half of the bullet was already true from Stage 2b - `_fill_segment` measures each
+attack to the next one or to the rest's end - so what was missing was a test, not code:
+`tests/test_durations.py` pins all four lengths and the rest the score writes after a
+stab.
+
+*The ring.* `bass_merge.carry_bass` runs at the end of the step loop and writes a
+struck thumb note into the steps that follow it, marking them `bass_held`: the string
+sounds and is not plucked. Five things end it - the next attack, the bar line, a rest,
+a shape that uses the string, and a shape the hand cannot reach the note from
+(`fingers.can_fret`) - and an **unplaced** step carries nothing, which is what keeps a
+hand-built progression byte-identical. That last rule is the one to keep: a progression
+with no bar line has nothing to stop the ring at.
+
+The renderers then agree about what is a new attack: `render._step_cells` mutes the
+cell (it answers "what is plucked"), `tabstaff._strikes_here` leaves it empty (the note
+was drawn where it was struck), `tabxml` ties the pitch **inside** the chord (per-note
+`<tie>`, patched onto the earlier note as the chain grows; a chord-level tie is what
+the bar-line cut writes, so a split event carries none), and `tabgp` writes a
+tie-note. `annotation` spells it in the bass parenthetical as `(bass: C3, held)`,
+because the tab shows a mute there and the note is sounding.
+
+One consequence is named rather than hidden: the ring stops at a **rest**, so a melody
+that rests for a bar while the bass line runs is still the hole Stage 7's lone-bass
+route fills. Nothing carried here crosses it.
 
 ### Stage 6: staff/HTML moved-thumb fix
 

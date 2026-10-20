@@ -693,6 +693,11 @@ def _bass_annotation(step: ArrangementStep, existing: str = "") -> str:
     if step.bass is None:
         return existing
     spelled = note_name(step.bass)
+    # A ringing note rather than a struck one, said in the one place the reader looks
+    # for the thumb: the tab draws a mute on that string, so without this the line
+    # would show a bass note that is sounding with nothing to say it sounds.
+    if step.bass_held:
+        return f"{existing} (bass: {spelled}, held)"
     role = step.bass_role or "bass"
     return f"{existing} (bass: {spelled}, {role})"
 

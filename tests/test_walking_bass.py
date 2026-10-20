@@ -927,12 +927,18 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
         """Same texture, two policies, and the line is measurably sparser."""
         walked = self.arrange(texture="chord2", grid="melody:every_note,bass:walk", bass=BASS_STYLE_WALK)
         anchored = self.arrange(texture="chord2", grid="melody:every_note,bass:walk", bass=BASS_STYLE_ANCHORS)
-        walked_notes = sum(1 for s in walked if s.bass is not None)
-        anchored_notes = sum(1 for s in anchored if s.bass is not None)
+        # The notes actually *struck*: a carried note rings into the steps after it,
+        # so counting `s.bass` would measure the bar rather than the line.
+        walked_notes = sum(1 for s in walked if s.bass is not None and not s.bass_held)
+        anchored_notes = sum(1 for s in anchored if s.bass is not None and not s.bass_held)
         self.assertGreater(walked_notes, anchored_notes)
         self.assertGreater(anchored_notes, 0, "anchors wrote nothing at all")
         self.assertEqual(
-            {s.bass_role for s in anchored if s.bass is not None},
+            {
+                s.bass_role
+                for s in anchored
+                if s.bass is not None and not s.bass_held
+            },
             {"anchor"},
             "anchors wrote a connective role",
         )

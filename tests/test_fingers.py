@@ -503,7 +503,7 @@ class TestTheEngineUsesItForOneQuestion(unittest.TestCase):
     """
 
     def test_the_only_engine_caller_is_the_walking_bass(self) -> None:
-        """`bass_place` imports `fingers` for the fret budget, and no other engine module does.
+        """`bass_place` imports `fingers` for the fret budget, `bass_merge` for the ring.
 
         Read from the AST rather than from `sys.modules`, for the reason
         `test_package_dag._imports_of` gives: a function-local import shows up here, which is
@@ -525,8 +525,11 @@ class TestTheEngineUsesItForOneQuestion(unittest.TestCase):
                     importers.add(path.stem)
         self.assertEqual(
             importers,
-            {"bass_place"},
-            "the set of engine modules reading fingers changed; it was exactly `bass_place`",
+            {"bass_place", "bass_merge"},
+            "the set of engine modules reading fingers changed: `bass_place` asks the "
+            "fret budget, and `bass_merge` asks the same question of a **carried** thumb "
+            "- a note that keeps ringing only if the hand holding the new shape can "
+            "still reach it",
         )
 
     def test_the_facade_binds_it_as_a_public_path(self) -> None:

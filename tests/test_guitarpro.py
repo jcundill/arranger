@@ -1494,6 +1494,59 @@ class TestModuleSurface(unittest.TestCase):
 
 
 @requires_guitarpro
+class TestARingingThumbIsNotRestruck(GuitarProTestCase):
+    """A bass note held under a moving melody is one note, not one per melody note.
+
+    `--bass-on 1` states one thumb note per bar, and `bass_merge.carry_bass` carries it
+    into the steps after it: the string sounds and is not plucked. A GP5 beat cannot
+    hold a string silently, so the carried note is written as a **tie** - the one way
+    this format says "same pitch, still sounding". Writing it as a normal note instead
+    would re-articulate the bass on every melody note and no comparison against the
+    arrangement would notice, because the fret is the same either way.
+    """
+
+    def setUp(self):
+        super().setUp()
+        import guitarpro
+
+        from arranger import Request
+
+        self.gp = guitarpro
+        self.request_steps = VoiceLeadingEngine.arrange_progression(
+            [
+                ("C5", "maj7", "Cmaj7"),
+                ("D5", "maj7", "Cmaj7"),
+                ("E5", "maj7", "Cmaj7"),
+                ("F5", "maj7", "Cmaj7"),
+            ],
+            timings=[(1, 1.0, 0.25), (1, 2.0, 0.25), (1, 3.0, 0.25), (1, 4.0, 0.25)],
+            request=Request(bass_on="1"),
+        )
+        self.ring_song = _parse(io.BytesIO(format_gp5(self.request_steps)))
+        self.ring_beats = [
+            beat
+            for measure in self.ring_song.tracks[0].measures
+            for beat in measure.voices[0].beats
+        ]
+
+    def test_the_attack_is_struck_and_the_rest_are_tied(self):
+        thumb = _GP_STRING_OFFSET - bass_string(self.request_steps[0])
+        types = [
+            [n.type for n in beat.notes if n.string == thumb]
+            for beat in self.ring_beats
+        ]
+        self.assertEqual(self.request_steps[0].bass_held, False)
+        self.assertEqual(types[0], [self.gp.NoteType.normal], "the attack was tied")
+        for found in types[1:]:
+            self.assertEqual(found, [self.gp.NoteType.tie], "the ring was re-struck")
+
+    def test_the_melody_is_always_a_new_note(self):
+        """Only the thumb rings; a tied melody would silence the tune."""
+        for beat in self.ring_beats[1:]:
+            normal = [n for n in beat.notes if n.type == self.gp.NoteType.normal]
+            self.assertTrue(normal, "a beat had nothing new in it")
+
+
 class TestRepeatMarkers(GuitarProTestCase):
     """A head's repeats and endings written onto the measure headers.
 

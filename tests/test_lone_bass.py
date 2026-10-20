@@ -133,7 +133,9 @@ class TestTheSingingRouteIsUntouched(unittest.TestCase):
             parts="melody,bass",
             request=Request(bass_on="1&"),
         )
-        sounding = [step for step in steps if step.bass is not None]
+        sounding = [
+            step for step in steps if step.bass is not None and not step.bass_held
+        ]
         self.assertEqual([step.beat for step in sounding], [1.5])
 
 

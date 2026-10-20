@@ -593,6 +593,12 @@ def _strikes_here(step: ArrangementStep, string_index: int) -> bool:
     strings out of this predicate is what would silence `show_mutes` and the `x`s a
     melody-only step spells out.
     """
+    if step.bass_held and string_index == step.voicing.bass_string:
+        # The thumb is still ringing: the note was drawn where it was struck, and this
+        # column does not pluck it again. Asked before `melody_only` because a
+        # melody-only selection still has a bass part, and before `repeated` because the
+        # soprano re-strike and the ringing thumb are different strings.
+        return False
     if step.melody_only:
         return True
     if step.bass_only:

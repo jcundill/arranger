@@ -994,11 +994,13 @@ class TestASingleNoteStepHasNothingToHold(unittest.TestCase):
         steps = self._steps()
         target = [s for s in steps if s.bar == 3 and s.beat == 1.0][0]
         # The premise, asserted rather than assumed: the step before this one played a
-        # single note, which is the whole reason the rule should not fire.
+        # single note **above the thumb**, which is the whole reason the rule should not
+        # fire. The thumb may be ringing under it (`ArrangementStep.bass_held`) - a held
+        # string is not a voice this step re-strikes.
         fill = [s for s in steps if s.bar == 2 and s.beat == 2.5][0]
         self.assertEqual(
-            [f for f in fill.voicing.frets if f >= 0],
-            [4],
+            len(fill.voicing.upper_midi_notes()),
+            1,
             "the premise changed: bar 2 beat 2.5 is no longer a single note",
         )
         self.assertFalse(

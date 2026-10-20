@@ -445,6 +445,23 @@ class ArrangementStep:
     # is what keeps the two apart: a walk-invented downbeat the melody moves onto can
     # arrive carrying both, and a renderer that obeyed the flag would drop the chord.
     bass_only: bool = False
+    # The thumb note **sounds but is not struck** here: it is the previous attack still
+    # ringing, under a shape this step plays. The mirror of `bass_only` - that one holds
+    # the voices *above* the thumb and strikes the thumb, this one strikes the voices
+    # above and lets the thumb ring on.
+    #
+    # It is what makes a sparse bass line a bass line rather than a series of stabs. A
+    # `--bass-on 1` request states one note per bar, and without this the note would
+    # stop at the next melody note and every bar would read as a bar-long bass note
+    # followed by silence. `bass_merge.carry_bass` sets it, after selection, for the
+    # reason the merge is after selection at all: a voice that no candidate chose must
+    # not enter the cost tuple.
+    #
+    # A renderer reads it as "this string is sounding and not plucked", which is the
+    # one thing the fret vector cannot say - the fret is there either way. `annotation`
+    # spells it in the bass parenthetical (`(bass: C3, held)`), because the tab draws a
+    # mute on that string and a reader would otherwise count a note that never sounds.
+    bass_held: bool = False
     # The guitar does **not** sound the melody on this step: the melodic voice belongs
     # to another instrument, and this one is a guide-tone comping shape underneath it.
     # Set from `melody=` (MELODY_NONE) rather than inferred, so a renderer can ask the

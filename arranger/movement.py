@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import Container, List, Optional, Sequence, Tuple
 
 from .bass import Slot
+from .bass_merge import carry_bass
 from .decisions import (
     MELODY_ALONE_BASS,
     MELODY_ALONE_NO_CHORD,
@@ -239,4 +240,8 @@ def arrange_progression(
             continue
         _route_slot(arrangements, slot, plan)
 
+    # The thumb's notes ring until something replaces them. Last, because it reads the
+    # steps the routes emitted rather than deciding anything about them - and after
+    # selection, so the held note cannot enter the cost tuple.
+    carry_bass(arrangements)
     return arrangements

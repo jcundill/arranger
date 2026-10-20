@@ -2688,7 +2688,49 @@ def rhythm_slots(
     grouping = _chord_grouping(head, grouping)
     beats = rhythm_beats(rhythm, head.beats_per_bar, grouping)
     positions = [(bar, beat) for bar in range(lo, hi) for beat in beats]
-    return _slots_at(head, positions, int(head.beat_type), head.beats_per_bar)
+    return [
+        (_note, _quality, _name, bar, beat, _stab_length(head, beat, length, grouping))
+        for (_note, _quality, _name, bar, beat, length) in _slots_at(
+            head, positions, int(head.beat_type), head.beats_per_bar
+        )
+    ]
+
+
+def _stab_length(
+    head: Head, beat: float, length: float, grouping: Sequence[int]
+) -> float:
+    """How long a requested chord attack rings: its **felt beat**, and no further.
+
+    The chord part states a harmony to somebody else's ear, so an attack that rang
+    until the next requested position would still be sounding over a beat it was not
+    asked for - `--chord-on 1` in a 4/4 bar would hold four beats, and the tab would be
+    one chord per bar rather than one stab on each downbeat. The length is the rest of
+    the felt beat the attack sits in (a whole pulse in 6/8, half a bar in 2/2), and the
+    gap to the next position still caps it: two attacks inside one beat are two
+    stabs, not one.
+
+    `length` is the distance to the next requested position, already in whole notes;
+    the felt beat is read from the grouping rather than from the denominator because
+    that is what a compound metre's pulse is.
+    """
+    felt = (_felt_beat_end(beat, grouping) - beat) / head.beat_type
+    return round(min(length, felt), 6)
+
+
+def _felt_beat_end(beat: float, grouping: Sequence[int]) -> float:
+    """The beat number that ends the group `beat` falls in, in the same units.
+
+    A group of one is the beat itself, so its end is the next beat; a group of three
+    is a 6/8 pulse and ends two denominator units later. A beat past every group's
+    end - which only a caller reading a position from another metre can supply - ends
+    at the bar line rather than raising: it is already outside where this can be
+    wrong in a way a length would show.
+    """
+    starts = group_starts(sum(grouping), grouping)
+    for start, group in zip(starts, grouping):
+        if beat < start + group - BEAT_EPSILON:
+            return start + float(group)
+    return float(sum(grouping)) + 1.0
 
 
 def _slots_at(
