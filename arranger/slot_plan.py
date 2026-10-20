@@ -21,7 +21,7 @@ from .decisions import (
     melody_alone_case,
     resolve_texture_grips,
 )
-from .grid import on_grid
+from .grid import Rhythm, on_grid
 from .texture import (
     metric_weight,
     roles_for_slot,
@@ -89,7 +89,11 @@ class SlotInputs:
     melody_voiced: bool
     melody_onsets: Optional[Container[int]]
     harmony_family: str
-    grid_pattern: str
+    #: The chord's rhythm, read by `_chord_here` unless a `grid=` preset was named.
+    chord_rhythm: Optional[Rhythm]
+    grid_pattern: Optional[str]
+    bass_rhythm: Rhythm
+    chord_fills: str
     beats_per_bar: int
     grouping: Tuple[int, ...]
     fret_min: int
@@ -251,10 +255,28 @@ def _texture_grips(role: str, slot: Slot, inputs: SlotInputs) -> Tuple[str, ...]
         # the arrangement: a target may sound three strings only where a bass note
         # is actually being placed under it, which is what `slot.bass` says.
         # `has_thumb` alone would thin chords the thumb never plays under -
-        # `--bass-style root` leaves most slots bare.
+        # `bass-on 1` leaves most slots bare.
         has_thumb=inputs.has_thumb and slot.bass is not None,
     )
 
+
+def _chord_here(inputs: SlotInputs, beat: Optional[float]) -> bool:
+    """Whether the chord part attacks at this position.
+
+    Two spellings, one question, and a **preset wins** because it is the engine's
+    own axis: a caller who named `grid=` is testing one pattern directly, and
+    reading the request's rhythm underneath it would answer a different question.
+    Otherwise the request's `chord_on` decides - `melody` at every written onset,
+    or the positions it names - and `wants_melody` is true for every slot for the
+    reason `on_grid` defers to the melody: the slots that exist are the melody's.
+    """
+    if inputs.grid_pattern is not None:
+        return on_grid(beat, inputs.grid_pattern, inputs.beats_per_bar)
+    if inputs.chord_rhythm is None or inputs.chord_rhythm.wants_melody:
+        return True
+    return inputs.chord_rhythm.includes(
+        beat, inputs.beats_per_bar, inputs.grouping
+    )
 
 def slot_state(
     car: Carried,
@@ -328,7 +350,7 @@ def slot_state(
     melody_alone = melody_alone_case(
         inputs.texture, role, slot_grips, chord_type, name, inputs.has_thumb,
         melody_voiced=sings_here,
-        on_grid=on_grid(beat, inputs.grid_pattern, inputs.beats_per_bar),
+        on_grid=_chord_here(inputs, beat),
     )
     return SlotPlan(
         context=_slot_context(

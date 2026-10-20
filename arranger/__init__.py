@@ -124,6 +124,10 @@ from .grid import (
     GRID_TIMELINE_PATTERNS,
     GRID_WALK,
     LAST,
+    RHYTHM_EVERY_BEAT,
+    RHYTHM_LAST,
+    RHYTHM_MELODY,
+    RHYTHM_NONE,
     SUB,
     TICKS_PER_BEAT,
     GridPattern,
@@ -178,6 +182,22 @@ from .harmony import (
     harmony_allowed,
     parse_harmony,
     resolve_harmony,
+)
+from .options import (
+    BASS_NOTES,
+    BASS_NOTES_ROOT,
+    BASS_NOTES_ROOT_FIFTH,
+    BASS_NOTES_WALK,
+    CHORD_FILLS,
+    CHORD_FILLS_COMP,
+    CHORD_FILLS_HOLD,
+    CHORD_FILLS_NONE,
+    CHORD_NOTES,
+    CHORD_NOTES_FULL,
+    Request,
+    ResolvedRequest,
+    format_request,
+    resolve_request,
 )
 from .parts import (
     PART_BASS,
@@ -306,7 +326,7 @@ def main() -> None:
     Falling through to the demo for an unrecognised command would answer a request for
     a head with three arrangements and exit 0 - the exit code would say it worked.
 
-    The test is `argv[1]` being a bare word, so an option (`--texture targets`) still
+    The test is `argv[1]` being a bare word, so an option (`--chord-on 1&`) still
     reaches the demo rather than being rejected, and `--help` is handled by the
     caller's own flag handling below.
     """
@@ -512,9 +532,27 @@ __all__ = [
     "GRID_STYLES",
     "GRID_TIMELINE_PATTERNS",
     "GRID_WALK",
+    "BASS_NOTES",
+    "BASS_NOTES_ROOT",
+    "BASS_NOTES_ROOT_FIFTH",
+    "BASS_NOTES_WALK",
+    "CHORD_FILLS",
+    "CHORD_FILLS_COMP",
+    "CHORD_FILLS_HOLD",
+    "CHORD_FILLS_NONE",
+    "CHORD_NOTES",
+    "CHORD_NOTES_FULL",
     "GridPattern",
     "LAST",
+    "RHYTHM_EVERY_BEAT",
+    "RHYTHM_LAST",
+    "RHYTHM_MELODY",
+    "RHYTHM_NONE",
+    "Request",
+    "ResolvedRequest",
     "Rhythm",
+    "format_request",
+    "resolve_request",
     "SUB",
     "TICKS_PER_BEAT",
     "beat_offset",

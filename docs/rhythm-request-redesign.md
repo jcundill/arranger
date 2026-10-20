@@ -4,6 +4,17 @@
 routing table. This file records the problem, the options considered and the
 recommended design. The decision points at the end are still open.
 
+**Progress:** Stage 0 (`Rhythm`, `parse_rhythm`) and Stage 1 (the `Request` value,
+`resolve_request`, the CLI flags and the run header) have landed. `arranger head`
+offers `--no-melody`, `--chord-on`, `--chord-notes`, `--bass-on` and `--bass-notes`,
+and the five old flags are gone; the staff flag is `--note-names`. The internal axes
+remain spellable on `ArrangeOptions` as the engine's implementation, and Stage 8
+retires them from the public surface. Two consequences of the staging are worth
+knowing while reading this document: a chord position **thins** the harmonisation
+where it is off the grid (the per-slot gate below is live), but it does not yet
+**add** an attack where no slot exists - that is Stage 2 - and `--chord-fills` is a
+request field with no flag until Stage 2b gives it behaviour.
+
 **Settled in review:** `--chord-fills {none,hold,comp}` is the chord's policy in
 a **notated melody rest** — not a thin chord under a melody note. The bass
 remains `--bass-on`.

@@ -25,13 +25,19 @@ from .bass_rules import (
 from .chords import (
     NON_CHORD_TONE_STRATEGIES,
 )
-from .grid import parse_grid, resolve_grid
+from .grid import Rhythm, parse_grid, resolve_grid
 from .grouping import COMMON_TIME, TimeSignature
 from .harmony import (
     parse_harmony,
     resolve_harmony,
 )
-from .options import ArrangeOptions
+from .options import (
+    DEFAULT_REQUEST,
+    ArrangeOptions,
+    Request,
+    ResolvedRequest,
+    resolve_request,
+)
 from .parts import (
     PART_BASS,
     parse_parts,
@@ -202,7 +208,8 @@ class _Knobs:
     bass: str
     parts: str
     harmony: str
-    grid: str
+    grid: Optional[str]
+    request: ResolvedRequest
     beats_per_bar: int
     beat_type: int
     grouping: Tuple[int, ...]
@@ -212,6 +219,71 @@ class _Knobs:
     slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]]
 
 
+@dataclass(frozen=True)
+class ResolvedAxes:
+    """The request, and the four axes the step loop reads.
+
+    `parts`, `texture`, `bass` and `harmony` are the engine's implementation; this
+    value is what a caller gets when it asks for them without going through the
+    step loop - `headxml` needs `parts` before the loop, to gate the comping union.
+    """
+
+    request: ResolvedRequest
+    texture: str
+    bass: str
+    parts: str
+    harmony: str
+
+
+def resolve_axes(
+    request: Request,
+    texture: Optional[str],
+    bass: Optional[str],
+    parts: Optional[str],
+    harmony: Optional[str],
+    time_signature: TimeSignature = COMMON_TIME,
+) -> ResolvedAxes:
+    """The request's derivation, with a caller's axis override winning.
+
+    `bass` and `parts` are **coupled**, and this is where the two spellings meet.
+    The request derives both; a caller who spells `parts=` is driving the
+    selection, so the bass stays on its sentinel and follows it; a caller who
+    spells only a bass policy is making a claim about the bass part, which takes
+    that part with it. One spelling owns the pair rather than merging two answers.
+    """
+    resolved = resolve_request(
+        request, time_signature.beats_per_bar, time_signature.resolved_grouping
+    )
+    texture = resolved.texture if texture is None else texture
+    harmony = resolved.harmony if harmony is None else harmony
+    if bass is None:
+        bass = resolved.bass if parts is None else BASS_STYLE_AUTO
+    elif parts is None and bass not in (BASS_STYLE_AUTO, BASS_STYLE_NONE):
+        parts = ",".join(resolved.parts + (PART_BASS,))
+    return ResolvedAxes(
+        request=resolved,
+        texture=texture,
+        bass=bass,
+        parts=",".join(resolved.parts) if parts is None else parts,
+        harmony=harmony,
+    )
+
+
+def _conflicts(**values: object) -> List[str]:
+    """The keyword names a caller spelled beside `options=`, sorted.
+
+    A keyword is "given" when it differs from its declared default, which is why
+    every sentinel default must equal the keyword's: a field defaulting to the
+    *resolved* value would compare unequal on every call and make a bare
+    `options=` look like a caller who had passed both spellings.
+    """
+    return sorted(
+        name
+        for name, value in values.items()
+        if value != ArrangeOptions.__dataclass_fields__[name].default
+    )
+
+
 def resolve_knobs(
     options: Optional[ArrangeOptions],
     *,
@@ -219,11 +291,12 @@ def resolve_knobs(
     non_chord_tone: str,
     fret_min: int,
     fret_max: int,
-    texture: str,
-    bass: str,
-    parts: str,
-    harmony: str,
-    grid: str,
+    texture: Optional[str] = None,
+    bass: Optional[str] = None,
+    parts: Optional[str] = None,
+    harmony: Optional[str] = None,
+    grid: Optional[str] = None,
+    request: Request = DEFAULT_REQUEST,
     time_signature: TimeSignature = COMMON_TIME,
     melody_onsets: Optional[Container[int]],
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
@@ -244,30 +317,20 @@ def resolve_knobs(
     than a full arrangement followed by a surprise.
     """
     if options is not None:
-        given = {
-            name: value
-            for name, value in (
-                ("top_strings", top_strings),
-                ("non_chord_tone", non_chord_tone),
-                ("fret_min", fret_min),
-                ("fret_max", fret_max),
-                ("texture", texture),
-                # `bass` is compared here like every other knob, and for the comparison
-                # to mean anything the two spellings must be equal when a caller names
-                # neither: `ArrangeOptions.bass` and the keyword both default to the
-                # `BASS_STYLE_AUTO` sentinel. A field defaulting to the resolved "none"
-                # would compare unequal to the sentinel on every call, and reading that
-                # resolved field back out of `options` would make the keyword look like a
-                # caller who had passed both.
-                ("bass", bass),
-                ("parts", parts),
-                ("harmony", harmony),
-                ("grid", grid),
-                ("time_signature", time_signature),
-                ("melody_onsets", melody_onsets),
-            )
-            if value != ArrangeOptions.__dataclass_fields__[name].default
-        }
+        given = _conflicts(
+            top_strings=top_strings,
+            non_chord_tone=non_chord_tone,
+            fret_min=fret_min,
+            fret_max=fret_max,
+            texture=texture,
+            bass=bass,
+            parts=parts,
+            harmony=harmony,
+            grid=grid,
+            time_signature=time_signature,
+            melody_onsets=melody_onsets,
+            request=request,
+        )
         if given:
             raise ValueError(
                 f"arrange_progression got both options= and the keyword(s) "
@@ -277,6 +340,7 @@ def resolve_knobs(
         non_chord_tone = options.non_chord_tone
         fret_min = options.fret_min
         fret_max = options.fret_max
+        request = options.request
         texture = options.texture
         bass = options.bass
         parts = options.parts
@@ -294,10 +358,6 @@ def resolve_knobs(
             f"Unknown non_chord_tone strategy {non_chord_tone!r}; "
             f"expected one of {NON_CHORD_TONE_STRATEGIES}"
         )
-    if texture not in TEXTURE_STYLES:
-        raise ValueError(
-            f"Unknown texture {texture!r}; expected one of {TEXTURE_STYLES}"
-        )
     # Resolved once, here, and passed down: an axis that cannot honour the request
     # raises rather than degrading to a value the caller did not ask for, so what a
     # caller sees is the refusal rather than an arrangement answering a different
@@ -306,6 +366,20 @@ def resolve_knobs(
     beats_per_bar = time_signature.beats_per_bar
     beat_type = time_signature.beat_type
     resolved_grouping = time_signature.resolved_grouping
+
+    # **The request is resolved before the axis overrides are read**, because it is
+    # the derivation those overrides replace: `chord_notes` becomes the texture, the
+    # two rhythms decide the parts, and `bass_notes` the note rules. An override is
+    # the engine's own spelling of one axis and wins, which is how the axis tests
+    # hold a texture or a bass policy to its behaviour without going through the
+    # public questions.
+    axes = resolve_axes(request, texture, bass, parts, harmony, time_signature)
+    resolved, texture, bass = axes.request, axes.texture, axes.bass
+    parts, harmony = axes.parts, axes.harmony
+    if texture not in TEXTURE_STYLES:
+        raise ValueError(
+            f"Unknown texture {texture!r}; expected one of {TEXTURE_STYLES}"
+        )
 
     return _Knobs(
         top_strings=top_strings,
@@ -317,6 +391,7 @@ def resolve_knobs(
         parts=parts,
         harmony=harmony,
         grid=grid,
+        request=resolved,
         beats_per_bar=beats_per_bar,
         beat_type=beat_type,
         grouping=resolved_grouping,
@@ -344,7 +419,13 @@ class _Policies:
     bass: str
     has_thumb: bool
     harmony_family: str
-    grid_pattern: str
+    #: The chord's rhythm. `None` when the caller spelled a `grid=` preset instead,
+    #: which is the internal axis; the preset then decides where a chord falls.
+    chord_rhythm: Optional[Rhythm]
+    grid_pattern: Optional[str]
+    #: The bass's rhythm, and what the chord states in a notated melody rest.
+    bass_rhythm: Rhythm
+    chord_fills: str
     grouping: Tuple[int, ...]
     slots: Optional[List[Slot]]
 
@@ -356,7 +437,10 @@ def resolve_policies(
     texture: str,
     bass: str,
     harmony: str,
-    grid: str,
+    grid: Optional[str],
+    chord_rhythm: Optional[Rhythm],
+    bass_rhythm: Rhythm,
+    chord_fills: str,
     beats_per_bar: int,
     beat_type: int,
     grouping: Tuple[int, ...],
@@ -417,7 +501,9 @@ def resolve_policies(
     # question about the part whether the guitar is singing it or comping under a
     # horn, so scoping it to one route would make `grid=` silently inert on a
     # melody-bearing arrangement rather than doing nothing there.
-    grid_pattern = _resolve_grid(grid, beats_per_bar, grouping)
+    grid_pattern = (
+        None if grid is None else _resolve_grid(grid, beats_per_bar, grouping)
+    )
 
     slots: Optional[List[Slot]] = None
     if has_thumb:
@@ -443,7 +529,10 @@ def resolve_policies(
         bass=bass,
         has_thumb=has_thumb,
         harmony_family=harmony_family,
+        chord_rhythm=chord_rhythm,
         grid_pattern=grid_pattern,
+        bass_rhythm=bass_rhythm,
+        chord_fills=chord_fills,
         grouping=grouping,
         slots=slots,
     )

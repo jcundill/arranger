@@ -48,7 +48,8 @@ from arranger import (
     GROUPING_AUTO,
     NO_CHORD,
     PITCH_CLASS_NAMES,
-    TARGET_BEATS,
+    RHYTHM_EVERY_BEAT,
+    RHYTHM_MELODY,
     TICKS_PER_BEAT,
     ArrangementStep,
     ChordParser,
@@ -68,12 +69,16 @@ from arranger import (
     resolve_grouping,
     resolve_parts,
 )
-from arranger.bass_rules import BASS_STYLE_AUTO
 from arranger.chords import midi_to_note_name, promote_slash_chord
 from arranger.grouping import TimeSignature
-from arranger.harmony import HARMONY_AUTO
-from arranger.options import ArrangeOptions
-from arranger.parts import PARTS_AUTO
+from arranger.options import (
+    DEFAULT_REQUEST,
+    ArrangeOptions,
+    Request,
+    format_request,
+    resolve_request,
+)
+from arranger.resolution import resolve_axes
 from arranger.slots import arrange_slots
 
 __all__ = [
@@ -2681,11 +2686,12 @@ def _head_request(
     options: Optional[ArrangeOptions],
     *,
     non_chord_tone: str,
-    texture: str,
-    bass: str,
-    parts: str,
-    harmony: str,
-    grid: str,
+    texture: Optional[str],
+    bass: Optional[str],
+    parts: Optional[str],
+    harmony: Optional[str],
+    grid: Optional[str],
+    request: Request,
     grouping: str,
 ) -> ArrangeOptions:
     """The arrangement request for a loaded head, from either spelling.
@@ -2702,11 +2708,12 @@ def _head_request(
     if options is not None:
         explicit_knobs = (
             non_chord_tone != "extension"
-            or texture != "uniform"
-            or bass != BASS_STYLE_AUTO
-            or parts != PARTS_AUTO
-            or harmony != HARMONY_AUTO
-            or grid != GRID_DEFAULT
+            or texture is not None
+            or bass is not None
+            or parts is not None
+            or harmony is not None
+            or grid is not None
+            or request != Request()
             or grouping != GROUPING_AUTO
         )
         if explicit_knobs:
@@ -2714,7 +2721,7 @@ def _head_request(
                 "pass either options= or the individual arrangement knobs, not both"
             )
         # The head owns the metre; only its grouping is a caller override.
-        return replace(
+        options = replace(
             options,
             time_signature=TimeSignature(
                 head.beats_per_bar,
@@ -2724,19 +2731,77 @@ def _head_request(
                 else stated,
             ),
         )
-    return ArrangeOptions(
-        non_chord_tone=non_chord_tone,
-        texture=texture,
-        bass=bass,
-        parts=parts,
-        harmony=harmony,
-        grid=grid,
-        time_signature=TimeSignature(
-            head.beats_per_bar,
-            head.beat_type,
-            grouping if grouping != GROUPING_AUTO else stated,
-        ),
+    else:
+        options = ArrangeOptions(
+            non_chord_tone=non_chord_tone,
+            texture=texture,
+            bass=bass,
+            parts=parts,
+            harmony=harmony,
+            grid=grid,
+            request=request,
+            time_signature=TimeSignature(
+                head.beats_per_bar,
+                head.beat_type,
+                grouping if grouping != GROUPING_AUTO else stated,
+            ),
+        )
+    return _resolve_axes(options)
+
+
+def _resolve_axes(options: ArrangeOptions) -> ArrangeOptions:
+    """Fill the implementation axes from the request, keeping a caller's override.
+
+    The head layer reads `parts` **before** the engine sees the request - the
+    comping union is gated on it - so the derivation cannot wait for
+    `resolve_knobs`. An axis spelled on the options is the engine's own spelling
+    and wins, which is what keeps `arrange_xml_head(..., parts="melody")` meaning
+    what it says.
+    """
+    axes = resolve_axes(
+        options.request,
+        options.texture,
+        options.bass,
+        options.parts,
+        options.harmony,
+        options.time_signature,
     )
+    return replace(
+        options,
+        texture=axes.texture,
+        bass=axes.bass,
+        parts=axes.parts,
+        harmony=axes.harmony,
+    )
+
+
+def _head_slots(
+    head: Head,
+    section: Optional[Tuple[int, int]],
+    options: ArrangeOptions,
+    grouping: Tuple[int, ...],
+) -> List[Tuple[Tuple[Optional[str], str, str], int, float, float]]:
+    """The head's melody slots, with the projected chord positions unioned in.
+
+    **The union is gated on whether the guitar comps at all, not on the route.**
+    A chord selection states the chord where the tune is silent - `docs/comping-styles.md`
+    §9.3 step D - while a *melody-only* selection plays the tune and nothing else, so
+    a position with no tune has nothing for it to play. Both `parse_parts` and
+    `resolve_parts` are needed: the parsed `auto` sentinel names no melody, which would
+    classify the default arrangement as the comping route. `docs/open-issues.md` item 1
+    holds the measurement.
+    """
+    slots = head_skeleton(head, section)
+    resolved_parts = resolve_parts(parse_parts(options.parts or ""))
+    if parts_has_melody_only(resolved_parts):
+        return slots
+    # `None` is the request deciding, and the merge's job is the projected chord
+    # positions, so the melody-anchored union is its default for now -
+    # `docs/rhythm-request-redesign.md` Stage 2 replaces this gate with the request's
+    # own positions.
+    return _merge_chord_slots(
+        slots, head, section, options.grid or GRID_DEFAULT, grouping
+    ) or slots
 
 
 def arrange_xml_head(
@@ -2745,11 +2810,12 @@ def arrange_xml_head(
     non_chord_tone: str = "extension",
     fallback: Optional[str] = None,
     section: Optional[Tuple[int, int]] = None,
-    texture: str = "uniform",
-    bass: str = "auto",
-    parts: str = "auto",
-    harmony: str = "auto",
-    grid: str = GRID_DEFAULT,
+    texture: Optional[str] = None,
+    bass: Optional[str] = None,
+    parts: Optional[str] = None,
+    harmony: Optional[str] = None,
+    grid: Optional[str] = None,
+    request: Request = DEFAULT_REQUEST,
     grouping: str = GROUPING_AUTO,
     options: Optional[ArrangeOptions] = None,
 ) -> Tuple[List[ArrangementStep], Head, List[str]]:
@@ -2799,6 +2865,7 @@ def arrange_xml_head(
         parts=parts,
         harmony=harmony,
         grid=grid,
+        request=request,
         grouping=grouping,
     )
     # Resolved once here, because this layer needs the tuple **before** the engine
@@ -2806,37 +2873,7 @@ def arrange_xml_head(
     # resolves the same request again for the step loop. One pure function, two
     # calls, so the two cannot disagree.
     resolved_grouping = options.time_signature.resolved_grouping
-    slots = head_skeleton(head, section)
-    # **The comping union is gated on whether the guitar comps at all, not on the
-    # route.** `parts=chord` is the ensemble answer: the guitar states the chord while
-    # somebody else sings, so a position with no melody note is a position the chord of
-    # the tune still occupies. `parts=auto` is the same claim *and* the guitar sings
-    # the tune — the grid still places chords where the tune is silent, which is
-    # `docs/comping-styles.md` §9.3 **step D**: the soprano is per slot, not per route.
-    # A *melody-only* selection (`parts=melody`, `melody,bass`) is the one case that is not
-    # merged: it plays the tune and nothing else, so a position with no tune has nothing
-    # for it to play. `_merge_chord_slots` unions the whole bar only for a melody-anchored
-    # grid, so the default (`every_note`, no flags) is a no-op on every note-bearing bar —
-    # which is what `docs/comping-styles.md` §8's acceptance criterion asks for — while a
-    # bar the melody never enters now gets its chords.
-    #
-    # **Both `parse_parts` and `resolve_parts`, and the second one is not optional.**
-    # `parse_parts("auto")` returns the **sentinel** `("auto",)`, which names no
-    # melody — so testing the route on the parsed value alone classifies the *default*
-    # arrangement as the comping route and unions grid positions into it, and every
-    # unioned slot then carries the placeholder melody. `resolve_parts` is what turns the
-    # sentinel into the three parts. `docs/open-issues.md` item 1 holds the
-    # measurement.
-    #
-    # This is trap 12 arriving from a new direction — a *resolution* step skipped, so a
-    # policy reads as something it is not. The predicate itself is the engine's own
-    # (`VoiceLeadingEngine.arrange_progression` routes each slot through the same
-    # question), which is why it is imported rather than re-tested.
-    resolved_parts = resolve_parts(parse_parts(options.parts))
-    if not parts_has_melody_only(resolved_parts):
-        slots = _merge_chord_slots(
-            slots, head, section, options.grid, resolved_grouping
-        ) or slots
+    slots = _head_slots(head, section, options, resolved_grouping)
     triples = [slot[0] for slot in slots]
     timings = [(slot[1], slot[2], slot[3]) for slot in slots]
     # §9.3 step C: which slots the melody **articulates** on. On the note path every
@@ -2987,15 +3024,48 @@ def _key_label(head: Head) -> str:
 
 
 def _head_options(args: Any) -> ArrangeOptions:
-    """The `head` command's arrangement knobs, as the engine request."""
+    """The `head` command's request, as the engine's one value."""
     return ArrangeOptions(
         non_chord_tone=args.non_chord_tone,
-        texture=args.texture,
-        bass=args.bass_style,
-        parts=args.parts,
-        harmony=args.harmony,
-        grid=args.grid,
+        request=Request(
+            melody=not args.no_melody,
+            chord_on=_chord_on(args),
+            chord_notes=args.chord_notes,
+            bass_on=args.bass_on,
+            bass_notes=args.bass_notes,
+        ),
     )
+
+
+def _chord_on(args: Any) -> str:
+    """The chord's rhythm: the flag, or the default the selection implies.
+
+    Comping for a horn defaults to four-to-the-bar (`every-beat`); playing the tune
+    defaults to the tune's own onsets. That is a **default**, not a rule: an
+    explicit `--chord-on melody` with `--no-melody` is refused by the request,
+    because there is no melody on this guitar to attach chords to.
+    """
+    if args.chord_on is not None:
+        return args.chord_on
+    return RHYTHM_MELODY if not args.no_melody else RHYTHM_EVERY_BEAT
+
+
+def _request_line(head: Head, args: Any) -> str:
+    """The canonical request, for the run header.
+
+    Resolved against the head's own metre, so the positions printed are the ones
+    this score's bars actually have; the spelling parses back, which is what
+    `tests/test_cli.py` asserts rather than the wording.
+    """
+    grouping = resolve_grouping(
+        head.grouping if head.grouping else GROUPING_AUTO,
+        head.beats_per_bar,
+        head.beat_type,
+    )
+    resolved = resolve_request(
+        _head_options(args).request, head.beats_per_bar, grouping
+    )
+    return format_request(resolved)
 
 
 def _print_play_order(head: Head) -> None:
@@ -3040,19 +3110,6 @@ def _print_metre_notes(head: Head, args: Any) -> None:
             f"  grouping: {format_grouping(grouping)} ({source}; "
             f"felt beats {', '.join(f'{beat:g}' for beat in starts)})"
         )
-    if args.texture != "targets":
-        return
-    # Named in the output because the metre is what the rule reads, and the metre is
-    # not 4/4 in three of the four committed scores. The beats are the **felt**
-    # beats: a 2/2 head has one target and a 12/8 head's second target is beat 7.
-    targets = [starts[index - 1] for index in TARGET_BEATS if index <= len(starts)]
-    label = "beat" if len(targets) == 1 else "beats"
-    named = " and ".join(f"{beat:g}" for beat in targets)
-    print(
-        f"  texture: targets - a full chord on {label} {named} of "
-        f"{head.beats_per_bar}/{head.beat_type}, a shell, a 3rd/6th or the "
-        f"melody alone elsewhere"
-    )
 
 
 def head_cli(argv: Optional[Sequence[str]] = None) -> int:
@@ -3129,13 +3186,14 @@ def head_cli(argv: Optional[Sequence[str]] = None) -> int:
     print(
         f"  {head.beats_per_bar}/{head.beat_type}, {_key_label(head)}, {len(head)} "
         f"melody note(s), bars {head.bars[0]}-{head.bars[1] - 1}; neck window: "
-        f"frets {args.fret_min}-{args.fret_max}; parts: {args.parts}"
+        f"frets {args.fret_min}-{args.fret_max}"
     )
     if head.markers and head.written_bars:
         _print_play_order(head)
     for note in notes:
         print(f"  note: {note}")
     _print_metre_notes(head, args)
+    print(f"  request: {_request_line(head, args)}")
     if not steps:
         print("  nothing could be voiced from this file")
         return 1

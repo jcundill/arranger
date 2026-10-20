@@ -27,14 +27,10 @@ from .bass_merge import attach_bass
 from .bass_place import (
     BassNote,
 )
-from .bass_rules import (
-    BASS_STYLE_AUTO,
-)
 from .chords import (
     NON_CHORD_TONE_EXTENSIONS,
     NON_CHORD_TONE_STRATEGIES,
 )
-from .grid import GRID_DEFAULT
 from .grip_tables import (
     GRIP_PREFERENCE,
 )
@@ -43,12 +39,10 @@ from .grips import (
     MELODY_STRING_CHOICES_FULL,
 )
 from .grouping import COMMON_TIME, TimeSignature
-from .harmony import HARMONY_AUTO
 from .movement import (
     arrange_progression,
 )
-from .options import ArrangeOptions
-from .parts import PARTS_AUTO
+from .options import DEFAULT_REQUEST, ArrangeOptions, Request
 from .step_prepare import (
     StepPreparation,
     prepare_step,
@@ -332,11 +326,12 @@ class VoiceLeadingEngine:
         # a slot a caller could not place is `(None, None, None)`, so an entry point may
         # hold either shape. See `movement.arrange_progression` for the same note.
         timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]] = None,
-        texture: str = "uniform",
-        bass: str = BASS_STYLE_AUTO,
-        parts: str = PARTS_AUTO,
-        harmony: str = HARMONY_AUTO,
-        grid: str = GRID_DEFAULT,
+        texture: Optional[str] = None,
+        bass: Optional[str] = None,
+        parts: Optional[str] = None,
+        harmony: Optional[str] = None,
+        grid: Optional[str] = None,
+        request: Request = DEFAULT_REQUEST,
         # The metre as one value: count, denominator and felt grouping, validated
         # together. Omitting it means `COMMON_TIME` (4/4). See
         # `movement.arrange_progression`.
@@ -362,6 +357,7 @@ class VoiceLeadingEngine:
             parts=parts,
             harmony=harmony,
             grid=grid,
+            request=request,
             time_signature=time_signature,
             melody_onsets=melody_onsets,
             options=options,

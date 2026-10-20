@@ -112,7 +112,7 @@ BASS_RULE_ROLES: Dict[str, FrozenSet[str]] = {
 
 # The two shipped styles, as rule lists, derived from `BASS_RULES` rather than listed so
 # the table above stays the one source. `walk` is the whole vocabulary; `anchors` is the
-# root rule alone. These are the spellings `--bass-style` takes.
+# root rule alone. These are the spellings a style takes.
 BASS_STYLE_WALK = ",".join(BASS_RULES)
 BASS_STYLE_ANCHORS = BASS_RULE_ROOT
 
@@ -126,7 +126,7 @@ BASS_STYLE_AUTO = "auto"
 
 
 def parse_bass_style(argument: str) -> Tuple[str, ...]:
-    """A `--bass-style` argument as the ordered tuple of note rules it names.
+    """A bass style argument as the ordered tuple of note rules it names.
 
     The spelling: comma-separated rule names, matched case-insensitively, whitespace
     around the commas ignored, so `"root,approach"` and `" Root , APPROACH "` are one

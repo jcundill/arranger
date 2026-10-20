@@ -19,19 +19,15 @@ from __future__ import annotations
 from typing import Container, List, Optional, Sequence, Tuple
 
 from .bass import Slot
-from .bass_rules import BASS_STYLE_AUTO
 from .decisions import (
     MELODY_ALONE_NO_CHORD,
     MELODY_ALONE_REST,
     MELODY_ALONE_TEXTURE,
 )
-from .grid import GRID_DEFAULT
 from .grips import MELODY_STRING_CHOICES_FULL
 from .grouping import COMMON_TIME, TimeSignature
 from .harmonised_route import harmonised_step
-from .harmony import HARMONY_AUTO
-from .options import ArrangeOptions
-from .parts import PARTS_AUTO
+from .options import DEFAULT_REQUEST, ArrangeOptions, Request
 from .resolution import resolve_knobs, resolve_policies
 from .routes import (
     comping_step,
@@ -147,11 +143,12 @@ def arrange_progression(
     fret_min: int = NECK_FRET_MIN,
     fret_max: int = NECK_FRET_MAX,
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]] = None,
-    texture: str = "uniform",
-    bass: str = BASS_STYLE_AUTO,
-    parts: str = PARTS_AUTO,
-    harmony: str = HARMONY_AUTO,
-    grid: str = GRID_DEFAULT,
+    texture: Optional[str] = None,
+    bass: Optional[str] = None,
+    parts: Optional[str] = None,
+    harmony: Optional[str] = None,
+    grid: Optional[str] = None,
+    request: Request = DEFAULT_REQUEST,
     time_signature: TimeSignature = COMMON_TIME,
     melody_onsets: Optional[Container[int]] = None,
     options: Optional[ArrangeOptions] = None,
@@ -171,70 +168,51 @@ def arrange_progression(
         parts=parts,
         harmony=harmony,
         grid=grid,
+        request=request,
         time_signature=time_signature,
         melody_onsets=melody_onsets,
         timings=timings,
     )
-    top_strings = _k.top_strings
-    non_chord_tone = _k.non_chord_tone
-    fret_min = _k.fret_min
-    fret_max = _k.fret_max
-    texture = _k.texture
-    bass = _k.bass
-    harmony = _k.harmony
-    grid = _k.grid
-    beats_per_bar = _k.beats_per_bar
-    beat_type = _k.beat_type
-    resolved_grouping = _k.grouping
-    melody_onsets = _k.melody_onsets
-    timings = _k.timings
-    bass_pcs = _k.bass_pcs
-    slash_bass_cost_for = _k.slash_bass_cost
-
     arrangements: List[ArrangementStep] = []
 
     _p = resolve_policies(
         progression,
         parts_arg=_k.parts,
-        texture=texture,
-        bass=bass,
-        harmony=harmony,
-        grid=grid,
-        beats_per_bar=beats_per_bar,
-        beat_type=beat_type,
-        grouping=resolved_grouping,
-        timings=timings,
+        texture=_k.texture,
+        bass=_k.bass,
+        harmony=_k.harmony,
+        grid=_k.grid,
+        chord_rhythm=_k.request.chord_rhythm,
+        bass_rhythm=_k.request.bass_rhythm,
+        chord_fills=_k.request.chord_fills,
+        beats_per_bar=_k.beats_per_bar,
+        beat_type=_k.beat_type,
+        grouping=_k.grouping,
+        timings=_k.timings,
     )
-    chosen_parts = _p.parts
-    melody_voiced = _p.melody_voiced
-    melody_only = _p.melody_only
-    bass = _p.bass
-    has_thumb = _p.has_thumb
-    harmony_family = _p.harmony_family
-    grid_pattern = _p.grid_pattern
-    slots = _p.slots
-
     carried = Carried()
-
-    loop = _loop_slots(progression, timings, slots)
+    loop = _loop_slots(progression, _k.timings, _p.slots)
     slot_inputs = SlotInputs(
         progression=progression,
-        top_strings=top_strings,
-        texture=texture,
-        parts=chosen_parts,
-        has_thumb=has_thumb,
-        melody_only=melody_only,
-        melody_voiced=melody_voiced,
-        melody_onsets=melody_onsets,
-        harmony_family=harmony_family,
-        grid_pattern=grid_pattern,
-        beats_per_bar=beats_per_bar,
-        grouping=resolved_grouping,
-        fret_min=fret_min,
-        fret_max=fret_max,
-        non_chord_tone=non_chord_tone,
-        bass_pcs=bass_pcs,
-        slash_bass_cost_for=slash_bass_cost_for,
+        top_strings=_k.top_strings,
+        texture=_k.texture,
+        parts=_p.parts,
+        has_thumb=_p.has_thumb,
+        melody_only=_p.melody_only,
+        melody_voiced=_p.melody_voiced,
+        melody_onsets=_k.melody_onsets,
+        harmony_family=_p.harmony_family,
+        chord_rhythm=_p.chord_rhythm,
+        grid_pattern=_p.grid_pattern,
+        bass_rhythm=_p.bass_rhythm,
+        chord_fills=_p.chord_fills,
+        beats_per_bar=_k.beats_per_bar,
+        grouping=_k.grouping,
+        fret_min=_k.fret_min,
+        fret_max=_k.fret_max,
+        non_chord_tone=_k.non_chord_tone,
+        bass_pcs=_k.bass_pcs,
+        slash_bass_cost_for=_k.slash_bass_cost,
     )
     for slot in loop:
         plan = slot_state(carried, slot, slot_inputs)

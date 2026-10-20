@@ -100,7 +100,11 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/slot_plan.py": Budget(6, 89, 5),
     "arranger/step_prepare.py": Budget(6, 74, 9),
     "arranger/harmonised_route.py": Budget(8, 54, 8),
-    "arranger/movement.py": Budget(8, 103, 14),
+    # The public `request=` joined the five implementation axis keywords, so the
+    # facade takes one more parameter until Stage 8 of
+    # `docs/rhythm-request-redesign.md` retires the axis spellings. The body did
+    # not grow: it reads the resolved knobs and policies as values.
+    "arranger/movement.py": Budget(8, 103, 15),
     # `ArrangeOptions` is a flat dataclass of knobs with no methods today.
     "arranger/options.py": Budget(5, 30, 3),
     "arranger/parts.py": Budget(9, 45, 1),
@@ -120,7 +124,10 @@ BUDGETS: Dict[str, Budget] = {
     # increases are the axis's own spelling, not a function that grew a second job;
     # `head_cli`'s branches moved into `_print_metre_notes` rather than raising its
     # budget.
-    "headxml.py": Budget(17, 125, 12),
+    # One more parameter for the same reason as `movement`: `request=` is the
+    # public spelling and the axis keywords are the implementation, which Stage 8
+    # removes. The merge block moved to `_head_slots`, so the length did not grow.
+    "headxml.py": Budget(17, 125, 13),
     "grip_chart.py": Budget(14, 84, 5),
     "tabgp.py": Budget(19, 151, 13),
     "tabscore.py": Budget(10, 98, 5),
