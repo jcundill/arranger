@@ -87,6 +87,10 @@ CONFIGS: List[Dict[str, Any]] = [
     # invisible in a sweep that only ever asked for one.
     {"request": Request(chord_on="none", chord_fills=CHORD_FILLS_HOLD)},
     {"request": Request(chord_on="none", chord_fills=CHORD_FILLS_COMP)},
+    # A lone bass line: no melody part, no chord part, and the thumb at every beat.
+    # The steps it emits are the only ones with nothing above the thumb at all, which is
+    # what `annotation._bass_alone_clause` exists to say.
+    {"request": Request(melody=False, chord_on="none", bass_on="every-beat")},
 ]
 
 #: (what the engine decided, when this step is one of those, what the line must say).
@@ -304,7 +308,9 @@ WITNESSES: List[Witness] = [
     ),
     (
         "the guitar comps: the tune is not its to play",
-        lambda step: not step.melody_voiced and bool(step.voicing.active_frets()),
+        # `upper_midi_notes`, not `active_frets`: a lone thumb is not comping, and its
+        # own note is the only thing that sounds - see the witness below.
+        lambda step: not step.melody_voiced and bool(step.voicing.upper_midi_notes()),
         lambda step: (
             "does not play the tune" in _line(step)
             or "the tune is silent here" in _line(step)
@@ -370,6 +376,15 @@ WITNESSES: List[Witness] = [
         "a bass note was written into the step",
         lambda step: step.bass is not None,
         lambda step: "bass: " in _line(step),
+    ),
+    (
+        "a slot the chord part leaves entirely to the bass line",
+        lambda step: (
+            step.bass is not None
+            and not step.bass_only
+            and not step.voicing.upper_midi_notes()
+        ),
+        lambda step: "the thumb alone" in _line(step),
     ),
     (
         "a bass note the walk asked for could not be placed, so the walk reads whole but is not",
@@ -661,6 +676,7 @@ class TestNewClausesMustBeRegistered(unittest.TestCase):
         from arranger import annotation
 
         known = {
+            "_bass_alone_clause",
             "_bass_refusal_clause",
             "_comping_clause",
             "_held_clause",

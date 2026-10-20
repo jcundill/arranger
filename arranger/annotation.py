@@ -257,6 +257,7 @@ def _annotate(step: ArrangementStep, *clauses: str) -> str:
         _window_clause(step),
         _slash_bass_clause(step),
         _held_clause(step),
+        _bass_alone_clause(step),
         _bass_refusal_clause(step),
     )
     for clause in derived:
@@ -344,6 +345,10 @@ def _comping_clause(step: ArrangementStep) -> str:
     is wrong rather than merely unsaid for every selection but the three-voice guide one:
     a single note on the low E string is not a shell's 3rd and 7th.
     """
+    if not step.voicing.upper_midi_notes():
+        # Nothing above the thumb is not comping: it is the bass part's own slot, and
+        # `_bass_alone_clause` (or `_held_clause`) says what it is.
+        return ""
     harmony = step.harmonized_as or step.chord
     root_str, _quality = ChordParser.parse_chord_name(harmony)
     # Keyed by degree *name*, so two octaves of one degree read once - at the note of the
@@ -494,6 +499,21 @@ def _held_clause(step: ArrangementStep) -> str:
     return "the shape above is held"
 
 
+
+
+def _bass_alone_clause(step: ArrangementStep) -> str:
+    """Says a step is the thumb on its own, with no chord stated and none held.
+
+    The bass part can have a slot the chord part does not: a `--chord-on` rhythm that
+    does not name this position, or a selection with no chord part at all. Nothing
+    above the thumb sounds there, and the tab cannot say what that is - six mutes and a
+    fret look the same whether the chord ran out or was never asked for. A step with a
+    shape still *ringing* is `_held_clause`'s, so this names the case where there is no
+    shape at all, which is the opening of a bass line.
+    """
+    if step.bass is None or step.bass_only or step.voicing.upper_midi_notes():
+        return ""
+    return "the thumb alone - the chord part is not stated here"
 
 
 def _bass_refusal_clause(step: ArrangementStep) -> str:

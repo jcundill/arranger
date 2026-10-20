@@ -55,6 +55,11 @@ class BassNote:
 
 
 
+#: Above every MIDI note a guitar can sound, so a lone thumb - a bass note with no
+#: shape above it - passes the "sound below the structure" test with nothing to fail.
+_THUMB_CEILING = 128
+
+
 def _bass_distance(first: int, second: int) -> int:
     """How far apart two pitch classes are, in semitones, the short way round."""
     return min((first - second) % 12, (second - first) % 12)
@@ -188,24 +193,45 @@ def held_shape(
     return None
 
 
+def is_shape_held(arrangements: List[ArrangementStep]) -> bool:
+    """Whether any **upper** voice is still ringing under this slot.
+
+    `held_shape` answered as a question: a shape is held when one of its strings other
+    than the thumb's own is fretted. A lone thumb leaves the previous chord ringing, so
+    the answer has to survive a run of them - which is why this is not
+    `previous_shape`, the last *sounding* step, whose vector a lone thumb replaces.
+    """
+    held = held_shape(arrangements)
+    if held is None:
+        return False
+    frets, thumb = held
+    return any(fret >= 0 for index, fret in enumerate(frets) if index != thumb)
+
+
 def _thumb_frame(
     upper: Voicing,
     held: Optional[Tuple[Sequence[int], Optional[int]]],
-) -> Optional[Tuple[int, List[int], List[int], float]]:
+    previous_bass: Optional[int] = None,
+) -> Tuple[int, List[int], List[int], float]:
     """The geometry a thumb note is placed against.
 
     Returns the lowest note the thumb must sound below, the strings that already
-    speak, the frets the fingers must cover, and the hand's position. None means
-    the upper voicing sounds nothing, so there is no shape to place a bass under.
+    speak, the frets the fingers must cover, and the hand's position.
+
+    An **empty** upper voicing is the lone-thumb case rather than a refusal: the step
+    is the bass part on its own, so there is nothing for the note to sound beneath and
+    no shape to read a position from. The hand is then the **bass line's own** - the
+    fret the previous thumb note sits at (`_thumb_hand_fret`) - so the octaves stay
+    where the line has been rather than leaping to the lowest one every slot. When a
+    shape *is* held the held branch below supplies the position, exactly as it does for
+    a `bass_only` step.
     """
     upper_midis = upper.midi_notes()
-    if not upper_midis:
-        return None
-    lowest_upper = min(upper_midis)
     active = upper.active_frets()
-    if not active:
-        return None
-    hand_fret = float(min(active))
+    # A silent shape still places a lone thumb: the note has nothing to sound below,
+    # which is a different question from "no room for it".
+    lowest_upper = min(upper_midis) if upper_midis else _THUMB_CEILING
+    hand_fret = float(min(active)) if active else _thumb_hand_fret(previous_bass)
 
     # The held shape widens "is this string free" and "what is the lowest note
     # sounding", and supplies the hand position, because the melody alone is up an
@@ -252,6 +278,25 @@ def _thumb_frame(
         # the same answer, so this one is chosen on the physics rather than on a count.
         hand_base = list(held_frets)
     return lowest_upper, sounding_frets, hand_base, hand_fret
+
+
+def _thumb_hand_fret(previous_bass: Optional[int]) -> float:
+    """Where the hand is for a lone bass note: the previous thumb note's fret.
+
+    The bass line is the only thing that moves a lone-thumb step's hand, so its own
+    previous note is the position - read as the lowest fingering of it on a bass
+    string, which is the octave the thumb would have used. No previous note (the head
+    of a phrase) means the open position, which makes the first note the lowest
+    playable one.
+    """
+    if previous_bass is None:
+        return 0.0
+    frets = [
+        previous_bass - STANDARD_TUNING[index].midi_note()
+        for index in BASS_STRING_INDICES
+    ]
+    playable = [fret for fret in frets if 0 <= fret <= 18]
+    return float(min(playable)) if playable else 0.0
 
 
 def _best_thumb_fret(
@@ -373,10 +418,9 @@ def place_bass(
     is the "penalty, never a filter" argument the neck window already makes: a step
     is never dropped because the thumb could not reach it.
     """
-    frame = _thumb_frame(upper, held)
-    if frame is None:
-        return None
-    lowest_upper, sounding_frets, hand_base, hand_fret = frame
+    lowest_upper, sounding_frets, hand_base, hand_fret = _thumb_frame(
+        upper, held, previous_bass
+    )
     return _best_thumb_fret(
         pitch_class, previous_bass, lowest_upper, sounding_frets, hand_base, hand_fret
     )

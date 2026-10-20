@@ -32,9 +32,13 @@ root as an `anchor` where it marks the bar and a `pedal` elsewhere, the 5th as
 `fifth` when the style alternates. The `bass=` axis keeps its anchors-only meaning
 until Stage 8 retires it.
 
-Still to land: 4 (the bass-only route and the `chord_here` per-slot pass, of which
-the fills half is built), 5 (durations and ties), 6 (staff moved thumb), 7 (comping
-and lone bass), 8 (docs and clean-up).
+Stage 4 is the bass part's own slots: a position the chord part leaves - a rhythm
+that does not name it, or a selection with no chord part - is played as the thumb
+alone when the guitar has no melody to sing there, instead of being a rest. A shape
+still ringing is held under it; nothing ringing and the line says "the thumb alone".
+
+Still to land: 5 (durations and ties), 6 (staff moved thumb), 7 (the lone-bass line's
+defaults and `--no-melody` measurements), 8 (docs and clean-up).
 
 ## The problem in one paragraph
 
@@ -581,6 +585,27 @@ This is the riskiest engine change; write the tests first.
 - `is_bass_only`: a bass-only step may now be a target when the chord part is
   off; update the docstring and `TestABassOnlyStepIsNeverATarget`'s precondition.
 - Re-check trap 12's guard ordering for both routes after every change.
+
+**Landed as:** `_chord_here` and `on_grid=` were already in place from Stages 2
+and 2b, so the stage was the route. `decisions.lone_bass_case` names the one
+combination no other decision speaks for - a bass note, no sung melody, no chord
+stated - and `routes.bass_alone_step` emits the thumb alone: an **empty** chord
+vector, so no upper voice is taken from the chord part, with `bass_only` read from
+`bass_place.is_shape_held` (a shape still ringing is held; a run of lone thumbs
+leaves the chord before them down, which `previous_shape` gets wrong because a lone
+thumb replaces the sounding vector). `bass_place.place_bass` now places a note
+against an empty upper voicing, taking the hand from the previous thumb's fret. The
+singing case needed no route: the melody-alone route already carries the thumb
+(`--chord-on 1&` with the melody on, measured).
+
+Two bullets are answered differently than written, and both are named here rather
+than quietly dropped. `comping_step`'s `standalone_bass` stays
+`parts == (PART_BASS,)`: the per-slot case that bullet wanted is a *different* step
+rather than a thinner comping one - its harmony is not stated at all - and
+`bass_alone_step` is it. `is_bass_only` keeps its rule (a target states a chord);
+its docstring now names the one route that sets the flag itself, where a target is a
+metric event and nothing above the thumb is struck, which is why the contradiction
+that rule exists for cannot arise there.
 
 ### Stage 5: durations, holds and ties
 

@@ -40,6 +40,7 @@ from .tuning import NO_CHORD, ROLE_FILL, ROLE_TARGET, ArrangementStep, Voicing
 MELODY_ALONE_NONE = "none"        # look it up through the grips, as usual
 MELODY_ALONE_TEXTURE = "texture"  # a texture case: has a harmony, not spelled out
 MELODY_ALONE_NO_CHORD = "nc"      # an NC bar: no harmony to voice at all
+MELODY_ALONE_BASS = "bass"        # the thumb alone: there is no chord here to state
 MELODY_ALONE_REST = "rest"        # off the grid: the guitar plays nothing here
 
 
@@ -226,6 +227,29 @@ def melody_alone_case(
     return MELODY_ALONE_NONE
 
 
+def lone_bass_case(
+    *, has_bass: bool, sings_here: bool, chord_stated: bool
+) -> bool:
+    """Whether this slot's only job is the thumb.
+
+    The three parts are independent, and this is the one combination the other
+    decisions cannot speak for: a slot can carry a bass note while the chord part
+    states nothing (the chord's rhythm does not name this position, or the selection
+    has no chord part at all) and the guitar has no melody to sing there. Such a slot
+    is **not** a rest - the bass line asked for it, and dropping it would lose the
+    thumb silently, which is the failure the walking-bass union exists to prevent.
+
+    `sings_here` is the per-slot answer rather than the arrangement's route, for the
+    reason `melody_alone_case` gives: the soprano is per slot, so a position the tune
+    is silent at is somebody else's even when the guitar sings the tune elsewhere.
+
+    `chord_stated` is False on a melody-only selection whatever its rhythm says: that
+    selection states no chord anywhere, so the rhythm's positions say nothing about
+    this slot.
+    """
+    return has_bass and not sings_here and not chord_stated
+
+
 def is_bass_only(slot_bass_only: bool, role: str) -> bool:
     """
     Whether this step's upper voices really are held across it.
@@ -257,6 +281,13 @@ def is_bass_only(slot_bass_only: bool, role: str) -> bool:
     four renderers that would each have to re-derive it - and it also has to be right
     before `attach_bass` reads it, because a target measures its thumb against its own
     voicing rather than against a shape it is holding.
+
+    **A route that states no chord does not ask this function.** `bass_alone_step` - the
+    bass part's own slot, where the chord part is off - sets the flag directly, because
+    there the fact is definitional rather than a contradiction: nothing above the thumb
+    is struck, and a target role there is a **metric** event (a strong beat, a chord
+    change) rather than a chord being voiced. Every caller of this function is a route
+    that voices harmony, which is why the rule above is stated over the role.
     """
     return slot_bass_only and role != ROLE_TARGET
 

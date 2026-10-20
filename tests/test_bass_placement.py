@@ -311,6 +311,13 @@ class TestABassOnlyStepIsNeverATarget(unittest.TestCase):
 
     Asserted as a property of the flags rather than as a tab string, because the flag
     is what the four renderers read and the tab is four renderings of it.
+
+    **The rule is about a step that states a chord**, and the one route that does not
+    is scoped out here rather than silently exempted: `routes.bass_alone_step` emits the
+    bass part on its own, where nothing above the thumb is struck and a target role is a
+    metric event rather than a chord. Its flag is `held_shape`'s answer - see
+    `test_bass_positions.TestTheLoneBassStep` - so the contradiction this class exists
+    for cannot arise there.
     """
 
     def _walking_arrangement(self):

@@ -16,6 +16,7 @@ from typing import Container, List, Optional, Tuple
 from . import grips as _grips
 from .bass import Slot
 from .bass_merge import attach_bass, next_resolution_melody
+from .bass_place import is_shape_held
 from .chords import ChordParser, resolve_substitute_harmony
 from .context import SlotContext
 from .cost import SelectionCriteria
@@ -426,6 +427,54 @@ def _emit_comping_step(
         non_chord_tone=harmony.is_non_chord_tone,
         strategy=harmony.strategy,
         harmonized_as=harmony.harmonized_as,
+    ))
+    attach_bass(arrangements[-1], slot.bass, arrangements)
+
+
+def bass_alone_step(
+    arrangements: List[ArrangementStep],
+    slot: Slot,
+    context: SlotContext,
+) -> None:
+    """The bass part alone: one thumb note where the guitar states no chord.
+
+    A slot whose only job is the thumb - the chord's rhythm does not name it, and the
+    guitar has no melody to sing there - is not a rest. The shape is **empty** rather
+    than thin: no upper voice is meant to sound, and a one-note "chord" would be the
+    chord part stealing the bass line's slot. `attach_bass` places the walked note
+    against the shape the hand is still holding, which is why its fret vector comes
+    back with exactly one string plucked and the rest muted.
+
+    A thumb note that cannot be placed leaves the step silent with
+    `bass_refused` set - the same contract every other route has, so a note the line
+    asked for is named rather than dropped.
+    """
+    # **What the hand is still holding decides how the line reads.** A shape that is
+    # ringing under this slot is held, exactly as it is for a `bass_only` union slot,
+    # and `attach_bass` then places the thumb against it; with nothing ringing (the
+    # head of a bass line, or a slot after a rest) the thumb is all there is, and the
+    # line says so through `annotation._bass_alone_clause`.
+    arrangements.append(ArrangementStep(
+        chord=context.name,
+        # The written note, which is the horn's line: the guitar does not sound it.
+        melody=context.note_str,
+        voicing=Voicing(
+            frets=[-1] * len(STANDARD_TUNING),
+            top_fret=0,
+            avg_fret=0.0,
+            grip="bass",
+        ),
+        bar=context.bar,
+        beat=context.beat,
+        duration=context.duration,
+        role=context.role,
+        metric_weight=context.weight,
+        partial=True,
+        # Only a shape with something **above the thumb** still sounding can be held:
+        # an all-muted previous step is a hole rather than a chord, and a run of lone
+        # thumbs leaves the chord before them down rather than replacing it.
+        bass_only=is_shape_held(arrangements),
+        melody_voiced=False,
     ))
     attach_bass(arrangements[-1], slot.bass, arrangements)
 

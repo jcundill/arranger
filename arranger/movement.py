@@ -20,6 +20,7 @@ from typing import Container, List, Optional, Sequence, Tuple
 
 from .bass import Slot
 from .decisions import (
+    MELODY_ALONE_BASS,
     MELODY_ALONE_NO_CHORD,
     MELODY_ALONE_REST,
     MELODY_ALONE_TEXTURE,
@@ -30,6 +31,7 @@ from .harmonised_route import harmonised_step
 from .options import DEFAULT_REQUEST, ArrangeOptions, Request
 from .resolution import resolve_knobs, resolve_policies
 from .routes import (
+    bass_alone_step,
     comping_step,
     no_chord_step,
     previous_shape,
@@ -44,6 +46,26 @@ from .tuning import (
 )
 
 __all__ = ["arrange_progression"]
+
+
+def _route_without_upper_voices(
+    arrangements: List[ArrangementStep], slot: Slot, plan: SlotPlan
+) -> None:
+    """The two answers for a slot with nothing above the thumb: the note, or nothing.
+
+    They are the **same situation read by different parts**, which is why they are one
+    branch rather than two: nothing above the thumb sounds here, and only the bass
+    line's own claim on the slot makes it a note. A rest where the bass asked for one
+    would drop the thumb, which is the one thing the bass grid exists to place - and a
+    thumb where the line has no note is not a choice, it is a refusal to report.
+    """
+    if plan.melody_alone == MELODY_ALONE_BASS:
+        bass_alone_step(arrangements, slot, plan.context)
+        return
+    rest_step(
+        arrangements, slot, plan.context,
+        sings_here=plan.sings_here, silence=plan.silence,
+    )
 
 
 def _route_slot(
@@ -63,11 +85,8 @@ def _route_slot(
     context = plan.context
     inputs = plan.inputs
 
-    if plan.melody_alone == MELODY_ALONE_REST:
-        rest_step(
-            arrangements, slot, context,
-            sings_here=plan.sings_here, silence=plan.silence,
-        )
+    if plan.melody_alone in (MELODY_ALONE_BASS, MELODY_ALONE_REST):
+        _route_without_upper_voices(arrangements, slot, plan)
         return
     if plan.melody_alone == MELODY_ALONE_TEXTURE:
         if texture_fill_step(

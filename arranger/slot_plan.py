@@ -17,7 +17,9 @@ from .bass import Slot
 from .chords import normalised_harmony
 from .context import SlotContext
 from .decisions import (
+    MELODY_ALONE_BASS,
     MELODY_ALONE_REST,
+    lone_bass_case,
     melody_alone_case,
     resolve_texture_grips,
 )
@@ -139,6 +141,30 @@ def _slot_context(
         duration=slot.duration,
         role=role,
         weight=metric_weight(slot.bar, slot.beat, inputs.beats_per_bar, inputs.grouping),
+    )
+
+
+def _sings_here(
+    inputs: SlotInputs, index: int, melody_note: Optional[Note]
+) -> bool:
+    """**Does the guitar sing *this* slot?** (§9.3 step D: the soprano is per slot.)
+
+    It sings a slot only where its voice selection has a soprano *and* the slot is a
+    melody **onset** - a written note articulating here. Every other slot it comps,
+    except on a melody-only selection, whose note-less slots were skipped above.
+
+    §9.2's onset signal is reused rather than re-derived: `melody_onsets` is the same
+    set the comping route's reharmonise guard reads, and a grid position the tune merely
+    *sustains* through is not an onset, so the guitar states the chord there rather than
+    re-articulating a note it did not begin - which is why a note-bearing merged
+    position still comps. `None` means every slot is an onset, the honest default for a
+    hand-built progression with no timeline, which keeps a bare `arrange_progression`
+    unchanged.
+    """
+    return (
+        inputs.melody_voiced
+        and melody_note is not None
+        and (inputs.melody_onsets is None or index in inputs.melody_onsets)
     )
 
 
@@ -305,30 +331,16 @@ def slot_state(
     index = slot.index
     note_str, chord_type, name = inputs.progression[index]
     if note_str is None:
-        if inputs.melody_only:
+        # A melody-only selection's note-less slot is **tune silent** unless the thumb
+        # has something there: `parts=melody,bass` plays the bass part, and a position
+        # the walk invented is the one place this selection sounds anything at all.
+        if inputs.melody_only and slot.bass is None:
             return _tune_silent_plan(car, slot, chord_type, name, inputs)
         melody_note = None
     else:
         melody_note = Note(note_str)
 
-    # **Does the guitar sing *this* slot?** (§9.3 step D: the soprano is per
-    # slot, not per route.) The guitar sings a slot only where its voice
-    # selection has a soprano *and* the slot is a melody **onset** - a written
-    # note articulating here. Every other slot it comps, except on a melody-only
-    # selection, whose note-less slots were skipped above.
-    #
-    # §9.2's onset signal is reused rather than re-derived: `melody_onsets` is
-    # the same set the comping route's reharmonise guard reads, and a grid
-    # position the tune merely *sustains* through is not an onset, so the guitar
-    # states the chord there rather than re-articulating a note it did not begin
-    # - which is why a note-bearing merged position still comps. `None` means
-    # every slot is an onset, the honest default for a hand-built progression
-    # with no timeline, which keeps a bare `arrange_progression` unchanged.
-    sings_here = (
-        inputs.melody_voiced
-        and melody_note is not None
-        and (inputs.melody_onsets is None or index in inputs.melody_onsets)
-    )
+    sings_here = _sings_here(inputs, index, melody_note)
 
     # Where this slot falls in the bar, and therefore what it is for. Read
     # defensively, exactly as slots.arrange_slots guards its own timings: a
@@ -358,11 +370,25 @@ def slot_state(
     # takes the comping-route branches inside `melody_alone_case`, so an
     # off-grid note-less slot rests rather than asserting a melody it has not
     # got. §9.3 step D.
+    chord_here = _chord_here(inputs, beat, melody_note is None)
     melody_alone = melody_alone_case(
         inputs.texture, role, slot_grips, chord_type, name, inputs.has_thumb,
         melody_voiced=sings_here,
-        on_grid=_chord_here(inputs, beat, melody_note is None),
+        on_grid=chord_here,
     )
+    # **The bass part's own claim on the slot**, and it is asked *after* the four
+    # melody-alone answers rather than inside them: it is the one combination that
+    # depends on the slot's thumb note, which `melody_alone_case` cannot see, and the
+    # answers it replaces are the ones that would otherwise drop the note - a rest on
+    # the comping route, and a melody-only selection's note-less position. A slot the
+    # guitar **sings** is not one of these: the melody-alone route already carries the
+    # thumb (`docs/engine.md`'s `--chord-on 1&` example).
+    if lone_bass_case(
+        has_bass=slot.bass is not None,
+        sings_here=sings_here,
+        chord_stated=chord_here and not inputs.melody_only,
+    ):
+        melody_alone = MELODY_ALONE_BASS
     return SlotPlan(
         context=_slot_context(
             inputs, slot, (note_str, chord_type, name), role
