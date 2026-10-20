@@ -140,9 +140,8 @@ HEAD_HELP = CommonHelp(
     tab="'staff' lays the head on one six-line staff, spaced on its real rhythm",
     no_melody=(
         "hand the tune to another instrument and comp instead. The chord then "
-        "attacks on every felt beat unless --chord-on names positions; asking for "
-        "the melody's own rhythm with this flag is refused, because there is no "
-        "melody on this guitar to attach it to"
+        "attacks on every felt beat - the default names the written melody's "
+        "onsets, and this guitar has none - unless --chord-on names positions"
     ),
     chord_on=(
         "when the chord attacks, comma-separated, in felt beats: 'melody' (the "

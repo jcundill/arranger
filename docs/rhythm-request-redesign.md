@@ -49,7 +49,9 @@ Stage 7 made `--no-melody` a complete request - the chord defaults to the metre'
 beats - and measured the lone bass line across five metres, which found two renderers
 that had been folding a repeated thumb into a hold.
 
-Still to land: 8 (docs and clean-up).
+Still to land: 8 (docs and clean-up) - and only its documentation: the README's flag
+table and the `--no-melody` help text are already corrected, and the list of what
+remains is at the end of that stage below.
 
 ## The problem in one paragraph
 
@@ -751,6 +753,42 @@ axis is the thing being retired.
   - no five-string steps;
   - `bass_refused` count.
 - `make check`; `make demo` and read the tabs, because the voicing paths moved.
+
+**Status: partly landed, and the remainder is this list.**
+
+Done in this round: the README's **flag table** now lists the six request flags and
+nothing else, and says in one paragraph that `texture=`, `bass=`, `parts=`, `harmony=`
+and `grid=` are the **Python API** underneath them (the axes are still real; only their
+CLI spelling is gone). The `--no-melody` help text no longer claims the melody's own
+rhythm is refused - Stage 7 derives it - and the `--melody` row was corrected to
+`--note-names`, which the flag has been called since Stage 1.
+
+Still to do, in this order, and none of it is code:
+
+1. **README's per-axis sections.** ~68 `--texture` / `--bass-style` / `--parts` /
+   `--harmony` / `--grid` spellings remain in the prose and in the example commands,
+   and the commands no longer run. Each section needs its examples expressed either as
+the request flag that now says the same thing (`--chord-notes 2` for `texture=chord2`,
+`--bass-notes walk` + `--bass-on every-beat` for `bass=` + `grid=bass:walk`) or as a
+`VoiceLeadingEngine` snippet, and the section headings relabelled from a flag to an
+axis.
+2. **`docs/engine.md`'s "six axes" section**, rewritten around the request with the
+   axes kept as an implementation table; and the `Adding a new chord quality` recipe's
+   flag references checked against the CLI.
+3. **`docs/renderers.md`**: the held-bass tie (`tabxml._build_note`'s per-note
+   `<tie>`), the staff's moved-thumb rule (`tabstaff._moved_thumb` / `_draws`), and
+   what a rest and a fill draw now that a stab is capped at its felt beat.
+4. **`docs/open-issues.md` items 1 and 4**, both of which this redesign resolves.
+5. **`AGENTS.md`**: the routing table's axis row and the "Six axes, not one"
+   paragraph, pointing at the request as the caller's vocabulary and the axes as the
+   engine's; plus the measured count (1372 at the point this was written).
+6. **The measurement table** the bullet list above asks for. The figures taken so far,
+   which are the ones to re-take rather than re-derive: the committed heads' default is
+   **one step per written note** (no added attacks); `--bass-on every-beat` gives 4 a
+   bar in 4/4, 2 in 2/2, 3 in 3/4, 2 in 5/4 (the `3+2` pulse) and 3 in 12/8 (`4+4+4`);
+   `--chord-fills hold` states one chord per rest segment and `comp` one per felt beat
+   (`tests/test_durations.py` and `tests/test_chord_fills.py` pin both); and the lone
+   bass line refuses **no** note in any of the five metres.
 
 ## Acceptance criteria
 

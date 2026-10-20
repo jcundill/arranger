@@ -110,18 +110,19 @@ python -m arranger head tests/data/synthetic_triplets.mxl --bars 1-3 --html head
 | `--bars` | whole head | half-open `LO-HI`; **bounds may be negative** for pickups |
 | `--non-chord-tone` | `extension` | how to harmonise melody note outside chord |
 | `--fallback` | off | `diminished` — see [non-chord melody notes](#non-chord-melody-notes) |
-| `--texture` | `uniform` | how many chord tones the part states: `uniform`, `chord3`, `chord2`, `chord1`, `targets` — see [texture](#texture) |
-| `--bass-style` | follows `--parts` | comma-separated note rules: `none`, `root`, or the full `root,5th,approach,nearest` — see [who plays which part](#who-plays-which-part-bass-and-parts) |
-| `--parts` | `auto` (all three) | which of `melody`, `bass`, `chord` the guitar takes, comma-separated — see [who plays which part](#who-plays-which-part-bass-and-parts) |
-| `--harmony` | `auto` (= `guide`) | `full`, `guide`, `shell_root`, `root` |
-| `--grid` | `melody:every_note` | comma-separated `PART:PATTERN` rows — see [where a chord falls](#where-a-chord-falls-the-grid-axis) |
+| `--no-melody` | off | the guitar does not sing: the tune belongs to somebody else, and the chord defaults to every felt beat |
+| `--chord-on` | `melody` | when the chord attacks: the written onsets, `none`, or positions such as `1&` or `every-beat` |
+| `--chord-notes` | `full` | how many chord tones it states: `full`, `3`, `2`, `1` |
+| `--chord-fills` | `none` | what it states in a notated melody rest: `hold` one chord, or `comp` a felt beat at a time |
+| `--bass-on` | `none` | when the thumb attacks: positions, or `every-beat` |
+| `--bass-notes` | `root` | what each thumb note is: the root, root-then-5th, or a walk |
 | `--fret-min` / `--fret-max` | `2` / `13` | neck window to aim for |
 | `--tab` | `line` | `staff` lays head on one six-line staff, spaced on real rhythm |
-| `--melody` / `--mutes` | off | with `--tab staff`: add melody row / spell muted strings as `x` |
+| `--note-names` / `--mutes` | off | with `--tab staff`: name each step's melody note / spell muted strings as `x` |
 | `--bars-per-line` | `4` | with `--tab staff`: bars per staff line |
 | `--html` / `--musicxml` / `--gp5` | off | also write head to file — see [rendering](#rendering) |
 
-Five of those flags expose the library's axes — `--texture`, `--bass-style`, `--parts`, `--harmony` and `--grid` — described once in [the six axes](#the-six-axes). The sixth, `grouping`, is read from the score rather than passed on the command line: a lead sheet already states it in a `3+2` direction, in its beaming, or in a dotted metronome mark.
+**The request is six questions, and the axes are how they are answered.** The flags above are the whole request a caller makes; the engine's own axes — `texture=`, `bass=`, `parts=`, `harmony=` and `grid=` — are the **Python API** underneath them, described in [the six axes](#the-six-axes), and a band setting is a combination of them rather than a mode. The sixth, `grouping`, is read from the score: a lead sheet already states it in a `3+2` direction, in its beaming, or in a dotted metronome mark.
 
 **Every written note sounds.** No reduction: `arranger head` plays tune as written, one step per note, each on written beat. Where *chords* fall is separate — the `grid=` axis — a note never quantised onto grid and dropped for sharing a slot.
 
