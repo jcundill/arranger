@@ -40,7 +40,13 @@ from typing import Any, Callable, Dict, List, Tuple
 
 from musthe import Note
 
-from arranger import PITCH_CLASS_NAMES, ChordParser
+from arranger import (
+    CHORD_FILLS_COMP,
+    CHORD_FILLS_HOLD,
+    PITCH_CLASS_NAMES,
+    ChordParser,
+    Request,
+)
 from arranger.annotation import _omission_clause, step_annotation
 from arranger.chords import melody_degree_name
 from arranger.tuning import (
@@ -75,6 +81,12 @@ CONFIGS: List[Dict[str, Any]] = [
     {"bass": "root,5th,approach,nearest", "grid": "melody:every_note,bass:walk"},
     {"grid": "chord:freddie"},
     {"non_chord_tone": "sustain"},
+    # A fill lives where no melody slot does, which is the one place a comping step
+    # can exist without a note beside it. Both policies, because `comp` states more
+    # attacks than `hold` and a clause that fired for one and not the other would be
+    # invisible in a sweep that only ever asked for one.
+    {"request": Request(chord_on="none", chord_fills=CHORD_FILLS_HOLD)},
+    {"request": Request(chord_on="none", chord_fills=CHORD_FILLS_COMP)},
 ]
 
 #: (what the engine decided, when this step is one of those, what the line must say).
@@ -463,10 +475,12 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         # grouped fixtures add 352, all of them from notes the old corpus did not have.
         self.assertEqual(named, 1377, "the number of steps naming their voices moved")
         # And for the comping part, whose voices are the only harmony the line can show:
-        # measured over this sweep, **1711** of the steps it arranges state a comping shape
+        # measured over this sweep, **1827** of the steps it arranges state a comping shape
         # and name each of its voices, so the reading of a thin line cannot quietly become
-        # a list of degrees again. The grouped fixtures add 802.
-        self.assertEqual(comping, 1711, "the number of comping lines naming a voice moved")
+        # a list of degrees again. The grouped fixtures add 802, and the 116 rest fills
+        # (`--chord-fills`) are the newest addition: a fill is a comping step with no
+        # melody beside it, which is why it counts here and nowhere else.
+        self.assertEqual(comping, 1827, "the number of comping lines naming a voice moved")
 
     def test_the_slash_bass_clause_is_not_a_tautology(self):
         """The one decision the witness table cannot hold, pinned in both directions.

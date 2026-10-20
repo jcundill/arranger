@@ -22,6 +22,7 @@ from .decisions import (
     resolve_texture_grips,
 )
 from .grid import Rhythm, on_grid
+from .options import CHORD_FILLS_NONE
 from .texture import (
     metric_weight,
     roles_for_slot,
@@ -260,7 +261,9 @@ def _texture_grips(role: str, slot: Slot, inputs: SlotInputs) -> Tuple[str, ...]
     )
 
 
-def _chord_here(inputs: SlotInputs, beat: Optional[float]) -> bool:
+def _chord_here(
+    inputs: SlotInputs, beat: Optional[float], melody_absent: bool
+) -> bool:
     """Whether the chord part attacks at this position.
 
     Two spellings, one question, and a **preset wins** because it is the engine's
@@ -269,7 +272,15 @@ def _chord_here(inputs: SlotInputs, beat: Optional[float]) -> bool:
     Otherwise the request's `chord_on` decides - `melody` at every written onset,
     or the positions it names - and `wants_melody` is true for every slot for the
     reason `on_grid` defers to the melody: the slots that exist are the melody's.
+
+    A slot with **no melody** is one the chord layer asked for: either a
+    `--chord-on` target or a rest `--chord-fills` fills, and a slot nothing asked
+    for is not in the timeline at all. So the chord attacks at it by construction,
+    which the rhythm test could not say - the position is precisely one the rhythm
+    does *not* name.
     """
+    if melody_absent and inputs.chord_fills != CHORD_FILLS_NONE:
+        return True
     if inputs.grid_pattern is not None:
         return on_grid(beat, inputs.grid_pattern, inputs.beats_per_bar)
     if inputs.chord_rhythm is None or inputs.chord_rhythm.wants_melody:
@@ -350,7 +361,7 @@ def slot_state(
     melody_alone = melody_alone_case(
         inputs.texture, role, slot_grips, chord_type, name, inputs.has_thumb,
         melody_voiced=sings_here,
-        on_grid=_chord_here(inputs, beat),
+        on_grid=_chord_here(inputs, beat, melody_note is None),
     )
     return SlotPlan(
         context=_slot_context(

@@ -33,6 +33,8 @@ from .grid import RHYTHM_NONE
 from .options import (
     BASS_NOTES,
     BASS_NOTES_ROOT,
+    CHORD_FILLS,
+    CHORD_FILLS_NONE,
     CHORD_NOTES,
     CHORD_NOTES_FULL,
 )
@@ -85,6 +87,7 @@ class CommonHelp:
     no_melody: str
     chord_on: str
     chord_notes: str
+    chord_fills: str
     bass_on: str
     bass_notes: str
 
@@ -153,6 +156,12 @@ HEAD_HELP = CommonHelp(
         "hand can fit - three under the melody, two once a bass note takes a string "
         "- or 3, 2 or 1 for exactly that many"
     ),
+    chord_fills=(
+        "what the chord does in a notated melody rest: 'none' (the default) rests "
+        "with the tune, 'hold' states the written chord once at the rest's onset, "
+        "and 'comp' states it on each felt beat through the rest. A rest with no "
+        "chord gets nothing, and this never adds a bass note - that is --bass-on's"
+    ),
     bass_on=(
         "when the bass attacks, comma-separated, in felt beats: 'none' (the "
         "default), 'every-beat', or positions such as '1'. The melody alone is the "
@@ -209,6 +218,12 @@ def add_common_arguments(
         choices=list(CHORD_NOTES),
         default=CHORD_NOTES_FULL,
         help=help_text.chord_notes,
+    )
+    parser.add_argument(
+        "--chord-fills",
+        choices=list(CHORD_FILLS),
+        default=CHORD_FILLS_NONE,
+        help=help_text.chord_fills,
     )
     parser.add_argument(
         "--bass-on",

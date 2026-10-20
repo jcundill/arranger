@@ -35,6 +35,7 @@ Deliberately stdlib-only: `musthe` remains the sole dependency.
 
 from __future__ import annotations
 
+import math
 import re
 import zipfile
 from dataclasses import dataclass, field, replace
@@ -44,6 +45,8 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 from xml.etree import ElementTree
 
 from arranger import (
+    CHORD_FILLS_COMP,
+    CHORD_FILLS_NONE,
     GRID_DEFAULT,
     GROUPING_AUTO,
     NO_CHORD,
@@ -76,6 +79,7 @@ from arranger.options import (
     DEFAULT_REQUEST,
     ArrangeOptions,
     Request,
+    ResolvedRequest,
     format_request,
     resolve_request,
 )
@@ -89,14 +93,17 @@ __all__ = [
     "Head",
     "HeadChange",
     "HeadNote",
+    "MelodyRest",
     "arrange_xml_head",
     "chord_at",
     "chord_slots",
     "expand_repeats",
+    "fill_slots",
     "head_cli",
     "head_skeleton",
     "load_musicxml",
     "melody_at",
+    "melody_rests",
     "melody_state",
     "parse_musicxml_chord",
 ]
@@ -2394,6 +2401,81 @@ def melody_state(head: Head, bar: int, beat: float) -> str:
     return "onset" if any(note.key == position for note in head.notes) else "held"
 
 
+def _position_at(head: Head, absolute: float) -> Tuple[int, float]:
+    """A beat on the absolute line as the `(bar, beat)` pair a slot carries.
+
+    The inverse of `grid.beat_offset`, and the only place this module turns one
+    back into the other: a segment built from durations has to name where it
+    begins in the coordinates the step loop indexes by. Rounded to six places, so
+    the sum of an eighth triplet is bar 3 beat 1 rather than a rest beginning a
+    hair before the barline.
+    """
+    beats_per_bar = head.beats_per_bar
+    index = math.floor(absolute / beats_per_bar + 1e-9)
+    return index + 1, round(absolute - index * beats_per_bar + 1.0, 6)
+
+
+@dataclass(frozen=True)
+class MelodyRest:
+    """A **notated silence** in the melody line: the span `--chord-fills` acts on.
+
+    `bar`/`beat` are where the rest begins and `beats` its length in this head's
+    metre. A rest may run past a bar line - that is a barline, not a musical split -
+    so a position plus a duration is the honest shape rather than a bar range.
+    """
+
+    bar: int
+    beat: float
+    beats: float
+
+
+def melody_rests(
+    head: Head, section: Optional[Tuple[int, int]] = None
+) -> List[MelodyRest]:
+    """The gaps between the melody's notes, as spans of silence.
+
+    **A rest is a notated silence, not a held note.** The sounding spans come from
+    each note's onset and its written duration - `melody_at`'s arithmetic, on the
+    same absolute beat line - and what is left between them is a rest. A note held
+    across a bar line covers the far side of it, so the rest after it starts where
+    the note actually stopped.
+
+    Overlapping notes are merged rather than producing a negative gap: a part with
+    two written voices can have a note begin before another ends, and silence is
+    only where nothing sounds.
+
+    The section's bounds are boundaries, so `--bars 5-8` fills 5-8 and nothing on
+    either side of it.
+    """
+    lo, hi = section if section is not None else head.bars
+    start = beat_offset(lo, 1.0, head.beats_per_bar)
+    stop = beat_offset(hi, 1.0, head.beats_per_bar)
+    spans: List[Tuple[float, float]] = []
+    for note in head.notes:
+        if not lo <= note.bar < hi:
+            continue
+        begin = beat_offset(note.bar, note.beat, head.beats_per_bar)
+        end = begin + note.duration * head.beat_type
+        spans.append((begin, min(end, stop)))
+    spans.sort()
+
+    rests: List[MelodyRest] = []
+    cursor = start
+    for begin, end in spans:
+        if begin - cursor > BEAT_EPSILON:
+            rests.append(_rest_at(head, cursor, begin - cursor))
+        cursor = max(cursor, end)
+    if stop - cursor > BEAT_EPSILON:
+        rests.append(_rest_at(head, cursor, stop - cursor))
+    return rests
+
+
+def _rest_at(head: Head, absolute: float, beats: float) -> MelodyRest:
+    """One rest span, with its start expressed in the slot coordinates."""
+    bar, beat = _position_at(head, absolute)
+    return MelodyRest(bar=bar, beat=beat, beats=round(beats, 6))
+
+
 def _tick_key(bar: int, beat: float) -> Tuple[int, int]:
     """A position as a **grouping key**: its bar and its beat rounded to the nearest tick.
 
@@ -2643,6 +2725,128 @@ def _slots_at(
     return slots
 
 
+def fill_slots(
+    head: Head,
+    request: ResolvedRequest,
+    section: Optional[Tuple[int, int]] = None,
+    grouping: Optional[Sequence[int]] = None,
+) -> List[Tuple[Optional[str], str, str, int, float, float]]:
+    """The chord slots `--chord-fills` puts in the tune's rests.
+
+    A **rest-relative policy**, not a rhythm: `--chord-on` names the positions the
+    chord attacks on, and this answers the other question - what the chord does
+    while the tune is *not* playing. `hold` states one chord per rest, `comp` one
+    per felt beat inside it, and both attack at the rest's onset wherever that is.
+
+    A rest is **split** where the harmony changes and where a `--chord-on` target
+    falls inside it, because either is a new chord to state; a fill then continues
+    after the target. The union in `_head_slots` deduplicates a fill landing on a
+    target, and the target's slot is the one kept.
+
+    A rest with **no chord in force** (`NC`, or a symbol this library cannot voice)
+    gets nothing: there is no chord to state, and inventing one is the failure every
+    other position rule in this module refuses.
+    """
+    fills = request.chord_fills
+    if fills == CHORD_FILLS_NONE:
+        return []
+    lo, hi = section if section is not None else head.bars
+    lengths = tuple(grouping) if grouping else (1,) * head.beats_per_bar
+    cuts = _fill_cuts(head, request.chord_rhythm, (lo, hi), lengths)
+    slots: List[Tuple[Optional[str], str, str, int, float, float]] = []
+    for rest in melody_rests(head, (lo, hi)):
+        begin = beat_offset(rest.bar, rest.beat, head.beats_per_bar)
+        end = begin + rest.beats
+        bounds = [begin] + [cut for cut in cuts if begin < cut < end] + [end]
+        for start, stop in zip(bounds, bounds[1:]):
+            slots.extend(_fill_segment(head, start, stop, fills, lengths))
+    return slots
+
+
+def _fill_cuts(
+    head: Head,
+    rhythm: Optional[Rhythm],
+    section: Tuple[int, int],
+    grouping: Tuple[int, ...],
+) -> List[float]:
+    """The positions that split a rest: a harmony change, and a chord target.
+
+    Both mean "a new chord starts here" to a fill, and both are placed on the
+    absolute beat line so a rest can be cut by either without asking which bar it
+    lies in. `rhythm` may name nothing (`--chord-on none`), which is the mode where
+    the chord exists *only* in the rests.
+    """
+    lo, hi = section
+    points = {
+        round(beat_offset(change.bar, change.beat, head.beats_per_bar), 6)
+        for change in head.chords
+        if lo <= change.bar < hi
+    }
+    if rhythm is not None and not rhythm.is_none:
+        for _melody, _quality, _name, bar, beat, _length in rhythm_slots(
+            head, rhythm, section, grouping
+        ):
+            points.add(round(beat_offset(bar, beat, head.beats_per_bar), 6))
+    return sorted(points)
+
+
+def _fill_segment(
+    head: Head,
+    start: float,
+    stop: float,
+    fills: str,
+    grouping: Tuple[int, ...],
+) -> List[Tuple[Optional[str], str, str, int, float, float]]:
+    """One un-split stretch of rest: its attacks, each with the harmony in force."""
+    positions = [start]
+    if fills == CHORD_FILLS_COMP:
+        positions.extend(_felt_starts(head, start, stop, grouping))
+    slots: List[Tuple[Optional[str], str, str, int, float, float]] = []
+    for index, position in enumerate(positions):
+        bar, beat = _position_at(head, position)
+        change = chord_at(head.chords, bar, beat)
+        if change is None or change.quality is None:
+            continue
+        following = positions[index + 1] if index + 1 < len(positions) else stop
+        root_name, _ = ChordParser.parse_chord_name(change.chord)
+        promoted = promote_slash_chord(root_name or "", change.quality, change.bass)
+        name = f"{change.chord}/{change.bass}" if change.bass else change.chord
+        slots.append(
+            (
+                None,
+                promoted,
+                name,
+                bar,
+                beat,
+                round((following - position) / head.beat_type, 6),
+            )
+        )
+    return slots
+
+
+def _felt_starts(
+    head: Head, start: float, stop: float, grouping: Tuple[int, ...]
+) -> List[float]:
+    """The felt beats **strictly inside** `(start, stop)`, on the absolute line.
+
+    A rest's onset is the fill's first attack wherever it falls, so this answers
+    only the interior - the group starts a `comp` also attacks on. The grouping
+    rather than the denominator count, for the reason `rhythm_beats` reads it: a
+    6/8 bar has two pulses, not six eighths.
+    """
+    beats_per_bar = head.beats_per_bar
+    first_bar = _position_at(head, start)[0]
+    last_bar = _position_at(head, stop - BEAT_EPSILON)[0]
+    starts = group_starts(beats_per_bar, grouping)
+    found: List[float] = []
+    for bar in range(first_bar, last_bar + 1):
+        for beat in starts:
+            absolute = beat_offset(bar, beat, beats_per_bar)
+            if start + BEAT_EPSILON < absolute < stop - BEAT_EPSILON:
+                found.append(absolute)
+    return found
+
+
 def head_skeleton(
     head: Head,
     section: Optional[Tuple[int, int]] = None,
@@ -2857,18 +3061,20 @@ def _head_slots(
         return _merge_chord_slots(
             slots, head, section, options.grid or GRID_DEFAULT, grouping
         )
-    rhythm = resolve_request(
-        options.request, head.beats_per_bar, grouping
-    ).chord_rhythm
-    if rhythm.wants_melody and not rhythm.positions:
-        # The default adds nothing: the skeleton already has one chord per written
-        # melody note, and no position is invented in the tune's rests. A chord
-        # chart never reaches here - `_melodyless_request` answers it before the
-        # slots are built.
-        return slots
-    if rhythm.is_none:
-        return slots
-    return _merge_rhythm_slots(slots, head, section, rhythm, grouping)
+    request = resolve_request(options.request, head.beats_per_bar, grouping)
+    chord_on = request.chord_rhythm
+    extra: List[Tuple[Optional[str], str, str, int, float, float]] = []
+    if not chord_on.is_none and not (chord_on.wants_melody and not chord_on.positions):
+        # `melody` alone adds nothing: the skeleton already has one chord per
+        # written note. A **positions** rhythm adds the attacks the caller named.
+        extra = rhythm_slots(head, chord_on, section, grouping)
+    extra.extend(fill_slots(head, request, section, grouping))
+    if head.first_bar_implicit:
+        # The anacrusis is not comping space, for the reason `_merge_chord_slots`
+        # gives: a chord there fills the pickup and moves the head's downbeat.
+        extra = [slot for slot in extra if slot[3] != head.bars[0]]
+    return _unioned(slots, extra)
+
 
 
 def arrange_xml_head(
@@ -3062,33 +3268,6 @@ def _unioned(
     return merged
 
 
-def _merge_rhythm_slots(
-    slots: List[Tuple[Tuple[Optional[str], str, str], int, float, float]],
-    head: Head,
-    section: Optional[Tuple[int, int]],
-    rhythm: Rhythm,
-    grouping: Tuple[int, ...],
-) -> List[Tuple[Tuple[Optional[str], str, str], int, float, float]]:
-    """A **requested** chord rhythm unioned into the melody's slots.
-
-    This is the request's half of the comping union, and it is deliberately not
-    the melody-anchored one: it adds exactly the positions `--chord-on` names, so
-    a bar the tune never enters gets a chord through a position the caller asked
-    for rather than through a grid figure. A position the tune *holds* through is
-    kept - a stab under a held note is what `1&` asks for - and a `None` melody at
-    one means the tune is silent, which the comping route reports rather than
-    inventing a note.
-
-    **A pickup bar is still not comping space**, for the reason
-    `_merge_chord_slots` gives: the anacrusis is inferred from a short first bar,
-    and a generated chord there fills it and moves the head's downbeat.
-    """
-    extra = rhythm_slots(head, rhythm, section, grouping)
-    if head.first_bar_implicit:
-        extra = [slot for slot in extra if slot[3] != head.bars[0]]
-    return _unioned(slots, extra)
-
-
 # ---------------------------------------------------------------------------
 # Command line
 # ---------------------------------------------------------------------------
@@ -3140,6 +3319,7 @@ def _head_options(args: Any) -> ArrangeOptions:
             melody=not args.no_melody,
             chord_on=_chord_on(args),
             chord_notes=args.chord_notes,
+            chord_fills=args.chord_fills,
             bass_on=args.bass_on,
             bass_notes=args.bass_notes,
         ),

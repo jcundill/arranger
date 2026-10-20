@@ -120,7 +120,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         parser there is nothing to disagree with, so what the count is for changes:
         it is now a tripwire for a flag appearing or vanishing unnoticed.
 
-        **19, and the grouping flag that briefly made it 20 is gone.** The metre's
+        **20, and the grouping flag that briefly made it 21 is gone.** The metre's
         third fact - which denominator units are felt as one beat - is the score's
         own: the importer reads an `N+N` direction, the beaming or a metronome pulse,
         and a hand-built progression declares the whole metre as a `TimeSignature`. A
@@ -129,7 +129,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         the grip-family axis.
         """
         flags = self.parser()
-        self.assertEqual(len(flags), 19, "the flag count moved; remeasure")
+        self.assertEqual(len(flags), 20, "the flag count moved; remeasure")
 
     def test_every_flag_is_one_somewhere(self):
         """No flag is registered without a decision behind it.
@@ -144,10 +144,10 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         self.assertEqual(
             sorted(self.parser()),
             [
-                "bars", "bars_per_line", "bass_notes", "bass_on", "chord_notes",
-                "chord_on", "fallback", "file", "fret_max", "fret_min", "gp5",
-                "html", "musicxml", "mutes", "no_melody", "non_chord_tone",
-                "note_names", "part", "tab",
+                "bars", "bars_per_line", "bass_notes", "bass_on", "chord_fills",
+                "chord_notes", "chord_on", "fallback", "file", "fret_max",
+                "fret_min", "gp5", "html", "musicxml", "mutes", "no_melody",
+                "non_chord_tone", "note_names", "part", "tab",
             ],
         )
 
@@ -179,7 +179,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         self.assertEqual(parsed.file, "head.musicxml")
 
     def test_the_help_text_is_not_one_shared_string(self):
-        """Fifteen flags take their prose from `CommonHelp`, and four are written inline.
+        """Sixteen flags take their prose from `CommonHelp`, four are written inline.
 
         Measured before `arranger/cli.py` existed: of the seventeen shared flags,
         all seventeen agreed on every field of *meaning*, and eleven disagreed on
@@ -188,8 +188,8 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         silently changed what both commands print, with nothing to catch it.
 
         With one parser there is no "differing" set any more, so this asserts the
-        partition that produced it instead: **eleven flags get their text from
-        `CommonHelp` and eight get it written inline**, and both halves are named.
+        partition that produced it instead: **sixteen flags get their text from
+        `CommonHelp` and four get it written inline**, and both halves are named.
         That is the property the split was built on - a flag whose help is the same
         wherever it is read is written once at the `add_argument` call, and one
         whose wording carries an arrangement of its own lives in the table.
@@ -208,18 +208,18 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         self.assertEqual(
             sorted(flags),
             [
-                "bars", "bars_per_line", "bass_notes", "bass_on", "chord_notes",
-                "chord_on", "fallback", "file", "fret_max", "fret_min", "gp5",
-                "html", "musicxml", "mutes", "no_melody", "non_chord_tone",
-                "note_names", "part", "tab",
+                "bars", "bars_per_line", "bass_notes", "bass_on", "chord_fills",
+                "chord_notes", "chord_on", "fallback", "file", "fret_max",
+                "fret_min", "gp5", "html", "musicxml", "mutes", "no_melody",
+                "non_chord_tone", "note_names", "part", "tab",
             ],
         )
         self.assertEqual(
             declared,
             {
-                "bars", "bars_per_line", "bass_notes", "bass_on", "chord_notes",
-                "chord_on", "fret_max", "fret_min", "gp5", "html", "musicxml",
-                "mutes", "no_melody", "note_names", "tab",
+                "bars", "bars_per_line", "bass_notes", "bass_on", "chord_fills",
+                "chord_notes", "chord_on", "fret_max", "fret_min", "gp5",
+                "html", "musicxml", "mutes", "no_melody", "note_names", "tab",
             },
         )
         # Every declared field reaches its flag, and reaches it with that text.

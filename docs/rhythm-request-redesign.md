@@ -1,28 +1,32 @@
 # The arrangement request: a rhythm-first redesign
 
-**Status:** proposal for review. Not implemented, and not yet in `AGENTS.md`'s
-routing table. This file records the problem, the options considered and the
-recommended design. The decision points at the end are still open.
+**Status:** in progress, stage by stage. The plan below is being implemented in the
+order it states, one commit per stage with `make check` green. This file records the
+problem, the options considered and the design; the decision points it left open were
+settled in review (see the notes under each).
 
-**Progress:** Stages 0-2 have landed. Stage 0 is the `Rhythm` grammar; Stage 1 is the
-`Request` value, `resolve_request`, the CLI flags and the run header; Stage 2 is the
-slot union. `arranger head` offers `--no-melody`, `--chord-on`, `--chord-notes`,
-`--bass-on` and `--bass-notes`, and the five old flags are gone; the staff flag is
-`--note-names`. The internal axes remain spellable on `ArrangeOptions` as the
-engine's implementation, and Stage 8 retires them from the public surface.
+**Progress:** Stages 0, 1, 2 and 2b have landed. Stage 0 is the `Rhythm` grammar;
+Stage 1 is the `Request` value, `resolve_request`, the CLI flags and the run header;
+Stage 2 is the slot union; Stage 2b is `--chord-fills`, the chord's policy in a
+notated melody rest. `arranger head` offers `--no-melody`, `--chord-on`,
+`--chord-notes`, `--chord-fills`, `--bass-on` and `--bass-notes`, and the five old
+flags are gone; the staff flag is `--note-names`. The internal axes remain spellable
+on `ArrangeOptions` as the engine's implementation, and Stage 8 retires them from the
+public surface.
 
-What that means for the rest of this document: `head FILE` now adds nothing - one
-chord per written melody note, no position invented in the tune's rests - and
-`--chord-on POSITIONS` both **thins** the harmonisation where a slot is off the grid
-and **adds** an attack at its positions, under a held note included. A file with no
-melody notes is answered as a chord chart: the rhythm falls back to `every-beat` and
-the substitution is reported in the loader's notes. Still to land: 2b (rest fills),
-3 (bass positions), 4 (the bass-only route and the rest answer), 5 (durations),
-6 (staff moved thumb), 7 (comping and lone bass), 8 (docs and clean-up).
+What that means for the rest of this document: `head FILE` adds nothing - one chord
+per written melody note and no position invented in the tune's rests. `--chord-on
+POSITIONS` both **thins** the harmonisation where a slot is off the grid and **adds**
+an attack at its positions, under a held note included. `--chord-fills hold|comp`
+states the written harmony where the tune is *silent*: one chord per rest, or one per
+felt beat inside it, split at a chord change and at a target, with the fill stopping
+at the rest's end. A rest under `NC` gets nothing, `--no-melody` refuses the flag, and
+a file with no melody notes is answered as a chord chart (rhythm `every-beat`, the
+substitution reported in the loader's notes).
 
-**Settled in review:** `--chord-fills {none,hold,comp}` is the chord's policy in
-a **notated melody rest** — not a thin chord under a melody note. The bass
-remains `--bass-on`.
+Still to land: 3 (bass at requested positions), 4 (the bass-only route and the
+`chord_here` per-slot pass, of which the fills half is built), 5 (durations and
+ties), 6 (staff moved thumb), 7 (comping and lone bass), 8 (docs and clean-up).
 
 ## The problem in one paragraph
 

@@ -59,7 +59,7 @@ round-2 plan: its live half is the module map below and the budget table in
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1287 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **1308 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
 
