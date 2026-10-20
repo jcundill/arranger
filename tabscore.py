@@ -338,6 +338,13 @@ def _is_hold(
     """
     if not events or step.repeated:
         return False
+    if step.bass is not None and not step.bass_held:
+        # The thumb is **struck** here, so this is an attack however the upper voices
+        # compare: a bass line on one chord repeats its root beat after beat, and
+        # folding those into one tied note deleted three of the four from the score
+        # (`tests/test_lone_bass.py` counts them). A carried thumb is the opposite -
+        # it is still ringing, and that *is* the tie.
+        return False
     previous = events[-1][0]
     if previous is None:
         return False

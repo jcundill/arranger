@@ -153,10 +153,18 @@ class TestTheContentQuestions(unittest.TestCase):
 class TestTheRefusals(unittest.TestCase):
     """A request the engine cannot honour is answered before any voicing work."""
 
-    def test_no_melody_cannot_ask_for_the_melody_s_rhythm(self):
-        with self.assertRaises(ValueError) as caught:
-            resolve_request(Request(melody=False, chord_on="melody"), 4)
-        self.assertIn("melody=off", str(caught.exception))
+    def test_no_melody_reads_the_melody_s_rhythm_as_every_beat(self):
+        """The default cannot attach to a tune this guitar does not play.
+
+        It is a **derivation** rather than a refusal: `--no-melody` on its own is a
+        complete request, and the header prints the positions it resolved to. The
+        refusal this replaces told the caller to name positions such as `every-beat`,
+        which is the answer the metre has anyway.
+        """
+        for spelling in ("melody", ""):
+            request = Request(melody=False, **({"chord_on": spelling} if spelling else {}))
+            resolved = resolve_request(request, 4)
+            self.assertEqual(resolved.chord_on, "1,2,3,4", spelling)
 
     def test_no_melody_cannot_ask_for_rest_fills(self):
         with self.assertRaises(ValueError) as caught:

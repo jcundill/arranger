@@ -379,14 +379,14 @@ class TestHeadCli(unittest.TestCase):
         self.assertEqual(self.code, 0, again)
         self.assertIn(f"chord-on={fields['chord-on']}", again)
 
-    def test_no_melody_comps_and_refuses_the_tune_s_rhythm(self):
+    def test_no_melody_defaults_the_chord_to_every_beat(self):
         """`--no-melody` hands the tune away, and the chord defaults to every beat.
 
-        The default is a **default**, not a rule: an explicit `--chord-on melody`
-        with `--no-melody` is refused, because there is no melody on this guitar
-        for the chord to attach to. The canonical header prints the positions the
-        metre actually has, which is why it is asserted as `chord-on=` rather than
-        against the word `every-beat`.
+        The default is a **derivation**, not a rule: `chord-on=melody` names the written
+        onsets, and this guitar has none - so the metre's own reading is used, and the
+        canonical header prints the positions it actually resolved to rather than the
+        word `every-beat`. Spellings are one request: omitting the flag and naming
+        `melody` produce the same arrangement.
         """
         output = self.run_cli(RAINY_DAY, "--bars", "1-3", "--no-melody")
         self.assertEqual(self.code, 0)
@@ -394,13 +394,11 @@ class TestHeadCli(unittest.TestCase):
         self.assertIn("chord-on=", output)
         self.assertNotIn("chord-on=melody", output)
 
-        import io
-        from contextlib import redirect_stderr
-
-        errors = io.StringIO()
-        with redirect_stderr(errors), self.assertRaises(SystemExit):
-            self.run_cli(RAINY_DAY, "--no-melody", "--chord-on", "melody")
-        self.assertIn("melody=off", errors.getvalue())
+        named = self.run_cli(
+            RAINY_DAY, "--bars", "1-3", "--no-melody", "--chord-on", "melody"
+        )
+        self.assertEqual(self.code, 0)
+        self.assertEqual(named, output, "two spellings of one request differed")
 
     def test_bass_on_is_what_writes_a_bass_line(self):
         """`--bass-on` is the only thing that adds a note below the tune.

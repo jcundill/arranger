@@ -33,6 +33,7 @@ from .bass_rules import (
     BASS_STYLE_NONE,
 )
 from .grid import (
+    RHYTHM_EVERY_BEAT,
     RHYTHM_MELODY,
     RHYTHM_NONE,
     Rhythm,
@@ -175,6 +176,14 @@ def resolve_request(
     answers a different one.
     """
     chord_rhythm = parse_rhythm(request.chord_on, beats_per_bar, grouping)
+    if not request.melody and chord_rhythm.wants_melody:
+        # **`--no-melody` on its own is a complete request.** The chord's default is
+        # "the written onsets", and a request that hands the tune to another instrument
+        # has none - so the answer is the metre's own reading of where a chord falls,
+        # which is every beat. It is a **derivation rather than a silent default**: the
+        # run header prints the resolved positions (`chord-on=1,2,3,4`), so a caller who
+        # wanted a sparser comp names it and can see what they were given otherwise.
+        chord_rhythm = parse_rhythm(RHYTHM_EVERY_BEAT, beats_per_bar, grouping)
     bass_rhythm = parse_rhythm(request.bass_on, beats_per_bar, grouping)
     return _resolved(request, chord_rhythm, bass_rhythm)
 
@@ -273,18 +282,14 @@ def _refuse(resolved: ResolvedRequest) -> None:
 
 
 def _refuse_melody(resolved: ResolvedRequest) -> None:
-    """The two questions that only make sense when the guitar sings the tune.
+    """The one remaining question that only makes sense when the guitar sings the tune.
 
-    Both are about a **span of the tune** - its onsets, its rests - and the guitar
-    has no tune on its part to attach either to, so neither can be answered by
-    guessing a different rhythm.
+    It is about a **span of the tune** - its notated rests - and the guitar has no
+    tune on its part to attach it to, so it cannot be answered by guessing a different
+    policy. `chord-on=melody` used to be refused here too; it is now derived to
+    `every-beat` in `resolve_request`, which is the one answer that keeps
+    `--no-melody` a complete request.
     """
-    if not resolved.melody and resolved.chord_rhythm.wants_melody:
-        raise ValueError(
-            "chord-on=melody attaches the chord to the written melody, and "
-            "melody=off hands that tune to another instrument - name the "
-            "positions the chord falls on instead, such as every-beat"
-        )
     if not resolved.melody and resolved.chord_fills != CHORD_FILLS_NONE:
         raise ValueError(
             f"chord-fills={resolved.chord_fills} is a policy for a notated melody "

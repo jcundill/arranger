@@ -14,7 +14,15 @@ import unittest
 
 from arranger import Request
 from arranger.annotation import step_annotation
-from tests.support import COMMON_8, WALTZ, arranged
+from arranger.render import format_progression
+from tests.support import (
+    COMMON_8,
+    FIVE_FOUR,
+    I_WAS_DOING_ALL_RIGHT,
+    TWELVE_EIGHT,
+    WALTZ,
+    arranged,
+)
 
 
 def _lone_bass(steps):
@@ -141,3 +149,111 @@ class TestTheSingingRouteIsUntouched(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTheDefaultForAMelodylessRequest(unittest.TestCase):
+    """`melody=off` on its own is a complete request, and says where the chord falls.
+
+    The chord's default is "the written onsets", and a request that hands the tune to
+    somebody else has none - so the answer is the metre's own reading of where a chord
+    falls: every **felt beat**, which is the grouping's pulse rather than the
+    denominator's count. It is a derivation rather than a silent default, and the run
+    header prints the resolved positions, which is what makes it visible.
+    """
+
+    def test_the_resolved_request_names_the_positions(self):
+        from arranger.options import resolve_request
+
+        resolved = resolve_request(Request(melody=False), 4, (1, 1, 1, 1))
+        self.assertEqual(resolved.chord_on, "1,2,3,4")
+
+    def test_a_compound_metre_gets_its_pulses(self):
+        """`1,2,3` here are **felt** beats: in 12/8 they land on the 1st, 5th and 9th."""
+        from arranger.options import resolve_request
+
+        resolved = resolve_request(Request(melody=False), 12, (4, 4, 4))
+        self.assertEqual(resolved.chord_on, "1,2,3")
+
+    def test_a_sparser_request_still_wins(self):
+        from arranger.options import resolve_request
+
+        resolved = resolve_request(
+            Request(melody=False, chord_on="1"), 4, (1, 1, 1, 1)
+        )
+        self.assertEqual(resolved.chord_on, "1")
+
+    def test_the_guitar_states_a_chord_on_each_of_them(self):
+        steps, _head, _notes = arranged(
+            COMMON_8, section=(1, 2), request=Request(melody=False)
+        )
+        self.assertEqual([step.beat for step in steps], [1.0, 2.0, 3.0, 4.0])
+        for step in steps:
+            self.assertTrue(step.voicing.upper_midi_notes())
+            self.assertFalse(step.melody_voiced)
+
+    def test_fills_are_still_refused(self):
+        """A fill policy needs melody rests to fill, and this request has none."""
+        from arranger.options import resolve_request
+
+        with self.assertRaises(ValueError):
+            resolve_request(
+                Request(melody=False, chord_fills="hold"), 4, (1, 1, 1, 1)
+            )
+
+
+class TestALoneBassLineAcrossTheMetres(unittest.TestCase):
+    """`chord-on=none` with a bass line is the thumb and nothing else, in every metre."""
+
+    #: head, and how many thumb attacks one full bar of it carries. `every-beat` is one
+    #: per **felt** beat, so 5/4's `3+2` is two and 12/8's `4+4+4` is three.
+    BARS = (
+        (COMMON_8, (2, 3), 4),
+        (I_WAS_DOING_ALL_RIGHT, (2, 3), 2),
+        (WALTZ, (2, 3), 3),
+        (FIVE_FOUR, (2, 3), 2),
+        (TWELVE_EIGHT, (2, 3), 3),
+    )
+
+    def _bar(self, path, section):
+        steps, head, _notes = arranged(
+            path,
+            section=section,
+            request=Request(melody=False, chord_on="none", bass_on="every-beat"),
+        )
+        return steps, head
+
+    def test_the_bar_carries_its_felt_beats(self):
+        for path, section, expected in self.BARS:
+            with self.subTest(head=path.split("/")[-1]):
+                steps, _head = self._bar(path, section)
+                attacks = [
+                    step for step in steps if step.bass is not None and not step.bass_held
+                ]
+                self.assertEqual(len(attacks), expected)
+
+    def test_no_thumb_note_is_refused(self):
+        """A lone thumb has no upper shape to fight with, so nothing can refuse it."""
+        for path, section, _expected in self.BARS:
+            with self.subTest(head=path.split("/")[-1]):
+                steps, _head = self._bar(path, section)
+                self.assertEqual(
+                    [step.bass_refused for step in steps if step.bass_refused], []
+                )
+
+    def test_every_renderer_carries_every_note(self):
+        """The one-line tab, the staff and the score agree about a bar of lone thumbs."""
+        from tabstaff import format_tab_staff
+        from tabxml import format_musicxml
+
+        steps, head = self._bar(COMMON_8, (2, 3))
+        line = format_progression(steps)
+        self.assertEqual(line.count("bass:"), 4)
+        staff = format_tab_staff(steps, show_chords=False, show_melody=False)
+        # One note per position and nothing else, so the six rows hold four digits
+        # between them - whichever string the thumb found that bar.
+        rows = [row for row in staff.splitlines() if row[:1] in "eBGDAE"]
+        self.assertEqual(len(rows), 6, staff)
+        self.assertEqual(sum(ch.isdigit() for row in rows for ch in row), 4, staff)
+        document = format_musicxml(steps, beats_per_bar=4, beat_type=4)
+        self.assertEqual(document.count("<note>"), 4, document)
+        self.assertNotIn("<rest", document)

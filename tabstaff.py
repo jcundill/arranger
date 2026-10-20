@@ -318,7 +318,13 @@ def _collapse_holds(
         # `bass_only` step is the other half of that rule and is a strike for the
         # opposite reason: its *upper* voices are held while the thumb moves, so it
         # would otherwise be collapsed away entirely and the walking line with it.
-        strikes = pitches != held or step.repeated or step.bass_only
+        # A column with **no upper voices at all** cannot be holding a shape: whatever it
+        # sounds - the thumb on its own - is struck. Without this a bass line of repeated
+        # roots read as one note and three holds, so the staff showed two notes where the
+        # tab showed four.
+        strikes = (
+            pitches != held or step.repeated or step.bass_only or not pitches
+        )
         collapsed.append((onset, step, strikes))
         if strikes:
             held = pitches

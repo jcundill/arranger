@@ -45,8 +45,11 @@ all say the string sounds without being plucked.
 Stage 6 fixed a renderer's outlier: a **held column whose thumb moves** is a hold for the
 shape and a new attack for the bass, and the ASCII staff and the HTML drew neither.
 
-Still to land: 7 (the lone-bass line's defaults and `--no-melody` measurements), 8
-(docs and clean-up).
+Stage 7 made `--no-melody` a complete request - the chord defaults to the metre's felt
+beats - and measured the lone bass line across five metres, which found two renderers
+that had been folding a repeated thumb into a hold.
+
+Still to land: 8 (docs and clean-up).
 
 ## The problem in one paragraph
 
@@ -698,6 +701,35 @@ fret is unambiguous on the row it is drawn on.
   renderers agree.
 - This is where the old "`--parts bass` is melody-slot-driven" bug is fixed for
   good.
+
+**Landed as:** `resolve_request` **derives** the melody-less default rather than
+refusing it - `chord_on=melody` names the written onsets, and a request that hands the
+tune away has none, so the metre's own reading is used. The header prints the resolved
+positions (`chord-on=1,2,3,4`, `1,2` in 2/2, `1,5,9` in a 12/8 bar), which is what makes
+the derivation visible; the refusal it replaced already told the caller to name
+`every-beat`, which is the answer the metre has anyway. Spellings are one request:
+omitting the flag and writing `melody` produce the same arrangement, and the CLI test
+asserts that round trip.
+
+The lone bass line itself was Stage 4's route, so this stage is its **measurement** and
+the two renderers it caught out. Measured over the committed heads with
+`--no-melody --chord-on none --bass-on every-beat`: 4 attacks a bar in 4/4, 2 in 2/2, 3
+in 3/4, **2 in 5/4's `3+2` and 3 in 12/8's `4+4+4`** - `every-beat` is one per felt beat,
+not one per denominator unit - and **zero `bass_refused`** in every one.
+
+Two renderers agreed with the tab only because a *hold* had never been asked to sound a
+thumb and nothing else:
+
+- `tabstaff._collapse_holds` marked a column with **no upper voices** a hold of the
+  previous one, so a bar of four repeated roots drew two notes. A column with nothing
+  above the thumb cannot be holding a shape; whatever it sounds is struck.
+- `tabscore._is_hold` folded those same steps into one tied note, for the same reason.
+  A step whose **thumb is struck** is an attack however the upper voices compare; a
+  *carried* thumb is the opposite, and that is the tie.
+
+`parts=bass` keeps its melody-anchored positions until Stage 8 removes the axis, and
+that is now stated rather than implied: the request spelling above is the fix, and the
+axis is the thing being retired.
 
 ### Stage 8: docs, cleanup and measurement
 
