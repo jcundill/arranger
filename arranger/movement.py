@@ -1,17 +1,18 @@
 """The step loop: one progression in, one arrangement out.
 
 `arrange_progression` is the entry point. It turns `(melody, quality, name)`
-triples into `ArrangementStep`s, dispatching each slot to one of five routes -
-a rest, a texture fill, a no-chord melody-alone step, a comping shape, or a
-harmonised melody step - and merging the walking bass in afterwards.
+triples into `ArrangementStep`s by asking `route_dispatch` which of the five routes
+takes each slot - a rest, a texture fill, a no-chord melody-alone step, a comping
+shape, or a harmonised melody step - and merging the walking bass in afterwards.
 
-One step's candidates are built in `step_prepare`; the melody-bearing route is
-in `harmonised_route`; the route dispatch itself (`_route_slot`) lives here so
-the loop stays one module. `VoiceLeadingEngine` is a facade of one-line
-delegates onto this module and `step_prepare`. The engine imports `grips`,
-`cost`, `chords` and the rest directly and does not import `steps` at all.
-`slots.arrange_slots` delegates through the class, so the imported-head path and
-the hand-built one still run one loop rather than two.
+This module owns the **sequencing**: the knobs resolved once, the slot list, the
+loop, and the bass merge. The branch table is `route_dispatch`; one step's
+candidates are built in `step_prepare`; the melody-bearing route is in
+`harmonised_route`. `VoiceLeadingEngine` is a facade of one-line delegates onto this
+module and `step_prepare`. The engine imports `grips`, `cost`, `chords` and the
+rest directly and does not import `steps` at all. `slots.arrange_slots` delegates
+through the class, so the imported-head path and the hand-built one still run one
+loop rather than two.
 """
 
 from __future__ import annotations
@@ -20,26 +21,12 @@ from typing import Container, List, Optional, Sequence, Tuple
 
 from .bass import Slot
 from .bass_merge import carry_bass
-from .decisions import (
-    MELODY_ALONE_BASS,
-    MELODY_ALONE_NO_CHORD,
-    MELODY_ALONE_REST,
-    MELODY_ALONE_TEXTURE,
-)
 from .grips import MELODY_STRING_CHOICES_FULL
 from .grouping import COMMON_TIME, TimeSignature
-from .harmonised_route import harmonised_step
 from .options import DEFAULT_REQUEST, ArrangeOptions, Request
 from .resolution import resolve_knobs, resolve_policies
-from .routes import (
-    bass_alone_step,
-    comping_step,
-    no_chord_step,
-    previous_shape,
-    rest_step,
-    texture_fill_step,
-)
-from .slot_plan import Carried, SlotInputs, SlotPlan, slot_state
+from .route_dispatch import dispatch_step
+from .slot_plan import Carried, SlotInputs, slot_state
 from .tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
@@ -47,80 +34,6 @@ from .tuning import (
 )
 
 __all__ = ["arrange_progression"]
-
-
-def _route_without_upper_voices(
-    arrangements: List[ArrangementStep], slot: Slot, plan: SlotPlan
-) -> None:
-    """The two answers for a slot with nothing above the thumb: the note, or nothing.
-
-    They are the **same situation read by different parts**, which is why they are one
-    branch rather than two: nothing above the thumb sounds here, and only the bass
-    line's own claim on the slot makes it a note. A rest where the bass asked for one
-    would drop the thumb, which is the one thing the bass grid exists to place - and a
-    thumb where the line has no note is not a choice, it is a refusal to report.
-    """
-    if plan.melody_alone == MELODY_ALONE_BASS:
-        bass_alone_step(arrangements, slot, plan.context)
-        return
-    rest_step(
-        arrangements, slot, plan.context,
-        sings_here=plan.sings_here, silence=plan.silence,
-    )
-
-
-def _route_slot(
-    arrangements: List[ArrangementStep],
-    slot: Slot,
-    plan: SlotPlan,
-) -> None:
-    """Send one planned slot to exactly one route, which appends its step.
-
-    The order is the contract: rest, fill, `NC`, comping, melody-bearing. A fill that
-    cannot be filled falls through rather than returning, because the chord of the
-    tune must not be lost to a texture - `texture_fill_step`'s own answer.
-
-    The route reads the plan's `context` and `inputs`, so the slot facts and the
-    arrangement facts keep the values the plan decided.
-    """
-    context = plan.context
-    inputs = plan.inputs
-
-    if plan.melody_alone in (MELODY_ALONE_BASS, MELODY_ALONE_REST):
-        _route_without_upper_voices(arrangements, slot, plan)
-        return
-    if plan.melody_alone == MELODY_ALONE_TEXTURE:
-        if texture_fill_step(
-            arrangements, slot, context,
-            top_strings=inputs.top_strings,
-            previous=previous_shape(arrangements),
-        ):
-            return
-    if plan.melody_alone == MELODY_ALONE_NO_CHORD:
-        no_chord_step(
-            arrangements, slot, context,
-            top_strings=inputs.top_strings,
-            previous=previous_shape(arrangements),
-        )
-        return
-    # --- The comping route: the guitar harmonises, somebody else sings ---
-    # See `comping_step`: taken before `prepare_step` because there is no melody for
-    # the guitar here, and only after the NC and melody-alone branches, which are the
-    # cases with no harmony to state.
-    if not plan.sings_here and not inputs.melody_only:
-        if comping_step(
-            arrangements, slot, context,
-            chord_type=context.harmony.chord_type,
-            melody_onsets=inputs.melody_onsets,
-            parts=inputs.parts,
-            harmony_family=inputs.harmony_family,
-        ):
-            return
-
-    # Every melody-bearing route below pins a note, and a slot with none has left the
-    # loop by now: the guard at the top refuses one the guitar is asked to sing, and
-    # the comping block above always steps or returns.
-    harmonised_step(arrangements, slot, plan)
 
 
 def _loop_slots(
@@ -238,7 +151,7 @@ def arrange_progression(
         plan = slot_state(carried, slot, slot_inputs)
         if plan is None:
             continue
-        _route_slot(arrangements, slot, plan)
+        dispatch_step(arrangements, slot, plan)
 
     # The thumb's notes ring until something replaces them. Last, because it reads the
     # steps the routes emitted rather than deciding anything about them - and after

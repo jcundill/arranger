@@ -120,11 +120,20 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/slot_plan.py": Budget(6, 89, 5),
     "arranger/step_prepare.py": Budget(6, 74, 9),
     "arranger/harmonised_route.py": Budget(8, 54, 8),
+    # The dispatch table: eleven small functions, each an entry's claim or emit, so
+    # the ceiling is `dispatch_step`'s four branches rather than any one route. The
+    # longest entry is 19 lines because the two answers with nothing above the thumb
+    # share one function and its reason.
+    "arranger/route_dispatch.py": Budget(4, 19, 3),
     # The public `request=` joined the five implementation axis keywords, so the
     # facade takes one more parameter until Stage 8 of
     # `docs/history/rhythm-request.md` retires the axis spellings. The body did
     # not grow: it reads the resolved knobs and policies as values.
-    "arranger/movement.py": Budget(8, 103, 15),
+    #
+    # The dispatch moved to `route_dispatch`, so this module is now the loop, the
+    # knobs and the merge: three functions, and the longest is `arrange_progression`
+    # reading the resolved values in order.
+    "arranger/movement.py": Budget(4, 89, 15),
     # `ArrangeOptions` is a flat dataclass of knobs with no methods today.
     "arranger/options.py": Budget(5, 30, 3),
     "arranger/parts.py": Budget(9, 45, 1),

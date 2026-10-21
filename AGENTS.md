@@ -24,7 +24,7 @@ gate and the conventions — not the explanation.
 | the trailing annotation a step carries, why a shape is thin, or what **must** be explained when a choice is added (`ArrangementStep.palette`, `cost.VOICING_COST_CRITERIA`, `tests/test_explanations.py`) | [docs/engine.md](docs/engine.md) | `arranger/annotation.py`, `arranger/render.py`, `arranger/movement.py` |
 | `texture=`, target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/texture.py`, `arranger/routes.py`, `arranger/bass_rules.py`, `arranger/bass_place.py`, `arranger/bass.py`, `arranger/decisions.py` |
 | non-chord melody notes, a new chord quality | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` |
-| the step loop, `arrange_progression` | [docs/engine.md](docs/engine.md) | `arranger/movement.py`, `arranger/harmonised_route.py`, `arranger/step_prepare.py`, `arranger/resolution.py`, `arranger/slot_plan.py` |
+| the step loop, `arrange_progression`, or **which route takes a slot** | [docs/engine.md](docs/engine.md) | `arranger/movement.py`, `arranger/route_dispatch.py`, `arranger/harmonised_route.py`, `arranger/step_prepare.py`, `arranger/resolution.py`, `arranger/slot_plan.py`, `tests/test_route_dispatch.py` |
 | a step route's arguments - `SlotContext`, one slot's request as a value rather than twenty parameters | [docs/engine.md](docs/engine.md) | `arranger/context.py`, `arranger/movement.py`, `arranger/harmonised_route.py`, `arranger/routes.py` |
 | tab staff, HTML, MusicXML, GP5, or the MusicXML importer — or **which module may import which**, including the `arranger ↔ tabstaff` loop and why it is inert | [docs/renderers.md](docs/renderers.md), and [docs/dependency-dag.md](docs/dependency-dag.md) | `tabscore.py`, `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py`, `tests/test_front_end_dag.py` |
 | an imported head's **repeats, volta endings or jumps** — why it is longer than the file's measure count, or the `|:` / `:|` / `1.` / `2.` / `D.C.` / `D.S.` / `Coda` / `Fine` the writers draw | [docs/renderers.md](docs/renderers.md) | `headxml.py` (`_parse_barline`, `_parse_direction`, `_parse_sound`, `_expand_play_order`, `expand_repeats`, `BarInstruction`, `BarMarker`, `Head.markers`, `HeadNote.written_bar`); each writer's `markers=` parameter |
@@ -66,7 +66,7 @@ thing to read before quoting one.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1388 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **1393 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
 
@@ -157,6 +157,12 @@ class definition on 3.11.
 Individually:
 
 ```bash
+make test        # .venv/bin/python -m unittest discover -s tests -t . -v
+make typecheck   # pyright, with --pythonpath so it can see the venv
+make lint        # ruff
+make demo        # the built-in demonstration arrangements
+```
+
 ## Repository layout
 
 ```
@@ -190,7 +196,8 @@ arranger/
 │   ├── slot_plan.py     #   one slot's plan: `slot_state` and the value it returns
 │   ├── step_prepare.py  #   one slot's candidates: prepare_step and its preparation
 │   ├── harmonised_route.py #  the melody-bearing route: prepare, select, demote, emit
-│   ├── movement.py      #   the step loop: _route_slot, _loop_slots, arrange_progression
+│   ├── route_dispatch.py # the branch table: which route takes a planned slot, in order
+│   ├── movement.py      #   the step loop: _loop_slots, arrange_progression
 │   ├── steps.py         #   VoiceLeadingEngine - the published facade
 │   ├── slots.py         #   the slot layer: triples to steps, the one pre-pass
 │   ├── render.py        #   format_progression and per-step rendering
@@ -230,7 +237,7 @@ tuning -> fingers -> chords -> grip_tables -> grip_place -> grips -> cost -> ann
                                                                     |
                        melody_alone -> routes -> slot_plan -> step_prepare -> harmonised_route
                                                                                     |
-                                 movement -> steps -> slots -> render -> cli
+                                                    route_dispatch -> movement -> steps -> slots -> render -> cli
 ```
 
 `demo` is the one module the chain does not show: it is the **printing front end**
@@ -268,7 +275,20 @@ the one list the budget table and that DAG test both read.
 Three consequences worth knowing:
 
 - **Adding a module inside `arranger/` needs no `pyproject.toml` change** — the
-  package is already listed. A new *top-level* module needs a `py-modules` entry, or a
+  package is already listed — but **four lists still name it**: `ORDER` in
+  `tests/test_package_dag.py`, `BUDGETS` in `tests/test_structure.py`, and the
+  facade's `from . import (...)` and `__all__`. The last two are not bookkeeping:
+  a submodule the facade never imports is reported by pyright as "specified in
+  `__all__` but not present in module", and one that is imported but unlisted fails
+  `test_dunder_all_matches_the_public_surface`. A new *top-level* module
+  additionally needs a `py-modules` entry, or a clean install ships without it.
+- **The Makefile names the package as a directory**, so a new engine module cannot be
+  forgotten by lint or typecheck. A new *top-level* module must be added to `MODULES`
+  and to the `typecheck` target in the same commit that creates it.
+- **`Voicing` and `ArrangementStep` live in `tuning`, not `steps`**, because `grips`
+  constructs a `Voicing` and both dataclasses default `role` to `ROLE_TARGET`. That
+  placement is forced by edges, not by taste.
+
 ## Requirements and licence
 
 - Python **3.11+**. The local dev virtualenv runs 3.14. 3.10 was dropped because
@@ -821,22 +841,6 @@ uses - for a caller who only wants the library:
 ```
 
 `make build` wraps `pip wheel . -w dist --no-deps`; no `build` package is required.
-
-
-  clean install ships without it.
-- **The Makefile names the package as a directory**, so a new engine module cannot be
-  forgotten by lint or typecheck. A new *top-level* module must be added to `MODULES`
-  and to the `typecheck` target in the same commit that creates it.
-- **`Voicing` and `ArrangementStep` live in `tuning`, not `steps`**, because `grips`
-  constructs a `Voicing` and both dataclasses default `role` to `ROLE_TARGET`. That
-  placement is forced by edges, not by taste.
-
-
-make test        # .venv/bin/python -m unittest discover -s tests -t . -v
-make typecheck   # pyright, with --pythonpath so it can see the venv
-make lint        # ruff
-make demo        # the built-in demonstration arrangements
-```
 
 Run everything **from the repository root**; the tests import `arranger` from the tree
 and need no install.

@@ -43,15 +43,18 @@ flowchart TB
     subgraph layer_loop["the step loop"]
         direction TB
         movement["movement"]
+        route_dispatch["route_dispatch"]
         harmonised_route["harmonised_route"]
         step_prepare["step_prepare"]
         routes["routes"]
         slot_plan["slot_plan"]
         melody_alone["melody_alone"]
         decisions["decisions"]
-        movement --> harmonised_route
-        movement --> routes
+        movement --> route_dispatch
         movement --> slot_plan
+        route_dispatch --> harmonised_route
+        route_dispatch --> routes
+        route_dispatch --> slot_plan
         harmonised_route --> step_prepare
         harmonised_route --> routes
         harmonised_route --> slot_plan
@@ -135,8 +138,12 @@ What the drawing makes visible:
   `context` is one slot's request; `parts` is the parts vocabulary. Because nothing
   is below them, every other module can depend on them without narrowing what may
   import it.
-- **`movement` is the loop, and `harmonised_route` is the route it usually takes.**
-  `movement` owns the slot loop and dispatches; `harmonised_route` is the
+- **`movement` is the loop, `route_dispatch` is the branch table, and
+  `harmonised_route` is the route it usually takes.** `movement` owns the slot loop,
+  the resolved knobs and the bass merge; `route_dispatch` holds the five entries that
+  decide which route a planned slot goes to, in an order that is itself the contract -
+  a fill or a comp that claims a slot and then declines it hands the slot on, so the
+  tune never loses its chord to a thinner texture; `harmonised_route` is the
   melody-bearing branch - prepare the candidates, select one, demote to the tune
   alone, or emit a rest - and `step_prepare` is the shared "what can this slot
   sound" step beneath it. They reach the axes, the request and the grips; the

@@ -64,6 +64,7 @@ ORDER = [
     "slot_plan",    # one slot's plan: `slot_state` and the value it returns
     "step_prepare", # one step's candidates: the octave-down rescue, non-chord-tone strategies
     "harmonised_route", # the melody-bearing route: prepare, select, demote, emit
+    "route_dispatch", # the branch table: which route takes a planned slot, in order
     "movement",     # the step loop: one progression in, one arrangement out
     "steps",        # the engine's published facade - delegates, incl. to `movement`
     "slots",        # the slot layer: triples to steps, the one pre-pass over them

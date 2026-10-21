@@ -250,7 +250,13 @@ class TestTheDecisionsAreActuallyShared(unittest.TestCase):
             'fret_span() >= GRIP_MAX_SPAN["drop2"]',
             "sounding_harmony(previous_step)",
         )
-        for module_name in ("arranger", "arranger.steps", "arranger.movement", "arranger.slots"):
+        for module_name in (
+            "arranger",
+            "arranger.steps",
+            "arranger.movement",
+            "arranger.route_dispatch",
+            "arranger.slots",
+        ):
             source = source_of(module_name)
             for snippet in snippets:
                 with self.subTest(module=module_name, snippet=snippet):

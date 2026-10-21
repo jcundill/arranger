@@ -79,6 +79,12 @@ and `tuning`. It owns the slot loop, route dispatch, timing construction, and
 bass merge. Routes are largely procedural functions; movement decides which one
 runs.
 
+Closed by P4 below for the half that was really a second job: the dispatch is
+`route_dispatch`'s `ROUTES` table, and `movement` kept the loop, the knobs, the
+timing and the merge. Its imports fell from eleven to nine, and the three modules
+it used to reach for the dispatch - `routes`, `harmonised_route` and `decisions` -
+are now one edge to `route_dispatch`.
+
 ### F6 — Tests coupled to private implementation details (encapsulation)
 
 AGENTS.md states tests import from `arranger.bass`, `arranger.grips`,
@@ -144,7 +150,7 @@ or voice-leading logic touched → commit separately.
 | 2 | P5 | done | TEST_SEAMS list in `tests/test_structure.py` — 25 private test-to-arranger reaches documented. New `TestTheTestSeams` test class asserts all reaches are recorded and no stale entries remain. |
 | 3 | P3 | done | Each axis answered by one resolver in the module owning its vocabulary: `resolve_bass` moved to `bass_rules`, `texture.parse_texture` added, `TestTheAxisResolvers` holds the signatures to the dependency table. |
 | 4 | P2 | done | The facade's bulk was demo code, not names: `main()` (151 lines, complexity 14) moved to `arranger.demo`, re-exported so `arranger.main`, the console script and `python -m arranger` are unchanged. Facade 695 → 543 lines, `__init__` budget 14/151 → 2/5. |
-| 5 | P4 | planned | Route dispatcher |
+| 5 | P4 | done | The dispatch left `movement` as `route_dispatch`: a frozen `Route(name, claims, emit)` and an ordered five-entry `ROUTES`, with `dispatch_step` asking each in turn. The order is now data, pinned by `tests/test_route_dispatch.py`, which also drives every entry from a request a caller can ask for and pins each request to the entry it must land in. `movement` 247 → 160 lines, 8 → 3 functions, 11 → 9 imports; demo output byte-identical against a worktree of the previous commit. |
 | 6 | P6 | done | The `arranger ↔ tabstaff` cycle measured inert in both directions and pinned by `TestTheRuntimeCycle`; the module-scope rule widened from the facade to the package. Two docstrings and `docs/renderers.md` had claimed an eager import "would fail to find the names" - it does not, and now a test says so. |
 | 7 | P7 | planned | Criteria extensibility |
 
@@ -398,10 +404,56 @@ be safer.
 
 ---
 
-## Next stages (P4, P7)
+## P4 — the dispatch, as a table instead of a chain
+
+`movement._route_slot` was a 45-line if-chain with two fall-throughs, and it was
+the only thing in the module that was not sequencing. It is now `route_dispatch`:
+a frozen `Route(name, claims, emit)` value and an ordered `ROUTES` tuple
+
+```
+no_upper_voices -> texture_fill -> no_chord -> comping -> melody_bearing
+```
+
+with `dispatch_step` asking each entry in turn. Three properties came out of that
+shape, and each is now a test rather than a comment:
+
+- **the order is data.** It used to be the *position of the `if` statements*, so a
+  reader had to hold five guards in their head to know that an `NC` bar beats the
+  comp and a fill beats the melody. `[route.name for route in ROUTES]` is the
+  contract, and `test_the_order_is_the_contract` states what each position is
+  load-bearing for.
+- **a decline is a value.** The fill and the comp may claim a slot and then return
+  False, handing it on; that was a nested `if` before, and it is now the same
+  `emit` contract for both.
+- **exactly one step per slot is structural.** `_claims_always` is the last entry
+  and its emit returns True, so `dispatch_step` cannot fall off the end. The test
+  wrapper measures it anyway - one slot, one appended step - because a structure
+  that is *supposed* to be guaranteed is exactly the one worth watching.
+
+The reachability half is the part a table can get wrong in a way a chain cannot: an
+entry whose claim no request can satisfy is a branch nobody sees. `CASES` in
+`tests/test_route_dispatch.py` is one request per entry, read from the table's own
+names, so an entry **added** but never fired fails one test, and an entry
+**deleted** or a claim **broadened** fails the other - the request lands in the
+wrong route. Both directions were checked by mutating `ROUTES` in a scratch run:
+broadening the comping claim failed two cases, deleting `no_chord` failed one.
+
+**What stayed put, deliberately.** `previous_shape` is still in `routes` (both the
+fill and the `NC` bar read it), and the route handlers keep their own docstrings and
+their `arrangements`-append convention. The dispatch table is about *which* runs,
+not about how; changing the handlers would be a second refactor with a different
+risk.
+
+**Measured:** `movement.py` 247 → 160 lines, 8 → 3 functions, 11 → 9 sibling
+imports; its budget 8/103/15 → 4/89/15, and `route_dispatch` starts at 4/19/3.
+`make demo` byte-identical against `git worktree add /tmp/pre HEAD`, and the suite
+green at 1393.
+
+---
+
+## Next stages (P7)
 
 | ID | What | Why |
 |---|---|---|
-| P4 | Route dispatcher extracted from `movement.py` | SRP |
 | P7 | `voicing_cost` accepts `SelectionCriteria`, returns named score | OCP |
 

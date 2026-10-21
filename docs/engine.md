@@ -378,22 +378,31 @@ kind and, for a silent plan, *why* it is silent (`silence`, one of the `SILENCE_
 constants). That decision, and the `Carried` / `SlotInputs` values it reads, live in
 **`slot_plan.py`**; `movement.py` only walks the plans it returns. It no longer refuses a slot outright: a melody-only selection at a position
 with no note gets a silent plan (`MELODY_ALONE_REST` + `tune_silent`) rather than `None`,
-so the tab keeps the bar. The plan then goes to **one** of five routes:
+so the tab keeps the bar. The plan then goes to **one** of five dispatch entries:
 
-| route | when |
-|---|---|
-| `rest_step` | the guitar is **silent**, for the reason `step.silence` names: off the grid, an `NC` bar under a comping selection, a position nothing can voice, or a melody-only selection with no tune |
-| `texture_fill_step` | the guitar sings the note and the texture thins the slot to it - a fill, a target no shell can sound, or an off-grid note |
-| `no_chord_step` | an `NC` bar the guitar *is* singing: the melody, and no harmony to state |
-| `comping_step` | the guitar does **not** sing this slot, so it comps under the horn |
-| `harmonised_step` | the guitar sings: pin the tune, and voice the chord beneath it |
+| entry | emits | when |
+|---|---|---|
+| `no_upper_voices` | `bass_alone_step`, `rest_step` | nothing above the thumb sounds: the bass line's own note, or a guitar silent for the reason `step.silence` names - off the grid, an `NC` bar under a comping selection, a position nothing can voice, or a melody-only selection with no tune |
+| `texture_fill` | `texture_fill_step` | the guitar sings the note and the texture thins the slot to it - a fill, a target no shell can sound, or an off-grid note |
+| `no_chord` | `no_chord_step` | an `NC` bar the guitar *is* singing: the melody, and no harmony to state |
+| `comping` | `comping_step` | the guitar does **not** sing this slot, so it comps under the horn |
+| `melody_bearing` | `harmonised_step` | the guitar sings: pin the tune, and voice the chord beneath it |
 
-`_route_slot` is the dispatch and stays in `movement.py`, so the loop is still one
-module. The four other routes live in **`routes.py`**. `harmonised_step` - prepare,
-select, demote, or rest - lives in **`harmonised_route.py`**, and the candidates it
-selects among are built by `prepare_step` in **`step_prepare.py`**, which is also what
-the facade reaches for a single step. That split is why the loop reads as dispatch
-rather than as a 250-line handler.
+The dispatch is **`route_dispatch.py`**: those five rows are its `ROUTES` table, each
+an entry with a *claim* ("is this slot mine?") and an *emit* ("here is the step"),
+asked in order. A route may claim a slot and then **decline** it - the texture fill
+and the comp are the two that can - and the next entry is asked instead, so the
+order is the contract rather than the set. The last entry claims every slot, which
+is what makes "exactly one step per slot" structural rather than a property to check;
+`tests/test_route_dispatch.py` pins the order and drives each entry from a request a
+caller can ask for.
+
+The four handlers other than `harmonised_step` live in **`routes.py`**. That one -
+prepare, select, demote, or rest - lives in **`harmonised_route.py`**, and the
+candidates it selects among are built by `prepare_step` in **`step_prepare.py`**,
+which is also what the facade reaches for a single step. That split is why the loop
+reads as sequencing rather than as a 250-line handler: `movement.py` is the
+sequencing - the knobs, the slot list, the loop, the bass merge.
 
 **The order is load-bearing**, and `AGENTS.md`'s trap 12 is what reordering it costs: the
 same slot can reach three of the five depending on its plan, and every ordering is right
