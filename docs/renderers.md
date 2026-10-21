@@ -616,7 +616,7 @@ module are gone and it is now named for what it does.
 
 **Imports are lazy where they keep the module cheap** — `argparse` inside
 `head_cli`, and the renderers inside it too, so `load_musicxml` costs nothing.
-`main()` imports `headxml` inside the `head` branch.
+`demo.main()` imports `headxml` inside the `head` branch.
 
 
 

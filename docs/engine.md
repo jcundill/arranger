@@ -97,9 +97,9 @@ you whether a change is an improvement or a different library.
   `pitch_classes()`, `soprano_string()` (index of the highest sounding string;
   `-1` if all muted). Supports legacy dict-style access (`v["frets"]`).
 - Tab rendering is **pure**: every renderer returns a string (or list of
-  strings) and prints nothing, so callers control display. **Only `main()` writes to
-  stdout** — the engine has no warning channel, so every choice it makes is either on the
-  tab line or a `ValueError` from the axis that could not honour the request.
+  strings) and prints nothing, so callers control display. **Only `demo.main()` writes
+  to stdout** — the engine has no warning channel, so every choice it makes is either on
+  the tab line or a `ValueError` from the axis that could not honour the request.
 - `ArrangementStep` — a dataclass of `chord`, `melody`, `voicing` plus the
   non-chord-tone bookkeeping `non_chord_tone` (bool), `strategy` (which strategy
   handled the step) and `harmonized_as` (the substitute chord name). Also
@@ -352,12 +352,11 @@ you whether a change is an improvement or a different library.
   complete shape existed and was too wide), so `annotation.step_annotation` can say
   `(melody alone - no voicing for this chord)` without claiming something false. See
   [Known limitations](#known-limitations).
-- `main()` — with no arguments, prints the built-in demonstrations; with `head`
+- `demo.main()` — with no arguments, prints the built-in demonstrations; with `head`
   as the first argument, delegates to `headxml.head_cli` through a **lazy** import
   inside the branch, so `import arranger` never depends on the importer or, through
-  it, on the renderers.
-- `main()` — prints the built-in demonstration arrangements; exposed as the
-  `jazz-arranger` console script via `[project.scripts]`.
+  it, on the renderers. It lives in `demo.py` and `arranger.main` re-exports it, which
+  is the name `[project.scripts]` exposes as the `jazz-arranger` console script.
 
 ### The step loop, and the five routes
 

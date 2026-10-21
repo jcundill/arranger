@@ -1133,7 +1133,6 @@ class TestTabstaffModuleBoundary(unittest.TestCase):
             "dataclass",
             "importlib",
             "re",
-            "sys",
         }
         self.assertEqual(
             defined - set(arranger.__all__) - ignored,

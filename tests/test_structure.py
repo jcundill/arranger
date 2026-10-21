@@ -79,8 +79,13 @@ class Budget:
 # function yet gets a small policy ceiling rather than a measurement, so the
 # first method it grows is still a deliberate size.
 BUDGETS: Dict[str, Budget] = {
-    "arranger/__init__.py": Budget(14, 151, 1),
+    "arranger/__init__.py": Budget(2, 5, 1),
     "arranger/__main__.py": Budget(5, 10, 2),
+    # The printing front end, measured as it stood when it moved out of the facade:
+    # the demonstration is one long function by design - a sequence of examples,
+    # each with the comment that says what it demonstrates - so its ceiling is the
+    # measurement, not a target. It imports `steps` and `render` and nothing else.
+    "arranger/demo.py": Budget(14, 151, 0),
     "arranger/annotation.py": Budget(18, 130, 2),
     "arranger/bass_place.py": Budget(16, 79, 6),
     "arranger/bass_rules.py": Budget(10, 82, 6),

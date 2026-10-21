@@ -102,7 +102,8 @@ class TestTheFrontEndDag(unittest.TestCase):
         `tabstaff` imports `arranger`, so a module-level import in the other
         direction would be a cycle - and it would also make `import arranger`
         pull in the MusicXML and GP5 writers for a caller who only wants the
-        engine. `arranger.__getattr__` and `main()` are the two lazy seams.
+        engine. `arranger.__getattr__` is the facade's lazy seam; the other one,
+        the `head` importer and the staff renderers, lives in `demo.main()`.
         """
         self.assertEqual(
             sorted(_module_imports(ROOT / "arranger" / "__init__.py")),

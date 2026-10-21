@@ -140,7 +140,7 @@ or voice-leading logic touched → commit separately.
 | 1 | P1 | done | Split `SlotContext` into `SlotTiming`, `SlotHarmony`, `SlotIdentity`, `SlotState` + composed `SlotContext`. All route consumers updated. |
 | 2 | P5 | done | TEST_SEAMS list in `tests/test_structure.py` — 25 private test-to-arranger reaches documented. New `TestTheTestSeams` test class asserts all reaches are recorded and no stale entries remain. |
 | 3 | P3 | done | Each axis answered by one resolver in the module owning its vocabulary: `resolve_bass` moved to `bass_rules`, `texture.parse_texture` added, `TestTheAxisResolvers` holds the signatures to the dependency table. |
-| 4 | P2 | planned | Facade surfaces: names only (`engine`, `request`, `rendering`) - the load-time half is declined, with the measurement, in its section below |
+| 4 | P2 | done | The facade's bulk was demo code, not names: `main()` (151 lines, complexity 14) moved to `arranger.demo`, re-exported so `arranger.main`, the console script and `python -m arranger` are unchanged. Facade 695 → 543 lines, `__init__` budget 14/151 → 2/5. |
 | 5 | P4 | planned | Route dispatcher |
 | 6 | P6 | planned | Runtime cycle |
 | 7 | P7 | planned | Criteria extensibility |
@@ -322,13 +322,44 @@ called "no subdivision" - and it is discoverability, not lazy loading. The
 decision is recorded here rather than assumed; a later stage may still pay for
 laziness, and this paragraph is the price it has to argue with.
 
+### What was done instead: the demo left the facade
+
+Measuring the facade for the names-only subdivision found the reason it was not
+worth doing: the 695-line module held **151 lines of demonstration** (`main()`,
+complexity 14) and the rest is the re-export list, which is the public API and has
+to live somewhere. Moving those names into three surface modules would add three
+import paths to keep in step and would not remove a line of printing; removing
+`main()` takes the printing out of the API module and adds no name to learn.
+
+So `main()` lives in **`arranger.demo`** and `__init__` re-exports it:
+
+- `arranger.main` is still `arranger.demo.main` - *identity*, not a copy - which
+  `tests/test_package_dag.py::test_the_facade_reexports_the_public_surface` pins
+  beside the other re-exports. The console script (`arranger:main`), `__main__.py`
+  and the three `arranger.main()` tests in `tests/test_cli.py` are untouched;
+- `demo` sits **last** in the declared order: it imports `steps` and `render` and
+  nothing else, so no `ALLOWED_EDGES` entry was needed - the evidence that it was
+  placed by its edges rather than appended;
+- it is a **public path** (`arranger.demo` in `__all__`): importing a submodule
+  binds it on the package whatever the import spelling, so leaving it out of the
+  list would make the list wrong - the rule the `__all__` comment already states
+  for `cli`, `render` and the rest;
+- the `if __name__ == "__main__"` guard that sat under `main()` was **dropped, not
+  moved**: it could never fire in `__init__.py` (relative imports) and `__main__.py`
+  is the entry point.
+
+Measured after the move: facade **695 → 543 lines**, `main` still 151 lines in its
+own module, `make demo` output byte-identical (diffed against a capture from before
+the change), and the budget table moved in both directions it should - `demo` states
+its measured ceiling `(14, 151, 0)` and `arranger/__init__.py` falls to `(2, 5, 1)`,
+its worst function now being `__getattr__`.
+
 ---
 
-## Next stages (P2, P4, P6, P7)
+## Next stages (P4, P6, P7)
 
 | ID | What | Why |
 |---|---|---|
-| P2 | Facade surfaces: `arranger.engine`, `arranger.request`, `arranger.render` | ISP |
 | P4 | Route dispatcher extracted from `movement.py` | SRP |
 | P6 | Document / eliminate `arranger ↔ tabstaff` runtime cycle | DIP |
 | P7 | `voicing_cost` accepts `SelectionCriteria`, returns named score | OCP |

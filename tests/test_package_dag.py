@@ -69,6 +69,7 @@ ORDER = [
     "slots",        # the slot layer: triples to steps, the one pre-pass over them
     "render",       # per-step rendering
     "cli",          # the two front ends' shared argparse block and output dispatch
+    "demo",         # the printing front end: the demonstration and the `head` hand-off
 ]
 
 # The edges the split could not avoid, each with the reason it is sound. Anything
@@ -235,6 +236,9 @@ class TestPackageDag(unittest.TestCase):
             ("bass_cost", "bass_place", "bass_cost"),
             ("format_progression", "render", "format_progression"),
             ("supported_string_sets", "grip_tables", "supported_string_sets"),
+            # `main` is the demonstration front end, re-exported so the console
+            # script, `__main__` and the tests reach one function - not a copy.
+            ("main", "demo", "main"),
         ]:
             module = __import__(f"arranger.{home}", fromlist=[attribute])
             self.assertIs(

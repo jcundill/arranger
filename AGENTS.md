@@ -194,7 +194,8 @@ arranger/
 │   ├── steps.py         #   VoiceLeadingEngine - the published facade
 │   ├── slots.py         #   the slot layer: triples to steps, the one pre-pass
 │   ├── render.py        #   format_progression and per-step rendering
-│   └── cli.py           #   the head CLI's flags and output dispatch
+│   ├── cli.py           #   the head CLI's flags and output dispatch
+│   └── demo.py          #   main(): the built-in demonstration and the `head` hand-off
 ├── tabscore.py          # score placement shared by the MusicXML and GP5 writers
 ├── tabstaff.py          # whole-progression staff renderers (ASCII + HTML)
 ├── tabxml.py            # MusicXML export (optional extra: music21)
@@ -231,6 +232,12 @@ tuning -> fingers -> chords -> grip_tables -> grip_place -> grips -> cost -> ann
                                                                                     |
                                  movement -> steps -> slots -> render -> cli
 ```
+
+`demo` is the one module the chain does not show: it is the **printing front end**
+(`main()`, re-exported as `arranger.main`), it imports `steps` and `render` and nothing
+from `cli`, and only the facade imports it. So it sits beside the chain rather than
+below `cli` - the order lists it last because nothing above it needs it, not because
+`cli` feeds it.
 
 `fingers` — which finger holds which fret — hangs off `tuning` alone, so it is drawn
 separately rather than as a branch of that chain. It is **not inert**: `bass_place` reads
@@ -342,7 +349,7 @@ There is no build step for local development.
 - Docstrings on public classes and methods. Comments explain *music-theory intent* —
   which chord tone is in the top voice, and why a shape is unreachable — not syntax.
 - **Rendering is pure.** Every renderer returns a string (or list of them) and prints
-  nothing. Only `main()` and the demo write to stdout.
+  nothing. Only `demo.main()` and the demo it runs write to stdout.
 - **The library never prints**, and it has no warning channel either. What the engine
   used to report through a `Diagnostics` collector is now either **on the tab line** -
   read off the step's own fields and phrased by a `render` `*_clause` - or a

@@ -33,8 +33,11 @@ flowchart TB
         slots["slots"]
         render["render"]
         cli["cli"]
+        demo["demo"]
         slots --> steps
         cli --> render
+        demo --> steps
+        demo --> render
     end
 
     subgraph layer_loop["the step loop"]
@@ -140,8 +143,10 @@ What the drawing makes visible:
   surfaces' one way into the loop is still `movement`. A new axis is normally
   wired through `options` and `resolution` first, which is why both sit between
   it and the axes.
-- **The surfaces do not feed back.** `steps`, `slots`, `render` and `cli` sit at the
-  top and import downwards; no layer below imports them.
+- **The surfaces do not feed back.** `steps`, `slots`, `render`, `cli` and `demo` sit
+  at the top and import downwards; no layer below imports them. `demo` is the
+  printing front end: it imports `steps` and `render`, and nothing imports it but
+  the facade, which re-exports its `main`.
 
 `ALLOWED_EDGES` is empty: every import points up the order, and an entry added to
 it must carry a reason and fails the moment its import disappears.
@@ -184,8 +189,9 @@ are function-local rather than module-scope and so are not part of this DAG:
 - `arranger.__getattr__` imports `tabstaff` on first access — the facade cannot
   import it eagerly, because `tabstaff` imports `arranger.tuning` and so re-enters
   the package while it is still initialising;
-- `main()` imports `headxml` only inside the `head` branch, so `import arranger`
-  does not pull in the importer or the renderers it uses.
+- `demo.main()` imports `headxml` only inside the `head` branch, so `import arranger`
+  does not pull in the importer or the renderers it uses. It is the same seam that
+  keeps the demonstration's `import tabstaff` out of the facade's module scope.
 
 The same lazy discipline holds for the optional extras: `tabxml` imports
 `music21` and `tabgp` imports `PyGuitarPro` at the point of writing, so a caller
