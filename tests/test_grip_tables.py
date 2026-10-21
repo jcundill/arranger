@@ -19,6 +19,7 @@ from arranger import (
     NECK_FRET_MIN,
     SHELL_DEGREES,
     ChordParser,
+    SelectionCriteria,
     VoiceLeadingEngine,
     Voicing,
     supported_string_sets,
@@ -463,7 +464,10 @@ class TestKnownTableGaps(unittest.TestCase):
             Note("D5"), "13", chord_name="C13"
         ):
             self.assertEqual(
-                self.engine.voicing_cost(v, previous=None, allowed_tones=tones)[0], 0.0,
+                self.engine.voicing_cost(
+                    v, SelectionCriteria(allowed_tones=tones)
+                ).foreign,
+                0.0,
                 v.tab_string(),
             )
 
@@ -490,15 +494,18 @@ class TestKnownTableGaps(unittest.TestCase):
         # Position is now the only thing separating them, and the criterion under test
         # still reports it: the lowest fret sits inside the window and the highest does
         # not, so the penalty is not uniformly zero.
-        window_costs = sorted(self.engine.voicing_cost(v, previous=v)[1] for v in pure)
+        window_costs = sorted(
+            self.engine.voicing_cost(v, SelectionCriteria(previous=v)).outside
+            for v in pure
+        )
         self.assertEqual(window_costs[0], 0.0, window_costs)
         self.assertGreater(window_costs[-1], 0.0, window_costs)
         # And the ordering under test: the shape inside the window outranks the one
         # outside it, purely on position.
         inside, outside = pure[0], pure[-1]
         self.assertLess(
-            self.engine.voicing_cost(inside, None, allowed_tones=tones),
-            self.engine.voicing_cost(outside, None, allowed_tones=tones),
+            self.engine.voicing_cost(inside, SelectionCriteria(allowed_tones=tones)),
+            self.engine.voicing_cost(outside, SelectionCriteria(allowed_tones=tones)),
         )
 
     def test_the_arranged_result_still_sounds_only_chord_tones(self):

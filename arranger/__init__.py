@@ -118,6 +118,10 @@ from .chords import (
     sounding_harmony,
 )
 
+# The selection rule's two value types: a caller ranking shapes itself needs the
+# criteria object to hand `voicing_cost`, and the score it gets back.
+from .cost import SelectionCriteria, VoicingScore
+
 # The demonstration front end. Re-exported by name because `[project.scripts]` and
 # `__main__.py` both point at `arranger:main`; binding it here also binds `arranger.demo`.
 from .demo import main
@@ -487,9 +491,11 @@ __all__ = [
     "ChordParser",
     "melody_degree_name",
     "GuitarFretboard",
+    "SelectionCriteria",
     "StepPreparation",
     "VoiceLeadingEngine",
     "Voicing",
+    "VoicingScore",
     "annotation",
     "bass",
     "bass_rules",

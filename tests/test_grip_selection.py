@@ -1,9 +1,10 @@
-"""What the selector prefers: position continuity, determinism, and the cost tuple.
+"""What the selector prefers: position continuity, determinism, and the cost score.
 
-`voicing_cost`'s seven elements are asserted positionally here, because that order *is*
-the library's central invariant - moving the code is safe, reordering it is a musical
-decision. The criteria are read through the shape the selector keeps wherever a choice
-can show them, and on the tuple itself where it cannot.
+`voicing_cost`'s seven fields are named, and their *order* is asserted once, by
+`test_the_field_order_is_the_rule`, because that order is the library's central
+invariant - moving the code is safe, reordering it is a musical decision. Every other
+assertion reads a field by name. The criteria are read through the shape the selector
+keeps wherever a choice can show them, and on the score itself where it cannot.
 """
 
 import unittest
@@ -15,8 +16,15 @@ from arranger import (
     BASS_DEGREES_6432,
     GRIP_PREFERENCE,
     ChordParser,
+    SelectionCriteria,
     VoiceLeadingEngine,
     Voicing,
+    VoicingScore,
+)
+from arranger.cost import (
+    PARTITION_CRITERION,
+    SPAN_CRITERION,
+    VOICING_COST_CRITERIA,
 )
 from tests.support import (
     QUALITIES,
@@ -120,9 +128,58 @@ class TestVoicingCost(unittest.TestCase):
     def setUp(self):
         self.engine = VoiceLeadingEngine()
 
+    def test_the_field_order_is_the_rule(self):
+        """The one positional assertion, and the reason the others can read names.
+
+        The score is a tuple, so comparison is lexicographic and this order *is* the
+        rule: correctness first, then the two comfort criteria (window, completeness),
+        then span above position, then movement, then the bass tie-break. A field may
+        be added; moving one is a musical decision with a measurement behind it, and
+        `docs/engine.md` holds that measurement.
+
+        The labels and the two derived indices are read from these fields, so this
+        also holds the printable phrases to the score they describe: a field whose
+        phrase is missing raises at import, and a phrase in the wrong place fails
+        here.
+        """
+        self.assertEqual(
+            VoicingScore._fields,
+            ("foreign", "outside", "missing", "span", "position", "movement", "bass"),
+        )
+        self.assertEqual(
+            VOICING_COST_CRITERIA,
+            (
+                "sounds a note outside the chord",
+                "lies outside the neck window",
+                "leaves a voice out",
+                "needs a wider stretch",
+                "sits further up the neck",
+                "moves the inner voices more",
+                "sounds a weaker bass",
+                "does not sound the written bass",
+            ),
+        )
+        self.assertEqual(SPAN_CRITERION, 3)
+        self.assertEqual(PARTITION_CRITERION, len(VoicingScore._fields))
+
+    def test_the_score_is_still_a_tuple(self):
+        """A named score must stay comparable, because `min` is what picks a shape.
+
+        The names are for the reader. `best_voicing_for` ranks with `<` on these
+        values, and `decisive_criterion` zips them, so a score that stopped being a
+        tuple would change the selection rather than the spelling.
+        """
+        v = self.engine.get_drop2_voicings(Note("C5"), "maj7", chord_name="Cmaj7")[0]
+        score = self.engine.voicing_cost(v, SelectionCriteria(previous=v))
+        self.assertIsInstance(score, tuple)
+        self.assertEqual(tuple(score), tuple(score._asdict().values()))
+        self.assertLessEqual(score, score)
+
     def test_a_voicing_inside_the_window_pays_no_window_penalty(self):
         v = self.engine.get_drop2_voicings(Note("C5"), "maj7", chord_name="Cmaj7")[0]
-        self.assertEqual(self.engine.voicing_cost(v, previous=v)[1], 0.0)
+        self.assertEqual(
+            self.engine.voicing_cost(v, SelectionCriteria(previous=v)).outside, 0.0
+        )
 
     def test_a_voicing_outside_the_window_is_penalised(self):
         """F5 sits at fret 13 on the high E (inside the window) but at fret 18 on the B
@@ -131,7 +188,10 @@ class TestVoicingCost(unittest.TestCase):
             Note("F5"), "maj7", chord_name="Cmaj7", top_string=4
         )
         self.assertTrue(candidates)
-        costs = [self.engine.voicing_cost(v, previous=v)[1] for v in candidates]
+        costs = [
+            self.engine.voicing_cost(v, SelectionCriteria(previous=v)).outside
+            for v in candidates
+        ]
         self.assertTrue(any(c > 0 for c in costs), costs)
 
     def test_missing_voices_come_last(self):
@@ -140,7 +200,9 @@ class TestVoicingCost(unittest.TestCase):
             Note("B4"), "maj7", chord_name="Cmaj7", grips=("shell",)
         )
         self.assertTrue(shells)
-        self.assertEqual(self.engine.voicing_cost(shells[0], previous=None)[2], 1.0)
+        self.assertEqual(
+            self.engine.voicing_cost(shells[0], SelectionCriteria()).missing, 1.0
+        )
 
     def test_the_selector_really_is_the_argmin_of_the_cost(self):
         candidates = self.engine.get_all_grip_voicings(
@@ -152,8 +214,8 @@ class TestVoicingCost(unittest.TestCase):
         assert best is not None  # pyright does not narrow through assertIsNotNone
         for v in candidates:
             self.assertLessEqual(
-                self.engine.voicing_cost(best, None),
-                self.engine.voicing_cost(v, None),
+                self.engine.voicing_cost(best, SelectionCriteria()),
+                self.engine.voicing_cost(v, SelectionCriteria()),
             )
 
     def test_a_root_or_fifth_bass_breaks_an_exact_tie(self):
@@ -179,7 +241,9 @@ class TestVoicingCost(unittest.TestCase):
             assert v.bass_pc is not None, f"{v.tab_string()} has no bass"
             bass_ok = (v.bass_pc - root_pc) % 12 in BASS_DEGREES_6432
             self.assertEqual(
-                self.engine.voicing_cost(v, None, root_pc=root_pc)[6],
+                self.engine.voicing_cost(
+                    v, SelectionCriteria(root_pc=root_pc)
+                ).bass,
                 0.0 if bass_ok else 1.0,
                 v.tab_string(),
             )
@@ -195,17 +259,17 @@ class TestVoicingCost(unittest.TestCase):
         )
         self.assertTrue(candidates)
         v = candidates[0]
-        without_root = self.engine.voicing_cost(v, None)
+        without_root = self.engine.voicing_cost(v, SelectionCriteria())
         with_root = self.engine.voicing_cost(
-            v, None, root_pc=Note("D4").midi_note() % 12
+            v, SelectionCriteria(root_pc=Note("D4").midi_note() % 12)
         )
         # The tuple is a fixed width whether or not a root is supplied, so `root_pc`
         # only ever changes a *value*; it never reshapes the cost or reorders the
         # criteria above it. That is what keeps `voicing_cost` a total order and the
         # engine deterministic.
         self.assertEqual(len(with_root), len(without_root))
-        self.assertEqual(with_root[:6], without_root[:6], v.tab_string())
-        self.assertNotEqual(with_root[6], without_root[6], v.tab_string())
+        self.assertEqual(with_root[:-1], without_root[:-1], v.tab_string())
+        self.assertNotEqual(with_root.bass, without_root.bass, v.tab_string())
         # A bass that is a 3rd or a 7th still scores 1.0. No contiguous Dm7 drop-2 has
         # one - they all put D or A underneath - so this sweeps for a chord that does,
         # pairing each shape with the chord it was actually generated for, because the
@@ -221,7 +285,9 @@ class TestVoicingCost(unittest.TestCase):
                     assert v.bass_pc is not None, f"{v.tab_string()} has no bass"
                     bass_ok = (v.bass_pc - root_pc) % 12 in BASS_DEGREES_6432
                     self.assertEqual(
-                        self.engine.voicing_cost(v, None, root_pc=root_pc)[6],
+                        self.engine.voicing_cost(
+                            v, SelectionCriteria(root_pc=root_pc)
+                        ).bass,
                         0.0 if bass_ok else 1.0,
                         f"{chord} {melody} {v.tab_string()}",
                     )
@@ -291,21 +357,31 @@ class TestVoicingCost(unittest.TestCase):
             frets=[-1, -1, 6, 7, 6, -1], top_fret=6, avg_fret=6.3333, grip="shell"
         )
         self.assertEqual(
-            self.engine.voicing_cost(barre, previous)[3],
-            self.engine.voicing_cost(in_position, previous)[3],
+            self.engine.voicing_cost(
+                barre, SelectionCriteria(previous=previous)
+            ).span,
+            self.engine.voicing_cost(
+                in_position, SelectionCriteria(previous=previous)
+            ).span,
         )
         self.assertLess(
-            self.engine.voicing_cost(in_position, previous),
-            self.engine.voicing_cost(barre, previous),
+            self.engine.voicing_cost(
+                in_position, SelectionCriteria(previous=previous)
+            ),
+            self.engine.voicing_cost(barre, SelectionCriteria(previous=previous)),
         )
         # A span-2 shape still loses on span alone, position notwithstanding.
         self.assertGreater(
-            self.engine.voicing_cost(wide, previous)[3],
-            self.engine.voicing_cost(barre, previous)[3],
+            self.engine.voicing_cost(
+                wide, SelectionCriteria(previous=previous)
+            ).span,
+            self.engine.voicing_cost(
+                barre, SelectionCriteria(previous=previous)
+            ).span,
         )
         self.assertLess(
-            self.engine.voicing_cost(barre, previous),
-            self.engine.voicing_cost(wide, previous),
+            self.engine.voicing_cost(barre, SelectionCriteria(previous=previous)),
+            self.engine.voicing_cost(wide, SelectionCriteria(previous=previous)),
         )
 
         # End-to-end: the G4 keeps the hand at frets 6-8 instead of jumping to 3.
@@ -344,7 +420,9 @@ class TestVoicingCost(unittest.TestCase):
         clean = [v for v in candidates if set(v.pitch_classes()) <= tones]
         self.assertTrue(clean)
         for v in candidates:
-            cost = self.engine.voicing_cost(v, previous=None, allowed_tones=tones)
+            cost = self.engine.voicing_cost(
+                v, SelectionCriteria(allowed_tones=tones)
+            )
             if set(v.pitch_classes()) <= tones:
                 self.assertEqual(cost[0], 0.0, v.tab_string())
             else:
@@ -352,7 +430,9 @@ class TestVoicingCost(unittest.TestCase):
                 # A foreign note outranks a tighter span, never the reverse.
                 for good in clean:
                     self.assertLessEqual(
-                        self.engine.voicing_cost(good, None, allowed_tones=tones)[0],
+                        self.engine.voicing_cost(
+                            good, SelectionCriteria(allowed_tones=tones)
+                        ).foreign,
                         cost[0],
                         f"{v.tab_string()} beat the clean {good.tab_string()}",
                     )
@@ -380,8 +460,11 @@ class TestVoicingCost(unittest.TestCase):
                 if wrong == 0:
                     continue
                 cost = self.engine.voicing_cost(
-                    v, previous=None, allowed_tones=tones,
-                    melody_pc=Note(melody).midi_note() % 12,
+                    v,
+                    SelectionCriteria(
+                        allowed_tones=tones,
+                        melody_pc=Note(melody).midi_note() % 12,
+                    ),
                 )
                 counts.setdefault(wrong, []).append(cost[0])
         self.assertTrue(counts, "no impure drop-2 candidate to compare")
@@ -417,14 +500,16 @@ class TestVoicingCost(unittest.TestCase):
             )
             self.assertEqual(
                 self.engine.voicing_cost(
-                    v, previous=None, allowed_tones=tones, melody_pc=melody_pc
-                )[0],
+                    v, SelectionCriteria(allowed_tones=tones, melody_pc=melody_pc)
+                ).foreign,
                 0.0,
                 v.tab_string(),
             )
             # Without the melody excluded, the same shape is flagged instead.
             self.assertEqual(
-                self.engine.voicing_cost(v, previous=None, allowed_tones=tones)[0],
+                self.engine.voicing_cost(
+                    v, SelectionCriteria(allowed_tones=tones)
+                ).foreign,
                 1.0,
                 v.tab_string(),
             )
@@ -441,14 +526,16 @@ class TestVoicingCost(unittest.TestCase):
         by something else there, which would move bass function off it.
         """
         v = self.engine.get_drop2_voicings(Note("C5"), "maj7", chord_name="Cmaj7")[0]
-        self.assertEqual(len(self.engine.voicing_cost(v, previous=None, root_pc=0)), 7)
+        self.assertEqual(
+            len(self.engine.voicing_cost(v, SelectionCriteria(root_pc=0))), 7
+        )
         # Relabelling the very same shape as each other family changes nothing at all, at
         # any width: `grip` is informational, and this is where that has to hold.
-        chosen_cost = self.engine.voicing_cost(v, previous=None, root_pc=0)
+        chosen_cost = self.engine.voicing_cost(v, SelectionCriteria(root_pc=0))
         for grip in GRIP_PREFERENCE:
             self.assertEqual(
                 self.engine.voicing_cost(
-                    replace(v, grip=grip), previous=None, root_pc=0
+                    replace(v, grip=grip), SelectionCriteria(root_pc=0)
                 ),
                 chosen_cost,
                 f"relabelling the shape as {grip} changed its cost",

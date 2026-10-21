@@ -187,7 +187,7 @@ def _palette_facts(
     criteria: _cost.SelectionCriteria,
 ) -> Palette:
     """What was on offer besides `chosen`, and the criterion that ranked it lower."""
-    def cost(voicing: Voicing) -> Tuple[float, ...]:
+    def cost(voicing: Voicing) -> _cost.VoicingScore:
         return criteria.cost(voicing)
 
     available = max(len(candidate.active_frets()) for candidate in candidates)

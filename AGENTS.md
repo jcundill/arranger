@@ -66,7 +66,7 @@ thing to read before quoting one.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1393 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **1395 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
 
@@ -500,16 +500,43 @@ routes that dropped them emit a rest step whose `silence` names the reason, and
 
 ### The cost tuple is not being refactored
 
-`voicing_cost`'s 7-element tuple is the library's central invariant, asserted
-positionally in `tests/test_grip_selection.py::TestVoicingCost`. Moving the code is safe;
-**reordering it is a musical decision, not a refactor.** Span is the one criterion
-promoted above position, and that was measured rather than guessed — the reasoning
-and the table of what it cost are in [docs/engine.md](docs/engine.md). Changing what
-a criterion *reports* is the same decision: spans 0 and 1 are bucketed to one value
+`voicing_cost` returns a `VoicingScore` - a `tuple` subclass whose **7 fields are the
+library's central invariant**. The order is asserted once, and positionally, by
+`tests/test_grip_selection.py::TestVoicingCost::test_the_field_order_is_the_rule`; every
+other assertion reads a field by name (`score.span`, not `score[3]`). Moving the code is
+safe; **reordering the fields is a musical decision, not a refactor.** Span is the one
+criterion promoted above position, and that was measured rather than guessed — the
+reasoning and the table of what it cost are in [docs/engine.md](docs/engine.md). Changing
+what a criterion *reports* is the same decision: spans 0 and 1 are bucketed to one value
 at the span index (a one-fret reach does not outrank keeping the hand in place),
 measured at one moved pin, and the `0/1/2` bucket was measured at 13 and rejected.
 
-**Deleting one is that decision too.** The tuple used to carry an eighth element, a rank
+**What is cheap is adding one.** A field on the score, its phrase in
+`cost._CRITERION_LABELS` (keyed by field name), and the value it reads from
+`SelectionCriteria` - because the label tuple, the span index and the partition index
+are all derived from the fields, and `voicing_cost` takes that one value rather than
+seven keywords. The recipe is in [docs/engine.md](docs/engine.md) §"Adding a ranking
+criterion".
+
+**Deleting one is the musical decision again.** The tuple used to carry an eighth element, a rank
+over grip families. It went because it was the *same rule* as the order candidates are
+generated in, written twice: they agreed, so neither was individually necessary. With the
+families generated in the same order, deleting the criterion changed **0 of 799**
+committed-head steps — tabs *and* grip labels — and **0 of 120** single-step sweeps; and
+reversing `GRIP_PREFERENCE` with the rank left in changed nothing either, at 0/799 and
+0/120. What the number does not say is the reason it is the right shape: no criterion
+names a grip family because a family is not a property of a shape. Two families can
+generate the very same tab, so at that depth the tuple would be choosing a *name* rather
+than a sound; and a four-note drop-2 never reaches a tie with a shell to lose, because
+criterion 2 separates them on note count. A tie now falls to generation order —
+`top_strings` first, then `GRIP_PREFERENCE` within one string - and with the grip-family
+axis deleted that order is the engine's rather than a caller's, so "most preferred first" is
+a property of the table rather than of a request.
+The two live cases that order decides are in [docs/engine.md](docs/engine.md)
+§"Known limitations".
+
+Likewise the 54 hardcoded tab strings in the tests stay: they are the acceptance
+gate, and a snapshot mechanism would let a regression pass by regenerating itself.
 over grip families. It went because it was the *same rule* as the order candidates are
 generated in, written twice: they agreed, so neither was individually necessary. With the
 families generated in the same order, deleting the criterion changed **0 of 799**

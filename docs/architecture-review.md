@@ -115,6 +115,10 @@ exists but `voicing_cost` still takes 7 positional arguments and returns a
 positional tuple. Extending/reordering the selection rule requires touching both
 the function and positional tests.
 
+Closed by P7 below: the rule takes the criteria value and returns a `VoicingScore`
+whose fields are named, so the order is asserted **once** and adding a criterion is
+a field, a label and a value — not a search through every call site.
+
 ### F10 — `grips.py` is a large hub (SRP)
 
 1,468 lines: builders, candidate generators, layout-vs-search partitioning
@@ -152,7 +156,7 @@ or voice-leading logic touched → commit separately.
 | 4 | P2 | done | The facade's bulk was demo code, not names: `main()` (151 lines, complexity 14) moved to `arranger.demo`, re-exported so `arranger.main`, the console script and `python -m arranger` are unchanged. Facade 695 → 543 lines, `__init__` budget 14/151 → 2/5. |
 | 5 | P4 | done | The dispatch left `movement` as `route_dispatch`: a frozen `Route(name, claims, emit)` and an ordered five-entry `ROUTES`, with `dispatch_step` asking each in turn. The order is now data, pinned by `tests/test_route_dispatch.py`, which also drives every entry from a request a caller can ask for and pins each request to the entry it must land in. `movement` 247 → 160 lines, 8 → 3 functions, 11 → 9 imports; demo output byte-identical against a worktree of the previous commit. |
 | 6 | P6 | done | The `arranger ↔ tabstaff` cycle measured inert in both directions and pinned by `TestTheRuntimeCycle`; the module-scope rule widened from the facade to the package. Two docstrings and `docs/renderers.md` had claimed an eager import "would fail to find the names" - it does not, and now a test says so. |
-| 7 | P7 | planned | Criteria extensibility |
+| 7 | P7 | done | `voicing_cost` takes one `SelectionCriteria` and returns a `VoicingScore` - a `tuple` subclass with 7 named fields, so comparison and `min` are unchanged. The field order is asserted once (not twenty times), the labels and the span/partition indices are derived from `_fields`, and the public `VoiceLeadingEngine.voicing_cost` takes the criteria object. `best_voicing` is now a builder of criteria over the one argmin, `best_voicing_for`. 29 test call sites moved from positional indices to field names; suite 1393 → 1395. |
 
 ---
 
@@ -451,9 +455,54 @@ green at 1393.
 
 ---
 
-## Next stages (P7)
+## P7 — the rule takes its context, and says what it scored
 
-| ID | What | Why |
-|---|---|---|
-| P7 | `voicing_cost` accepts `SelectionCriteria`, returns named score | OCP |
+F9's complaint had two halves, and the second was the one that mattered: the order
+was asserted **twenty times**, positionally, across `TestVoicingCost` - so reordering
+a criterion meant editing a test file rather than reading one line, and every call
+site read `[3]` where it meant "span".
+
+`VoicingScore` is a `NamedTuple`, and that single choice does both jobs:
+
+- **it is still a tuple.** Comparison stays lexicographic, `min` still picks the
+  winner, and `decisive_criterion` still zips two scores. Nothing about the rule
+  moved - only its spelling.
+- **the order is asserted once.** `test_the_field_order_is_the_rule` names the seven
+  fields, the eight phrases and the two derived indices; every other assertion reads
+  `score.span`.
+
+The other half is `voicing_cost(voicing, criteria)`. `SelectionCriteria` already
+existed but `voicing_cost` took seven keywords and `SelectionCriteria.cost`
+re-spelled all seven when delegating - three places to keep in step for one rule.
+Now the value is the whole input:
+
+- a new *input* (as `root_pc` and `melody_pc` both were, added one at a time) is a
+  defaulted field on `SelectionCriteria`, and the facade method does not change;
+- `SelectionCriteria.cost` is `voicing_cost(voicing, self)`, so the selector and the
+  palette record cannot be scored against arguments the other did not see;
+- `best_voicing` (the keyword convenience) now **builds** the criteria and delegates
+  to `best_voicing_for`, so there is one argmin rather than two that must agree.
+
+**What the return being a named tuple buys an editor is smaller than what it buys the
+next criterion.** Adding one is: a field, its phrase in `_CRITERION_LABELS` (keyed by
+field name, so it cannot drift), and the value read from the criteria - because
+`VOICING_COST_CRITERIA`, `SPAN_CRITERION` and `PARTITION_CRITERION` are all derived
+from `_fields`, and the return is built by keyword so the field and its position
+cannot drift apart. A field with no phrase raises `KeyError` at import, which no run
+can miss. The one thing that is still a decision is *where* it ranks.
+
+**Measured:** the seven-field order and the eight phrases are unchanged, so the demo
+output is byte-identical and every pinned tab still says what it said. 29 test call
+sites moved from positional indices to field names; `TestVoicingCost` gained two
+tests (the order, and "the score is still a tuple") and lost nothing. Suite
+1393 → 1395, ruff 0, pyright 0/0.
+
+---
+
+## The plan is complete
+
+All seven stages landed: P1, P2, P3, P4, P5, P6, P7. What is left of the review's
+findings is the pair it deliberately did **not** stage - F8 (the explanation
+invariant) and F10 (`grips.py`'s size) - both of which are covered by the standing
+tests and the recipes in `AGENTS.md` rather than by a refactor.
 

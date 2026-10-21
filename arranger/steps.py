@@ -234,17 +234,16 @@ class VoiceLeadingEngine:
     def voicing_cost(
         cls,
         voicing: Voicing,
-        previous: Optional[Voicing],
-        fret_min: int = NECK_FRET_MIN,
-        fret_max: int = NECK_FRET_MAX,
-        allowed_tones: Optional[Container[int]] = None,
-        root_pc: Optional[int] = None,
-        melody_pc: Optional[int] = None,
-    ) -> Tuple[float, ...]:
-        """See `cost.voicing_cost` - the library's central invariant is there."""
-        return _cost.voicing_cost(
-            voicing, previous, fret_min, fret_max, allowed_tones, root_pc, melody_pc
-        )
+        criteria: _cost.SelectionCriteria,
+    ) -> _cost.VoicingScore:
+        """See `cost.voicing_cost` - the library's central invariant is there.
+
+        `criteria` is the whole ranking context, so a caller that wants one more input
+        passes a `SelectionCriteria` field rather than another keyword; for "rank
+        against nothing" pass `SelectionCriteria()`, which is no previous shape, no
+        window override and no chord to check against.
+        """
+        return _cost.voicing_cost(voicing, criteria)
 
     @classmethod
     def _best_voicing(

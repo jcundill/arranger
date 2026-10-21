@@ -267,24 +267,36 @@ you whether a change is an improvement or a different library.
     across every allowed soprano string, high-E first, applying the chord-tone match
     then the quality-only fallback. **Pure**: it neither filters by fret nor
     transposes. `get_all_drop2_voicings` is this pinned to `grips=("drop2",)`.
-  - `voicing_cost(voicing, previous, fret_min, fret_max, allowed_tones)` — the whole
-    selection rule as one comparable **7-element** tuple: notes outside the chord, then
+  - `voicing_cost(voicing, criteria)` — the whole selection rule as one comparable
+    **7-field** `VoicingScore`: notes outside the chord, then
     frets outside the window, then missing voices, then **span** (with spans 0 and 1
     bucketed to the same value — see §"Span outranks neck position"), then neck
     position (the difference of average frets from the previous voicing), then pitch
     movement, then bass function. Lexicographic, not a weighted sum, because these
-    priorities must not be traded against each other. **No element names a grip family**,
-    so a tie that runs off the end of the tuple is broken by generation order:
+    priorities must not be traded against each other. **No field names a grip family**,
+    so a tie that runs off the end of the score is broken by generation order:
     `top_strings` first, then `GRIP_PREFERENCE` within one string. The generators still
     take a `grips=` preference list - that is how the order is written down - but no
     arrangement route reaches it: the axis that let a caller give one is deleted, so the
     family a step is voiced with is `GRIP_PREFERENCE`'s order and nothing else.
     `best_voicing` is its argmin and is stable, so the engine is deterministic.
-    The internal selector passes the same inputs as one `SelectionCriteria` value
-    (`previous`, the window, the allowed tones, the pitch classes and the slash-bass
-    ranking), so the selection and the palette record cannot be scored against
-    different arguments. `voicing_cost` keeps its primitive signature; the object is
-    the internal seam, not a second public cost rule.
+    **Every input arrives as one `SelectionCriteria` value** (`previous`, the window,
+    the allowed tones, the melody's pitch class, the root, and the slash-bass pair the
+    partition reads before the score), so the selection and the palette record cannot
+    be scored against different arguments - and a new ranking input is a *field* on
+    that value rather than an eighth parameter. The score is a `tuple` subclass with
+    named fields, so `min` and `decisive_criterion` compare exactly what they always
+    did; **its field order is the invariant** and is asserted once, in
+    `TestVoicingCost::test_the_field_order_is_the_rule`.
+  - **Adding a ranking criterion** touches three places, and only the first is code:
+    a field on `VoicingScore` (named in the return), its phrase in
+    `cost._CRITERION_LABELS` (keyed by field name, so it cannot drift out of order),
+    and its value read from the criteria in `voicing_cost`. The label tuple, the span
+    index and the partition index are all *derived* from the fields, so nothing else
+    has to be found and updated - and a field with no label raises at import, which no
+    run can miss. What is **not** free is the *position*: a new field is ranked above
+    or below the existing ones, and moving one is a musical decision with a
+    measurement, which is why the order has its own test.
   - **No element names a finger, and that is measured rather than omitted.** The right
     hand's own criterion was a candidate and it is settled: measured at every placement it
     changed **0** picks below `position` and **17** just after `span`, across 94 of 1,204
