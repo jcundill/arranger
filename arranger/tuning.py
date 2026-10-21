@@ -465,6 +465,20 @@ class ArrangementStep:
     # spells it in the bass parenthetical (`(bass: C3, held)`), because the tab draws a
     # mute on that string and a reader would otherwise count a note that never sounds.
     bass_held: bool = False
+    # The chord part was **asked** to attack at this position: a position named by the
+    # chord's own rhythm (`--chord-on 1,2`, the stab `--chord-on melody,1&` adds under a
+    # held note) or a slot the chord layer invented because the tune is silent there
+    # (a `--chord-fills` position, a chord chart with no tune).
+    #
+    # It exists because "the shape is the same as the step before" cannot tell a hold
+    # from a re-strike, and on the comping route the engine deliberately stops saying so
+    # in the pitches: `melody_voiced=False` removes the soprano a `repeated` step would
+    # re-articulate, so a repeat holds the whole shape instead (`render._step_cells`).
+    # That rule is about a slot the tune *sustains* through; a position the request names
+    # is a new attack, and `--chord-on every-beat` is only audible as four stabs a bar if
+    # the renderers know the difference. Defaulted, so a hand-built step and every
+    # existing construction are unaffected.
+    chord_attack: bool = False
     # The guitar does **not** sound the melody on this step: the melodic voice belongs
     # to another instrument, and this one is a guide-tone comping shape underneath it.
     # Set from `melody=` (MELODY_NONE) rather than inferred, so a renderer can ask the

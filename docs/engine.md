@@ -1613,6 +1613,21 @@ re-strike a guide tone and the shape would change on a beat where nothing has. T
 becomes **hold the whole shape**, which is what a guitarist comping behind a horn does while
 the horn repeats the note.
 
+**`chord_attack` is the other half of that rule, and the two are told apart by the request
+rather than by the pitches.** A comp on `--chord-on every-beat` repeats one shape four
+times a bar, and a slot the tune merely sustains through has the same pitches — so the
+renderers, which compare shapes, could not tell a re-strike from a hold, and folded the
+named position into the one before it: the arrangement said four attacks and the score,
+the staff, the HTML and GP5 all wrote **one long chord**. `slot_plan._chord_attacks` sets
+`ArrangementStep.chord_attack` where the chord part was *asked* for the attack — a position
+`--chord-on` named (including the stab `--chord-on melody,1&` puts under a held note), or a
+slot the chord layer invented because the tune is silent there — and a slot the
+eighth-note skeleton invented under a sustaining note keeps its hold. Measured on the
+committed heads under the default comping request: the flag restores **103 attacks** — 38%
+of the 270 sounding steps, across 9 of the 13 heads — and changes **no** melody-bearing
+step, because a written onset there already strikes through `repeated` or by carrying a
+different soprano.
+
 This is not a corner case. Measured over 2,243 corpus steps, **152 carry `repeated`**, and
 keeping the old rule rendered every one as a single moving note — a melody line on the
 guitar part, on exactly the beats where the arrangement had handed the tune away.
@@ -1620,7 +1635,8 @@ guitar part, on exactly the beats where the arrangement had handed the tune away
 The rule is stated in **two** places, `render._step_cells` and `tabstaff._strikes_here`,
 because those two are what keep the one-line renderer, the ASCII staff and the HTML from
 disagreeing about what attacks. `tests/test_comping.py::TestRepeatedStepsHoldTheShape`
-asserts they agree, string by string.
+asserts they agree, string by string. `tests/test_chord_attack.py` holds the flag's half:
+the rule, and the four renderers reading it.
 
 ### Two consequences, both derived rather than listed
 

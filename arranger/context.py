@@ -53,3 +53,8 @@ class SlotContext:
     duration: Optional[float]
     role: str
     weight: int
+    #: Whether the chord part is a **new attack** here rather than a shape still
+    #: ringing. `slot_plan._chord_attacks` decides it once per slot, from the request's
+    #: chord rhythm and the slot's own melody; the routes stamp it on the step so the
+    #: renderers can tell a re-strike from a hold. See `ArrangementStep.chord_attack`.
+    chord_attack: bool = False

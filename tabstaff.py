@@ -322,8 +322,20 @@ def _collapse_holds(
         # sounds - the thumb on its own - is struck. Without this a bass line of repeated
         # roots read as one note and three holds, so the staff showed two notes where the
         # tab showed four.
+        #
+        # `chord_attack` is the arrangement's own answer to "is this the same shape still
+        # ringing, or did the rhythm ask for it again?". Pitches cannot say: a comp on
+        # `--chord-on every-beat` repeats the identical shape on every beat, and the
+        # pitches are equal whether the player holds it or strikes it. It is the mirror
+        # of `repeated` - the tune re-articulated is a strike, the chord re-articulated
+        # is one too - and the one exemption that has to be recorded rather than
+        # compared. `_chord_attacks` is where the rule lives.
         strikes = (
-            pitches != held or step.repeated or step.bass_only or not pitches
+            pitches != held
+            or step.repeated
+            or step.bass_only
+            or not pitches
+            or step.chord_attack
         )
         collapsed.append((onset, step, strikes))
         if strikes:

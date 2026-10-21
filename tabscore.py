@@ -338,6 +338,13 @@ def _is_hold(
     """
     if not events or step.repeated:
         return False
+    if step.chord_attack:
+        # The chord's rhythm **named** this position, so it is a new attack even where
+        # the shape is the one already ringing. The same exemption `bass_held` below
+        # makes from the other end, and for the same reason: a struck voice is a strike
+        # however the pitches compare. Without it a comp on `--chord-on every-beat` was
+        # written as one long chord a bar instead of one attack per beat.
+        return False
     if step.bass is not None and not step.bass_held:
         # The thumb is **struck** here, so this is an attack however the upper voices
         # compare: a bass line on one chord repeats its root beat after beat, and

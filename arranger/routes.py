@@ -420,6 +420,10 @@ def _emit_comping_step(
         metric_weight=context.weight,
         bass_only=is_bass_only(slot.bass_only, context.role),
         melody_voiced=False,
+        # The rhythm asked for this chord, so it is struck even where the shape is the
+        # one already ringing: a comp on `--chord-on every-beat` is four attacks a bar,
+        # and the renderers would otherwise fold beats 2..n into one long chord.
+        chord_attack=context.chord_attack,
         # What the substitution changed about the *harmony*, reported the
         # way the melody route reports it: `chord` stays the written
         # symbol, and these three say what was actually stated under the

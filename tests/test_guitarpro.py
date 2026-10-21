@@ -1662,3 +1662,28 @@ class TestGuitarProAnacrusis(unittest.TestCase):
         self.assertEqual(first[1][1], 1.0)
         # And the bar it leads into is full again.
         self.assertEqual(sum(length for _s, length, _t in measures[1]), 4.0)
+
+
+@requires_guitarpro
+class TestARestruckCompIsNotOneLongChord(GuitarProTestCase):
+    """A comp that repeats the same shape is two beats, not one long chord.
+
+    The GP5 half of `tests/test_chord_attack.py`. The writer reads
+    `tabscore.score_events`, which treats a position the chord's rhythm **named** as a new
+    attack rather than folding it into the chord before it. Written as one long note, the
+    file would play half the attacks the arrangement contains, and no comparison of the
+    frets would notice: the pitches are the same either way.
+    """
+
+    def test_the_two_attacks_are_two_beats(self):
+        from arranger import Request
+        from headxml import arrange_xml_head
+
+        steps, _head, _notes = arrange_xml_head(
+            BUT_NOT_FOR_ME, section=(2, 3), request=Request(melody=False, chord_on="1,2")
+        )
+        song = _parse(io.BytesIO(format_gp5(steps)))
+        beats = [
+            beat for measure in song.tracks[0].measures for beat in measure.voices[0].beats
+        ]
+        self.assertEqual([len(beat.notes) for beat in beats[:2]], [3, 3])

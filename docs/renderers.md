@@ -98,14 +98,27 @@ Two consequences worth knowing:
 
 An arrangement is data; four renderers read it. **They must agree about which notes are new
 attacks**, because a note drawn twice is a wrong rhythm and a note drawn nowhere is a note
-the arrangement does not really contain. Three facts drive that agreement, and each has one
+the arrangement does not really contain. Four facts drive that agreement, and each has one
 owner.
 
 | fact | the field | what a renderer does with it |
 |---|---|---|
 | the shape is the same as the previous one | compared in `_staff_columns` / `_is_hold` | a hold column draws nothing: the previous shape is still ringing |
+| the chord is **struck again** though the shape is unchanged | `ArrangementStep.chord_attack` | the column is a strike and the shape is drawn again |
 | the thumb has **moved** under a held shape | `_moved_thumb` compares `(bass_midi, bass_string)` | the hold column draws **the bass string only** |
 | the thumb is **sounding and not plucked** | `ArrangementStep.bass_held` | the tab mutes that string, the staff leaves it blank, the score ties it, GP5 writes a tie note |
+
+**The first row cannot decide on its own, and the second is why.** A comp on
+`--chord-on every-beat` states the *same shape* on every beat, and so does a slot the
+tune merely sustains through - the pitches are identical whether the player strikes the
+chord again or lets it ring. On the comping route that ambiguity is load-bearing, because
+`melody_voiced=False` removes the soprano a `repeated` step would re-articulate, so the
+engine deliberately holds the whole shape there (`render._step_cells`). The chord's own
+rhythm is the fact that separates the two, and `slot_plan._chord_attacks` is its one home:
+a position the request **named** - a `--chord-on` position, a stab under a held note - or a
+slot the chord layer invented where the tune is silent is a new attack; a slot the
+eighth-note skeleton invented under a sustaining note is a hold, and stays one.
+
 
 **The hold comparison is of the upper voices**, and it has to be: a walking bass moves the
 lowest pitch on every beat, so including it would mark every column a strike and turn the

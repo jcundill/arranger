@@ -122,13 +122,14 @@ def _slot_context(
     pass a value the context can compute from the same facts.
     """
     note_str, chord_type, name = triple
+    melody_note = Note(note_str) if note_str is not None else None
     return SlotContext(
         progression=inputs.progression,
         index=slot.index,
         name=name,
         chord_type=chord_type,
         note_str=note_str,
-        melody_note=Note(note_str) if note_str is not None else None,
+        melody_note=melody_note,
         fret_min=inputs.fret_min,
         fret_max=inputs.fret_max,
         texture=inputs.texture,
@@ -141,6 +142,7 @@ def _slot_context(
         duration=slot.duration,
         role=role,
         weight=metric_weight(slot.bar, slot.beat, inputs.beats_per_bar, inputs.grouping),
+        chord_attack=_chord_attacks(inputs, slot, melody_note),
     )
 
 
@@ -314,6 +316,47 @@ def _chord_here(
     return inputs.chord_rhythm.includes(
         beat, inputs.beats_per_bar, inputs.grouping
     )
+
+
+def _chord_attacks(
+    inputs: SlotInputs,
+    slot: Slot,
+    melody_note: Optional[Note],
+) -> bool:
+    """Whether this slot's chord is a **new attack** rather than a shape still ringing.
+
+    `_chord_here` answers where the chord part states a harmony. This answers the
+    narrower question the renderers ask when two consecutive steps sound the same
+    pitches - is the later one struck again, or is the earlier one still ringing? - and
+    only the arrangement can answer it, because the pitches are identical either way.
+
+    Two ways to be an attack:
+
+    - the slot carries **no melody**, so the chord layer asked for it: a position
+      `--chord-on` named, or a silent bar `--chord-fills` placed a chord in. Nothing
+      in the tune is being re-articulated, so there is no hold to preserve;
+    - the chord's **own rhythm names this beat**. `--chord-on every-beat` on a comp is
+      four stabs a bar, and `--chord-on melody,1&` adds one under a note the tune is
+      holding.
+
+    A written melody onset needs no clause of its own: a step there re-strikes through
+    `ArrangementStep.repeated` or by carrying a different soprano. A position the
+    eighth-note skeleton invented, where the tune merely sustains, is neither - that is
+    the hold `tabstaff._collapse_holds` and `tabscore._is_hold` exist for.
+
+    A `grid=` preset keeps its own reading rather than being re-derived from the
+    request here, for the reason `_chord_here` gives: a preset is the engine's axis and
+    a caller who named one is testing that pattern, not the request's rhythm
+    underneath it.
+    """
+    if melody_note is None:
+        return True
+    if inputs.grid_pattern is not None or inputs.chord_rhythm is None:
+        return False
+    return inputs.chord_rhythm.includes(
+        slot.beat, inputs.beats_per_bar, inputs.grouping
+    )
+
 
 def slot_state(
     car: Carried,

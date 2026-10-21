@@ -536,6 +536,8 @@ Gmaj9/F# D4  5    x-x-x-x-3-x       (harmony under 5 - melody alone, the most th
 
 One stab, on the and of 1; the melody notes elsewhere are the tune alone. **A stab lasts its felt beat and no further** — the beats it does not fill are written as a rest — and a position the metre does not have is refused rather than clamped.
 
+**Every position you name is a new attack**, even where the chord is the same shape as the one before it. `--no-melody --chord-on 1,2` on a 2/2 head strikes the same chord twice a bar, and the staff, the HTML, the score and the GP5 file all draw both; a comp on `--chord-on every-beat` is four attacks a bar, not one long chord. Only a position the engine *invents* — a slot the tune merely sustains through — is a hold.
+
 **What happens to a melody note with no chord on it depends who sings** — the one place the rhythm needs two answers:
 
 - **the guitar singing** — the tune's note still sounds, alone. No note is dropped: chord-melody under `--chord-on 1&,2&,3&,4&` plays the melody throughout and places chords only on the ands. The lone note is placed by the same position-aware selector a chord is, from the positions its strings offer, so it lands where the hand already is rather than at the high E string's nearest fret.
