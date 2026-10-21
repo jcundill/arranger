@@ -13,8 +13,11 @@ cannot drift apart, which is what the two grids have to agree on for the `collap
 behaviour to mean the same thing in each.
 
 Split out of `arranger.py` so the renderers can grow without making the voicing
-engine harder to read. Everything here imports from `arranger`, never the reverse,
-except for the public re-exports at the bottom - see the note there.
+engine harder to read. The only thing here that reaches into the package is
+`arranger.tuning`, a leaf that imports nothing: the facade resolves *this* module
+through a PEP 562 `__getattr__`, so the two name each other without either needing
+the other to be initialised. [docs/dependency-dag.md](docs/dependency-dag.md) has
+the measurement.
 """
 
 from __future__ import annotations

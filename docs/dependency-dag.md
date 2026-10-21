@@ -186,12 +186,41 @@ flowchart TB
 The rendering surface's lazy seams are **deliberately not drawn**, because they
 are function-local rather than module-scope and so are not part of this DAG:
 
-- `arranger.__getattr__` imports `tabstaff` on first access — the facade cannot
-  import it eagerly, because `tabstaff` imports `arranger.tuning` and so re-enters
-  the package while it is still initialising;
-- `demo.main()` imports `headxml` only inside the `head` branch, so `import arranger`
-  does not pull in the importer or the renderers it uses. It is the same seam that
-  keeps the demonstration's `import tabstaff` out of the facade's module scope.
+- `arranger.__getattr__` imports `tabstaff` on first access, so `import arranger`
+  loads none of the six front ends;
+- `demo.main()` imports `headxml` and the staff renderers inside the branch that
+  needs them, so `import arranger` pulls in neither the importer nor the renderers
+  it uses;
+- `cli` imports `tabstaff` inside the function that dispatches the output, for the
+  same reason.
+
+### The loop those seams make, and why it is inert
+
+Drawn from both directions the graph has a loop: `arranger` resolves `tabstaff`
+through `__getattr__`, and every rendering front end imports `arranger.tuning` -
+which means importing a *submodule*, and importing a submodule runs the package's
+`__init__` first. Measured on the tree rather than argued:
+
+| question | measurement |
+|---|---|
+| does `import arranger` load a front end? | **no** - 0 of the six, which is the lazy seam working rather than an AST claim |
+| can the four renderers import with the facade *absent*? | **yes** - with a blank `arranger` module in `sys.modules`, so `__getattr__` does not exist, `tabscore`, `tabstaff`, `tabxml` and `tabgp` all import and bind the *same* `ArrangementStep`; their reverse edge is the leaf |
+| what would a module-scope `from tabstaff import ...` in the facade cost? | it **works**, and loads `tabstaff`, `tabxml`, `tabgp` and `tabscore` on every `import arranger`. Three-run wall times overlapped (0.7-1.5 s either way), so the cost is the modules and the write paths, not the seconds |
+| what would a module-scope `import headxml` cost? | it **fails**: `ImportError: cannot import name 'CHORD_FILLS_COMP'` - `headxml` names the facade's public surface and meets a facade that has not defined it yet |
+
+So the loop is a cycle on paper only, in the direction the code takes it: neither
+side waits for the other, because the front ends need `tuning` and the facade's
+edge is taken *after* the facade is complete. The one ordering that would break is
+a front end imported **during** the facade's own initialisation, and `headxml`
+above is that case made visible. `tests/test_front_end_dag.py::TestTheRuntimeCycle`
+holds each row of the table.
+
+**Eliminating the loop is not worth what it costs.** The only edge that could go is
+the benign one: `tuning` would move to a top-level module, with `arranger/tuning.py`
+left as a shim and a new public module added to `py-modules`, the Makefile's
+`MODULES`, `typecheck` and `FRONT_ENDS`. That leaves `headxml`'s edge - the one
+that actually fails - exactly where it is, so the price would be a new public name
+and a second source for "where the voicing dataclasses live", to redraw a diagram.
 
 The same lazy discipline holds for the optional extras: `tabxml` imports
 `music21` and `tabgp` imports `PyGuitarPro` at the point of writing, so a caller

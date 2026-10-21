@@ -180,9 +180,9 @@ class TestPackageDag(unittest.TestCase):
     def test_no_module_imports_the_facade(self):
         """Nothing inside the package may import `arranger` itself.
 
-        This is the cycle Phase 5 exists to open. A module reaching back up through
-        the facade would get a half-initialised package, and would hide its real
-        dependency from the check above.
+        This is the cycle the package's layering exists to prevent. A module reaching
+        back up through the facade would get a half-initialised package, and would
+        hide its real dependency from the check above.
         """
         offenders = []
         for module in ORDER:

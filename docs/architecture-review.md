@@ -66,7 +66,10 @@ requires `parts`, `texture`, `grid`, and metre context.
 ### F4 — Hidden runtime circularity (DIP)
 
 `arranger.__init__` lazily resolves `tabstaff` via `__getattr__` (PEP 562)
-because `tabstaff` imports `arranger.tuning`. The AST DAG test passes (the
+because `tabstaff` imports `arranger.tuning`, so the two name each other. The AST
+DAG test passes - the facade's import is not module-scope - but the runtime graph
+has a loop, and nothing measured whether either side could meet the other half
+built. Closed by P6 below: measured inert in both directions, and pinned.
 
 ### F5 — `movement.py` is a central orchestrator with high fan-in (SRP)
 
@@ -142,7 +145,7 @@ or voice-leading logic touched → commit separately.
 | 3 | P3 | done | Each axis answered by one resolver in the module owning its vocabulary: `resolve_bass` moved to `bass_rules`, `texture.parse_texture` added, `TestTheAxisResolvers` holds the signatures to the dependency table. |
 | 4 | P2 | done | The facade's bulk was demo code, not names: `main()` (151 lines, complexity 14) moved to `arranger.demo`, re-exported so `arranger.main`, the console script and `python -m arranger` are unchanged. Facade 695 → 543 lines, `__init__` budget 14/151 → 2/5. |
 | 5 | P4 | planned | Route dispatcher |
-| 6 | P6 | planned | Runtime cycle |
+| 6 | P6 | done | The `arranger ↔ tabstaff` cycle measured inert in both directions and pinned by `TestTheRuntimeCycle`; the module-scope rule widened from the facade to the package. Two docstrings and `docs/renderers.md` had claimed an eager import "would fail to find the names" - it does not, and now a test says so. |
 | 7 | P7 | planned | Criteria extensibility |
 
 ---
@@ -356,11 +359,49 @@ its worst function now being `__getattr__`.
 
 ---
 
-## Next stages (P4, P6, P7)
+## P6 — the cycle, measured instead of assumed
+
+F4 named a cycle: `arranger` resolves the staff renderers through a PEP 562
+`__getattr__`, and `tabstaff` imports `arranger.tuning`. Two documents explained the
+lazy seam by saying an eager import "would re-enter a half-initialised `arranger`
+and fail to find the names". **That explanation is false**, and measuring it is what
+this stage produced:
+
+| probe | result |
+|---|---|
+| `import arranger`, then look in `sys.modules` | **0 of the 6** front ends loaded - the seam is lazy at runtime, not merely in the AST |
+| the four renderers, with a blank `arranger` module in `sys.modules` (no `__getattr__` at all) | **all four import**, each binding the same `ArrangementStep` from `arranger.tuning` - the reverse edge is the leaf |
+| a module-scope `from tabstaff import format_tab_staff` added to `arranger/__init__.py` in a scratch copy | **it imports cleanly**, and loads `tabstaff`, `tabxml`, `tabgp`, `tabscore` on every `import arranger` |
+| a module-scope `import headxml` in the same scratch copy | **`ImportError: cannot import name 'CHORD_FILLS_COMP'`** |
+
+So neither half of the loop can wait for the other, and the seam's real job is not
+to break a deadlock: it keeps four rendering modules - and the write paths among
+them - out of every `import arranger`. The hard failure belongs to the two front ends
+that name the facade's *public surface* (`headxml`, `grip_chart`), which cannot be
+imported until the facade has finished; `demo.main()`'s and `cli`'s function-local
+imports are what keep them clear of that.
+
+**What changed.** The three claims became one test class rather than prose:
+`tests/test_front_end_dag.py::TestTheRuntimeCycle` measures the facade's laziness and
+the front ends' independence of it, and the module-scope rule was widened from the
+facade alone to the whole package, since `cli` was the second module that could have
+taken that edge. The two false docstrings were corrected - `tabstaff`'s module
+document, `arranger/__init__`'s export comment, `docs/renderers.md`, and
+`test_importing_tabstaff_first_does_not_crash`, whose premise was the false one.
+
+**Elimination was declined, deliberately.** The benign edge could go by moving
+`tuning` to a top-level module with `arranger/tuning.py` as a shim. That is a new
+public module (four registries to add it to: `py-modules`, `MODULES`, `typecheck`,
+`FRONT_ENDS`) and a second place to look for the voicing dataclasses, and it leaves
+`headxml`'s failing edge untouched. The diagram would be tidier; the code would not
+be safer.
+
+---
+
+## Next stages (P4, P7)
 
 | ID | What | Why |
 |---|---|---|
 | P4 | Route dispatcher extracted from `movement.py` | SRP |
-| P6 | Document / eliminate `arranger ↔ tabstaff` runtime cycle | DIP |
 | P7 | `voicing_cost` accepts `SelectionCriteria`, returns named score | OCP |
 

@@ -12,14 +12,21 @@ renderers so `from arranger import format_musicxml` keeps one spelling, and its
 two edges are that facade rather than accidental coupling. The writers' edge to
 `tabscore` is different: both need the same score placement, and that shared core
 is what keeps `tabgp` and `tabxml` from depending on one another.
+
+The package and the front ends name each other - `arranger.__getattr__` resolves
+`tabstaff`, and `tabstaff` imports `arranger.tuning` - so the last class here
+measures the cycle rather than arguing about it. See
+[docs/dependency-dag.md](../docs/dependency-dag.md) for why it is inert.
 """
 
 from __future__ import annotations
 
 import ast
+import subprocess
+import sys
 import unittest
 from pathlib import Path
-from typing import Dict, Set
+from typing import Dict, List, Set
 
 from tests.support import FRONT_ENDS
 
@@ -96,20 +103,104 @@ class TestTheFrontEndDag(unittest.TestCase):
             stale, [], "an allowed front-end edge no longer exists - delete the entry"
         )
 
-    def test_the_facade_does_not_import_a_front_end_at_module_scope(self):
-        """`arranger` re-exports the front ends lazily, not at import time.
+    def test_no_package_module_imports_a_front_end_at_module_scope(self):
+        """`arranger` reaches the front ends lazily, never during its own import.
 
-        `tabstaff` imports `arranger`, so a module-level import in the other
-        direction would be a cycle - and it would also make `import arranger`
-        pull in the MusicXML and GP5 writers for a caller who only wants the
-        engine. `arranger.__getattr__` is the facade's lazy seam; the other one,
-        the `head` importer and the staff renderers, lives in `demo.main()`.
+        This is the load-bearing half of the cycle. `headxml` names the facade's
+        own public surface at module scope (`from arranger import ...`), so a
+        module-scope import of it from inside the package would run it against a
+        *partially initialised* `arranger`; `tabstaff` imports the package too,
+        which runs the facade before the renderer gets to its own first line.
+
+        So every reach is function-local or a `__getattr__` resolution:
+        `demo.main()` imports the importer and the staff renderers, `cli` imports
+        `tabstaff`, and the facade's seven re-exports go through PEP 562. The scan
+        is over the whole package rather than the facade, because the CLI was the
+        second module that could have taken the edge at import time.
         """
+        offenders: List[str] = []
+        for path in sorted((ROOT / "arranger").glob("*.py")):
+            for imported in sorted(_module_imports(path)):
+                offenders.append(f"arranger/{path.name} imports {imported}")
         self.assertEqual(
-            sorted(_module_imports(ROOT / "arranger" / "__init__.py")),
+            offenders,
             [],
-            "the facade imports a front end at module scope - keep it lazy",
+            "a package module imports a front end at module scope - keep it lazy",
         )
+
+
+class TestTheRuntimeCycle(unittest.TestCase):
+    """The package and the front ends name each other, and neither needs the other.
+
+    On paper the two edges make a cycle: `arranger.__getattr__` resolves the staff
+    renderers, while `tabstaff` imports `arranger.tuning`. It is inert, and that is
+    a measurement rather than an argument - the facade's edge is taken only *after*
+    the facade is complete, and the four rendering front ends reach a leaf that
+    needs nothing from it. Both halves are pinned here in a fresh interpreter,
+    because this process imported all of them at collection time.
+    """
+
+    def test_the_facade_loads_no_front_end(self):
+        """`import arranger` on its own leaves every front end unimported.
+
+        The AST scan in the class above says no module-scope import exists. This is
+        the same fact measured: a `__getattr__` is only lazy if nothing touches the
+        attribute during the import, and a module-scope *read* of one of these names
+        would import the front end just as surely as an import statement would.
+        """
+        expected = sorted(FRONT_ENDS_BY_STEM)
+        code = (
+            "import sys, arranger;"
+            f" print(sorted(n for n in {expected!r} if n in sys.modules))"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=str(ROOT),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            result.stdout.strip(), "[]", "import arranger loaded a front end"
+        )
+
+    def test_the_rendering_front_ends_import_with_the_facade_absent(self):
+        """The reverse edge is the leaf, so the cycle cannot fire.
+
+        `sys.modules['arranger']` is replaced with a blank package before the
+        imports, so the facade never runs and has no `__getattr__` at all. The four
+        renderers still import, each reaching `arranger.tuning` through the blank
+        package's `__path__`, and the blank module is still the one bound
+        afterwards - which is the claim: nothing here needed a public name.
+
+        `headxml` is deliberately absent. It names the facade's public surface
+        (`from arranger import CHORD_FILLS_COMP`), so it fails against a blank
+        package; that is why `demo.main()` imports it *after* the facade is
+        complete, and why the module-scope rule above is not tidiness.
+        """
+        package_dir = str(ROOT / "arranger")
+        code = (
+            "import sys, types;"
+            " blank = types.ModuleType('arranger');"
+            f" blank.__path__ = [{package_dir!r}];"
+            " sys.modules['arranger'] = blank;"
+            " import tabscore, tabstaff, tabxml, tabgp;"
+            " assert sys.modules['arranger'] is blank, 'a front end ran the facade';"
+            " from arranger.tuning import ArrangementStep;"
+            " assert tabscore.ArrangementStep is ArrangementStep;"
+            " assert tabstaff.ArrangementStep is ArrangementStep;"
+            " assert tabxml.ArrangementStep is ArrangementStep;"
+            " assert tabgp.ArrangementStep is ArrangementStep;"
+            " print('ok')"
+        )
+        result = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=str(ROOT),
+            capture_output=True,
+            text=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "ok")
 
 
 if __name__ == "__main__":

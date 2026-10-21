@@ -3,7 +3,9 @@
 This is the package's **front end**, the one place allowed to print - the engine returns
 values and every renderer returns a string. It sits above `steps` and `render` in the
 dependency order, and its imports of the importer and the staff renderers are
-deliberately function-local so `import arranger` does not pay for either.
+deliberately function-local, for two different reasons: `import arranger` should not pay
+for either, and `headxml` names the facade's public surface, so it cannot be imported
+until the facade has finished - which is what this module is.
 
 `arranger.main` re-exports it, so `python -m arranger`, the `jazz-arranger` console
 script and `tests/test_cli.py` all reach one function rather than three copies.

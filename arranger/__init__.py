@@ -285,14 +285,17 @@ from .tuning import (
 __version__ = "0.12.0"
 
 
-# The whole-progression staff renderers live in `tabstaff`, which imports this
-# module. They are exposed here through a module-level __getattr__ rather than a
-# top-level `from tabstaff import ...`, because that would be an import cycle:
-# importing `tabstaff` first would re-enter this half-initialised module and fail to
-# find the names. PEP 562 resolves each name on first access instead, so
+# The whole-progression staff renderers live in `tabstaff`, which imports
+# `arranger.tuning` - and importing a submodule runs this module first. They are
+# exposed here through a module-level __getattr__ rather than a top-level
+# `from tabstaff import ...`, so that `import arranger` does not load the four
+# rendering modules (`tabstaff`, `tabxml`, `tabgp`, `tabscore`) for a caller who
+# only wants the engine. PEP 562 resolves each name on first access instead, so
 # `from arranger import format_tab_html` keeps working - the spelling the README
-# and the tests use - without a lazy import at every call site. This is
-# the same lazy-import discipline main() uses for the head importer, for the same reason.
+# and the tests use - without a lazy import at every call site. `demo.main()`'s
+# `headxml` import is the same discipline and not the same reason: `headxml` names
+# this module's public surface, so it *cannot* be imported until this module has
+# finished. `tests/test_front_end_dag.py::TestTheRuntimeCycle` holds both halves.
 _TABSTAFF_EXPORTS = {
     # name -> the module it lives in. The MusicXML and Guitar Pro renderers live in
     # `tabxml` and `tabgp`, which `tabstaff` re-exports, so resolving them through

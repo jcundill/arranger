@@ -66,18 +66,36 @@ in a third medium and live in `tabgp.py` — see
 [Guitar Pro 5 export](#guitar-pro-5-export). `tabstaff` re-exports all four, so
 there is still one spelling for the whole staff-rendering surface.
 
-**The dependency is one-way: `tabstaff` imports `arranger`, never the reverse.** It
-takes `STRING_NAMES`, `ArrangementStep` and `_MUTED_CELL` from here; the last of
-those stays put because `Voicing.tab_block()` and `format_progression` use it too.
+**The dependency is one-way: `tabstaff` imports `arranger.tuning`, never the
+reverse.** It takes `STRING_NAMES`, `ArrangementStep` and `MUTED_CELL` from there -
+the leaf the whole package is built on, which imports nothing - and the last of those
+stays put because `Voicing.tab_block()` and `format_progression` use it too.
 
-### The re-export is lazy, and has to be
+### The re-export is lazy, and why
 
 `from arranger import format_tab_html` still works — the README and the tests
-spell it that way — but `arranger` does **not** import `tabstaff` at
-the top. A top-level (or even bottom-of-file) import would be a genuine cycle:
-importing `tabstaff` first would re-enter a half-initialised `arranger` and fail to
-find the names. So `arranger` exposes them through a **module-level `__getattr__`**
-(PEP 562), which resolves each name on first access.
+spell it that way — but `arranger` does **not** import `tabstaff` at the top. So
+`arranger` exposes the seven names through a **module-level `__getattr__`**
+(PEP 562), which resolves each on first access.
+
+The reason is cost, plus one hard failure. Measured on the tree:
+
+- a module-scope `from tabstaff import format_tab_staff` in `arranger/__init__.py`
+  **imports cleanly** — Python resolves `arranger.tuning` through the partially
+  initialised package — but it also loads `tabstaff`, `tabxml`, `tabgp` and
+  `tabscore` on every `import arranger`. With the lazy seam, `import arranger`
+  loads **none** of the six front ends;
+- a module-scope `import headxml` **fails**, with
+  `ImportError: cannot import name 'CHORD_FILLS_COMP'`: `headxml` names the facade's
+  own public surface, so it meets a facade that has not defined those names yet.
+
+So "the dependency is one-way" is the rule for the four rendering modules, and "no
+package module imports a front end at module scope" is the rule for the two that
+name the facade (`headxml`, `grip_chart`). `demo.main()`'s and `cli`'s imports are
+function-local for both reasons at once, and the two directions still do not
+deadlock: the front ends need only `tuning`, so neither side waits for the other.
+[docs/dependency-dag.md](dependency-dag.md) has the full table, and
+`tests/test_front_end_dag.py::TestTheRuntimeCycle` holds it.
 
 Two consequences worth knowing:
 
