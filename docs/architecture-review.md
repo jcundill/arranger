@@ -138,7 +138,7 @@ or voice-leading logic touched → commit separately.
 | Stage | ID | Status | Notes |
 |---|---|---|---|
 | 1 | P1 | done | Split `SlotContext` into `SlotTiming`, `SlotHarmony`, `SlotIdentity`, `SlotState` + composed `SlotContext`. All route consumers updated. |
-| 2 | P5 | planned | TEST_SEAMS list |
+| 2 | P5 | done | TEST_SEAMS list in `tests/test_structure.py` — 25 private test-to-arranger reaches documented. New `TestTheTestSeams` test class asserts all reaches are recorded and no stale entries remain. |
 | 3 | P3 | planned | Axis resolvers |
 | 4 | P2 | planned | Facade surfaces |
 | 5 | P4 | planned | Route dispatcher |
@@ -176,6 +176,55 @@ or voice-leading logic touched → commit separately.
 - 799 tests pass across `test_progressions`, `test_comping`, `test_request`, `test_lone_bass`, `test_explanations`, `test_chord_fills`, `test_non_chord_tones`, `test_chord_attack`, `test_bass_hold`, `test_durations`, `test_bass_placement`, `test_bass_positions`, `test_harmony`, `test_parts`, `test_grid`, `test_grip_selection`, `test_grips`, `test_palette`, `test_fretboard`, `test_grouping`, `test_front_end_dag`, `test_package_dag`, `test_structure`, `test_fingers`, `test_placement`, `test_generated_grips`, `test_voicings`, `test_bass`, `test_chord_parser`, `test_html_rendering`
 - `ruff check`: 0 errors
 - `pyright`: 0 errors, 0 warnings on changed files
+
+---
+
+## P5 — Complete: TEST_SEAMS list (done)
+
+**What changed:**
+
+Added `TEST_SEAMS: Set[str]` to `tests/test_structure.py`, documenting every
+private name a test file imports from an arranger module. Each entry is
+`test_module -> arranger.module._private_name`, the same shape the encapsulation
+meter uses for library modules.
+
+25 seams recorded across 14 test files:
+
+| Test file | Private names reached |
+|---|---|
+| `test_palette` | `arranger.annotation._criterion_phrase` |
+| `test_explanations` | `arranger.annotation._omission_clause` |
+| `test_bass` | `arranger.bass._bass_harmony`, `arranger.bass._walking_bass_line`, `arranger.bass_rules._comping_no_room_reason` |
+| `test_walking_bass` | `arranger.bass._melody_in_force`, `arranger.bass._melody_timeline` |
+| `test_comping` | `arranger.grips._comping_palette`, `arranger.grips._search_comping_voicings` |
+| `test_generated_grips` | `arranger.grips._drop2_palette`, `arranger.grips._guide_tones` |
+| `test_grips` | `arranger.grips._guide_tones`, `arranger.grips._close_stack_offsets`, `arranger.grips._interval_set_for_grip` |
+| `test_grip_tables` | `arranger.grips._LAYOUT_GRIPS`, `arranger.grips._SEARCHED_GRIPS` |
+| `test_placement` | `arranger.grip_place._searched_shape`, `arranger.grips._drop2_6432_request`, `arranger.grips._shell_request` |
+| `test_texture` | `arranger.grips._interval_offsets` |
+| `test_parts` | `arranger.render._step_cells` |
+| `test_bass_hold` | `arranger.render._step_cells` |
+| `test_bass_placement` | `arranger.render._step_cells` |
+| `test_tab_rendering` | `arranger.render._format_step` |
+| `test_headxml_repeats` | `arranger.cli._as_written` |
+
+Added `_test_files()` and `_test_private_imports()` scanner functions that
+mirror the library-module encapsulation meter, scanning `tests/` for
+`from arranger.<module> import <_name>` patterns.
+
+Added `TestTheTestSeams` test class with `test_every_test_private_reach_is_recorded`,
+which fails in both directions:
+- A new test-private reach not in TEST_SEAMS → caught
+- A TEST_SEAMS entry no longer used → caught (prevents rot)
+
+**Files touched:**
+
+- `tests/test_structure.py` — added `TEST_SEAMS`, `_test_files`, `_test_private_imports`, `TestTheTestSeams`
+
+**Verification:**
+- `tests.test_structure`: all 8 tests pass (including the new one)
+- `ruff check`: 0 errors
+- `pyright`: 0 errors, 0 warnings
 
 ---
 

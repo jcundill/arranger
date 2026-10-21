@@ -155,6 +155,56 @@ ALLOWED_PRIVATE_IMPORTS: Set[str] = set()
 # directions, so a new reach is caught and a deleted one cannot leave a stale entry.
 ALLOWED_PRIVATE_ATTRIBUTES: Set[str] = set()
 
+# Tests reach into arranger privates too, and that coupling is invisible unless it
+# is named. TEST_SEAMS records every private name a test file imports from an
+# arranger module, so a refactor that renames or removes one fails here rather
+# than silently breaking a test. The test below fails in both directions: a new
+# reach is caught, and a seam that no longer exists cannot rot.
+#
+# Each entry is `test_module -> arranger.module._private_name`, the same shape
+# the encapsulation meter uses for library modules.
+TEST_SEAMS: Set[str] = {
+    # A test helper reads the phrase a cost criterion names.
+    "test_palette -> arranger.annotation._criterion_phrase",
+    # The explanation invariant reads the omission clause directly.
+    "test_explanations -> arranger.annotation._omission_clause",
+    # Bass tests read the walking bass's private helpers.
+    "test_bass -> arranger.bass._bass_harmony",
+    "test_bass -> arranger.bass._walking_bass_line",
+    # Walking bass tests read the melody-in-force helpers.
+    "test_walking_bass -> arranger.bass._melody_in_force",
+    "test_walking_bass -> arranger.bass._melody_timeline",
+    # Bass rules tests read the no-room reason.
+    "test_bass -> arranger.bass_rules._comping_no_room_reason",
+    # Comping tests read the grip generators and palette directly.
+    "test_comping -> arranger.grips._comping_palette",
+    "test_comping -> arranger.grips._search_comping_voicings",
+    # The generated-grips witness reads the drop-2 palette and guide tones.
+    "test_generated_grips -> arranger.grips._drop2_palette",
+    "test_generated_grips -> arranger.grips._guide_tones",
+    # Exact fingerings read the grip tables and stack internals.
+    "test_grips -> arranger.grips._guide_tones",
+    "test_grips -> arranger.grips._close_stack_offsets",
+    "test_grips -> arranger.grips._interval_set_for_grip",
+    # Grip table tests read the layout/search partitions.
+    "test_grip_tables -> arranger.grips._LAYOUT_GRIPS",
+    "test_grip_tables -> arranger.grips._SEARCHED_GRIPS",
+    # Placement tests read the searched shape and grip requests.
+    "test_placement -> arranger.grip_place._searched_shape",
+    "test_placement -> arranger.grips._drop2_6432_request",
+    "test_placement -> arranger.grips._shell_request",
+    # Texture tests read the interval offsets.
+    "test_texture -> arranger.grips._interval_offsets",
+    # Staff rendering reads the step's cells.
+    "test_parts -> arranger.render._step_cells",
+    "test_bass_hold -> arranger.render._step_cells",
+    "test_bass_placement -> arranger.render._step_cells",
+    # Tab rendering reads the step formatter directly.
+    "test_tab_rendering -> arranger.render._format_step",
+    # Repeat/volta rendering reads the as-written formatting.
+    "test_headxml_repeats -> arranger.cli._as_written",
+}
+
 
 FunctionNode = Union[ast.FunctionDef, ast.AsyncFunctionDef]
 
@@ -421,6 +471,64 @@ class TestTheEncapsulationRule(unittest.TestCase):
             [],
             "the allowlist names an attribute that is no longer reached - delete "
             "the entry",
+        )
+
+
+def _test_files() -> List[Path]:
+    """Every test module the seam rule covers."""
+    return sorted((ROOT / "tests").glob("test_*.py"))
+
+
+def _test_private_imports(path: Path) -> Iterator[str]:
+    """`test -> home.private_name` for every private name a test imports.
+
+    Mirrors `_private_imports` but scans the `tests/` tree instead of the
+    library, and only reads `from arranger.<module> import <_name>` - the
+    cross-module reach that makes a test coupled to implementation rather than
+    contract.
+
+    `_target_of` strips the `arranger.` prefix, so the full module name is
+    rebuilt from `node.module` before the target is formed.
+    """
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    importer = path.stem
+    for node in ast.walk(tree):
+        if not isinstance(node, ast.ImportFrom):
+            continue
+        if not node.module or not node.module.startswith("arranger."):
+            continue
+        target = node.module.split(".", 1)[1]
+        if not target or target == importer:
+            continue
+        for alias in node.names:
+            if alias.name.startswith("_"):
+                yield f"{importer} -> arranger.{target}.{alias.name}"
+
+
+class TestTheTestSeams(unittest.TestCase):
+    """Tests that reach into arranger privates declare the seam.
+
+    A private name another module imports is public whatever it is called - and
+    a test file is another module. The seam list is the measured debt, and it
+    fails in both directions so neither a new reach nor a stale entry can pass
+    quietly.
+    """
+
+    def test_every_test_private_reach_is_recorded(self):
+        """No private name crosses from a test into arranger undocumented."""
+        found: Set[str] = set()
+        for path in _test_files():
+            found.update(_test_private_imports(path))
+        self.assertEqual(
+            sorted(found - TEST_SEAMS),
+            [],
+            "a test imports a private arranger name - make it public, or "
+            "add it to TEST_SEAMS with a reason",
+        )
+        self.assertEqual(
+            sorted(TEST_SEAMS - found),
+            [],
+            "TEST_SEAMS names a reach that no longer exists - delete the entry",
         )
 
 
