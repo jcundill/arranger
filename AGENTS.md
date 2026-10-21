@@ -29,7 +29,7 @@ gate and the conventions — not the explanation.
 | tab staff, HTML, MusicXML, GP5, or the MusicXML importer | [docs/renderers.md](docs/renderers.md) | `tabscore.py`, `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py` |
 | an imported head's **repeats, volta endings or jumps** — why it is longer than the file's measure count, or the `|:` / `:|` / `1.` / `2.` / `D.C.` / `D.S.` / `Coda` / `Fine` the writers draw | [docs/renderers.md](docs/renderers.md) | `headxml.py` (`_parse_barline`, `_parse_direction`, `_parse_sound`, `_expand_play_order`, `expand_repeats`, `BarInstruction`, `BarMarker`, `Head.markers`, `HeadNote.written_bar`); each writer's `markers=` parameter |
 | the slot layer: triples to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
-| the **request** — `--chord-on`, `--bass-on`, `--chord-notes`, `--bass-notes`, `--chord-fills`, `--no-melody` — or a new one, and how a request becomes the axes (`Rhythm`, `parse_rhythm`, `felt_beat`, the refusals) | [docs/rhythm-request-redesign.md](docs/rhythm-request-redesign.md), and [docs/engine.md](docs/engine.md) §"The request, and the six axes under it" | `arranger/options.py` (`Request`, `resolve_request`, `format_request`), `arranger/grid.py` (`Rhythm`, `parse_rhythm`, `felt_beat`), `arranger/cli.py`, `tests/test_rhythm.py`, `tests/test_request.py` |
+| the **request** — `--chord-on`, `--bass-on`, `--chord-notes`, `--bass-notes`, `--chord-fills`, `--no-melody` — or a new one, and how a request becomes the axes (`Rhythm`, `parse_rhythm`, `felt_beat`, the refusals) | [docs/history/rhythm-request.md](docs/history/rhythm-request.md), and [docs/engine.md](docs/engine.md) §"The request, and the six axes under it" | `arranger/options.py` (`Request`, `resolve_request`, `format_request`), `arranger/grid.py` (`Rhythm`, `parse_rhythm`, `felt_beat`), `arranger/cli.py`, `tests/test_rhythm.py`, `tests/test_request.py` |
 | the MusicXML **importer's chord timeline**, or a bar the melody skips | [docs/engine.md](docs/engine.md), and [docs/open-issues.md](docs/open-issues.md) item 6 for the release instant | `headxml.py` (`chord_at`, `rhythm_slots`, `fill_slots`, `melody_rests`, `_bar_resolution`, `_tick_key`) and `grid.py` (`grid_resolutions`, `TICKS_PER_BEAT`) — **built**: a position the request names is emitted with `melody=None`, a rest policy places chords in the tune's notated silences, and §9.2 refuses a position the tune is still **holding**. The old default union (a position invented at the bar's own subdivision wherever the tune was silent) went with the `--grid` flag: it is now `--chord-on` or `--chord-fills`, asked for by name |
 | an open bug, with its measurement | [docs/open-issues.md](docs/open-issues.md) | — the figures and the behaviour are that document's own business; no test compares them with the prose or is keyed to these items |
 | a **note held over a bar line**, when the melody's end is reached, or a pickup bar (`Head.first_bar_implicit`) | [docs/engine.md](docs/engine.md) | `headxml.py` (`melody_at`, `melody_state`, `_merge_chord_slots`), `arranger/grid.py` (`beat_offset`), `tests/test_headxml_timeline.py` |
@@ -48,14 +48,17 @@ gate and the conventions — not the explanation.
 it records why a decision was made and is never revised. If the code has moved on, the history
 is still true *about the past* — so read the current documents above first and treat a
 contradiction between them as a bug in one of them. A retired document is added once and then
-frozen like the rest; it is not a home for an open plan. Eight are retired there:
-`reharmonisation-proposals.md`, whose corpus went away, and the six plan documents whose live
+frozen like the rest; it is not a home for an open plan. Nine are retired there:
+`reharmonisation-proposals.md`, whose corpus went away; the six plan documents whose live
 halves are now stated in [docs/engine.md](docs/engine.md) — `voices-axis.md`, `one-fact.md`,
-`parts.md`, `generated-grips.md`, `comping-styles.md` and `fingering.md`. Each of those six
-carries a retirement header saying which half of it is the record and where the live rule went,
-which is the one thing to read before quoting one. The eighth, `restructuring.md`, is the
-round-2 plan: its live half is the module map below and the budget table in
-`tests/test_structure.py`, and its record is what each phase cost.
+`parts.md`, `generated-grips.md`, `comping-styles.md` and `fingering.md`; `restructuring.md`,
+the round-2 plan, whose live half is the module map below and the budget table in
+`tests/test_structure.py`; and `rhythm-request.md`, the rhythm-first request, whose live
+half is the flag table in [README.md](README.md), the request-to-axes mapping in
+`docs/engine.md` and the four renderers' agreement in
+[docs/renderers.md](docs/renderers.md). Each of the plan documents carries a retirement
+header saying which half of it is the record and where the live rule went, which is the one
+thing to read before quoting one.
 
 ## The gate
 
@@ -783,7 +786,7 @@ Each of these cost real time, or nearly shipped a defect.
 | [docs/renderers.md](docs/renderers.md) | tab staff, MusicXML import/export, GP5, and their traps |
 | [docs/dependency-dag.md](docs/dependency-dag.md) | the enforced import graphs, drawn: the engine package's layers and their main dependencies, and the front ends' recorded edges |
 | [docs/open-issues.md](docs/open-issues.md) | the open bugs, each stated as **issue / problem / why it exists** with its measurement; a fixed one is removed, and its record lives in git |
-| [docs/history/](docs/history/) | the retired documents - the completed plans (corpus, walking bass, texture, arranging guide, `voices=`, the Stage-2 collapse, parts, generated grips, comping styles, fingering, restructuring) and the retired reharmonisation proposals. A plan that landed whole carries a header saying where its live rules went: `docs/engine.md` |
+| [docs/history/](docs/history/) | the retired documents - the completed plans (corpus, walking bass, texture, arranging guide, `voices=`, the Stage-2 collapse, parts, generated grips, comping styles, fingering, restructuring, the rhythm-first request) and the retired reharmonisation proposals. A plan that landed whole carries a header saying where its live rules went: `docs/engine.md` |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | what CI runs, and which tests it does *not* run |
 
 `common_grips.md` is generated from the engine's own tables by `grip_chart.py` and

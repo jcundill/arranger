@@ -38,7 +38,7 @@ Reproduce the measurements with the commands in [Reproducing](#reproducing).
 
 ## 1. The library facade takes its harmony per melody note (closed)
 
-**Closed by the rhythm-first request** ([rhythm-request-redesign.md](rhythm-request-redesign.md)).
+**Closed by the rhythm-first request** ([docs/history/rhythm-request.md](history/rhythm-request.md)).
 The item had two open halves and both now have an answer rather than a workaround.
 
 **The entry point.** A caller *can* place a chord where the tune is silent, and always could:
@@ -262,7 +262,7 @@ silence, so it need not move with it.
 # Items 1 and 4 are closed (see above), and their recipes are gone with them: they
 # reproduced a default union and a `--grid` flag that the rhythm-first request removed,
 # so running them now measures a different arrangement. The record is the commit and
-# docs/rhythm-request-redesign.md.
+# docs/history/rhythm-request.md.
 
 # the bass row is inert *inside the engine*: every head is byte-identical to the default row.
 # No CLI flag can reach it any more - the thumb's positions are `--bass-on` - so this

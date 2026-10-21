@@ -1,11 +1,16 @@
+> **Retired: implemented in full.** This was the plan for the rhythm-first request, and
+> every stage of it landed - the notes under each stage say what landed and where it
+> differed. Its **live half** is now stated elsewhere and this document is the record:
+> the flags are [README.md](../../README.md), the request-to-axes mapping and the engine's
+> reasoning are [docs/engine.md](../engine.md) §"The request, and the six axes under it",
+> and the four renderers' agreement is [docs/renderers.md](../renderers.md) §"What the
+> four renderers must agree about". Where this document and those disagree, they are
+> right: it was written first.
+
 # The arrangement request: a rhythm-first redesign
 
-**Status: implemented.** Each stage below is a commit with `make check` green, and the
-notes under each say what landed and where it differed from the plan. This file is still
-the *record* of the problem, the options and the design; the live rules now live in
-[docs/engine.md](engine.md) (the request and the axes), [docs/renderers.md](renderers.md)
-(the four renderers' agreement) and [README.md](../README.md) (the flags). When this file
-and those disagree, they are right and it is the plan that was written first.
+**Status: implemented**, one commit per stage with `make check` green. The notes under
+each stage record what landed and where it differed from the plan.
 
 **Progress: every stage has landed.** Stage 0 is the `Rhythm` grammar; Stage 1 is the
 `Request` value, `resolve_request`, the CLI flags and the run header; Stage 2 is the

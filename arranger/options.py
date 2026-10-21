@@ -2,7 +2,7 @@
 
 The **request** is the public vocabulary: who sings the tune, when each
 accompaniment layer attacks, and what each states. The four questions and their
-grammar are in `docs/rhythm-request-redesign.md`; `resolve_request` turns them into
+grammar are in `docs/history/rhythm-request.md`; `resolve_request` turns them into
 the engine's internal axes - `parts`, `texture`, `harmony`, `bass` and the chord's
 rhythm - which is what the step loop actually reads.
 

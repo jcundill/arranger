@@ -77,7 +77,7 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/bass_place.py": Budget(16, 79, 6),
     "arranger/bass_rules.py": Budget(10, 82, 6),
     # `walking_slots` takes a seventh parameter at Stage 3 of
-    # `docs/rhythm-request-redesign.md`: `rhythm=` is the bass's **positions**, which
+    # `docs/history/rhythm-request.md`: `rhythm=` is the bass's **positions**, which
     # the metre's three facts cannot express (a sparse `1,3` is not a grouping).
     # Deliberate rather than an accident of growth - the metre's own three are one
     # grouping already, and the rhythm is a fourth fact rather than a second spelling
@@ -109,7 +109,7 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/harmonised_route.py": Budget(8, 54, 8),
     # The public `request=` joined the five implementation axis keywords, so the
     # facade takes one more parameter until Stage 8 of
-    # `docs/rhythm-request-redesign.md` retires the axis spellings. The body did
+    # `docs/history/rhythm-request.md` retires the axis spellings. The body did
     # not grow: it reads the resolved knobs and policies as values.
     "arranger/movement.py": Budget(8, 103, 15),
     # `ArrangeOptions` is a flat dataclass of knobs with no methods today.

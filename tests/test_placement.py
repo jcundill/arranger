@@ -582,7 +582,7 @@ class TestTheGripDistribution(unittest.TestCase):
         #
         # **387, nine fewer than before the request redesign**, and the nine are all
         # `shell`: they were the default union's comping steps in the tune's rests,
-        # which `head FILE` no longer invents (`docs/rhythm-request-redesign.md`).
+        # which `head FILE` no longer invents (`docs/history/rhythm-request.md`).
         self.assertEqual(total, 387)
         self.assertEqual(
             counts,
