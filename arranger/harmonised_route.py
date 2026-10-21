@@ -73,17 +73,17 @@ def _emit_step(
         original_melody=prepared.original_melody,
         repeated=repeated,
         partial=len(chosen.active_frets()) < 4,
-        bar=context.bar,
-        beat=context.beat,
-        duration=context.duration,
+        bar=context.timing.bar,
+        beat=context.timing.beat,
+        duration=context.timing.duration,
         role=role,
-        metric_weight=context.weight,
+        metric_weight=context.state.weight,
         bass_only=is_bass_only(slot.bass_only, role),
         # A position the chord's rhythm **named** - the stab `--chord-on melody,1and` puts
         # under a held note - is struck even when the shape is unchanged. A slot the
         # skeleton invented, where the tune merely sustains, is not: that is a hold, and
         # `repeated` already covers the tune's own re-articulations.
-        chord_attack=context.chord_attack,
+        chord_attack=context.state.chord_attack,
     ))
     attach_bass(arrangements[-1], slot.bass, arrangements)
 
@@ -107,7 +107,7 @@ def _prepare_or_rescue(
     context: SlotContext = plan.context
     inputs = plan.inputs
     prepared = prepare_step(
-        context.progression, context.index,
+        context.identity.progression, context.identity.index,
         previous=prev_sounding.voicing if prev_sounding is not None else None,
         previous_chord=prev_sounding.chord if prev_sounding is not None else None,
         top_strings=inputs.top_strings,
@@ -117,8 +117,8 @@ def _prepare_or_rescue(
         grips=plan.slot_grips,
     )
     if prepared is not None:
-        return prepared, context.role
-    assert context.melody_note is not None
+        return prepared, context.state.role
+    assert context.harmony.melody_note is not None
     if rescue_melody_alone(
         arrangements, slot, context,
         top_strings=inputs.top_strings, previous=previous_shape(arrangements),
@@ -133,7 +133,7 @@ def _prepare_or_rescue(
         silence=(
             SILENCE_OUT_OF_REACH
             if not _grips.get_melody_only_voicings(
-                context.melody_note, prefer=inputs.top_strings
+                context.harmony.melody_note, prefer=inputs.top_strings
             )
             else SILENCE_NO_SHAPE
         ),
@@ -150,14 +150,14 @@ def _promoted_fill(
     context: SlotContext = plan.context
     inputs = plan.inputs
     if not should_promote_fill(
-        context.texture, context.role, True, plan.slot_grips,
+        context.texture, context.state.role, True, plan.slot_grips,
         has_thumb=context.has_thumb,
         melody_only=inputs.melody_only,
     ):
         return None
     prev_sounding = last_sounding_step(arrangements)
     return prepare_step(
-        context.progression, context.index,
+        context.identity.progression, context.identity.index,
         previous=prev_sounding.voicing if prev_sounding is not None else None,
         previous_chord=prev_sounding.chord if prev_sounding is not None else None,
         top_strings=inputs.top_strings,
@@ -304,7 +304,7 @@ def _selection_for(
         substitute = prepared.chord_name
     allowed_tones = ChordParser.get_chord_tones(sub_quality, substitute)
     root_pc = _grips.chord_context(prepared.chord_type, prepared.chord_name)[1]
-    assert context.melody_note is not None
+    assert context.harmony.melody_note is not None
     return _Selection(
         candidates=candidates,
         criteria=_cost.SelectionCriteria(
@@ -313,10 +313,10 @@ def _selection_for(
             fret_max=context.fret_max,
             allowed_tones=allowed_tones,
             root_pc=root_pc,
-            melody_pc=context.melody_note.midi_note() % 12,
+            melody_pc=context.harmony.melody_note.midi_note() % 12,
             bass_pc=(
                 None if context.bass_pcs is None
-                else context.bass_pcs.get(context.index)
+                else context.bass_pcs.get(context.identity.index)
             ),
             slash_bass_cost=context.slash_bass_cost_for,
         ),
@@ -338,7 +338,7 @@ def harmonised_step(
     """
 
     context: SlotContext = plan.context
-    assert context.note_str is not None and context.melody_note is not None
+    assert context.harmony.note_str is not None and context.harmony.melody_note is not None
     prev_sounding = last_sounding_step(arrangements)
     prepared_and_role = _prepare_or_rescue(
         arrangements, slot, plan, prev_sounding,
@@ -365,7 +365,7 @@ def harmonised_step(
             best_voicing = narrower
             palette = selection.palette(best_voicing)
         elif demoted_to_melody_alone(
-            arrangements, slot, replace(context, role=role),
+            arrangements, slot, replace(context, state=replace(context.state, role=role)),
             top_strings=plan.inputs.top_strings,
             previous=selection.criteria.previous,
             best_voicing=best_voicing,

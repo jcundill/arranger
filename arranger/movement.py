@@ -110,7 +110,7 @@ def _route_slot(
     if not plan.sings_here and not inputs.melody_only:
         if comping_step(
             arrangements, slot, context,
-            chord_type=context.chord_type,
+            chord_type=context.harmony.chord_type,
             melody_onsets=inputs.melody_onsets,
             parts=inputs.parts,
             harmony_family=inputs.harmony_family,

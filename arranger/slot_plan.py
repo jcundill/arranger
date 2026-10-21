@@ -15,7 +15,7 @@ from musthe import Note
 
 from .bass import Slot
 from .chords import normalised_harmony
-from .context import SlotContext
+from .context import SlotContext, SlotHarmony, SlotIdentity, SlotState, SlotTiming
 from .decisions import (
     MELODY_ALONE_BASS,
     MELODY_ALONE_REST,
@@ -124,12 +124,26 @@ def _slot_context(
     note_str, chord_type, name = triple
     melody_note = Note(note_str) if note_str is not None else None
     return SlotContext(
-        progression=inputs.progression,
-        index=slot.index,
-        name=name,
-        chord_type=chord_type,
-        note_str=note_str,
-        melody_note=melody_note,
+        timing=SlotTiming(
+            bar=slot.bar,
+            beat=slot.beat,
+            duration=slot.duration,
+        ),
+        harmony=SlotHarmony(
+            name=name,
+            chord_type=chord_type,
+            note_str=note_str,
+            melody_note=melody_note,
+        ),
+        identity=SlotIdentity(
+            progression=inputs.progression,
+            index=slot.index,
+        ),
+        state=SlotState(
+            role=role,
+            weight=metric_weight(slot.bar, slot.beat, inputs.beats_per_bar, inputs.grouping),
+            chord_attack=_chord_attacks(inputs, slot, melody_note),
+        ),
         fret_min=inputs.fret_min,
         fret_max=inputs.fret_max,
         texture=inputs.texture,
@@ -137,12 +151,6 @@ def _slot_context(
         non_chord_tone=inputs.non_chord_tone,
         bass_pcs=inputs.bass_pcs,
         slash_bass_cost_for=inputs.slash_bass_cost_for,
-        bar=slot.bar,
-        beat=slot.beat,
-        duration=slot.duration,
-        role=role,
-        weight=metric_weight(slot.bar, slot.beat, inputs.beats_per_bar, inputs.grouping),
-        chord_attack=_chord_attacks(inputs, slot, melody_note),
     )
 
 

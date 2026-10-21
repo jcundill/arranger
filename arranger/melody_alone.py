@@ -117,7 +117,7 @@ def rescue_melody_alone(
     board - and the caller reports the step as skipped.
     """
     # A singing slot always has both; pin the Optional fields for the checker.
-    assert context.melody_note is not None and context.note_str is not None
+    assert context.harmony.melody_note is not None and context.harmony.note_str is not None
     # **The string must be one the caller named.** `get_melody_only_voicings`
     # keeps searching *below* the set it is given, so a note the named set
     # cannot carry - D4 under `top_strings=(5,)`, below the high E string's
@@ -127,7 +127,7 @@ def rescue_melody_alone(
     # a caller asking for a string that cannot carry the tune. `named_only`
     # is where that promise is kept.
     solo_voicing, inside_window = melody_alone_shape(
-        context.melody_note,
+        context.harmony.melody_note,
         previous=previous,
         top_strings=top_strings,
         named_only=True,
@@ -137,10 +137,10 @@ def rescue_melody_alone(
         # HIGH_FRET_LIMIT, so the step reports what sounds and keeps the
         # written pitch - the same seam every melody-alone route uses.
         sounding, written_original = sounding_melody(
-            solo_voicing, context.note_str
+            solo_voicing, context.harmony.note_str
         )
         step = ArrangementStep(
-            chord=context.name,
+            chord=context.harmony.name,
             melody=sounding,
             voicing=solo_voicing,
             original_melody=written_original,
@@ -153,12 +153,12 @@ def rescue_melody_alone(
             # the same shape deliberately and does not carry this; see
             # `ArrangementStep.chord_unvoiced`.
             chord_unvoiced=True,
-            bar=context.bar,
-            beat=context.beat,
-            duration=context.duration,
-            role=context.role,
-            metric_weight=context.weight,
-            bass_only=is_bass_only(slot.bass_only, context.role),
+            bar=context.timing.bar,
+            beat=context.timing.beat,
+            duration=context.timing.duration,
+            role=context.state.role,
+            metric_weight=context.state.weight,
+            bass_only=is_bass_only(slot.bass_only, context.state.role),
         )
         attach_bass(step, slot.bass, arrangements)
         arrangements.append(step)
@@ -188,14 +188,14 @@ def demoted_to_melody_alone(
     """
     # As above: the demotion is only reached for a singing slot, so the two
     # Optional fields are pinned for the type checker.
-    assert context.melody_note is not None and context.note_str is not None
+    assert context.harmony.melody_note is not None and context.harmony.note_str is not None
     solo, inside_window = melody_alone_shape(
-        context.melody_note, previous=previous, top_strings=top_strings
+        context.harmony.melody_note, previous=previous, top_strings=top_strings
     )
     if solo is not None and solo.fret_span() < best_voicing.fret_span():
         arrangements.append(ArrangementStep(
-            chord=context.name,
-            melody=context.note_str,
+            chord=context.harmony.name,
+            melody=context.harmony.note_str,
             voicing=solo,
             partial=False,
             # The shape the demotion turned away, and the criterion it did it for: the
@@ -209,12 +209,12 @@ def demoted_to_melody_alone(
                 decided_by=_cost.SPAN_CRITERION,
                 inside_window=inside_window,
             ),
-            bar=context.bar,
-            beat=context.beat,
-            duration=context.duration,
-            role=context.role,
-            metric_weight=context.weight,
-            bass_only=is_bass_only(slot.bass_only, context.role),
+            bar=context.timing.bar,
+            beat=context.timing.beat,
+            duration=context.timing.duration,
+            role=context.state.role,
+            metric_weight=context.state.weight,
+            bass_only=is_bass_only(slot.bass_only, context.state.role),
         ))
         attach_bass(arrangements[-1], slot.bass, arrangements)
         return True
