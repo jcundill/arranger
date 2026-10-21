@@ -35,10 +35,10 @@ def _cut_time_case():
     Measured over every committed head and three requests; two steps in the corpus are
     this shape, and this is the one whose thumb fret (`12`, low E) is unambiguous on the
     row it is drawn on. The plan guessed the cut-time head's bar 3 beat 1; the real
-    cases are bars 2, 4 and 8 beat 1.5 there, with `--chord-on 1,1& --bass-on 1&`.
+    cases are bars 2, 4 and 8 beat 1.5 there, with `--chord-on 1,1and --bass-on 1and`.
     """
     steps, head, _notes = arrange_xml_head(
-        COMMON_8, section=(7, 8), request=Request(chord_on="1,1&", bass_on="every-beat")
+        COMMON_8, section=(7, 8), request=Request(chord_on="1,1and", bass_on="every-beat")
     )
     return steps, head
 

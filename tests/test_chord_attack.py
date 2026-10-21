@@ -54,9 +54,9 @@ class TestTheEngineRule(unittest.TestCase):
         self.assertTrue(all(step.chord_attack for step in bar_two))
 
     def test_an_added_stab_under_the_tune_is_flagged(self):
-        """`--chord-on melody,1&` adds an attack at 1&, which the tune is not starting on."""
+        """`--chord-on melody,1and` adds an attack at 1and, which the tune is not starting on."""
         steps, _head, _notes = arrange_xml_head(
-            COMMON_8, section=(1, 3), request=Request(chord_on="melody,1&")
+            COMMON_8, section=(1, 3), request=Request(chord_on="melody,1and")
         )
         stabs = [
             step for step in steps if step.beat == 1.5 and step.voicing.active_frets()

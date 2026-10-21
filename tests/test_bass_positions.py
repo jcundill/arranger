@@ -92,8 +92,8 @@ class TestSparsePositions(unittest.TestCase):
         self.assertEqual([note.beat for note in line(bass_on="1,3")], [1.0, 3.0])
 
     def test_an_offbeat_position_is_the_only_place_it_sounds(self):
-        """`1&` is a real position, and the line states one note there per bar."""
-        self.assertEqual([note.beat for note in line(bass_on="1&")], [1.5])
+        """`1and` is a real position, and the line states one note there per bar."""
+        self.assertEqual([note.beat for note in line(bass_on="1and")], [1.5])
 
     def test_a_rhythm_the_metre_does_not_have_is_still_refused(self):
         """The metre's own refusal survives: `3` is not a position in 2/2.
@@ -214,7 +214,7 @@ class TestTheStepsCarryTheLine(unittest.TestCase):
     def test_a_sparse_position_becomes_a_step_of_its_own(self):
         """The beat the melody merely holds through still gets its thumb note.
 
-        `1&` names one position and no other, so the step carries the melody **in
+        `1and` names one position and no other, so the step carries the melody **in
         force** under a thumb stroke - the union's documented `bass_only` slot. A
         requested position is therefore never dropped for want of a note to attach
         it to, and the downbeat is not given one either.
@@ -224,7 +224,7 @@ class TestTheStepsCarryTheLine(unittest.TestCase):
         steps, _head, _notes = arranged(
             COMMON_8,
             section=(1, 2),
-            request=Request(chord_on="none", bass_on="1&", bass_notes="root"),
+            request=Request(chord_on="none", bass_on="1and", bass_notes="root"),
         )
         rings = [(step.bar, step.beat) for step in steps if _attacks(step)]
         self.assertEqual(rings, [(1, 1.5)])

@@ -2679,7 +2679,7 @@ def rhythm_slots(
 ) -> List[Tuple[Optional[str], str, str, int, float, float]]:
     """Every position `rhythm` names, as slots, including positions no note has.
 
-    The complement of `head_skeleton` for a **requested** chord rhythm: `1&` in a
+    The complement of `head_skeleton` for a **requested** chord rhythm: `1and` in a
     4/4 bar is beat 1.5 of every bar in the section, and a position the tune merely
     holds through is still one the chord attacks on - a stab under a held note is
     wanted, so unlike the melody-anchored union there is no hold filter here.

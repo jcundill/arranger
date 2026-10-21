@@ -82,7 +82,7 @@ class TestAStabLastsItsFeltBeat(unittest.TestCase):
 
     def test_the_next_attack_caps_the_stab(self):
         """Two attacks inside one beat are two stabs, not one long one."""
-        steps = self._steps(_long_note_score(), Request(melody=False, chord_on="2,2&"))
+        steps = self._steps(_long_note_score(), Request(melody=False, chord_on="2,2and"))
         stabs = {step.beat: step.duration for step in steps if step.bar == 1}
         self.assertEqual(stabs[2.0], 0.125)
 

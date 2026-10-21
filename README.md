@@ -111,7 +111,7 @@ python -m arranger head tests/data/synthetic_triplets.mxl --bars 1-3 --html head
 | `--non-chord-tone` | `extension` | how to harmonise melody note outside chord |
 | `--fallback` | off | `diminished` — see [non-chord melody notes](#non-chord-melody-notes) |
 | `--no-melody` | off | the guitar does not sing: the tune belongs to somebody else, and the chord defaults to every felt beat |
-| `--chord-on` | `melody` | when the chord attacks: the written onsets, `none`, or positions such as `1&` or `every-beat` |
+| `--chord-on` | `melody` | when the chord attacks: the written onsets, `none`, or positions such as `1and` or `every-beat` |
 | `--chord-notes` | `full` | how many chord tones it states: `full`, `3`, `2`, `1` |
 | `--chord-fills` | `none` | what it states in a notated melody rest: `hold` one chord, or `comp` a felt beat at a time |
 | `--bass-on` | `none` | when the thumb attacks: positions, or `every-beat` |
@@ -284,8 +284,8 @@ Every run on a committed score in `tests/data/`, each one request changed. Outpu
 | ask | flag | output shown in |
 |---|---|---|
 | every note in full — the default | *(nothing to pass)* | [quick start](#quick-start) |
-| a chord stab on the and of 1 | `--chord-on 1&` | [when the chord attacks](#when-the-chord-attacks---chord-on) |
-| the harmonisation **and** the stab | `--chord-on melody,1&` | [when the chord attacks](#when-the-chord-attacks---chord-on) |
+| a chord stab on the and of 1 | `--chord-on 1and` | [when the chord attacks](#when-the-chord-attacks---chord-on) |
+| the harmonisation **and** the stab | `--chord-on melody,1and` | [when the chord attacks](#when-the-chord-attacks---chord-on) |
 | chords on the strong beats | `--chord-on 1,3` | [how thick the chord part is](#how-thick-the-chord-part-is---chord-notes) |
 | shells only | `--chord-notes 2` | [grips](#grips) |
 | guide-tone duos | `--chord-notes 1` | [grips](#grips) |
@@ -504,7 +504,7 @@ The chord name is still printed above each step as context; nothing under it is 
 
 ## When the chord attacks: `--chord-on`
 
-**Positions, in felt beats, bar-relative.** The chord's default is `melody` — one chord under each written melody note, held for that note. A list of positions **replaces** the default, so `--chord-on 1&` is only the stab and `--chord-on melody,1&` is the harmonisation plus the stab.
+**Positions, in felt beats, bar-relative.** The chord's default is `melody` — one chord under each written melody note, held for that note. A list of positions **replaces** the default, so `--chord-on 1and` is only the stab and `--chord-on melody,1and` is the harmonisation plus the stab.
 
 | token | meaning |
 |---|---|
@@ -512,17 +512,19 @@ The chord name is still printed above each step as context; nothing under it is 
 | `none` | the layer is absent |
 | `every-beat` | the start of every felt beat: 2 per bar in 2/2, 4 in 4/4, 3 in 3/4, 4 in 12/8 |
 | `1`, `2`, `3`, `4` | that felt beat |
-| `1&` | halfway through felt beat 1 — "the and of 1" |
+| `1and` | halfway through felt beat 1 — "the and of 1" |
 | `1e`, `1a` | a quarter / three-quarters through felt beat 1 |
-| `last`, `last&` | the last felt beat, and its offbeat |
-| `melody,1&` | the melody-note harmonisation **plus** a stab |
+| `last`, `lastand` | the last felt beat, and its offbeat |
+| `melody,1and` | the melody-note harmonisation **plus** a stab |
 
-**A list replaces the default token.** `none` cannot be combined with another token, and a position the metre does not have is **refused** (`3` in a 2/2 bar), not silently dropped. `&` is the midpoint of the felt beat, so it is a quarter-note offbeat in 2/2, an eighth-note offbeat in 4/4 and the midpoint of a dotted-quarter pulse in 6/8; `e` and `a` are the quarter and three-quarter points. `every-beat` and `last` resolve against the metre's **grouping**, not its denominator count.
+**A list replaces the default token.** `none` cannot be combined with another token, and a position the metre does not have is **refused** (`3` in a 2/2 bar), not silently dropped. `and` is the midpoint of the felt beat, so it is a quarter-note offbeat in 2/2, an eighth-note offbeat in 4/4 and the midpoint of a dotted-quarter pulse in 6/8; `e` and `a` are the quarter and three-quarter points. `every-beat` and `last` resolve against the metre's **grouping**, not its denominator count.
+
+**The midpoint is spelled `and`, not `&`** — a position is a command-line argument, and an unquoted `&` is the shell's background operator, so `--chord-on 1&` would send the arrangement to the background and leave the token unsaid. Every token the run header prints is safe to paste back, and `1&` is refused with the spelling it should be.
 
 **Positions are bar-relative and metre-aware — one name works in any metre.** "The upbeat of the final beat" is 4.5 in 4/4, 2.5 in 2/2 and 3.5 in 3/4: the same musical idea, three beat numbers. Spelling a pattern as a literal beat would name, on a 2/2 head, a beat that does not exist.
 
 ```bash
-python -m arranger head tests/data/synthetic_repeat_slash.musicxml --bars 1-2 --chord-on 1&
+python -m arranger head tests/data/synthetic_repeat_slash.musicxml --bars 1-2 --chord-on 1and
 ```
 
 ```text
@@ -540,12 +542,12 @@ One stab, on the and of 1; the melody notes elsewhere are the tune alone. **A st
 
 **What happens to a melody note with no chord on it depends who sings** — the one place the rhythm needs two answers:
 
-- **the guitar singing** — the tune's note still sounds, alone. No note is dropped: chord-melody under `--chord-on 1&,2&,3&,4&` plays the melody throughout and places chords only on the ands. The lone note is placed by the same position-aware selector a chord is, from the positions its strings offer, so it lands where the hand already is rather than at the high E string's nearest fret.
+- **the guitar singing** — the tune's note still sounds, alone. No note is dropped: chord-melody under `--chord-on 1and,2and,3and,4and` plays the melody throughout and places chords only on the ands. The lone note is placed by the same position-aware selector a chord is, from the positions its strings offer, so it lands where the hand already is rather than at the high E string's nearest fret.
 - **the guitar comping** (`--no-melody`) — the guitar is **silent** on that beat: the melody belongs to the horn and there is nothing for the guitar to add. The step is still emitted, so the part keeps its position and lines up against the tune, and it draws as an empty column.
 
 **The rhythm places chords, not the thumb.** The thumb line's own positions come from `--bass-on`, so the thumb sounds on beats where the guitar strikes no chord at all — the `bass_only` steps above are exactly that. The chord rhythm *does* change the shape a thumb note is placed against: a different chord above can move the note or refuse it.
 
-The presets the old `grid` flag exposed are **spellings of positions**, not names: `freddie` is `every-beat`, `charleston` is `1,2&`, `joe_pass` is `1&,2&,3&,4&` and `final_and` is `last&`.
+The presets the old `grid` flag exposed are **spellings of positions**, not names: `freddie` is `every-beat`, `charleston` is `1,2and`, `joe_pass` is `1and,2and,3and,4and` and `final_and` is `lastand`.
 
 ### What the chord does in a rest: `--chord-fills`
 

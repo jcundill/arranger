@@ -146,9 +146,9 @@ HEAD_HELP = CommonHelp(
     chord_on=(
         "when the chord attacks, comma-separated, in felt beats: 'melody' (the "
         "default) at every written melody note, 'none', 'every-beat', or positions "
-        "such as '1', '1&' (the and of 1) or 'last&'. A list replaces the default, "
-        "so '1&' is only the stab and 'melody,1&' is the harmonisation plus the stab. "
-        "A position the metre does not have is refused, not dropped"
+        "such as '1', '1and' (the and of 1) or 'lastand'. A list replaces the "
+        "default, so '1and' is only the stab and 'melody,1and' is the harmonisation "
+        "plus the stab. A position the metre does not have is refused, not dropped"
     ),
     chord_notes=(
         "how many chord notes to state: 'full' (the default) is the most the right "
@@ -163,8 +163,8 @@ HEAD_HELP = CommonHelp(
     ),
     bass_on=(
         "when the bass attacks, comma-separated, in felt beats: 'none' (the "
-        "default), 'every-beat', or positions such as '1'. The melody alone is the "
-        "default, so a bass line is always asked for"
+        "default), 'every-beat', or positions such as '1' or '1and' (the and of "
+        "1). The melody alone is the default, so a bass line is always asked for"
     ),
     bass_notes=(
         "what each bass attack states: 'root' (the default), 'root-5th' "

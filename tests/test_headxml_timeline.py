@@ -540,7 +540,7 @@ class TestChordSlots(unittest.TestCase):
         self.assertGreater(checked, 0, "no position was added anywhere")
 
     def test_a_requested_position_is_added_even_under_a_held_note(self):
-        """`chord-on=1&` attacks at 1.5 of **every** bar, and duplicates no written slot.
+        """`chord-on=1and` attacks at 1.5 of **every** bar, and duplicates no written slot.
 
         This is the request's half of the union, and the reason it is not §9.2-filtered: a
         stab under a note the tune is still holding is exactly what "the and of 1" asks
@@ -554,7 +554,7 @@ class TestChordSlots(unittest.TestCase):
             (bar, round(beat, 6))
             for _t, bar, beat, _d in head_skeleton(head, None)
         }
-        steps, _head, _notes = arranged(RAINY_DAY, request=Request(chord_on="1&"))
+        steps, _head, _notes = arranged(RAINY_DAY, request=Request(chord_on="1and"))
         added = {
             (s.bar, round(s.beat or 0.0, 6))
             for s in steps

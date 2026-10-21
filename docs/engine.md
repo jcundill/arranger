@@ -1620,7 +1620,7 @@ renderers, which compare shapes, could not tell a re-strike from a hold, and fol
 named position into the one before it: the arrangement said four attacks and the score,
 the staff, the HTML and GP5 all wrote **one long chord**. `slot_plan._chord_attacks` sets
 `ArrangementStep.chord_attack` where the chord part was *asked* for the attack — a position
-`--chord-on` named (including the stab `--chord-on melody,1&` puts under a held note), or a
+`--chord-on` named (including the stab `--chord-on melody,1and` puts under a held note), or a
 slot the chord layer invented because the tune is silent there — and a slot the
 eighth-note skeleton invented under a sustaining note keeps its hold. Measured on the
 committed heads under the default comping request: the flag restores **103 attacks** — 38%

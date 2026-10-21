@@ -329,7 +329,7 @@ def main() -> None:
     Falling through to the demo for an unrecognised command would answer a request for
     a head with three arrangements and exit 0 - the exit code would say it worked.
 
-    The test is `argv[1]` being a bare word, so an option (`--chord-on 1&`) still
+    The test is `argv[1]` being a bare word, so an option (`--chord-on 1and`) still
     reaches the demo rather than being rejected, and `--help` is handled by the
     caller's own flag handling below.
     """

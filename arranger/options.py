@@ -110,7 +110,7 @@ class Request:
 
     melody: bool = True
     #: When the chord attacks: `melody` (the written onsets), `none`, or
-    #: positions such as `1&`. See `grid.parse_rhythm`.
+    #: positions such as `1and`. See `grid.parse_rhythm`.
     chord_on: str = RHYTHM_MELODY
     #: How many chord notes to state, `full` being "the most that fits".
     chord_notes: str = CHORD_NOTES_FULL

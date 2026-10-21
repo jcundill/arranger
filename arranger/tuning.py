@@ -466,7 +466,7 @@ class ArrangementStep:
     # mute on that string and a reader would otherwise count a note that never sounds.
     bass_held: bool = False
     # The chord part was **asked** to attack at this position: a position named by the
-    # chord's own rhythm (`--chord-on 1,2`, the stab `--chord-on melody,1&` adds under a
+    # chord's own rhythm (`--chord-on 1,2`, the stab `--chord-on melody,1and` adds under a
     # held note) or a slot the chord layer invented because the tune is silent there
     # (a `--chord-fills` position, a chord chart with no tune).
     #

@@ -66,7 +66,7 @@ thing to read before quoting one.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1381 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
+Current measured state: **1383 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
 ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
 the absence of an error message. A quiet run is not evidence; a moved count is.
 
@@ -715,13 +715,17 @@ Each of these cost real time, or nearly shipped a defect.
     `--grips` and reported `invalid choice: 'tests/data/...'` — the flag worked only
     after the file. Every list-valued option is one comma-separated string now, parsed by
     the module that owns the vocabulary - `parts.parse_parts` for `--parts` - so
-    `head --chord-on 1,2& FILE` and `head FILE --chord-on 1,2&` are one run — and that
-    spelling is the one **the run header prints back** (`chord-on=1,2&`), so the line a
+    `head --chord-on 1,2and FILE` and `head FILE --chord-on 1,2and` are one run — and that
+    spelling is the one **the run header prints back** (`chord-on=1,2and`), so the line a
     reader copies is the line the parser accepts.
     **Two things to carry forward: a list-valued option is one string the module that
     owns the vocabulary parses, never `nargs`; and a parser's own output is
     documentation — if the run header prints a spelling, that spelling has to be
-    accepted** (the round trip is asserted). Note a *selection* is canonicalised and a
+    accepted** (the round trip is asserted). The spelling is also chosen to be
+    **argv-safe**: the midpoint of a felt beat is `1and`, never `1&`, because an
+    unquoted `&` is a shell's background operator and the token would never reach the
+    parser — so the line the header prints is also a line a shell will deliver. Note a
+    *selection* is canonicalised and a
     *sequence* is not: `parse_parts` re-sorts into `PART_NAMES` order because a parts
     selection is a set, while `--chord-on`'s positions are sorted because they are also
     a set — and the grip order that must not have been canonicalised was a spelling of

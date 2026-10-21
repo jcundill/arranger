@@ -48,7 +48,7 @@ emits for a note-less slot, so the hand-built path and the imported one are one 
 `movement.arrange_progression` needs no second input type.
 
 **The generation.** What was genuinely missing was a *source* of positions, and it is the request
-now: `--chord-on` names them (`1&`, `every-beat`, a list), `--chord-fills` places chords in the
+now: `--chord-on` names them (`1and`, `every-beat`, a list), `--chord-fills` places chords in the
 tune's notated rests, and `headxml.rhythm_slots` / `fill_slots` emit one triple per position with
 `melody=None`. The default grid's union is gone with the flag that exposed it, so nothing invents
 a position nobody asked for.

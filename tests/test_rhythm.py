@@ -1,24 +1,28 @@
 """The rhythm grammar: direct positions in felt beats.
 
 `Rhythm` is the request the arrangement is asked with. Its positions are **felt
-beats**, not denominator units, so `1&` is the midpoint of the bar's first felt
+beats**, not denominator units, so `1and` is the midpoint of the bar's first felt
 beat in 2/2, 4/4 and 6/8 alike - a quarter-note offbeat in the first, an eighth-note
 offbeat in the second, and the midpoint of a dotted-quarter pulse in the third.
 
-What is verified, in order:
+The midpoint is spelled `and` rather than the musical `&`, because a position is a
+command-line argument and an unquoted `&` is a shell's background operator: a token
+the shell eats never reaches the parser. What is verified, in order:
 
 - **the simple metres**: `every-beat` follows the denominator count (2, 3 and 4),
-  and `1&` / `3&` land halfway through their felt beat;
+  and `1and` / `3and` land halfway through their felt beat;
 - **the compound metre**: `every-beat` follows the grouping, so 6/8 has two felt
-  beats and its second one is the bar's fourth eighth - and `&` is the midpoint of
+  beats and its second one is the bar's fourth eighth - and `and` is the midpoint of
   the dotted-quarter pulse rather than a fixed half-beat;
 - **the list**: a list replaces the default, `melody` may stand beside positions,
   order and duplicates are not part of the request, and `none` is the one token
   that cannot be combined;
-- **the refusals**: a position the metre does not have, an unknown token, a decimal
-  and an empty entry all raise, because each is a question rather than silence;
+- **the refusals**: a position the metre does not have, an unknown token, a decimal,
+  an empty entry and the shell-unsafe `&` all raise, because each is a question
+  rather than silence;
 - **the canonical spelling**: one position has one token, the run header's spelling
-  parses back to the same value, and the round trip is asserted over every metre.
+  parses back to the same value and contains no shell metacharacter, and the round
+  trip is asserted over every metre.
 
 No arrangement is built here. This is the grammar's own test; the step loop reads
 it in the stages that follow.
@@ -55,13 +59,13 @@ class TestTheSimpleMetres(unittest.TestCase):
                     self.assertTrue(rhythm.includes(float(beat), beats, None))
 
     def test_the_and_is_halfway_through_its_felt_beat(self):
-        """`1&` is 1.5 and `3&` is 3.5 where those beats exist."""
+        """`1and` is 1.5 and `3and` is 3.5 where those beats exist."""
         for beats in (2, 3, 4):
             with self.subTest(metre=f"{beats}/4"):
-                self.assertTrue(parse_rhythm("1&", beats).includes(1.5, beats))
-                self.assertFalse(parse_rhythm("1&", beats).includes(1.0, beats))
-        self.assertTrue(parse_rhythm("3&", 3).includes(3.5, 3))
-        self.assertTrue(parse_rhythm("last&", 2).includes(2.5, 2))
+                self.assertTrue(parse_rhythm("1and", beats).includes(1.5, beats))
+                self.assertFalse(parse_rhythm("1and", beats).includes(1.0, beats))
+        self.assertTrue(parse_rhythm("3and", 3).includes(3.5, 3))
+        self.assertTrue(parse_rhythm("lastand", 2).includes(2.5, 2))
 
     def test_the_quarter_and_three_quarter_points_are_named(self):
         """`e` and `a` are 0.25 and 0.75 into the felt beat."""
@@ -72,7 +76,7 @@ class TestTheSimpleMetres(unittest.TestCase):
 
     def test_a_bar_relative_position_is_not_an_absolute_one(self):
         """The same token is the same place in every bar, not the same time."""
-        rhythm = parse_rhythm("1&", 4)
+        rhythm = parse_rhythm("1and", 4)
         self.assertTrue(rhythm.includes(1.5, 4))
         self.assertFalse(rhythm.includes(2.5, 4))
         self.assertFalse(rhythm.includes(4.5, 4))
@@ -93,11 +97,11 @@ class TestTheCompoundMetre(unittest.TestCase):
         self.assertFalse(rhythm.includes(2.0, 6, grouping))
 
     def test_the_and_is_the_midpoint_of_the_dotted_quarter(self):
-        """`1&` is 2.5 beats into the bar, not 1.5 and not the third eighth."""
+        """`1and` is 2.5 beats into the bar, not 1.5 and not the third eighth."""
         grouping = _six_eight()
-        self.assertTrue(parse_rhythm("1&", 6, grouping).includes(2.5, 6, grouping))
-        self.assertFalse(parse_rhythm("1&", 6, grouping).includes(1.5, 6, grouping))
-        self.assertTrue(parse_rhythm("2&", 6, grouping).includes(5.5, 6, grouping))
+        self.assertTrue(parse_rhythm("1and", 6, grouping).includes(2.5, 6, grouping))
+        self.assertFalse(parse_rhythm("1and", 6, grouping).includes(1.5, 6, grouping))
+        self.assertTrue(parse_rhythm("2and", 6, grouping).includes(5.5, 6, grouping))
 
     def test_the_quarter_points_scale_with_the_group(self):
         """`e` and `a` are a quarter and three quarters of a three-beat group."""
@@ -133,7 +137,7 @@ class TestTheList(unittest.TestCase):
 
     def test_melody_and_a_position_are_both_kept(self):
         """The motivating request: harmonise the tune and stab on the and of 1."""
-        rhythm = parse_rhythm("melody,1&", 4)
+        rhythm = parse_rhythm("melody,1and", 4)
         self.assertTrue(rhythm.melody)
         self.assertTrue(rhythm.wants_melody)
         self.assertEqual(rhythm.positions, (1.5,))
@@ -141,13 +145,13 @@ class TestTheList(unittest.TestCase):
         self.assertFalse(rhythm.is_none)
 
     def test_order_and_duplicates_are_not_part_of_the_request(self):
-        """`3,1,1,2&` and `1,2&,3` are one value, and one canonical string."""
-        self.assertEqual(parse_rhythm("3,1,1,2&", 4), parse_rhythm("1,2&,3", 4))
-        self.assertEqual(str(parse_rhythm("3,1,1,2&", 4)), "1,2&,3")
+        """`3,1,1,2and` and `1,2and,3` are one value, and one canonical string."""
+        self.assertEqual(parse_rhythm("3,1,1,2and", 4), parse_rhythm("1,2and,3", 4))
+        self.assertEqual(str(parse_rhythm("3,1,1,2and", 4)), "1,2and,3")
 
     def test_none_is_the_one_token_that_cannot_be_combined(self):
-        """`none,1&` and `none,melody` are refused rather than resolved."""
-        for text in ("none,1&", "none,melody", "1&,none"):
+        """`none,1and` and `none,melody` are refused rather than resolved."""
+        for text in ("none,1and", "none,melody", "1and,none"):
             with self.subTest(text=text):
                 with self.assertRaises(ValueError) as caught:
                     parse_rhythm(text, 4)
@@ -170,11 +174,11 @@ class TestTheList(unittest.TestCase):
         self.assertFalse(rhythm.includes(1.0, 4))
 
     def test_case_and_whitespace_are_not_part_of_the_request(self):
-        self.assertEqual(parse_rhythm(" MELODY , 1& ", 4), parse_rhythm("melody,1&", 4))
+        self.assertEqual(parse_rhythm(" MELODY , 1and ", 4), parse_rhythm("melody,1and", 4))
 
     def test_the_value_is_frozen(self):
         """A request written halfway through arranging is worse than a refused one."""
-        rhythm = parse_rhythm("1&", 4)
+        rhythm = parse_rhythm("1and", 4)
         with self.assertRaises(FrozenInstanceError):
             rhythm.positions = ()  # type: ignore[misc]
 
@@ -207,7 +211,17 @@ class TestTheRefusals(unittest.TestCase):
             parse_rhythm("swing", 4)
         message = str(caught.exception)
         self.assertIn("every-beat", message)
-        self.assertIn("last&", message)
+        self.assertIn("lastand", message)
+
+    def test_the_musical_ampersand_is_refused_and_names_its_spelling(self):
+        """`1&` cannot be a token: a shell backgrounds the command at the `&`."""
+        for text, spelling in (("1&", "1and"), ("last&", "lastand"), ("melody,2&", "2and")):
+            with self.subTest(text=text):
+                with self.assertRaises(ValueError) as caught:
+                    parse_rhythm(text, 4)
+                message = str(caught.exception)
+                self.assertIn(spelling, message)
+                self.assertIn("background operator", message)
 
     def test_an_empty_entry_is_refused(self):
         with self.assertRaises(ValueError):
@@ -215,7 +229,7 @@ class TestTheRefusals(unittest.TestCase):
 
     def test_a_doubled_subdivision_is_refused(self):
         with self.assertRaises(ValueError):
-            parse_rhythm("1&&", 4)
+            parse_rhythm("1andand", 4)
 
     def test_a_position_off_the_named_subdivisions_is_refused(self):
         """A programmatic value cannot smuggle in a position the grammar lacks."""
@@ -232,20 +246,29 @@ class TestTheCanonicalSpelling(unittest.TestCase):
         cases = {
             "1": "1",
             "1e": "1e",
-            "1&": "1&",
+            "1and": "1and",
             "1a": "1a",
             "last": "4",
-            "last&": "4&",
+            "lastand": "4and",
             "every-beat": "1,2,3,4",
-            "melody,1&": "melody,1&",
-            "3,1,2&": "1,2&,3",
+            "melody,1and": "melody,1and",
+            "3,1,2and": "1,2and,3",
         }
         for text, canonical in cases.items():
             with self.subTest(text=text):
                 self.assertEqual(str(parse_rhythm(text, 4)), canonical)
         self.assertEqual(str(parse_rhythm("every-beat", 2)), "1,2")
         self.assertEqual(str(parse_rhythm("every-beat", 6, (3, 3))), "1,2")
-        self.assertEqual(str(parse_rhythm("last&", 3)), "3&")
+        self.assertEqual(str(parse_rhythm("lastand", 3)), "3and")
+
+    def test_the_header_spelling_is_safe_to_paste_into_a_shell(self):
+        """The run header prints a request; every token it prints must be argv-safe."""
+        for text in ("1and", "lastand", "melody,1and", "1and,2and,3and,4and"):
+            with self.subTest(text=text):
+                printed = str(parse_rhythm(text, 4))
+                for unsafe in "&;|<>()$`*?[]{}":
+                    self.assertNotIn(unsafe, printed)
+                self.assertEqual(parse_rhythm(printed, 4), parse_rhythm(text, 4))
 
     def test_the_spelling_round_trips(self):
         """Under every metre the grammar accepts, `parse(str(x)) == x`."""
@@ -255,13 +278,13 @@ class TestTheCanonicalSpelling(unittest.TestCase):
             "none",
             "every-beat",
             "1",
-            "1&",
+            "1and",
             "1e",
             "1a",
             "last",
-            "last&",
-            "melody,1&",
-            "1,2&,3",
+            "lastand",
+            "melody,1and",
+            "1,2and,3",
             "2,1",
         )
         for beats, grouping in metres:

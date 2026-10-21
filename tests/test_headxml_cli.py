@@ -327,20 +327,20 @@ class TestHeadCli(unittest.TestCase):
         self.assertFalse(hasattr(arranger, "parse_grips"))
         self.assertFalse(hasattr(ArrangeOptions(), "grips"))
 
-        output = self.run_cli(RAINY_DAY, "--bars", "1-3", "--chord-on", "1,2&")
+        output = self.run_cli(RAINY_DAY, "--bars", "1-3", "--chord-on", "1,2and")
         self.assertEqual(self.code, 0)
-        self.assertIn("chord-on=1,2&", output)
+        self.assertIn("chord-on=1,2and", output)
 
     def test_a_flag_named_before_the_file_still_arranges_that_file(self):
-        """`head --chord-on 1,2& FILE` finds the file.
+        """`head --chord-on 1,2and FILE` finds the file.
 
         The quieter half of the old `nargs="+"` trap: an option that takes a list with
         spaces consumes the positional written after it, so it could only ever come last.
         One comma-separated string has no such order, and this is the round trip saying so.
         """
-        output = self.run_cli("--bars", "1-3", "--chord-on", "1,2&", RAINY_DAY)
+        output = self.run_cli("--bars", "1-3", "--chord-on", "1,2and", RAINY_DAY)
         self.assertEqual(self.code, 0)
-        self.assertIn("chord-on=1,2&", output)
+        self.assertIn("chord-on=1,2and", output)
 
     def test_the_request_reaches_the_engine(self):
         """The flag is a spelling of the request, so both reach the same arrangement.
@@ -368,13 +368,13 @@ class TestHeadCli(unittest.TestCase):
         `every-beat` prints as the positions it resolves to, which is the same request in
         that metre, so the round trip is on the *value* rather than on the spelling.
         """
-        output = self.run_cli(RAINY_DAY, "--bars", "1-3", "--chord-on", "1,2&")
+        output = self.run_cli(RAINY_DAY, "--bars", "1-3", "--chord-on", "1,2and")
         row = next(line for line in output.splitlines() if "request: " in line)
         fields = dict(
             field.split("=", 1)
             for field in row.split("request: ", 1)[1].split()
         )
-        self.assertEqual(fields["chord-on"], "1,2&")
+        self.assertEqual(fields["chord-on"], "1,2and")
         again = self.run_cli(RAINY_DAY, "--bars", "1-3", "--chord-on", fields["chord-on"])
         self.assertEqual(self.code, 0, again)
         self.assertIn(f"chord-on={fields['chord-on']}", again)

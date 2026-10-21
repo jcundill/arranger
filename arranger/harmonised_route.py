@@ -79,7 +79,7 @@ def _emit_step(
         role=role,
         metric_weight=context.weight,
         bass_only=is_bass_only(slot.bass_only, role),
-        # A position the chord's rhythm **named** - the stab `--chord-on melody,1&` puts
+        # A position the chord's rhythm **named** - the stab `--chord-on melody,1and` puts
         # under a held note - is struck even when the shape is unchanged. A slot the
         # skeleton invented, where the tune merely sustains, is not: that is a hold, and
         # `repeated` already covers the tune's own re-articulations.

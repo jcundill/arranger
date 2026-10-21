@@ -336,7 +336,7 @@ def _chord_attacks(
       `--chord-on` named, or a silent bar `--chord-fills` placed a chord in. Nothing
       in the tune is being re-articulated, so there is no hold to preserve;
     - the chord's **own rhythm names this beat**. `--chord-on every-beat` on a comp is
-      four stabs a bar, and `--chord-on melody,1&` adds one under a note the tune is
+      four stabs a bar, and `--chord-on melody,1and` adds one under a note the tune is
       holding.
 
     A written melody onset needs no clause of its own: a step there re-strikes through
@@ -425,7 +425,7 @@ def slot_state(
     # answers it replaces are the ones that would otherwise drop the note - a rest on
     # the comping route, and a melody-only selection's note-less position. A slot the
     # guitar **sings** is not one of these: the melody-alone route already carries the
-    # thumb (`docs/engine.md`'s `--chord-on 1&` example).
+    # thumb (`docs/engine.md`'s `--chord-on 1and` example).
     if lone_bass_case(
         has_bass=slot.bass is not None,
         sings_here=sings_here,

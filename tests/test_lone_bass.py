@@ -139,7 +139,7 @@ class TestTheSingingRouteIsUntouched(unittest.TestCase):
             COMMON_8,
             section=(1, 2),
             parts="melody,bass",
-            request=Request(bass_on="1&"),
+            request=Request(bass_on="1and"),
         )
         sounding = [
             step for step in steps if step.bass is not None and not step.bass_held

@@ -152,7 +152,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         )
 
     def test_a_list_option_leaves_the_file_positional_alone(self):
-        """`head --chord-on 1,2& FILE` and `head --bass-on every-beat FILE`.
+        """`head --chord-on 1,2and FILE` and `head --bass-on every-beat FILE`.
 
         This is the defect a `head FILE --grips a b` run hid: `nargs="+"` consumed the
         filename as a list element and then refused it (`invalid choice:
@@ -170,8 +170,8 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         from headxml import head_cli
 
         parser = _parser_of(head_cli)
-        parsed = parser.parse_args(["--chord-on", "1,2&", "head.musicxml"])
-        self.assertEqual(parsed.chord_on, "1,2&")
+        parsed = parser.parse_args(["--chord-on", "1,2and", "head.musicxml"])
+        self.assertEqual(parsed.chord_on, "1,2and")
         self.assertEqual(parsed.file, "head.musicxml")
 
         parsed = parser.parse_args(["--bass-on", "every-beat", "head.musicxml"])
