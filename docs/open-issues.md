@@ -2,23 +2,29 @@
 
 Each item states the **issue**, the **problem it produces**, and **why it exists**, with the
 measurement behind it. A fixed issue is **removed** from this file rather than kept as history —
-its record lives in the commit that fixed it and in the document it belongs to. Six are open, and
-each figure is stated **once**, in its own item: a summary here would be a second source for it,
-which is how the numbers in this paragraph rotted three times before the *recipes* below were
-made explicit. **Every figure in this file is re-measured by hand from the recipe beside it**:
-they are this document's own business, and the gate is not keyed to these items.
+its record lives in the commit that fixed it and in the document it belongs to. **One exception,
+stated so it is not a silent one:** items 1 and 4 are closed **in place** with their numbers,
+because `docs/history/` is frozen and cites items by number — removing them and renumbering would
+silently repoint about fifty references at a different item, which is the contradiction between
+documents this project treats as a bug. A closed item says how it closed and carries no figure of
+its own.
 
-1. **The library facade takes its harmony per melody note, so a hand-built timing cannot place a
-   chord where the tune is silent** — the importer's half is fixed in full, at the bar and at the
-   position; what is left is the entry point a caller supplying its own timings reaches.
+Four are open, and each figure is stated **once**, in its own item: a summary here would be a
+second source for it, which is how the numbers in this paragraph rotted three times before the
+*recipes* below were made explicit. **Every figure in this file is re-measured by hand from the
+recipe beside it**: they are this document's own business, and the gate is not keyed to these
+items.
+
+1. *(closed)* **The library facade takes its harmony per melody note** — closed by the
+   rhythm-first request; see below.
 2. **A refused thumb note is usually not the shape being unplayable** — measured, decision left
    open: the selector's lever recovers nothing harmlessly any more, and the walk's own pitch,
    which costs the tuple nothing, reaches most of the refusals but only a fraction of them by a
    chord tone.
 3. **`harmony=full` is accepted on the comping route and answered with a different family** — the
    one axis value refused by nothing that resolves to something other than itself.
-4. **A `bass:` grid row is accepted and changes nothing** — the walk's beats come from the bass
-   part, so the row is inert rather than wrong.
+4. *(closed)* **A `bass:` grid row is accepted and changes nothing** — closed by the request; the
+   internal row survives with its own tests.
 5. **A lone note the hand holds can leave the walk below the shape's reach** — the reach is as
    near as the walk's own note allows, so it is the register and not the placement; measured,
    with the selector-side lever left unbuilt.
@@ -30,98 +36,32 @@ Reproduce the measurements with the commands in [Reproducing](#reproducing).
 
 ---
 
-## 1. The library facade takes its harmony per melody note, so a hand-built timing cannot place a chord where the tune is silent
+## 1. The library facade takes its harmony per melody note (closed)
 
-**Status: the importer path is fixed in full; the facade's input shape is what is left.** A bar
-the melody never enters, and a beat *inside* a bar it does occupy, are both arranged under every
-route that voices chords, including the default grid. What remains is the **entry point**: a
-caller supplying its own timings gives one harmony *per melody note*, so a position no note
-occupies cannot carry a chord.
+**Closed by the rhythm-first request** ([rhythm-request-redesign.md](rhythm-request-redesign.md)).
+The item had two open halves and both now have an answer rather than a workaround.
 
-**The issue.** Harmony reaches the facade *per melody note*, not per time position. There is no
-chord-in-force structure a position without a note can read, so the step loop — which iterates
-melody slots — can only *keep* or *drop* a slot and can never *create* one.
+**The entry point.** A caller *can* place a chord where the tune is silent, and always could:
+`(None, quality, name)` is a legal triple, and giving it its own `(bar, beat, duration)` puts a
+chord at that position with no melody above it. That is the same shape `headxml.head_skeleton`
+emits for a note-less slot, so the hand-built path and the imported one are one path -
+`movement.arrange_progression` needs no second input type.
 
-**The problem, and what of it is closed.**
+**The generation.** What was genuinely missing was a *source* of positions, and it is the request
+now: `--chord-on` names them (`1&`, `every-beat`, a list), `--chord-fills` places chords in the
+tune's notated rests, and `headxml.rhythm_slots` / `fill_slots` emit one triple per position with
+`melody=None`. The default grid's union is gone with the flag that exposed it, so nothing invents
+a position nobody asked for.
 
-- ~~A bar whose melody is entirely rests produces **no part at all**~~ — **fixed at the level
-  of the bar.** `_merge_chord_slots` unions a melody-anchored grid's positions for a bar
-  `head_skeleton` never touched, so `synthetic_chords_only` now arranges **16 steps** under
-  every grid. The scale of the addition over all ten heads is the candidate count below.
-- ~~A chords-only lead sheet is silent on every export path~~ — **fixed.** It arranges all
-  four bars under the default grid and 16 under `freddie`. The one route still silent is a
-  **melody-only selection** (`soprano`, `soprano,bass`), which is a different claim: it plays
-  the tune and nothing else, and there is no tune.
-- ~~The walking bass shares the limit one level down~~ — **was already fixed wherever a named
-  grid ran**, and the default grid's silence was the only thing withholding the bar from it.
-  `walking_slots` walks the bars the *timings* touch, and the union writes its added slots
-  into those timings. The default now reaches every bar `freddie` reaches **where the tune is
-  silent**; a bar whose every position is *held* is withheld by §9.2, and a named grid still
-  comps it (`synthetic_repeat_slash` bar 12 is the case).
-- ~~The case is structurally inexpressible~~ — **the field half was already done** before this
-  item was last measured: `(None, quality, name)` is a legal triple, and `chord_slots` emits
-  exactly that shape.
-- **Landed: a beat the melody skips *inside* a bar it occupies.** The union's exception used
-  to be the **bar**, so a *named* grid already generated inside a bar the tune occupies:
-  `synthetic_common_8` bar 4 (written onsets 1 and 3) yields **6** steps under `joe_pass`,
-  sounding 1.5, 2.5, 3.5 and 4.5 — none of them written onsets — and bar 3 (onsets 1, 2, 3,
-  4) yields **8** under the same grid on both routes. What the default lacked was positions
-  of its own, and it has them now: **each bar is generated at its own subdivision**
-  (`grid.grid_resolutions`, converted through the metre so no bar is generated finer than
-  the sixteenth this library floors at), and the union takes those positions wherever the
-  tune is **silent**. §9.2 still refuses a position the tune is *holding*, so a bar whose
-  silence is a held note rather than a gap is a different claim.
-  The candidates are measured rather than guessed: **153 positions** where no note is
-  written are named by the default grid across the ten committed heads. Per head:
-  `Trouble_in_Mind_Blues` 66, `synthetic_chords_only` 16, `synthetic_waltz` 20,
-  `synthetic_repeat_slash` 12, `synthetic_common_8` 10, `synthetic_tab_export` 9,
-  `synthetic_pickup_common` 8, `synthetic_cut_time` 7, `synthetic_pickup_cut` 3,
-  `synthetic_triplets` 2. **25** of them become steps once §9.2 and the chord-in-force rule
-  have spoken: `synthetic_chords_only` 16, `Trouble_in_Mind_Blues` 4,
-  `synthetic_common_8` 3, `synthetic_repeat_slash` 1, `synthetic_waltz` 1, and nothing on
-  the other five. The rest are a position the tune is still holding (the majority), one
-  with no chord in force, or a position in a pickup bar.
-- **Partly open: a stab's duration belongs to the producer that made the step, not to the
-  grid.** `chord_slots` sets a length from the following **grid** position, capped at the
-  barline, and `head_skeleton` from the **melody note**, and the union merges the two — so a
-  *generated* position lasts until the next grid position while a *written* onset keeps the
-  note's own length, shorter than that distance where the tune's own notes overlap and longer
-  where the grid subdivides finer than the note. Measured with `parts=chord` under the default
-  grid: all **16** of `synthetic_chords_only`'s steps match their own grid gap, while
-  `synthetic_repeat_slash` has **1** of its 27 steps whose length differs from the distance
-  to the next step: bar 5's G4, a written onset held across the following bar. (Bar 11's
-  F4 is the last step, so it has no following gap to differ from.) `docs/history/comping-styles.md` §9.6's "the grid owns the
-  rhythm" would give a written onset the grid's answer; nothing implements that for it, and
-  §9.4 is where the axis that would own it is proposed.
+**The duration.** The item's last open bullet was that "a stab's duration belongs to the producer
+that made the step". It has one rule now, and the rule is the request's: a position the chord
+rhythm names lasts to the end of the **felt beat** it sits in (`headxml._stab_length`), and a
+chord under a melody onset lasts that note. `ArrangementStep.duration` is a **cap** in the score
+(`tabscore._capped_span`), so a stab shorter than the gap is written as a note and a rest rather
+than a chord ringing over beats nothing asked for. `tests/test_durations.py` pins all four cases.
 
-**Why it exists.** The facade's input is triples plus timings, and the harmony is attached to a
-melody note, so there is no position for a chord to sit on where the tune is silent. Closing it
-means one of two changes, and they are not the same size: the facade accepting a **chord
-timeline** in place of per-note harmony, or the facade generating the positions itself. The
-importer took the second route; the first is the different order of change this item has named
-from the start. That route needed no fifth `decisions.melody_alone_case` kind, which the item
-predicted and §9.3 step D had already made unnecessary: it had made "a note-less grid position a
-*singing* selection receives" a real case, and the comping branch answers it with
-`MELODY_ALONE_NONE` — the grid decides whether the guitar is silent *about a chord it could
-state*, and there it can.
-
-**Landed.** `Head.chords` / `HeadChange` record the timeline as the document is walked;
-`headxml.chord_at` queries it by forward fill; `headxml.chord_slots` yields one slot per position
-the grid names; and `arrange_xml_head` unions them with `head_skeleton`'s for any selection that
-voices chords (`comps+freddie`: `synthetic_cut_time` 21 → 23, `synthetic_repeat_slash` 30 → 35,
-`synthetic_triplets` 112 → 112), plus the bar-level
-`every_note` exception that closes the silence, **plus generated positions inside a bar the tune
-occupies** (`headxml._generated_beats` and the position-level union in `_merge_chord_slots`). The
-importer's route is therefore complete: of the positions the default grid names, only the ones
-§9.2 refuses — a note still holding them — produce nothing, and a stab's own length follows the
-producer that made the step rather than the grid (the bullet above).
-
-**The rule it suggests.** A rhythm needs a source of its own. Where a grid's positions are
-filtered out of the melody rather than generated from the metre, they vanish silently and no
-warning can be issued, because the question was never asked. The position is the smallest unit at
-which that silence was a defect; the level below it is where the *boundary* of §9.2's hold rule
-decides, and item 6 is what that costs — a position on a note's release is declined along with a
-position inside it.
+The importer's half remains as it was: `Head.chords` / `HeadChange` / `chord_at` are the timeline,
+and every position the request names resolves through them.
 
 ---
 
@@ -209,32 +149,22 @@ chord's own tone set, which varies by quality and lives in `TONE_PRIORITY`.
 
 ---
 
-## 4. A `bass:` grid row is accepted and changes nothing
+## 4. A `bass:` grid row is accepted and changes nothing (closed)
 
-**Status: open, diagnosed.** The row spelling is validated; the row itself has no reader.
+**Closed for a caller, and kept internal on purpose.** The bug was never the row: it was that the
+CLI offered a flag whose `bass:` half did nothing, so `--grid melody:every_note,bass:walk` printed
+a request back and then wrote no bass note. That flag is gone. The thumb's positions are
+`--bass-on` and its notes are `--bass-notes`, so the spelling that could lie to a user no longer
+exists.
 
-**The issue.** `grid=` is `PART:PATTERN` rows, and `GRID_PART_PATTERNS` offers three for the bass
-part: `bass:every_note`, `bass:walk` and `bass:anchors`. All three parse, all three are allowed
-by `grid_allowed`, and none of them changes a note. `grid_bass_pattern` is the function written to
-read the row and **nothing calls it**: the walk's beats come from the bass *part* — `bass.py`'s
-own timeline and the style's rules, unioned when a thumb line sounds — which is why the walk the
-help text attributes to `bass:walk` already happens without it.
-
-**The problem.** Measured over all ten committed heads, `texture=targets` with
-`--bass-style root,5th,approach,nearest`: the default row and each of the three `bass:` rows give
-**byte-identical steps**, same count and same tab lines on every head — 104, 16, 32, 13, 8, 35,
-29, 57, 23, 112. So a caller who writes `--grid bass:walk` is handed exactly what a caller who wrote
-nothing got, and nothing on the line says so. That is the failure this document exists for: a
-spelling stating a choice the library did not make.
-
-**Why it exists / not fixed.** The rows are part of the axis's vocabulary —
-[docs/history/parts.md](history/parts.md) §7 step 5 fixes `grid=` as positions × parts — and `parse_grid`
-validates them, so refusing them would be the axis rejecting a spelling it documents. What is
-missing is the *reader*: building it moves the walk's positions off `bass.py`'s timeline and onto
-the row, which changes the walked-beat union that item 2's figures are taken over. That is a
-measured cost rather than an oversight, so the row is documented as inert
-([README.md](../README.md)). No test re-takes the equality: item 4 is a **deferral** rather than
-a behaviour worth asserting, and when the reader lands, the item and its row go together.
+**The internal row survives, and is deliberately unread.** `GRID_PART_PATTERNS` still validates
+`bass:every_note`, `bass:walk` and `bass:anchors`, and `grid_bass_pattern` still has no caller. It
+is kept because it is the axis's own vocabulary - `parts=` / `grid=` are the Python API under the
+request (design principle 9 of the plan) - and because `tests/test_grid.py` pins the property the
+row exists to state: a bass row **defers to the melody**, since the walk's beats come from
+`bass.py`'s own timeline rather than from a preset. A row that is parsed-but-unread *inside* the
+engine, with a test saying so, is not the failure this document is for; a flag that states a choice
+the library did not make is, and it is gone.
 
 ---
 
@@ -329,86 +259,14 @@ silence, so it need not move with it.
 ## Reproducing
 
 ```bash
-# 1. the bar-level rule: a bar the melody never enters, under the default grid
-# `every_note` is melody-anchored and the union's exception is the BAR, so a bar the tune
-# never enters is added beat for beat while every bar it does enter is untouched. Bar 6 of
-# this head is the case the old behaviour got wrong: no notes at all, and two changes behind
-# it. The head is written as 8 bars and *played* as 12, because the loader plays repeats.
-.venv/bin/python -c "
-from headxml import arrange_xml_head
-steps, head, _notes = arrange_xml_head('tests/data/synthetic_repeat_slash.musicxml')
-bars = sorted({s.bar for s in steps})
-lo, hi = head.bars                     # (first, last + 1) - the file's measure extent
-print('bars arranged:', len(bars), 'of', hi - lo)
-print('bar 6 (no notes at all):', [(s.beat, s.chord) for s in steps if s.bar == 6])
-"
-# bars arranged: 11 of 12 - and bar 12 is not missing: bar 11's F4 is held through it,
-# so a step that began in bar 11 sounds the bar. Bar 6 has no notes of its own, and its
-# downbeat is held from bar 5, so the grid states only the position the tune has left:
-# [(2.0, 'D9')] - it used to be absent entirely.
+# Items 1 and 4 are closed (see above), and their recipes are gone with them: they
+# reproduced a default union and a `--grid` flag that the rhythm-first request removed,
+# so running them now measures a different arrangement. The record is the commit and
+# docs/rhythm-request-redesign.md.
 
-# the chords-only lead sheet: the extreme case, now arranged under the default grid
-.venv/bin/python -c "
-from headxml import arrange_xml_head
-steps, _head, _notes = arrange_xml_head('tests/data/synthetic_chords_only.musicxml')
-print('steps:', len(steps))   # 16 - four bars, four beats each
-"
-# and the one route still silent, which is a different claim:
-.venv/bin/python -c "
-from headxml import arrange_xml_head
-steps, _head, _notes = arrange_xml_head('tests/data/synthetic_chords_only.musicxml', parts='melody')
-print('steps:', len(steps))   # 0 - a melody-only selection has no tune to play
-"
-
-# the 36 candidates the bar-level rule names, over four heads: count the grid's positions
-# in the bars `head_skeleton` never touched. Nothing is monkeypatched and no 'before' tree is
-# needed - a bar the melody never enters contributes no melody slot, so every candidate in one
-# is the union's. These are *candidates*: §9.2 and the chord-in-force rule decide how many
-# become steps (the 25 in the bullet above).
-.venv/bin/python -c "
-import glob, os
-import headxml as H
-total = 0
-for path in sorted(glob.glob('tests/data/*.musicxml')) + sorted(glob.glob('tests/data/*.mxl')):
-    head = H.load_musicxml(path, None)
-    melody_bars = {bar for _t, bar, _b, _d in H.head_skeleton(head, None)}
-    added = [s for s in H.chord_slots(head, None, 'chord:every_note') if s[3] not in melody_bars]
-    total += len(added)
-    print('%-32s added=%d' % (os.path.basename(path), len(added)))
-print('total added:', total)
-"
-# 12, 16, 4, 4 in the order the heads are read, and six zeros for the heads with no
-# melody-less bar - 36 candidates across the corpus.
-
-# what is still open, and now the item's whole remaining scope: the LIBRARY entry point
-# takes its harmony per melody note, so a hand-built progression with no slot in bar 2
-# cannot express one. The importer no longer shares this limit.
-.venv/bin/python -c "
-from arranger import VoiceLeadingEngine
-prog = [('D5','m7','Dm7'), ('C5','maj7','Cmaj7'), ('E4','7','A7')]
-timings = [(1,1.0,1.0), (1,2.0,1.0), (3,1.0,1.0), (3,2.0,1.0)]   # no slot in bar 2
-steps = VoiceLeadingEngine.arrange_progression(
-    prog, timings=timings, parts='chord', grid='chord:freddie',
-    )
-print('bar 2 present:', any(s.bar == 2 for s in steps))
-print('Cmaj7 duration:', [s.duration for s in steps if s.chord == 'Cmaj7'])
-"
-# bar 2 present: False, and Cmaj7 is voiced once for the melody note's own duration -
-# the caller supplies the slots, so this route needs generated slots to answer it.
-
-# the walking bass: the same limit, only where the caller builds the timings by hand
-.venv/bin/python -c "
-from arranger.bass import bass_line_for
-from arranger.chords import ChordParser
-chords = [(ChordParser.parse_chord_name(n)[0], ChordParser.parse_chord_name(n)[1] or '', n)
-          for _m, _q, n in [('D5','m7','Dm7'), ('C5','maj7','Cmaj7'), ('E4','7','A7')]]
-line = bass_line_for('root,5th,approach,nearest', chords, [(1,1.0), (1,2.0), (3,1.0), (3,2.0)], 4)
-print('bars walked:', sorted({n.bar for n in line}))
-"
-# bars walked: [1, 3]   <- on the head path the union supplies bar 2, so this is the
-#                            library function called directly with hand-built timings.
-
-# 4. a bass: grid row is inert: every head comes out byte-identical to the default row
+# the bass row is inert *inside the engine*: every head is byte-identical to the default row.
+# No CLI flag can reach it any more - the thumb's positions are `--bass-on` - so this
+# measures the Python-API property `tests/test_grid.py` pins.
 .venv/bin/python -c "
 import glob
 import headxml as H
@@ -424,8 +282,9 @@ for path in heads:
     same += len(tabs) == 1
 print('inert rows: %d of %d heads identical' % (same, len(heads)))
 "
-# inert rows: 10 of 10 heads identical - and all four spellings give 83, 16, 32, 13, 8,
-# 33, 28, 57, 23, 112 steps, so the row is a no-op rather than an accident of one head.
+# inert rows: 13 of 13 heads identical, all four spellings giving the same count and the same
+# tab lines on each - so the row is a no-op rather than an accident of one head. (The corpus is
+# 13 files and not the 10 this item was written against; re-measured, not remembered.)
 
 # 6. a position on a note's release is not generated: `melody_at` keeps a note in force
 # through its own end instant, so `melody_state` answers held where the tune has already

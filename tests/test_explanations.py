@@ -282,9 +282,9 @@ WITNESSES: List[Witness] = [
         lambda step: "rests here" in _line(step),
     ),
     (
-        "the guitar is silent because the grid places no chord",
+        "the guitar is silent because no part was asked to sound there",
         lambda step: step.silence == SILENCE_GRID,
-        lambda step: "the grid places no chord" in _line(step),
+        lambda step: "no part was asked to sound" in _line(step),
     ),
     (
         "the guitar is silent because an NC bar gives a comping part nothing to state",

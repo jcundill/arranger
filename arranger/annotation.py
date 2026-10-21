@@ -395,7 +395,7 @@ def _and_list(items: List[str]) -> str:
 # grid's answer, which was the only reason before the other routes learned to emit
 # a step of their own.
 _SILENCE_PHRASES: Dict[str, str] = {
-    SILENCE_GRID: "the guitar rests here - the grid places no chord",
+    SILENCE_GRID: "the guitar rests here - no part was asked to sound at this position",
     SILENCE_NC_COMPING: "the guitar rests here - no chord to comp",
     SILENCE_NO_SHAPE: (
         "the guitar rests here - no voicing for this chord and none for the melody"

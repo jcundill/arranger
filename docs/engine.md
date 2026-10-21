@@ -204,7 +204,7 @@ you whether a change is an improvement or a different library.
   rendering. `Voicing.tab_block()` still renders a single voicing vertically.
 - `format_tab_staff`, `format_tab_html` and `write_tab_html` **live in
   `tabstaff.py`**, not here, and are re-exported below. See
-  [The staff renderers live in `tabstaff.py`](#the-staff-renderers-live-in-tabstaffpy).
+  [The staff renderers live in `tabstaff.py`](renderers.md#the-staff-renderers-live-in-tabstaffpy).
 - `format_tab_staff(steps, beats_per_bar=4, beat_type=4, rhythm=True,
   show_chords=False, show_melody=False, show_melody_string=True, show_mutes=False,
   collapse=True, measures_per_line=4, show_timing=False)` — renders the **whole
@@ -564,7 +564,7 @@ than only through a result.
 so a zero-span barre and a one-fret reach tie and the decision falls through to neck
 position. One fret of stretch is not a stretch worth moving the hand for, and the
 case that showed it was a player reading the tab rather than a corpus measurement:
-`Bb7` under `F4 → G4 → F4` with a three-note palette (`--texture chord2`)
+`Bb7` under `F4 → G4 → F4` with a three-note palette (`texture="chord2"`)
 was voiced `x-x-6-7-6-x`,
 `x-x-x-3-3-3`, `x-x-6-7-6-x` — down to a fret-3 barre for one note and straight back,
 because the barre spans zero and the natural shape at frets 7–8 spans one. The
@@ -762,6 +762,34 @@ The window is a **penalty, not a filter**: a step with no voicing inside frets 2
 still played, just outside it. A filter would silently drop every step whose melody
 has no in-window shape, and losing a chord of the tune is worse than being a fret out
 of position. `tests/test_grip_tables.py::TestFretWindow` pins that.
+
+## The request, and the six axes under it
+
+`head`'s CLI asks six questions and derives the axes from them. This document describes
+the axes, because they are the implementation: **a request is resolved into them once,
+and nothing below this section reads the request again.**
+
+| the question (CLI) | the axis it resolves to |
+|---|---|
+| `--no-melody` | `parts=` — the melody part is dropped from the selection |
+| `--chord-on POSITIONS` | the chord layer's rhythm (`grid`, rewritten around `Rhythm`) |
+| `--chord-notes full\|3\|2\|1` | `texture=uniform\|chord3\|chord2\|chord1` |
+| `--chord-fills none\|hold\|comp` | chord slots in the tune's rests, plus `parts=` including the chord |
+| `--bass-on POSITIONS` | the bass layer's rhythm, and `bass=` when it is not `none` |
+| `--bass-notes root\|root-5th\|walk` | `bass=root`, `bass=root,5th`, or the full four rules |
+
+`harmony=` is not on that list: it is the one axis with no request spelling, because it
+is read only on the comping route and the request that route answers is `--no-melody`,
+whose chord content is `--chord-notes`'s. The metre is read from the score (`grouping`,
+below) rather than from a flag.
+
+**The resolution is a derivation with refusals, not a set of defaults**, and it happens
+before any voicing work (`options.resolve_request` → `resolution`). A content question
+about a layer the request leaves silent is refused with the reason; a position the metre
+does not have is refused by the parser; and `--no-melody` derives the chord's rhythm to
+the metre's felt beats rather than refusing, because its default names a melody this
+guitar does not have. A **spelled axis** still wins over the derivation in the Python
+API, which is what lets this document's measurements be taken on one axis at a time.
 
 ## Texture: chords on the beats, fills between
 
@@ -1516,8 +1544,8 @@ decision [docs/open-issues.md](open-issues.md) item 6 records, pinned by
 
 **The arity is the length of the selection, and it is honoured.** `notes` says how many
 voices the guitar was asked for, and a two-voice request is **two notes**. The first
-version of this generator always built a three-note shell, so `--texture chord1` and
-`--texture chord2` both came back with three — a part sounding a note nobody named,
+version of this generator always built a three-note shell, so `texture="chord1"` and
+`texture="chord2"` both came back with three — a part sounding a note nobody named,
 which in a band setting is a voice another player was supposed to have.
 
 **The arity picks the grip family rather than truncating one.** Truncating a `shell` set to
@@ -1537,7 +1565,7 @@ guitar sings at all.
 **One voice is a weaker claim, and the rule says so rather than refusing.** Two notes can
 sound both guide tones, which is what states the chord; one note cannot, so a single note
 keeps the **first** guide tone (the 3rd, or the 4th on a sus chord) — the same preference
-order `_duo_offsets` already applies. Refusing instead would have made `--texture chord1`
+order `_duo_offsets` already applies. Refusing instead would have made `texture="chord1"`
 fall through to the melody-bearing route: measured, it put the horn's line back on the
 guitar on every step, the opposite of what asking for one note meant.
 
@@ -1607,7 +1635,7 @@ listed, so a spelling that cannot be voiced cannot miss it either.
 answer it gives reaches `get_melody_only_voicing`, so under `parts="chord"` it must not
 answer `MELODY_ALONE_TEXTURE` — or a texture *fill* would put the tune straight back on the
 guitar, and the axis would be honoured only on targets. Measured: before the guard, every
-fill under `--texture targets --bass-style root,5th,approach,nearest` came back `x-7-x-x-x-8`, a bare melody note.
+fill under `texture="targets", bass="root,5th,approach,nearest"` came back `x-7-x-x-x-8`, a bare melody note.
 
 **An `NC` bar is emitted silent, with the reason on the step.** There is no chord, so
 there are no guide tones, and the guitar is genuinely silent while the horn is not. The

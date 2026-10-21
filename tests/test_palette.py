@@ -296,7 +296,7 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         for step in silent:
             self.assertEqual(
                 step_annotation(step),
-                " (the guitar rests here - the grid places no chord)",
+                " (the guitar rests here - no part was asked to sound at this position)",
             )
 
     def test_a_comping_step_names_the_voices_it_states(self):

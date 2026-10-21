@@ -94,6 +94,51 @@ Two consequences worth knowing:
   spelled as one literal in both modules rather than with `+=`, which a checker
   cannot follow either.
 
+## What the four renderers must agree about
+
+An arrangement is data; four renderers read it. **They must agree about which notes are new
+attacks**, because a note drawn twice is a wrong rhythm and a note drawn nowhere is a note
+the arrangement does not really contain. Three facts drive that agreement, and each has one
+owner.
+
+| fact | the field | what a renderer does with it |
+|---|---|---|
+| the shape is the same as the previous one | compared in `_staff_columns` / `_is_hold` | a hold column draws nothing: the previous shape is still ringing |
+| the thumb has **moved** under a held shape | `_moved_thumb` compares `(bass_midi, bass_string)` | the hold column draws **the bass string only** |
+| the thumb is **sounding and not plucked** | `ArrangementStep.bass_held` | the tab mutes that string, the staff leaves it blank, the score ties it, GP5 writes a tie note |
+
+**The hold comparison is of the upper voices**, and it has to be: a walking bass moves the
+lowest pitch on every beat, so including it would mark every column a strike and turn the
+arrangement back into the chord list the collapse exists to prevent. The cost of that choice
+is a column whose shape is held and whose thumb moves — a hold for the shape and a new attack
+for the bass — and it used to draw nothing at all, so the note was in the one-line tab and in
+the score while the ASCII staff and the HTML showed silence. `_moved_thumb` is that fact and
+`_draws` is the one predicate both renderers now ask. The comparison is by `(midi, string)`
+rather than by role, because a thumb can move to another octave of the same pitch class and
+that is a note being plucked.
+
+**A carried thumb is the mirror image.** `bass_merge.carry_bass` writes a struck note into
+the steps that follow it, so a `--bass-on 1` line is one note ringing through the bar rather
+than a stab per melody note. The fret is in the vector because the string really is
+sounding, so each renderer has to say "not plucked" in its own way:
+
+- `render._step_cells` draws a mute on that string — the one-line tab answers *what is
+  plucked*;
+- `tabstaff._strikes_here` returns False, so the cell is empty — the note was drawn where it
+  was struck;
+- `tabxml._build_note` writes a **per-note `<tie>`**: the earlier `Note` is patched to
+  `start`/`continue` and this one is written with `stop`. It has to be at the note inside the
+  chord, not on the chord, because the other voices are new. An event cut at a bar line
+  carries no such tie — the cut writes one chord-level tie, and a note cannot carry two;
+- `tabgp._strike_notes` writes the note as `NoteType.tie`, which is that format's only way
+  to say "still sounding"; the tie is only trusted where the last note written on that
+  string is the same fret, because a GP5 tie carries no fret of its own.
+
+A **rest column** is drawn by all four as silence: a blank cell, an `x` under `--mutes`, an
+explicit `<rest>` in the score. A **fill** is not a rest — it is a step with no melody — so
+it draws the chord it states and its line says *the tune is silent here*, which is what stops
+a chord with no melody above it from reading as a mistake.
+
 ## MusicXML import
 
 `headxml` is the counterpart to `tabxml`: it reads a written head — a melody plus

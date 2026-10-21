@@ -125,7 +125,10 @@ ROLE_FILL = "fill"
 # keeps its line-up against the tune; a message alone was not enough, because it
 # reached nobody reading the part. Five values, one
 # per route that can decline to play:
-SILENCE_GRID = "grid"            # the grid places no chord on this beat
+# The grid - the layer that decides when each part sounds - placed nothing here. The
+# phrase a reader sees (`annotation._SILENCE_PHRASES`) names the *request* rather than
+# the grid, because the flag that used to expose one no longer exists.
+SILENCE_GRID = "grid"
 SILENCE_NC_COMPING = "nc_comping"  # an NC bar: nothing for a comping part to state
 SILENCE_NO_SHAPE = "no_shape"    # no shape in the palette, and the tune cannot stand alone
 SILENCE_OUT_OF_REACH = "out_of_reach"  # no string reaches the written melody note

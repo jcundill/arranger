@@ -1,18 +1,24 @@
 # The arrangement request: a rhythm-first redesign
 
-**Status:** in progress, stage by stage. The plan below is being implemented in the
-order it states, one commit per stage with `make check` green. This file records the
-problem, the options considered and the design; the decision points it left open were
-settled in review (see the notes under each).
+**Status: implemented.** Each stage below is a commit with `make check` green, and the
+notes under each say what landed and where it differed from the plan. This file is still
+the *record* of the problem, the options and the design; the live rules now live in
+[docs/engine.md](engine.md) (the request and the axes), [docs/renderers.md](renderers.md)
+(the four renderers' agreement) and [README.md](../README.md) (the flags). When this file
+and those disagree, they are right and it is the plan that was written first.
 
-**Progress:** Stages 0, 1, 2 and 2b have landed. Stage 0 is the `Rhythm` grammar;
-Stage 1 is the `Request` value, `resolve_request`, the CLI flags and the run header;
-Stage 2 is the slot union; Stage 2b is `--chord-fills`, the chord's policy in a
-notated melody rest. `arranger head` offers `--no-melody`, `--chord-on`,
-`--chord-notes`, `--chord-fills`, `--bass-on` and `--bass-notes`, and the five old
-flags are gone; the staff flag is `--note-names`. The internal axes remain spellable
-on `ArrangeOptions` as the engine's implementation, and Stage 8 retires them from the
-public surface.
+**Progress: every stage has landed.** Stage 0 is the `Rhythm` grammar; Stage 1 is the
+`Request` value, `resolve_request`, the CLI flags and the run header; Stage 2 is the
+slot union; Stage 2b is `--chord-fills`, the chord's policy in a notated melody rest;
+Stage 3 is the bass line at the requested positions; Stage 4 is the bass-only route;
+Stage 5 is a stab's length and the carried thumb; Stage 6 is the staff's moved thumb;
+Stage 7 is `--no-melody` as a complete request; Stage 8 is the documentation, and it
+closed open-issues items 1 and 4.
+
+`arranger head` offers `--no-melody`, `--chord-on`, `--chord-notes`, `--chord-fills`,
+`--bass-on` and `--bass-notes`, and the five old flags are gone; the staff flag is
+`--note-names`. The internal axes remain in the **Python API** as the engine's
+implementation - design principle 9 - and no CLI flag spells one.
 
 What that means for the rest of this document: `head FILE` adds nothing - one chord
 per written melody note and no position invented in the tune's rests. `--chord-on
@@ -49,9 +55,11 @@ Stage 7 made `--no-melody` a complete request - the chord defaults to the metre'
 beats - and measured the lone bass line across five metres, which found two renderers
 that had been folding a repeated thumb into a hold.
 
-Still to land: 8 (docs and clean-up) - and only its documentation: the README's flag
-table and the `--no-melody` help text are already corrected, and the list of what
-remains is at the end of that stage below.
+Stage 8 landed as documentation plus one consequence in code: the phrase a reader sees at
+a position nobody asked to sound now names the **request** rather than "the grid", because
+the flag that exposed a grid is gone. The rest of that stage's list - the README's axis
+sections, `docs/engine.md`'s request table, `docs/renderers.md`'s four-renderer rule and
+open-issues items 1 and 4 - is written, and each command the README prints was re-run.
 
 ## The problem in one paragraph
 
