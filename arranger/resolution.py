@@ -18,9 +18,7 @@ from .bass import (
 from .bass_rules import (
     BASS_STYLE_AUTO,
     BASS_STYLE_NONE,
-    BASS_STYLE_WALK,
-    bass_allowed,
-    parse_bass_style,
+    resolve_bass,
 )
 from .chords import (
     NON_CHORD_TONE_STRATEGIES,
@@ -42,95 +40,12 @@ from .parts import (
     PART_BASS,
     parse_parts,
     parts_has_melody_only,
-    parts_have_bass,
     parts_have_melody,
     resolve_parts,
 )
 from .texture import (
-    TEXTURE_STYLES,
-    derived_arity,
+    parse_texture,
 )
-
-
-def _resolve_bass(
-    texture: str,
-    bass: str,
-    parts: Tuple[str, ...],
-) -> str:
-    """The style to actually run: `BASS_STYLE_AUTO` resolved or validated.
-
-    Three outcomes, in the order they are decided:
-
-    - `auto` resolves from the selection, and the shipped answer is **no line**: a
-      caller who wants one names the note rules or a `bass:walk` grid row. The one
-      case the sentinel writes one is a melody-only selection that also names the
-      bass part - `parts="melody,bass"` is the tune with a thumb under it. A
-      `parts="bass"` selection alone is **not** melody-only (it has no tune) and keeps
-      no thumb: that part already is the bass line, and a thumb under it would double
-      it.
-    - an unknown rule raises. The same rule as everywhere else in the library: a
-      spelling nobody recognises is a question, and answering it by defaulting to a
-      walk would put a bass line under an arrangement that did not ask for one.
-      `parse_bass_style` owns the vocabulary and the message.
-    - a combination the left hand cannot accommodate **raises**. It used to fall back
-      to `none` with a warning, and that was the wrong shape for the same reason
-      `resolve_harmony` now raises: `none` is what a caller gets by asking for `none`,
-      so handing it back for a walk the texture cannot carry is a silent
-      substitution. A walking line with gaps in it is worse than no line, so the
-      choice between them is the caller's, and the message names a texture that would
-      work. Losing the *bass* still costs less than losing the tune - that trade is
-      made per beat, by `attach_bass`, where the step survives and the tab says so.
-
-    **The selection is passed rather than the flags derived from it** - the route
-    (`voices_have_soprano`), the comping arity (`len(voices)`), the lone-bass case
-    and the melody-only case are all decided here from the one fact, so the two
-    spellings of one request cannot disagree. Which left-hand shapes an arrangement
-    will generate is decided by the selection, and no texture can express it:
-    `uniform` is a real grip palette on the melody-bearing route and a
-    **meaningless name** on the comping one, where the shapes come from
-    `get_comping_voicings`, and inert a third time over on a melody-only selection,
-    whose shapes are single frets. So this function asks `bass_allowed` about the
-    comping route's capacity when that is the route, the melody-only route's when
-    that is, and the texture's otherwise.
-
-    This is why the call site resolves the melody axis **first**. That ordering is
-    deliberate rather than incidental - see `arrange_progression`, and note that the two
-    resolutions are independent of each other, so swapping them back would only
-    reintroduce the bug. What must not change is that both happen *before*
-    `has_thumb` is read, because that flag gates whether the walked-beat union is built
-    at all.
-    """
-    melody_voiced = parts_have_melody(parts)
-    melody_only = parts_has_melody_only(parts)
-    if bass == BASS_STYLE_AUTO:
-        # A thumb line is a **combination**, not the default (docs/history/parts.md §9): the
-        # shipped answer is no line, and a caller who wants one names a style or a
-        # `bass:walk` grid row. The one sentinel case that still writes one is a
-        # melody-only selection that names the bass part - the tune with a thumb under
-        # it, which is what `parts=melody,bass` means.
-        bass = (
-            BASS_STYLE_WALK
-            if melody_only and parts_have_bass(parts)
-            else BASS_STYLE_NONE
-        )
-    if bass == BASS_STYLE_NONE:
-        return bass
-    parse_bass_style(bass)  # raises on an unknown rule; the style is validated here
-    allowed, reason = bass_allowed(
-        parts,
-        texture,
-        bass,
-        # `None` for the melody-bearing route, so `bass_allowed` asks the route's
-        # own capacity - the melody-only route's, or the texture's palette.
-        # The chord part's arity on the comping one, which is the shape the comping
-        # generator will actually build.
-        None if melody_voiced else derived_arity(texture, parts),
-        parts == (PART_BASS,),
-        melody_only=melody_only,
-    )
-    if not allowed:
-        raise ValueError(reason)
-    return bass
 
 
 def _resolve_parts(parts: str) -> Tuple[str, ...]:
@@ -376,10 +291,10 @@ def resolve_knobs(
     axes = resolve_axes(request, texture, bass, parts, harmony, time_signature)
     resolved, texture, bass = axes.request, axes.texture, axes.bass
     parts, harmony = axes.parts, axes.harmony
-    if texture not in TEXTURE_STYLES:
-        raise ValueError(
-            f"Unknown texture {texture!r}; expected one of {TEXTURE_STYLES}"
-        )
+    # `texture` is the one axis with no sentinel to answer, so this is its whole
+    # resolution: a membership check owned by `texture`, so the vocabulary is
+    # spelled in one module rather than once per caller.
+    texture = parse_texture(texture)
 
     return _Knobs(
         top_strings=top_strings,
@@ -453,9 +368,9 @@ def resolve_policies(
     rather than never at all on an arrangement where the guitar happens to be
     singing.
 
-    **The melody axis comes before `_resolve_bass` because the bass policy needs
+    **The parts axis comes before the bass policy because the bass policy needs
     to know which route the engine is on**, and only this function knows.
-    `bass_allowed` measures thumb capacity against `texture.texture_palette`, which
+    `resolve_bass` measures thumb capacity against `texture.texture_palette`, which
     describes the shapes the melody-bearing route generates and is *inert* on the
     comping one - so asking it about a texture on that route refused a
     combination that is playable and, worse, told the player to change a setting
@@ -479,14 +394,11 @@ def resolve_policies(
     # is the one case that walks. An explicit style overrides both, which is what lets
     # a texture that was never written for a thumb line carry one.
     #
-    # The resolved parts are passed rather than the flags derived from them - the
-    # route, the arity and the lone-bass case are decided inside, from the selection,
-    # so the two spellings of one request cannot disagree.
-    bass = _resolve_bass(
-        texture,
-        bass,
-        parts,
-    )
+    # `resolve_bass` lives in `bass_rules` and takes the resolved `parts` rather than
+    # the flags derived from them - the route, the arity and the lone-bass case are
+    # decided inside from the selection, so the two spellings of one request cannot
+    # disagree.
+    bass = resolve_bass(bass, parts, texture)
     has_thumb = bass != BASS_STYLE_NONE
 
     # The harmony axis, resolved here for the same reason and read only by the

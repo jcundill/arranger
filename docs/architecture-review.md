@@ -139,7 +139,7 @@ or voice-leading logic touched → commit separately.
 |---|---|---|---|
 | 1 | P1 | done | Split `SlotContext` into `SlotTiming`, `SlotHarmony`, `SlotIdentity`, `SlotState` + composed `SlotContext`. All route consumers updated. |
 | 2 | P5 | done | TEST_SEAMS list in `tests/test_structure.py` — 25 private test-to-arranger reaches documented. New `TestTheTestSeams` test class asserts all reaches are recorded and no stale entries remain. |
-| 3 | P3 | planned | Axis resolvers |
+| 3 | P3 | done | Each axis answered by one resolver in the module owning its vocabulary: `resolve_bass` moved to `bass_rules`, `texture.parse_texture` added, `TestTheAxisResolvers` holds the signatures to the dependency table. |
 | 4 | P2 | planned | Facade surfaces |
 | 5 | P4 | planned | Route dispatcher |
 | 6 | P6 | planned | Runtime cycle |
@@ -228,12 +228,81 @@ which fails in both directions:
 
 ---
 
-## Next stages (P2–P7)
+## P3 — Complete: independent axis resolvers (done)
+
+**What changed:**
+
+- **`resolve_bass(bass, parts, texture)` now lives in `bass_rules`.** It owns the
+  note-rule vocabulary (`BASS_RULE_ROLES`), the refusal (`bass_allowed`) and the
+  capacity arithmetic (`derived_arity`, `comping_capacity`), so the axis is
+  answered beside its own tables rather than in the composition module. It takes
+  the resolved `parts` selection rather than the flags derived from it, so the
+  route, the arity and the melody-only case are decided from one fact.
+- **`texture.parse_texture(argument)` is the texture axis's validator.** The
+  refusal it produces existed three times - `texture_arity`, `roles_for_slot` and
+  `resolution.resolve_knobs` - which is three sentences to keep in step. There is
+  now one, in the module that owns `TEXTURE_STYLES`. `texture` has no `*_AUTO`
+  sentinel, because the request always names a style, so the axis is validated
+  rather than resolved.
+- **`resolve_policies` composes, and reads as a composition.** Each line names the
+  axis it answers and the values that answer depends on.
+
+**The dependency graph, as the code states it:**
+
+| axis | answered by | reads |
+|---|---|---|
+| `parts` | `parts.resolve_parts` after `parse_parts` | nothing |
+| `texture` | `texture.parse_texture` | nothing (validated, not resolved) |
+| `harmony` | `harmony.resolve_harmony` | `parts` |
+| `bass` | `bass_rules.resolve_bass` | `parts`, `texture` |
+| `grid` | `grid.resolve_grid` | the metre: `beats_per_bar`, `grouping` |
+
+F3 named four edges; measurement found one. What the review called entanglement
+was mostly the *request's* derivation, which happens before any axis exists:
+
+- **`bass → grid` is not an edge.** The coupling is at the request level:
+  `bass_on` is a rhythm and `bass_notes` a set of note rules, and
+  `options._bass_policy` turns the pair into a policy - a rhythm that never
+  attacks means no line, whatever it was asked to state. Once the request is
+  resolved, the policy string reads neither the grid nor any rhythm.
+- **`texture → parts` and `texture → grouping` are not edges either.**
+  `resolve_request` derives `parts` from the two rhythms, and `grouping` is the
+  metre's; the texture's arity is read later, by the palette, and never feeds
+  back into either.
+- **`harmony → parts` is real**, and so is `bass → parts`; both axes are claims
+  about parts the selection may not take, which is why their refusals name the
+  part that would work.
+
+So the live graph is `parts → {harmony, bass}` plus `texture → bass`: acyclic,
+one source per edge, and now pinned.
+
+**The guard:** `tests/test_structure.py` carries `AXIS_RESOLVERS` (axis → owning
+module and function), `AXIS_DEPENDENCIES` (the argument names that *are* the
+graph) and `TestTheAxisResolvers`, which reads both from the AST and fails in
+both directions - a resolver that moves out of its module, and one that grows a
+dependency its row does not name. The same class asserts that
+`resolve_policies` calls `_resolve_parts` before the three axes that read it: a
+step whose parts happen to be right says nothing about which resolution ran
+first, while a call moved above it is silent in every tab.
+
+**Files touched:**
+
+- `arranger/bass_rules.py` — `resolve_bass` (moved from `resolution`), import order
+- `arranger/texture.py` — `parse_texture`; `texture_arity` and `roles_for_slot` route through it
+- `arranger/resolution.py` — `_resolve_bass` deleted, texture validation delegated, imports pruned, `resolve_policies` docstring corrected (the parts axis, not "the melody axis")
+- `tests/test_structure.py` — `AXIS_RESOLVERS`, `AXIS_DEPENDENCIES`, `POLICY_WIRING`, `TestTheAxisResolvers`
+
+**Verification:**
+- full suite: 1386 tests OK (skipped=2)
+- `ruff check`: 0 errors
+- `pyright`: 0 errors, 0 warnings
+
+---
+
+## Next stages (P2, P4, P6, P7)
 
 | ID | What | Why |
 |---|---|---|
-| P5 | TEST_SEAMS list — make test-to-private coupling explicit | Encapsulation |
-| P3 | Independent axis resolvers in `resolution.py` | DIP, SRP |
 | P2 | Facade surfaces: `arranger.engine`, `arranger.request`, `arranger.render` | ISP |
 | P4 | Route dispatcher extracted from `movement.py` | SRP |
 | P6 | Document / eliminate `arranger ↔ tabstaff` runtime cycle | DIP |

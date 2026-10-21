@@ -28,11 +28,19 @@ only edit this table should ever receive is a decrease.** If a number has to go
 up, that is a decision to state in the commit - which is exactly what a budget
 is for: it makes the decision visible instead of letting it pass quietly.
 
-The other tests here are the two halves of encapsulation. A name another module
+The other tests here are structural rather than numerical. A name another module
 imports is public, whatever its spelling says - and the rule covers the two ways
 to import it: the name itself, and a module alias followed by a private
 attribute. Both allowlists fail in both directions, so a new reach is caught and
 an entry that is no longer used cannot rot there.
+
+The axis graph is the third kind. Each axis is answered by exactly one function,
+in the module that owns its vocabulary, and this file reads those signatures to
+hold them to the dependencies they declare - `parts` reads nothing, `harmony` and
+`bass` read `parts`, and `bass` also reads the texture, while `grid` reads the
+metre's count and grouping rather than another axis. A signature is the one place
+an implicit dependency cannot hide, which is why the table below is asserted
+against the AST rather than promised in a docstring.
 """
 
 from __future__ import annotations
@@ -530,6 +538,119 @@ class TestTheTestSeams(unittest.TestCase):
             [],
             "TEST_SEAMS names a reach that no longer exists - delete the entry",
         )
+
+
+#: Where each axis is answered, and what its resolver is allowed to read.
+#:
+#: `module.function` is the one place the axis is resolved, and it lives beside
+#: the vocabulary rather than beside the composition: `resolution` wires the
+#: answers together, but it does not own the words. The parameter names **are**
+#: the dependency graph, so a resolver that quietly grows a `grid` argument is a
+#: change to this table rather than an extra keyword nobody reviewed.
+AXIS_RESOLVERS: Dict[str, Tuple[str, str]] = {
+    "parts": ("parts", "resolve_parts"),
+    "texture": ("texture", "parse_texture"),
+    "harmony": ("harmony", "resolve_harmony"),
+    "bass": ("bass_rules", "resolve_bass"),
+    "grid": ("grid", "resolve_grid"),
+}
+
+AXIS_DEPENDENCIES: Dict[str, Tuple[str, ...]] = {
+    "parts": ("parts",),
+    "texture": ("argument",),
+    "harmony": ("harmony", "parts"),
+    "bass": ("bass", "parts", "texture"),
+    "grid": ("grid", "beats_per_bar", "grouping"),
+}
+
+#: The wiring `resolution.resolve_policies` calls, in the order the axes depend.
+#: `_resolve_parts` first because the other three read its answer: `bass` measures
+#: the thumb against the route the selection names, and `harmony` picks its degree
+#: order from whether the guitar sings.
+POLICY_WIRING: Tuple[str, ...] = (
+    "_resolve_parts",
+    "resolve_bass",
+    "_resolve_harmony",
+    "_resolve_grid",
+)
+
+
+def _top_level_function(path: Path, name: str) -> FunctionNode:
+    """The function `name` as `path` defines it in its module body."""
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == name:
+            return node
+    raise AssertionError(f"{_relative(path)} does not define {name}")
+
+
+def _parameter_names(node: FunctionNode) -> Tuple[str, ...]:
+    """The words `node`'s signature asks its caller for, in order."""
+    args = node.args
+    positional = [argument.arg for argument in args.posonlyargs + args.args]
+    if positional and positional[0] in ("self", "cls"):
+        positional = positional[1:]
+    return tuple(positional) + tuple(argument.arg for argument in args.kwonlyargs)
+
+
+def _call_lines(node: FunctionNode) -> Dict[str, int]:
+    """Where `node` first calls each bare function name, keyed by that name."""
+    lines: Dict[str, int] = {}
+    for child in ast.walk(node):
+        if isinstance(child, ast.Call) and isinstance(child.func, ast.Name):
+            lines.setdefault(child.func.id, child.lineno)
+    return lines
+
+
+class TestTheAxisResolvers(unittest.TestCase):
+    """Each axis is answered where its vocabulary lives, from named dependencies.
+
+    The axes were once resolved by one function, so `harmony=` could not be
+    reasoned about - or tested - without `parts`, `grid` and the metre in view,
+    and the dependency between two of them was prose rather than a signature.
+    These two tests are the shape of the repair, and they fail in both
+    directions: a resolver that moves away from its module, and one that grows a
+    dependency its table row does not name.
+    """
+
+    def test_each_axis_is_resolved_by_its_own_module(self):
+        """The resolver's home is the axis's home, and its parameters are its deps."""
+        for axis, (module, function) in AXIS_RESOLVERS.items():
+            with self.subTest(axis=axis):
+                node = _top_level_function(ENGINE / f"{module}.py", function)
+                self.assertEqual(
+                    _parameter_names(node),
+                    AXIS_DEPENDENCIES[axis],
+                    f"{module}.{function} reads more or less than the "
+                    f"{axis} axis declares - update AXIS_DEPENDENCIES if the "
+                    "dependency is real, or drop the parameter",
+                )
+
+    def test_the_composition_resolves_parts_before_the_axes_that_read_it(self):
+        """`resolution` wires the axes in dependency order, not in call-site order.
+
+        Read off the call sites rather than an arrangement's answer: a step whose
+        parts happen to be right says nothing about which resolution ran first,
+        while a call moved above `_resolve_parts` is visible here and silent in
+        every tab.
+        """
+        lines = _call_lines(
+            _top_level_function(ENGINE / "resolution.py", "resolve_policies")
+        )
+        missing = [name for name in POLICY_WIRING if name not in lines]
+        self.assertEqual(
+            missing,
+            [],
+            "resolve_policies no longer wires an axis - an axis resolved per slot "
+            "is a band that changes halfway through a tune",
+        )
+        for axis in POLICY_WIRING[1:]:
+            with self.subTest(axis=axis):
+                self.assertLess(
+                    lines["_resolve_parts"],
+                    lines[axis],
+                    f"{axis} is resolved before parts, which it reads",
+                )
 
 
 def _top_level_bindings(path: Path) -> Iterator[Tuple[str, int]]:

@@ -11,8 +11,8 @@ from __future__ import annotations
 from typing import Dict, FrozenSet, List, Optional, Sequence, Tuple
 
 from .grip_tables import GRIP_STRING_SETS, comping_string_sets
-from .parts import PART_NAMES, parts_have_bass
-from .texture import TEXTURE_STYLES, texture_palette
+from .parts import PART_BASS, PART_NAMES, parts_has_melody_only, parts_have_bass, parts_have_melody
+from .texture import TEXTURE_STYLES, derived_arity, texture_palette
 from .tuning import ROLE_FILL, ROLE_TARGET
 
 # --- Walking bass ---
@@ -355,6 +355,64 @@ def bass_allowed(
         if free < 1:
             return False, _no_room_reason(texture, role)
     return True, ""
+
+
+def resolve_bass(
+    bass: str,
+    parts: Tuple[str, ...],
+    texture: str,
+) -> str:
+    """The bass style to actually run: `auto` resolved, then validated.
+
+    Three outcomes, in the order they are decided:
+
+    - `auto` resolves to **no line**, which is the shipped answer: a caller who
+      wants one names the note rules. The one selection that writes a line is a
+      melody-only selection that also names the bass part - `parts="melody,bass"`
+      is the tune with a thumb under it. A `parts="bass"` selection alone is **not**
+      melody-only (it has no tune) and keeps no thumb: that part already is the bass
+      line, and a thumb under it would double it.
+    - an unknown rule raises. A spelling nobody recognises is a question, and
+      answering it by defaulting to a walk would put a line under an arrangement that
+      did not ask for one; `parse_bass_style` owns the vocabulary and the message.
+    - a combination the left hand cannot carry **raises**, naming a texture that
+      would work. `none` is what a caller gets by asking for `none`, so handing it
+      back for a walk the hand cannot accommodate would be a silent substitution, and
+      a walking line with gaps in it is worse than no line. Losing the *bass* still
+      costs less than losing the tune - that trade is made per beat by
+      `attach_bass`, where the step survives and the tab says so.
+
+    Takes the resolved `parts` rather than the flags derived from them: the route,
+    the comping arity and the lone-bass case are decided here from the one selection,
+    so two spellings of one request cannot disagree. Which capacity question is
+    asked is `bass_allowed`'s business - the comping generator's on that route, the
+    melody-only route's on its own, and the texture's palette otherwise, since
+    `uniform` is a real palette on the melody-bearing route and a meaningless name on
+    the comping one.
+    """
+    melody_voiced = parts_have_melody(parts)
+    melody_only = parts_has_melody_only(parts)
+
+    if bass == BASS_STYLE_AUTO:
+        bass = (
+            BASS_STYLE_WALK
+            if melody_only and parts_have_bass(parts)
+            else BASS_STYLE_NONE
+        )
+    if bass == BASS_STYLE_NONE:
+        return bass
+    parse_bass_style(bass)  # raises on an unknown rule
+    allowed, reason = bass_allowed(
+        parts,
+        texture,
+        bass,
+        None if melody_voiced else derived_arity(texture, parts),
+        parts == (PART_BASS,),
+        melody_only=melody_only,
+    )
+    if not allowed:
+        raise ValueError(reason)
+    return bass
 
 
 def _comping_no_room_reason(notes: int, bass_voice: bool) -> str:

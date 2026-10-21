@@ -122,6 +122,23 @@ def families_up_to_with_thin(arity: int) -> Tuple[str, ...]:
     ) + tuple(name for name, size in THIN_ENTRIES.items() if size <= arity)
 
 
+def parse_texture(argument: str) -> str:
+    """A `texture` argument as one of `TEXTURE_STYLES`, or a refusal naming them.
+
+    The vocabulary and its message belong to the module that owns the axis, so the
+    three callers that ask whether a style exists - `texture_arity`,
+    `roles_for_slot` and `resolution` - share one sentence instead of keeping
+    three in step. It is a **validator rather than a resolver**: `texture` is the
+    one axis with no `*_AUTO` sentinel, because the request always names a style,
+    so there is nothing here to answer and only a spelling to check.
+    """
+    if argument not in TEXTURE_STYLES:
+        raise ValueError(
+            f"Unknown texture {argument!r}; expected one of {TEXTURE_STYLES}"
+        )
+    return argument
+
+
 def texture_arity(texture: str, parts: Tuple[str, ...]) -> Optional[int]:
     """The chord part's arity under this texture, or `None` for "derived".
 
@@ -134,11 +151,7 @@ def texture_arity(texture: str, parts: Tuple[str, ...]) -> Optional[int]:
     Raises `ValueError` for a texture outside `TEXTURE_STYLES`, before any voicing
     work, so a typo cannot cost a caller a full arrangement before it is reported.
     """
-    if texture not in TEXTURE_ARITY:
-        raise ValueError(
-            f"Unknown texture {texture!r}; expected one of {TEXTURE_STYLES}"
-        )
-    return TEXTURE_ARITY[texture]
+    return TEXTURE_ARITY[parse_texture(texture)]
 
 
 def derived_arity(
@@ -289,10 +302,7 @@ def roles_for_slot(
     Both arguments are ignored by every other texture, so `uniform` and `targets`
     stay byte-identical.
     """
-    if texture not in TEXTURE_ARITY:
-        raise ValueError(
-            f"Unknown texture {texture!r}; expected one of {TEXTURE_STYLES}"
-        )
+    texture = parse_texture(texture)
     if (
         texture in ("uniform", "chord1", "chord2", "chord3")
         and not (has_thumb and melody_only)
