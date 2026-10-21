@@ -8,8 +8,8 @@
 
 Based on reading the repository layout, AGENTS.md, docs/engine.md,
 docs/renderers.md, docs/dependency-dag.md, and the engine modules listed in the
-routing table, plus the structural tests (`test_package_dag.py`,
-`test_structure.py`, `test_front_end_dag.py`).
+routing table, plus the structural tests (`meta_package_dag.py`,
+`meta_structure.py`, `meta_front_end_dag.py`).
 
 The strongest asset is the Phase 5 package refactor: a 4,290-line monolith is now
 ~30 modules in a strict dependency DAG, enforced mechanically by an AST test.
@@ -151,10 +151,10 @@ or voice-leading logic touched → commit separately.
 | Stage | ID | Status | Notes |
 |---|---|---|---|
 | 1 | P1 | done | Split `SlotContext` into `SlotTiming`, `SlotHarmony`, `SlotIdentity`, `SlotState` + composed `SlotContext`. All route consumers updated. |
-| 2 | P5 | done | TEST_SEAMS list in `tests/test_structure.py` — 25 private test-to-arranger reaches documented. New `TestTheTestSeams` test class asserts all reaches are recorded and no stale entries remain. |
+| 2 | P5 | done | TEST_SEAMS list in `tests/meta_structure.py` — 25 private test-to-arranger reaches documented. New `TestTheTestSeams` test class asserts all reaches are recorded and no stale entries remain. |
 | 3 | P3 | done | Each axis answered by one resolver in the module owning its vocabulary: `resolve_bass` moved to `bass_rules`, `texture.parse_texture` added, `TestTheAxisResolvers` holds the signatures to the dependency table. |
 | 4 | P2 | done | The facade's bulk was demo code, not names: `main()` (151 lines, complexity 14) moved to `arranger.demo`, re-exported so `arranger.main`, the console script and `python -m arranger` are unchanged. Facade 695 → 543 lines, `__init__` budget 14/151 → 2/5. |
-| 5 | P4 | done | The dispatch left `movement` as `route_dispatch`: a frozen `Route(name, claims, emit)` and an ordered five-entry `ROUTES`, with `dispatch_step` asking each in turn. The order is now data, pinned by `tests/test_route_dispatch.py`, which also drives every entry from a request a caller can ask for and pins each request to the entry it must land in. `movement` 247 → 160 lines, 8 → 3 functions, 11 → 9 imports; demo output byte-identical against a worktree of the previous commit. |
+| 5 | P4 | done | The dispatch left `movement` as `route_dispatch`: a frozen `Route(name, claims, emit)` and an ordered five-entry `ROUTES`, with `dispatch_step` asking each in turn. The order is now data, pinned by `tests/meta_route_dispatch.py`, which also drives every entry from a request a caller can ask for and pins each request to the entry it must land in. `movement` 247 → 160 lines, 8 → 3 functions, 11 → 9 imports; demo output byte-identical against a worktree of the previous commit. |
 | 6 | P6 | done | The `arranger ↔ tabstaff` cycle measured inert in both directions and pinned by `TestTheRuntimeCycle`; the module-scope rule widened from the facade to the package. Two docstrings and `docs/renderers.md` had claimed an eager import "would fail to find the names" - it does not, and now a test says so. |
 | 7 | P7 | done | `voicing_cost` takes one `SelectionCriteria` and returns a `VoicingScore` - a `tuple` subclass with 7 named fields, so comparison and `min` are unchanged. The field order is asserted once (not twenty times), the labels and the span/partition indices are derived from `_fields`, and the public `VoiceLeadingEngine.voicing_cost` takes the criteria object. `best_voicing` is now a builder of criteria over the one argmin, `best_voicing_for`. 29 test call sites moved from positional indices to field names; suite 1393 → 1395. |
 
@@ -186,7 +186,7 @@ or voice-leading logic touched → commit separately.
 
 **Verification:**
 - All modules import cleanly
-- 799 tests pass across `test_progressions`, `test_comping`, `test_request`, `test_lone_bass`, `test_explanations`, `test_chord_fills`, `test_non_chord_tones`, `test_chord_attack`, `test_bass_hold`, `test_durations`, `test_bass_placement`, `test_bass_positions`, `test_harmony`, `test_parts`, `test_grid`, `test_grip_selection`, `test_grips`, `test_palette`, `test_fretboard`, `test_grouping`, `test_front_end_dag`, `test_package_dag`, `test_structure`, `test_fingers`, `test_placement`, `test_generated_grips`, `test_voicings`, `test_bass`, `test_chord_parser`, `test_html_rendering`
+- 799 tests pass across `test_progressions`, `test_comping`, `test_request`, `test_lone_bass`, `meta_explanations`, `test_chord_fills`, `test_non_chord_tones`, `test_chord_attack`, `test_bass_hold`, `test_durations`, `test_bass_placement`, `test_bass_positions`, `test_harmony`, `test_parts`, `test_grid`, `test_grip_selection`, `test_grips`, `test_palette`, `test_fretboard`, `test_grouping`, `meta_front_end_dag`, `meta_package_dag`, `meta_structure`, `test_fingers`, `test_placement`, `test_generated_grips`, `test_voicings`, `test_bass`, `test_chord_parser`, `test_html_rendering`
 - `ruff check`: 0 errors
 - `pyright`: 0 errors, 0 warnings on changed files
 
@@ -196,7 +196,7 @@ or voice-leading logic touched → commit separately.
 
 **What changed:**
 
-Added `TEST_SEAMS: Set[str]` to `tests/test_structure.py`, documenting every
+Added `TEST_SEAMS: Set[str]` to `tests/meta_structure.py`, documenting every
 private name a test file imports from an arranger module. Each entry is
 `test_module -> arranger.module._private_name`, the same shape the encapsulation
 meter uses for library modules.
@@ -206,7 +206,7 @@ meter uses for library modules.
 | Test file | Private names reached |
 |---|---|
 | `test_palette` | `arranger.annotation._criterion_phrase` |
-| `test_explanations` | `arranger.annotation._omission_clause` |
+| `meta_explanations` | `arranger.annotation._omission_clause` |
 | `test_bass` | `arranger.bass._bass_harmony`, `arranger.bass._walking_bass_line`, `arranger.bass_rules._comping_no_room_reason` |
 | `test_walking_bass` | `arranger.bass._melody_in_force`, `arranger.bass._melody_timeline` |
 | `test_comping` | `arranger.grips._comping_palette`, `arranger.grips._search_comping_voicings` |
@@ -232,10 +232,10 @@ which fails in both directions:
 
 **Files touched:**
 
-- `tests/test_structure.py` — added `TEST_SEAMS`, `_test_files`, `_test_private_imports`, `TestTheTestSeams`
+- `tests/meta_structure.py` — added `TEST_SEAMS`, `_test_files`, `_test_private_imports`, `TestTheTestSeams`
 
 **Verification:**
-- `tests.test_structure`: all 8 tests pass (including the new one)
+- `tests.meta_structure`: all 8 tests pass (including the new one)
 - `ruff check`: 0 errors
 - `pyright`: 0 errors, 0 warnings
 
@@ -289,7 +289,7 @@ was mostly the *request's* derivation, which happens before any axis exists:
 So the live graph is `parts → {harmony, bass}` plus `texture → bass`: acyclic,
 one source per edge, and now pinned.
 
-**The guard:** `tests/test_structure.py` carries `AXIS_RESOLVERS` (axis → owning
+**The guard:** `tests/meta_structure.py` carries `AXIS_RESOLVERS` (axis → owning
 module and function), `AXIS_DEPENDENCIES` (the argument names that *are* the
 graph) and `TestTheAxisResolvers`, which reads both from the AST and fails in
 both directions - a resolver that moves out of its module, and one that grows a
@@ -303,7 +303,7 @@ first, while a call moved above it is silent in every tab.
 - `arranger/bass_rules.py` — `resolve_bass` (moved from `resolution`), import order
 - `arranger/texture.py` — `parse_texture`; `texture_arity` and `roles_for_slot` route through it
 - `arranger/resolution.py` — `_resolve_bass` deleted, texture validation delegated, imports pruned, `resolve_policies` docstring corrected (the parts axis, not "the melody axis")
-- `tests/test_structure.py` — `AXIS_RESOLVERS`, `AXIS_DEPENDENCIES`, `POLICY_WIRING`, `TestTheAxisResolvers`
+- `tests/meta_structure.py` — `AXIS_RESOLVERS`, `AXIS_DEPENDENCIES`, `POLICY_WIRING`, `TestTheAxisResolvers`
 
 **Verification:**
 - full suite: 1386 tests OK (skipped=2)
@@ -347,7 +347,7 @@ import paths to keep in step and would not remove a line of printing; removing
 So `main()` lives in **`arranger.demo`** and `__init__` re-exports it:
 
 - `arranger.main` is still `arranger.demo.main` - *identity*, not a copy - which
-  `tests/test_package_dag.py::test_the_facade_reexports_the_public_surface` pins
+  `tests/meta_package_dag.py::test_the_facade_reexports_the_public_surface` pins
   beside the other re-exports. The console script (`arranger:main`), `__main__.py`
   and the three `arranger.main()` tests in `tests/test_cli.py` are untouched;
 - `demo` sits **last** in the declared order: it imports `steps` and `render` and
@@ -392,7 +392,7 @@ imported until the facade has finished; `demo.main()`'s and `cli`'s function-loc
 imports are what keep them clear of that.
 
 **What changed.** The three claims became one test class rather than prose:
-`tests/test_front_end_dag.py::TestTheRuntimeCycle` measures the facade's laziness and
+`tests/meta_front_end_dag.py::TestTheRuntimeCycle` measures the facade's laziness and
 the front ends' independence of it, and the module-scope rule was widened from the
 facade alone to the whole package, since `cli` was the second module that could have
 taken that edge. The two false docstrings were corrected - `tabstaff`'s module
@@ -436,7 +436,7 @@ shape, and each is now a test rather than a comment:
 
 The reachability half is the part a table can get wrong in a way a chain cannot: an
 entry whose claim no request can satisfy is a branch nobody sees. `CASES` in
-`tests/test_route_dispatch.py` is one request per entry, read from the table's own
+`tests/meta_route_dispatch.py` is one request per entry, read from the table's own
 names, so an entry **added** but never fired fails one test, and an entry
 **deleted** or a claim **broadened** fails the other - the request lands in the
 wrong route. Both directions were checked by mutating `ROUTES` in a scratch run:
@@ -505,4 +505,12 @@ All seven stages landed: P1, P2, P3, P4, P5, P6, P7. What is left of the review'
 findings is the pair it deliberately did **not** stage - F8 (the explanation
 invariant) and F10 (`grips.py`'s size) - both of which are covered by the standing
 tests and the recipes in `AGENTS.md` rather than by a refactor.
+
+**Postscript - the structural tests are now a half of the suite you can run on its
+own.** Everything this review calls structural is a `tests/meta_*.py` module, and the
+music is `tests/test_*.py`: `make test-features`, `make test-meta`, and `make test`
+running both. The split is by filename, so there is no list to keep in step, and
+`tests/meta_structure.py::TestTheSplit` fails on a module that matches neither - the
+one way a pattern-based gate could quietly stop running something. The rule for where
+a new test goes is in `AGENTS.md` §"The gate".
 

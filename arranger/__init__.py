@@ -17,7 +17,7 @@ dependency order, and nothing above imports anything below it by accident:
 left-hand fingering module of `docs/history/fingering.md`, and `bass_place` is the one engine
 reader that reaches it - it calls `fingers.can_fret` for the four-fret budget of a merged
 `bass_only` step, which is why the facade binds the module. `tests/test_fingers.py` holds
-that caller set. It is in `test_package_dag.ORDER`, because a module missing from that
+that caller set. It is in `meta_package_dag.ORDER`, because a module missing from that
 list is unconstrained by the layering.
 
 `demo` holds `main()` - the built-in demonstration and the `head` hand-off - and sits
@@ -300,7 +300,7 @@ __version__ = "0.12.0"
 # and the tests use - without a lazy import at every call site. `demo.main()`'s
 # `headxml` import is the same discipline and not the same reason: `headxml` names
 # this module's public surface, so it *cannot* be imported until this module has
-# finished. `tests/test_front_end_dag.py::TestTheRuntimeCycle` holds both halves.
+# finished. `tests/meta_front_end_dag.py::TestTheRuntimeCycle` holds both halves.
 _TABSTAFF_EXPORTS = {
     # name -> the module it lives in. The MusicXML and Guitar Pro renderers live in
     # `tabxml` and `tabgp`, which `tabstaff` re-exports, so resolving them through

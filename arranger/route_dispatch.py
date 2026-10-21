@@ -13,7 +13,7 @@ the comp, and for the same reason: a texture that cannot be filled and a chord
 position with nothing to state must not cost the tune its chord, so the next entry
 is asked instead. That fall-through is what the order is for.
 
-`tests/test_route_dispatch.py` holds the order, and measures that each entry fires
+`tests/meta_route_dispatch.py` holds the order, and measures that each entry fires
 on a progression a caller can ask for - an entry that no request can reach is a
 branch nobody can see.
 """
@@ -174,7 +174,7 @@ def _emit_melody(
 #: before `comping` keeps the thumb's own slot from being read as a chord position;
 #: `texture_fill` before `melody_bearing` is what stops a fill from being voiced as
 #: a chord; `no_chord` before `comping` is what keeps an `NC` bar from being
-#: reharmonised. `tests/test_route_dispatch.py` pins the sequence.
+#: reharmonised. `tests/meta_route_dispatch.py` pins the sequence.
 ROUTES: Tuple[Route, ...] = (
     Route("no_upper_voices", _claims_no_upper_voices, _emit_no_upper_voices),
     Route("texture_fill", _claims_texture, _emit_texture_fill),

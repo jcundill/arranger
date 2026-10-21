@@ -2,8 +2,8 @@
 
 The tree has two enforced dependency graphs: the `arranger` package, and the
 top-level modules beside it. This document draws their shape. It is a **reading**,
-not a check: the source of truth is `ORDER` in `tests/test_package_dag.py` and
-`ALLOWED_FRONT_EDGES` in `tests/test_front_end_dag.py`, and those tests fail when
+not a check: the source of truth is `ORDER` in `tests/meta_package_dag.py` and
+`ALLOWED_FRONT_EDGES` in `tests/meta_front_end_dag.py`, and those tests fail when
 the code stops matching them. Nothing compares this file with the tree.
 
 An arrow means **"imports"**: `A --> B` is an import of `B` by `A`, whether it is
@@ -219,7 +219,7 @@ So the loop is a cycle on paper only, in the direction the code takes it: neithe
 side waits for the other, because the front ends need `tuning` and the facade's
 edge is taken *after* the facade is complete. The one ordering that would break is
 a front end imported **during** the facade's own initialisation, and `headxml`
-above is that case made visible. `tests/test_front_end_dag.py::TestTheRuntimeCycle`
+above is that case made visible. `tests/meta_front_end_dag.py::TestTheRuntimeCycle`
 holds each row of the table.
 
 **Eliminating the loop is not worth what it costs.** The only edge that could go is

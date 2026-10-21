@@ -194,7 +194,7 @@ you whether a change is an improvement or a different library.
   where the choice was made: a hold does not repeat its shape's count. Both are *derived
   clauses* in `annotation._annotate`, never branches at a return site, because a fact written as a
   branch is a fact some route will not print — which is precisely how 22 transposed steps lost
-  their substitute chord and 2 holds lost their octave. `tests/test_explanations.py` holds the
+  their substitute chord and 2 holds lost their octave. `tests/meta_explanations.py` holds the
   whole invariant as a table of (decision, when this step is one of those, what the line must
   say), swept over every committed head from the step's **fields** rather than from the
   wording; `AGENTS.md` states the rule an editor must follow when adding a choice.
@@ -406,7 +406,7 @@ asked in order. A route may claim a slot and then **decline** it - the texture f
 and the comp are the two that can - and the next entry is asked instead, so the
 order is the contract rather than the set. The last entry claims every slot, which
 is what makes "exactly one step per slot" structural rather than a property to check;
-`tests/test_route_dispatch.py` pins the order and drives each entry from a request a
+`tests/meta_route_dispatch.py` pins the order and drives each entry from a request a
 caller can ask for.
 
 The four handlers other than `harmonised_step` live in **`routes.py`**. That one -

@@ -1,6 +1,6 @@
 """The top-level front ends form a DAG too, and this is what holds them to it.
 
-`tests/test_package_dag.py` covers the engine package. The modules beside it are
+`tests/meta_package_dag.py` covers the engine package. The modules beside it are
 not in that order, so their imports were unconstrained: a renderer could import
 another renderer, or the facade could import one at module scope, and nothing
 failed. This test closes that gap with the same shape as the package rule - the

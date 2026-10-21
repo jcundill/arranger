@@ -13,7 +13,7 @@ the one the chord asks for" - and it reads the bass off a symbol with a general
 pattern rather than a Weimar one, so `A-/G` means the same thing wherever it came
 from.
 
-Ordering note for `tests/test_package_dag.py`: this module sits after `steps`
+Ordering note for `tests/meta_package_dag.py`: this module sits after `steps`
 (it constructs `VoiceLeadingEngine`) and imports nothing from `render` or `cli`,
 so it needs no entry in `ALLOWED_EDGES`.
 """
@@ -222,7 +222,7 @@ def arrange_slots(
     # **The substitution must be applied before the slot's role is computed.** Under
     # `targets` the role does not read the harmony, so the order would not show; on a
     # walked route it does, so reordering this would move the walk's roles.
-    # `tests/test_step_loop_equivalence.py` is the standing check that the two entry
+    # `tests/meta_step_loop_equivalence.py` is the standing check that the two entry
     # points still agree.
     unresolved = unresolved_steps(list(triples), options.non_chord_tone, onsets)
     retry = set(unresolved) if fallback == "diminished" else set()

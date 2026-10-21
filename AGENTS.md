@@ -21,12 +21,12 @@ gate and the conventions — not the explanation.
 | how a shape is placed on its strings — a family that *searches* versus one that computes a layout, `Placement`, `candidate`, the placement memo (`search_shape` / `_searched_shape` / `place_shape`) | [docs/history/generated-grips.md](docs/history/generated-grips.md) §4 | `arranger/grip_place.py`, `arranger/grips.py`, `tests/test_placement.py` |
 | where a **lone note** is fretted — a fill, an `NC` bar, a rescued melody, a span demotion (`get_melody_only_voicings`, `_melody_alone_shape`) | [docs/engine.md](docs/engine.md) | `arranger/grips.py`, `arranger/melody_alone.py`, `arranger/routes.py`, `tests/test_non_chord_tones.py` |
 | which chord tones a shape states — `TONE_PRIORITY`, the tone a four-voice shape gives up, the palette a melody with no degree to match is offered, or the order that was not taken | [docs/history/generated-grips.md](docs/history/generated-grips.md) | `arranger/grip_tables.py` (`TONE_PRIORITY`, `stated_tones`), `arranger/grips.py` (`drop2_template_for`, `_drop2_palette`), `tests/test_generated_grips.py`, `tests/support.py` (`WITNESS`) |
-| the trailing annotation a step carries, why a shape is thin, or what **must** be explained when a choice is added (`ArrangementStep.palette`, `cost.VOICING_COST_CRITERIA`, `tests/test_explanations.py`) | [docs/engine.md](docs/engine.md) | `arranger/annotation.py`, `arranger/render.py`, `arranger/movement.py` |
+| the trailing annotation a step carries, why a shape is thin, or what **must** be explained when a choice is added (`ArrangementStep.palette`, `cost.VOICING_COST_CRITERIA`, `tests/meta_explanations.py`) | [docs/engine.md](docs/engine.md) | `arranger/annotation.py`, `arranger/render.py`, `arranger/movement.py` |
 | `texture=`, target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/texture.py`, `arranger/routes.py`, `arranger/bass_rules.py`, `arranger/bass_place.py`, `arranger/bass.py`, `arranger/decisions.py` |
 | non-chord melody notes, a new chord quality | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` |
-| the step loop, `arrange_progression`, or **which route takes a slot** | [docs/engine.md](docs/engine.md) | `arranger/movement.py`, `arranger/route_dispatch.py`, `arranger/harmonised_route.py`, `arranger/step_prepare.py`, `arranger/resolution.py`, `arranger/slot_plan.py`, `tests/test_route_dispatch.py` |
+| the step loop, `arrange_progression`, or **which route takes a slot** | [docs/engine.md](docs/engine.md) | `arranger/movement.py`, `arranger/route_dispatch.py`, `arranger/harmonised_route.py`, `arranger/step_prepare.py`, `arranger/resolution.py`, `arranger/slot_plan.py`, `tests/meta_route_dispatch.py` |
 | a step route's arguments - `SlotContext`, one slot's request as a value rather than twenty parameters | [docs/engine.md](docs/engine.md) | `arranger/context.py`, `arranger/movement.py`, `arranger/harmonised_route.py`, `arranger/routes.py` |
-| tab staff, HTML, MusicXML, GP5, or the MusicXML importer — or **which module may import which**, including the `arranger ↔ tabstaff` loop and why it is inert | [docs/renderers.md](docs/renderers.md), and [docs/dependency-dag.md](docs/dependency-dag.md) | `tabscore.py`, `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py`, `tests/test_front_end_dag.py` |
+| tab staff, HTML, MusicXML, GP5, or the MusicXML importer — or **which module may import which**, including the `arranger ↔ tabstaff` loop and why it is inert | [docs/renderers.md](docs/renderers.md), and [docs/dependency-dag.md](docs/dependency-dag.md) | `tabscore.py`, `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py`, `tests/meta_front_end_dag.py` |
 | an imported head's **repeats, volta endings or jumps** — why it is longer than the file's measure count, or the `|:` / `:|` / `1.` / `2.` / `D.C.` / `D.S.` / `Coda` / `Fine` the writers draw | [docs/renderers.md](docs/renderers.md) | `headxml.py` (`_parse_barline`, `_parse_direction`, `_parse_sound`, `_expand_play_order`, `expand_repeats`, `BarInstruction`, `BarMarker`, `Head.markers`, `HeadNote.written_bar`); each writer's `markers=` parameter |
 | the slot layer: triples to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
 | the **request** — `--chord-on`, `--bass-on`, `--chord-notes`, `--bass-notes`, `--chord-fills`, `--no-melody` — or a new one, and how a request becomes the axes (`Rhythm`, `parse_rhythm`, `felt_beat`, the refusals) | [docs/history/rhythm-request.md](docs/history/rhythm-request.md), and [docs/engine.md](docs/engine.md) §"The request, and the six axes under it" | `arranger/options.py` (`Request`, `resolve_request`, `format_request`), `arranger/grid.py` (`Rhythm`, `parse_rhythm`, `felt_beat`), `arranger/cli.py`, `tests/test_rhythm.py`, `tests/test_request.py` |
@@ -53,7 +53,7 @@ frozen like the rest; it is not a home for an open plan. Nine are retired there:
 halves are now stated in [docs/engine.md](docs/engine.md) — `voices-axis.md`, `one-fact.md`,
 `parts.md`, `generated-grips.md`, `comping-styles.md` and `fingering.md`; `restructuring.md`,
 the round-2 plan, whose live half is the module map below and the budget table in
-`tests/test_structure.py`; and `rhythm-request.md`, the rhythm-first request, whose live
+`tests/meta_structure.py`; and `rhythm-request.md`, the rhythm-first request, whose live
 half is the flag table in [README.md](README.md), the request-to-axes mapping in
 `docs/engine.md` and the four renderers' agreement in
 [docs/renderers.md](docs/renderers.md). Each of the plan documents carries a retirement
@@ -66,9 +66,32 @@ thing to read before quoting one.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1395 tests OK (skipped=2)**, pyright **0 errors 0 warnings**,
-ruff **0 errors**. If your change moves any of those numbers, that is the signal — not
-the absence of an error message. A quiet run is not evidence; a moved count is.
+Current measured state: **1314 feature + 83 meta tests OK (skipped=2)**, pyright
+**0 errors 0 warnings**, ruff **0 errors**. If your change moves any of those numbers, that
+is the signal — not the absence of an error message. A quiet run is not evidence; a moved
+count is.
+
+**The suite is two halves, and the filename is the half.** `make test` runs both, in two
+`discover` invocations, because unittest filters by one basename pattern and cannot
+exclude one:
+
+```bash
+make test-features   # tests/test_*.py   - the music: the inner loop
+make test-meta       # tests/meta_*.py   - the tree: before committing
+make test-one M=tests.test_texture       # named modules: the fastest loop
+```
+
+A test about the **music** is `test_*.py`; a test about the **tree** — the module graph,
+the budgets, the private seams, the generated chart, the fixture corpus, the extras'
+laziness, the explanation contract — is `meta_*.py`. **When in doubt it is `test_*.py`**,
+because that half runs first, so a mis-filed test is seen early rather than never.
+`tests/meta_structure.py::TestTheSplit` fails on a module matching neither pattern, which
+is the only way a pattern-based gate could go quiet, and `test` running both is what keeps
+the split a way *in* rather than a smaller gate. The split is a reading aid, not a speed
+fix: **83 of 1397 tests are meta**, and the minutes are in the four feature modules that
+sweep every quality or every committed head (`test_comping`, `test_fingers`,
+`test_musicxml`, `meta_explanations`) — so `make test-one` on the module you are touching
+is the loop that actually saves time.
 
 **A public request in front of the six axes.** `head` asks six questions - who plays the
 tune, when each accompaniment layer attacks, what each states, and what the chord does in a
@@ -157,7 +180,7 @@ class definition on 3.11.
 Individually:
 
 ```bash
-make test        # .venv/bin/python -m unittest discover -s tests -t . -v
+make test        # both halves: test-features then test-meta
 make typecheck   # pyright, with --pythonpath so it can see the venv
 make lint        # ruff
 make demo        # the built-in demonstration arrangements
@@ -209,7 +232,7 @@ arranger/
 ├── tabgp.py             # Guitar Pro 5 export (optional extra: PyGuitarPro)
 ├── headxml.py           # MusicXML import: a melody + chord symbols
 ├── grip_chart.py        # generates common_grips.md from the engine's tables
-├── tests/               # unittest, one file per concern, + support.py
+├── tests/               # unittest: `test_*.py` is the music, `meta_*.py` the tree
 │   └── data/            # committed MusicXML fixtures (music21, MuseScore, ours)
 ├── docs/                # the documents the routing table above points at
 ├── pyproject.toml       # PEP 621 + PEP 639 metadata (setuptools backend)
@@ -257,17 +280,17 @@ tuning -> fingers   (step 1 of docs/history/fingering.md; `bass_place` reads can
 ```
 
 A module may import only what is *below* it, and
-**`tests/test_package_dag.py` asserts that from the AST** — so the layering cannot
+**`tests/meta_package_dag.py` asserts that from the AST** — so the layering cannot
 erode one "temporary" import at a time. Read its `ORDER` list before adding a module.
 `ALLOWED_EDGES` in that file is the escape hatch: each entry there must justify itself
 in a comment. It is **empty** now, and an entry that no longer permits an import fails,
 so permission cannot outlive the code it was granted for.
 
-The same discipline has two other checks. **`tests/test_structure.py`** fails a module
+The same discipline has two other checks. **`tests/meta_structure.py`** fails a module
 that reaches a sibling's `_`-prefixed name either by importing it or through a module
 alias (`alias._helper`), and its `ALLOWED_PRIVATE_ATTRIBUTES` list is empty too -
 `render` importing `annotation.step_annotation` rather than `_step_annotation` is what
-kept it so. **`tests/test_front_end_dag.py`** holds the top-level modules to the same
+kept it so. **`tests/meta_front_end_dag.py`** holds the top-level modules to the same
 rule, with the deliberate edges named: `tabstaff`'s re-exports of the two writers, and
 each writer's use of `tabscore` for placement. `FRONT_ENDS` in `tests/support.py` is
 the one list the budget table and that DAG test both read.
@@ -276,7 +299,7 @@ Three consequences worth knowing:
 
 - **Adding a module inside `arranger/` needs no `pyproject.toml` change** — the
   package is already listed — but **four lists still name it**: `ORDER` in
-  `tests/test_package_dag.py`, `BUDGETS` in `tests/test_structure.py`, and the
+  `tests/meta_package_dag.py`, `BUDGETS` in `tests/meta_structure.py`, and the
   facade's `from . import (...)` and `__all__`. The last two are not bookkeeping:
   a submodule the facade never imports is reported by pyright as "specified in
   `__all__` but not present in module", and one that is imported but unlisted fails
@@ -374,7 +397,7 @@ There is no build step for local development.
   used to report through a `Diagnostics` collector is now either **on the tab line** -
   read off the step's own fields and phrased by a `render` `*_clause` - or a
   `ValueError` from the axis that could not honour the request. Adding a `print()` to
-  the engine is a regression, and `tests/test_explanations.py` is what keeps a choice
+  the engine is a regression, and `tests/meta_explanations.py` is what keeps a choice
   from going *unexplained* rather than merely unprinted.
 - **Do not add a third-party dependency** without explicit approval. `musthe` is the
   only runtime one; that is load-bearing for the LGPL reasoning above.
@@ -473,7 +496,7 @@ renderer**, never re-derived at a call site:
   shape above is held"; "the most a fill's palette offers" — the last is the difference
   between *the library ran out* and *the caller asked for fewer*).
 
-`tests/test_explanations.py` is the standing check: a table of (decision, when this step is
+`tests/meta_explanations.py` is the standing check: a table of (decision, when this step is
 one of those, what the line must say), swept over every committed head and working from the
 step's **fields** rather than from the wording, so it cannot be satisfied by phrasing.
 **Adding a decision means adding its witness to that table in the same commit**, and a new
@@ -562,8 +585,12 @@ gate, and a snapshot mechanism would let a regression pass by regenerating itsel
    whichever the routing table sends you to — and the relevant test file.
 2. Make the smallest change that satisfies the requirement.
 3. Add or update tests in `tests/`, in the existing `unittest` style: one class per
-   concern, descriptive `test_*` names, docstrings stating what is verified.
-4. Run `make check` from the repo root. It must report `OK`.
+   concern, descriptive `test_*` names, docstrings stating what is verified. **The
+   filename is the half** — a test about the music is `test_*.py`, a test about the
+   tree (module graph, budgets, seams, generated docs, fixtures, the explanation
+   contract) is `meta_*.py`, and when in doubt it is `test_*.py`.
+4. Run `make test-features` while iterating and `make check` from the repo root before
+   committing. It must report `OK` for both halves.
 5. Run `make demo` when you touched voicing or voice-leading logic, and read the
    printed tabs.
 6. Commit each logical change separately. **Never `git push`** — this branch is the
@@ -668,7 +695,7 @@ Each of these cost real time, or nearly shipped a defect.
    proving a refactor changed nothing, capture the fingerprint from the commit you
    think it is, not from a file that has been sitting in the tree since
    (`git worktree add /tmp/pre HEAD`). The capture itself is a throwaway script under
-   `/tmp`, kept out of the repository: `tests/test_step_loop_equivalence.py` is the
+   `/tmp`, kept out of the repository: `tests/meta_step_loop_equivalence.py` is the
    standing check, and a measurement that only matters during one refactor has no
    business outliving it. (This trap used to have a corpus half — the gitignored
    database had to be copied across or the capture came back empty — and that half

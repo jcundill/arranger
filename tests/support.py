@@ -49,8 +49,8 @@ from arranger import (
 )
 
 #: The library's top-level modules: the shared score core, the renderers, the
-#: importer and the grip-chart generator. Shared by `test_structure` (which budgets
-#: them) and `test_front_end_dag` (which holds their imports to the facade rule), so
+#: importer and the grip-chart generator. Shared by `meta_structure` (which budgets
+#: them) and `meta_front_end_dag` (which holds their imports to the facade rule), so
 #: the two lists cannot drift apart.
 FRONT_ENDS = (
     "tabscore.py",
@@ -522,7 +522,7 @@ def nearest_reach_for_note(
 #: melody that stops before the last bar.
 #:
 #: One sweep is deliberately **not** on this list, and it is the one whose subject is not a
-#: rule but the behaviour space itself: `test_explanations`' witness table keeps every
+#: rule but the behaviour space itself: `meta_explanations`' witness table keeps every
 #: committed head, because a narrower sweep retires witnesses rather than time. Its
 #: docstring says so where the sweep is.
 #:

@@ -1087,7 +1087,7 @@ class TestTabstaffModuleBoundary(unittest.TestCase):
         rather than a lazy trick: `tabstaff` imports `arranger.tuning`, a leaf that
         needs nothing from the facade, so importing it first runs the facade to
         completion before the renderer reaches its own first line.
-        `tests/test_front_end_dag.py::TestTheRuntimeCycle` holds that to a blank
+        `tests/meta_front_end_dag.py::TestTheRuntimeCycle` holds that to a blank
         package, which is the sharper form - a facade that never ran at all.
         """
         import subprocess

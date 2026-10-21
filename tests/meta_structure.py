@@ -41,11 +41,17 @@ hold them to the dependencies they declare - `parts` reads nothing, `harmony` an
 metre's count and grouping rather than another axis. A signature is the one place
 an implicit dependency cannot hide, which is why the table below is asserted
 against the AST rather than promised in a docstring.
+
+The file also keeps the suite's own split honest: a test module is `test_*.py` (the
+music, run by `make test-features`) or `meta_*.py` (the tree, run by
+`make test-meta`), and `make test` is both. `TestTheSplit` fails on a file that is
+neither, because a pattern-based gate would otherwise stop running it in silence.
 """
 
 from __future__ import annotations
 
 import ast
+import fnmatch
 import unittest
 from dataclasses import dataclass
 from pathlib import Path
@@ -54,12 +60,27 @@ from typing import Dict, Iterator, List, Set, Tuple, Union
 from tests.support import FRONT_ENDS
 
 ROOT = Path(__file__).resolve().parent.parent
+TESTS = ROOT / "tests"
 ENGINE = ROOT / "arranger"
+
+#: The two halves of the suite, by filename. `make test-features` discovers the
+#: first pattern and `make test-meta` the second - so the half is the file's name,
+#: not a list somewhere that has to be kept in step. A test about the music is
+#: `test_*.py`; a test about the *tree* (the module graph, the budgets, the seams,
+#: the generated chart, the fixture corpus, the extras' laziness, the explanation
+#: contract) is `meta_*.py`. When in doubt it is `test_*.py`: that half runs first,
+#: so a mis-filed test is seen early rather than never.
+FEATURE_PATTERN = "test_*.py"
+META_PATTERN = "meta_*.py"
+
+#: The files in `tests/` that are not test modules: the package marker and the two
+#: shared helpers. They match neither half and that is their whole job.
+TEST_HELPERS: Set[str] = {"__init__.py", "support.py", "fixture_scores.py"}
 
 # The top-level modules are part of the library the gate measures, and they stay
 # flat files: `tabgp`'s lazy `import guitarpro` is the licensing boundary and a
 # package `__init__` would put a file in front of it. See
-# `tests/test_optional_extras.py`, which is the other half of that argument. The
+# `tests/meta_optional_extras.py`, which is the other half of that argument. The
 # tuple itself lives in `support`, because the front-end DAG test reads it too.
 
 
@@ -189,7 +210,7 @@ TEST_SEAMS: Set[str] = {
     # A test helper reads the phrase a cost criterion names.
     "test_palette -> arranger.annotation._criterion_phrase",
     # The explanation invariant reads the omission clause directly.
-    "test_explanations -> arranger.annotation._omission_clause",
+    "meta_explanations -> arranger.annotation._omission_clause",
     # Bass tests read the walking bass's private helpers.
     "test_bass -> arranger.bass._bass_harmony",
     "test_bass -> arranger.bass._walking_bass_line",
@@ -497,8 +518,13 @@ class TestTheEncapsulationRule(unittest.TestCase):
 
 
 def _test_files() -> List[Path]:
-    """Every test module the seam rule covers."""
-    return sorted((ROOT / "tests").glob("test_*.py"))
+    """Every test module the seam rule covers - **both halves of the suite**.
+
+    A meta test reaches into privates exactly as a feature test does, so scanning
+    only `test_*.py` would have retired the seam list from the half that reads the
+    engine's internals.
+    """
+    return sorted(TESTS.glob(FEATURE_PATTERN)) + sorted(TESTS.glob(META_PATTERN))
 
 
 def _test_private_imports(path: Path) -> Iterator[str]:
@@ -552,6 +578,49 @@ class TestTheTestSeams(unittest.TestCase):
             [],
             "TEST_SEAMS names a reach that no longer exists - delete the entry",
         )
+
+
+class TestTheSplit(unittest.TestCase):
+    """The suite is two halves, and every module is in exactly one of them.
+
+    `make test-features` discovers `test_*.py`, `make test-meta` discovers
+    `meta_*.py`, and `make test` runs both - so the split is a way *in*, never a
+    smaller gate. What it could narrow by accident is the union: a module named
+    neither way is matched by neither pattern, so `make test` would stop running
+    it while every other check stayed green. That is the trap the halves are worth
+    a test for - a gate that enumerates its inputs by hand silently skips whatever
+    was added last, and a *pattern* is only better than a list if something fails
+    when a file falls between the patterns.
+    """
+
+    def test_every_module_matches_one_half(self):
+        """A test file is `test_*.py` or `meta_*.py` - never neither."""
+        found = {path.name for path in TESTS.glob("*.py")} - TEST_HELPERS
+        self.assertTrue(found, "the tests/ tree has no test modules at all")
+        strays = sorted(
+            name
+            for name in found
+            if not (
+                fnmatch.fnmatch(name, FEATURE_PATTERN)
+                or fnmatch.fnmatch(name, META_PATTERN)
+            )
+        )
+        self.assertEqual(
+            strays,
+            [],
+            "a test module matches neither `test_*.py` (the music, "
+            "`make test-features`) nor `meta_*.py` (the tree, `make test-meta`), "
+            "so `make test` does not run it - rename it into a half",
+        )
+
+    def test_both_halves_are_populated(self):
+        """Neither pattern may match nothing, or the split is quietly one-sided.
+
+        A rename that emptied a half would leave `make test` green over the other
+        one, which is the same failure as a stray file seen from the other side.
+        """
+        self.assertTrue(sorted(TESTS.glob(FEATURE_PATTERN)))
+        self.assertTrue(sorted(TESTS.glob(META_PATTERN)))
 
 
 #: Where each axis is answered, and what its resolver is allowed to read.

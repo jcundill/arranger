@@ -15,7 +15,7 @@ renderers are imported *inside* `render_and_write`. Importing `tabstaff` at modu
 would execute the package `__init__` through `arranger.tuning`, so the import stays in the
 function body - which is also what leaves `headxml`'s `load_musicxml` cheap.
 
-This module sits **last** in `tests/test_package_dag.py`'s `ORDER`: it reads
+This module sits **last** in `tests/meta_package_dag.py`'s `ORDER`: it reads
 `NECK_FRET_MIN`/`MAX` from `tuning`,
 `NON_CHORD_TONE_STRATEGIES` from `chords`, `TEXTURE_STYLES` from `texture` and
 `format_progression` from `render`, and is imported by nothing below it. It needs

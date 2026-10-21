@@ -9,7 +9,7 @@ are not the retired tunes.
 `Trouble_in_Mind_Blues.musicxml` is retained because it is the only committed
 notation-program export that carries cross-barline ties on a 4/4 blues, which is
 the case `tests/test_headxml.py::TestAHeldNoteIsOneNoteAcrossABarline` pins.
-It is not generated, and `tests/test_fixture_corpus.py` names it as the one
+It is not generated, and `tests/meta_fixture_corpus.py` names it as the one
 deliberate exception.
 
 ## What each generated file is for
@@ -36,7 +36,7 @@ deliberate exception.
 .venv/bin/python tests/fixture_scores.py --check   # no write; fails on a drift
 ```
 
-`tests/test_fixture_corpus.py` runs the same comparison as part of `make check`,
+`tests/meta_fixture_corpus.py` runs the same comparison as part of `make check`,
 and refuses any retired filename. It also checks the two things a notation
 program needs before it will open a score cleanly: every note and rest states the
 `<type>` its `<duration>` corresponds to, and every non-pickup measure adds up to

@@ -95,7 +95,7 @@ name the facade (`headxml`, `grip_chart`). `demo.main()`'s and `cli`'s imports a
 function-local for both reasons at once, and the two directions still do not
 deadlock: the front ends need only `tuning`, so neither side waits for the other.
 [docs/dependency-dag.md](dependency-dag.md) has the full table, and
-`tests/test_front_end_dag.py::TestTheRuntimeCycle` holds it.
+`tests/meta_front_end_dag.py::TestTheRuntimeCycle` holds it.
 
 Two consequences worth knowing:
 

@@ -37,8 +37,8 @@ on:
 permissions:
   contents: read
 
-# Cancel superseded runs on the same ref: the suite takes ~45s locally and
-# several minutes across five versions, so a five-commit push would otherwise
+# Cancel superseded runs on the same ref: the suite takes a couple of minutes locally
+# and several minutes across four versions, so a five-commit push would otherwise
 # spend most of its time re-running work already superseded.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}

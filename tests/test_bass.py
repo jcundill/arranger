@@ -51,7 +51,7 @@ from arranger import (
 
 # Private helpers imported from where they live rather than through the package
 # facade: they are not API, and re-exporting them would enlarge the public
-# surface for one test file's benefit. See `test_package_dag` and the facade
+# surface for one test file's benefit. See `meta_package_dag` and the facade
 # docstring.
 from arranger.bass import (
     _bass_harmony,

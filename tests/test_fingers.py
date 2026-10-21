@@ -506,7 +506,7 @@ class TestTheEngineUsesItForOneQuestion(unittest.TestCase):
         """`bass_place` imports `fingers` for the fret budget, `bass_merge` for the ring.
 
         Read from the AST rather than from `sys.modules`, for the reason
-        `test_package_dag._imports_of` gives: a function-local import shows up here, which is
+        `meta_package_dag._imports_of` gives: a function-local import shows up here, which is
         exactly what should be caught, and it does not depend on what some other test happened
         to import first.
         """
@@ -535,7 +535,7 @@ class TestTheEngineUsesItForOneQuestion(unittest.TestCase):
     def test_the_facade_binds_it_as_a_public_path(self) -> None:
         """`arranger.fingers` is reachable, which is what the DAG check needs.
 
-        `tests/test_package_dag.py::test_every_module_is_imported_by_something` counts
+        `tests/meta_package_dag.py::test_every_module_is_imported_by_something` counts
         `__init__` as an importer, which is one of the two reasons `"fingers"` is in
         `arranger.__all__`; the other is that the module is its own public path and the two
         public names the engine reads - `can_fret` and `assign_fingers` - are reachable
