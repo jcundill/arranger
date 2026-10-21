@@ -140,7 +140,7 @@ or voice-leading logic touched → commit separately.
 | 1 | P1 | done | Split `SlotContext` into `SlotTiming`, `SlotHarmony`, `SlotIdentity`, `SlotState` + composed `SlotContext`. All route consumers updated. |
 | 2 | P5 | done | TEST_SEAMS list in `tests/test_structure.py` — 25 private test-to-arranger reaches documented. New `TestTheTestSeams` test class asserts all reaches are recorded and no stale entries remain. |
 | 3 | P3 | done | Each axis answered by one resolver in the module owning its vocabulary: `resolve_bass` moved to `bass_rules`, `texture.parse_texture` added, `TestTheAxisResolvers` holds the signatures to the dependency table. |
-| 4 | P2 | planned | Facade surfaces |
+| 4 | P2 | planned | Facade surfaces: names only (`engine`, `request`, `rendering`) - the load-time half is declined, with the measurement, in its section below |
 | 5 | P4 | planned | Route dispatcher |
 | 6 | P6 | planned | Runtime cycle |
 | 7 | P7 | planned | Criteria extensibility |
@@ -296,6 +296,31 @@ first, while a call moved above it is silent in every tab.
 - full suite: 1386 tests OK (skipped=2)
 - `ruff check`: 0 errors
 - `pyright`: 0 errors, 0 warnings
+
+---
+
+## P2 — the facade subdivision, and what measuring it changed
+
+F2 asks for `arranger.engine` / `arranger.request` / `arranger.render`. Two facts
+found while planning it:
+
+1. **`arranger.render` is taken.** It is an engine module in the layer order
+   (`... -> movement -> steps -> slots -> render -> cli`) and a name in `__all__`.
+   A surface module cannot use it; `arranger.rendering` can.
+2. **The load-time half of F2 is not worth what it costs.** Measured:
+   `python -c 'import arranger'` loads **32** `arranger` modules (and no optional
+   extra), taking 0.36 s including interpreter start. The only way to make a
+   client's `import arranger.engine` avoid them is a PEP 562 `__getattr__` facade
+   over the whole public surface - and a module `__getattr__` returns its declared
+   type, so every one of the ~130 public names would become `Any` to pyright
+   unless the export table were written a second time under `TYPE_CHECKING`,
+   which nothing can keep in step. **The type surface is worth more than 0.3 s.**
+
+So P2's live half is the *names*: three surface modules that own the grouped
+re-export lists, with `__init__` composed from them. That is what the finding
+called "no subdivision" - and it is discoverability, not lazy loading. The
+decision is recorded here rather than assumed; a later stage may still pay for
+laziness, and this paragraph is the price it has to argue with.
 
 ---
 
