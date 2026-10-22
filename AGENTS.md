@@ -595,12 +595,19 @@ gate, and a snapshot mechanism would let a regression pass by regenerating itsel
    printed tabs.
 6. Commit each logical change separately. **Never `git push`** — this branch is the
    user's to push.
-7. **When the context is running out, stop and write the state down.** A long session
-   banks what it has done, what is left, and **why each decision was made**, in a scratch
-   handoff outside the tree, and then says that compaction would help rather than pressing
-   on. The user is helping the task, so asking costs nothing; a session running on a
-   thinning context re-litigates settled decisions and reverts deliberate ones, which is
-   what every trap below is made of.
+7. **When the context is running out, stop, write the handoff, and ask the user for a
+   fresh session.** A long session banks what it has done, what is left, and **why each
+   decision was made**, in a scratch handoff outside the tree, and then says that
+   compaction would help rather than pressing on. As part of this repository's working
+   rules, **the ask is expected rather than tolerated**: the user has said they want to be
+   asked whenever the agent judges that a handoff would help, and will compact on request —
+   so raise it early, at the first sign that the context is thinning, rather than at the
+   point where it has already gone. **Write the state down before asking**, in the same
+   turn as the question, so the compaction the question invites cannot lose the state the
+   question was about. Asking costs one line; being late costs a re-litigated design,
+   because a session running on a thinning context re-litigates settled decisions and
+   reverts deliberate ones, which is what every trap below is made of.
+
 ## Adding a new chord quality
 
 1. Add the quality's tones to `TONE_PRIORITY`, most defining first. **That row is the
