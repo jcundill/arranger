@@ -231,16 +231,16 @@ def grid_allowed(
     row = GRID_PATTERNS[pattern]
     if row.bar_relative:
         return False, (
-            f"grid=chord:{pattern} places no chord in a bar of {beats_per_bar} "
+            f"grid=\"chord:{pattern}\" places no chord in a bar of {beats_per_bar} "
             f"beats, and it is a bar-relative pattern, which should resolve in any "
             f"metre - so this is a defect in the pattern rather than a mismatch with "
             f"the metre"
         )
     return False, (
-        f"grid=chord:{pattern} is a metre-relative figure and places no chord in "
+        f"grid=\"chord:{pattern}\" is a metre-relative figure and places no chord in "
         f"a bar of {beats_per_bar} beats: it is right, or it is a figure of another "
         f"metre asked of this one. Try a bar-relative pattern such as 'freddie' or "
-        f"'final_and', or grid=melody:every_note"
+        f"'final_and', or grid=\"melody:every_note\""
     )
 
 

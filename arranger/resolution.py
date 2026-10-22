@@ -161,7 +161,7 @@ def resolve_axes(
     """The request's derivation, with a caller's axis override winning.
 
     `bass` and `parts` are **coupled**, and this is where the two spellings meet.
-    The request derives both; a caller who spells `parts=` is driving the
+    The request derives both; a caller who spells `parts` is driving the
     selection, so the bass stays on its sentinel and follows it; a caller who
     spells only a bass policy is making a claim about the bass part, which takes
     that part with it. One spelling owns the pair rather than merging two answers.
@@ -366,7 +366,7 @@ class _Policies:
     bass: str
     has_thumb: bool
     harmony_family: str
-    #: The chord's rhythm. `None` when the caller spelled a `grid=` preset instead,
+    #: The chord's rhythm. `None` when the caller spelled a `grid` preset instead,
     #: which is the internal axis; the preset then decides where a chord falls.
     chord_rhythm: Optional[Rhythm]
     grid_pattern: Optional[str]
@@ -417,7 +417,7 @@ def resolve_policies(
     # The melody-only selection, decided once here and read by the bass policy,
     # the grip resolution and the promotion rule below: `(soprano,)` is the
     # tune alone and `(soprano, bass)` the tune with a thumb under it,
-    # whatever `texture=` says - the texture is inert on that route, the same
+    # whatever `texture` says - the texture is inert on that route, the same
     # way it is on the comping one.
     melody_only = parts_has_melody_only(parts)
 
@@ -440,10 +440,10 @@ def resolve_policies(
     # the guitar happens to be singing - the same argument as `_resolve_melody`'s.
     harmony_family = _resolve_harmony(harmony, parts)
     # The grid axis, resolved here for the same reason and read by **both** routes
-    # below rather than only the comping one - unlike `harmony=`, which the guitar
+    # below rather than only the comping one - unlike `harmony`, which the guitar
     # singing makes unreachable. A grid says where a chord lands, and that is a
     # question about the part whether the guitar is singing it or comping under a
-    # horn, so scoping it to one route would make `grid=` silently inert on a
+    # horn, so scoping it to one route would make `grid` silently inert on a
     # melody-bearing arrangement rather than doing nothing there.
     grid_pattern = (
         None if grid is None else _resolve_grid(grid, beats_per_bar, grouping)

@@ -431,7 +431,7 @@ class ArrangementStep:
     # and it is what keeps a progression with no rhythm on the default path.
     # See `metric_weight`.
     metric_weight: int = 0
-    # --- Walking bass (a `bass=` style, or a `bass:walk` grid row) ---
+    # --- Walking bass (a `bass` style, or a `bass:walk` grid row) ---
     #
     # The bass note's role, one of the BASS_ROLE_* constants. Defaulted and a plain
     # string, like `role`.

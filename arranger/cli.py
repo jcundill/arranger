@@ -204,8 +204,8 @@ def add_common_arguments(
     flags, and its prose spoke throughout of "both" and "the other" - which is how
     `--skeleton` and `--pick` are **not** offered, and the reason is a policy
     rather than an omission: the MusicXML path does not reduce - every written note of a
-    score gets its own slot. Where chords fall is the `grid=` axis, and which notes the
-    guitar plays is the `parts=` axis.
+    score gets its own slot. Where chords fall is the `grid` axis, and which notes the
+    guitar plays is the `parts` axis.
 
     The order the flags are added in is the order they appear in `--help`.
     """

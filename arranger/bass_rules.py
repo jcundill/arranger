@@ -65,7 +65,7 @@ BASS_ROLE_HOLD = "hold"
 # --- The bass style: which note rules the thumb line is written on -----------------
 #
 # A **style**, not a flag, and it names *note rules* rather than a rhythm: how many beats
-# carry a note is `grid=`'s business ([docs/history/parts.md](docs/history/parts.md) §4), and the rule list
+# carry a note is `grid`'s business ([docs/history/parts.md](docs/history/parts.md) §4), and the rule list
 # says only what a note that does sound is *for*.
 #
 # The four rules, and the `BASS_ROLE_*` values each admits:
@@ -234,7 +234,7 @@ def comping_capacity(notes: int, bass_voice: bool = False) -> int:
     generates. On the comping route the shapes come from
     `get_comping_voicings` instead, and the texture is *inert* there: all 80 comping
     shapes on `tests/data/synthetic_cut_time.mxl` are byte-identical under
-    `texture=uniform` and `texture=targets`. Asking `thumb_capacity` therefore refuses a
+    `texture="uniform"` and `texture="targets"`. Asking `thumb_capacity` therefore refuses a
     combination that is perfectly playable, on the strength of a palette the comping
     route never uses - `bass_allowed("uniform", "root,5th,approach,nearest")` refuses
     `melody="alto,tenor", bass="root,5th,approach,nearest"` under the default texture.
@@ -335,7 +335,7 @@ def bass_allowed(
         # state, and writing one anyway would put a note in the part a bassist owns.
         return False, (
             f"a bass line is a claim about the bass part, and "
-            f"parts={','.join(parts)} does not take it - add 'bass' to parts, or "
+            f"parts=\"{','.join(parts)}\" does not take it - add 'bass' to parts, or "
             f"drop the bass style"
         )
     if melody_only and notes is None:

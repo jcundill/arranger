@@ -466,7 +466,7 @@ if __name__ == "__main__":
 
 
 class TestTheBassStyleRegistry(unittest.TestCase):
-    """`bass=` names note rules, and the set of rules is open.
+    """`bass` names note rules, and the set of rules is open.
 
     The point of the registry is that a **new note rule is a row in a table**, not
     another branch at each of the call sites that decide whether a thumb line exists.
@@ -715,7 +715,7 @@ class TestCompingCapacity(unittest.TestCase):
 
         `_no_room_reason` names a texture because a palette is what failed. On the comping
         route the route itself was chosen by the parts selection, and the original bug
-        produced a warning that pointed at `texture=` - a setting that could not change
+        produced a warning that pointed at `texture` - a setting that could not change
         the outcome. Since no arity currently refuses, this asserts the sentence's shape
         directly against the function rather than through `bass_allowed`.
         """

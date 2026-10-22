@@ -1,4 +1,4 @@
-"""`harmony=`: which degrees the chord part states when it is not singing.
+"""`harmony`: which degrees the chord part states when it is not singing.
 
 `guide` and `shell_root` are two claims that both need three notes, so the refusal rule is
 stated on how many notes were asked for rather than on a table of combinations; and a
@@ -39,7 +39,7 @@ from tests.support import (
 
 
 class TestTheHarmonyAxis(unittest.TestCase):
-    """`harmony=`: which degrees the guitar states when it is not singing.
+    """`harmony`: which degrees the guitar states when it is not singing.
 
     The fourth axis, and the only one that answers **what the part says about the
     chord** rather than how many notes sound, where they fall, or who plays the bottom.
@@ -49,7 +49,7 @@ class TestTheHarmonyAxis(unittest.TestCase):
     """
 
     def test_the_axis_is_inert_by_default(self):
-        """`harmony=auto` and no `harmony=` at all are the same arrangement.
+        """`harmony="auto"` and no `harmony` at all are the same arrangement.
 
         The load-bearing assertion of the whole axis, and the reason the default is the
         sentinel rather than a resolved value: `auto` resolves to `guide`, which is what
@@ -116,7 +116,7 @@ class TestTheHarmonyAxis(unittest.TestCase):
         self.assertEqual(HARMONY_AUTO_POLICIES[True], HARMONY_FULL)
 
     def test_the_axis_is_inert_when_the_guitar_is_singing(self):
-        """`harmony=` changes nothing on an arrangement that voices the melody.
+        """`harmony` changes nothing on an arrangement that voices the melody.
 
         The comping generator is only reached when `melody_voiced` is False, so every
         value must produce the same singing arrangement - otherwise the axis would be
@@ -273,7 +273,7 @@ class TestTheHarmonyAxis(unittest.TestCase):
         """The refusal raises, and its message names the selection that would work.
 
         **This test used to assert the opposite**, and the inversion is the point
-        rather than a weakening: it asserted that a refused `harmony=shell_root`
+        rather than a weakening: it asserted that a refused `harmony="shell_root"`
         warned and then produced an arrangement byte-identical to the default
         `guide` one. That behaviour was the defect - the caller asked for one
         degree family and was silently handed another, on an axis whose whole
@@ -296,7 +296,7 @@ class TestTheHarmonyAxis(unittest.TestCase):
         """Resolution happens up front, so a typo is never silently ignored.
 
         The comping route is not reached when the guitar sings, so resolving inside
-        that branch would mean `harmony=bogus` on a default arrangement reported
+        that branch would mean `harmony="bogus"` on a default arrangement reported
         nothing at all - and the same argument `_resolve_melody` is resolved for.
         """
         with self.assertRaises(ValueError):
@@ -307,9 +307,9 @@ class TestTheHarmonyAxis(unittest.TestCase):
     def test_the_lone_bass_states_a_root_or_a_fifth(self):
         """The degree rule for a one-note bass shape is `BASS_DEGREES_6432`, not a family.
 
-        It used to be asserted through `harmony=root`, which was a family *for the
+        It used to be asserted through `harmony="root"`, which was a family *for the
         bass voice*; with the parts axis the bass note is what the bass part states,
-        and `harmony=` is a claim about the chord part, which a lone bass does not
+        and `harmony` is a claim about the chord part, which a lone bass does not
         take. What survives is the musical rule the family used to spell.
         """
         for name in ("Ebmaj", "Bb7", "Cm7"):

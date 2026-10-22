@@ -1,6 +1,6 @@
 """The texture axis: how many notes the chord part states, by metric weight.
 
-`texture=` owns **how many notes the chord part states**. It is not a grip list:
+`texture` owns **how many notes the chord part states**. It is not a grip list:
 the grip families are an internal search space over the chord part's degrees
 and the neck window, keyed by the number of notes they sound under the melody.
 What remains a choice is the arity and the metric policy that varies it.

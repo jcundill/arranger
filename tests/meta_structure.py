@@ -734,7 +734,7 @@ def _call_lines(node: FunctionNode) -> Dict[str, int]:
 class TestTheAxisResolvers(unittest.TestCase):
     """Each axis is answered where its vocabulary lives, from named dependencies.
 
-    The axes were once resolved by one function, so `harmony=` could not be
+    The axes were once resolved by one function, so `harmony` could not be
     reasoned about - or tested - without `parts`, `grid` and the metre in view,
     and the dependency between two of them was prose rather than a signature.
     These two tests are the shape of the repair, and they fail in both

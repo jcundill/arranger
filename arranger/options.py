@@ -7,19 +7,20 @@ them, and `resolve_request` turns either into the engine's internal axes - `part
 `texture`, `harmony`, `bass` and the chord's rhythm - which is what the step loop
 actually reads.
 
-The axes are still spellable as keyword overrides on `ArrangeOptions` and
-`arrange_progression`, because they are the engine's implementation and the axis
-tests hold them directly to their own behaviour. `None` means "derive this from the
-request"; a value means "the implementation axis, spelled out".
+**This object is the only door to the five axes.** They are the engine's implementation
+rather than a question a caller asks, so no entry point takes one as a keyword - a caller
+who wants a texture or a bass policy names it here, and the axis tests hold each to its own
+behaviour that way. `None` means "derive this from the request"; a value means "the
+implementation axis, spelled out". The request and the metre are the exception the other
+way: they are **input facts**, so `request=` and `time_signature=` sit beside `options=` on
+the entry points and `resolution.settle_input_fact` reconciles the two spellings.
 
 Frozen, because an options object that can be mutated halfway through arranging is
 worse than the keyword list it replaces - the failure would depend on *when* it was
 written. Build a second one instead.
 
-Every field's default is the same value `arrange_progression`'s keyword defaults to, so
-`ArrangeOptions()` asks for exactly what `arrange_progression(progression)` builds. That
-call still
-accepts the same keywords directly; see its docstring for how the two interact.
+Every field's default is the same value the entry point's keyword defaults to, so
+`ArrangeOptions()` asks for exactly what `arrange_progression(progression)` builds.
 """
 
 from __future__ import annotations

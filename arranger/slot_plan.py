@@ -92,7 +92,7 @@ class SlotInputs:
     melody_voiced: bool
     melody_onsets: Optional[Container[int]]
     harmony_family: str
-    #: The chord's rhythm, read by `_chord_here` unless a `grid=` preset was named.
+    #: The chord's rhythm, read by `_chord_here` unless a `grid` preset was named.
     chord_rhythm: Optional[Rhythm]
     grid_pattern: Optional[str]
     bass_rhythm: Rhythm
@@ -280,7 +280,7 @@ def _texture_grips(role: str, slot: Slot, inputs: SlotInputs) -> Tuple[str, ...]
 
     A melody-only selection never asks: the left hand plays nothing on every slot,
     whatever the texture's palettes say, so the loop hands an empty palette straight
-    through. Skipping the resolution is what makes `texture=` silently inert here
+    through. Skipping the resolution is what makes `texture` silently inert here
     rather than noisily so.
     """
     if inputs.melody_only:
@@ -303,7 +303,7 @@ def _chord_here(
     """Whether the chord part attacks at this position.
 
     Two spellings, one question, and a **preset wins** because it is the engine's
-    own axis: a caller who named `grid=` is testing one pattern directly, and
+    own axis: a caller who named `grid` is testing one pattern directly, and
     reading the request's rhythm underneath it would answer a different question.
     Otherwise the request's `chord_on` decides - `melody` at every written onset,
     or the positions it names - and `wants_melody` is true for every slot for the
@@ -352,7 +352,7 @@ def _chord_attacks(
     eighth-note skeleton invented, where the tune merely sustains, is neither - that is
     the hold `tabstaff._collapse_holds` and `tabscore._is_hold` exist for.
 
-    A `grid=` preset keeps its own reading rather than being re-derived from the
+    A `grid` preset keeps its own reading rather than being re-derived from the
     request here, for the reason `_chord_here` gives: a preset is the engine's axis and
     a caller who named one is testing that pattern, not the request's rhythm
     underneath it.
@@ -383,7 +383,7 @@ def slot_state(
     note_str, chord_type, name = inputs.progression[index]
     if note_str is None:
         # A melody-only selection's note-less slot is **tune silent** unless the thumb
-        # has something there: `parts=melody,bass` plays the bass part, and a position
+        # has something there: `parts="melody,bass"` plays the bass part, and a position
         # the walk invented is the one place this selection sounds anything at all.
         if inputs.melody_only and slot.bass is None:
             return _tune_silent_plan(car, slot, chord_type, name, inputs)

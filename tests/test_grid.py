@@ -1,6 +1,6 @@
-"""The grid axis: `grid=`, and the rhythm a part places its notes on.
+"""The grid axis: `grid`, and the rhythm a part places its notes on.
 
-`parts=` answers *which parts sound* and `texture=` *how many notes the chord part
+`parts` answers *which parts sound* and `texture` *how many notes the chord part
 states*; this answers *where in the bar a part sounds*. Those are different questions
 and all three are needed for a comping style to mean anything: a shell on every beat
 and a shell on the ands are not variants of one another.

@@ -352,7 +352,7 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
     def test_a_held_step_says_the_shape_above_it_is_held(self):
         """`bass_only` is a claim about the left hand, and the tab cannot show it.
 
-        `texture=targets` rather than a fixed arity, because a fixed-arity row makes *every*
+        `texture="targets"` rather than a fixed arity, because a fixed-arity row makes *every*
         slot a target and so leaves no step whose shape the guitar holds through.
         """
         from headxml import arrange_xml_head

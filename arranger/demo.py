@@ -119,7 +119,7 @@ def main() -> None:
     for label, kwargs in (
         ("no timing - every note is a chord", {}),
         (
-            "texture=targets - chords on beats 1 and 3, fills between",
+            "ArrangeOptions(texture=\"targets\") - chords on beats 1 and 3, fills between",
             {"timings": texture_timings, "options": ArrangeOptions(texture="targets")},
         ),
     ):

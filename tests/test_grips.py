@@ -1298,7 +1298,7 @@ class TestTheFamilyIsNotASpelling(unittest.TestCase):
     """There is no `--grips` and no `parse_grips`: a family is not a choice.
 
     The families are the chord part's *internal search space* (`docs/history/parts.md` §4):
-    `parts=` says which parts sound, `texture=` says how many notes the chord part
+    `parts` says which parts sound, `texture` says how many notes the chord part
     states, and `TONE_PRIORITY` plus the neck window decide which family states
     them. So the spelling this class used to test - a comma-separated list of
     families, in the order the caller ranked them - is deleted rather than

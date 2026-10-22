@@ -109,11 +109,11 @@ confined to one texture and no step of the reported row among them, it is not wo
 
 ---
 
-## 3. `harmony=full` is accepted on the comping route and answered with a different family
+## 3. `harmony` set to `full` is accepted on the comping route and answered with a different family
 
 **Status: open, diagnosed.**
 
-**The issue.** `harmony=` is read only by the comping route, and `grips.get_comping_voicings`
+**The issue.** `harmony` is read only by the comping route, and `grips.get_comping_voicings`
 implements the degree families it is handed through *arity* — the guide tones, or a lone bass
 note. It has no implementation of `full` ("state every tone the quality defines"), because the
 whole-chord chord-melody is the **grip** route's job, reached when the guitar sings. But
@@ -125,8 +125,8 @@ the route that does, and it is now the **only** value on this axis that does eit
 `root` and `shell_root` **raise** `ValueError` when the voice selection has no room for them, so
 a refusal on this axis is loud everywhere except here. Measured on
 `[("D5","m7","Dm7"), ("C5","maj7","Cmaj7"), ("A4","7","A7"), ("G4","maj7","Gmaj7")]`,
-`harmony=full` under `parts=chord` gives guide tones — byte-identical to the same
-arrangement with no `harmony=` at all. It is the one value refused by nothing that resolves to
+`ArrangeOptions(harmony="full", parts="chord")` gives guide tones — byte-identical to the same
+arrangement with no `harmony` at all. It is the one value refused by nothing that resolves to
 something other than itself, which is the failure `resolve_harmony`'s own docstring names.
 
 **Why it exists / not fixed.** The fix is undecided and both directions are live: **refuse it**,
@@ -150,7 +150,8 @@ exists.
 
 **The internal row survives, and is deliberately unread.** `GRID_PART_PATTERNS` still validates
 `bass:every_note`, `bass:walk` and `bass:anchors`, and `grid_bass_pattern` still has no caller. It
-is kept because it is the axis's own vocabulary - `parts=` / `grid=` are the Python API under the
+is kept because it is the axis's own vocabulary - `ArrangeOptions(parts=…)` / `grid` are the
+Python API under the
 request (design principle 9 of the plan) - and because `tests/test_grid.py` pins the property the
 row exists to state: a bass row **defers to the melody**, since the walk's beats come from
 `bass.py`'s own timeline rather than from a preset. A row that is parsed-but-unread *inside* the
@@ -184,8 +185,8 @@ choice is `x-8-7-8-x-x`, the walk's F is seven frets under it, and the shape now
 where the low E has the note. `tests/test_bass_placement.py::TestTheHarmonyLeavesRoomForTheBass`
 pins it, including the dropped shape's tab and the clause that names it.
 
-**Measured.** Over the committed heads × the walk row (`texture=targets`,
-`bass=root,5th,approach,nearest`, `grid=melody:every_note,bass:walk`; 460 requested notes over 773
+**Measured.** Over the committed heads × the walk row (`ArrangeOptions(texture="targets",
+bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk")`; 460 requested notes over 773
 steps that carry a thumb): worst merged span **5**, with **0** steps over 5 — the same sweep under
 `--bass-on 1,2,1and,2and` had 44 steps over 5 with a worst of 9. Over the four thumb rows item 2
 uses (1,318 requests): worst **5**, **0** over 5. The narrow is what keeps the note and the bound
@@ -279,6 +280,7 @@ silence, so it need not move with it.
 .venv/bin/python -c "
 import glob
 import headxml as H
+from arranger.options import ArrangeOptions
 rows = ['melody:every_note', 'bass:every_note', 'bass:walk', 'bass:anchors']
 heads = (sorted(glob.glob('tests/data/*.musicxml')) + sorted(glob.glob('tests/data/*.mxl'))
          + sorted(glob.glob('examples/*.mxl')))
@@ -287,7 +289,8 @@ for path in heads:
     tabs = set()
     for grid in rows:
         steps, _h, _n = H.arrange_xml_head(
-            path, texture='targets', bass='root,5th,approach,nearest', grid=grid)
+            path, options=ArrangeOptions(
+                texture='targets', bass='root,5th,approach,nearest', grid=grid))
         tabs.add(tuple(s.tab_line() for s in steps))
     same += len(tabs) == 1
 print('inert rows: %d of %d heads identical' % (same, len(heads)))

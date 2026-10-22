@@ -180,7 +180,7 @@ def melody_alone_case(
     # got wrong in a way its test caught.**
     #
     # The grid is asked *inside* the voice guard rather than after it. Answering the
-    # voice guard first makes `grid=` silently inert on the comping route - all
+    # voice guard first makes `grid` silently inert on the comping route - all
     # four patterns come back byte-identical to the default, which
     # `docs/history/comping-styles.md` records. Asking it inside is safe because a grid
     # only ever *removes* chords, so it cannot reintroduce a soprano the voice
@@ -223,10 +223,10 @@ def melody_alone_case(
         #   fourth kind because no existing answer is that.
         #
         # Without the second case an off-grid slot fell through to the comping route
-        # and comped anyway, the exact opposite of what `grid=joe_pass` asks for.
+        # and comped anyway, the exact opposite of what `grid="joe_pass"` asks for.
         # Without the first case it rested, and the guitar lost notes of the tune it
         # was supposed to be singing - measured at 39 of 80 steps on
-        # `synthetic_cut_time` under `grid=freddie`, where every note off the beat went
+        # `synthetic_cut_time` under `grid="freddie"`, where every note off the beat went
         # silent instead of sounding alone.
         # Reached only when the guitar **is** singing, since the guard above answers
         # the comping route - so this is unconditionally the texture case: the note of
@@ -355,7 +355,7 @@ def should_promote_fill(
     a penalty rather than a filter.
 
     Disabled wherever a fill is *meant* to be empty - under a thumb line on a fill, and
-    on a melody-only selection (`parts=melody`) - because the melody-alone branch has
+    on a melody-only selection (`parts="melody"`) - because the melody-alone branch has
     already handled it, so promoting here would undo the selection one step at a
     time. The caller passes the selection fact, so it is derived in one place rather
     than re-decided here.

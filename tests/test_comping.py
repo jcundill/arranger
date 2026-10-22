@@ -334,7 +334,7 @@ class TestTheAxisIsInertByDefault(unittest.TestCase):
 
 
 class TestTheCompingArrangement(unittest.TestCase):
-    """`parts=bass,chord` through the engine: what the guitarist is handed."""
+    """`parts="bass,chord"` through the engine: what the guitarist is handed."""
 
     def setUp(self):
         self.engine = VoiceLeadingEngine()
@@ -457,7 +457,7 @@ class TestTheCompingArrangement(unittest.TestCase):
             self.assertFalse(step.melody_voiced, step.tab_line())
 
     def test_the_bass_axis_still_decides_the_bottom(self):
-        """`bass=walk` walks under a comping part, and `bass=none` does not.
+        """`bass="walk"` walks under a comping part, and `bass="none"` does not.
 
         This is the band setting as a whole: both axes named, and neither inferred
         from the other.
@@ -701,8 +701,8 @@ class TestTheSopranoIsPerSlotNotPerRoute(unittest.TestCase):
 
     `parts_have_melody` answers the arrangement-level half of the route; the other
     half is per slot. A soprano-named selection still **comps** the grid positions its
-    tune is silent at, or merely sustains through, so `grid=joe_pass --voices
-    soprano,...` places chords on the offbeats instead of ignoring the grid. The written
+    tune is silent at, or merely sustains through, so `grid="chord:joe_pass"` with the
+    tune still ours places chords on the offbeats instead of ignoring the grid. The written
     onsets are untouched - that is the acceptance criterion, and **the default grid
     generates positions of its own** too (`every_note`, at each bar's own subdivision),
     so the default is no longer inert but still invents no melody - see
@@ -932,11 +932,11 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
     That table describes the shapes `get_all_grip_voicings` generates; on the comping
     route the shapes come from `get_comping_voicings` and the texture is a meaningless
     name - measured on `tests/data/synthetic_cut_time.mxl`, all 80 comping shapes are
-    byte-identical under `texture=uniform` and `texture=targets`.
+    byte-identical under `texture="uniform"` and `texture="targets"`.
 
     So `parts="chord", bass="root,5th,approach,nearest"` under the **default** texture was refused with
     "uniform leaves no bass string free for a target" and emitted no thumb at all, while
-    the same request under `texture=targets` emitted 127. The warning named a setting
+    the same request under `texture="targets"` emitted 127. The warning named a setting
     that could not change the outcome.
 
     The existing `test_the_bass_axis_still_decides_the_bottom` passed throughout,
@@ -967,7 +967,7 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
         return steps
 
     def test_the_default_texture_no_longer_refuses_a_thumb_line(self):
-        """The regression itself: `bass=walk` under the default texture.
+        """The regression itself: `bass="walk"` under the default texture.
 
         Asserted on the *thumb notes* rather than on the warning, because a fix that
         merely quieted the warning while still dropping the line would pass otherwise.
@@ -1028,7 +1028,7 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
         barely visits still carries four quarters, and the part has more steps than the
         head had notes.
 
-        **Compared against `bass=none` and not against a texture.** The first draft of
+        **Compared against `bass="none"` and not against a texture.** The first draft of
         this test compared `uniform` against `targets` and failed, which was the fix
         working: both now build the same union, because the texture no longer reaches
         the decision. A test asserting the texture *changes* the step count here would

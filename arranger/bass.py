@@ -905,7 +905,7 @@ def bass_line_for(
 
     `root` and `root-5th` are **not** the walk filtered, when a rhythm was named: they
     ask for one note at every position the rhythm names, which the walk's vocabulary has
-    no role for, so `_simple_bass_line` builds them. With **no** rhythm - the `bass=`
+    no role for, so `_simple_bass_line` builds them. With **no** rhythm - the `bass`
     axis, which is the engine's own spelling - `root` keeps its documented anchors-only
     meaning: there, the polyphony *is* the grid's, and the walk's own beats are the
     metre's felt beats rather than a caller's positions.

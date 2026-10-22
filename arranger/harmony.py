@@ -1,7 +1,7 @@
 """The harmony axis: which *degrees* the chord part states when it is not singing.
 
 A **degree order**, and nothing else. It answers "in which order does the chord part
-state its degrees", not "how many notes are on the guitar": the arity is `texture=`'s,
+state its degrees", not "how many notes are on the guitar": the arity is `texture`'s,
 and the order is `TONE_PRIORITY`'s row for the quality, sliced to that arity. A reduced
 shape therefore gives up the order's **tail**.
 
@@ -112,9 +112,9 @@ def resolve_harmony(harmony: str, parts: Tuple[str, ...]) -> str:
 def harmony_allowed(harmony: str, parts: Tuple[str, ...]) -> Tuple[bool, str]:
     """Whether this degree order can be stated by this selection, and why not.
 
-    **Derived rather than listed**, from one fact: every `harmony=` value is a claim
+    **Derived rather than listed**, from one fact: every `harmony` value is a claim
     about the **chord part**, so a selection that does not take it has no part to state
-    the order on. This is `harmony=root`'s old refusal generalised - a content policy
+    the order on. This is `harmony="root"`'s old refusal generalised - a content policy
     for a part the selection does not name is refused, naming the part that would work.
 
     Checked before any voicing work, on the library's standing rule that an impossible
@@ -123,8 +123,8 @@ def harmony_allowed(harmony: str, parts: Tuple[str, ...]) -> Tuple[bool, str]:
     """
     if not parts_have_chord(parts):
         return False, (
-            f"harmony={harmony} is a degree order for the chord part, and "
-            f"parts={','.join(parts)} does not take it - add 'chord' to parts, or "
+            f"harmony=\"{harmony}\" is a degree order for the chord part, and "
+            f"parts=\"{','.join(parts)}\" does not take it - add 'chord' to parts, or "
             f"drop the harmony"
         )
     return True, ""

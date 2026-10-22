@@ -7,7 +7,7 @@
 - **the defaults are the shipped arrangement**: the guitar sings, the chord states
   the full harmonisation under each written melody note, and nothing else sounds;
 - **the two rhythms decide the parts**, so `bass_on` is what makes the bass part
-  exist rather than a `parts=` spelling beside it;
+  exist rather than a `parts` spelling beside it;
 - **content maps to the implementation**: `chord_notes` to the texture,
   `bass_notes` to the note rules, and `full` to the *derivation* rather than to a
   number;
@@ -68,7 +68,7 @@ class TestTheShippedRequest(unittest.TestCase):
         self.assertEqual(resolve_request(Request(), 4).texture, "uniform")
 
     def test_the_degree_order_is_the_engine_s_auto(self):
-        """`harmony=` is not a public question; the shipped answer is its `auto`."""
+        """`harmony` is not a public question; the shipped answer is its `auto`."""
         self.assertEqual(resolve_request(Request(), 4).harmony, HARMONY_AUTO)
 
     def test_the_chord_attacks_at_the_written_melody(self):

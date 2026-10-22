@@ -584,7 +584,7 @@ than only through a result.
 so a zero-span barre and a one-fret reach tie and the decision falls through to neck
 position. One fret of stretch is not a stretch worth moving the hand for, and the
 case that showed it was a player reading the tab rather than a corpus measurement:
-`Bb7` under `F4 → G4 → F4` with a three-note palette (`texture="chord2"`)
+`Bb7` under `F4 → G4 → F4` with a three-note palette (`ArrangeOptions(texture="chord2")`)
 was voiced `x-x-6-7-6-x`,
 `x-x-x-3-3-3`, `x-x-6-7-6-x` — down to a fret-3 barre for one note and straight back,
 because the barre spans zero and the natural shape at frets 7–8 spans one. The
@@ -794,21 +794,23 @@ holding the two spellings together, and `tests/test_request.py` asserts it.
 
 | the question | the flag | `Request(...)` | the axis it resolves to |
 |---|---|---|---|
-| who plays the tune? | `--no-melody` | `melody=False` | `parts=` — the melody part is dropped from the selection |
+| who plays the tune? | `--no-melody` | `melody=False` | `parts` — the melody part is dropped from the selection |
 | when does the chord attack? | `--chord-on POSITIONS` | `chord_on="1and"` | the chord layer's rhythm (`grid`, rewritten around `Rhythm`) |
-| what does the chord state? | `--chord-notes full\|3\|2\|1` | `chord_notes="2"` | `texture=uniform\|chord3\|chord2\|chord1` |
-| what does it do in a melody rest? | `--chord-fills none\|hold\|comp` | `chord_fills="hold"` | chord slots in the tune's rests, plus `parts=` including the chord |
-| when does the thumb attack? | `--bass-on POSITIONS` | `bass_on="every-beat"` | the bass layer's rhythm, and `bass=` when it is not `none` |
-| what does each thumb note state? | `--bass-notes root\|root-5th\|walk` | `bass_notes="walk"` | `bass=root`, `bass=root,5th`, or the full four rules |
+| what does the chord state? | `--chord-notes full\|3\|2\|1` | `chord_notes="2"` | the texture axis — `uniform`, `chord3`, `chord2`, `chord1` |
+| what does it do in a melody rest? | `--chord-fills none\|hold\|comp` | `chord_fills="hold"` | chord slots in the tune's rests, plus `parts` including the chord |
+| when does the thumb attack? | `--bass-on POSITIONS` | `bass_on="every-beat"` | the bass layer's rhythm, and `bass` when it is not `none` |
+| what does each thumb note state? | `--bass-notes root\|root-5th\|walk` | `bass_notes="walk"` | the bass axis — `"root"`, `"root,5th"`, or the full four rules |
 
 The values are the flags' own strings, so a request read off a run header is one a caller
-can paste into Python. The axis keywords (`texture=`, `bass=`, `parts=`, `harmony=`,
-`grid=`, `time_signature=`) still ride beside the request and win where they are spelled,
-which is how the axis tests hold a texture or a bass policy to its own behaviour.
+can paste into Python. The axes those questions resolve to are the engine's implementation,
+so a caller who wants one directly spells it through `options=ArrangeOptions(...)` — which
+is how the axis tests hold a texture or a bass policy to its own behaviour. The request and
+the metre are **input facts**, so `request=` and `time_signature=` sit beside `options=`
+rather than inside it, and one call may name both.
 
-`harmony=` is not on that list: it is the one axis with no request spelling, because it
+`harmony` is not on that list: it is the one axis with no request spelling, because it
 is read only on the comping route and the request that route answers is `melody=False`,
-whose chord content is `chord_notes`'s. The metre is read from the score (`grouping`,
+whose chord content is `chord_notes`'s. The metre is read from the score (its grouping,
 below) rather than from a flag.
 
 **The resolution is a derivation with refusals, not a set of defaults**, and it happens
@@ -826,9 +828,9 @@ the bar a note falls, so the `eighths` skeleton — one slot per eighth — prod
 re-struck four-note chords per bar. That is a chord list. `tabstaff`'s `collapse`
 hides it in the *drawing*; the selection never made the decision.
 
-`texture="targets"` is that decision. It is the arranging guide's method — full chords
-on the principal melody notes, something lighter in the gaps — expressed as **a change
-to what may be played**, never as a change to what is preferred.
+`ArrangeOptions(texture="targets")` is that decision. It is the arranging guide's method —
+full chords on the principal melody notes, something lighter in the gaps — expressed as
+**a change to what may be played**, never as a change to what is preferred.
 
 `uniform` is **derived, not listed**: it is the most notes the arithmetic allows at that
 position — with the tune on top and no thumb that is three, the four-note shape this library
@@ -892,7 +894,7 @@ Five decisions are load-bearing:
   was refused for its reach, so "no voicing for this chord" would be claiming something
   that is not true.
 - **The role's palette is the texture's business: there is no grip axis.** A caller
-  cannot name a grip family. `texture=` states the chord part's arity and
+  cannot name a grip family. `texture` states the chord part's arity and
   `texture_palette` builds the families that arity admits from `GRIP_PREFERENCE`, so a
   family the texture never uses cannot be asked for, and a tie that runs off the end of
   the cost tuple falls to the engine's own order rather than a caller's.
@@ -1022,8 +1024,8 @@ a jump cannot stop the jump, because both are legal shapes, and `span` deliberat
 outranks neck position in the tuple. Measured when this landed, over the heads
 then in the tree and the three textures then shipped: **21** of 2,399 steps change, every
 one of them under `targets` — 18 a different shape and 3 only the flag — while
-`uniform` and a walking thumb line (`bass="root,5th,approach,nearest"`) are untouched. The
-narrowing **cannot starve a step**: a thin palette with nothing on the
+`uniform` and a walking thumb line (`ArrangeOptions(bass="root,5th,approach,nearest")`) are
+untouched. The narrowing **cannot starve a step**: a thin palette with nothing on the
 held string keeps its candidates unchanged, and such a step is then simply not marked
 `repeated`.
 
@@ -1268,7 +1270,7 @@ melodic interval.
 - If no voicing matches a melody/chord, `arrange_progression` **emits a rest step** with
   `silence="no_shape"` — the bar stays on the tab and `_silence_clause` says why — rather
   than raising or dropping the position.
-- **Texture (`texture="targets"`):**
+- **Texture (`ArrangeOptions(texture="targets")`):**
   - **The target-note rule is a fixed `(1, 3)`.** There is no way to say "chords on
     beat 1 only", or "fills on beat 2 as well", or to mark a bar that is all target
     notes — a cadenza or a shout chorus, say. The rule lives in one function
@@ -1290,14 +1292,15 @@ melodic interval.
     not added: nothing in the pipeline supplies a key, and inferring one from the
     chord progression would be a guess.
 
-### Melody alone: `parts="melody"` and `parts="melody,bass"`
+### Melody alone: `ArrangeOptions(parts="melody")` and `ArrangeOptions(parts="melody,bass")`
 
-Two selections that answer "lead sheet in, the tune out". `parts="melody"` plays the
-melody and nothing else, and `parts="melody,bass"` plays the same line with a walking
-thumb under it and still nothing harmonising it. Neither is a *grip*, for the reason
-above: what they change is which parts sound at all, and a grip would have to win a cost
-comparison it should not be in. `parts="melody,bass"` is one selection plus a `bass=`
-answer rather than a second mode: the thumb line is the bass part's own axis.
+Two selections that answer "lead sheet in, the tune out". `ArrangeOptions(parts="melody")`
+plays the melody and nothing else, and `ArrangeOptions(parts="melody,bass")` plays the same
+line with a walking thumb under it and still nothing harmonising it. Neither is a *grip*,
+for the reason above: what they change is which parts sound at all, and a grip would have to
+win a cost comparison it should not be in. `ArrangeOptions(parts="melody,bass")` is one
+selection plus a `bass` answer rather than a second mode: the thumb line is the bass part's
+own axis.
 
 A melody-only selection reaches `melody_alone_case` through the selection itself
 (`parts.parts_has_melody_only`), which is the fact that says the chord part is not the
@@ -1331,28 +1334,28 @@ Three decisions are load-bearing:
   happens not to look at it.
 
 The two selections differ in exactly one thing — the thumb line — which is what makes
-them one selection plus a `bass=` answer rather than two spellings: `parts="melody,bass"`
-is `parts="melody"` with a thumb line under it, and `bass=auto` reads the selection (the
-table below).
+them one selection plus a `bass` answer rather than two spellings:
+`ArrangeOptions(parts="melody,bass")` is `ArrangeOptions(parts="melody")` with a thumb line
+under it, and `ArrangeOptions(bass="auto")` reads the selection (the table below).
 
-### The bass style: `bass=` as its own axis
+### The bass style: `bass` as its own axis
 
 The thumb line used to be part of a texture's *name*, so one word meant both "a shell on
 the strong beats" and "a note on every beat below". Two separable decisions
-wearing one identifier. It is now `texture=` (the left hand) crossed with `bass=` (the
-thumb), and `bass=auto` — the default — means **no line at all**: a caller who wants one
-names the note rules or a `bass:walk` grid row. The sentinel still writes a line in one
-case, and it is a selection rather than a texture:
+wearing one identifier. It is now `texture` (the left hand) crossed with `bass` (the
+thumb), and `ArrangeOptions(bass="auto")` — the default — means **no line at all**: a caller
+who wants one names the note rules or a `bass:walk` grid row. The sentinel still writes a
+line in one case, and it is a selection rather than a texture:
 
 | selection | default bass | equivalent to |
 |---|---|---|
-| `parts="melody,bass"` | `root,5th,approach,nearest` | `parts="melody,bass", bass="root,5th,approach,nearest"` |
-| everything else | `none` | `bass="none"` |
+| `ArrangeOptions(parts="melody,bass")` | `root,5th,approach,nearest` | `ArrangeOptions(parts="melody,bass", bass="root,5th,approach,nearest")` |
+| everything else | `none` | `ArrangeOptions(bass="none")` |
 
-`parts="melody"` alone keeps no thumb, and the two spellings are one arrangement:
-`parts="melody", bass="root,5th,approach,nearest"` is the tune with a thumb line under it.
-A lone `parts="bass"` selection keeps none either: that part already is the bass line, and a
-thumb under it would double it.
+`ArrangeOptions(parts="melody")` alone keeps no thumb, and the two spellings are one
+arrangement: `ArrangeOptions(parts="melody", bass="root,5th,approach,nearest")` is the tune
+with a thumb line under it. A lone `ArrangeOptions(parts="bass")` selection keeps none
+either: that part already is the bass line, and a thumb under it would double it.
 
 All the equivalences are asserted byte-for-byte against the rendered tab, so nothing moved
 when the axis was separated out.
@@ -1429,8 +1432,9 @@ frets, so all three thumb strings are free whatever the texture's palette says, 
 **Nothing in the tree is refused any more, and that is a consequence of the grip tables
 rather than of this rule.** `uniform` used to be the one that failed: its palette held
 `drop24`'s `(4,2,1,0)`, the one reachable set that spanned all three thumb strings, so
-`bass="root,5th,approach,nearest"` under the default texture was refused, naming a texture that
-would work. Removing the four inner-skip `drop24` sets for the right-hand reason in
+`ArrangeOptions(bass="root,5th,approach,nearest")` under the default texture was refused,
+naming a texture that would work. Removing the four inner-skip `drop24` sets for the
+right-hand reason in
 [fingering.md](history/fingering.md) §4.4 removed that set with them, so the worst case anywhere
 is now one free string — the rule's threshold — and `uniform` carries every policy. The
 refusal and its reason string stay, because the question is still the right one: the
@@ -1473,9 +1477,9 @@ invariant could not see the defect — and
 a target whose quality has no shell — `Bmaj` under a `D5` melody, say — is a melody alone
 over the thumb rather than a four-note shape nobody can play.
 
-### `parts=` as the third axis: which of melody, bass and chord the guitar takes
+### `parts` as the third axis: which of melody, bass and chord the guitar takes
 
-`texture=` answers *how thick the chord part is*. `parts=` answers *which parts this
+`texture` answers *how thick the chord part is*. `parts` answers *which parts this
 instrument plays at all*, and it is an axis of the same kind rather than a mode — a band
 setting is a **combination**, not one name.
 
@@ -1483,7 +1487,7 @@ Three parts, because four strings sound at once and four strings is not four par
 
 - **melody** — 0 or 1 note. The tune, on the top string. Its rhythm is data, not choice.
 - **bass** — 0 or 1 note. The bottom of the band. The note that names the chord.
-- **chord** — 0 or more, the arity `texture=` states.
+- **chord** — 0 or more, the arity `texture` states.
 
 The fourth string is **capacity, not a part**. `melody + bass + chord <= 4`
 (`grips.RIGHT_HAND_STRINGS`) is arithmetic rather than a rule: a selection that does not
@@ -1527,26 +1531,28 @@ simply ranked lower.
 
 | axis | owns | values |
 |---|---|---|
-| `parts=` | which of melody / bass / chord the guitar takes | any subset of `melody`, `bass`, `chord`; `auto` *(default)* is all three |
-| `texture=` | the **chord part's arity**, by metric weight | `uniform`, `targets`, `chord1`, `chord2`, `chord3` |
-| `harmony=` | the chord part's **degree order** | `auto` *(default)*, `full`, `guide`, `shell_root` |
-| `bass=` | the bass part's **note rules**, in the order they are tried | `auto` *(default)*, `none`, or an ordered list of `root`, `5th`, `approach`, `nearest` |
-| `grid=` | **when each part sounds** | `PART:PATTERN` rows — see `` `grid=` `` below |
+| `parts` | which of melody / bass / chord the guitar takes | any subset of `melody`, `bass`, `chord`; `auto` *(default)* is all three |
+| `texture` | the **chord part's arity**, by metric weight | `uniform`, `targets`, `chord1`, `chord2`, `chord3` |
+| `harmony` | the chord part's **degree order** | `auto` *(default)*, `full`, `guide`, `shell_root` |
+| `bass` | the bass part's **note rules**, in the order they are tried | `auto` *(default)*, `none`, or an ordered list of `root`, `5th`, `approach`, `nearest` |
+| `grid` | **when each part sounds** | `PART:PATTERN` rows — see `` `grid` `` below |
 
 **Order carries no meaning, so the selection is canonicalised.** `parse_parts` returns
-`PART_NAMES` order, so `parts="chord,bass"` and `parts="bass,chord"` are one request and
-not two that happen to agree. `auto` names every part; `none` is refused rather than
+`PART_NAMES` order, so `ArrangeOptions(parts="chord,bass")` and
+`ArrangeOptions(parts="bass,chord")` are one request and not two that happen to agree.
+`auto` names every part; `none` is refused rather than
 expanded, because a selection that names no part has no line to state. An unknown name
 raises: a spelling nobody recognises is a question, and answering it by dropping a part
 would hand back an arrangement missing something nobody asked it to drop.
 
-`parts="chord"` is the ensemble comping answer: the tune belongs to the horn, the root to
-the bassist, and the guitar takes the harmony in between. That is not silence — silence is
-not an arrangement — and `parts="melody"` is its opposite, the tune and nothing else.
+`ArrangeOptions(parts="chord")` is the ensemble comping answer: the tune belongs to the
+horn, the root to the bassist, and the guitar takes the harmony in between. That is not
+silence — silence is not an arrangement — and `ArrangeOptions(parts="melody")` is its
+opposite, the tune and nothing else.
 
 **Naming a part is a request for it to sound, and a policy for a part the selection leaves
 out is refused**, naming the part that would work. Two axes are inert rather than refused:
-`harmony=` is read only by the comping route, and `texture=` says nothing on a melody-only
+`harmony` is read only by the comping route, and `texture` says nothing on a melody-only
 selection, whose shapes are single frets.
 
 **An `NC` bar has no chord part and no bass part**, on every route, and the melody is
@@ -1556,11 +1562,11 @@ no chord. That is a derivation rather than a rule about chordless bars, and it i
 chords and not the bass line. "No chord here" and "silent here" are different facts, and only
 the second is a rest.
 
-### `harmony=`: which degrees the chord part states
+### `harmony`: which degrees the chord part states
 
-`texture=` says **how many** notes the chord part states; `harmony=` says **which**. The
+`texture` says **how many** notes the chord part states; `harmony` says **which**. The
 order is `TONE_PRIORITY`'s row for the quality, read at the chord part's own degrees, so the
-arity `texture=` takes is a **prefix** of that row and a reduced shape gives up its **tail**.
+arity `texture` takes is a **prefix** of that row and a reduced shape gives up its **tail**.
 For `Cmaj7` (`3rd, 7th, root, 5th`): at three voices the 5th goes, at two the shape is the
 guide pair, and at one it is the 3rd alone.
 
@@ -1587,15 +1593,15 @@ consequence is [open-issues.md](open-issues.md) item 3: on the comping route `fu
 accepted and answered with a different family.
 
 **The axis is read only by the comping route.** A grip is a claim about a chord's 3rd and
-7th and takes its arity from `texture=`, so `harmony=` cannot reach an arrangement the
+7th and takes its arity from `texture`, so `harmony` cannot reach an arrangement the
 guitar sings; a policy named for a part the selection leaves out is refused before anything
 is generated.
 
 ### `get_comping_voicings`: a chord with no melody on top
 
-The generator behind a `parts="chord"` selection. **It is the same exhaustive search with
-nothing held at the top.** A shell is already a claim about the chord's 3rd and 7th rather
-than about
+The generator behind a comping selection (`ArrangeOptions(parts="chord")`). **It is the same
+exhaustive search with nothing held at the top.** A shell is already a claim about the
+chord's 3rd and 7th rather than about
 the tune, so the search needed no new rule: `frets_in_span` already tries every fret
 combination on the remaining strings and the candidate keeps the ones where both guide
 tones sound and nothing outside
@@ -1629,9 +1635,10 @@ decision [docs/open-issues.md](open-issues.md) item 6 records, pinned by
 
 **The arity is the length of the selection, and it is honoured.** `notes` says how many
 voices the guitar was asked for, and a two-voice request is **two notes**. The first
-version of this generator always built a three-note shell, so `texture="chord1"` and
-`texture="chord2"` both came back with three — a part sounding a note nobody named,
-which in a band setting is a voice another player was supposed to have.
+version of this generator always built a three-note shell, so
+`ArrangeOptions(texture="chord1")` and `ArrangeOptions(texture="chord2")` both came back
+with three — a part sounding a note nobody named, which in a band setting is a voice
+another player was supposed to have.
 
 **The arity picks the grip family rather than truncating one.** Truncating a `shell` set to
 two strings looks free and is not: it yields pairs the library has never measured —
@@ -1650,9 +1657,10 @@ guitar sings at all.
 **One voice is a weaker claim, and the rule says so rather than refusing.** Two notes can
 sound both guide tones, which is what states the chord; one note cannot, so a single note
 keeps the **first** guide tone (the 3rd, or the 4th on a sus chord) — the same preference
-order `_duo_offsets` already applies. Refusing instead would have made `texture="chord1"`
-fall through to the melody-bearing route: measured, it put the horn's line back on the
-guitar on every step, the opposite of what asking for one note meant.
+order `_duo_offsets` already applies. Refusing instead would have made
+`ArrangeOptions(texture="chord1")` fall through to the melody-bearing route: measured, it
+put the horn's line back on the guitar on every step, the opposite of what asking for one
+note meant.
 
 **With no melody to support, a fourth voice would be the root or the 5th** — the two notes
 that carry no information about the chord's quality. That is why only the `shell` family is
@@ -1693,7 +1701,7 @@ measurement is what corrected it.
 
 Normally `repeated` is a **soprano-only re-strike** — the melody re-articulates under an
 unchanged harmony, so the inner voices are held. That presumes there *is* a soprano
-carrying the tune. Under `parts="chord"` there is none, so "re-strike the soprano" would
+carrying the tune. Under a comping selection there is none, so "re-strike the soprano" would
 re-strike a guide tone and the shape would change on a beat where nothing has. The rule
 becomes **hold the whole shape**, which is what a guitarist comping behind a horn does while
 the horn repeats the note.
@@ -1733,10 +1741,11 @@ selection axis is `parts_has_melody_only`, which is derived from the parts rathe
 listed, so a spelling that cannot be voiced cannot miss it either.
 
 **`melody_alone_case` gains a guard, because its routes all end at the melody alone.** Every
-answer it gives reaches `get_melody_only_voicing`, so under `parts="chord"` it must not
+answer it gives reaches `get_melody_only_voicing`, so under a comping selection it must not
 answer `MELODY_ALONE_TEXTURE` — or a texture *fill* would put the tune straight back on the
 guitar, and the axis would be honoured only on targets. Measured: before the guard, every
-fill under `texture="targets", bass="root,5th,approach,nearest"` came back `x-7-x-x-x-8`, a bare melody note.
+fill under `ArrangeOptions(texture="targets", bass="root,5th,approach,nearest")` came back
+`x-7-x-x-x-8`, a bare melody note.
 
 **An `NC` bar is emitted silent, with the reason on the step.** There is no chord, so
 there are no guide tones, and the guitar is genuinely silent while the horn is not. The
@@ -1749,17 +1758,18 @@ it twice or hand the horn's line back to the guitarist.
 
 
 
-## `grid=` — where a chord falls
+## `grid` — where a chord falls
 
-`harmony=` answers *which degrees* a stab states; this answers *where one lands*. A
-comping style needs both, and `bass=` supplies a third orthogonal question (what plays the
+`harmony` answers *which degrees* a stab states; this answers *where one lands*. A
+comping style needs both, and `bass` supplies a third orthogonal question (what plays the
 bottom). The vocabulary is `GRID_PART_PATTERNS` + `GRID_STYLES` + `GRID_PATTERNS` in
 `grid.py`, with `parse_grid` / `resolve_grid` / `grid_allowed` /
 `grid_defers_to_melody` beside the other axes' functions. A row is written **`part:pattern`**
 — `chord:freddie`, `bass:walk` — so the axis is positions crossed with parts, and each part
 may have a row of its own. There is **no `auto` grid value**: `GRID_DEFAULT` is
-`melody:every_note`, so the tune's own slots govern every part, and `grid=auto` is refused
-like any other unknown name (see [comping-styles.md](history/comping-styles.md) §9.3).
+`melody:every_note`, so the tune's own slots govern every part, and
+`ArrangeOptions(grid="auto")` is refused like any other unknown name (see
+[comping-styles.md](history/comping-styles.md) §9.3).
 
 **Positions are `(beat, eighths)` pairs, and `beat` may be a sentinel.** `LAST` resolves
 to the metre's final beat and `ALL` to every beat of the bar, so a pattern names *a
@@ -1828,9 +1838,10 @@ The **ordering of those guards is load-bearing and was got wrong twice** — see
 [../AGENTS.md](../AGENTS.md) trap 12 for the three orderings and what each one breaks.
 
 **The grid does not touch the bass line**, and that is orthogonality tested rather than
-asserted: measured on `synthetic_cut_time` with `parts="chord", texture="targets",
-grid="melody:every_note,bass:walk"`, the walked notes are `[51, None, 52, None]` at both the
-`melody:every_note` and the `chord:freddie` chord row. A grid removes chords, never the thumb.
+asserted: measured on `synthetic_cut_time` with
+`ArrangeOptions(parts="chord", texture="targets", grid="melody:every_note,bass:walk")`, the
+walked notes are `[51, None, 52, None]` at both the `melody:every_note` and the
+`chord:freddie` chord row. A grid removes chords, never the thumb.
 
 ### What is not built
 
@@ -1845,7 +1856,7 @@ A **four-note comping chord** is the third, and it is a decision about string se
 about a longer degree order: `derived_arity` caps the chord part at `chord3`, and
 `get_comping_voicings` offers the `shell` family alone, because with no melody to support a
 fourth voice would be the root or the 5th — the two notes that say least about the quality.
-Its consequence for `harmony=` is [open-issues.md](open-issues.md) item 3.
+Its consequence for `harmony` is [open-issues.md](open-issues.md) item 3.
 
 Both withdrawals are [comping-styles.md](history/comping-styles.md) §8 Stage D, and
 [open-issues.md](open-issues.md) item 1 is the larger thing underneath them — a grid names

@@ -410,7 +410,7 @@ class TestChordSlots(unittest.TestCase):
     arrangements changed and thirty-six did not.
 
     **The synthetic corpus is shorter, so the counts are smaller.** Current step counts
-    under `parts=chord`:
+    under `parts="chord"`:
 
         comps+freddie   cut time 23, repeat slash 35, triplets 112
         comps+joe_pass  cut time 28, repeat slash 39, triplets 114
@@ -510,7 +510,7 @@ class TestChordSlots(unittest.TestCase):
     def test_every_added_position_is_one_the_tune_is_silent_at(self):
         """The rule the melody-anchored **axis** follows: only where the tune is silent.
 
-        Swept with `grid=` spelled, because that is the union this rule is about - the
+        Swept with `grid` spelled, because that is the union this rule is about - the
         default request adds no position, and a requested position (`chord-on`) is
         deliberately allowed under a held note. The heads are
         `tests.support.sweep_head_paths()`: the rule is position-level and about the
@@ -734,12 +734,12 @@ class TestChordSlots(unittest.TestCase):
         self.assertGreater(first, 1.0, "a position with no harmony was filled in")
 
     def test_the_singing_route_is_not_touched(self):
-        """`parts=auto` invents no melody: a note-less position carries `None`.
+        """`parts="auto"` invents no melody: a note-less position carries `None`.
 
         The regression that makes this necessary, and it was measured rather than
         predicted: `parse_parts("auto")` returns the **sentinel** `("auto",)`, which has
         no soprano, so testing the route on the parsed value alone classified the *default*
-        arrangement as the comping route. Fourteen steps of a singing `grid=freddie`
+        arrangement as the comping route. Fourteen steps of a singing `grid="freddie"`
         arrangement carried the placeholder melody before `resolve_parts` was added.
 
         **What is asserted is the absence of an invented pitch, not the step count.** The

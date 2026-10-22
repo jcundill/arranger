@@ -131,7 +131,7 @@ class TestTheSingingRouteIsUntouched(unittest.TestCase):
         self.assertEqual(_lone_bass(steps), [])
 
     def test_a_melody_only_selection_sounds_its_bass_positions(self):
-        """`parts=melody,bass` plays the tune and the thumb - a walk position included.
+        """`parts="melody,bass"` plays the tune and the thumb - a walk position included.
 
         Its note-less slots were *tune silent* before: the selection's early answer
         fired before the bass part's claim on the position was asked.

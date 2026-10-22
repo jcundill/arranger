@@ -33,11 +33,11 @@ def parse_parts(argument: str) -> Tuple[str, ...]:
     """A `parts` argument as a canonical tuple of part names.
 
     **Order carries no meaning**, so the result is canonicalised to
-    `PART_NAMES` order: `parts=chord,bass` and `parts=bass,chord` are one
+    `PART_NAMES` order: `parts="chord,bass"` and `parts="bass,chord"` are one
     request and must not produce two arrangements.
 
     `auto` is the shipped default and names every part - the tune on top, the
-    thumb underneath, and a chord part whose arity `texture=` states. Any other
+    thumb underneath, and a chord part whose arity `texture` states. Any other
     spelling is a comma-separated list of the names above.
 
     Raises `ValueError` on an unknown name, on an empty argument, and on `auto`
@@ -123,8 +123,8 @@ def parts_have_chord(parts: Tuple[str, ...]) -> bool:
 def parts_has_melody_only(parts: Tuple[str, ...]) -> bool:
     """Whether the selection takes the tune and no chord part.
 
-    `parts=melody` is the tune with no left hand under it, and
-    `parts=melody,bass` is the same line with a thumb under it. **The chord part
+    `parts="melody"` is the tune with no left hand under it, and
+    `parts="melody,bass"` is the same line with a thumb under it. **The chord part
     is what this rules out, and the bass part is deliberately not** - the thumb
     has its own axis (`bass_style=`), and a line with a thumb under it is still
     one note's worth of left hand.

@@ -102,7 +102,7 @@ class TestSelectionDeterminism(unittest.TestCase):
 
         `grips=("drop2",)` with the old soprano set used to reproduce this library's
         original output, and that is exactly what `docs/history/parts.md` §4 deletes: a caller
-        chooses the *arity* (`texture=`) and the parts, and `TONE_PRIORITY` plus the
+        chooses the *arity* (`texture`) and the parts, and `TONE_PRIORITY` plus the
         neck window decide which family states those notes. The arrangement here is
         therefore the engine's own - and where it disagrees with the old pinned tabs it
         is because the wider palette found a **purer** shape: `G7` under B4 on the high

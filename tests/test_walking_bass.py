@@ -75,7 +75,7 @@ class TestValidation(unittest.TestCase):
         It used to be a texture of its own (`texture="walking_bass"`), which made one
         name cover two claims - what the thumb states, and how many notes the chord
         part states. `docs/history/parts.md` §6 splits them, so what "accepted" means here is that
-        `bass=BASS_STYLE_WALK` parses and the arrangement it makes is one bar of four
+        `bass="BASS_STYLE_WALK"` parses and the arrangement it makes is one bar of four
         beats.
         """
         self.assertEqual(set(parse_bass_style(BASS_STYLE_WALK)), set(BASS_RULES))
@@ -858,7 +858,7 @@ class TestNoRegression(unittest.TestCase):
 
 
 class TestTheBassPolicyIsAnAxis(unittest.TestCase):
-    """`bass=` selects the pattern; the texture no longer carries it.
+    """`bass` selects the pattern; the texture no longer carries it.
 
     `walking_bass` used to mean "a thumb line" as part of its name. Now it means "a
     thumb line, by default", and the same line is reachable from a texture that has
@@ -910,7 +910,7 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
         self.assertNotEqual(
             named,
             self.tabs(self.arrange(texture="targets", grid=grid)),
-            "the default produced the walk, so `bass=` is not an axis",
+            "the default produced the walk, so `bass` is not an axis",
         )
 
     def test_auto_follows_the_selection_under_a_melody_only_part(self):

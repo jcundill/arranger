@@ -679,7 +679,7 @@ class TestChordsOnlyHead(unittest.TestCase):
         Exactly the rhythm each pattern names on a 4/4 bar: `freddie` a chord on every
         beat (16 = 4 bars x 4), `joe_pass` on the *ands* (first at bar 1 beat 1.5), and
         `final_and` on the final beat's upbeat (first at bar 1 beat 4.5). Every slot
-        carries `parts=None`, because the file has no tune — the honest absence step B
+        carries `parts="None"`, because the file has no tune — the honest absence step B
         made expressible, not the deleted placeholder.
         """
         expected = {

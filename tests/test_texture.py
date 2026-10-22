@@ -286,7 +286,7 @@ class TestRoles(unittest.TestCase):
         **This assertion was inverted, not deleted.** It used to name the one
         empty palette a texture *did* carry - `walking_bass`'s fill - and assert
         that it was the only one. `walking_bass` is not a texture any more (it is
-        `bass=BASS_STYLE_WALK` over `texture=targets`), and the arity rule leaves
+        `bass="BASS_STYLE_WALK"` over `texture="targets"`), and the arity rule leaves
         no row that can be empty: a fill one thinner than a one-note target is the
         `melody` entry rather than nothing. What survives is the rule the test was
         for, and it is now stated over the whole palette table rather than over a
@@ -324,7 +324,7 @@ class TestRoles(unittest.TestCase):
         It used to be a texture of its own (`texture="walking_bass"`), which made
         one name cover two claims: which note the thumb states (a *bass* fact) and
         how many notes the chord part states (a *texture* fact). `docs/history/parts.md` §6
-        splits them - `bass=BASS_STYLE_WALK` with `texture="targets"` - and the
+        splits them - `bass="BASS_STYLE_WALK"` with `texture="targets"` - and the
         arrangement is the same, so what is asserted here is the pair rather than
         the one spelling.
         """
@@ -747,7 +747,7 @@ class TestTheThumbReach(unittest.TestCase):
 
     The right hand assigns **strings**, not roles - the thumb takes the bottom note of a two-
     or three-note shape whenever that note sits on the E, A, D or G string, with or without a
-    bass line under the shape. `bass=` is an arrangement-level fact and never reaches it: the
+    bass line under the shape. `bass` is an arrangement-level fact and never reaches it: the
     merged bass note is written into the fret vector *after* selection. Above the G the thumb
     is out of reach and the fingers take the bottom, which `duo`'s 1-2 pair and the two
     one-note comping shapes are the only reachable sets to ask for. How often it happens is
@@ -1018,7 +1018,7 @@ class TestTimingsDefensive(unittest.TestCase):
 
 
 class TestMelodyOnlySelections(unittest.TestCase):
-    """`parts=melody` and `parts=melody,bass`: the tune alone, and the tune
+    """`parts="melody"` and `parts="melody,bass"`: the tune alone, and the tune
     with a thumb under it.
 
     Both answer "lead sheet in, melody out". They are **part selections** rather
@@ -1026,7 +1026,7 @@ class TestMelodyOnlySelections(unittest.TestCase):
     would have to win a cost comparison it should not be in, and
     `GRIP_PREFERENCE` deliberately leaves `melody` out for exactly that reason.
     They were the `melody` and `melody_bass` textures, then the `voices=` axis,
-    and they are the `parts=` axis now - see `docs/history/one-fact.md` and
+    and they are the `parts` axis now - see `docs/history/one-fact.md` and
     `docs/history/parts.md`.
     """
 
@@ -1114,7 +1114,7 @@ class TestMelodyOnlySelections(unittest.TestCase):
 
         **Inverted rather than deleted.** It used to loop over `grips=("duo",)`,
         `("shell",)` and so on, asserting the same thing about the axis that was
-        deleted; `texture=` is the axis that survived, and it is the one that can
+        deleted; `texture` is the axis that survived, and it is the one that can
         change how many notes the chord part states.
         """
         for parts in ("melody", "melody,bass"):

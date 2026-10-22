@@ -3095,7 +3095,7 @@ def _head_slots(
         return slots
     # A **spelled axis** is the engine's own spelling, so the union keeps the
     # melody-anchored behaviour those axes have always documented: a named preset
-    # when `grid=` says which, and `every_note` otherwise. Only a pure request is
+    # when `grid` says which, and `every_note` otherwise. Only a pure request is
     # answered by its own `chord-on` rhythm - that is what makes `head FILE` the
     # melody and nothing added.
     if any(

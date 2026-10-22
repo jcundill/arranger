@@ -1,4 +1,4 @@
-"""`parts=`: which of melody, bass and chord the guitar takes.
+"""`parts`: which of melody, bass and chord the guitar takes.
 
 The axis is a selection rather than a setting, so these tests are about what the guitar
 leaves to the other players - a melody-only selection, a bass part under a comp, and the
@@ -71,7 +71,7 @@ class TestMelodyOnlySelections(unittest.TestCase):
     def test_a_soprano_less_selection_comps_on_every_texture(self):
         """The refusal that dissolved: nothing is self-contradictory anywhere now.
 
-        Before the collapse, `parts=alto,tenor` on a melody-only texture was
+        Before the collapse, `parts="alto,tenor"` on a melody-only texture was
         refused with a warning and the melody handed back to the guitar. With
         the claim keyed on the selection, the same request comps, on every
         texture, without a refusal.
@@ -147,7 +147,7 @@ class TestMelodyOnlySelections(unittest.TestCase):
         a melody-only selection the note of the tune still sounds, alone -
         which is what every slot of that selection is anyway, so the ordering
         is asserted rather than left to read as a coincidence. Measured under
-        `grid=joe_pass`, which places no chord on beat 1.0: every slot of the
+        `grid="joe_pass"`, which places no chord on beat 1.0: every slot of the
         soprano-only arrangement still sounds its note.
         """
         progression = [
@@ -239,7 +239,7 @@ class TestTheArityFollowsTheTexture(unittest.TestCase):
     The first version of the generator always built a three-voice shell, so
     `--voices alto` and `--voices alto,tenor` both came back with three notes - the part
     sounding a voice nobody asked for, which in a band setting is a voice another player
-    was supposed to have. The equivalent hole now is `texture=`: a comping slot that
+    was supposed to have. The equivalent hole now is `texture`: a comping slot that
     states the default three regardless of the arity the caller asked for would be the
     same defect with the knob renamed, and this is the class that would catch it.
     """
@@ -278,7 +278,7 @@ class TestTheArityFollowsTheTexture(unittest.TestCase):
 
 
 class TestABassPartIsABassNote(unittest.TestCase):
-    """`parts=bass` sounds a bass note: low, and a root or a 5th.
+    """`parts="bass"` sounds a bass note: low, and a root or a 5th.
 
     Three defects, all measured on `tests/data/synthetic_cut_time.mxl` before this class
     existed, and all three had to be fixed together - which is why the tests are three
@@ -296,7 +296,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
       sounds like the wrong chord, which is what `BASS_DEGREES_6432` says in as many
       words. So register alone would have produced a *low 3rd*, still wrong.
 
-    `parts=` names **parts**, not voices, which is what makes the first defect
+    `parts` names **parts**, not voices, which is what makes the first defect
     unreachable through the API: there is one bass part and it is addressed by name, so
     two different requests cannot collapse to one arrangement. The inner voices are
     reached as the chord part - both guide tones together - and

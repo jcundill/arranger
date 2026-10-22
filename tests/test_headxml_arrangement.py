@@ -792,7 +792,7 @@ class TestHeadTexture(unittest.TestCase):
 class TestANarrowPaletteNeverLosesTheTune(unittest.TestCase):
     """A palette with no room to state a chord must not take the melody note with it.
 
-    `texture=chord1` is the narrowest thing the texture axis can express: a chord-melody
+    `texture="chord1"` is the narrowest thing the texture axis can express: a chord-melody
     is the tune plus **one** chord tone, where the default states four. A palette that
     narrow answers no candidate at all for a melody the non-chord-tone table cannot
     reharmonise, unless it reaches the non-grip `duo` - so this is where a dropped note

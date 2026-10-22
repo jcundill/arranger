@@ -120,8 +120,8 @@ def rest_step(
         silence=silence,
     ))
     # The thumb still walks on a rest. A comping grid thins the **chords**,
-    # not the bass line - that is the whole difference between `grid=` and
-    # `bass=none`, and dropping the attach here would silently delete the
+    # not the bass line - that is the whole difference between `grid` and
+    # `bass="none"`, and dropping the attach here would silently delete the
     # walk from every bar the grid thinned.
     attach_bass(
         arrangements[-1], slot.bass, arrangements
@@ -344,7 +344,7 @@ def _comping_candidates(
     """The melody-free shapes a comping step may state, in a playable position.
 
     `notes` is how many chord voices the guitar states here - the chord part's arity,
-    which `texture=` owns. **A voice is a *role* in the stack, not a count of parts
+    which `texture` owns. **A voice is a *role* in the stack, not a count of parts
     played twice**, so it is the arity rather than the number of parts named.
 
     **A grid position the tune is silent at is not the melody's voice** (§9.3 step D):

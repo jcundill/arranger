@@ -842,7 +842,7 @@ def _shell_voicing(
         # the **first** guide tone (the 3rd, or the 4th on a sus chord) and drops the second,
         # which is the same preference order `_duo_offsets` already applies.
         #
-        # Refusing here would instead make `texture=chord1` fall through to the ordinary
+        # Refusing here would instead make `texture="chord1"` fall through to the ordinary
         # melody-bearing route, which states the horn's line on the guitar on every step
         # and hands it back - the opposite of what asking for one note meant.
         keep = 2 if notes >= 2 else 1
@@ -922,7 +922,7 @@ def _search_comping_voicings(request: CompingRequest) -> List[Voicing]:
 
     **`shell_root` asks for both guide tones *and* a root or 5th under them**, which is
     the claim neither flag above can state: `bass_voice` spends the whole shape on the
-    bass, and the default spends it on the guide tones alone. It is a `harmony=` value
+    bass, and the default spends it on the guide tones alone. It is a `harmony` value
     rather than a change of arity, because it is a claim about *which degrees sound* and
     not about how many notes there are - the same reason `HARMONY_STYLES` is a table of
     degree families and not a count. It resolves on the **existing** `(5,4,3)` shell sets,
