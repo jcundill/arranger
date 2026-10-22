@@ -3354,31 +3354,25 @@ def _key_label(head: Head) -> str:
 
 
 def _head_options(args: Any) -> ArrangeOptions:
-    """The `head` command's request, as the engine's one value."""
+    """The `head` command's request, as the engine's one value.
+
+    `--chord-on` reaches the request as the flag gave it, or as the request's own
+    default when the flag was absent. What that default *means* under `--no-melody`
+    - every felt beat, because this guitar has no written onsets to attach chords to
+    - is `resolve_request`'s derivation, so the flag layer holds no metre-dependent
+    rule of its own.
+    """
     return ArrangeOptions(
         non_chord_tone=args.non_chord_tone,
         request=Request(
             melody=not args.no_melody,
-            chord_on=_chord_on(args),
+            chord_on=args.chord_on if args.chord_on is not None else RHYTHM_MELODY,
             chord_notes=args.chord_notes,
             chord_fills=args.chord_fills,
             bass_on=args.bass_on,
             bass_notes=args.bass_notes,
         ),
     )
-
-
-def _chord_on(args: Any) -> str:
-    """The chord's rhythm: the flag, or the default the selection implies.
-
-    Comping for a horn defaults to four-to-the-bar (`every-beat`); playing the tune
-    defaults to the tune's own onsets. That is a **default**, not a rule: an
-    explicit `--chord-on melody` with `--no-melody` is refused by the request,
-    because there is no melody on this guitar to attach chords to.
-    """
-    if args.chord_on is not None:
-        return args.chord_on
-    return RHYTHM_MELODY if not args.no_melody else RHYTHM_EVERY_BEAT
 
 
 def _request_line(head: Head, args: Any) -> str:
