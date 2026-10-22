@@ -208,6 +208,16 @@ def _sounding_frets(step: ArrangementStep) -> List[Tuple[int, int]]:
     left to the caller.
     """
     voicing = step.voicing
+    if step.bass_held and voicing.bass_string is not None:
+        # The thumb is ringing rather than plucked, so it is not one of this step's
+        # notes. `_strike_notes` writes it as a tie instead: a GP beat cannot hold a
+        # string silently the way an empty tab cell can, and leaving the note out
+        # entirely would cut the bass line at every melody note.
+        return [
+            (index, fret)
+            for index, fret in enumerate(voicing.frets)
+            if fret >= 0 and index != voicing.bass_string
+        ]
     if step.melody_only:
         return [(index, fret) for index, fret in enumerate(voicing.frets) if fret >= 0]
     if step.bass_only:
@@ -464,6 +474,23 @@ def _strike_notes(
                 velocity=_VELOCITY,
                 # A continuation part carries the tie from the part before it.
                 type=(gp.NoteType.tie if continued else gp.NoteType.normal),
+            )
+        )
+        last_on_string[gp_string] = fret
+    if step.bass_held and step.voicing.bass_string is not None and step.bass is not None:
+        # The held thumb, as the continuation it is. `last_on_string` decides whether the
+        # tie can be trusted: a tie carries no fret (see this function's docstring), so if
+        # an upper voice has since been written on that string the note is struck instead.
+        gp_string = _GP_STRING_OFFSET - step.voicing.bass_string
+        fret = step.voicing.frets[step.voicing.bass_string]
+        held = last_on_string.get(gp_string) == fret
+        beat.notes.append(
+            gp.Note(
+                beat,
+                value=fret,
+                string=gp_string,
+                velocity=_VELOCITY,
+                type=(gp.NoteType.tie if held else gp.NoteType.normal),
             )
         )
         last_on_string[gp_string] = fret

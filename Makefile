@@ -17,13 +17,26 @@ RUFF ?= .venv/bin/ruff
 # and in the typecheck target below.
 MODULES = arranger tabscore.py tabstaff.py tabxml.py tabgp.py headxml.py grip_chart.py tests
 
-.PHONY: help install install-extra install-extra-gp install-dev test typecheck lint format check demo build clean chart chart-audit
+# The suite is two halves and one command. A test about the **music** is
+# `tests/test_*.py`; a test about the **tree** - the module graph, the budgets, the
+# private seams, the generated chart, the fixture corpus, the extras' laziness, the
+# explanation contract - is `tests/meta_*.py`. The half is the filename, so there is
+# no list to keep in step, and `test` runs both so the split is a way in rather than
+# a smaller gate. `tests/meta_structure.py::TestTheSplit` fails on a file that is
+# neither, which is the one way a pattern-based gate could go quiet.
+FEATURE_PATTERN = test_*.py
+META_PATTERN = meta_*.py
+
+.PHONY: help install install-extra install-extra-gp install-dev test test-features test-meta test-one typecheck lint format check demo build clean chart chart-audit
 
 help:
 	@echo "Available targets:"
 	@echo "  make help      Show this message"
 	@echo "  make install   Install the package into the local virtualenv (editable)"
-	@echo "  make test      Run the full unittest suite (verbose)"
+	@echo "  make test      Run the whole unittest suite: both halves (verbose)"
+	@echo "  make test-features  Run the music half only - the inner loop (verbose)"
+	@echo "  make test-meta      Run the structural half only - before committing (verbose)"
+	@echo "  make test-one M=tests.test_texture  Run named modules (the fastest loop)"
 	@echo "  make typecheck Run pyright over the modules and tests/ (dev-only tool)"
 	@echo "  make lint      Run ruff over the modules and tests/ (dev-only tool)"
 	@echo "  make format    Reformat the tree with ruff"
@@ -55,8 +68,28 @@ install-extra-gp:
 install-dev:
 	$(PYTHON) -m pip install -e '.[dev]'
 
-test:
-	$(PYTHON) -m unittest discover -s tests -t . -v
+# The whole suite: both halves, in the order a reader wants them - the music first,
+# because that is what a feature change moves.
+#
+# Two invocations rather than one `discover` because unittest filters by *one*
+# basename pattern: `-p 'test_*.py'` cannot exclude `meta_*.py`, and a list of
+# modules would be trap #1. The two patterns are therefore the split's only
+# definition - `TestTheSplit` in tests/meta_structure.py fails if a file matches
+# neither, so no module can fall between them and stop running.
+test: test-features test-meta
+
+test-features:
+	$(PYTHON) -m unittest discover -s tests -t . -p '$(FEATURE_PATTERN)' -v
+
+test-meta:
+	$(PYTHON) -m unittest discover -s tests -t . -p '$(META_PATTERN)' -v
+
+# The fastest loop there is, and the reason the split is not the whole answer:
+# `make test-one M="tests.test_texture tests.test_grid"` costs one interpreter
+# start (~0.6s) plus the modules named.
+test-one:
+	@test -n "$(M)" || { echo "name at least one module: make test-one M=tests.test_texture"; exit 1; }
+	$(PYTHON) -m unittest -v $(M)
 
 typecheck:
 	@command -v $(PYRIGHT) >/dev/null 2>&1 || { echo "make typecheck needs pyright: $(PYTHON) -m pip install pyright"; exit 1; }

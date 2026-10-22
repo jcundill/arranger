@@ -526,7 +526,7 @@ def slash_bass_cost(voicing_midis: Sequence[int], bass_pc: Optional[int]) -> int
     voicing that cannot honour the bass is still usable.
 
     Named `slash_bass_cost`, not `bass_cost`, because the walking line already
-    owns that name (`arranger.bass.bass_cost`) - the two rank different things and
+    owns that name (`arranger.bass_place.bass_cost`) - the two rank different things and
     the shared spelling was a trap. This is the slash-chord half.
     """
     if bass_pc is None or not voicing_midis:

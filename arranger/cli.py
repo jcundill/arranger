@@ -4,10 +4,10 @@
 a flag cannot be added in one place and silently missed in another. The idea behind the
 split is that **the duplication worth removing is the *argument*, not the *prose***: the
 flags whose help is identical are written once here, and prose that genuinely differs is
-kept and lives in one table. `head`'s `--texture` says "of the notated bar" because a
-score has a notated metre, and `HEAD_HELP` holds the rest. `CommonHelp` is one dataclass
-with one field per flag, so a flag added here has nowhere else to be forgotten, and
-`tests/test_cli.py` asserts every declared field reaches `add_argument` with its text.
+kept and lives in one table. `HEAD_HELP` holds the prose for every flag whose wording
+carries a musical decision, and `CommonHelp` is one dataclass with one field per such
+flag, so a flag added here has nowhere else to be forgotten - `tests/test_cli.py`
+asserts every declared field reaches `add_argument` with its text.
 
 **Laziness is deliberate and load-bearing.** `argparse` is imported only under
 `TYPE_CHECKING` (the annotations are strings, so nothing at runtime needs it) and the
@@ -15,7 +15,7 @@ renderers are imported *inside* `render_and_write`. Importing `tabstaff` at modu
 would execute the package `__init__` through `arranger.tuning`, so the import stays in the
 function body - which is also what leaves `headxml`'s `load_musicxml` cheap.
 
-This module sits **last** in `tests/test_package_dag.py`'s `ORDER`: it reads
+This module sits **last** in `tests/meta_package_dag.py`'s `ORDER`: it reads
 `NECK_FRET_MIN`/`MAX` from `tuning`,
 `NON_CHORD_TONE_STRATEGIES` from `chords`, `TEXTURE_STYLES` from `texture` and
 `format_progression` from `render`, and is imported by nothing below it. It needs
@@ -28,15 +28,17 @@ from __future__ import annotations
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
-from .bass_rules import (
-    BASS_STYLE_AUTO,
-)
 from .chords import NON_CHORD_TONE_STRATEGIES
-from .grid import GRID_DEFAULT
-from .harmony import HARMONY_AUTO, HARMONY_STYLES
-from .parts import PARTS_AUTO
+from .grid import RHYTHM_NONE
+from .options import (
+    BASS_NOTES,
+    BASS_NOTES_ROOT,
+    CHORD_FILLS,
+    CHORD_FILLS_NONE,
+    CHORD_NOTES,
+    CHORD_NOTES_FULL,
+)
 from .render import format_progression
-from .texture import TEXTURE_STYLES
 from .tuning import NECK_FRET_MAX, NECK_FRET_MIN, ArrangementStep
 
 if TYPE_CHECKING:  # pragma: no cover - the annotations are strings at runtime
@@ -78,11 +80,16 @@ class CommonHelp:
     fret_max: Optional[str]
     gp5: str
     html: str
-    melody: str
+    note_names: str
     musicxml: str
     mutes: str
     tab: str
-    texture: str
+    no_melody: str
+    chord_on: str
+    chord_notes: str
+    chord_fills: str
+    bass_on: str
+    bass_notes: str
 
 
 @dataclass(frozen=True)
@@ -127,14 +134,43 @@ HEAD_HELP = CommonHelp(
     ),
     gp5="also write a Guitar Pro 5 file (needs: pip install 'jazz-arranger[gp]')",
     html="also write a self-contained HTML page",
-    melody="with --tab staff, add melody note names",
+    note_names="with --tab staff, add melody note names",
     musicxml="also write a MusicXML score (needs: pip install 'jazz-arranger[xml]')",
     mutes="with --tab staff, spell out the unsounded strings",
     tab="'staff' lays the head on one six-line staff, spaced on its real rhythm",
-    texture=(
-        "'targets' states a full chord on the bar's first and third felt beats - "
-        "beats 1 and 3 of a simple metre - and fills the notes between with a shell, "
-        "a 3rd/6th or the melody alone; 'uniform' (the default) voices every note in full"
+    no_melody=(
+        "hand the tune to another instrument and comp instead. The chord then "
+        "attacks on every felt beat - the default names the written melody's "
+        "onsets, and this guitar has none - unless --chord-on names positions"
+    ),
+    chord_on=(
+        "when the chord attacks, comma-separated, in felt beats: 'melody' (the "
+        "default) at every written melody note, 'none', 'every-beat', or positions "
+        "such as '1', '1and' (the and of 1) or 'lastand'. A list replaces the "
+        "default, so '1and' is only the stab and 'melody,1and' is the harmonisation "
+        "plus the stab. A position the metre does not have is refused, not dropped"
+    ),
+    chord_notes=(
+        "how many chord notes to state: 'full' (the default) is the most the right "
+        "hand can fit - three under the melody, two once a bass note takes a string "
+        "- or 3, 2 or 1 for exactly that many"
+    ),
+    chord_fills=(
+        "what the chord does in a notated melody rest: 'none' (the default) rests "
+        "with the tune, 'hold' states the written chord once at the rest's onset, "
+        "and 'comp' states it on each felt beat through the rest. A rest with no "
+        "chord gets nothing, and this never adds a bass note - that is --bass-on's"
+    ),
+    bass_on=(
+        "when the bass attacks, comma-separated, in felt beats: 'none' (the "
+        "default), 'every-beat', or positions such as '1' or '1and' (the and of "
+        "1). The melody alone is the default, so a bass line is always asked for"
+    ),
+    bass_notes=(
+        "what each bass attack states: 'root' (the default), 'root-5th' "
+        "alternating, or 'walk' for the anchor/connect/approach line. The rhythm is "
+        "--bass-on's, so 'root' on every beat is a pedal rather than the old "
+        "anchors-only rule"
     ),
 )
 
@@ -166,67 +202,39 @@ def add_common_arguments(
         help="retry unresolved tensions as dim7 substitutions; replaces the written chord",
     )
     parser.add_argument(
-        "--texture",
-        choices=list(TEXTURE_STYLES),
-        default="uniform",
-        help=help_text.texture,
+        "--no-melody",
+        action="store_true",
+        help=help_text.no_melody,
     )
     parser.add_argument(
-        "--bass-style",
-        default=BASS_STYLE_AUTO,
-        help=(
-            "which note rules the thumb line may state, comma-separated and in "
-            "resolution order, any of root, 5th, approach, nearest. The full "
-            "'root,5th,approach,nearest' puts a note on every beat, which is what makes "
-            "the line a walk; 'root' alone sounds only where the harmony anchors. "
-            "'none' is no line at all, and 'auto' - the default - follows the parts "
-            "selection: a selection that takes the bass part writes the full list, and "
-            "one that leaves it out writes no line. Refused outright where the "
-            "selection does not take the bass part; a single note the left hand cannot "
-            "reach is dropped from that step and named on it"
-        ),
+        "--chord-on",
+        default=None,
+        metavar="POSITIONS",
+        help=help_text.chord_on,
     )
     parser.add_argument(
-        "--parts",
-        default=PARTS_AUTO,
-        help=(
-            "which of melody, bass and chord the guitar takes, comma-separated "
-            "(default: auto = all three). 'melody' is the tune on top, 'bass' the "
-            "bottom the thumb realises, 'chord' the harmonisation between them, "
-            "whose arity --texture states and whose degree order --harmony states. "
-            "Leaving the melody out hands the tune to another instrument and leaves "
-            "a comping part; melody alone is the tune and nothing else (with a thumb "
-            "under it when bass is named too). A policy named for a part the "
-            "selection leaves out is refused, naming the part that would work"
-        ),
+        "--chord-notes",
+        choices=list(CHORD_NOTES),
+        default=CHORD_NOTES_FULL,
+        help=help_text.chord_notes,
     )
     parser.add_argument(
-        "--harmony",
-        choices=list(HARMONY_STYLES) + [HARMONY_AUTO],
-        default=HARMONY_AUTO,
-        help=(
-            "the order the chord part states its degrees in: 'auto' (the default) is "
-            "the full chord when the guitar sings and the guide pair (3rd and 7th) "
-            "when it comps, 'guide' is the pair, 'shell_root' adds a root or 5th under "
-            "them, 'full' is the whole tone set. --texture takes the first n of the "
-            "order, so a thinner part gives up the tail. Refused where the selection "
-            "does not take the chord part"
-        ),
+        "--chord-fills",
+        choices=list(CHORD_FILLS),
+        default=CHORD_FILLS_NONE,
+        help=help_text.chord_fills,
     )
     parser.add_argument(
-        "--grid",
-        default=GRID_DEFAULT,
-        help=(
-            "when each part sounds, as comma-separated PART:PATTERN rows. The "
-            "default is melody:every_note - the chord under every written melody "
-            "note - and a row overrides one part: chord:every_note|freddie|joe_pass|"
-            "final_and|charleston, bass:every_note|walk|anchors. So "
-            "'melody:every_note,bass:walk' is a chord under the tune with the thumb "
-            "walking every felt beat, and 'bass:anchors' walks only where the harmony "
-            "changes. Positions are bar-relative, so final_and is the same musical "
-            "idea in 2/2, 3/4 and 4/4. Where the guitar is singing, a note with no "
-            "chord on it sounds alone; where it is comping, the guitar rests"
-        ),
+        "--bass-on",
+        default=RHYTHM_NONE,
+        metavar="POSITIONS",
+        help=help_text.bass_on,
+    )
+    parser.add_argument(
+        "--bass-notes",
+        choices=list(BASS_NOTES),
+        default=BASS_NOTES_ROOT,
+        help=help_text.bass_notes,
     )
     parser.add_argument(
         "--fret-min",
@@ -246,7 +254,9 @@ def add_common_arguments(
         default="line",
         help=help_text.tab,
     )
-    parser.add_argument("--melody", action="store_true", help=help_text.melody)
+    parser.add_argument(
+        "--note-names", action="store_true", help=help_text.note_names
+    )
     parser.add_argument("--mutes", action="store_true", help=help_text.mutes)
     parser.add_argument(
         "--bars-per-line", type=int, default=4, help=help_text.bars_per_line
@@ -380,7 +390,7 @@ def render_and_write(
                 beats_per_bar=bars,
                 beat_type=beat,
                 measures_per_line=args.bars_per_line,
-                show_melody=args.melody,
+                show_melody=args.note_names,
                 show_mutes=args.mutes,
                 markers=written_markers,
             )
@@ -397,7 +407,7 @@ def render_and_write(
             beats_per_bar=bars,
             beat_type=beat,
             measures_per_line=args.bars_per_line,
-            show_melody=args.melody,
+            show_melody=args.note_names,
             show_mutes=args.mutes,
             notes=list(notes),
             markers=written_markers,

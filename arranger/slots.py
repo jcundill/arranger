@@ -13,7 +13,7 @@ the one the chord asks for" - and it reads the bass off a symbol with a general
 pattern rather than a Weimar one, so `A-/G` means the same thing wherever it came
 from.
 
-Ordering note for `tests/test_package_dag.py`: this module sits after `steps`
+Ordering note for `tests/meta_package_dag.py`: this module sits after `steps`
 (it constructs `VoiceLeadingEngine`) and imports nothing from `render` or `cli`,
 so it needs no entry in `ALLOWED_EDGES`.
 """
@@ -27,9 +27,8 @@ from typing import Container, Dict, List, Optional, Sequence, Tuple
 from musthe import Note
 
 from .chords import bass_pitch_class, slash_bass, slash_bass_cost
-from .options import ArrangeOptions
+from .options import ArrangeOptions, resolve_request
 from .steps import VoiceLeadingEngine
-from .texture import TEXTURE_STYLES
 from .tuning import NO_CHORD, ArrangementStep
 
 __all__ = [
@@ -199,10 +198,15 @@ def arrange_slots(
     """
     if options is None:
         options = ArrangeOptions()
-    if options.texture not in TEXTURE_STYLES:
-        raise ValueError(
-            f"Unknown texture {options.texture!r}; expected one of {TEXTURE_STYLES}"
-        )
+    # The request is resolved up front for the same reason the texture was: a
+    # spelling nobody recognises must cost a message rather than a full retry pass
+    # and a surprise afterwards. `_slot_options` builds the object with the head's
+    # metre, so the positions are read against the bars that will be arranged.
+    resolve_request(
+        options.request,
+        options.time_signature.beats_per_bar,
+        options.time_signature.resolved_grouping,
+    )
     if fallback not in (None, "diminished"):
         raise ValueError(f"Unknown fallback {fallback!r}; expected None or 'diminished'")
 
@@ -218,7 +222,7 @@ def arrange_slots(
     # **The substitution must be applied before the slot's role is computed.** Under
     # `targets` the role does not read the harmony, so the order would not show; on a
     # walked route it does, so reordering this would move the walk's roles.
-    # `tests/test_step_loop_equivalence.py` is the standing check that the two entry
+    # `tests/meta_step_loop_equivalence.py` is the standing check that the two entry
     # points still agree.
     unresolved = unresolved_steps(list(triples), options.non_chord_tone, onsets)
     retry = set(unresolved) if fallback == "diminished" else set()

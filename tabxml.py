@@ -47,7 +47,7 @@ time.
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Container, Dict, List, Optional, Sequence, Tuple
 from xml.etree import ElementTree
 
 from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES, ArrangementStep, GuitarFretboard
@@ -157,7 +157,10 @@ def _pitch(midi: int) -> Tuple[str, int]:
     return PITCH_CLASS_NAMES[midi % 12], midi // 12 - 1
 
 
-def _sounding(step: ArrangementStep) -> List[int]:
+def _sounding(
+    step: ArrangementStep,
+    ringing: Sequence[int] = (),
+) -> List[int]:
     """
     The pitches a step actually sounds, as MIDI numbers, lowest string first.
 
@@ -165,20 +168,47 @@ def _sounding(step: ArrangementStep) -> List[int]:
     leave the inner voices blank, because the held shape belongs to the chord the
     hold began on and the player is not re-fingering it. Honoured here rather than
     taken from the full voicing, so the score says the same thing the tab says.
+
+    A **`bass_only`** step is the mirror image: the thumb alone is new, and the
+    voices above it are the pitches **already ringing** (`ringing`, the notes this
+    part has written and not yet stopped). They are returned so they can be re-stated
+    and **tied** - a score has no way to say "still sounding" other than a tie, and
+    writing the step's own frets instead would re-attack the chord, and the melody
+    with it, on every beat the thumb line invents.
     """
     voicing = step.voicing
     soprano = voicing.soprano_string()
     strings = [index for index, fret in enumerate(voicing.frets) if fret >= 0]
     if step.repeated and soprano >= 0:
         strings = [soprano]
-    return [
+    pitches = [
         GuitarFretboard.fret_to_midi(index, voicing.frets[index]) for index in strings
     ]
+    if step.bass_only and ringing:
+        thumb = _thumb_pitch(step)
+        held = [pitch for pitch in ringing if pitch != thumb]
+        # The ringing voices, then the one note this step strikes.
+        return held + ([] if thumb is None else [thumb])
+    return pitches
 
 
-def _build_note(step: ArrangementStep, length: float) -> Any:
+def _thumb_pitch(step: ArrangementStep) -> Optional[int]:
+    """The MIDI pitch this step's thumb strikes, or None when it strikes nothing."""
+    voicing = step.voicing
+    string = voicing.bass_string
+    if string is None or voicing.frets[string] < 0:
+        return None
+    return GuitarFretboard.fret_to_midi(string, voicing.frets[string])
+
+
+def _build_note(
+    step: Optional[ArrangementStep],
+    length: float,
+    writing: Optional[Dict[str, Any]] = None,
+    split: bool = False,
+) -> Any:
     """
-    One step as a music21 `Chord`, a single `Note`, or a `Rest`.
+    One step as a music21 `Chord`, a single `Note`, or a `Rest` - and what is ringing.
 
     A one-pitch step becomes a `Note` rather than a one-note `Chord`, so a repeated
     melody exports as the single note it is played as, and a melody-only (no chord)
@@ -186,29 +216,88 @@ def _build_note(step: ArrangementStep, length: float) -> Any:
     string, written as **pitches only**: the staff is notation, and a `<fret>` or a
     `<string>` on a notation staff is information no reader can use. Fretting is
     written by `tabgp` - see the module docstring.
+
+    **A pitch that is still ringing is tied, not re-struck.** `ringing` maps a MIDI
+    pitch to the `Note` object written for it last, and the pitches a step sounds
+    without plucking are its held thumb (`ArrangementStep.bass_held`) - unless the
+    event is `split` at a bar line, where the cut is written as one chord tie and a
+    note cannot carry two.
+    The earlier note is patched to `start`/`continue` and this one is written with
+    `stop`, which is the one way MusicXML says a note lasts across an attack - and it
+    has to be done at the note inside the chord rather than on the chord, because the
+    other voices are new. Measured on the engine's own steps: without it a
+    `--bass-on 1` line re-articulates its bar-long bass note on every melody note.
+
+    `writing` is `_build_part`'s mutable bookkeeping, and the one key this function owns
+    in it is `"ringing"`: a MIDI pitch mapped to the `Note` written for it last. It is
+    updated **in place** - the pitches this step states replace their entries, and a
+    step that sounds nothing clears it, because a rest is where the ring stops - so the
+    caller keeps one map for the whole part.
     """
     from music21 import chord, note
+    from music21 import tie as tie_module
 
-    sounding = _sounding(step)
+    if writing is None:
+        writing = {}
+    ringing: Dict[int, Any] = writing.setdefault("ringing", {})
+    if step is None:
+        ringing.clear()
+        return note.Rest(quarterLength=length)
+    held = list(ringing)
+    continued = _continued_pitch(step, split)
+    if step.bass_only:
+        # Nothing above the thumb is struck: those voices are **still ringing**, so they
+        # are written again and tied, and the thumb is the one attack. Without this the
+        # score re-attacked the chord - and the melody with it - on every beat the thumb
+        # line invented, which is the fault the tab and the GP5 file were fixed for.
+        thumb = _thumb_pitch(step)
+        continued = frozenset(pitch for pitch in held if pitch != thumb)
+    sounding = _sounding(step, held)
     if not sounding:
+        ringing.clear()
         return note.Rest(quarterLength=length)
 
-    pitches = []
+    names = []
     for midi in sounding:
         # Written an octave higher than it sounds, as guitar music is. The
         # transposition is declared on the part, so the reader plays it back down -
         # see `_WRITTEN_OCTAVE_SHIFT`.
         step_name, octave = _pitch(midi + _WRITTEN_OCTAVE_SHIFT)
-        pitches.append(f"{step_name}{octave}")
-    if len(pitches) == 1:
-        return note.Note(pitches[0], quarterLength=length)
+        names.append(f"{step_name}{octave}")
+    if len(names) == 1:
+        built: Any = note.Note(names[0], quarterLength=length)
+        elements = [built]
+    else:
+        built = chord.Chord(names, quarterLength=length)
+        # A guitar shape is played with the fingers on the frets it is written on, so
+        # the stems point down however high the top note is - the top note of a drop-2
+        # voicing is often the *lowest* sounding voice inverted on the high string.
+        built.stemDirection = "down"
+        elements = built.notes
 
-    built: Any = chord.Chord(pitches, quarterLength=length)
-    # A guitar shape is played with the fingers on the frets it is written on, so
-    # the stems point down however high the top note is - the top note of a drop-2
-    # voicing is often the *lowest* sounding voice inverted on the high string.
-    built.stemDirection = "down"
+    for midi, element in zip(sounding, elements):
+        if midi not in continued or midi not in ringing:
+            continue
+        previous = ringing[midi]
+        previous.tie = tie_module.Tie(
+            "start" if previous.tie is None else "continue"
+        )
+        element.tie = tie_module.Tie("stop")
+    # This step's pitches replace what was ringing; anything it does not state stops.
+    ringing.clear()
+    ringing.update(zip(sounding, elements))
     return built
+
+
+def _continued_pitch(step: ArrangementStep, split: bool) -> Container[int]:
+    """The pitches this step sounds **without plucking**: its held thumb, if any.
+
+    Nothing continues across an event cut at a bar line: the cut is already written as
+    one chord-level tie, and a note cannot carry two.
+    """
+    if split or not step.bass_held or step.bass is None:
+        return frozenset()
+    return {step.bass}
 
 
 def _build_part(
@@ -338,7 +427,7 @@ def _build_part(
             remaining -= piece
 
         for index, (where, at, piece) in enumerate(pieces):
-            built = _rest(piece) if step is None else _build_note(step, piece)
+            built = _build_note(step, piece, state, len(pieces) > 1)
             if len(pieces) > 1:
                 built.tie = tie_module.Tie(
                     "start" if index == 0

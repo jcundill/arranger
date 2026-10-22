@@ -11,8 +11,8 @@ from __future__ import annotations
 from typing import Dict, FrozenSet, List, Optional, Sequence, Tuple
 
 from .grip_tables import GRIP_STRING_SETS, comping_string_sets
-from .parts import PART_NAMES, parts_have_bass
-from .texture import TEXTURE_STYLES, texture_palette
+from .parts import PART_BASS, PART_NAMES, parts_has_melody_only, parts_have_bass, parts_have_melody
+from .texture import TEXTURE_STYLES, derived_arity, texture_palette
 from .tuning import ROLE_FILL, ROLE_TARGET
 
 # --- Walking bass ---
@@ -42,15 +42,23 @@ BASS_STRING_INDICES: Tuple[int, ...] = (0, 1, 2)
 # "target" is deliberately **not** reused for beat 4, because that word already means the
 # *left hand's* principal note (ROLE_TARGET) and one word cannot carry both:
 #
-#   anchor    beat 1, or any strong beat where the harmony changes: the root, always
-#   connect   beats 2 and 3: a chord tone, an extension, or passing motion
-#   approach  beat 4: a half step from the next bar's anchor
-#   enclosure beat 3 or 4: half step above, then half step below the next anchor
-#   hold      any beat: the previous note repeated, when nothing better is reachable
+#   anchor    the first position of a bar, and any strong beat where the harmony
+#             changes: the root, always
+#   connect   a position between those: a chord tone, an extension, or passing motion
+#   approach  the last position of a bar: a half step from the next bar's anchor
+#   enclosure the position before an approach: half step above, then below the anchor
+#   pedal     the root on a position the line does not anchor - `root` asked to sound
+#             at every position names the root everywhere, and only the first one per
+#             bar *marks* the bar
+#   fifth     the 5th on a position the line does not anchor, which is what
+#             `root-5th` alternates with the root
+#   hold      any position: the previous note repeated, when nothing else is reachable
 BASS_ROLE_ANCHOR = "anchor"
 BASS_ROLE_CONNECT = "connect"
 BASS_ROLE_APPROACH = "approach"
 BASS_ROLE_ENCLOSURE = "enclosure"
+BASS_ROLE_PEDAL = "pedal"
+BASS_ROLE_FIFTH = "fifth"
 BASS_ROLE_HOLD = "hold"
 
 
@@ -62,11 +70,11 @@ BASS_ROLE_HOLD = "hold"
 #
 # The four rules, and the `BASS_ROLE_*` values each admits:
 #
-#   root      the chord's root, on the beats that anchor - beat 1, and any strong beat
-#             where the harmony changes. Admits `anchor`.
-#   5th       the root, then the 5th: the `BASS_DEGREES_6432` order. The walking anchor is
-#             always the root, so this admits the same `anchor` beats; the 5th is the
-#             fallback `_shell_voicing` already reads from that table.
+#   root      the chord's root, at every position the rhythm names - on the anchor it
+#             *marks* the bar, and elsewhere it is a pedal. Admits `anchor` and `pedal`.
+#   5th       the root and the 5th alternating at those positions: the anchor takes the
+#             root and a non-anchor position takes the 5th, which is `BASS_DEGREES_6432`
+#             read as a line rather than as the one note the low E may carry.
 #   approach  a note reaching the *next* anchor - the half step below it on the last beat,
 #             the half step above on the penultimate. Admits `approach` and `enclosure`,
 #             which are one rule read at two beats.
@@ -99,20 +107,20 @@ BASS_RULES: Tuple[str, ...] = (
 
 # Which `BASS_ROLE_*` values each rule admits. Keyed by rule so a new one is a row here,
 # and asserted against `BASS_RULES` in the tests so a rule cannot be named without the
-# roles it governs. `5th` shares `root`'s anchor beats (the walking anchor is always the
-# root, so the 5th is the fallback, not a second beat); `approach` governs both the
-# last-beat approach and the penultimate enclosure, because they are one rule read at two
-# beats.
+# roles it governs. `root` and `5th` share the anchor (the root marks the bar whichever
+# of the two was asked for) and differ between anchors: a pedal or the 5th. `approach`
+# governs both the last-position approach and the enclosure before it, because they are
+# one rule read at two positions.
 BASS_RULE_ROLES: Dict[str, FrozenSet[str]] = {
-    BASS_RULE_ROOT: frozenset({BASS_ROLE_ANCHOR}),
-    BASS_RULE_5TH: frozenset({BASS_ROLE_ANCHOR}),
+    BASS_RULE_ROOT: frozenset({BASS_ROLE_ANCHOR, BASS_ROLE_PEDAL}),
+    BASS_RULE_5TH: frozenset({BASS_ROLE_ANCHOR, BASS_ROLE_FIFTH}),
     BASS_RULE_APPROACH: frozenset({BASS_ROLE_APPROACH, BASS_ROLE_ENCLOSURE}),
     BASS_RULE_NEAREST: frozenset({BASS_ROLE_CONNECT}),
 }
 
 # The two shipped styles, as rule lists, derived from `BASS_RULES` rather than listed so
 # the table above stays the one source. `walk` is the whole vocabulary; `anchors` is the
-# root rule alone. These are the spellings `--bass-style` takes.
+# root rule alone. These are the spellings a style takes.
 BASS_STYLE_WALK = ",".join(BASS_RULES)
 BASS_STYLE_ANCHORS = BASS_RULE_ROOT
 
@@ -126,7 +134,7 @@ BASS_STYLE_AUTO = "auto"
 
 
 def parse_bass_style(argument: str) -> Tuple[str, ...]:
-    """A `--bass-style` argument as the ordered tuple of note rules it names.
+    """A bass style argument as the ordered tuple of note rules it names.
 
     The spelling: comma-separated rule names, matched case-insensitively, whitespace
     around the commas ignored, so `"root,approach"` and `" Root , APPROACH "` are one
@@ -347,6 +355,64 @@ def bass_allowed(
         if free < 1:
             return False, _no_room_reason(texture, role)
     return True, ""
+
+
+def resolve_bass(
+    bass: str,
+    parts: Tuple[str, ...],
+    texture: str,
+) -> str:
+    """The bass style to actually run: `auto` resolved, then validated.
+
+    Three outcomes, in the order they are decided:
+
+    - `auto` resolves to **no line**, which is the shipped answer: a caller who
+      wants one names the note rules. The one selection that writes a line is a
+      melody-only selection that also names the bass part - `parts="melody,bass"`
+      is the tune with a thumb under it. A `parts="bass"` selection alone is **not**
+      melody-only (it has no tune) and keeps no thumb: that part already is the bass
+      line, and a thumb under it would double it.
+    - an unknown rule raises. A spelling nobody recognises is a question, and
+      answering it by defaulting to a walk would put a line under an arrangement that
+      did not ask for one; `parse_bass_style` owns the vocabulary and the message.
+    - a combination the left hand cannot carry **raises**, naming a texture that
+      would work. `none` is what a caller gets by asking for `none`, so handing it
+      back for a walk the hand cannot accommodate would be a silent substitution, and
+      a walking line with gaps in it is worse than no line. Losing the *bass* still
+      costs less than losing the tune - that trade is made per beat by
+      `attach_bass`, where the step survives and the tab says so.
+
+    Takes the resolved `parts` rather than the flags derived from them: the route,
+    the comping arity and the lone-bass case are decided here from the one selection,
+    so two spellings of one request cannot disagree. Which capacity question is
+    asked is `bass_allowed`'s business - the comping generator's on that route, the
+    melody-only route's on its own, and the texture's palette otherwise, since
+    `uniform` is a real palette on the melody-bearing route and a meaningless name on
+    the comping one.
+    """
+    melody_voiced = parts_have_melody(parts)
+    melody_only = parts_has_melody_only(parts)
+
+    if bass == BASS_STYLE_AUTO:
+        bass = (
+            BASS_STYLE_WALK
+            if melody_only and parts_have_bass(parts)
+            else BASS_STYLE_NONE
+        )
+    if bass == BASS_STYLE_NONE:
+        return bass
+    parse_bass_style(bass)  # raises on an unknown rule
+    allowed, reason = bass_allowed(
+        parts,
+        texture,
+        bass,
+        None if melody_voiced else derived_arity(texture, parts),
+        parts == (PART_BASS,),
+        melody_only=melody_only,
+    )
+    if not allowed:
+        raise ValueError(reason)
+    return bass
 
 
 def _comping_no_room_reason(notes: int, bass_voice: bool) -> str:

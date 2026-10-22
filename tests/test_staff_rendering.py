@@ -1083,9 +1083,12 @@ class TestTabstaffModuleBoundary(unittest.TestCase):
 
     def test_importing_tabstaff_first_does_not_crash(self):
         """
-        tabstaff imports arranger, so importing it first re-enters arranger while
-        it is being set up. The lazy __getattr__ is what keeps that from failing, as
-        a bottom-of-file import would have.
+        The entry order a caller controls cannot matter, and the reason is the edge
+        rather than a lazy trick: `tabstaff` imports `arranger.tuning`, a leaf that
+        needs nothing from the facade, so importing it first runs the facade to
+        completion before the renderer reaches its own first line.
+        `tests/meta_front_end_dag.py::TestTheRuntimeCycle` holds that to a blank
+        package, which is the sharper form - a facade that never ran at all.
         """
         import subprocess
         import sys
@@ -1133,7 +1136,6 @@ class TestTabstaffModuleBoundary(unittest.TestCase):
             "dataclass",
             "importlib",
             "re",
-            "sys",
         }
         self.assertEqual(
             defined - set(arranger.__all__) - ignored,

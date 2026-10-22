@@ -89,18 +89,26 @@ class TestTheRecordedPalette(unittest.TestCase):
         self.assertEqual(alternative.tab_string(), "x-7-7-11-12-x")
         self.assertEqual(palette.decided_by, SPAN_CRITERION)
 
-    def test_a_comping_shape_records_no_palette(self):
-        """`--voices none` is guide tones by construction, so nothing is claimed.
+    def test_a_comping_shape_records_the_palette_it_chose_from(self):
+        """A comping shape records a palette, and the palette makes no voice-count claim.
 
-        `palette` states "fewer voices than the palette could offer", and a comping shape
-        makes no such claim: its arity follows the voices the caller named, and the line
-        says which degrees sound instead (`annotation._comping_clause`).
+        The palette is there for the *choice*: a comping shape is picked from a candidate
+        list like any other, and the request can force that choice by asking for a bass
+        note (`Palette.dropped_for_bass`). What it does **not** claim is "fewer voices
+        than the palette could offer" - the arity follows the voices the caller named, and
+        the line says which degrees sound instead (`annotation._comping_clause`) - so
+        `_shape_clause` is silent here even though the palette is not.
         """
         steps = VoiceLeadingEngine.arrange_progression(COMPLETE, parts="chord")
         self.assertEqual(len(steps), 3)
         for step in steps:
             self.assertFalse(step.melody_voiced)
-            self.assertIsNone(step.palette, step.tab_line())
+            self.assertIsNotNone(step.palette, step.tab_line())
+            assert step.palette is not None
+            self.assertEqual(step.palette.available, 3)
+            self.assertIsNone(step.palette.dropped_for_bass, step.tab_line())
+            # The count is the comping clause's, not the palette's.
+            self.assertNotIn("voices", step_annotation(step).split("sounding")[0])
 
     def test_a_fill_records_the_only_palette_it_has(self):
         """The tune alone *is* the palette there, so the one voice is its limit.
@@ -296,7 +304,7 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         for step in silent:
             self.assertEqual(
                 step_annotation(step),
-                " (the guitar rests here - the grid places no chord)",
+                " (the guitar rests here - no part was asked to sound at this position)",
             )
 
     def test_a_comping_step_names_the_voices_it_states(self):

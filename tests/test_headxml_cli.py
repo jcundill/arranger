@@ -208,7 +208,7 @@ class TestHeadCli(unittest.TestCase):
 
     def test_the_staff_renderer_is_reachable(self):
         """--tab staff lays the head on one six-line staff, in the notated metre."""
-        output = self.run_cli(self.score_path(), "--tab", "staff", "--melody")
+        output = self.run_cli(self.score_path(), "--tab", "staff", "--note-names")
         # The staff draws six strings, high E first. The `*` is `_carries_melody`'s
         # marker, drawn on any string sounding the melody, so it may sit between the
         # letter and the bar - which it now does, because span being ranked above neck
@@ -310,9 +310,9 @@ class TestHeadCli(unittest.TestCase):
 
         `--grips` named a family list, and the family axis is deleted, so the flag is gone
         rather than deprecated: a spelling quietly ignored would arrange something other
-        than what the run header reported. What survives of its lesson is `--parts`, the
-        same shape of option - a list, spelled the way the flags beside it spell one - and
-        it is one argument, never `nargs="+"`.
+        than what the run header reported. What survives of its lesson is `--chord-on`,
+        the same shape of option - a list, spelled the way the flags beside it spell one -
+        and it is one argument, never `nargs="+"`.
         """
         import io
         from contextlib import redirect_stderr
@@ -327,73 +327,121 @@ class TestHeadCli(unittest.TestCase):
         self.assertFalse(hasattr(arranger, "parse_grips"))
         self.assertFalse(hasattr(ArrangeOptions(), "grips"))
 
-        output = self.run_cli(RAINY_DAY, "--bars", "1-3", "--parts", "melody,chord")
+        output = self.run_cli(RAINY_DAY, "--bars", "1-3", "--chord-on", "1,2and")
         self.assertEqual(self.code, 0)
-        self.assertIn("parts: melody,chord", output)
+        self.assertIn("chord-on=1,2and", output)
 
     def test_a_flag_named_before_the_file_still_arranges_that_file(self):
-        """`head --parts melody,chord FILE` finds the file.
+        """`head --chord-on 1,2and FILE` finds the file.
 
         The quieter half of the old `nargs="+"` trap: an option that takes a list with
         spaces consumes the positional written after it, so it could only ever come last.
         One comma-separated string has no such order, and this is the round trip saying so.
         """
-        output = self.run_cli("--bars", "1-3", "--parts", "melody,chord", RAINY_DAY)
+        output = self.run_cli("--bars", "1-3", "--chord-on", "1,2and", RAINY_DAY)
         self.assertEqual(self.code, 0)
-        self.assertIn("parts: melody,chord", output)
+        self.assertIn("chord-on=1,2and", output)
 
     def test_the_request_reaches_the_engine(self):
-        """The flag is a spelling of `texture=`, so both reach the same arrangement.
+        """The flag is a spelling of the request, so both reach the same arrangement.
 
         Asserted against the library call rather than against a recorded tab, which is what
         makes it a claim about the *wiring*: a flag that parsed correctly and then arranged
         the default would pass a snapshot and fail this.
         """
+        from arranger.options import Request
+
         path = self.score_path()
-        output = self.run_cli(path, "--texture", "chord1")
+        output = self.run_cli(path, "--chord-notes", "1")
         self.assertEqual(self.code, 0)
-        steps, _head, _notes = arrange_xml_head(path, texture="chord1")
+        steps, _head, _notes = arrange_xml_head(
+            path, request=Request(chord_notes="1")
+        )
         self.assertIn(format_progression(steps), output)
 
     def test_the_banner_spelling_is_accepted_back_on_the_flag(self):
-        """The run header's own `parts:` row can be pasted back onto `--parts`.
+        """The run header's own request row can be pasted back onto the flags.
 
         The header is how a reader reproduces a run, so a spelling it prints that the flag
-        refuses is a trap: the line a reader copies is the one that does not work.
-        Asserted as a round trip through the CLI rather than as a string comparison.
+        refuses is a trap: the line a reader copies is the one that does not work. The
+        `chord-on=` value is fed back to `--chord-on` and the header must repeat it -
+        `every-beat` prints as the positions it resolves to, which is the same request in
+        that metre, so the round trip is on the *value* rather than on the spelling.
         """
-        output = self.run_cli(RAINY_DAY, "--bars", "1-3", "--parts", "melody,chord")
-        row = next(line for line in output.splitlines() if "parts: " in line)
-        printed = row.split("parts: ", 1)[1].strip()
-        again = self.run_cli(RAINY_DAY, "--bars", "1-3", "--parts", printed)
+        output = self.run_cli(RAINY_DAY, "--bars", "1-3", "--chord-on", "1,2and")
+        row = next(line for line in output.splitlines() if "request: " in line)
+        fields = dict(
+            field.split("=", 1)
+            for field in row.split("request: ", 1)[1].split()
+        )
+        self.assertEqual(fields["chord-on"], "1,2and")
+        again = self.run_cli(RAINY_DAY, "--bars", "1-3", "--chord-on", fields["chord-on"])
         self.assertEqual(self.code, 0, again)
-        self.assertIn(f"parts: {printed}", again)
+        self.assertIn(f"chord-on={fields['chord-on']}", again)
+
+    def test_no_melody_defaults_the_chord_to_every_beat(self):
+        """`--no-melody` hands the tune away, and the chord defaults to every beat.
+
+        The default is a **derivation**, not a rule: `chord-on=melody` names the written
+        onsets, and this guitar has none - so the metre's own reading is used, and the
+        canonical header prints the positions it actually resolved to rather than the
+        word `every-beat`. Spellings are one request: omitting the flag and naming
+        `melody` produce the same arrangement.
+        """
+        output = self.run_cli(RAINY_DAY, "--bars", "1-3", "--no-melody")
+        self.assertEqual(self.code, 0)
+        self.assertIn("melody=off", output)
+        self.assertIn("chord-on=", output)
+        self.assertNotIn("chord-on=melody", output)
+
+        named = self.run_cli(
+            RAINY_DAY, "--bars", "1-3", "--no-melody", "--chord-on", "melody"
+        )
+        self.assertEqual(self.code, 0)
+        self.assertEqual(named, output, "two spellings of one request differed")
+
+    def test_bass_on_is_what_writes_a_bass_line(self):
+        """`--bass-on` is the only thing that adds a note below the tune.
+
+        The default is no bass at all, which the header states and the tab shows:
+        no step carries a `(bass: ...)` clause. Asking for one states the part and
+        the note rules, and the line reaches the tab.
+        """
+        plain = self.run_cli(RAINY_DAY, "--bars", "1-3")
+        self.assertIn("bass-on=none", plain)
+        self.assertNotIn("(bass:", plain)
+
+        walked = self.run_cli(
+            RAINY_DAY, "--bars", "1-3", "--bass-on", "every-beat",
+            "--bass-notes", "walk",
+        )
+        self.assertEqual(self.code, 0)
+        self.assertIn("bass-notes=walk", walked)
+        self.assertIn("(bass:", walked)
 
     def test_a_name_outside_a_vocabulary_is_a_usage_error_naming_it(self):
-        """A name the axis does not know is refused with the vocabulary it has.
+        """A name the request does not know is refused with the vocabulary it has.
 
-        Three, because the second and third are the ones a reader gets wrong: `alto` is a
-        *voice* name from before the parts axis, and the answer is not a mapping - the
-        inner voices live in the chord part - so the refusal has to name the parts; and a
-        bare `freddie` is the pattern name without the part it belongs to, so the refusal
-        has to name the row spellings.
+        Three, because each names a different table: an arity outside
+        `--chord-notes`, a position the metre does not have, and a bass name outside
+        `--bass-notes`. The position is refused by the *metre* rather than by argparse,
+        because a position list is only legal against a bar - which is why the message
+        names the beats this one has.
         """
         import io
         from contextlib import redirect_stderr
 
         errors = io.StringIO()
         with redirect_stderr(errors), self.assertRaises(SystemExit):
-            self.run_cli(self.score_path(), "--texture", "shell")
-        self.assertIn("shell", errors.getvalue())
-        self.assertIn("uniform", errors.getvalue())
+            self.run_cli(self.score_path(), "--chord-notes", "4")
+        self.assertIn("full", errors.getvalue())
 
         errors = io.StringIO()
         with redirect_stderr(errors), self.assertRaises(SystemExit):
-            self.run_cli(self.score_path(), "--parts", "alto")
-        for part in arranger.PART_NAMES:
-            self.assertIn(part, errors.getvalue())
+            self.run_cli(self.score_path(), "--chord-on", "9")
+        self.assertIn("felt beat 9", errors.getvalue())
 
         errors = io.StringIO()
         with redirect_stderr(errors), self.assertRaises(SystemExit):
-            self.run_cli(self.score_path(), "--grid", "freddie")
-        self.assertIn("melody:every_note", errors.getvalue())
+            self.run_cli(self.score_path(), "--bass-notes", "swing")
+        self.assertIn("root-5th", errors.getvalue())

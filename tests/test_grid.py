@@ -62,6 +62,7 @@ from arranger import (
     GRID_WALK,
     PART_BASS,
     PART_CHORD,
+    RHYTHM_MELODY,
     SUB,
     TICKS_PER_BEAT,
     GridPattern,
@@ -373,14 +374,17 @@ class TestTheGroupingDecidesTheFeltBeats(unittest.TestCase):
 class TestTheDefaultIsInert(unittest.TestCase):
     """`every_note` is the default and is on everywhere, which is what "no change" means."""
 
-    def test_the_default_grid_is_every_note(self):
+    def test_the_default_request_defers_to_the_melody(self):
         """The default is the shipped behaviour, not merely a harmless one.
 
-        `grid=auto` used to be the sentinel that resolved to this; Step A withdrew it,
-        so the default names `every_note` outright - matching `arrange_progression`'s
-        keyword default, which is what makes the two spellings comparable.
+        The public spelling is the **rhythm**, so `ArrangeOptions()` names no preset:
+        its request says `chord_on=melody`, which places the chord at every written
+        melody onset - exactly what `melody:every_note` said before the request
+        existed. The preset remains the engine's internal axis, and is still the
+        fallback `on_grid` is asked about when a caller spells one.
         """
-        self.assertEqual(ArrangeOptions().grid, GRID_DEFAULT)
+        self.assertIsNone(ArrangeOptions().grid)
+        self.assertEqual(ArrangeOptions().request.chord_on, RHYTHM_MELODY)
 
     def test_every_note_is_on_the_grid_at_every_beat(self):
         """So a caller that names no grid places exactly the chords it always did."""

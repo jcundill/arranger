@@ -15,13 +15,16 @@ from musthe import Note
 
 from .bass import Slot
 from .chords import normalised_harmony
-from .context import SlotContext
+from .context import SlotContext, SlotHarmony, SlotIdentity, SlotState, SlotTiming
 from .decisions import (
+    MELODY_ALONE_BASS,
     MELODY_ALONE_REST,
+    lone_bass_case,
     melody_alone_case,
     resolve_texture_grips,
 )
-from .grid import on_grid
+from .grid import Rhythm, on_grid
+from .options import CHORD_FILLS_NONE
 from .texture import (
     metric_weight,
     roles_for_slot,
@@ -89,7 +92,11 @@ class SlotInputs:
     melody_voiced: bool
     melody_onsets: Optional[Container[int]]
     harmony_family: str
-    grid_pattern: str
+    #: The chord's rhythm, read by `_chord_here` unless a `grid=` preset was named.
+    chord_rhythm: Optional[Rhythm]
+    grid_pattern: Optional[str]
+    bass_rhythm: Rhythm
+    chord_fills: str
     beats_per_bar: int
     grouping: Tuple[int, ...]
     fret_min: int
@@ -115,13 +122,28 @@ def _slot_context(
     pass a value the context can compute from the same facts.
     """
     note_str, chord_type, name = triple
+    melody_note = Note(note_str) if note_str is not None else None
     return SlotContext(
-        progression=inputs.progression,
-        index=slot.index,
-        name=name,
-        chord_type=chord_type,
-        note_str=note_str,
-        melody_note=Note(note_str) if note_str is not None else None,
+        timing=SlotTiming(
+            bar=slot.bar,
+            beat=slot.beat,
+            duration=slot.duration,
+        ),
+        harmony=SlotHarmony(
+            name=name,
+            chord_type=chord_type,
+            note_str=note_str,
+            melody_note=melody_note,
+        ),
+        identity=SlotIdentity(
+            progression=inputs.progression,
+            index=slot.index,
+        ),
+        state=SlotState(
+            role=role,
+            weight=metric_weight(slot.bar, slot.beat, inputs.beats_per_bar, inputs.grouping),
+            chord_attack=_chord_attacks(inputs, slot, melody_note),
+        ),
         fret_min=inputs.fret_min,
         fret_max=inputs.fret_max,
         texture=inputs.texture,
@@ -129,11 +151,30 @@ def _slot_context(
         non_chord_tone=inputs.non_chord_tone,
         bass_pcs=inputs.bass_pcs,
         slash_bass_cost_for=inputs.slash_bass_cost_for,
-        bar=slot.bar,
-        beat=slot.beat,
-        duration=slot.duration,
-        role=role,
-        weight=metric_weight(slot.bar, slot.beat, inputs.beats_per_bar, inputs.grouping),
+    )
+
+
+def _sings_here(
+    inputs: SlotInputs, index: int, melody_note: Optional[Note]
+) -> bool:
+    """**Does the guitar sing *this* slot?** (§9.3 step D: the soprano is per slot.)
+
+    It sings a slot only where its voice selection has a soprano *and* the slot is a
+    melody **onset** - a written note articulating here. Every other slot it comps,
+    except on a melody-only selection, whose note-less slots were skipped above.
+
+    §9.2's onset signal is reused rather than re-derived: `melody_onsets` is the same
+    set the comping route's reharmonise guard reads, and a grid position the tune merely
+    *sustains* through is not an onset, so the guitar states the chord there rather than
+    re-articulating a note it did not begin - which is why a note-bearing merged
+    position still comps. `None` means every slot is an onset, the honest default for a
+    hand-built progression with no timeline, which keeps a bare `arrange_progression`
+    unchanged.
+    """
+    return (
+        inputs.melody_voiced
+        and melody_note is not None
+        and (inputs.melody_onsets is None or index in inputs.melody_onsets)
     )
 
 
@@ -251,8 +292,77 @@ def _texture_grips(role: str, slot: Slot, inputs: SlotInputs) -> Tuple[str, ...]
         # the arrangement: a target may sound three strings only where a bass note
         # is actually being placed under it, which is what `slot.bass` says.
         # `has_thumb` alone would thin chords the thumb never plays under -
-        # `--bass-style root` leaves most slots bare.
+        # `bass-on 1` leaves most slots bare.
         has_thumb=inputs.has_thumb and slot.bass is not None,
+    )
+
+
+def _chord_here(
+    inputs: SlotInputs, beat: Optional[float], melody_absent: bool
+) -> bool:
+    """Whether the chord part attacks at this position.
+
+    Two spellings, one question, and a **preset wins** because it is the engine's
+    own axis: a caller who named `grid=` is testing one pattern directly, and
+    reading the request's rhythm underneath it would answer a different question.
+    Otherwise the request's `chord_on` decides - `melody` at every written onset,
+    or the positions it names - and `wants_melody` is true for every slot for the
+    reason `on_grid` defers to the melody: the slots that exist are the melody's.
+
+    A slot with **no melody** is one the chord layer asked for: either a
+    `--chord-on` target or a rest `--chord-fills` fills, and a slot nothing asked
+    for is not in the timeline at all. So the chord attacks at it by construction,
+    which the rhythm test could not say - the position is precisely one the rhythm
+    does *not* name.
+    """
+    if melody_absent and inputs.chord_fills != CHORD_FILLS_NONE:
+        return True
+    if inputs.grid_pattern is not None:
+        return on_grid(beat, inputs.grid_pattern, inputs.beats_per_bar)
+    if inputs.chord_rhythm is None or inputs.chord_rhythm.wants_melody:
+        return True
+    return inputs.chord_rhythm.includes(
+        beat, inputs.beats_per_bar, inputs.grouping
+    )
+
+
+def _chord_attacks(
+    inputs: SlotInputs,
+    slot: Slot,
+    melody_note: Optional[Note],
+) -> bool:
+    """Whether this slot's chord is a **new attack** rather than a shape still ringing.
+
+    `_chord_here` answers where the chord part states a harmony. This answers the
+    narrower question the renderers ask when two consecutive steps sound the same
+    pitches - is the later one struck again, or is the earlier one still ringing? - and
+    only the arrangement can answer it, because the pitches are identical either way.
+
+    Two ways to be an attack:
+
+    - the slot carries **no melody**, so the chord layer asked for it: a position
+      `--chord-on` named, or a silent bar `--chord-fills` placed a chord in. Nothing
+      in the tune is being re-articulated, so there is no hold to preserve;
+    - the chord's **own rhythm names this beat**. `--chord-on every-beat` on a comp is
+      four stabs a bar, and `--chord-on melody,1and` adds one under a note the tune is
+      holding.
+
+    A written melody onset needs no clause of its own: a step there re-strikes through
+    `ArrangementStep.repeated` or by carrying a different soprano. A position the
+    eighth-note skeleton invented, where the tune merely sustains, is neither - that is
+    the hold `tabstaff._collapse_holds` and `tabscore._is_hold` exist for.
+
+    A `grid=` preset keeps its own reading rather than being re-derived from the
+    request here, for the reason `_chord_here` gives: a preset is the engine's axis and
+    a caller who named one is testing that pattern, not the request's rhythm
+    underneath it.
+    """
+    if melody_note is None:
+        return True
+    if inputs.grid_pattern is not None or inputs.chord_rhythm is None:
+        return False
+    return inputs.chord_rhythm.includes(
+        slot.beat, inputs.beats_per_bar, inputs.grouping
     )
 
 
@@ -272,30 +382,16 @@ def slot_state(
     index = slot.index
     note_str, chord_type, name = inputs.progression[index]
     if note_str is None:
-        if inputs.melody_only:
+        # A melody-only selection's note-less slot is **tune silent** unless the thumb
+        # has something there: `parts=melody,bass` plays the bass part, and a position
+        # the walk invented is the one place this selection sounds anything at all.
+        if inputs.melody_only and slot.bass is None:
             return _tune_silent_plan(car, slot, chord_type, name, inputs)
         melody_note = None
     else:
         melody_note = Note(note_str)
 
-    # **Does the guitar sing *this* slot?** (§9.3 step D: the soprano is per
-    # slot, not per route.) The guitar sings a slot only where its voice
-    # selection has a soprano *and* the slot is a melody **onset** - a written
-    # note articulating here. Every other slot it comps, except on a melody-only
-    # selection, whose note-less slots were skipped above.
-    #
-    # §9.2's onset signal is reused rather than re-derived: `melody_onsets` is
-    # the same set the comping route's reharmonise guard reads, and a grid
-    # position the tune merely *sustains* through is not an onset, so the guitar
-    # states the chord there rather than re-articulating a note it did not begin
-    # - which is why a note-bearing merged position still comps. `None` means
-    # every slot is an onset, the honest default for a hand-built progression
-    # with no timeline, which keeps a bare `arrange_progression` unchanged.
-    sings_here = (
-        inputs.melody_voiced
-        and melody_note is not None
-        and (inputs.melody_onsets is None or index in inputs.melody_onsets)
-    )
+    sings_here = _sings_here(inputs, index, melody_note)
 
     # Where this slot falls in the bar, and therefore what it is for. Read
     # defensively, exactly as slots.arrange_slots guards its own timings: a
@@ -325,11 +421,25 @@ def slot_state(
     # takes the comping-route branches inside `melody_alone_case`, so an
     # off-grid note-less slot rests rather than asserting a melody it has not
     # got. §9.3 step D.
+    chord_here = _chord_here(inputs, beat, melody_note is None)
     melody_alone = melody_alone_case(
         inputs.texture, role, slot_grips, chord_type, name, inputs.has_thumb,
         melody_voiced=sings_here,
-        on_grid=on_grid(beat, inputs.grid_pattern, inputs.beats_per_bar),
+        on_grid=chord_here,
     )
+    # **The bass part's own claim on the slot**, and it is asked *after* the four
+    # melody-alone answers rather than inside them: it is the one combination that
+    # depends on the slot's thumb note, which `melody_alone_case` cannot see, and the
+    # answers it replaces are the ones that would otherwise drop the note - a rest on
+    # the comping route, and a melody-only selection's note-less position. A slot the
+    # guitar **sings** is not one of these: the melody-alone route already carries the
+    # thumb (`docs/engine.md`'s `--chord-on 1and` example).
+    if lone_bass_case(
+        has_bass=slot.bass is not None,
+        sings_here=sings_here,
+        chord_stated=chord_here and not inputs.melody_only,
+    ):
+        melody_alone = MELODY_ALONE_BASS
     return SlotPlan(
         context=_slot_context(
             inputs, slot, (note_str, chord_type, name), role

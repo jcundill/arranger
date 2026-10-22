@@ -1,21 +1,82 @@
 """The selection rule: which of the candidates is played.
 
-`voicing_cost` is the library's central invariant - a tuple compared lexicographically,
-not a weighted sum, with its order asserted positionally by
-`tests/test_grip_selection.py::TestVoicingCost` - and `best_voicing` is its argmin. **No
-criterion names a grip family**: a tie that runs off the end of the tuple is broken by
-generation order, which is `grips.GRIP_PREFERENCE`. `bass_cost` deliberately lives in
-`bass` instead, next to the `BASS_ROLE_*` vocabulary it ranks over, because importing it
-here would make `cost` import `bass` and `bass` import `cost`.
+`voicing_cost` is the library's central invariant - a named tuple compared
+lexicographically, not a weighted sum, with its field order asserted in
+`tests/test_grip_selection.py::TestVoicingCost` - and `best_voicing` is its argmin. Every
+input the rule reads arrives as one `SelectionCriteria`, so the selector, the palette
+record and a caller cannot score one slot against different arguments. **No criterion
+names a grip family**: a tie that runs off the end of the tuple is broken by generation
+order, which is `grips.GRIP_PREFERENCE`. `bass_cost` deliberately lives in `bass_place`
+instead, next to the `BASS_ROLE_*` vocabulary it ranks over, which sits above `cost` in
+the dependency order.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Container, List, Optional, Sequence, Tuple
+from typing import Callable, Container, List, NamedTuple, Optional, Sequence
 
 from .grips import BASS_DEGREES_6432
 from .tuning import NECK_FRET_MAX, NECK_FRET_MIN, GuitarFretboard, Voicing
+
+
+class VoicingScore(NamedTuple):
+    """One shape's cost, named and positional at once.
+
+    It is a `tuple` subclass on purpose: **the field order is the invariant**, and
+    comparison stays lexicographic, so `min`, `sorted` and `decisive_criterion` keep
+    working on the values they always did. What the names buy is that an editor reads
+    `score.span` rather than `score[3]`, and that adding a criterion is one field here
+    plus one label in `_CRITERION_LABELS` - the return names its elements, so the two
+    cannot fall out of step.
+
+    The order is asserted once, in `TestVoicingCost::test_the_field_order_is_the_rule`;
+    **do not reorder the fields.** Reordering is a musical decision with measurements,
+    recorded in `docs/engine.md` §"Span outranks neck position", not a refactor.
+    """
+
+    #: Notes outside the chord, counted - the correctness criterion, first.
+    foreign: float
+    #: Frets outside the neck window, counted - a penalty, not a filter.
+    outside: float
+    #: Voices the shape leaves out: `4 - len(active)`, and nothing exempts a duo.
+    missing: float
+    #: Fret span, with spans 0 and 1 bucketed together.
+    span: float
+    #: Distance in neck position from the previous shape.
+    position: float
+    #: Total pitch movement of the voices, in semitones.
+    movement: float
+    #: 0 for a root or 5th in the bass, 1 otherwise; unasked without a root.
+    bass: float
+
+
+@dataclass(frozen=True)
+class SelectionCriteria:
+    """Everything a candidate is ranked against, except the candidate itself.
+
+    `voicing_cost` takes this and nothing else, so the selector and the palette
+    record cannot score the same slot against different arguments - and a caller that
+    wants one more ranking input passes a field rather than another keyword.
+
+    `previous` is here rather than beside `candidates` because it is part of the
+    ranking context, not a candidate: every shape in one palette is scored against
+    the same held shape. `bass_pc` and `slash_bass_cost` are the partition's half of
+    the rule and are read before `cost` is called.
+    """
+
+    previous: Optional[Voicing] = None
+    fret_min: int = NECK_FRET_MIN
+    fret_max: int = NECK_FRET_MAX
+    allowed_tones: Optional[Container[int]] = None
+    root_pc: Optional[int] = None
+    melody_pc: Optional[int] = None
+    bass_pc: Optional[int] = None
+    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]] = None
+
+    def cost(self, voicing: Voicing) -> VoicingScore:
+        """This shape's cost under exactly these criteria."""
+        return voicing_cost(voicing, self)
 
 
 def window_penalty(
@@ -40,17 +101,14 @@ def window_penalty(
     )
 
 
-def voicing_cost(
-    voicing: Voicing,
-    previous: Optional[Voicing],
-    fret_min: int = NECK_FRET_MIN,
-    fret_max: int = NECK_FRET_MAX,
-    allowed_tones: Optional[Container[int]] = None,
-    root_pc: Optional[int] = None,
-    melody_pc: Optional[int] = None,
-) -> Tuple[float, ...]:
+
+def voicing_cost(voicing: Voicing, criteria: SelectionCriteria) -> VoicingScore:
     """
-    The whole selection rule as one comparable number, lowest wins.
+    The whole selection rule as one comparable value, lowest wins.
+
+    Every ranking input is read from `criteria` (`allowed_tones`, `melody_pc`,
+    `root_pc`, the window), so one more input is a field there rather than a keyword
+    here - what keeps one rule serving the selector, the palette record and the facade.
 
     It is a *tuple* rather than a weighted sum on purpose. These priorities are
     genuine trade-offs that must not be traded against each other - "stay in
@@ -139,117 +197,94 @@ def voicing_cost(
     `best_voicing`.
     """
     active = voicing.active_frets()
-    outside = sum(1 for fret in active if not fret_min <= fret <= fret_max)
+    outside = sum(
+        1 for fret in active if not criteria.fret_min <= fret <= criteria.fret_max
+    )
     foreign = 0.0
     # An empty tone set means the chord could not be read, not that every note is
     # wrong - which is why this tests truthiness and not `is not None`. Without it a
     # count turns an unreadable chord into "every note is a wrong note", and fewer
     # notes becomes *better* than more. `Dm(maj7)` is the live case: the spelling
     # does not parse, so it has no tone set.
-    if allowed_tones:
+    if criteria.allowed_tones:
         for pitch in voicing.midi_notes():
             pc = pitch % 12
-            if melody_pc is not None and pc == melody_pc % 12:
+            if criteria.melody_pc is not None and pc == criteria.melody_pc % 12:
                 continue
-            if pc not in allowed_tones:
+            if pc not in criteria.allowed_tones:
                 foreign += 1.0
 
-    if previous is None:
+    if criteria.previous is None:
         position = abs(voicing.avg_fret - 9)
         movement = 0.0
     else:
-        position = abs(voicing.avg_fret - previous.avg_fret)
-        movement = calculate_pitch_leading_distance(previous, voicing)
+        position = abs(voicing.avg_fret - criteria.previous.avg_fret)
+        movement = calculate_pitch_leading_distance(criteria.previous, voicing)
 
     missing = 4 - len(active)
     bass_root_or_fifth = (
         0.0
-        if root_pc is not None
+        if criteria.root_pc is not None
         and voicing.bass_pc is not None
-        and (voicing.bass_pc - root_pc) % 12 in BASS_DEGREES_6432
+        and (voicing.bass_pc - criteria.root_pc) % 12 in BASS_DEGREES_6432
         else 1.0
     )
 
-    return (
-        foreign,
-        float(outside),
-        float(missing),
+    # Built by keyword, so a new criterion's label and its position here cannot drift
+    # apart: the field name is the join between the two.
+    return VoicingScore(
+        foreign=foreign,
+        outside=float(outside),
+        missing=float(missing),
         # Spans 0 and 1 bucketed - see criterion 3. Two or more still outranks position.
-        0.0 if voicing.fret_span() <= 1 else float(voicing.fret_span()),
-        position,
-        movement,
-        bass_root_or_fifth,
+        span=0.0 if voicing.fret_span() <= 1 else float(voicing.fret_span()),
+        position=position,
+        movement=movement,
+        bass=bass_root_or_fifth,
     )
 
 
-@dataclass(frozen=True)
-class SelectionCriteria:
-    """Everything a candidate is ranked against, except the candidate itself.
+#: The phrase each score field is printed with, keyed by **field name** rather than by
+#: position: the order of the labels is read off `VoicingScore._fields`, so this table
+#: cannot put two criteria out of step - and a new field with no label here raises a
+#: `KeyError` at import, which is the one failure the suite cannot miss.
+_CRITERION_LABELS = {
+    "foreign": "sounds a note outside the chord",
+    "outside": "lies outside the neck window",
+    "missing": "leaves a voice out",
+    "span": "needs a wider stretch",
+    "position": "sits further up the neck",
+    "movement": "moves the inner voices more",
+    "bass": "sounds a weaker bass",
+}
 
-    `voicing_cost` is the primitive function and keeps its seven-argument public
-    signature; this is the value the internal selector and the palette record pass
-    around so they cannot score the same slot against different arguments.
-
-    `previous` is here rather than beside `candidates` because it is part of the
-    ranking context, not a candidate: every shape in one palette is scored against
-    the same held shape. `bass_pc` and `slash_bass_cost` are the partition's half of
-    the rule and are read before `cost` is called.
-    """
-
-    previous: Optional[Voicing] = None
-    fret_min: int = NECK_FRET_MIN
-    fret_max: int = NECK_FRET_MAX
-    allowed_tones: Optional[Container[int]] = None
-    root_pc: Optional[int] = None
-    melody_pc: Optional[int] = None
-    bass_pc: Optional[int] = None
-    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]] = None
-
-    def cost(self, voicing: Voicing) -> Tuple[float, ...]:
-        """This shape's cost under exactly these criteria."""
-        return voicing_cost(
-            voicing,
-            self.previous,
-            self.fret_min,
-            self.fret_max,
-            allowed_tones=self.allowed_tones,
-            root_pc=self.root_pc,
-            melody_pc=self.melody_pc,
-        )
-
-
-#: The name of each way a shape can lose to another, so a caller holding two candidates
-#: can say *which* one separated them: `movement` records the index on the step and
-#: `render` reads the phrase from here, which is what keeps the labels from going stale.
+#: The phrase a shape lost on, by score index, so a caller holding two candidates can
+#: say *which* one separated them: the routes record the index on the step and `render`
+#: reads the phrase from here, which is what keeps the labels from going stale.
 #:
-#: The first seven are `voicing_cost`'s tuple in its own order - that order is the
-#: invariant and this spells it. The eighth is **not a cost criterion at all**: it names a
-#: shape removed by a caller's partition *before* the tuple ever saw it, which is how the
-#: written slash bass is honoured (`decisions.select_step_voicing`).
+#: The first seven are `VoicingScore`'s fields in their own order - that order is the
+#: invariant and this spells it from it. The eighth is **not a cost criterion at all**: it
+#: names a shape removed by a caller's partition *before* the tuple ever saw it, which is
+#: how the written slash bass is honoured (`decisions.select_step_voicing`).
 #:
 #: Each entry is a predicate, read after "the N-voice voicing <tab>".
-VOICING_COST_CRITERIA = (
-    "sounds a note outside the chord",
-    "lies outside the neck window",
-    "leaves a voice out",
-    "needs a wider stretch",
-    "sits further up the neck",
-    "moves the inner voices more",
-    "sounds a weaker bass",
-    "does not sound the written bass",
-)
+VOICING_COST_CRITERIA = tuple(
+    _CRITERION_LABELS[field] for field in VoicingScore._fields
+) + ("does not sound the written bass",)
 
 #: `VOICING_COST_CRITERIA`'s span entry, which is the one
-#: `decisions.should_demote_to_melody_alone` turns a shape away for.
-SPAN_CRITERION = VOICING_COST_CRITERIA.index("needs a wider stretch")
+#: `decisions.should_demote_to_melody_alone` turns a shape away for. Read from the
+#: score's own field list, so the label above and this index cannot disagree.
+SPAN_CRITERION = VoicingScore._fields.index("span")
 
 #: `VOICING_COST_CRITERIA`'s last entry: lost to a caller's partition rather than to a
-#: cost, so no element of the two tuples need differ.
-PARTITION_CRITERION = VOICING_COST_CRITERIA.index("does not sound the written bass")
+#: cost, so no element of the two scores need differ. It is the first index *past* the
+#: fields, which is where the partition label was put.
+PARTITION_CRITERION = len(VoicingScore._fields)
 
 
-def decisive_criterion(winner: Sequence[float], loser: Sequence[float]) -> Optional[int]:
-    """Which element of `voicing_cost`'s tuple ranked `loser` below `winner`.
+def decisive_criterion(winner: VoicingScore, loser: VoicingScore) -> Optional[int]:
+    """Which element of the score ranked `loser` below `winner`.
 
     The first index at which two costs differ *is* the criterion that decided between
     them, because every element before it is equal. None means the two tied, in which
@@ -295,13 +330,20 @@ def best_voicing(
 
     `root_pc` is passed straight through to voicing_cost and is what enables the
     bass-function tie-break. A caller that has no root omits it and gets no bass term.
+
+    This is the **keyword spelling**, and it builds the criteria rather than ranking
+    anything itself: one selection primitive (`best_voicing_for`) is what makes the
+    two spellings the same rule instead of two that must be kept in step.
     """
-    if not candidates:
-        return None
-    return min(
+    return best_voicing_for(
         candidates,
-        key=lambda v: voicing_cost(
-            v, previous, fret_min, fret_max, allowed_tones, root_pc, melody_pc
+        SelectionCriteria(
+            previous=previous,
+            fret_min=fret_min,
+            fret_max=fret_max,
+            allowed_tones=allowed_tones,
+            root_pc=root_pc,
+            melody_pc=melody_pc,
         ),
     )
 
@@ -312,9 +354,10 @@ def best_voicing_for(
 ) -> Optional[Voicing]:
     """The candidate `criteria` likes best, or None when there are no candidates.
 
-    The object form of `best_voicing`, for the selector and the palette record: a
-    tie still falls to the previous candidate, because this is the same stable `min`
-    over the same cost tuple.
+    The one argmin behind both spellings - and behind the selector and the palette
+    record - so a route cannot rank against one set of criteria and record a choice
+    made under another. A tie still falls to the earlier candidate, because this is
+    the same stable `min` over the same score (see `best_voicing` for what that means).
     """
     if not candidates:
         return None

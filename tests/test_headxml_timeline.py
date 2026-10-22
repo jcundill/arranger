@@ -13,7 +13,7 @@ import os
 import tempfile
 import unittest
 
-from arranger import SILENCE_TUNE_SILENT, format_progression
+from arranger import GRID_DEFAULT, SILENCE_TUNE_SILENT, format_progression
 from arranger.options import ArrangeOptions
 from arranger.slots import arrange_slots
 from headxml import (
@@ -458,42 +458,48 @@ class TestChordSlots(unittest.TestCase):
         )
         self.assertEqual(positions, [(1.0, "Am7"), (2.0, "D9")])
 
-    def test_the_default_grid_adds_the_silent_position_in_a_melody_less_bar(self):
-        """**The melody-less bar, and the first half of open-issues item 1's fix.**
+    def test_the_default_request_adds_nothing_in_a_melody_less_bar(self):
+        """`head FILE` is the melody plus one chord per note - no position invented.
 
-        A bar the melody never enters contributes no melody slot of its own, so every
-        position in one is the union's - and `every_note` is melody-anchored, meaning
-        it names no positions of its own to copy from. The unit of generation for such
-        a bar is therefore the beat (`_bar_resolution` has no onsets to fit), which is
-        the rule this test pins.
+        **This assertion is inverted, not deleted** (AGENTS.md trap 5). It used to
+        pin the default union's silent position in bar 6; the request redesign makes
+        that union a *policy* (`--chord-fills`, and positions the caller names), so
+        the default request now leaves a bar the tune never enters silent.
 
-        Bar 6 is the case the old behaviour got wrong: no written notes and two
-        changes, and **no part produced** - not quiet, absent - on every export path.
-        It is not *entirely* silent under the corrected metre, though: bar 5's G4 is
-        held through beat 1.5, so only beat 2.0 is a position the tune has left. The
-        default grid adds that one and withholds the held one, which is §9.2's rule
-        applied inside a bar with no onsets of its own.
+        The grid **axis** is still reachable as `grid="melody:every_note"`, and it is
+        where this fixture's silent position is still added - bar 5's G4 is held
+        through beat 1.5, so only beat 2.0 is a position the tune has left. Keeping
+        both halves in one test is what says the behaviour moved rather than went.
         """
+        head = self.rainy
+        skeleton = head_skeleton(head, None)
+        written = {(bar, round(beat, 6)) for _t, bar, beat, _d in skeleton}
         steps, _head, _notes = arranged(RAINY_DAY)
-        silent = [s for s in steps if s.bar == 6]
-        silent.sort(key=lambda step: (step.bar or 0, step.beat or 0.0))
-        self.assertEqual([(s.beat, s.chord) for s in silent], [(2.0, "D9")])
-        for step in silent:
-            self.assertIsNone(step.melody, step.tab_line())
-            self.assertFalse(step.melody_voiced, step.tab_line())
+        self.assertEqual(
+            {(s.bar, round(s.beat or 0.0, 6)) for s in steps}, written
+        )
+        self.assertEqual([s for s in steps if s.bar == 6], [])
+
+        axis, _head, _notes = arranged(RAINY_DAY, grid=GRID_DEFAULT)
+        silent = sorted((s.beat, s.chord) for s in axis if s.bar == 6)
+        self.assertEqual(silent, [(2.0, "D9")])
+        for step in axis:
+            if step.bar == 6:
+                self.assertIsNone(step.melody, step.tab_line())
+                self.assertFalse(step.melody_voiced, step.tab_line())
 
     def test_a_bar_the_melody_does_enter_is_untouched_by_the_default_grid(self):
-        """The old bar-level claim, kept as a *fixture* fact rather than as the rule.
+        """The old bar-level claim, now a fact about the grid **axis** rather than the default.
 
-        `synthetic_repeat_slash`'s tune is continuous, so the positions the default grid
-        generates inside its note-bearing bars are all ones a note is still *holding* -
-        and a held position is not a slot (§9.2). That is why this fixture adds positions
-        in its melody-less bars only. The rule itself is position-level now, and
-        `test_every_added_position_is_one_the_tune_is_silent_at` is where it is stated.
+        `synthetic_repeat_slash`'s tune is continuous, so the positions the
+        melody-anchored axis generates inside its note-bearing bars are all ones a note
+        is still *holding* - and a held position is not a slot (§9.2). That is why that
+        axis adds positions in its melody-less bars only. The default request adds none
+        at all, which the test above states.
         """
         skeleton = head_skeleton(self.rainy, None)
         melody_bars = {bar for _triple, bar, _beat, _duration in skeleton}
-        steps, _head, _notes = arranged(RAINY_DAY)
+        steps, _head, _notes = arranged(RAINY_DAY, grid=GRID_DEFAULT)
         added = {(s.bar, s.beat) for s in steps} - {
             (bar, round(beat, 6)) for _t, bar, beat, _d in skeleton
         }
@@ -502,20 +508,14 @@ class TestChordSlots(unittest.TestCase):
             self.assertNotIn(bar, melody_bars, f"bar {bar} has notes and was added to")
 
     def test_every_added_position_is_one_the_tune_is_silent_at(self):
-        """The rule the union follows **inside** a melody bar: only where the tune is silent.
+        """The rule the melody-anchored **axis** follows: only where the tune is silent.
 
-        The bar-level exception was the whole of the old rule, and it was the bar because a
-        beat-level union could not tell a position the tune *skips* from one it merely
-        *holds*. The default grid now generates at each bar's own subdivision, so the unit
-        is the position and both refusals are stated rather than implied: a position the
-        tune writes is left to the note, and a position it is still holding is not a slot
-        at all (§9.2).
-
-        Swept over heads rather than argued, so a change that let a generated
-        chord land under a sounding note fails here instead of moving a count. The heads are
-        `tests.support.sweep_head_paths()` - the rule is position-level and about the metre,
-        so three of them answer it, and `synthetic_cut_time` and the waltz between them hold the
-        held-note and the skip cases.
+        Swept with `grid=` spelled, because that is the union this rule is about - the
+        default request adds no position, and a requested position (`chord-on`) is
+        deliberately allowed under a held note. The heads are
+        `tests.support.sweep_head_paths()`: the rule is position-level and about the
+        metre, so three of them answer it, and `synthetic_cut_time` and the waltz
+        between them hold the held-note and the skip cases.
         """
         checked = 0
         for path in sweep_head_paths():
@@ -525,7 +525,7 @@ class TestChordSlots(unittest.TestCase):
                     (bar, round(beat, 6))
                     for _t, bar, beat, _d in head_skeleton(head, None)
                 }
-                steps, _head, _notes = arranged(path)
+                steps, _head, _notes = arranged(path, grid=GRID_DEFAULT)
                 for step in steps:
                     bar, beat = step.bar or 0, step.beat or 0.0
                     if (bar, round(beat, 6)) in written:
@@ -538,6 +538,44 @@ class TestChordSlots(unittest.TestCase):
                         f"sounding note: {step.tab_line()}",
                     )
         self.assertGreater(checked, 0, "no position was added anywhere")
+
+    def test_a_requested_position_is_added_even_under_a_held_note(self):
+        """`chord-on=1and` attacks at 1.5 of **every** bar, and duplicates no written slot.
+
+        This is the request's half of the union, and the reason it is not §9.2-filtered: a
+        stab under a note the tune is still holding is exactly what "the and of 1" asks
+        for, and the melody-anchored axis refuses precisely that position. A written note
+        keeps its own slot - the chord is the note's, not a second attack.
+        """
+        from arranger.options import Request
+
+        head = load_musicxml(RAINY_DAY)
+        written = {
+            (bar, round(beat, 6))
+            for _t, bar, beat, _d in head_skeleton(head, None)
+        }
+        steps, _head, _notes = arranged(RAINY_DAY, request=Request(chord_on="1and"))
+        added = {
+            (s.bar, round(s.beat or 0.0, 6))
+            for s in steps
+            if (s.bar, round(s.beat or 0.0, 6)) not in written
+        }
+        bars = {s.bar for s in steps if s.bar is not None}
+        for bar in bars:
+            self.assertTrue(
+                any(
+                    s.bar == bar and abs((s.beat or 0.0) - 1.5) < 1e-6
+                    for s in steps
+                ),
+                f"bar {bar} has no attack on the and of 1",
+            )
+        # The bars whose and of 1 the tune does not write are the ones the request
+        # had to add, and at least one of them is a held note.
+        self.assertTrue(added, "every and of 1 already had a written note")
+        self.assertTrue(
+            any(melody_state(head, bar, 1.5) == "held" for bar, _ in added),
+            "the fixture must hold a note through the and of 1 somewhere",
+        )
 
     def test_a_melody_less_bar_with_no_harmony_behind_it_adds_nothing(self):
         """The bar-level rule never guesses a chord, which is the invariant that matters most.

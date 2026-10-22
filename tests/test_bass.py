@@ -25,6 +25,7 @@ from arranger import (
     BASS_ROLE_CONNECT,
     BASS_ROLE_ENCLOSURE,
     BASS_ROLE_HOLD,
+    BASS_ROLE_PEDAL,
     BASS_RULE_5TH,
     BASS_RULE_APPROACH,
     BASS_RULE_NEAREST,
@@ -50,7 +51,7 @@ from arranger import (
 
 # Private helpers imported from where they live rather than through the package
 # facade: they are not API, and re-exporting them would enlarge the public
-# surface for one test file's benefit. See `test_package_dag` and the facade
+# surface for one test file's benefit. See `meta_package_dag` and the facade
 # docstring.
 from arranger.bass import (
     _bass_harmony,
@@ -517,10 +518,17 @@ class TestTheBassStyleRegistry(unittest.TestCase):
         )
 
     def test_the_shipped_anchors_is_the_root_rule_alone(self):
-        """`BASS_STYLE_ANCHORS` names only the root rule, which admits only anchors."""
+        """`BASS_STYLE_ANCHORS` names one rule, which admits the root's two roles.
+
+        The rule governs the root wherever it sounds: on the position that marks the
+        bar (`anchor`) and on one that does not (`pedal`). With no rhythm named - the
+        only way this style is reached - the filtered walk keeps the anchors, so the
+        line this spelling produces is what it always was.
+        """
         self.assertEqual(BASS_STYLE_ANCHORS, BASS_RULE_ROOT)
         self.assertEqual(
-            BASS_RULE_ROLES[BASS_RULE_ROOT], frozenset({BASS_ROLE_ANCHOR})
+            BASS_RULE_ROLES[BASS_RULE_ROOT],
+            frozenset({BASS_ROLE_ANCHOR, BASS_ROLE_PEDAL}),
         )
 
     def test_the_walk_keeps_every_role_and_anchors_keeps_only_the_root(self):

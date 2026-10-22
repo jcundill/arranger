@@ -66,18 +66,36 @@ in a third medium and live in `tabgp.py` — see
 [Guitar Pro 5 export](#guitar-pro-5-export). `tabstaff` re-exports all four, so
 there is still one spelling for the whole staff-rendering surface.
 
-**The dependency is one-way: `tabstaff` imports `arranger`, never the reverse.** It
-takes `STRING_NAMES`, `ArrangementStep` and `_MUTED_CELL` from here; the last of
-those stays put because `Voicing.tab_block()` and `format_progression` use it too.
+**The dependency is one-way: `tabstaff` imports `arranger.tuning`, never the
+reverse.** It takes `STRING_NAMES`, `ArrangementStep` and `MUTED_CELL` from there -
+the leaf the whole package is built on, which imports nothing - and the last of those
+stays put because `Voicing.tab_block()` and `format_progression` use it too.
 
-### The re-export is lazy, and has to be
+### The re-export is lazy, and why
 
 `from arranger import format_tab_html` still works — the README and the tests
-spell it that way — but `arranger` does **not** import `tabstaff` at
-the top. A top-level (or even bottom-of-file) import would be a genuine cycle:
-importing `tabstaff` first would re-enter a half-initialised `arranger` and fail to
-find the names. So `arranger` exposes them through a **module-level `__getattr__`**
-(PEP 562), which resolves each name on first access.
+spell it that way — but `arranger` does **not** import `tabstaff` at the top. So
+`arranger` exposes the seven names through a **module-level `__getattr__`**
+(PEP 562), which resolves each on first access.
+
+The reason is cost, plus one hard failure. Measured on the tree:
+
+- a module-scope `from tabstaff import format_tab_staff` in `arranger/__init__.py`
+  **imports cleanly** — Python resolves `arranger.tuning` through the partially
+  initialised package — but it also loads `tabstaff`, `tabxml`, `tabgp` and
+  `tabscore` on every `import arranger`. With the lazy seam, `import arranger`
+  loads **none** of the six front ends;
+- a module-scope `import headxml` **fails**, with
+  `ImportError: cannot import name 'CHORD_FILLS_COMP'`: `headxml` names the facade's
+  own public surface, so it meets a facade that has not defined those names yet.
+
+So "the dependency is one-way" is the rule for the four rendering modules, and "no
+package module imports a front end at module scope" is the rule for the two that
+name the facade (`headxml`, `grip_chart`). `demo.main()`'s and `cli`'s imports are
+function-local for both reasons at once, and the two directions still do not
+deadlock: the front ends need only `tuning`, so neither side waits for the other.
+[docs/dependency-dag.md](dependency-dag.md) has the full table, and
+`tests/meta_front_end_dag.py::TestTheRuntimeCycle` holds it.
 
 Two consequences worth knowing:
 
@@ -93,6 +111,75 @@ Two consequences worth knowing:
   fails if the list and the module's public names diverge, in either direction. It is
   spelled as one literal in both modules rather than with `+=`, which a checker
   cannot follow either.
+
+## What the four renderers must agree about
+
+An arrangement is data; four renderers read it. **They must agree about which notes are new
+attacks**, because a note drawn twice is a wrong rhythm and a note drawn nowhere is a note
+the arrangement does not really contain. Four facts drive that agreement, and each has one
+owner.
+
+| fact | the field | what a renderer does with it |
+|---|---|---|
+| the shape is the same as the previous one | compared in `_staff_columns` / `_is_hold` | a hold column draws nothing: the previous shape is still ringing |
+| the chord is **struck again** though the shape is unchanged | `ArrangementStep.chord_attack` | the column is a strike and the shape is drawn again |
+| the thumb has **moved** under a held shape | `_moved_thumb` compares `(bass_midi, bass_string)` | the hold column draws **the bass string only** |
+| the thumb is **sounding and not plucked** | `ArrangementStep.bass_held` | the tab mutes that string, the staff leaves it blank, the score ties it, GP5 writes a tie note |
+| the step exists for the thumb: **nothing above it is struck** | `ArrangementStep.bass_only` | the tab and the staff draw the bass string only; the score re-states the ringing pitches **as ties**; GP5 writes the thumb as a new note and those pitches as ties |
+
+**The first row cannot decide on its own, and the second is why.** A comp on
+`--chord-on every-beat` states the *same shape* on every beat, and so does a slot the
+tune merely sustains through - the pitches are identical whether the player strikes the
+chord again or lets it ring. On the comping route that ambiguity is load-bearing, because
+`melody_voiced=False` removes the soprano a `repeated` step would re-articulate, so the
+engine deliberately holds the whole shape there (`render._step_cells`). The chord's own
+rhythm is the fact that separates the two, and `slot_plan._chord_attacks` is its one home:
+a position the request **named** - a `--chord-on` position, a stab under a held note - or a
+slot the chord layer invented where the tune is silent is a new attack; a slot the
+eighth-note skeleton invented under a sustaining note is a hold, and stays one.
+
+**The last row is the one the score cannot express otherwise.** GP5 has no way to write a
+string that sounds without being plucked, so a held shape is written as `NoteType.tie`
+notes; MusicXML does, and it is still a **tie** rather than a fresh note - a note written
+again is a note re-attacked. Both writers therefore re-state the *ringing* pitches and tie
+them (`tabgp._sounding_frets` draws the thumb, `tabxml._sounding` takes the pitches the part
+has already written), and `decisions.is_bass_only` is what says when: a position the
+chord's rhythm did not name, over a harmony and a melody that are already sounding. Without
+that, a tied melody under a walking line was re-plucked on every beat the walk invented, in
+the tab and in both files.
+
+
+**The hold comparison is of the upper voices**, and it has to be: a walking bass moves the
+lowest pitch on every beat, so including it would mark every column a strike and turn the
+arrangement back into the chord list the collapse exists to prevent. The cost of that choice
+is a column whose shape is held and whose thumb moves — a hold for the shape and a new attack
+for the bass — and it used to draw nothing at all, so the note was in the one-line tab and in
+the score while the ASCII staff and the HTML showed silence. `_moved_thumb` is that fact and
+`_draws` is the one predicate both renderers now ask. The comparison is by `(midi, string)`
+rather than by role, because a thumb can move to another octave of the same pitch class and
+that is a note being plucked.
+
+**A carried thumb is the mirror image.** `bass_merge.carry_bass` writes a struck note into
+the steps that follow it, so a `--bass-on 1` line is one note ringing through the bar rather
+than a stab per melody note. The fret is in the vector because the string really is
+sounding, so each renderer has to say "not plucked" in its own way:
+
+- `render._step_cells` draws a mute on that string — the one-line tab answers *what is
+  plucked*;
+- `tabstaff._strikes_here` returns False, so the cell is empty — the note was drawn where it
+  was struck;
+- `tabxml._build_note` writes a **per-note `<tie>`**: the earlier `Note` is patched to
+  `start`/`continue` and this one is written with `stop`. It has to be at the note inside the
+  chord, not on the chord, because the other voices are new. An event cut at a bar line
+  carries no such tie — the cut writes one chord-level tie, and a note cannot carry two;
+- `tabgp._strike_notes` writes the note as `NoteType.tie`, which is that format's only way
+  to say "still sounding"; the tie is only trusted where the last note written on that
+  string is the same fret, because a GP5 tie carries no fret of its own.
+
+A **rest column** is drawn by all four as silence: a blank cell, an `x` under `--mutes`, an
+explicit `<rest>` in the score. A **fill** is not a rest — it is a step with no melody — so
+it draws the chord it states and its line says *the tune is silent here*, which is what stops
+a chord with no melody above it from reading as a mistake.
 
 ## MusicXML import
 
@@ -558,7 +645,7 @@ module are gone and it is now named for what it does.
 
 **Imports are lazy where they keep the module cheap** — `argparse` inside
 `head_cli`, and the renderers inside it too, so `load_musicxml` costs nothing.
-`main()` imports `headxml` inside the `head` branch.
+`demo.main()` imports `headxml` inside the `head` branch.
 
 
 

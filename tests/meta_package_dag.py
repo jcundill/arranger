@@ -53,6 +53,7 @@ ORDER = [
     "grid",         # the grid axis: when each part sounds
     "texture",      # the texture axis: how many notes the chord part states
     "bass_rules",   # the bass vocabulary, capacities and refusals
+    "bass_place",   # the thumb's octave and string: the cost and `place_bass`
     "bass",         # the walking-bass thumb line
     "bass_merge",   # merging the walk into a chosen step; the next resolution melody
     "options",      # the knobs, as one value
@@ -61,11 +62,15 @@ ORDER = [
     "melody_alone", # where a lone note is fretted: the tune alone, with or without harmony
     "routes",       # the route handlers: rest, fill, NC and the comping route
     "slot_plan",    # one slot's plan: `slot_state` and the value it returns
+    "step_prepare", # one step's candidates: the octave-down rescue, non-chord-tone strategies
+    "harmonised_route", # the melody-bearing route: prepare, select, demote, emit
+    "route_dispatch", # the branch table: which route takes a planned slot, in order
     "movement",     # the step loop: one progression in, one arrangement out
     "steps",        # the engine's published facade - delegates, incl. to `movement`
     "slots",        # the slot layer: triples to steps, the one pre-pass over them
     "render",       # per-step rendering
     "cli",          # the two front ends' shared argparse block and output dispatch
+    "demo",         # the printing front end: the demonstration and the `head` hand-off
 ]
 
 # The edges the split could not avoid, each with the reason it is sound. Anything
@@ -176,9 +181,9 @@ class TestPackageDag(unittest.TestCase):
     def test_no_module_imports_the_facade(self):
         """Nothing inside the package may import `arranger` itself.
 
-        This is the cycle Phase 5 exists to open. A module reaching back up through
-        the facade would get a half-initialised package, and would hide its real
-        dependency from the check above.
+        This is the cycle the package's layering exists to prevent. A module reaching
+        back up through the facade would get a half-initialised package, and would
+        hide its real dependency from the check above.
         """
         offenders = []
         for module in ORDER:
@@ -229,9 +234,12 @@ class TestPackageDag(unittest.TestCase):
             ("Voicing", "tuning", "Voicing"),
             ("ArrangementStep", "tuning", "ArrangementStep"),
             ("GuitarFretboard", "tuning", "GuitarFretboard"),
-            ("bass_cost", "bass", "bass_cost"),
+            ("bass_cost", "bass_place", "bass_cost"),
             ("format_progression", "render", "format_progression"),
             ("supported_string_sets", "grip_tables", "supported_string_sets"),
+            # `main` is the demonstration front end, re-exported so the console
+            # script, `__main__` and the tests reach one function - not a copy.
+            ("main", "demo", "main"),
         ]:
             module = __import__(f"arranger.{home}", fromlist=[attribute])
             self.assertIs(

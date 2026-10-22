@@ -36,6 +36,7 @@ from arranger import (
 from arranger.fingers import (
     FINGERS,
     INDEX,
+    MAX_HAND_SPAN,
     MIDDLE,
     NO_FINGER,
     PINKY,
@@ -45,6 +46,7 @@ from arranger.fingers import (
     can_fret,
     finger_movement,
     fingers_needed,
+    hand_span,
 )
 from tests.support import make_voicing, note_name
 
@@ -390,19 +392,25 @@ class TestFingerMovement(unittest.TestCase):
         self.assertEqual((movement.total, movement.largest), (4, 1))
 
     def test_a_leap_and_a_spread_are_ranked_oppositely_by_the_two_numbers(self) -> None:
-        """§1.2: one finger leaping three frets is not three fingers moving two.
+        """§1.2: one finger moving two frets is not four fingers moving one each.
 
-        From `5-6-7-8-x-x`: to `5-6-7-11-x-x` is one finger travelling three frets and totals
-        3; to `5-6-9-10-x-x` is three fingers travelling two each and totals 4. The sum
-        prefers the leap and `largest` prefers the spread, and a player would call the first
-        the bigger move - so neither number alone describes both, which is why both are
-        reported.
+        From `x-x-5-6-7-8`: to `x-x-3-6-7-8` the index travels two frets and the movement
+        totals 2; to `x-x-6-7-8-9` every finger travels one and it totals 4. So the sum
+        prefers the leap while `largest` prefers the spread - a player would call the
+        index's move the bigger one - which is why both numbers are reported rather than
+        either alone.
+
+        Both shapes stay inside the hand's five frets, which is why the leap is measured
+        on the *lowest* finger rather than on the pinky as §1.2's original example did: a
+        pinky leaping three frets over a four-fret hand reaches six, and
+        `fingers.MAX_HAND_SPAN` says no hand does (the shape is not assigNABLE, so there
+        would be no `Fingering` to measure a movement between).
         """
         anchored = fingering_for([-1, -1, 5, 6, 7, 8])
-        leap = finger_movement(anchored, fingering_for([-1, -1, 5, 6, 7, 11]))
-        spread = finger_movement(anchored, fingering_for([-1, -1, 5, 6, 9, 10]))
-        self.assertEqual((leap.total, leap.largest), (3, 3))
-        self.assertEqual((spread.total, spread.largest), (4, 2))
+        leap = finger_movement(anchored, fingering_for([-1, -1, 3, 6, 7, 8]))
+        spread = finger_movement(anchored, fingering_for([-1, -1, 6, 7, 8, 9]))
+        self.assertEqual((leap.total, leap.largest), (2, 2))
+        self.assertEqual((spread.total, spread.largest), (4, 1))
         self.assertLess(leap.total, spread.total)
         self.assertGreater(leap.largest, spread.largest)
 
@@ -449,7 +457,7 @@ class TestTheFourFretBudget(unittest.TestCase):
     """§4.3's left-hand half: five distinct frets is not a hard shape, it is an impossible one.
 
     Asserted on a bare vector rather than on a `Voicing` because that is the level the refusal
-    lives at: `bass.place_bass` asks *before* it picks a string, and the shape it asks about
+    lives at: `bass_place.place_bass` asks *before* it picks a string, and the shape it asks about
     is one the hand is **already holding** with the candidate fret added, which is not a
     `Voicing` anyone builds.
     """
@@ -469,7 +477,7 @@ class TestTheFourFretBudget(unittest.TestCase):
     def test_one_fret_shared_by_two_strings_is_one_finger(self) -> None:
         """Constraint 3, which is why the count is over frets and not over strings."""
         self.assertEqual(fingers_needed([-1, 5, 5, 5, -1, -1]), 1)
-        self.assertTrue(can_fret([-1, 5, 7, 9, 5, 11]))
+        self.assertTrue(can_fret([-1, 5, 7, 9, 5, 10]))
 
     def test_the_merged_hand_the_engine_had_to_refuse(self) -> None:
         """The one hand in the committed heads that needed five frets, as the engine sees it.
@@ -491,6 +499,48 @@ class TestTheFourFretBudget(unittest.TestCase):
         self.assertIsNone(assign_fingers(make_voicing(hand)))
 
 
+class TestTheHandsReach(unittest.TestCase):
+    """The bound the finger count cannot see: five frets, index to pinky.
+
+    `fingers_needed` answers *how many fingers* and `hand_span` answers *how far apart they
+    are*. The merged walking-bass step can pass the first and fail the second - the reported
+    hand is three fingers and eight frets - so the two are separate refusals in `can_fret`,
+    and neither implies the other.
+
+    The figures and the bar they came from are `docs/open-issues.md` item 5's business; what
+    this class holds is the rule, at the level it is stated: a bare fret vector, which is
+    what `bass_place.place_bass` and `bass_merge._takes_the_ring` ask about.
+    """
+
+    def test_the_bound_is_the_hand_and_one_fret_wider_is_refused(self) -> None:
+        """Five frets apart is the reach; six is not, however few the fingers."""
+        self.assertEqual(MAX_HAND_SPAN, 5)
+        self.assertTrue(can_fret([-1, 5, 6, 7, 5 + MAX_HAND_SPAN, -1]))
+        self.assertFalse(can_fret([-1, 5, 6, 7, 5 + MAX_HAND_SPAN + 1, -1]))
+
+    def test_an_open_string_does_not_widen_the_hand(self) -> None:
+        """Fret 0 takes no finger, so it is not the hand's bottom - as in `fingers_needed`."""
+        self.assertEqual(hand_span([0, -1, 3, 4, -1, -1]), 1)
+        self.assertTrue(can_fret([0, -1, 3, 4, -1, -1]))
+
+    def test_a_shape_with_nothing_fretted_spans_nothing(self) -> None:
+        self.assertEqual(hand_span([-1, -1, -1, -1, -1, -1]), 0)
+        self.assertEqual(hand_span([-1, -1, 9, -1, -1, -1]), 0)
+
+    def test_the_reported_hand_is_three_fingers_and_eight_frets(self) -> None:
+        """`[1, 8, -1, 8, 9, -1]`: the thumb seven frets under a three-fret shape.
+
+        It passes the finger budget and fails the hand, which is the whole defect: the
+        count was the only test, so this vector was written and played.
+        """
+        hand = [1, 8, -1, 8, 9, -1]
+        self.assertEqual(fingers_needed(hand), 3)
+        self.assertEqual(hand_span(hand), 8)
+        self.assertFalse(can_fret(hand))
+        # The assignment agrees, because the two share the predicate.
+        self.assertIsNone(assign_fingers(make_voicing(hand)))
+
+
 class TestTheEngineUsesItForOneQuestion(unittest.TestCase):
     """§4.3's left-hand half - not inert any more, and exactly one module reads it.
 
@@ -503,10 +553,10 @@ class TestTheEngineUsesItForOneQuestion(unittest.TestCase):
     """
 
     def test_the_only_engine_caller_is_the_walking_bass(self) -> None:
-        """`bass` imports `fingers` for the fret budget, and no other engine module does.
+        """`bass_place` imports `fingers` for the fret budget, `bass_merge` for the ring.
 
         Read from the AST rather than from `sys.modules`, for the reason
-        `test_package_dag._imports_of` gives: a function-local import shows up here, which is
+        `meta_package_dag._imports_of` gives: a function-local import shows up here, which is
         exactly what should be caught, and it does not depend on what some other test happened
         to import first.
         """
@@ -525,14 +575,17 @@ class TestTheEngineUsesItForOneQuestion(unittest.TestCase):
                     importers.add(path.stem)
         self.assertEqual(
             importers,
-            {"bass"},
-            "the set of engine modules reading fingers changed; it was exactly `bass`",
+            {"bass_place", "bass_merge"},
+            "the set of engine modules reading fingers changed: `bass_place` asks the "
+            "fret budget, and `bass_merge` asks the same question of a **carried** thumb "
+            "- a note that keeps ringing only if the hand holding the new shape can "
+            "still reach it",
         )
 
     def test_the_facade_binds_it_as_a_public_path(self) -> None:
         """`arranger.fingers` is reachable, which is what the DAG check needs.
 
-        `tests/test_package_dag.py::test_every_module_is_imported_by_something` counts
+        `tests/meta_package_dag.py::test_every_module_is_imported_by_something` counts
         `__init__` as an importer, which is one of the two reasons `"fingers"` is in
         `arranger.__all__`; the other is that the module is its own public path and the two
         public names the engine reads - `can_fret` and `assign_fingers` - are reachable

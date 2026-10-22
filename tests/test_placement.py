@@ -579,14 +579,18 @@ class TestTheGripDistribution(unittest.TestCase):
         # The three grouped fixtures add 62 steps - one per written note - and the
         # pre-existing heads' distribution is unchanged. A moved count here still
         # means a shape moved; the fixture delta is the only expected difference.
-        self.assertEqual(total, 396)
+        #
+        # **387, nine fewer than before the request redesign**, and the nine are all
+        # `shell`: they were the default union's comping steps in the tune's rests,
+        # which `head FILE` no longer invents (`docs/history/rhythm-request.md`).
+        self.assertEqual(total, 387)
         self.assertEqual(
             counts,
             {
                 "drop3": 107,
                 "drop2_6432": 98,
                 "drop2": 102,
-                "shell": 39,
+                "shell": 30,
                 "closed": 26,
                 "melody": 8,
                 "drop24": 12,

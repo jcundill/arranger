@@ -125,7 +125,10 @@ ROLE_FILL = "fill"
 # keeps its line-up against the tune; a message alone was not enough, because it
 # reached nobody reading the part. Five values, one
 # per route that can decline to play:
-SILENCE_GRID = "grid"            # the grid places no chord on this beat
+# The grid - the layer that decides when each part sounds - placed nothing here. The
+# phrase a reader sees (`annotation._SILENCE_PHRASES`) names the *request* rather than
+# the grid, because the flag that used to expose one no longer exists.
+SILENCE_GRID = "grid"
 SILENCE_NC_COMPING = "nc_comping"  # an NC bar: nothing for a comping part to state
 SILENCE_NO_SHAPE = "no_shape"    # no shape in the palette, and the tune cannot stand alone
 SILENCE_OUT_OF_REACH = "out_of_reach"  # no string reaches the written melody note
@@ -320,12 +323,20 @@ class Palette:
     is what makes an out-of-position shape explicable: the window is a preference and never
     a filter, so a shape outside it is played rather than dropped, and only the palette can
     say whether there was anything inside to play instead.
+
+    `dropped_for_bass` is the shape the ranking preferred from the palette **before** the
+    requested bass note narrowed it (`decisions.leaving_room_for_the_bass`). It is not
+    `alternative`: that is the fuller shape the tuple turned down on merit, while this one
+    was never ranked at all, because the thumb could not reach the line's note under it. A
+    step that carries no thumb line leaves it None, and so does a narrow that did not change
+    the winner - in both cases the shape played is the ranking's own first choice.
     """
 
     available: int
     alternative: Optional[Voicing] = None
     decided_by: Optional[int] = None
     inside_window: bool = False
+    dropped_for_bass: Optional[Voicing] = None
 
 
 @dataclass
@@ -439,12 +450,44 @@ class ArrangementStep:
     # returns more steps than the progression it was given under this texture, and this
     # field is how a renderer tells which is which.
     #
-    # It is a statement about the **left hand**, so it never coexists with
-    # `role == ROLE_TARGET`: a target states the harmony, and a step that re-states a
-    # chord cannot also be one that holds the previous shape. `decisions.is_bass_only`
-    # is what keeps the two apart: a walk-invented downbeat the melody moves onto can
-    # arrive carrying both, and a renderer that obeyed the flag would drop the chord.
+    # It is a statement about the **left hand**, so it says nothing about the role: a slot
+    # the walk invented can be a `target` (its beats are strong ones) and still have
+    # nothing to state above the thumb - the chord never changed and the melody is the
+    # note still ringing. `decisions.is_bass_only` decides it from those two facts, and
+    # clears `repeated` beside it, because a step that struck its soprano would be
+    # re-plucking the very note the hold leaves alone.
     bass_only: bool = False
+    # The thumb note **sounds but is not struck** here: it is the previous attack still
+    # ringing, under a shape this step plays. The mirror of `bass_only` - that one holds
+    # the voices *above* the thumb and strikes the thumb, this one strikes the voices
+    # above and lets the thumb ring on.
+    #
+    # It is what makes a sparse bass line a bass line rather than a series of stabs. A
+    # `--bass-on 1` request states one note per bar, and without this the note would
+    # stop at the next melody note and every bar would read as a bar-long bass note
+    # followed by silence. `bass_merge.carry_bass` sets it, after selection, for the
+    # reason the merge is after selection at all: a voice that no candidate chose must
+    # not enter the cost tuple.
+    #
+    # A renderer reads it as "this string is sounding and not plucked", which is the
+    # one thing the fret vector cannot say - the fret is there either way. `annotation`
+    # spells it in the bass parenthetical (`(bass: C3, held)`), because the tab draws a
+    # mute on that string and a reader would otherwise count a note that never sounds.
+    bass_held: bool = False
+    # The chord part was **asked** to attack at this position: a position named by the
+    # chord's own rhythm (`--chord-on 1,2`, the stab `--chord-on melody,1and` adds under a
+    # held note) or a slot the chord layer invented because the tune is silent there
+    # (a `--chord-fills` position, a chord chart with no tune).
+    #
+    # It exists because "the shape is the same as the step before" cannot tell a hold
+    # from a re-strike, and on the comping route the engine deliberately stops saying so
+    # in the pitches: `melody_voiced=False` removes the soprano a `repeated` step would
+    # re-articulate, so a repeat holds the whole shape instead (`render._step_cells`).
+    # That rule is about a slot the tune *sustains* through; a position the request names
+    # is a new attack, and `--chord-on every-beat` is only audible as four stabs a bar if
+    # the renderers know the difference. Defaulted, so a hand-built step and every
+    # existing construction are unaffected.
+    chord_attack: bool = False
     # The guitar does **not** sound the melody on this step: the melodic voice belongs
     # to another instrument, and this one is a guide-tone comping shape underneath it.
     # Set from `melody=` (MELODY_NONE) rather than inferred, so a renderer can ask the

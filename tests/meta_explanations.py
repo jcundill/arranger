@@ -40,7 +40,13 @@ from typing import Any, Callable, Dict, List, Tuple
 
 from musthe import Note
 
-from arranger import PITCH_CLASS_NAMES, ChordParser
+from arranger import (
+    CHORD_FILLS_COMP,
+    CHORD_FILLS_HOLD,
+    PITCH_CLASS_NAMES,
+    ChordParser,
+    Request,
+)
 from arranger.annotation import _omission_clause, step_annotation
 from arranger.chords import melody_degree_name
 from arranger.tuning import (
@@ -75,6 +81,16 @@ CONFIGS: List[Dict[str, Any]] = [
     {"bass": "root,5th,approach,nearest", "grid": "melody:every_note,bass:walk"},
     {"grid": "chord:freddie"},
     {"non_chord_tone": "sustain"},
+    # A fill lives where no melody slot does, which is the one place a comping step
+    # can exist without a note beside it. Both policies, because `comp` states more
+    # attacks than `hold` and a clause that fired for one and not the other would be
+    # invisible in a sweep that only ever asked for one.
+    {"request": Request(chord_on="none", chord_fills=CHORD_FILLS_HOLD)},
+    {"request": Request(chord_on="none", chord_fills=CHORD_FILLS_COMP)},
+    # A lone bass line: no melody part, no chord part, and the thumb at every beat.
+    # The steps it emits are the only ones with nothing above the thumb at all, which is
+    # what `annotation._bass_alone_clause` exists to say.
+    {"request": Request(melody=False, chord_on="none", bass_on="every-beat")},
 ]
 
 #: (what the engine decided, when this step is one of those, what the line must say).
@@ -174,7 +190,12 @@ def _sounding_pairs(step: ArrangementStep) -> List[str]:
     witness catch a clause that speaks where it should not as well as one that stays quiet
     where it should speak.
     """
-    if not step.melody_voiced or step.repeated or step.chord_unvoiced:
+    if (
+        not step.melody_voiced
+        or step.repeated
+        or step.bass_only
+        or step.chord_unvoiced
+    ):
         return []
     harmony = step.harmonized_as or step.chord
     pitches = step.voicing.upper_midi_notes()
@@ -266,9 +287,9 @@ WITNESSES: List[Witness] = [
         lambda step: "rests here" in _line(step),
     ),
     (
-        "the guitar is silent because the grid places no chord",
+        "the guitar is silent because no part was asked to sound there",
         lambda step: step.silence == SILENCE_GRID,
-        lambda step: "the grid places no chord" in _line(step),
+        lambda step: "no part was asked to sound" in _line(step),
     ),
     (
         "the guitar is silent because an NC bar gives a comping part nothing to state",
@@ -292,7 +313,9 @@ WITNESSES: List[Witness] = [
     ),
     (
         "the guitar comps: the tune is not its to play",
-        lambda step: not step.melody_voiced and bool(step.voicing.active_frets()),
+        # `upper_midi_notes`, not `active_frets`: a lone thumb is not comping, and its
+        # own note is the only thing that sounds - see the witness below.
+        lambda step: not step.melody_voiced and bool(step.voicing.upper_midi_notes()),
         lambda step: (
             "does not play the tune" in _line(step)
             or "the tune is silent here" in _line(step)
@@ -316,6 +339,14 @@ WITNESSES: List[Witness] = [
             step.palette is not None
             and step.palette.available > len(step.voicing.upper_midi_notes())
             and not step.repeated
+            # A held step states no count of its own - the shape in the tab is the one
+            # already down, explained where it was chosen. The hold's rule.
+            and not step.bass_only
+            # A comping step records a palette for the *choice*, not for a count: its
+            # arity is what the selection asked for and `_comping_clause` names the
+            # voices it states. `annotation._shape_clause` is silent there by the same
+            # rule as the two routes below.
+            and step.melody_voiced
         ),
         lambda step: "voices" in _line(step) or "melody alone" in _line(step),
     ),
@@ -326,13 +357,23 @@ WITNESSES: List[Witness] = [
             and step.palette.alternative is None
             and _thin(step)
             and not step.repeated
-            # The routes whose own clause states the count - an `NC` bar and a melody no
-            # shape could voice - keep it to themselves, the way a hold does. See
-            # `annotation._shape_clause`: the *window* fact they carry is still witnessed.
+            # As above: a hold's shape was explained where it was chosen.
+            and not step.bass_only
+            # The routes whose own clause states the count - an `NC` bar, a melody no
+            # shape could voice and a comping shape - keep it to themselves, the way a
+            # hold does. See `annotation._shape_clause`: the *window* fact they carry is
+            # still witnessed.
             and not step.melody_only
             and not step.chord_unvoiced
+            and step.melody_voiced
         ),
         lambda step: "palette offers" in _line(step),
+    ),
+    (
+        "the shape is not the ranking's first choice, because the requested bass note "
+        "could not sound under it",
+        lambda step: step.palette is not None and step.palette.dropped_for_bass is not None,
+        lambda step: "leave room for the requested bass note" in _line(step),
     ),
     (
         "a four-voice shape leaves a chord tone out, which the frets cannot show",
@@ -358,6 +399,15 @@ WITNESSES: List[Witness] = [
         "a bass note was written into the step",
         lambda step: step.bass is not None,
         lambda step: "bass: " in _line(step),
+    ),
+    (
+        "a slot the chord part leaves entirely to the bass line",
+        lambda step: (
+            step.bass is not None
+            and not step.bass_only
+            and not step.voicing.upper_midi_notes()
+        ),
+        lambda step: "the thumb alone" in _line(step),
     ),
     (
         "a bass note the walk asked for could not be placed, so the walk reads whole but is not",
@@ -400,11 +450,16 @@ WITNESSES: List[Witness] = [
             and step.palette.alternative is None
             and _thin(step)
             and not step.repeated
+            # A held step states no count of its own: the shape in the tab is the one
+            # already down, explained where it was chosen - the hold's rule.
+            and not step.bass_only
             # As above: an `NC` fill-role slot states its own count ("no chord - melody
-            # alone"), and it is the no-harmony fact that explains the thinness, not the
-            # texture. The palette's window fact is still witnessed.
+            # alone"), a comping shape's comes from `_comping_clause`, and it is the
+            # no-harmony or the arity that explains the thinness, not the texture. The
+            # palette's window fact is still witnessed.
             and not step.melody_only
             and not step.chord_unvoiced
+            and step.melody_voiced
         ),
         lambda step: "a fill's" in _line(step),
     ),
@@ -457,16 +512,18 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
             omitted, 139, "the number of steps owing an omitted-tone clause moved"
         )
         # The same reasoning for the voice list, which is the clause most steps carry:
-        # measured over this sweep, **1375** of the steps it arranges sound two or more
+        # measured over this sweep, **1377** of the steps it arranges sound two or more
         # upper voices on a route that sings the tune - so a change that thinned the
         # default palette, or that stopped the clause firing, moves this number. The
         # grouped fixtures add 352, all of them from notes the old corpus did not have.
-        self.assertEqual(named, 1375, "the number of steps naming their voices moved")
+        self.assertEqual(named, 1377, "the number of steps naming their voices moved")
         # And for the comping part, whose voices are the only harmony the line can show:
-        # measured over this sweep, **1897** of the steps it arranges state a comping shape
+        # measured over this sweep, **1827** of the steps it arranges state a comping shape
         # and name each of its voices, so the reading of a thin line cannot quietly become
-        # a list of degrees again. The grouped fixtures add 802.
-        self.assertEqual(comping, 1897, "the number of comping lines naming a voice moved")
+        # a list of degrees again. The grouped fixtures add 802, and the 116 rest fills
+        # (`--chord-fills`) are the newest addition: a fill is a comping step with no
+        # melody beside it, which is why it counts here and nowhere else.
+        self.assertEqual(comping, 1827, "the number of comping lines naming a voice moved")
 
     def test_the_slash_bass_clause_is_not_a_tautology(self):
         """The one decision the witness table cannot hold, pinned in both directions.
@@ -647,8 +704,14 @@ class TestNewClausesMustBeRegistered(unittest.TestCase):
         from arranger import annotation
 
         known = {
+            "_bass_alone_clause",
             "_bass_refusal_clause",
+            "_bass_room_clause",
             "_comping_clause",
+            # The step's own statement when it states a degree: it is read where no other
+            # branch has claimed the line, so it is witnessed by the degree column rather
+            # than by a sentence of its own.
+            "_degree_clause",
             "_held_clause",
             "_omission_clause",
             "_shape_clause",

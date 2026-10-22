@@ -5,7 +5,7 @@ writers.  It does not need to contain anyone's tune to do that, so every file
 except the retained ``Trouble_in_Mind_Blues.musicxml`` is generated here from
 this module's own material.  The generator is stdlib-only and deterministic: a
 committed document is a pure function of the code below, which is what lets
-``tests/test_fixture_corpus.py`` compare the two.
+``tests/meta_fixture_corpus.py`` compare the two.
 
 Run ``python tests/fixture_scores.py`` to rewrite the fixtures, or
 ``python tests/fixture_scores.py --check`` to compare without writing.

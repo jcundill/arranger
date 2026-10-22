@@ -26,7 +26,7 @@ import os
 import tempfile
 import unittest
 
-from arranger import ArrangementStep, VoiceLeadingEngine
+from arranger import ROLE_TARGET, ArrangementStep, VoiceLeadingEngine
 
 # The shared placement core, reached directly: these tests are about where events
 # land, which is decided in `tabscore` and only turned into beats by `tabgp`.
@@ -1494,6 +1494,102 @@ class TestModuleSurface(unittest.TestCase):
 
 
 @requires_guitarpro
+class TestARingingThumbIsNotRestruck(GuitarProTestCase):
+    """A bass note held under a moving melody is one note, not one per melody note.
+
+    `--bass-on 1` states one thumb note per bar, and `bass_merge.carry_bass` carries it
+    into the steps after it: the string sounds and is not plucked. A GP5 beat cannot
+    hold a string silently, so the carried note is written as a **tie** - the one way
+    this format says "same pitch, still sounding". Writing it as a normal note instead
+    would re-articulate the bass on every melody note and no comparison against the
+    arrangement would notice, because the fret is the same either way.
+    """
+
+    def setUp(self):
+        super().setUp()
+        import guitarpro
+
+        from arranger import Request
+
+        self.gp = guitarpro
+        self.request_steps = VoiceLeadingEngine.arrange_progression(
+            [
+                ("C5", "maj7", "Cmaj7"),
+                ("D5", "maj7", "Cmaj7"),
+                ("E5", "maj7", "Cmaj7"),
+                ("F5", "maj7", "Cmaj7"),
+            ],
+            timings=[(1, 1.0, 0.25), (1, 2.0, 0.25), (1, 3.0, 0.25), (1, 4.0, 0.25)],
+            request=Request(bass_on="1"),
+        )
+        self.ring_song = _parse(io.BytesIO(format_gp5(self.request_steps)))
+        self.ring_beats = [
+            beat
+            for measure in self.ring_song.tracks[0].measures
+            for beat in measure.voices[0].beats
+        ]
+
+    def test_the_attack_is_struck_and_the_rest_are_tied(self):
+        thumb = _GP_STRING_OFFSET - bass_string(self.request_steps[0])
+        types = [
+            [n.type for n in beat.notes if n.string == thumb]
+            for beat in self.ring_beats
+        ]
+        self.assertEqual(self.request_steps[0].bass_held, False)
+        self.assertEqual(types[0], [self.gp.NoteType.normal], "the attack was tied")
+        for found in types[1:]:
+            self.assertEqual(found, [self.gp.NoteType.tie], "the ring was re-struck")
+
+    def test_the_melody_is_always_a_new_note(self):
+        """Only the thumb rings; a tied melody would silence the tune."""
+        for beat in self.ring_beats[1:]:
+            normal = [n for n in beat.notes if n.type == self.gp.NoteType.normal]
+            self.assertTrue(normal, "a beat had nothing new in it")
+
+
+class TestAHeldTargetIsNotResticed(GuitarProTestCase):
+    """The reported fault: a tied melody re-plucked on every beat the walk invented.
+
+    `--bass-on 1,2,1and,2and` puts a thumb on the half-beats, and the tune of "But Not
+    For Me" ties across them. A slot the walk invented is a **target** there - its beats
+    are strong ones - but there is nothing to state above the thumb: the chord has not
+    changed and the melody is the note still ringing. So the step is `bass_only`, and the
+    beat writes the thumb as a new note and nothing else.
+
+    Read through `_sounding_frets`, the function the writer takes its notes from, so the
+    assertion is about what reaches the file rather than about a tab string. That a
+    `bass_only` beat writes the ringing shape as **ties** is
+    `TestWalkingBass.test_a_bass_only_beat_carries_the_held_shape_as_ties`.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from arranger import Request
+        from tests.support import arranged
+
+        self.steps, _head, _notes = arranged(
+            BUT_NOT_FOR_ME, request=Request(bass_on="1,2,1and,2and")
+        )
+
+    def test_a_target_the_walk_invented_strikes_only_the_thumb(self):
+        held = [
+            step for step in self.steps
+            if step.bass_only and step.role == ROLE_TARGET
+        ]
+        self.assertTrue(
+            held,
+            "the premise: the walk invented a target over a tied melody",
+        )
+        from tabgp import _sounding_frets
+
+        for step in held:
+            self.assertEqual(
+                [index for index, _fret in _sounding_frets(step)],
+                [bass_string(step)],
+                f"bar {step.bar} beat {step.beat}: the held beat re-struck the melody",
+            )
+
+
 class TestRepeatMarkers(GuitarProTestCase):
     """A head's repeats and endings written onto the measure headers.
 
@@ -1609,3 +1705,28 @@ class TestGuitarProAnacrusis(unittest.TestCase):
         self.assertEqual(first[1][1], 1.0)
         # And the bar it leads into is full again.
         self.assertEqual(sum(length for _s, length, _t in measures[1]), 4.0)
+
+
+@requires_guitarpro
+class TestARestruckCompIsNotOneLongChord(GuitarProTestCase):
+    """A comp that repeats the same shape is two beats, not one long chord.
+
+    The GP5 half of `tests/test_chord_attack.py`. The writer reads
+    `tabscore.score_events`, which treats a position the chord's rhythm **named** as a new
+    attack rather than folding it into the chord before it. Written as one long note, the
+    file would play half the attacks the arrangement contains, and no comparison of the
+    frets would notice: the pitches are the same either way.
+    """
+
+    def test_the_two_attacks_are_two_beats(self):
+        from arranger import Request
+        from headxml import arrange_xml_head
+
+        steps, _head, _notes = arrange_xml_head(
+            BUT_NOT_FOR_ME, section=(2, 3), request=Request(melody=False, chord_on="1,2")
+        )
+        song = _parse(io.BytesIO(format_gp5(steps)))
+        beats = [
+            beat for measure in song.tracks[0].measures for beat in measure.voices[0].beats
+        ]
+        self.assertEqual([len(beat.notes) for beat in beats[:2]], [3, 3])

@@ -21,9 +21,34 @@ from . import cost as _cost
 from . import grips as _grips
 from .bass import Slot
 from .bass_merge import attach_bass
+from .chords import normalised_harmony
 from .context import SlotContext
-from .decisions import is_bass_only
+from .decisions import is_bass_only, melody_is_ringing
 from .tuning import ArrangementStep, Palette, Voicing, note_name
+
+
+def _held_bass(
+    slot: Slot,
+    context: SlotContext,
+    arrangements: List[ArrangementStep],
+    sounding: str,
+) -> bool:
+    """Whether a melody-alone step is a hold the thumb bought, rather than a strike.
+
+    The tune alone under a thumb line, on a beat the walk invented: the note is the one
+    already sounding, so nothing above the thumb is struck either. Asked by the two
+    melody-alone routes that can meet such a beat - the rescue and the demotion - with
+    the pitch that **sounds**, which is the pitch a previous step has to be leaving
+    ringing for the hold to be truthful.
+    """
+    return is_bass_only(
+        slot.bass_only,
+        chord_attack=context.state.chord_attack,
+        holds=melody_is_ringing(
+            arrangements, Note(sounding).midi_note(),
+            normalised_harmony(context.harmony.name),
+        ),
+    )
 
 
 def sounding_melody(voicing: Voicing, written: str) -> Tuple[str, Optional[str]]:
@@ -117,7 +142,7 @@ def rescue_melody_alone(
     board - and the caller reports the step as skipped.
     """
     # A singing slot always has both; pin the Optional fields for the checker.
-    assert context.melody_note is not None and context.note_str is not None
+    assert context.harmony.melody_note is not None and context.harmony.note_str is not None
     # **The string must be one the caller named.** `get_melody_only_voicings`
     # keeps searching *below* the set it is given, so a note the named set
     # cannot carry - D4 under `top_strings=(5,)`, below the high E string's
@@ -127,7 +152,7 @@ def rescue_melody_alone(
     # a caller asking for a string that cannot carry the tune. `named_only`
     # is where that promise is kept.
     solo_voicing, inside_window = melody_alone_shape(
-        context.melody_note,
+        context.harmony.melody_note,
         previous=previous,
         top_strings=top_strings,
         named_only=True,
@@ -137,10 +162,10 @@ def rescue_melody_alone(
         # HIGH_FRET_LIMIT, so the step reports what sounds and keeps the
         # written pitch - the same seam every melody-alone route uses.
         sounding, written_original = sounding_melody(
-            solo_voicing, context.note_str
+            solo_voicing, context.harmony.note_str
         )
         step = ArrangementStep(
-            chord=context.name,
+            chord=context.harmony.name,
             melody=sounding,
             voicing=solo_voicing,
             original_melody=written_original,
@@ -153,12 +178,12 @@ def rescue_melody_alone(
             # the same shape deliberately and does not carry this; see
             # `ArrangementStep.chord_unvoiced`.
             chord_unvoiced=True,
-            bar=context.bar,
-            beat=context.beat,
-            duration=context.duration,
-            role=context.role,
-            metric_weight=context.weight,
-            bass_only=is_bass_only(slot.bass_only, context.role),
+            bar=context.timing.bar,
+            beat=context.timing.beat,
+            duration=context.timing.duration,
+            role=context.state.role,
+            metric_weight=context.state.weight,
+            bass_only=_held_bass(slot, context, arrangements, sounding),
         )
         attach_bass(step, slot.bass, arrangements)
         arrangements.append(step)
@@ -188,14 +213,14 @@ def demoted_to_melody_alone(
     """
     # As above: the demotion is only reached for a singing slot, so the two
     # Optional fields are pinned for the type checker.
-    assert context.melody_note is not None and context.note_str is not None
+    assert context.harmony.melody_note is not None and context.harmony.note_str is not None
     solo, inside_window = melody_alone_shape(
-        context.melody_note, previous=previous, top_strings=top_strings
+        context.harmony.melody_note, previous=previous, top_strings=top_strings
     )
     if solo is not None and solo.fret_span() < best_voicing.fret_span():
         arrangements.append(ArrangementStep(
-            chord=context.name,
-            melody=context.note_str,
+            chord=context.harmony.name,
+            melody=context.harmony.note_str,
             voicing=solo,
             partial=False,
             # The shape the demotion turned away, and the criterion it did it for: the
@@ -209,12 +234,12 @@ def demoted_to_melody_alone(
                 decided_by=_cost.SPAN_CRITERION,
                 inside_window=inside_window,
             ),
-            bar=context.bar,
-            beat=context.beat,
-            duration=context.duration,
-            role=context.role,
-            metric_weight=context.weight,
-            bass_only=is_bass_only(slot.bass_only, context.role),
+            bar=context.timing.bar,
+            beat=context.timing.beat,
+            duration=context.timing.duration,
+            role=context.state.role,
+            metric_weight=context.state.weight,
+            bass_only=_held_bass(slot, context, arrangements, context.harmony.note_str),
         ))
         attach_bass(arrangements[-1], slot.bass, arrangements)
         return True

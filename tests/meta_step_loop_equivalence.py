@@ -250,7 +250,13 @@ class TestTheDecisionsAreActuallyShared(unittest.TestCase):
             'fret_span() >= GRIP_MAX_SPAN["drop2"]',
             "sounding_harmony(previous_step)",
         )
-        for module_name in ("arranger", "arranger.steps", "arranger.movement", "arranger.slots"):
+        for module_name in (
+            "arranger",
+            "arranger.steps",
+            "arranger.movement",
+            "arranger.route_dispatch",
+            "arranger.slots",
+        ):
             source = source_of(module_name)
             for snippet in snippets:
                 with self.subTest(module=module_name, snippet=snippet):
@@ -276,10 +282,11 @@ class TestTheDecisionsAreActuallyShared(unittest.TestCase):
         this is re-pointed a second time rather than dropped.
 
         It is re-pointed a third time here, to the **set** of modules the engine is
-        made of. The per-slot plan was extracted to `slot_plan` and the axis
-        resolvers to `resolution`, so two decisions the loop calls are now one
-        module away from the loop itself. Reading `movement` alone would have
-        asserted that those two are *not* called - the opposite of what this test
+        made of. The per-slot plan was extracted to `slot_plan`, the axis
+        resolvers to `resolution`, and the melody-bearing route to
+        `harmonised_route`, so decisions the loop calls are now one or two
+        modules away from `movement` itself. Reading `movement` alone would have
+        asserted that those are *not* called - the opposite of what this test
         exists to protect - and dropping them from `DECISIONS` would have retired
         the check for the busiest decision in the engine.
         """
@@ -287,6 +294,7 @@ class TestTheDecisionsAreActuallyShared(unittest.TestCase):
             source_of(name)
             for name in (
                 "arranger.movement",
+                "arranger.harmonised_route",
                 "arranger.slot_plan",
                 "arranger.resolution",
             )

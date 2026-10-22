@@ -26,7 +26,8 @@ from arranger import (
     parse_harmony,
     supported_string_sets,
 )
-from arranger.options import ArrangeOptions
+from arranger.options import ArrangeOptions, Request
+from arranger.resolution import resolve_axes
 from tests.support import (
     PROGRESSION,
     VOICES_ARG,
@@ -92,14 +93,21 @@ class TestTheHarmonyAxis(unittest.TestCase):
         )
 
     def test_the_default_is_the_sentinel_and_resolves_to_guide(self):
-        """`ArrangeOptions().harmony` is `auto`, and `auto` resolves to `guide`.
+        """The default leaves `harmony` underived, and `auto` resolves to `guide`.
 
         Asserted separately because the two spellings are load-bearing in different
-        places: the field must match `arrange_progression`'s keyword default for the
-        comparison above to mean anything, and the policy must resolve to the shipped
-        behaviour for the arrangement to be unchanged.
+        places: the field must be `None` - "the request decides" - for the comparison
+        above to mean anything, `resolve_axes` must derive `auto` from it, and the
+        policy must resolve to the shipped behaviour for the arrangement to be
+        unchanged.
         """
-        self.assertEqual(ArrangeOptions().harmony, HARMONY_AUTO)
+        self.assertIsNone(ArrangeOptions().harmony)
+        self.assertEqual(
+            resolve_axes(
+                Request(), None, None, None, None, ArrangeOptions().time_signature
+            ).harmony,
+            HARMONY_AUTO,
+        )
         # Keyed by **whether the guitar sings**, not by the sentinel: `auto` is the
         # engine's own choice and resolves per selection (`resolve_harmony`).
         self.assertEqual(HARMONY_AUTO_POLICIES[False], HARMONY_GUIDE)

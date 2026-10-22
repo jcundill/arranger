@@ -1,14 +1,14 @@
 """The engine's published facade: `VoiceLeadingEngine`.
 
 This module is the class the library spells `VoiceLeadingEngine.get_drop2_voicings`
-and forty test call sites depend on. Every method is a one-line forwarder to the
-module that owns the body - `grips`, `cost`, `chords`, and, for the two entry
-points, `movement`.
+and the test suite's call sites depend on. Every method is a one-line forwarder to
+the module that owns the body - `grips`, `cost`, `chords`, `bass_merge`, and, for
+the two entry points, `movement` and `step_prepare`.
 
 **The step loop is not here** - it is in `movement`, which imports this module's
-collaborators directly and does not import this module. The two methods below
-forward to it, so the published spelling is unchanged and there is one loop rather
-than two.
+collaborators directly and does not import this module. `arrange_progression` below
+forwards to it and `prepare_step` to `step_prepare`, so the published spelling is
+unchanged and there is one loop rather than two.
 
 `StepPreparation` is re-exported for the same reason: it is the value
 `prepare_step` returns, and callers reach it as `arranger.steps.StepPreparation`.
@@ -23,18 +23,14 @@ from musthe import Note
 from . import chords as _chords
 from . import cost as _cost
 from . import grips as _grips
-from .bass import (
-    BassNote,
-)
 from .bass_merge import attach_bass
-from .bass_rules import (
-    BASS_STYLE_AUTO,
+from .bass_place import (
+    BassNote,
 )
 from .chords import (
     NON_CHORD_TONE_EXTENSIONS,
     NON_CHORD_TONE_STRATEGIES,
 )
-from .grid import GRID_DEFAULT
 from .grip_tables import (
     GRIP_PREFERENCE,
 )
@@ -43,14 +39,14 @@ from .grips import (
     MELODY_STRING_CHOICES_FULL,
 )
 from .grouping import COMMON_TIME, TimeSignature
-from .harmony import HARMONY_AUTO
 from .movement import (
-    StepPreparation,
     arrange_progression,
+)
+from .options import DEFAULT_REQUEST, ArrangeOptions, Request
+from .step_prepare import (
+    StepPreparation,
     prepare_step,
 )
-from .options import ArrangeOptions
-from .parts import PARTS_AUTO
 from .tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
@@ -238,17 +234,16 @@ class VoiceLeadingEngine:
     def voicing_cost(
         cls,
         voicing: Voicing,
-        previous: Optional[Voicing],
-        fret_min: int = NECK_FRET_MIN,
-        fret_max: int = NECK_FRET_MAX,
-        allowed_tones: Optional[Container[int]] = None,
-        root_pc: Optional[int] = None,
-        melody_pc: Optional[int] = None,
-    ) -> Tuple[float, ...]:
-        """See `cost.voicing_cost` - the library's central invariant is there."""
-        return _cost.voicing_cost(
-            voicing, previous, fret_min, fret_max, allowed_tones, root_pc, melody_pc
-        )
+        criteria: _cost.SelectionCriteria,
+    ) -> _cost.VoicingScore:
+        """See `cost.voicing_cost` - the library's central invariant is there.
+
+        `criteria` is the whole ranking context, so a caller that wants one more input
+        passes a `SelectionCriteria` field rather than another keyword; for "rank
+        against nothing" pass `SelectionCriteria()`, which is no previous shape, no
+        window override and no chord to check against.
+        """
+        return _cost.voicing_cost(voicing, criteria)
 
     @classmethod
     def _best_voicing(
@@ -305,7 +300,7 @@ class VoiceLeadingEngine:
         fret_max: int = NECK_FRET_MAX,
         grips: Tuple[str, ...] = GRIP_PREFERENCE,
     ) -> Optional[StepPreparation]:
-        """See `movement.prepare_step` - the full docstring is there."""
+        """See `step_prepare.prepare_step` - the full docstring is there."""
         return prepare_step(
             progression,
             index,
@@ -330,11 +325,12 @@ class VoiceLeadingEngine:
         # a slot a caller could not place is `(None, None, None)`, so an entry point may
         # hold either shape. See `movement.arrange_progression` for the same note.
         timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]] = None,
-        texture: str = "uniform",
-        bass: str = BASS_STYLE_AUTO,
-        parts: str = PARTS_AUTO,
-        harmony: str = HARMONY_AUTO,
-        grid: str = GRID_DEFAULT,
+        texture: Optional[str] = None,
+        bass: Optional[str] = None,
+        parts: Optional[str] = None,
+        harmony: Optional[str] = None,
+        grid: Optional[str] = None,
+        request: Request = DEFAULT_REQUEST,
         # The metre as one value: count, denominator and felt grouping, validated
         # together. Omitting it means `COMMON_TIME` (4/4). See
         # `movement.arrange_progression`.
@@ -360,6 +356,7 @@ class VoiceLeadingEngine:
             parts=parts,
             harmony=harmony,
             grid=grid,
+            request=request,
             time_signature=time_signature,
             melody_onsets=melody_onsets,
             options=options,

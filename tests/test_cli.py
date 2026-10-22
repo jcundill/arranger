@@ -120,7 +120,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         parser there is nothing to disagree with, so what the count is for changes:
         it is now a tripwire for a flag appearing or vanishing unnoticed.
 
-        **19, and the grouping flag that briefly made it 20 is gone.** The metre's
+        **20, and the grouping flag that briefly made it 21 is gone.** The metre's
         third fact - which denominator units are felt as one beat - is the score's
         own: the importer reads an `N+N` direction, the beaming or a metronome pulse,
         and a hand-built progression declares the whole metre as a `TimeSignature`. A
@@ -129,7 +129,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         the grip-family axis.
         """
         flags = self.parser()
-        self.assertEqual(len(flags), 19, "the flag count moved; remeasure")
+        self.assertEqual(len(flags), 20, "the flag count moved; remeasure")
 
     def test_every_flag_is_one_somewhere(self):
         """No flag is registered without a decision behind it.
@@ -144,45 +144,42 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         self.assertEqual(
             sorted(self.parser()),
             [
-                "bars", "bars_per_line", "bass_style", "fallback", "file", "fret_max",
-                "fret_min", "gp5", "grid", "harmony", "html",
-                "melody", "musicxml", "mutes", "non_chord_tone", "part", "parts", "tab",
-                "texture",
+                "bars", "bars_per_line", "bass_notes", "bass_on", "chord_fills",
+                "chord_notes", "chord_on", "fallback", "file", "fret_max",
+                "fret_min", "gp5", "html", "musicxml", "mutes", "no_melody",
+                "non_chord_tone", "note_names", "part", "tab",
             ],
         )
 
     def test_a_list_option_leaves_the_file_positional_alone(self):
-        """`head --parts melody,bass FILE` and `head --grid chord:freddie,bass:walk FILE`.
+        """`head --chord-on 1,2and FILE` and `head --bass-on every-beat FILE`.
 
         This is the defect a `head FILE --grips a b` run hid: `nargs="+"` consumed the
         filename as a list element and then refused it (`invalid choice:
         'tests/data/...'`), so a list option written *before* the file could not work at
         all. `AGENTS.md` trap 14 is the rule - a list-valued option is one comma-separated
         string the module that owns the vocabulary parses, never `nargs` and never
-        `choices` - and `--parts` and `--grid` are the two flags that carry it now that
-        `--grips` is gone. Asserted on the parse rather than on a whole run, because a
+        `choices` - and the two rhythm flags are what carry it now that `--parts` and
+        `--grid` are gone. Asserted on the parse rather than on a whole run, because a
         positional is the parser's business and no score is needed to see it eaten.
 
-        **The grid half is the reason this asserts a *second row*.** `--grid` carried
-        `choices=GRID_STYLES` while its own help text documented
-        `'melody:every_note,bass:walk'`, so the spelling the flag printed was the one it
-        refused - the flag could name one row and only one, and "run the tune with the
-        thumb walking" was unreachable as written.
+        **Neither rhythm flag takes `choices`**, because the grammar is open-ended: a
+        position list is only legal against a metre, and `--grips`' old refusal showed
+        what a closed `choices` does to a spelling the help itself prints.
         """
         from headxml import head_cli
 
         parser = _parser_of(head_cli)
-        parsed = parser.parse_args(["--parts", "melody,bass", "head.musicxml"])
-        self.assertEqual(parsed.parts, "melody,bass")
+        parsed = parser.parse_args(["--chord-on", "1,2and", "head.musicxml"])
+        self.assertEqual(parsed.chord_on, "1,2and")
         self.assertEqual(parsed.file, "head.musicxml")
 
-        rows = "chord:freddie,bass:walk"
-        parsed = parser.parse_args(["--grid", rows, "head.musicxml"])
-        self.assertEqual(parsed.grid, rows)
+        parsed = parser.parse_args(["--bass-on", "every-beat", "head.musicxml"])
+        self.assertEqual(parsed.bass_on, "every-beat")
         self.assertEqual(parsed.file, "head.musicxml")
 
     def test_the_help_text_is_not_one_shared_string(self):
-        """Eleven flags take their prose from `CommonHelp`, and eight are written inline.
+        """Sixteen flags take their prose from `CommonHelp`, four are written inline.
 
         Measured before `arranger/cli.py` existed: of the seventeen shared flags,
         all seventeen agreed on every field of *meaning*, and eleven disagreed on
@@ -191,17 +188,18 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         silently changed what both commands print, with nothing to catch it.
 
         With one parser there is no "differing" set any more, so this asserts the
-        partition that produced it instead: **eleven flags get their text from
-        `CommonHelp` and eight get it written inline**, and both halves are named.
+        partition that produced it instead: **sixteen flags get their text from
+        `CommonHelp` and four get it written inline**, and both halves are named.
         That is the property the split was built on - a flag whose help is the same
         wherever it is read is written once at the `add_argument` call, and one
         whose wording carries an arrangement of its own lives in the table.
 
-        The eight: `bass_style`, `fallback`, `grid`, `harmony`, `non_chord_tone` and
-        `parts` are arranging choices that mean the same thing against any file, so
-        they print one help string rather than two - that was the original reason
-        each is *not* in `CommonHelp`, and the reason survives the corpus. `file`
-        and `part` are prose argparse writes from the flag name.
+        The four: `fallback` and `non_chord_tone` are arranging choices whose help is
+        one line apiece and has never differed per command, and `file` and `part` are
+        prose argparse writes from the flag name. The former `--parts`, `--texture`,
+        `--harmony`, `--bass-style` and `--grid` moved into the table with the request
+        flags that replaced them: each is prose a reader needs in full, so the table is
+        where it can be read in one block.
         """
         from dataclasses import fields
 
@@ -210,17 +208,18 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         self.assertEqual(
             sorted(flags),
             [
-                "bars", "bars_per_line", "bass_style", "fallback", "file", "fret_max",
-                "fret_min", "gp5", "grid", "harmony", "html",
-                "melody", "musicxml", "mutes", "non_chord_tone", "part", "parts", "tab",
-                "texture",
+                "bars", "bars_per_line", "bass_notes", "bass_on", "chord_fills",
+                "chord_notes", "chord_on", "fallback", "file", "fret_max",
+                "fret_min", "gp5", "html", "musicxml", "mutes", "no_melody",
+                "non_chord_tone", "note_names", "part", "tab",
             ],
         )
         self.assertEqual(
             declared,
             {
-                "bars", "bars_per_line", "fret_max", "fret_min", "gp5", "html",
-                "melody", "musicxml", "mutes", "tab", "texture",
+                "bars", "bars_per_line", "bass_notes", "bass_on", "chord_fills",
+                "chord_notes", "chord_on", "fret_max", "fret_min", "gp5",
+                "html", "musicxml", "mutes", "no_melody", "note_names", "tab",
             },
         )
         # Every declared field reaches its flag, and reaches it with that text.
@@ -233,8 +232,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         # And nothing claims to come from the table without declaring it.
         self.assertEqual(
             sorted(flags),
-            sorted(declared | {"bass_style", "fallback", "file", "grid",
-                               "harmony", "non_chord_tone", "part", "parts"}),
+            sorted(declared | {"fallback", "file", "non_chord_tone", "part"}),
         )
 
     def test_the_reduction_flags_are_gone(self):
