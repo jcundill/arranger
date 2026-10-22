@@ -173,25 +173,22 @@ class TestTheCompingPaletteIsRemembered(unittest.TestCase):
         for quality, name in self.CASES:
             for notes in (1, 3):
                 for bass_voice in (False, True):
-                    for shell_root in (False, True):
-                        request = CompingRequest(
-                            quality,
-                            name,
-                            NECK_FRET_MIN,
-                            NECK_FRET_MAX,
-                            notes,
-                            bass_voice,
-                            shell_root,
-                        )
-                        searched = _search_comping_voicings(request)
-                        remembered = _comping_palette(request)
-                        self.assertEqual(
-                            [snapshot(voicing) for voicing in searched],
-                            list(remembered),
-                            f"{name} notes={notes} bass_voice={bass_voice} "
-                            f"shell_root={shell_root}",
-                        )
-                        checked += 1
+                    request = CompingRequest(
+                        quality,
+                        name,
+                        NECK_FRET_MIN,
+                        NECK_FRET_MAX,
+                        notes,
+                        bass_voice,
+                    )
+                    searched = _search_comping_voicings(request)
+                    remembered = _comping_palette(request)
+                    self.assertEqual(
+                        [snapshot(voicing) for voicing in searched],
+                        list(remembered),
+                        f"{name} notes={notes} bass_voice={bass_voice}",
+                    )
+                    checked += 1
         self.assertGreater(checked, 20, "the memo was compared over almost nothing")
 
     def test_a_caller_writing_into_its_shape_does_not_reach_the_next_caller(self):
@@ -225,7 +222,7 @@ class TestTheCompingPaletteIsRemembered(unittest.TestCase):
     def test_the_request_is_the_memo_key(self):
         """The object entry point and the primitive one share one memo entry."""
         request = CompingRequest(
-            "maj7", "Cmaj7", NECK_FRET_MIN, NECK_FRET_MAX, 3, False, False
+            "maj7", "Cmaj7", NECK_FRET_MIN, NECK_FRET_MAX, 3, False
         )
         before = _comping_palette.cache_info()
         by_object = get_comping_voicings_for(request)

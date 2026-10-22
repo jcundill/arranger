@@ -743,7 +743,6 @@ def _shell_voicing(
     tones: Tuple[int, ...],
     notes: int = 3,
     bass_voice: bool = False,
-    shell_root: bool = False,
 ) -> Optional[Voicing]:
     """
     One comping candidate, or None when it does not state the chord.
@@ -775,12 +774,6 @@ def _shell_voicing(
     preference order, and keeps the same rule as every other shape: nothing outside the
     chord may sound. The 5th is a fallback rather than a co-equal choice because the
     root is the note that names the chord; a 5th names it only in company.
-
-    **`shell_root` is the third way to spend the bottom of the shape**, and the only one
-    that asks for *more* than a plain guide-tone shape: both guide tones, and a bass
-    degree underneath them, so the ear hears which chord it is as well as what quality.
-    It is checked as the conjunction of the two rules above rather than as a third list,
-    which is why it can be added without deciding anything new about degrees.
     """
     guide = SHELL_DEGREES.get(canonical)
     if guide is None:
@@ -800,38 +793,6 @@ def _shell_voicing(
             if (root_pc + degree) % 12 in pcs:
                 break
         else:
-            return None
-    elif shell_root:
-        # **The new case, and it is a conjunction of two rules rather than a third one.**
-        # A `shell_root` shape says both things at once: the guide tones state the chord's
-        # *quality*, and a bass degree underneath says which chord it is. Each half is
-        # already stated by a table - `SHELL_DEGREES` for the first, `BASS_DEGREES_6432`
-        # for the second - so the check is both of those, applied, and not a new list
-        # written here that could drift from either.
-        #
-        # The containment check comes first and unconditionally, exactly as in every
-        # other branch: a shape sounding a note outside the chord is not a voicing of
-        # this one whatever else it gets right.
-        allowed = {(root_pc + tone) % 12 for tone in tones}
-        if not pcs <= allowed:
-            return None
-        needed = {(root_pc + degree) % 12 for degree in guide}
-        if not needed <= pcs:
-            return None
-        # **The lowest note, not merely *a* note of that degree.** This is the whole
-        # difference between this family and a guide-tone shape, and it is the part that
-        # is easy to get wrong: on an `Ebmaj` whose guide tones are D and G, a shape of
-        # `D G Bb` already *contains* a fifth (Bb), so a check for "some bass degree is
-        # sounding" is satisfied by the plain guide-tone shape and this family would
-        # silently be a synonym for `guide`. Stating the harmony from the bottom up
-        # means the bass degree is the one the ear hears **first**, so it is checked on
-        # the lowest sounding note rather than on the set.
-        #
-        # Root first, 5th as the fallback: the same preference order `BASS_DEGREES_6432`
-        # states, read here rather than re-decided, because the root is the note that
-        # names the chord and a 5th names it only in company.
-        lowest = min(midis) % 12
-        if lowest not in {(root_pc + degree) % 12 for degree in BASS_DEGREES_6432}:
             return None
     else:
         # **One voice is a weaker claim, and the rule says so rather than refusing.** Two
@@ -867,7 +828,7 @@ def _shell_voicing(
 class CompingRequest:
     """One melody-free comping shape request, as a value.
 
-    The seven fields are exactly what the enumeration reads - the chord, the neck
+    The six fields are exactly what the enumeration reads - the chord, the neck
     window, the arity and the two degree flags - so the memo key and the request
     cannot drift apart. `frozen` also makes it hashable, which is what lets
     `_comping_palette` cache on the request itself rather than a reconstructed
@@ -880,7 +841,6 @@ class CompingRequest:
     fret_max: int = NECK_FRET_MAX
     notes: int = 3
     bass_voice: bool = False
-    shell_root: bool = False
 
 
 def _search_comping_voicings(request: CompingRequest) -> List[Voicing]:
@@ -918,14 +878,6 @@ def _search_comping_voicings(request: CompingRequest) -> List[Voicing]:
     in a bass register rather than the middle of the neck), and it takes the note from
     `BASS_DEGREES_6432` rather than `SHELL_DEGREES` (so it is a root or a 5th rather than
     a 3rd). Both are needed and neither is enough: a low 3rd is still not a bass note.
-
-    **`shell_root` asks for both guide tones *and* a root or 5th under them**, which is
-    the claim neither flag above can state: `bass_voice` spends the whole shape on the
-    bass, and the default spends it on the guide tones alone. It is a `harmony` value
-    rather than a change of arity, because it is a claim about *which degrees sound* and
-    not about how many notes there are - a degree family is not a count. It resolves on the
-    **existing** `(5,4,3)` shell sets,
-    so no new string set is involved - `docs/history/comping-styles.md` holds the measurement.
 
     Every candidate sounds only chord tones, holds a fret span of at most
     `GRIP_MAX_SPAN["shell"]`, and occupies one string set from `GRIP_STRING_SETS["shell"]`
@@ -970,7 +922,6 @@ def _search_comping_voicings(request: CompingRequest) -> List[Voicing]:
                 tones,
                 request.notes,
                 request.bass_voice,
-                request.shell_root,
             )
             if found is None:
                 continue
@@ -1038,7 +989,6 @@ def get_comping_voicings(
     fret_max: int = NECK_FRET_MAX,
     notes: int = 3,
     bass_voice: bool = False,
-    shell_root: bool = False,
 ) -> List[Voicing]:
     """The primitive spelling of `get_comping_voicings_for`, kept for callers.
 
@@ -1052,7 +1002,6 @@ def get_comping_voicings(
         fret_max=fret_max,
         notes=notes,
         bass_voice=bass_voice,
-        shell_root=shell_root,
     ))
 
 

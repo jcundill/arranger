@@ -92,17 +92,15 @@ class VoiceLeadingEngine:
         fret_max: int = NECK_FRET_MAX,
         notes: int = 3,
         bass_voice: bool = False,
-        shell_root: bool = False,
     ) -> List[Voicing]:
         """See `grips.get_comping_voicings`."""
         return _grips.get_comping_voicings(
             chord_type,
             chord_name,
-            fret_min,
-            fret_max,
-            notes,
-            bass_voice,
-            shell_root,
+            fret_min=fret_min,
+            fret_max=fret_max,
+            notes=notes,
+            bass_voice=bass_voice,
         )
 
     @classmethod
