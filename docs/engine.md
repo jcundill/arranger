@@ -785,22 +785,30 @@ of position. `tests/test_grip_tables.py::TestFretWindow` pins that.
 
 ## The request, and the six axes under it
 
-`head`'s CLI asks six questions and derives the axes from them. This document describes
-the axes, because they are the implementation: **a request is resolved into them once,
-and nothing below this section reads the request again.**
+A caller asks six questions, and the six are one value (`options.Request`) spelled twice:
+by `head`'s flags and by `Request(...)` on the library's own front door,
+`arrange_progression(progression, request=Request(...))`. This document describes the
+axes, because they are the implementation: **a request is resolved into them once, and
+nothing below this section reads the request again.** `cli.REQUEST_DESTS` is the one list
+holding the two spellings together, and `tests/test_request.py` asserts it.
 
-| the question (CLI) | the axis it resolves to |
-|---|---|
-| `--no-melody` | `parts=` — the melody part is dropped from the selection |
-| `--chord-on POSITIONS` | the chord layer's rhythm (`grid`, rewritten around `Rhythm`) |
-| `--chord-notes full\|3\|2\|1` | `texture=uniform\|chord3\|chord2\|chord1` |
-| `--chord-fills none\|hold\|comp` | chord slots in the tune's rests, plus `parts=` including the chord |
-| `--bass-on POSITIONS` | the bass layer's rhythm, and `bass=` when it is not `none` |
-| `--bass-notes root\|root-5th\|walk` | `bass=root`, `bass=root,5th`, or the full four rules |
+| the question | the flag | `Request(...)` | the axis it resolves to |
+|---|---|---|---|
+| who plays the tune? | `--no-melody` | `melody=False` | `parts=` — the melody part is dropped from the selection |
+| when does the chord attack? | `--chord-on POSITIONS` | `chord_on="1and"` | the chord layer's rhythm (`grid`, rewritten around `Rhythm`) |
+| what does the chord state? | `--chord-notes full\|3\|2\|1` | `chord_notes="2"` | `texture=uniform\|chord3\|chord2\|chord1` |
+| what does it do in a melody rest? | `--chord-fills none\|hold\|comp` | `chord_fills="hold"` | chord slots in the tune's rests, plus `parts=` including the chord |
+| when does the thumb attack? | `--bass-on POSITIONS` | `bass_on="every-beat"` | the bass layer's rhythm, and `bass=` when it is not `none` |
+| what does each thumb note state? | `--bass-notes root\|root-5th\|walk` | `bass_notes="walk"` | `bass=root`, `bass=root,5th`, or the full four rules |
+
+The values are the flags' own strings, so a request read off a run header is one a caller
+can paste into Python. The axis keywords (`texture=`, `bass=`, `parts=`, `harmony=`,
+`grid=`, `time_signature=`) still ride beside the request and win where they are spelled,
+which is how the axis tests hold a texture or a bass policy to its own behaviour.
 
 `harmony=` is not on that list: it is the one axis with no request spelling, because it
-is read only on the comping route and the request that route answers is `--no-melody`,
-whose chord content is `--chord-notes`'s. The metre is read from the score (`grouping`,
+is read only on the comping route and the request that route answers is `melody=False`,
+whose chord content is `chord_notes`'s. The metre is read from the score (`grouping`,
 below) rather than from a flag.
 
 **The resolution is a derivation with refusals, not a set of defaults**, and it happens

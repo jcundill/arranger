@@ -29,7 +29,7 @@ gate and the conventions — not the explanation.
 | tab staff, HTML, MusicXML, GP5, or the MusicXML importer — or **which module may import which**, including the `arranger ↔ tabstaff` loop and why it is inert | [docs/renderers.md](docs/renderers.md), and [docs/dependency-dag.md](docs/dependency-dag.md) | `tabscore.py`, `tabstaff.py`, `tabxml.py`, `tabgp.py`, `headxml.py`, `tests/meta_front_end_dag.py` |
 | an imported head's **repeats, volta endings or jumps** — why it is longer than the file's measure count, or the `|:` / `:|` / `1.` / `2.` / `D.C.` / `D.S.` / `Coda` / `Fine` the writers draw | [docs/renderers.md](docs/renderers.md) | `headxml.py` (`_parse_barline`, `_parse_direction`, `_parse_sound`, `_expand_play_order`, `expand_repeats`, `BarInstruction`, `BarMarker`, `Head.markers`, `HeadNote.written_bar`); each writer's `markers=` parameter |
 | the slot layer: triples to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
-| the **request** — `--chord-on`, `--bass-on`, `--chord-notes`, `--bass-notes`, `--chord-fills`, `--no-melody` — or a new one, and how a request becomes the axes (`Rhythm`, `parse_rhythm`, `felt_beat`, the refusals) | [docs/history/rhythm-request.md](docs/history/rhythm-request.md), and [docs/engine.md](docs/engine.md) §"The request, and the six axes under it" | `arranger/options.py` (`Request`, `resolve_request`, `format_request`), `arranger/grid.py` (`Rhythm`, `parse_rhythm`, `felt_beat`), `arranger/cli.py`, `tests/test_rhythm.py`, `tests/test_request.py` |
+| the **request** — the six questions, spelled by `--chord-on`, `--bass-on`, `--chord-notes`, `--bass-notes`, `--chord-fills`, `--no-melody` and by `Request(...)` — or a new one, and how a request becomes the axes (`Rhythm`, `parse_rhythm`, `felt_beat`, the refusals) | [docs/engine.md](docs/engine.md) §"The request, and the six axes under it" | `arranger/options.py` (`Request`, `resolve_request`, `format_request`), `arranger/grid.py` (`Rhythm`, `parse_rhythm`, `felt_beat`), `arranger/cli.py` (`REQUEST_DESTS` is the one list holding the two spellings to the same six), `tests/test_rhythm.py`, `tests/test_request.py` |
 | the MusicXML **importer's chord timeline**, or a bar the melody skips | [docs/engine.md](docs/engine.md), and [docs/open-issues.md](docs/open-issues.md) item 6 for the release instant | `headxml.py` (`chord_at`, `rhythm_slots`, `fill_slots`, `melody_rests`, `_bar_resolution`, `_tick_key`) and `grid.py` (`grid_resolutions`, `TICKS_PER_BEAT`) — **built**: a position the request names is emitted with `melody=None`, a rest policy places chords in the tune's notated silences, and §9.2 refuses a position the tune is still **holding**. The old default union (a position invented at the bar's own subdivision wherever the tune was silent) went with the `--grid` flag: it is now `--chord-on` or `--chord-fills`, asked for by name |
 | an open bug, with its measurement | [docs/open-issues.md](docs/open-issues.md) | — the figures and the behaviour are that document's own business; no test compares them with the prose or is keyed to these items |
 | a **note held over a bar line**, when the melody's end is reached, or a pickup bar (`Head.first_bar_implicit`) | [docs/engine.md](docs/engine.md) | `headxml.py` (`melody_at`, `melody_state`, `_merge_chord_slots`), `arranger/grid.py` (`beat_offset`), `tests/test_headxml_timeline.py` |
@@ -66,7 +66,7 @@ thing to read before quoting one.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1326 feature + 83 meta tests OK (skipped=2)**, pyright
+Current measured state: **1334 feature + 83 meta tests OK (skipped=2)**, pyright
 **0 errors 0 warnings**, ruff **0 errors**. If your change moves any of those numbers, that
 is the signal — not the absence of an error message. A quiet run is not evidence; a moved
 count is.
@@ -95,9 +95,12 @@ is the loop that actually saves time.
 
 **A public request in front of the six axes.** `head` asks six questions - who plays the
 tune, when each accompaniment layer attacks, what each states, and what the chord does in a
-melody rest - and `options.resolve_request` derives the axes from them. Those six flags are
-the **user-facing vocabulary**; the axes below are the engine's implementation, and the
-Python API keeps them. `texture=` (how many chord tones the part states,
+melody rest - and `options.resolve_request` derives the axes from them. The six are **one
+value spelled twice**: by those flags and by `Request(...)` on
+`arrange_progression(progression, request=Request(...))`, with `cli.REQUEST_DESTS` the one
+list holding the two spellings to the same six. Both are the **user-facing vocabulary**; the
+axes below are the engine's implementation, and the axis keywords ride beside the request to
+spell them. `texture=` (how many chord tones the part states,
 `TEXTURE_STYLES`), `bass=` (the note rules the thumb states, `BASS_RULES` in
 `bass_rules`), `parts=` (which of melody / bass /
 chord the guitar takes, `PART_NAMES`), `harmony=` (which *degrees* the part states when it is

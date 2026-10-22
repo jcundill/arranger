@@ -59,6 +59,8 @@ G7       B4  13-x-12-12-12-x
 Cmaj7    C5  x-x-9-9-8-8
 ```
 
+**The six questions have a second spelling.** `Request` carries them as one value (`from arranger import Request`), so the same call asks for a walking line under the tune — `engine.arrange_progression(progression, request=Request(bass_on="every-beat", bass_notes="walk"))`. Both spellings and what each question means are in [the request and the axes under it](#the-request-and-the-six-axes-under-it).
+
 Each step is an `ArrangementStep` (`chord`, `melody`, `voicing`, plus `non_chord_tone`, `strategy`, `harmonized_as`); `voicing` is a `Voicing` with `frets` (six entries, `-1` = muted), `top_fret`, `avg_fret` and helpers `tab_string()`, `fret_span()`, `midi_notes()`, `pitch_classes()`, `soprano_string()`.
 
 Tab runs low E → high E, `x` = muted — `x-x-12-13-13-13` is a voicing on D-G-B-E with melody on high E.
@@ -74,8 +76,9 @@ python -m arranger head tests/data/synthetic_cut_time.mxl --bars 1-3
 ```text
 Synthetic Cut Time - Fixture Generator
   part: Voice
-  2/2, Eb major, 20 melody note(s), bars 1-8; neck window: frets 2-13; parts: auto
+  2/2, Eb major, 20 melody note(s), bars 1-8; neck window: frets 2-13
   note: 3 rests and unpitched notes
+  request: melody=on chord-on=melody chord-notes=full bass-on=none bass-notes=root chord-fills=none
 
 Bb7      F4  5    6-x-6-7-6-x       (harmony under 5 - 4 voices -
                                     sounding: Bb Root, Ab b7, D 3, F 5)
@@ -122,7 +125,7 @@ python -m arranger head tests/data/synthetic_triplets.mxl --bars 1-3 --html head
 | `--bars-per-line` | `4` | with `--tab staff`: bars per staff line |
 | `--html` / `--musicxml` / `--gp5` | off | also write head to file — see [rendering](#rendering) |
 
-**The request is six questions, and the axes are how they are answered.** The flags above are the whole request a caller makes; the engine's own axes — `texture=`, `bass=`, `parts=`, `harmony=` and `grid=` — are the **Python API** underneath them, described in [the request and the axes under it](#the-request-and-the-six-axes-under-it), and a band setting is a combination of them rather than a mode. The sixth, `grouping`, is read from the score: a lead sheet already states it in a `3+2` direction, in its beaming, or in a dotted metronome mark.
+**The request is six questions, and each has two spellings.** The flags above are one; `Request(...)` is the other, so a library caller asks the same six — `engine.arrange_progression(progression, request=Request(melody=False, chord_on="every-beat"))` is the comp for a horn. Underneath both are the engine's own axes — `texture=`, `bass=`, `parts=`, `harmony=` and `grid=` — which are the implementation, described in [the request and the axes under it](#the-request-and-the-six-axes-under-it); a band setting is a combination of them rather than a mode. The sixth, `grouping`, is read from the score: a lead sheet already states it in a `3+2` direction, in its beaming, or in a dotted metronome mark.
 
 **Every written note sounds.** No reduction: `arranger head` plays tune as written, one step per note, each on written beat. Where *chords* fall is a separate question — `--chord-on` — and a note is never quantised onto a position and dropped for sharing a slot.
 
@@ -281,44 +284,44 @@ GP5 is a *tab* format, so every note carries own fret and string. Each step writ
 
 Every run on a committed score in `tests/data/`, each one request changed. Output shown in the linked section:
 
-| ask | flag | output shown in |
-|---|---|---|
-| every note in full — the default | *(nothing to pass)* | [quick start](#quick-start) |
-| a chord stab on the and of 1 | `--chord-on 1and` | [when the chord attacks](#when-the-chord-attacks---chord-on) |
-| the harmonisation **and** the stab | `--chord-on melody,1and` | [when the chord attacks](#when-the-chord-attacks---chord-on) |
-| chords on the strong beats | `--chord-on 1,3` | [how thick the chord part is](#how-thick-the-chord-part-is---chord-notes) |
-| shells only | `--chord-notes 2` | [grips](#grips) |
-| guide-tone duos | `--chord-notes 1` | [grips](#grips) |
-| tune on its own | `--chord-on none` | [the tune on its own](#the-tune-on-its-own) |
-| a chord in the tune's rests | `--chord-on none --chord-fills hold` | [what the chord does in a rest](#what-the-chord-does-in-a-rest---chord-fills) |
-| walking bass under the melody | `--bass-on every-beat --bass-notes walk` | [a thumb line under the melody](#a-thumb-line-under-the-melody) |
-| comp for a horn | `--no-melody --chord-on every-beat` | [the chord alone](#the-chord-alone---no-melody) |
-| a lone bass line | `--no-melody --chord-on none --bass-on every-beat` | [the thumb alone](#the-thumb-alone) |
-| reduced chord where nothing else fits | `--fallback diminished` | [non-chord melody notes](#non-chord-melody-notes) |
+| ask | flag | `Request(...)` | output shown in |
+|---|---|---|---|
+| every note in full — the default | *(nothing to pass)* | `Request()` | [quick start](#quick-start) |
+| a chord stab on the and of 1 | `--chord-on 1and` | `Request(chord_on="1and")` | [when the chord attacks](#when-the-chord-attacks---chord-on) |
+| the harmonisation **and** the stab | `--chord-on melody,1and` | `Request(chord_on="melody,1and")` | [when the chord attacks](#when-the-chord-attacks---chord-on) |
+| chords on the strong beats | `--chord-on 1,3` | `Request(chord_on="1,3")` | [how thick the chord part is](#how-thick-the-chord-part-is---chord-notes) |
+| shells only | `--chord-notes 2` | `Request(chord_notes="2")` | [grips](#grips) |
+| guide-tone duos | `--chord-notes 1` | `Request(chord_notes="1")` | [grips](#grips) |
+| tune on its own | `--chord-on none` | `Request(chord_on="none")` | [the tune on its own](#the-tune-on-its-own) |
+| a chord in the tune's rests | `--chord-on none --chord-fills hold` | `Request(chord_on="none", chord_fills="hold")` | [what the chord does in a rest](#what-the-chord-does-in-a-rest---chord-fills) |
+| walking bass under the melody | `--bass-on every-beat --bass-notes walk` | `Request(bass_on="every-beat", bass_notes="walk")` | [a thumb line under the melody](#a-thumb-line-under-the-melody) |
+| comp for a horn | `--no-melody --chord-on every-beat` | `Request(melody=False, chord_on="every-beat")` | [the chord alone](#the-chord-alone---no-melody) |
+| a lone bass line | `--no-melody --chord-on none --bass-on every-beat` | `Request(melody=False, chord_on="none", bass_on="every-beat")` | [the thumb alone](#the-thumb-alone) |
+| reduced chord where nothing else fits | `--fallback diminished` | *(not a request field — `fallback=`)* | [non-chord melody notes](#non-chord-melody-notes) |
 
 ## The request, and the six axes under it
 
-`head` asks **six questions**, and each has one flag: who plays the tune, when each accompaniment layer attacks, what each layer states, and what the chord does in a notated melody rest.
+`head` asks **six questions**, and each has one flag: who plays the tune, when each accompaniment layer attacks, what each layer states, and what the chord does in a notated melody rest. A library caller asks the same six through `Request`, whose field names are the flags' own:
 
-| question | flag | values |
-|---|---|---|
-| who plays the tune? | `--no-melody` | the guitar does, unless this is passed |
-| when does the chord attack? | `--chord-on` | positions in felt beats, or `melody`, `none`, `every-beat` |
-| what does the chord state? | `--chord-notes` | `full`, `3`, `2`, `1` |
-| what does it do in a melody rest? | `--chord-fills` | `none`, `hold`, `comp` |
-| when does the thumb attack? | `--bass-on` | positions, `every-beat`, or `none` |
-| what does each thumb note state? | `--bass-notes` | `root`, `root-5th`, `walk` |
+| question | flag | `Request(...)` | values |
+|---|---|---|---|
+| who plays the tune? | `--no-melody` | `melody=False` | the guitar does, unless this is passed |
+| when does the chord attack? | `--chord-on` | `chord_on="1and"` | positions in felt beats, or `melody`, `none`, `every-beat` |
+| what does the chord state? | `--chord-notes` | `chord_notes="2"` | `full`, `3`, `2`, `1` |
+| what does it do in a melody rest? | `--chord-fills` | `chord_fills="hold"` | `none`, `hold`, `comp` |
+| when does the thumb attack? | `--bass-on` | `bass_on="every-beat"` | positions, `every-beat`, or `none` |
+| what does each thumb note state? | `--bass-notes` | `bass_notes="walk"` | `root`, `root-5th`, `walk` |
 
-**The default adds nothing.** `head FILE` is one chord under each written melody note, held for that note — no bass, no extra attacks, no chord invented in a rest. Everything else is asked for.
+**The default adds nothing.** `head FILE` is one chord under each written melody note, held for that note — no bass, no extra attacks, no chord invented in a rest. Everything else is asked for. `Request()` is that same default, so `arrange_progression(progression)` and `arrange_progression(progression, request=Request())` are one arrangement.
 
-Those six are the whole request. Underneath them are the engine's own axes — `texture=`, `bass=`, `parts=`, `harmony=`, `grid=` and the metre — which are the **Python API**, derived from the request and still the implementation. A band setting is a combination of them rather than a mode:
+**Those six are the whole request, and `Request` carries them as one value.** A library caller passes it beside the progression — `engine.arrange_progression(progression, timings=timings, request=Request(bass_on="every-beat", bass_notes="walk"))` — and the axis keywords still ride along as overrides when a test or a caller wants the implementation directly. Underneath the request are the engine's own axes, derived from it and still the implementation. A band setting is a combination of them rather than a mode:
 
 | axis | the question it answers | values |
 |---|---|---|
 | `texture=` | how many chord tones the chord part states, and where the fuller positions are | `uniform`, `targets`, `chord3`, `chord2`, `chord1` |
 | `bass=` | which note rules the thumb line may state | `none`, `root`, `root,5th,approach,nearest` |
 | `parts=` | which of melody, bass and chord the guitar takes | any subset of `melody`, `bass`, `chord` |
-| `harmony=` | which **degrees** a part states when not singing | `full`, `guide`, `shell_root`, `root` |
+| `harmony=` | which **degrees** a part states when not singing | `full`, `guide`, `shell_root` |
 | `grid=` | when each part sounds | `PART:PATTERN` rows — `melody:every_note,chord:freddie` |
 | `grouping` | which denominator units are felt as one beat | the score's `N+N+…` (a direction or its beaming), or `auto`; a hand-built progression states it in `TimeSignature` |
 
@@ -370,7 +373,7 @@ for step in steps:
 ```text
 1.0 target x-x-7-9-6-8
 1.5 fill x-x-x-10-10-12
-2.0 fill x-x-x-5-5-5
+2.0 fill x-x-10-9-10-x
 3.0 target x-7-7-5-6-x
 ```
 
@@ -429,14 +432,15 @@ Three separate questions, one flag each: **does the guitar sing the tune**, **wh
 
 `harmony` is read only when the guitar has no tune of its own, and it is a **library-only** value: there is no request flag, because it changes nothing on the route the guitar sings — a chord-melody's shell is a **grip** the selector picks, not a degree family.
 
-| `harmony=` | the part sounds | needs |
+| `harmony=` | the shapes it admits | needs |
 |---|---|---|
-| `guide` (default) | 3rd and 7th — the notes that say major or minor | two notes |
-| `shell_root` | both guide tones **and** root or 5th underneath | three notes |
-| `root` | root, or 5th where root unreachable — the bass note alone | `parts=("bass",)` |
-| `full` | whole chord | ordinary chord-melody route — see [the request](#the-request-and-the-six-axes-under-it) |
+| `guide` (default) | the guide pair — 3rd and 7th, the notes that say major or minor | two notes |
+| `shell_root` | both guide tones **and** a root or 5th as the lowest note | three notes |
+| `full` | the whole chord | ordinary chord-melody route — see [the request](#the-request-and-the-six-axes-under-it) |
 
-`harmony="shell_root", parts=("bass", "chord")` is the ensemble: horn on the tune, guitar stating the quality *and* the root underneath. A degree order named for a part the selection leaves out is **refused outright** (`ValueError`), not quietly thinned — `harmony="guide"` with `parts=("melody",)` asks degrees of a part the guitar is not playing.
+It is a **constraint on the palette, not a shape**: `guide` and `shell_root` often choose the same voicing, because a shape whose lowest note is already a root or a 5th satisfies both. What changes is which shapes are on the table — `get_comping_voicings("m7", "Cm7", notes=3, shell_root=True)[0]` is `x-x-x-12-11-11` where the plain palette's first is `x-x-x-3-4-3`.
+
+`harmony="shell_root"` with `parts="bass,chord"` is the ensemble: horn on the tune, guitar stating the quality *and* the root underneath — `8-x-8-8-x-x`, the root under the b7 and b3. A degree order named for a part the selection leaves out is **refused outright** (`ValueError`), not quietly thinned: `harmony="guide"` with `parts="melody"` says *"harmony=guide is a degree order for the chord part, and parts=melody does not take it - add 'chord' to parts, or drop the harmony"*.
 
 ### The thumb alone
 
