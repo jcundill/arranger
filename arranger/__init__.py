@@ -30,6 +30,11 @@ from `cli`, and is re-exported here as `arranger.main` so the console script and
 because everything public is re-exported here. The *code* moved; the spelling did
 not, so the README, the tests and `headxml` are unaffected.
 
+`ArrangeOptions` is re-exported because it is the one door to the implementation
+axes: `arrange_progression` and `arrange_xml_head` take `request=` and the input
+facts, and an axis override - `texture="targets"`, a `grid=` preset - is spelled
+`options=ArrangeOptions(...)`. See `options.py`.
+
 Two things are deliberately lazy, and both are load-bearing:
 
 - the three whole-progression staff renderers, resolved through a module-level
@@ -211,6 +216,7 @@ from .options import (
     CHORD_FILLS_NONE,
     CHORD_NOTES,
     CHORD_NOTES_FULL,
+    ArrangeOptions,
     Request,
     ResolvedRequest,
     format_request,
@@ -408,6 +414,7 @@ __all__ = [
     "RHYTHM_LAST",
     "RHYTHM_MELODY",
     "RHYTHM_NONE",
+    "ArrangeOptions",
     "Request",
     "ResolvedRequest",
     "Rhythm",
