@@ -17,23 +17,33 @@ call site.
 **Why this module imports the engine's vocabulary and the engine imports this module.**
 The dependency runs one way: `decisions` needs the engine's own constants
 (`GRIP_PREFERENCE`, `ROLE_FILL`, `GRIP_MAX_SPAN`, `sounding_harmony`) and the engine needs
-the decisions. So `steps` imports this module, and this module imports `grips`, `chords`,
-`cost` and `tuning` - all of which sit *below* `steps` in the package's DAG, so the
-imports are ordinary top-level ones and there is no cycle to dodge.
+the decisions. So `steps` imports this module, and this module imports `bass_place`, `grips`,
+`chords`, `cost` and `tuning` - all of which sit *below* `steps` in the package's DAG, so the
+imports are ordinary top-level ones and there is no cycle to dodge. `bass_place` is here
+because the bass note a request names is a decision this module makes in front of selection:
+whether a candidate leaves room for the thumb is asked with the very call that will place the
+note afterwards.
 """
 
 from __future__ import annotations
 
 from typing import List, Optional, Tuple
 
+from .bass_place import BassNote, bass_placement
 from .chords import sounding_harmony
-from .cost import SelectionCriteria, best_voicing_for
+from .cost import (
+    PARTITION_CRITERION,
+    SelectionCriteria,
+    VoicingScore,
+    best_voicing_for,
+    decisive_criterion,
+)
 from .grip_tables import (
     GRIP_MAX_SPAN,
     GRIP_PREFERENCE,
     thumb_safe_grips,
 )
-from .tuning import NO_CHORD, ROLE_FILL, ROLE_TARGET, ArrangementStep, Voicing
+from .tuning import NO_CHORD, ROLE_FILL, ROLE_TARGET, ArrangementStep, Palette, Voicing
 
 # The three answers to "how is this slot played". Named rather than a bool because
 # the two non-default routes build different steps - see `melody_alone_case`.
@@ -250,46 +260,83 @@ def lone_bass_case(
     return has_bass and not sings_here and not chord_stated
 
 
-def is_bass_only(slot_bass_only: bool, role: str) -> bool:
+def is_bass_only(
+    slot_bass_only: bool,
+    *,
+    chord_attack: bool,
+    holds: bool,
+) -> bool:
     """
     Whether this step's upper voices really are held across it.
 
-    `slot_bass_only` is what the **bass grid** said: the walk invented this beat,
-    because the bass moves on a finer grid than the melody does (decision B). That
-    is a statement about where the beat came from, not about what the left hand
-    plays, and the two come apart.
+    `slot_bass_only` is what the **bass grid** said: the walk invented this beat, because
+    the bass moves on a finer grid than the melody does (decision B). That is a statement
+    about where the beat came from, not about what the left hand plays, and the two come
+    apart. What the flag means, and what all four renderers do with it, is the stronger
+    claim: **nothing above the thumb is struck**. It is the only thing that keeps a tied
+    melody from being plucked again on every beat the walk invents.
 
-    A **target** is the case that matters. `roles_for_slot` promotes a strong beat to
-    a target when the melody moves onto it, and under a thumb line the walk
-    invents downbeats the melody grid never had - so a slot can arrive with
-    `bass_only=True` *and* `role == ROLE_TARGET` at the same time. Those two flags
-    contradict each other: `bass_only` means "nothing above the thumb strikes, the
-    upper voices are held from the last shape", while a target means "a full chord
-    states the harmony here". The engine voices a real `shell` or `melody` grip on
-    such a step, and then `bass_only` told all four renderers to suppress it - so the
-    chord of the tune vanished from the tab, the GP5 file and the score while existing
-    in the engine's own output. `tabxml` was the only renderer that showed it, and
-    only because `_sounding` filters on `fret >= 0` and never applies the rule at all.
+    Two facts defeat it, and each is a reason such a slot may still have something to say
+    above the thumb:
 
-    A **fill** is the other half and is untouched: under decision C a fill is the
-    melody alone, and the melody it carries is the one already sounding, so holding it
-    is exactly right. That is why this is a role test rather than a pitch comparison -
-    on "But Not For Me" 13 of the 22 `bass_only` steps are fills that are correctly
-    held, and 9 are targets that were wrongly silenced.
+    - **the chord's rhythm named this position** (`chord_attack`): the chord part was asked
+      to attack here, so it does. Under `--chord-on every-beat` the walk and the chord
+      rhythm agree and every beat is a fresh chord.
+    - **the shape above is not the one ringing** (`holds`): the harmony moved, or the
+      melody there is not the note still sounding, so holding would print the new chord's
+      name over the old chord's voices. Such a step is voiced afresh and struck.
 
-    The answer is a flag the renderers read, so it has to be right here rather than in
-    four renderers that would each have to re-derive it - and it also has to be right
-    before `attach_bass` reads it, because a target measures its thumb against its own
-    voicing rather than against a shape it is holding.
+    That is why this is **not** a role test. A **target** at a slot the walk invented is
+    the ordinary case *and* the case that must sound when the chord changed under it - the
+    role cannot tell those apart, and reading the role alone silenced nine downbeats of
+    "But Not For Me" whose harmony had not changed at all. `holds` is
+    `melody_is_ringing` on the melody routes and deliberately false on the comping one.
+
+    A `bass_only` step must also clear `repeated`: the two flags name opposite halves of
+    one column, and `tabstaff._strikes_here` takes their **union**, so a step carrying both
+    would strike the soprano the hold exists to leave alone.
+
+    The answer is a flag the renderers read, so it has to be right here rather than in four
+    renderers that would each have to re-derive it - and it also has to be right before
+    `attach_bass` reads it, because a held step measures its thumb against the shape it is
+    holding rather than against its own thinned voicing.
 
     **A route that states no chord does not ask this function.** `bass_alone_step` - the
     bass part's own slot, where the chord part is off - sets the flag directly, because
     there the fact is definitional rather than a contradiction: nothing above the thumb
-    is struck, and a target role there is a **metric** event (a strong beat, a chord
-    change) rather than a chord being voiced. Every caller of this function is a route
-    that voices harmony, which is why the rule above is stated over the role.
+    sounds at all, so there is nothing to strike or to hold.
     """
-    return slot_bass_only and role != ROLE_TARGET
+    return slot_bass_only and not chord_attack and holds
+
+
+def melody_is_ringing(
+    arrangements: List[ArrangementStep],
+    melody_midi: int,
+    harmony: Tuple[Optional[str], Optional[str]],
+) -> bool:
+    """Whether the step already struck leaves `melody_midi` sounding under `harmony`.
+
+    The hold a `bass_only` step relies on, and **not** `holds_the_shape`: that one answers
+    "does this step's shape re-state the one before it", so a previous step sounding a
+    single note answers no - there are no inner voices for a `repeated` flag to suppress.
+    Here the question is only what the left hand is leaving *ringing*, and one finger on
+    the melody is something: it is exactly the note the tune is sustaining while the thumb
+    walks under it, and re-plucking it to say so is the fault this exists to prevent.
+
+    Compared on the **sounding** pitch, because either side of this may have been
+    transposed down an octave by the `HIGH_FRET_LIMIT` rule, and on the harmony, because a
+    note ringing across a chord change is not a hold - see `holds_the_shape`.
+
+    Reads the **last** step rather than the last sounding one: a rest between here and
+    there ends the ring, and then there is nothing left to hold.
+    """
+    if not arrangements:
+        return False
+    previous_step = arrangements[-1]
+    sounding = previous_step.voicing.midi_notes()
+    if not sounding or max(sounding) != melody_midi:
+        return False
+    return sounding_harmony(previous_step) == harmony
 
 
 def should_promote_fill(
@@ -505,3 +552,119 @@ def select_step_voicing(
             candidates = [v for v, c in zip(candidates, costs) if c == best]
 
     return best_voicing_for(candidates, criteria)
+
+
+def palette_facts(
+    candidates: List[Voicing],
+    chosen: Voicing,
+    criteria: SelectionCriteria,
+) -> Palette:
+    """What was on offer besides `chosen`, and the criterion that ranked it lower.
+
+    Shared by the two routes that choose a shape - the melody-bearing one and the comping
+    one - because it is one question and one answer: what the palette held, what the best
+    **fuller** shape was, and which element of `cost.voicing_cost` turned it away. The
+    slash-bass partition is folded in here because it ranks *before* the tuple, so a shape
+    it dropped lost to the bass rather than to a criterion.
+
+    `Palette.dropped_for_bass` is deliberately not set here: that is a fact about the
+    request narrowing the palette rather than about the ranking, and it is recorded by
+    `dropped_for_the_bass`.
+    """
+    def cost(voicing: Voicing) -> VoicingScore:
+        return criteria.cost(voicing)
+
+    def lost_to_the_bass_partition(alternative: Voicing) -> bool:
+        """Whether the slash-bass partition would have dropped `alternative`."""
+        if criteria.bass_pc is None or criteria.slash_bass_cost is None:
+            return False
+        here = criteria.slash_bass_cost(chosen.midi_notes(), criteria.bass_pc)
+        there = criteria.slash_bass_cost(alternative.midi_notes(), criteria.bass_pc)
+        return here != there
+
+    available = max(len(candidate.active_frets()) for candidate in candidates)
+    inside_window = any(
+        all(
+            criteria.fret_min <= fret <= criteria.fret_max
+            for fret in candidate.active_frets()
+        )
+        for candidate in candidates
+    )
+    chosen_voices = len(chosen.active_frets())
+    fuller = [c for c in candidates if len(c.active_frets()) > chosen_voices]
+    if not fuller:
+        return Palette(available=available, inside_window=inside_window)
+    alternative = min(fuller, key=cost)
+    decided_by = decisive_criterion(cost(chosen), cost(alternative))
+    if lost_to_the_bass_partition(alternative):
+        decided_by = PARTITION_CRITERION
+    return Palette(
+        available=available,
+        alternative=alternative,
+        decided_by=decided_by,
+        inside_window=inside_window,
+    )
+
+
+def leaving_room_for_the_bass(
+    candidates: List[Voicing],
+    note: Optional[BassNote],
+    arrangements: List[ArrangementStep],
+    *,
+    bass_only: bool,
+) -> List[Voicing]:
+    """The candidates a requested bass note can actually sound under.
+
+    A requested grid bass note is part of the **request**, so the harmony has to make room
+    for it: a shape whose player cannot reach the line's note is not a shape that honours
+    that request, however well it ranks. The question is asked before selection and with
+    `bass_placement` - the very call `attach_bass` will make afterwards - so the filter
+    cannot accept a placement the merge then refuses.
+
+    **A narrowing, never a widening.** What comes back is a subset of the palette the axis
+    offered, and the cost tuple ranks it unchanged: no criterion is added, reordered or
+    re-weighted, and no candidate carries a thumb. That is the only form this can take
+    without turning the bass into a ranking input, which the layering forbids - `cost` sits
+    below `bass_place`, so `voicing_cost` cannot ask where the thumb goes, and the
+    select-then-merge order exists so it never has to.
+
+    The **full palette comes back when nothing survives**, so a slot the hand genuinely
+    cannot reach the note under behaves exactly as it did before: the shape is played and
+    the note is refused, named on the line by `annotation._bass_refusal_clause`. Losing a
+    step is worse than losing its bass.
+
+    Returned unchanged when the request names no bass for this slot, which is every step of
+    an arrangement without a thumb line - which is why adding this cannot move a tab that
+    never asked for one.
+    """
+    if note is None:
+        return candidates
+    reachable = [
+        candidate for candidate in candidates
+        if bass_placement(candidate, note, arrangements, bass_only=bass_only) is not None
+    ]
+    return reachable or candidates
+
+
+def dropped_for_the_bass(
+    full: List[Voicing],
+    narrowed: List[Voicing],
+    chosen: Voicing,
+    criteria: SelectionCriteria,
+) -> Optional[Voicing]:
+    """The shape the ranking preferred from the palette the bass narrowed, if any.
+
+    Recorded on the step's `Palette` so the line can say *why* a shape that is not the
+    ranking's first choice is the one being played: a reader counting strings has no other
+    way to know that a string was left free on purpose.
+
+    `None` when the request narrowed nothing, and also when the narrow did not change the
+    winner - in both cases the played shape *is* the ranking's first choice and there is
+    nothing to explain.
+    """
+    if len(full) == len(narrowed):
+        return None
+    preferred = select_step_voicing(full, criteria)
+    if preferred is None or preferred is chosen:
+        return None
+    return preferred

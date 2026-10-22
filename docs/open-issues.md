@@ -3,13 +3,14 @@
 Each item states the **issue**, the **problem it produces**, and **why it exists**, with the
 measurement behind it. A fixed issue is **removed** from this file rather than kept as history —
 its record lives in the commit that fixed it and in the document it belongs to. **One exception,
-stated so it is not a silent one:** items 1 and 4 are closed **in place** with their numbers,
+stated so it is not a silent one:** items **1, 2, 4 and 5** are closed **in place** with their numbers,
 because `docs/history/` is frozen and cites items by number — removing them and renumbering would
 silently repoint about fifty references at a different item, which is the contradiction between
-documents this project treats as a bug. A closed item says how it closed and carries no figure of
-its own.
+documents this project treats as a bug. A closed item says how it closed and **keeps the
+measurement that closed it** — that measurement is the item's evidence, and the recipe beside it is
+what keeps it re-measurable — but it states each figure once, where the item's own subject puts it.
 
-Four are open, and each figure is stated **once**, in its own item: a summary here would be a
+Two are open, and each figure is stated **once**, in its own item: a summary here would be a
 second source for it, which is how the numbers in this paragraph rotted three times before the
 *recipes* below were made explicit. **Every figure in this file is re-measured by hand from the
 recipe beside it**: they are this document's own business, and the gate is not keyed to these
@@ -17,20 +18,17 @@ items.
 
 1. *(closed)* **The library facade takes its harmony per melody note** — closed by the
    rhythm-first request; see below.
-2. **A refused thumb note is usually not the shape being unplayable** — measured, decision left
-   open: the selector's lever recovers nothing harmlessly any more, and the walk's own pitch,
-   which costs the tuple nothing, reaches most of the refusals but only a fraction of them by a
-   chord tone.
+2. *(closed)* **A refused thumb note is usually not the shape being unplayable** — closed by the
+   palette narrow: a requested bass note moves the harmony instead of being dropped; see below.
 3. **`harmony=full` is accepted on the comping route and answered with a different family** — the
    one axis value refused by nothing that resolves to something other than itself.
 4. *(closed)* **A `bass:` grid row is accepted and changes nothing** — closed by the request; the
    internal row survives with its own tests.
-5. **A lone note the hand holds can leave the walk below the shape's reach** — the reach is as
-   near as the walk's own note allows, so it is the register and not the placement; measured,
-   with the selector-side lever left unbuilt.
-6. **A position falling on a note's release is not generated** — `melody_at` keeps a note in
-   force through its end instant, so §9.2 declines a position the tune has already stopped
-   holding; measured, and the boundary is pinned by a test while the reading stays open.
+5. *(closed)* **A lone note the hand holds can leave the walk below the shape's reach** — closed by
+   the hand's reach being bounded and the palette making room for the note; see below.
+6. **A position falling on a note's release is read as held** — `melody_at` keeps a note in
+   force through its end instant; the boundary is pinned by a test and the reading stays open,
+   but the grid that used to name such a position went with `--grid`, so it now costs no step.
 
 Reproduce the measurements with the commands in [Reproducing](#reproducing).
 
@@ -65,56 +63,49 @@ and every position the request names resolves through them.
 
 ---
 
-## 2. A refused thumb note is usually not the shape being unplayable
+## 2. A refused thumb note is usually not the shape being unplayable (closed)
 
-**Status: diagnosed, not fixed — the decision is left open.** This is the question
-[docs/history/fingering.md](history/fingering.md) §4.3 leaves hanging: whether the **selector** should have
-left room for the thumb in the first place.
+**Closed by leaving room for the thumb.** The question this item left open —
+[docs/history/fingering.md](history/fingering.md) §4.3's "should the selector have left room for
+the thumb in the first place?" — is now answered *yes*, and the answer is a **palette narrow**
+rather than a cost criterion: `decisions.leaving_room_for_the_bass` drops every candidate the
+thumb cannot reach the requested note under, and the same `voicing_cost` ranks what is left. The
+bass still never enters the tuple — `cost` sits below `bass_place` in the package DAG, so it
+cannot ask where the thumb goes, and no candidate carries one.
 
-**The issue.** `place_bass` refuses a candidate and the step keeps its upper voicing.
-`ArrangementStep.bass_refused` records the wanted pitch class and `annotation._bass_refusal_clause`
-phrases it on the tab line, so the omission is reported on the part rather than in a collector.
+**Why the lever pays now when it did not before.** The old measurement's "harmless recovery is
+gone" was about recovering *after* the fact: re-selecting the shape once the note had already
+failed changed the harmony and paid the span bucket anyway. Narrowing **before** the ranking is a
+different trade, because the shape is then chosen for the hand it will be played with. It also
+removed the `drop24` caveat: nothing is being added to the palette, so the three inner-skip sets
+that were removed for the right-hand reason are not missed.
 
-**The problem.** Over the ten committed heads × the four rows that place a thumb note under a
-texture that has one (`targets`/`uniform` × `root`/`root,5th,approach,nearest`; **674**
-`place_bass` calls) refusals number **76** today. `targets` and `uniform` are the two textures
-that carry a thumb line; the walk itself is the bass part's grid row rather than a texture, which
-is why the rows are two textures × two rule sets. Attributed by cause:
+**Measured**, over the committed heads (15: `tests/data`'s 13 and `examples`' 2) × the four
+rows that place a thumb note under a texture that has one (`targets`/`uniform` ×
+`root`/`root,5th,approach,nearest`; 1,318 requests): refusals **130 → 22**. All 22 are on the
+two `uniform` rows (7 under `root`, 15 under the walk), where a four-voice texture leaves the
+thumb the least to move to; the line names the refused pitch. The same question asked of the
+melody grid the report was filed under (`--bass-on 1,2,1and,2and`, 986 steps and 729 requested
+notes) goes 79 → **0**. On the comping route, where the guitar does not sing, the narrow
+recovers the same way — `--bass-on every-beat` over the committed heads goes 155 → **0** (the
+row that *does* sing, `--bass-on every-beat` with the melody, keeps 16: a tune in the soprano
+is a fifth voice the `uniform` texture cannot always make room under).
 
-| cause | refusals |
-|---|---|
-| no free string | **0** |
-| **no octave of the walk's pitch below the shape** | **76** |
-| five frets for four fingers | **0** |
+**What it costs.** Shapes move: measured over the committed heads under
+`--bass-on 1,2,1and,2and`, **148 of 986** steps choose a different shape, **85** of them
+stating one *more* voice and **33** stating fewer (a shape that frees a string for the thumb
+tends to be the fuller one, because `missing` outranks `position` in the tuple — but not
+always). Melody pitch never changes; the melody moves to another string in 54 of those 148,
+about a third. Hand travel over the row rises 1606 → 1666 frets in total (mean 1.65 → 1.72 per
+step), while jumps over five frets *fall* 97 → 95 because the reach bound below removes the
+wide ones. `make demo` is byte-identical: the narrow is inert without a requested bass note.
 
-The middle row is the common case, and it is the one the clause names — but note it is a
-*replica* of `place_bass`'s three filters that names it, not the engine, because the field
-carries the wanted pitch and not the reason it could not be placed. 49 of the 76 are a
-*doubling*: the walk's pitch class is the shape's own bottom class an octave up, so the thumb
-would restate what the chord already sounds. The other 27 are a pitch the shape has no octave of
-beneath it.
-
-**Why the levers do not pay.** All three filters are right, and dropping the note is deliberate
-policy — a step is never dropped because the thumb could not reach it.
-
-- **the walk's own pitch** is the fourth lever and costs the tuple nothing — it re-states the
-  bass under the shape already chosen. Its payoff was measured on the retired corpus rather
-  than re-taken here; what that measurement established is why the lever is not built: it
-  recovers a fraction of the refusals, and the ones it recovers are the ones whose pitch is
-  already a chord tone, which the shape sounds an octave up.
-- **the shape-level retries** (re-select over hosting shapes, identical notes or any) are the
-  other lever, and their numbers — 0 of 34 for the identical-notes retry, 10 of 53 on the tree
-  it was first asked on, 48 of 53 for the bare one — are **not re-measured here**: the script
-  was a throwaway (AGENTS.md trap 8), so those counts are about the trees they were taken on.
-  What they established is why the lever is not built, and that part is independent of the
-  count: **the harmless recovery is gone.** The ten hosts that sounded the chosen shape's own
-  notes were the four inner-skip `drop24` sets, and §4.4 removed them for the right-hand reason,
-  so every remaining recovery changes the harmony and pays the span bucket.
-
-Not built, for the reason [docs/history/fingering.md](history/fingering.md) §4.4 reached for the finger skip:
-the payoff is small, it changes what a downbeat states, and the current behaviour — drop the
-note, keep the shape, report it — is defensible precisely because the chord already sounds that
-pitch class an octave up.
+**Still not recorded on the step: the cause of a refusal.** `ArrangementStep.bass_refused`
+carries the wanted pitch class, not the reason, so the four causes — no free string, no octave of
+the pitch below the shape, a fifth fret for four fingers, a reach wider than the hand's five —
+are named together by `annotation._bass_refusal_clause`. Recording which one fired would remove
+the replica the recipe below describes; that is an engine change, and with the 22 that remain
+confined to one texture and no step of the reported row among them, it is not worth the field.
 
 ---
 
@@ -168,62 +159,56 @@ the library did not make is, and it is gone.
 
 ---
 
-## 5. A lone note the hand holds can leave the walk below the shape's reach
+## 5. A lone note the hand holds can leave the walk below the shape's reach (closed)
 
-**Status: diagnosed, not fixed — the lever is [docs/history/fingering.md](history/fingering.md) §4.3's question**,
-and it is the same question item 2 leaves open, seen from the other side.
+**Closed by bounding the hand and making room for the note.** Two changes, and neither is
+sufficient alone — the measurements below are why.
 
-**The issue.** `place_bass` ranks the thumb's candidates by proximity to the hand but never
-*bounds* the reach: a pitch with no position inside the hand's span is still played, because "a
-step is never dropped because the thumb could not reach it". A `bass_only` step can therefore
-sound a bass note several frets away from the shape the fingers are holding, with no nearer option
-to take.
+**The reach is bounded.** `fingers.can_fret` used to count *fingers* only (`fingers_needed <= 4`),
+so a merged hand could be three fingers and eight frets: `[1, 8, -1, 8, 9, -1]`, the reported bar,
+passed the check because 1, 8 and 9 are three distinct frets. It now requires
+`hand_span(frets) <= fingers.MAX_HAND_SPAN` as well, where `hand_span` is max − min over frets at
+1 or above (an open string takes no finger and does not widen the hand). Five is the bound because
+it is the hand's own size, and every `GRIP_MAX_SPAN` entry sits at or under it — asserted in
+`tests/test_grip_tables.py` rather than written as a second copy of the number. Both of
+`can_fret`'s callers inherit it: `bass_place.place_bass`, which asks before it picks a string, and
+`bass_merge._takes_the_ring`, which asks before it lets a struck note keep ringing under the next
+shape.
 
-**The problem.** Measured over the ten committed heads × the walk row (`texture=targets`,
-`bass=root,5th,approach,nearest`, `grid=melody:every_note,bass:walk`): the worst reach is **5**
-(`synthetic_waltz`) and **1** step exceeds **4** frets — `synthetic_waltz` bar 11 beat 2 — and
-**it is placed as near the hand as its own note allows**, which is what
-`tests/test_bass_placement.py::TestTheThumbReachesTheHandHoldingTheShape.test_the_thumb_stays_within_reach_of_the_fingers`
-now asserts instead of excusing. The wide reach is therefore the **walk's register**: the note the
-line decided to play has no position nearer the held shape, and the placement took the nearest one
-there is (`tests.support.nearest_reach_for_note` is the replica that says so, and the engine's own
-choice must equal it). The note itself is chosen by the walk's own ordering — proximity first, then
-continuity with the previous bass note, then the lower pitch (`bass_place.place_bass` spells the three
-out) — so a register the hand can reach is not something the placement can fix.
+**The harmony moves instead.** A refusal alone would have cost 92 of the 729 requested notes on
+the row the report came from — all of them playable by a lower shape. So selection now narrows the
+palette to the shapes the thumb can reach the requested note under, and the tuple ranks what is
+left (`decisions.leaving_room_for_the_bass`; item 2 has the mechanism and the cost). The reported
+bar, `tests/data/synthetic_cut_time.mxl` **bar 6 beat 2.5**, is the case: the ranking's first
+choice is `x-8-7-8-x-x`, the walk's F is seven frets under it, and the shape now sits at frets 1–4
+where the low E has the note. `tests/test_bass_placement.py::TestTheHarmonyLeavesRoomForTheBass`
+pins it, including the dropped shape's tab and the clause that names it.
 
-The same sweep over `c5dde40` — before the lone-note placement landed, so with the tune's single
-notes wherever the highest string put them — had a worst of **3** and none over 4. The reach did
-not get worse on its own account: it got **visible** when a lone note started sitting where the
-hand already is, because the walk's "below the shape" filter then leaves only a low octave. The
-current case is `synthetic_waltz` bar 11: the held shape and the walk's note are five frets apart,
-and no nearer position for that note survives the filters. The trade is stated in the same
-commit's measurement: hand travel over the same row falls **3070 → 1728** frets.
+**Measured.** Over the committed heads × the walk row (`texture=targets`,
+`bass=root,5th,approach,nearest`, `grid=melody:every_note,bass:walk`; 460 requested notes over 773
+steps that carry a thumb): worst merged span **5**, with **0** steps over 5 — the same sweep under
+`--bass-on 1,2,1and,2and` had 44 steps over 5 with a worst of 9. Over the four thumb rows item 2
+uses (1,318 requests): worst **5**, **0** over 5. The narrow is what keeps the note and the bound
+is what keeps the hand; room without the bound still writes 52 wide steps through `carry_bass`,
+and the bound without the room refuses 92 notes that a lower shape could sound.
 
-**Why the levers do not pay** — the first is the *selector's* business and the second the
-*walk's*, and neither is built:
-
-- **leaving room for the thumb** is item 2's lever: re-select the upper shape so the bass can
-  reach it. It changes what the step states for the walk's benefit, which is why it needed
-  measuring rather than adopting (item 2's counts).
-- **the walk's register** — playing the same pitch class an octave up, where the hand is — is the
-  one lever that needs nothing from the selector, but it fights the line's own continuity: the
-  third key of `place_bass`'s ordering only breaks a proximity tie, precisely so a walking bass
-  does not leap octaves for no reason. Measured on the four cases above, every one of them is a
-  register the hand would have to travel to.
-- **refusing the note** would bound the reach at the cost of the note — the step above — and
-  unlike the three existing filters it is not a playability *fact*: a bass note five frets below a
-  held shape is playable, and it is the hand's span that suffers. Refusing it would legislate a
-  stretch the library deliberately declines to define, which is the sentence that used to be the
-  whole of this test's docstring.
+**What the walk's register lever would have been.** Playing the pitch class an octave up was the
+item's remaining idea. It is moot: the *shape* now moves to where the line's own octave is
+reachable, so the register the hand can reach is chosen by the ranking rather than imposed on the
+line. The third lever — refusing the note — is what the bound now does, and it is kept as the
+**fallback** rather than the policy: the palette gives up the note only when no shape in it can
+carry it, which over the four thumb rows happens **22** times, every one of them under the
+`uniform` texture.
 
 ---
 
-## 6. A position falling on a note's release is not generated
+## 6. A position falling on a note's release is read as held
 
-**Status: open, diagnosed, and the boundary is pinned.** §9.2's hold rule is *inclusive* at its
-edge, so the instant a note stops sounding is treated as one it still holds, and the grid declines
-that position. The reading is a decision; the arithmetic that finds the edge is not, and it now
-uses the head's own metre.
+**Status: open as a reading, and its measured cost is gone.** §9.2's hold rule is *inclusive* at
+its edge, so the instant a note stops sounding is treated as one it still holds. The reading is a
+decision, it is still what is built, and `tests/test_headxml_timeline.py` pins it; the arithmetic
+that finds the edge is not a decision, and it uses the head's own metre. What has changed is that
+the grid which used to *name* such a position no longer exists.
 
 **The issue.** `melody_at` keeps a note in force while `position <= end`, where the position and
 the end are both on one absolute beat line and the end is
@@ -233,14 +218,22 @@ itself** still returns the note. `melody_state` then answers `held` there rather
 and §9.2's rule that a held position is not a slot declines it. A position where the tune has
 *stopped* is therefore treated exactly like one where it is still sounding.
 
-**The problem.** Positions the grid names produce nothing. Measured by patching that boundary
-alone — a `held` answer whose in-force note ends at that exact position becomes `silent` — and
-re-arranging all ten committed heads under the default grid: **9** steps are added, 334 → 343.
-Per head: `Trouble_in_Mind_Blues` **+3**, `synthetic_cut_time` **+2**, `synthetic_triplets` **+2**,
-`synthetic_common_8` **+1** and `synthetic_waltz` **+1**, with nothing on the other five.
-`synthetic_common_8` bar 8 is the simplest shape of it: the last bar's downbeat is the release of
-the tune's final note, so the position is reported `held` and the bar yields one step fewer than
-the grid names.
+**The problem, and what became of it.** The measurement that made this an issue was taken when the
+default grid was the union — a position invented at the bar's own subdivision wherever the tune was
+silent — and under it 9 steps were lost across the corpus. That union went with the `--grid` flag
+(the rhythm-first request replaced it with `--chord-on` and `--chord-fills`, asked for by name), and
+the melody-anchored default now generates no positions of its own, so there is nothing left for the
+rule to decline: re-measured by patching the boundary alone — a `held` answer whose in-force note
+ends at that exact position becomes `silent` — **every current row adds 0 steps** (685 under the
+default, 823 under `--chord-on every-beat`, 1,012 under `--chord-on 1,2,1and,2and`).
+
+**Where it still shows.** 27 positions in the corpus have a note releasing exactly on one the bar
+resolution generates. An **explicit** chord row asks for those positions directly (its grid is not
+melody-anchored, so the hold filter never runs), and each becomes a step carrying the released
+note: `examples/But_Not_for_Me.mxl` bar 5 beat 1 is a `Ebmaj` whose melody is the `G4` that ends
+there. That is consistent with the reading rather than a second bug — a position the caller names
+is placed — but it is where a change of reading would be felt now, and the reason the item stays
+open rather than closing.
 
 **Why it exists.** Two readings of "sounds here" are both defensible and the code implements one
 without recording which: a note covering `[onset, end]` sounds *through* its release, or it
@@ -259,10 +252,26 @@ silence, so it need not move with it.
 ## Reproducing
 
 ```bash
-# Items 1 and 4 are closed (see above), and their recipes are gone with them: they
-# reproduced a default union and a `--grid` flag that the rhythm-first request removed,
-# so running them now measures a different arrangement. The record is the commit and
-# docs/history/rhythm-request.md.
+# The corpus is the committed heads: `tests/data`'s 13 and `examples`' 2, fifteen in all.
+# Every glob below names all fifteen, because a figure taken over one of them is not a
+# figure about "the committed heads" - the 720 and 435 this file used to quote came from
+# a `tests/data`-only sweep, and mixing the two corpora is what made them disagree.
+#
+# Items 1, 2, 4 and 5 are closed (see above). Item 1's recipe went with the default union
+# it was written against, and item 4's with the `--grid` flag the rhythm-first request
+# removed; item 4's residual property - the `bass:` row is inert *inside* the engine - is
+# the snippet below, and items 2 and 5 own their figures in their own sections.
+#
+# Both of the closed engine items are re-measurable in one line each, which is the form
+# their fix took - no replica of `place_bass` is needed any more, because there is nothing
+# left to attribute:
+#
+#   item 2: `bass_refused` over the four thumb rows - `targets`/`uniform` x
+#           `root`/`root,5th,approach,nearest` - is 22 of 1,318 requests, and every one of
+#           the 22 is on a `uniform` row;
+#   item 5: `fingers.hand_span(step.voicing.frets)` over a walked row never exceeds
+#           `fingers.MAX_HAND_SPAN`, and neither does the merged hand of any step that
+#           carries a thumb.
 
 # the bass row is inert *inside the engine*: every head is byte-identical to the default row.
 # No CLI flag can reach it any more - the thumb's positions are `--bass-on` - so this
@@ -271,7 +280,8 @@ silence, so it need not move with it.
 import glob
 import headxml as H
 rows = ['melody:every_note', 'bass:every_note', 'bass:walk', 'bass:anchors']
-heads = sorted(glob.glob('tests/data/*.musicxml')) + sorted(glob.glob('tests/data/*.mxl'))
+heads = (sorted(glob.glob('tests/data/*.musicxml')) + sorted(glob.glob('tests/data/*.mxl'))
+         + sorted(glob.glob('examples/*.mxl')))
 same = 0
 for path in heads:
     tabs = set()
@@ -282,9 +292,9 @@ for path in heads:
     same += len(tabs) == 1
 print('inert rows: %d of %d heads identical' % (same, len(heads)))
 "
-# inert rows: 13 of 13 heads identical, all four spellings giving the same count and the same
+# inert rows: 15 of 15 heads identical, all four spellings giving the same count and the same
 # tab lines on each - so the row is a no-op rather than an accident of one head. (The corpus is
-# 13 files and not the 10 this item was written against; re-measured, not remembered.)
+# 15 files and not the 10 this item was written against; re-measured, not remembered.)
 
 # 6. a position on a note's release is not generated: `melody_at` keeps a note in force
 # through its own end instant, so `melody_state` answers held where the tune has already
@@ -322,7 +332,8 @@ def at_release(head, bar, beat):
 def arrange(path):
     return H.arrange_xml_head(path)[0]
 
-paths = sorted(glob.glob('tests/data/*.musicxml')) + sorted(glob.glob('tests/data/*.mxl'))
+paths = (sorted(glob.glob('tests/data/*.musicxml')) + sorted(glob.glob('tests/data/*.mxl'))
+         + sorted(glob.glob('examples/*.mxl')))
 total = 0
 for path in paths:
     before = arrange(path)
@@ -333,24 +344,27 @@ for path in paths:
     print('%-40s %+d' % (os.path.basename(path), len(after) - len(before)))
 print('added: %d over %d heads' % (total, len(paths)))
 "
-# Trouble_in_Mind_Blues +3, synthetic_cut_time +2, synthetic_triplets +2,
-# synthetic_common_8 +1, synthetic_waltz +1 and the other five 0 -
-# and `added: 9 over 10 heads`, which is 334 steps becoming 343. The two readings of sounds
-# here are both defensible; what the patch cannot say is which one the library should hold.
+# every head +0, and `added: 0 over 15 heads`: the melody-anchored default generates no
+# position of its own, so there is nothing for the rule to decline. The +9 this item used to
+# report (334 steps becoming 343, `Trouble_in_Mind_Blues` +3, `synthetic_cut_time` +2,
+# `synthetic_triplets` +2, `synthetic_common_8` +1, `synthetic_waltz` +1) was measured against
+# the union the `--grid` flag used to produce. The two readings of sounds here are both
+# defensible; what the patch cannot say is which one the library should hold.
 ```
 
 
-Item 2's counts are re-measured the same way (no committed script — `AGENTS.md` trap 8): wrap
-`bass_place.place_bass` and `bass_merge._attach_bass`, load each `tests/data/` head over the four rows
-that place a thumb note under a texture that has one (`texture` in `targets`/`uniform` ×
-`bass` in `root`/`root,5th,approach,nearest`), and count a refusal wherever `place_bass` returns `None`.
+Item 2's count is re-measured the same way (no committed script — `AGENTS.md` trap 8): load each
+committed head over the four rows that place a thumb note under a texture that has one
+(`texture` in `targets`/`uniform` × `bass` in `root`/`root,5th,approach,nearest`) and count the
+steps whose `bass_refused` is set. It reads **22** of 1,318 requests, every one of them on a
+`uniform` row, which is why there is no attribution table in that item any more: with selection
+leaving room for the note, the only refusals left are slots where no shape can carry it at all,
+and they are counted where the report named them.
 
-Naming the *cause* needs a replica of `place_bass`'s three filters rather than a reading of the
-step, and that is a limitation worth stating: `ArrangementStep.bass_refused` carries the wanted
+Naming the *cause* would still need a replica of `place_bass`'s four filters rather than a reading
+of the step, and that limitation is unchanged: `ArrangementStep.bass_refused` carries the wanted
 pitch class, not the reason it could not be placed. Rebuild the free-string set, the octaves of
-the wanted pitch below the shape's own lowest note, and the `fingers.can_fret` four-fret budget,
-in that order, and the first of the three that comes back empty is the cause. The replica is
-validated by agreement rather than by inspection — over all 674 calls it agrees with the real
-`place_bass` on every outcome, which is what makes the `0 / 76 / 0` split a measurement and not
-a description of the code. Recording the cause on the field would remove the replica; that is a
-change to the engine, not to this document.
+the wanted pitch below the shape's own lowest note, the `fingers.can_fret` four-fret budget and
+now its reach, in that order, and the first of the four that comes back empty is the cause. It is
+not rebuilt here: the 22 that remain sit on one texture, and none of them is on the row the report
+was filed under.

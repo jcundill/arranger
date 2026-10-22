@@ -392,19 +392,19 @@ Gmaj9    D4  5    3-x-4-4-3-x       (shell - 3rd & 7th, partial -
                                     3 voices, the most this palette offers -
                                     sounding: F# 7, B 3, D 5) (bass: G2, anchor)
 Gmaj9    D4  5    3-x-x-x-3-x       (melody repeated - single note) (bass: G2, held)
-Gmaj9    D4  5    2-x-x-x-3-x       (melody repeated - single note) (bass: F#2, connect)
+Gmaj9    D4  5    2-x-x-x-x-x       (the shape above is held) (bass: F#2, connect)
 Gmaj9/F# D4  5    x-x-4-4-3-x       (shell - 3rd & 7th, partial -
                                     3 voices, the most this palette offers -
                                     sounding: F# 7, B 3, D 5) (bass: F#2, held)
 ```
 
-Expect **more steps than the melody had** — four here for three notes, because the bass grid is finer than the melody's. A step marked `bass_only=True` is the thumb alone: the previous shape is held and the melody is not re-attacked.
+Expect **more steps than the melody had** — four here for three notes, because the bass grid is finer than the melody's. A step marked `bass_only=True` is the thumb alone: the previous shape is held, and nothing above the thumb is struck — not the chord, and not the melody. That is what makes a **tied** melody stay one note under a walking line: the tune of "But Not For Me" ties across half-beats, and with `--bass-on 1,2,1and,2and` those half-beats are thumb attacks under a shape nobody re-plucks. A note the tune genuinely **re-articulates** is a different step and says so (`melody repeated - single note`: soprano alone, inner voices held).
 
 **The thumb rings until the next attack.** `(bass: G2, held)` is a note **sounding and not plucked**: it was struck on beat 1 and is still ringing under the melody at 1.5. The one-line tab draws a mute on that string — the tab answers "what is plucked" — while the staff leaves the cell empty and the MusicXML ties the pitch inside the chord, so all four renderers say the same thing about one note. The ring ends at the next attack, the bar line, a rest, or a shape the hand cannot hold it under.
 
-Each bass note says its purpose in `step.bass_role`: `anchor` (the chord's root where the line marks the bar), `connect` (a passing note between chords), `approach` (a semitone from the next root), `pedal` (a root on a position that is not the bar's first), `enclosure`, `hold` (a repeat). The thumb is placed against the **shape the hand holds**, not the melody: adjacent bass strings are five semitones apart, so "prefer the lowest string" and "stay where the hand is" are in permanent opposition, and placement takes the fret nearest the upper voicing.
+Each bass note says its purpose in `step.bass_role`: `anchor` (the chord's root where the line marks the bar), `connect` (a passing note between chords), `approach` (a semitone from the next root), `pedal` (a root on a position that is not the bar's first), `enclosure`, `hold` (a repeat). The thumb is placed against the **shape the hand holds**, not the melody: adjacent bass strings are five semitones apart, so "prefer the lowest string" and "stay where the hand is" are in permanent opposition, and placement takes the fret nearest the upper voicing — within the hand's reach. When the ranking's first shape cannot reach the requested note at all, the **harmony moves** to one that can, so the note sounds instead of going missing.
 
-A step whose bass note is unplayable keeps its upper voicing and says so rather than writing unplayable tab (`no playable bass note for bass ... - no free string below the melody, no octave of that pitch below the shape, or the hand would need a fifth fret`). The commonest case is the middle one; counts over the committed heads are in [docs/open-issues.md](docs/open-issues.md) item 2.
+A step whose bass note cannot be played keeps its upper voicing and says so rather than writing unplayable tab (`no playable bass note for bass ... - no free string below the melody, no octave of that pitch below the shape, the hand would need a fifth fret, or the reach is wider than five frets`). **The chord moves first**: a requested note the shape cannot reach is played by re-voicing the chord where the thumb *can* reach it, and the line says so (`placed to leave room for the requested bass note`). Dropping the note is the last resort, for the slots where no shape can carry it; counts over the committed heads are in [docs/open-issues.md](docs/open-issues.md) item 2.
 
 ## Who plays what: `--no-melody` and the two layer flags
 

@@ -218,10 +218,16 @@ class TestWalkingBassRendering(unittest.TestCase):
         """
         The role is printed because the thumb is no longer uniformly chord tones, so a
         reader counting strings would wonder why the bass is not playing the chord.
+
+        The connect note on the fill is `E2`, not `E3`: the hand is at the open position
+        there, and `E3` is the low E at fret 12 - twelve frets from the fingers, which no
+        hand reaches (`fingers.MAX_HAND_SPAN`). The line takes the octave it can play, and
+        the pitch class is the same one the walk asked for.
         """
         rendered = format_progression(self.steps)
         self.assertIn("(bass: F3, anchor)", rendered)
-        self.assertIn("(bass: E3, connect)", rendered)
+        self.assertIn("(bass: E2, connect)", rendered)
+        self.assertNotIn("(bass: E3, connect)", rendered)
 
     def test_the_bass_annotates_a_partial_shell_as_well_as_a_plain_one(self):
         """

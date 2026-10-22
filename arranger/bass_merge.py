@@ -7,6 +7,13 @@ construction. Three independent failures are all handled the same way - the step
 survives and the bass is named, which is why `bass_refused` carries the wanted pitch
 class rather than a flag.
 
+`bass_placement` is the placement itself, without the bookkeeping, because selection asks
+it **before** choosing: a candidate a requested bass note cannot sound under is one the
+routes leave out of the palette, so the harmony makes room for the line instead of dropping
+the note. That question is a narrowing of the palette rather than a cost criterion, which
+is what keeps the two facts - "which shape is best" and "where the thumb goes" - in the
+order this module states.
+
 `carry_bass` is the other half of the same decision, and also after selection: a thumb
 note is a **line**, so the note a step strikes keeps sounding under the steps that
 follow it - until the next attack, the bar line, a rest, or a shape the hand cannot
@@ -27,7 +34,7 @@ from typing import Container, List, Optional, Sequence, Tuple
 from musthe import Note
 
 from . import chords as _chords
-from .bass_place import BassNote, held_shape, place_bass, previous_bass
+from .bass_place import BassNote, bass_placement
 from .fingers import can_fret
 from .tuning import PITCH_CLASS_NAMES, ArrangementStep
 
@@ -46,16 +53,18 @@ def attach_bass(
     - no candidate string survives `place_bass`'s filters, so there is nowhere to
       put the thumb. `step.bass_refused` records the wanted pitch class and
       `annotation._bass_refusal_clause` phrases it, because a reader cannot tell the
-      three ways that happens apart from the outside and the common one is not the
+      ways that happens apart from the outside and the common one is not the
       intuitive one: no free string below the melody, **no octave of the wanted
-      pitch below the shape's own lowest note**, or a fifth fret for four fingers.
-      The counts are in `docs/open-issues.md` item 2, and the field carries the
-      wanted pitch rather than the cause, so a reader who needs the split has to
-      re-measure it there. Same argument as the neck window being a penalty rather than
-      a filter: losing a step is worse than losing its bass.
-    - a candidate string exists, but every one of them would need a **fifth fret**
-      from a hand already holding the shape - the `bass_only` case. A bass note a player cannot finger is not a
-      bass note, so it is refused rather than written.
+      pitch below the shape's own lowest note**, a fifth fret for four fingers, or a
+      reach wider than the hand's five frets. The counts are in
+      `docs/open-issues.md` item 2, and the field carries the wanted pitch rather
+      than the cause, so a reader who needs the split has to re-measure it there.
+      Same argument as the neck window being a penalty rather than a filter: losing a
+      step is worse than losing its bass.
+    - a candidate string exists, but every one of them would need a **fifth fret** from
+      a hand already holding the shape, or would leave that hand reaching more than five
+      frets - the `bass_only` case. A bass note a player cannot finger is not a bass
+      note, so it is refused rather than written.
     - a step that already carries a bass, which cannot happen while the union is
       one walked note per slot, but is checked rather than assumed.
 
@@ -69,21 +78,15 @@ def attach_bass(
     if step.bass is not None:
         return
     # A `bass_only` step re-states nothing above the thumb, so the shape the hand is
-    # holding is the last **struck** one, not this step's own thinned vector.
-    # Measured against the thinned vector the thumb is placed on a string the hand
-    # is already fingering and ranked from a fret the hand is not at - the
-    # unplayable bar. For any other step the current
-    # voicing *is* the shape, so `held` must not narrow it.
-    held = (
-        held_shape(arrangements)
-        if step.bass_only and not step.melody_only
-        else None
-    )
-    placed = place_bass(
+    # holding is the last **struck** one, not this step's own thinned vector. Measured
+    # against the thinned vector the thumb is placed on a string the hand is already
+    # fingering and ranked from a fret the hand is not at - the unplayable bar. For any
+    # other step the current voicing *is* the shape, so `held` must not narrow it.
+    placed = bass_placement(
         step.voicing,
-        note.pitch_class,
-        previous_bass=previous_bass(arrangements),
-        held=held,
+        note,
+        arrangements,
+        bass_only=step.bass_only and not step.melody_only,
     )
     if placed is None:
         # The pitch class rather than a flag: the tab shows no thumb, so a reader

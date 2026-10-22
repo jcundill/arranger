@@ -10,17 +10,26 @@ composes already is.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Container, List, Optional, Tuple
+
+from musthe import Note
 
 from . import grips as _grips
 from .bass import Slot
 from .bass_merge import attach_bass, next_resolution_melody
 from .bass_place import is_shape_held
-from .chords import ChordParser, resolve_substitute_harmony
+from .chords import ChordParser, normalised_harmony, resolve_substitute_harmony
 from .context import SlotContext
 from .cost import SelectionCriteria
-from .decisions import is_bass_only, select_step_voicing
+from .decisions import (
+    dropped_for_the_bass,
+    is_bass_only,
+    leaving_room_for_the_bass,
+    melody_is_ringing,
+    palette_facts,
+    select_step_voicing,
+)
 from .harmony import HARMONY_SHELL_ROOT
 from .melody_alone import melody_alone_shape, sounding_melody
 from .parts import PART_BASS
@@ -165,7 +174,18 @@ def texture_fill_step(
             duration=context.timing.duration,
             role=context.state.role,
             metric_weight=context.state.weight,
-            bass_only=is_bass_only(slot.bass_only, context.state.role),
+            # The tune alone under the thumb, on a beat the walk invented: the note is the
+            # one already sounding, so nothing above the thumb is struck here either. A
+            # position the chord's rhythm *named* is a fresh attack, and takes the answer
+            # `_emit_step` gives it.
+            bass_only=is_bass_only(
+                slot.bass_only,
+                chord_attack=context.state.chord_attack,
+                holds=melody_is_ringing(
+                    arrangements, Note(sounding).midi_note(),
+                    normalised_harmony(context.harmony.name),
+                ),
+            ),
         )
         attach_bass(fill, slot.bass, arrangements)
         arrangements.append(fill)
@@ -206,6 +226,16 @@ def no_chord_step(
     sounding, written_original = sounding_melody(
         solo_voicing, context.harmony.note_str
     )
+    # The note already sounding, on a beat the walk invented: nothing above the thumb is
+    # struck. Asked before the append so this step is not part of what it reads.
+    bass_only = is_bass_only(
+        slot.bass_only,
+        chord_attack=context.state.chord_attack,
+        holds=melody_is_ringing(
+            arrangements, Note(sounding).midi_note(),
+            normalised_harmony(context.harmony.name),
+        ),
+    )
     arrangements.append(ArrangementStep(
         chord=context.harmony.name,
         melody=sounding,
@@ -225,12 +255,12 @@ def no_chord_step(
         duration=context.timing.duration,
         role=context.state.role,
         metric_weight=context.state.weight,
+        bass_only=bass_only,
     ))
     # An `NC` bar is still a place the thumb walks: the walk reads the last
     # known harmony (or skips), and the melody-alone shape leaves every bass
     # string free. Attaching it here rather than only on harmonised steps is
     # what keeps a bar of no-chord melody from being a hole in the walk.
-    arrangements[-1].bass_only = is_bass_only(slot.bass_only, context.state.role)
     attach_bass(arrangements[-1], slot.bass, arrangements)
 
 
@@ -351,45 +381,66 @@ def _comping_choice(
     candidates: List[Voicing],
     context: SlotContext,
     harmony: _CompingHarmony,
-) -> Voicing:
-    """The comping shape the selector prefers, or the generator's first when it abstains.
+    slot: Slot,
+) -> Tuple[Voicing, Palette]:
+    """The comping shape the selector prefers, and the palette it chose from.
 
     The root is read once for the bass-function tie-break. `get_comping_voicings` has
     already refused to generate anything without one, so by this point it is never
     None - the check is read from the same place the generator read it rather than
     re-derived, so the two cannot disagree.
+
+    **The requested bass note narrows the palette here**, exactly as it does on the
+    melody-bearing route: a comping shape the thumb cannot reach that beat's note under is
+    not offered, so the chord part moves instead of the line losing a note. The palette
+    that comes back therefore records the shape the ranking preferred *before* the narrow
+    (`Palette.dropped_for_bass`) - a comping step states its voices through
+    `_comping_clause`, but *why this shape* is a palette fact like any other.
     """
     _canonical, root_pc, _tones = _grips.chord_context(harmony.chord_type, harmony.name)
     # The last *sounding* shape: a silent position between here and the previous chord
     # is a hole in the tab, not a shape the hand held - see `last_sounding_step`.
     prev_sounding = last_sounding_step(arrangements)
-    return select_step_voicing(
-        candidates,
-        SelectionCriteria(
-            previous=prev_sounding.voicing if prev_sounding is not None else None,
-            fret_min=context.fret_min,
-            fret_max=context.fret_max,
-            # The tones the written chord allows. Passed even though the generator
-            # already filters on them: `voicing_cost` counts wrong notes itself, and a
-            # generator that could be wrong should not be the only thing standing
-            # between a chord symbol and a note that is not in it.
-            allowed_tones=ChordParser.get_chord_tones(harmony.chord_type, harmony.name),
-            # The root, which enables the bass-function tie-break. None for a chord
-            # whose name will not parse, which leaves that criterion unasked rather
-            # than guessing a bass - the same rule the ordinary route follows.
-            root_pc=root_pc,
-            # No `melody_pc`: there is no melody on the guitar for the wrong-note count
-            # to excuse, which is what lets a comping shape be held to the chord's full
-            # tone set.
-            melody_pc=None,
-            # The corpus's slash bass, honoured before selection rather than after,
-            # exactly as on the ordinary route.
-            bass_pc=(
-                context.bass_pcs.get(context.identity.index) if context.bass_pcs else None
-            ),
-            slash_bass_cost=context.slash_bass_cost_for,
+    criteria = SelectionCriteria(
+        previous=prev_sounding.voicing if prev_sounding is not None else None,
+        fret_min=context.fret_min,
+        fret_max=context.fret_max,
+        # The tones the written chord allows. Passed even though the generator
+        # already filters on them: `voicing_cost` counts wrong notes itself, and a
+        # generator that could be wrong should not be the only thing standing
+        # between a chord symbol and a note that is not in it.
+        allowed_tones=ChordParser.get_chord_tones(harmony.chord_type, harmony.name),
+        # The root, which enables the bass-function tie-break. None for a chord
+        # whose name will not parse, which leaves that criterion unasked rather
+        # than guessing a bass - the same rule the ordinary route follows.
+        root_pc=root_pc,
+        # No `melody_pc`: there is no melody on the guitar for the wrong-note count
+        # to excuse, which is what lets a comping shape be held to the chord's full
+        # tone set.
+        melody_pc=None,
+        # The corpus's slash bass, honoured before selection rather than after,
+        # exactly as on the ordinary route.
+        bass_pc=(
+            context.bass_pcs.get(context.identity.index) if context.bass_pcs else None
         ),
-    ) or candidates[0]
+        slash_bass_cost=context.slash_bass_cost_for,
+    )
+    chosen = select_step_voicing(candidates, criteria) or candidates[0]
+    offered = candidates
+    candidates = leaving_room_for_the_bass(
+        offered, slot.bass, arrangements,
+        # Never a hold here - see `_emit_comping_step` for why - so the thumb is measured
+        # against each candidate rather than against a shape already down.
+        bass_only=is_bass_only(
+            slot.bass_only, chord_attack=context.state.chord_attack, holds=False
+        ),
+    )
+    chosen = select_step_voicing(candidates, criteria) or candidates[0]
+    palette = palette_facts(candidates, chosen, criteria)
+    dropped = dropped_for_the_bass(offered, candidates, chosen, criteria)
+    if dropped is not None:
+        palette = replace(palette, dropped_for_bass=dropped)
+    return chosen, palette
 
 
 def _emit_comping_step(
@@ -398,11 +449,14 @@ def _emit_comping_step(
     context: SlotContext,
     harmony: _CompingHarmony,
     chosen: Voicing,
+    palette: Palette,
 ) -> None:
     """Append the comping shape, then merge the thumb into it.
 
     `chord` stays the **written** symbol; `harmonized_as` and `strategy` say what the
-    substitution actually stated under the horn's line (§9.3 step C).
+    substitution actually stated under the horn's line (§9.3 step C). The palette is what
+    the shape was chosen from: a comping step's voice count is `_comping_clause`'s to name,
+    and the palette is here for the choice the request's bass note forced.
     """
     arrangements.append(ArrangementStep(
         chord=context.harmony.name,
@@ -410,6 +464,7 @@ def _emit_comping_step(
         # sound it - `melody_voiced=False` is what says so.
         melody=context.harmony.note_str,
         voicing=chosen,
+        palette=palette,
         # A comping shape is three voices by construction, so `partial`
         # is always true and is not worth re-deriving per step.
         partial=True,
@@ -418,7 +473,13 @@ def _emit_comping_step(
         duration=context.timing.duration,
         role=context.state.role,
         metric_weight=context.state.weight,
-        bass_only=is_bass_only(slot.bass_only, context.state.role),
+        # **Nothing is ever held on this route**: a comping step exists to state its chord,
+        # and a slot the walk invented with the chord part on is one of those - the chord
+        # the tune is on has to be heard there. There is also no melody on the guitar for a
+        # hold to leave ringing. So the second fact a hold needs cannot be had here.
+        bass_only=is_bass_only(
+            slot.bass_only, chord_attack=context.state.chord_attack, holds=False
+        ),
         melody_voiced=False,
         # The rhythm asked for this chord, so it is struck even where the shape is the
         # one already ringing: a comp on `--chord-on every-beat` is four attacks a bar,
@@ -571,6 +632,10 @@ def comping_step(
         # strategy finds nothing. The guitar plays the tune here, which is a worse
         # answer than a thin one and a better one than silence.
         return False
-    chosen = _comping_choice(arrangements, candidates, context, harmony)
-    _emit_comping_step(arrangements, slot, context, harmony, chosen)
+    # The requested bass note is part of the request here too: a comping shape the thumb
+    # cannot reach that beat's note under is not offered, so the chord part moves instead
+    # of the line losing a note. A narrowing of what the axis offered, never a widening -
+    # see `decisions.leaving_room_for_the_bass`.
+    chosen, palette = _comping_choice(arrangements, candidates, context, harmony, slot)
+    _emit_comping_step(arrangements, slot, context, harmony, chosen, palette)
     return True

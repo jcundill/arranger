@@ -1081,6 +1081,49 @@ cells are otherwise empty, so without the tint a repeated note reads as a gap in
 music rather than as a deliberate single note. The ASCII staff needed no equivalent,
 because a gap in a fixed-width cell is already legible.
 
+### The other hold: a beat the thumb invented
+
+Under a thumb line the bass grid is finer than the melody's, so a bar whose tune is a
+whole note still gets a thumb note on each of its beats. The steps at those invented
+positions are marked **`bass_only`**, and the flag means what it says: nothing above the
+thumb is struck, and the shape in the tab is the previous step's, still ringing.
+
+`decisions.is_bass_only` is the one owner of that answer, and it reads **two facts**, not
+the step's role:
+
+- **the chord's rhythm did not name the position** (`chord_attack`). A position the
+  request named — `--chord-on every-beat`, a stab under a held note — is a fresh attack
+  whatever the shape is, so a comp of four attacks a bar stays four attacks;
+- **nothing above the thumb has changed** (`decisions.melody_is_ringing`): the harmony is
+  the one already ringing and the melody is the note still sounding. A note repeating
+  across a *chord change* is not a hold — printing the new name over the old voices would
+  claim a harmony that is not sounding — so such a step is voiced afresh and struck.
+
+The role is deliberately not consulted. A slot the walk invented on a strong beat is a
+`target`, and reading that as "a target states its harmony, so it cannot be a hold"
+silenced nine downbeats of "But Not For Me" whose harmony had not changed at all; the
+same reading then re-plucked every tied melody note in the tab, the score and the GP5
+file on the beats the walk had invented. A `bass_only` step also **clears `repeated`**:
+the two flags name opposite halves of one column, and the renderers take their union.
+
+The four renderers agree by construction, and each says "nothing above the thumb is
+struck" in its own notation: the one-line tab and the staff draw the thumb and mute the
+rest, `tabgp` writes the thumb as a new note and the ringing shape as ties, and `tabxml`
+re-states those pitches and ties them — a score has no other way to say *still sounding*.
+
+**One measured caveat, stated rather than left to be discovered.** The shape a held step
+records (`step.voicing`) is the one the selector preferred; the shape that *sounds* is the
+one already down. They are the same shape in all but a handful of cases — over the
+committed heads under `--bass-on 1,2,1and,2and`, **3 of its 293** held shapes differ in
+*what sounds* (the same chord, the same melody, another voicing of it); under
+`--bass-on every-beat`, **0 of 112**. Another **40** and **14** move a voice to a different
+string with the same pitches, which no renderer can show. A held step whose recorded
+voicing is the thumb alone (`grip == "bass"`, a comping step's hold — 8 in the melody row)
+is in neither count: it has no upper shape to compare. What a hold means is that the hand
+does not move, so the ringing shape is what the tab, the score and the GP5 file draw, and
+the annotation says `the shape above is held` rather than naming a voice nobody plays. The
+selector's preference is simply not acted on there, exactly as a repeated melody's is not.
+
 ## High melodies move down an octave
 
 The user requirement was "anything over the 13th fret, play the soprano on the B
@@ -1455,10 +1498,24 @@ sets are built on. A gap crossed by the **middle or ring** finger is a real reac
 `grips.finger_skip_count` is that metric, and the string tables are held to it by test
 rather than by the selector - the four `drop24` sets that carried a skip were removed.
 
-The left hand's budget is **four frets**, and unlike the four-string rule it is stated over a
-*step*: `fingers.can_fret` is the check and `bass_place.place_bass` is its only engine caller, so
-a bass note that would need a fifth fret is refused there rather than inside a shape.
-`AGENTS.md`'s playability invariants hold both.
+The left hand's budget is **four fingers and five frets**, and unlike the four-string rule it is
+stated over a *step* rather than a shape: `fingers.can_fret` is the check, and it refuses both a
+fifth fretted position (`fingers_needed`) and a reach wider than `fingers.MAX_HAND_SPAN`. Its
+callers are `bass_place.place_bass`, which asks before it picks a string, and
+`bass_merge._takes_the_ring`, which asks before it lets a struck note keep ringing under the next
+shape. So a bass note that would need a fifth fret, or that would leave the hand spanning more
+than five, is refused there rather than inside a shape - and `AGENTS.md`'s playability invariants
+hold both.
+
+**The note is not only refused; the shape is asked to make room.** A requested grid bass note is
+part of the request, so `decisions.leaving_room_for_the_bass` narrows the palette to the
+candidates `bass_placement` can put the note under, and the same cost tuple ranks what is left.
+That is a **narrowing and never a criterion**: no candidate carries a thumb, `cost` still sits
+below `bass_place` in the DAG and cannot ask the question, and a palette where nothing survives is
+returned unchanged so the step keeps its shape and `bass_refused` names the note. The shape that
+the ranking preferred before the narrow is recorded on `Palette.dropped_for_bass`, because a
+reader counting strings otherwise cannot tell a shape that moved for the bass from one that was
+simply ranked lower.
 
 | axis | owns | values |
 |---|---|---|

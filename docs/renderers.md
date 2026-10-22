@@ -125,6 +125,7 @@ owner.
 | the chord is **struck again** though the shape is unchanged | `ArrangementStep.chord_attack` | the column is a strike and the shape is drawn again |
 | the thumb has **moved** under a held shape | `_moved_thumb` compares `(bass_midi, bass_string)` | the hold column draws **the bass string only** |
 | the thumb is **sounding and not plucked** | `ArrangementStep.bass_held` | the tab mutes that string, the staff leaves it blank, the score ties it, GP5 writes a tie note |
+| the step exists for the thumb: **nothing above it is struck** | `ArrangementStep.bass_only` | the tab and the staff draw the bass string only; the score re-states the ringing pitches **as ties**; GP5 writes the thumb as a new note and those pitches as ties |
 
 **The first row cannot decide on its own, and the second is why.** A comp on
 `--chord-on every-beat` states the *same shape* on every beat, and so does a slot the
@@ -136,6 +137,16 @@ rhythm is the fact that separates the two, and `slot_plan._chord_attacks` is its
 a position the request **named** - a `--chord-on` position, a stab under a held note - or a
 slot the chord layer invented where the tune is silent is a new attack; a slot the
 eighth-note skeleton invented under a sustaining note is a hold, and stays one.
+
+**The last row is the one the score cannot express otherwise.** GP5 has no way to write a
+string that sounds without being plucked, so a held shape is written as `NoteType.tie`
+notes; MusicXML does, and it is still a **tie** rather than a fresh note - a note written
+again is a note re-attacked. Both writers therefore re-state the *ringing* pitches and tie
+them (`tabgp._sounding_frets` draws the thumb, `tabxml._sounding` takes the pitches the part
+has already written), and `decisions.is_bass_only` is what says when: a position the
+chord's rhythm did not name, over a harmony and a melody that are already sounding. Without
+that, a tied melody under a walking line was re-plucked on every beat the walk invented, in
+the tab and in both files.
 
 
 **The hold comparison is of the upper voices**, and it has to be: a walking bass moves the

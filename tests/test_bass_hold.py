@@ -71,11 +71,30 @@ class TestTheRingEnds(unittest.TestCase):
         from arranger.bass_merge import carry_bass
 
         struck = _struck_bass()
-        following = make_step([-1, 3, 2, 0, 1, -1], bar=1, beat=2.0)
+        # A shape the hand can hold *with* the ringing note: three fingers, seven to
+        # nine, so the low E at fret 8 joins frets it can reach. A shape at frets 1-3
+        # would put the thumb seven frets under the hand, which `fingers.can_fret`
+        # refuses (see `TestTheRingEnds.test_a_shape_beyond_the_hand_ends_it`).
+        following = make_step([-1, 9, 8, 0, 7, -1], bar=1, beat=2.0)
         carry_bass([struck, following])
         self.assertTrue(following.bass_held)
         self.assertEqual(following.voicing.frets[0], 8)
         self.assertEqual(following.bass, 36)
+
+    def test_a_shape_beyond_the_hand_ends_it(self):
+        """The reach, not just the finger count: a note the hand cannot get to is not held.
+
+        This is the pair the reach bound closed. Fret 8 on the low E with the hand on
+        frets 1-3 is four distinct frets and seven of reach - a shape the budget allows
+        and no hand can hold - so the note stops ringing rather than being written.
+        """
+        from arranger.bass_merge import carry_bass
+
+        struck = _struck_bass()
+        following = make_step([-1, 3, 2, 0, 1, -1], bar=1, beat=2.0)
+        carry_bass([struck, following])
+        self.assertFalse(following.bass_held)
+        self.assertIsNone(following.bass)
 
     def test_a_shape_on_that_string_ends_it(self):
         """The hand cannot sound two notes on one string."""

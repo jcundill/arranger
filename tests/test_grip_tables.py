@@ -24,6 +24,7 @@ from arranger import (
     Voicing,
     supported_string_sets,
 )
+from arranger.fingers import MAX_HAND_SPAN
 from arranger.grip_tables import (
     THUMB_REACH_STRINGS,
     finger_skip_count,
@@ -118,6 +119,16 @@ class TestStringSetTable(unittest.TestCase):
         )
         self.assertEqual(GRIP_MAX_SPAN["duo"], 4)
         self.assertEqual(GRIP_MAX_SPAN["interval"], 4)
+        # And the whole table sits inside the hand's own reach, which is the bound a
+        # *merged* step is held to (`fingers.can_fret`). A family allowed to span more
+        # than a hand could never be played - the rule would be stricter than the
+        # instrument - so the two numbers are asserted against each other rather than
+        # against a copy of 5.
+        for family, span in GRIP_MAX_SPAN.items():
+            self.assertLessEqual(
+                span, MAX_HAND_SPAN,
+                f"{family}'s span cap is wider than the hand's reach",
+            )
 
     def test_every_family_is_placed_exactly_one_way(self):
         """

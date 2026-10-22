@@ -190,7 +190,12 @@ def _sounding_pairs(step: ArrangementStep) -> List[str]:
     witness catch a clause that speaks where it should not as well as one that stays quiet
     where it should speak.
     """
-    if not step.melody_voiced or step.repeated or step.chord_unvoiced:
+    if (
+        not step.melody_voiced
+        or step.repeated
+        or step.bass_only
+        or step.chord_unvoiced
+    ):
         return []
     harmony = step.harmonized_as or step.chord
     pitches = step.voicing.upper_midi_notes()
@@ -334,6 +339,14 @@ WITNESSES: List[Witness] = [
             step.palette is not None
             and step.palette.available > len(step.voicing.upper_midi_notes())
             and not step.repeated
+            # A held step states no count of its own - the shape in the tab is the one
+            # already down, explained where it was chosen. The hold's rule.
+            and not step.bass_only
+            # A comping step records a palette for the *choice*, not for a count: its
+            # arity is what the selection asked for and `_comping_clause` names the
+            # voices it states. `annotation._shape_clause` is silent there by the same
+            # rule as the two routes below.
+            and step.melody_voiced
         ),
         lambda step: "voices" in _line(step) or "melody alone" in _line(step),
     ),
@@ -344,13 +357,23 @@ WITNESSES: List[Witness] = [
             and step.palette.alternative is None
             and _thin(step)
             and not step.repeated
-            # The routes whose own clause states the count - an `NC` bar and a melody no
-            # shape could voice - keep it to themselves, the way a hold does. See
-            # `annotation._shape_clause`: the *window* fact they carry is still witnessed.
+            # As above: a hold's shape was explained where it was chosen.
+            and not step.bass_only
+            # The routes whose own clause states the count - an `NC` bar, a melody no
+            # shape could voice and a comping shape - keep it to themselves, the way a
+            # hold does. See `annotation._shape_clause`: the *window* fact they carry is
+            # still witnessed.
             and not step.melody_only
             and not step.chord_unvoiced
+            and step.melody_voiced
         ),
         lambda step: "palette offers" in _line(step),
+    ),
+    (
+        "the shape is not the ranking's first choice, because the requested bass note "
+        "could not sound under it",
+        lambda step: step.palette is not None and step.palette.dropped_for_bass is not None,
+        lambda step: "leave room for the requested bass note" in _line(step),
     ),
     (
         "a four-voice shape leaves a chord tone out, which the frets cannot show",
@@ -427,11 +450,16 @@ WITNESSES: List[Witness] = [
             and step.palette.alternative is None
             and _thin(step)
             and not step.repeated
+            # A held step states no count of its own: the shape in the tab is the one
+            # already down, explained where it was chosen - the hold's rule.
+            and not step.bass_only
             # As above: an `NC` fill-role slot states its own count ("no chord - melody
-            # alone"), and it is the no-harmony fact that explains the thinness, not the
-            # texture. The palette's window fact is still witnessed.
+            # alone"), a comping shape's comes from `_comping_clause`, and it is the
+            # no-harmony or the arity that explains the thinness, not the texture. The
+            # palette's window fact is still witnessed.
             and not step.melody_only
             and not step.chord_unvoiced
+            and step.melody_voiced
         ),
         lambda step: "a fill's" in _line(step),
     ),
@@ -678,7 +706,12 @@ class TestNewClausesMustBeRegistered(unittest.TestCase):
         known = {
             "_bass_alone_clause",
             "_bass_refusal_clause",
+            "_bass_room_clause",
             "_comping_clause",
+            # The step's own statement when it states a degree: it is read where no other
+            # branch has claimed the line, so it is witnessed by the degree column rather
+            # than by a sentence of its own.
+            "_degree_clause",
             "_held_clause",
             "_omission_clause",
             "_shape_clause",

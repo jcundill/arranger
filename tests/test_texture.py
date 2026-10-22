@@ -1560,16 +1560,17 @@ class TestARepeatedMelodyHoldsItsString(unittest.TestCase):
         Every renderer assumes *a `repeated` step's melody is on the string the previous
         step's melody is on*, and a rule stated over a generated `Voicing` says nothing
         about the step the engine assembles afterwards. So it is swept: the committed
-        heads over five arity/bass combinations. The thumb rows carry no holds at all,
-        because a fill under a thumb is `bass_only` and nothing there is marked
-        `repeated`; they are swept so that a change which makes one is caught rather
-        than assumed away. The counts are in
-        [docs/open-issues.md](../docs/open-issues.md) item 2.
-
-        The arrangements are `tests.support.arranged`'s: this sweep and the four-fret one
-        in `test_walking_bass` ask for the same heads under the same textures. The heads
+        heads over five arity/bass combinations. The arrangements are
+        `tests.support.arranged`'s: this sweep and the four-fret one in
+        `test_walking_bass` ask for the same heads under the same textures. The heads
         are `tests.support.sweep_head_paths()`: the string a hold keeps is a rule about the
         metre and the notation, so one head per metre answers it.
+
+        **The thumb rows hold through `bass_only`, not `repeated`.** A slot the walk
+        invented strips nothing above the thumb (`decisions.is_bass_only`), so it is not
+        a re-articulation and the string it would have re-struck is not asked about -
+        which is why both kinds are counted below: a sweep that saw only `repeated` steps
+        would report the thumb rows as exercising nothing at all.
         """
         from tests.support import arranged, sweep_head_paths
 
@@ -1581,11 +1582,14 @@ class TestARepeatedMelodyHoldsItsString(unittest.TestCase):
             ("targets", "root"),
             ("chord1", BASS_STYLE_WALK),
         )
-        checked = 0
+        checked = held = 0
         for path in paths:
             for texture, bass in configs:
                 steps, _head, _notes = arranged(path, texture=texture, bass=bass)
                 for previous, step in zip(steps, steps[1:]):
+                    if step.bass_only:
+                        held += 1
+                        continue
                     if not step.repeated:
                         continue
                     checked += 1
@@ -1596,8 +1600,10 @@ class TestARepeatedMelodyHoldsItsString(unittest.TestCase):
                         f"{step.melody} re-struck on another string ({step.tab_line()})",
                     )
         # The corpus is deliberately shorter than the retired transcriptions, so
-        # the premise is that the hold is exercised, not an old population count.
-        self.assertGreater(checked, 20, "the hold is not exercised at all")
+        # the premise is that both kinds of hold are exercised, not an old
+        # population count.
+        self.assertGreater(checked, 5, "a re-articulated hold is not exercised")
+        self.assertGreater(held, 20, "a thumb-only hold is not exercised")
 
 
 if __name__ == "__main__":  # pragma: no cover

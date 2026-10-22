@@ -2,8 +2,10 @@
 
 The line itself is `bass`'s business - it runs harmony-only, before any upper voicing
 exists. This module answers the physical half: `place_bass` resolves the octave and the
-string together against the hand holding the shape, after selection, and `bass_cost`
-ranks the line's candidates over the `BASS_ROLE_*` vocabulary.
+string together against the hand holding the shape, after selection, `bass_placement` asks
+the same question of a candidate **before** selection (so the harmony can leave room for a
+requested note), and `bass_cost` ranks the line's candidates over the `BASS_ROLE_*`
+vocabulary.
 """
 
 from __future__ import annotations
@@ -174,9 +176,9 @@ def held_shape(
     need to know what the hand is holding rather than what the current step carries.
 
     A `repeated` step is excluded for the same reason, and so is a **target**: the flag
-    says what the left hand is doing, and a target re-states its harmony rather than
-    holding a shape, so it never carries `bass_only` at all
-    (`decisions.is_bass_only`).
+    says what the left hand is doing, and a target carrying `bass_only` is one whose
+    harmony did not change - the hold is decided by `decisions.is_bass_only` from the
+    chord's rhythm and the shape still ringing, never from the role.
 
     The thumb's string comes back too, because that note is **not** part of the shape
     the fingers are holding - see `place_bass`. Identifying it by string rather than by
@@ -350,6 +352,38 @@ def _best_thumb_fret(
             if best is None or candidate[0] < best[0]:
                 best = candidate
     return None if best is None else best[1]
+def bass_placement(
+    upper: Voicing,
+    note: Optional[BassNote],
+    arrangements: List[ArrangementStep],
+    *,
+    bass_only: bool,
+) -> Optional[Tuple[int, int, int]]:
+    """Where `note` goes under `upper`, or None when it cannot be placed at all.
+
+    One function because two questions ask it and must not be allowed to disagree:
+    `bass_merge.attach_bass` writes the note down with it, and the two selecting routes
+    ask it **before** selection whether a candidate leaves room for the note. The second
+    question is what makes the harmony honour a requested grid bass note instead of
+    dropping it, and a second copy of this call would let a filter accept a placement the
+    merge then refuses.
+
+    `bass_only` says the hand is holding a shape this step does not strike, so the
+    placement is measured against `held_shape` rather than against `upper`: the thumb then
+    joins frets the hand is already fingering, may sound *below* a shape it does not
+    re-state, and is counted as a fifth fret for four fingers rather than as a note of its
+    own. See `place_bass`.
+    """
+    if note is None:
+        return None
+    return place_bass(
+        upper,
+        note.pitch_class,
+        previous_bass=previous_bass(arrangements),
+        held=held_shape(arrangements) if bass_only else None,
+    )
+
+
 def place_bass(
     upper: Voicing,
     pitch_class: int,

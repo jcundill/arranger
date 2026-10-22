@@ -157,7 +157,10 @@ def _pitch(midi: int) -> Tuple[str, int]:
     return PITCH_CLASS_NAMES[midi % 12], midi // 12 - 1
 
 
-def _sounding(step: ArrangementStep) -> List[int]:
+def _sounding(
+    step: ArrangementStep,
+    ringing: Sequence[int] = (),
+) -> List[int]:
     """
     The pitches a step actually sounds, as MIDI numbers, lowest string first.
 
@@ -165,15 +168,37 @@ def _sounding(step: ArrangementStep) -> List[int]:
     leave the inner voices blank, because the held shape belongs to the chord the
     hold began on and the player is not re-fingering it. Honoured here rather than
     taken from the full voicing, so the score says the same thing the tab says.
+
+    A **`bass_only`** step is the mirror image: the thumb alone is new, and the
+    voices above it are the pitches **already ringing** (`ringing`, the notes this
+    part has written and not yet stopped). They are returned so they can be re-stated
+    and **tied** - a score has no way to say "still sounding" other than a tie, and
+    writing the step's own frets instead would re-attack the chord, and the melody
+    with it, on every beat the thumb line invents.
     """
     voicing = step.voicing
     soprano = voicing.soprano_string()
     strings = [index for index, fret in enumerate(voicing.frets) if fret >= 0]
     if step.repeated and soprano >= 0:
         strings = [soprano]
-    return [
+    pitches = [
         GuitarFretboard.fret_to_midi(index, voicing.frets[index]) for index in strings
     ]
+    if step.bass_only and ringing:
+        thumb = _thumb_pitch(step)
+        held = [pitch for pitch in ringing if pitch != thumb]
+        # The ringing voices, then the one note this step strikes.
+        return held + ([] if thumb is None else [thumb])
+    return pitches
+
+
+def _thumb_pitch(step: ArrangementStep) -> Optional[int]:
+    """The MIDI pitch this step's thumb strikes, or None when it strikes nothing."""
+    voicing = step.voicing
+    string = voicing.bass_string
+    if string is None or voicing.frets[string] < 0:
+        return None
+    return GuitarFretboard.fret_to_midi(string, voicing.frets[string])
 
 
 def _build_note(
@@ -218,8 +243,16 @@ def _build_note(
     if step is None:
         ringing.clear()
         return note.Rest(quarterLength=length)
+    held = list(ringing)
     continued = _continued_pitch(step, split)
-    sounding = _sounding(step)
+    if step.bass_only:
+        # Nothing above the thumb is struck: those voices are **still ringing**, so they
+        # are written again and tied, and the thumb is the one attack. Without this the
+        # score re-attacked the chord - and the melody with it - on every beat the thumb
+        # line invented, which is the fault the tab and the GP5 file were fixed for.
+        thumb = _thumb_pitch(step)
+        continued = frozenset(pitch for pitch in held if pitch != thumb)
+    sounding = _sounding(step, held)
     if not sounding:
         ringing.clear()
         return note.Rest(quarterLength=length)

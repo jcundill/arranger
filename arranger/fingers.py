@@ -5,11 +5,12 @@ implies, and the movement between two of them. It is built first because the que
 that remain about fingering are empirical (that document's §2.4 and §4.3) and can only be
 answered by code that exists.
 
-**Exactly one engine call reaches this module, and it is §4.3's left-hand half.**
-`can_fret` is the four-frets-for-four-fingers check, and `bass_place.place_bass` is its caller:
-on a `bass_only` step the thumb is merged into a shape the hand is still *holding*, so the
-fret it adds joins frets that are not this step's own. Nothing else in the engine reads
-this module - `voicing_cost` does not, `decisions` does not, and every renderer is
+**Two engine calls reach this module, and both are §4.3's left-hand half.** `can_fret`
+bounds a *merged* hand - a shape plus a thumb note that is not part of it - by the fingers
+and by the reach, and `bass_place.place_bass` and `bass_merge._takes_the_ring` are its two
+callers: the first before it picks a string under the shape the hand is holding, the second
+before it lets a struck note keep ringing under the next shape. Nothing else in the engine
+reads this module - `voicing_cost` does not, `decisions` does not, and every renderer is
 untouched. §5 step 3, whether a per-finger criterion earns a place in the cost tuple, is
 still open, and §4.2 is why that decision is not taken here.
 
@@ -39,12 +40,16 @@ document — §2.5 (which strings `p-i-m-a` pluck, and why the thumb-to-index ga
 a gap between the fingers is not) and §4.4 (the measurement, which left the engine alone) —
 and both are answered in `grips.py`, not here.
 
-Nothing here decides playability. `GRIP_MAX_SPAN` is still the span bound and
-`voicing_cost` is still the selection rule; this module answers the narrower question -
-*which* finger - and returns `None` rather than guessing when no assignment exists. The one
-shape it can refuse, five distinct frets, is not reachable from a generated grip at all: it
-is the *merged* walking-bass step of §4.3, which is why the refusal is a return value the
-check reads - `can_fret`, called from `bass_place.place_bass` - rather than an exception or a
+Nothing here decides playability of a *grip*. `GRIP_MAX_SPAN` is still the span bound a
+generated family is held to and `voicing_cost` is still the selection rule; this module
+answers the narrower question - *which* finger - and returns `None` rather than guessing
+when no assignment exists. What it does decide is whether a **step** is playable, because a
+step can be wider than any grip: `can_fret` bounds both the fingers and the hand's reach,
+and the two are independent refusals. A shape of five distinct frets over four strings is
+not a generated grip at all - it is the *merged* walking-bass step of §4.3 - and neither is
+a three-fret shape whose frets are eight apart, which is the same merged step seen from the
+other end. Both come back as a return value the check reads (`can_fret`, called from
+`bass_place.place_bass` and `bass_merge._takes_the_ring`) rather than as an exception or a
 silently crossed fingering.
 """
 
@@ -68,6 +73,11 @@ FINGERS = (INDEX, MIDDLE, RING, PINKY)
 # A sounding string with no finger on it: an open string (fret 0), or a muted one (-1). The
 # two are not the same note, but they are the same fact *here* - neither costs a finger.
 NO_FINGER = 0
+#: The widest the hand reaches: five frets, index to pinky. Not a preference and not a grip's
+#: span - it is the hand's own size, which is why it bounds a *step* as well as a shape.
+#: `GRIP_MAX_SPAN` (4 or 5, per family) is a stricter bound on the shapes the engine
+#: generates, and `tests/test_grip_tables.py` holds every one of them below this one.
+MAX_HAND_SPAN = 5
 
 
 @dataclass
@@ -175,18 +185,42 @@ def fingers_needed(frets: Iterable[int]) -> int:
 
 
 def can_fret(frets: Iterable[int]) -> bool:
-    """False when a fret vector needs more frets than the left hand has fingers.
+    """False when a fret vector is beyond the left hand: a fifth fret, or a sixth reach.
 
-    This is §4.3's refusal asked *before* the assignment rather than after it: one finger
-    holds one fret and no finger holds two, so five distinct frets is not a hard shape but
-    an impossible one, and no monotonising score can rescue it.
+    Two independent refusals, both of them §4.3's:
 
-    `bass_place.place_bass` is the caller, and it is the only one. Under a `bass_only` step the
-    thumb is merged into the shape the hand is still **holding**, so its fret joins frets
-    that are not this step's own - which is the one way a fifth can appear in an engine
-    whose every generated grip sounds at most four strings.
+    - **one finger, one fret** bounds the *count* - `fingers_needed(frets) <= 4`;
+    - **the hand's own size** bounds how far apart the outermost fingers are -
+      `hand_span(frets) <= MAX_HAND_SPAN`.
+
+    Neither implies the other, and that is the trap this predicate exists to close: a
+    merged walking-bass vector can need three fingers and still put the thumb seven frets
+    under the shape (`[1, 8, -1, 8, 9, -1]`), which the count passes and the hand cannot.
+    The two were one test until that hand was measured; `docs/open-issues.md` item 5 holds
+    the figures, and `tests/test_fingers.py::TestTheHandsReach` holds the rule.
+
+    `bass_place.place_bass` and `bass_merge._takes_the_ring` are the callers, and both ask
+    it of a **merged** vector rather than of a shape: the first before it picks a string
+    under a shape the hand is holding, the second before it lets a struck note keep
+    ringing under the next shape. Nothing here reads a generated grip, whose own bounds are
+    stricter.
     """
-    return fingers_needed(frets) <= len(FINGERS)
+    return fingers_needed(frets) <= len(FINGERS) and hand_span(frets) <= MAX_HAND_SPAN
+
+
+def hand_span(frets: Iterable[int]) -> int:
+    """How far apart the hand's outermost fingers are: max minus min over frets at 1 or above.
+
+    An open string takes no finger and so does not widen the hand - a fretted note a third
+    above one is still the bottom of the hand - and a muted string is not part of the shape
+    at all. Both are the same two rules `fingers_needed` and `assign_fingers` apply, which
+    is why the span and the fingerprint of a vector can be read off one pass of it.
+
+    Stated over a bare vector rather than a `Voicing` for the reason `fingers_needed` gives:
+    the caller has two shapes merged into one hand and no single `Voicing` to point at.
+    """
+    fretted = [fret for fret in frets if fret >= 1]
+    return max(fretted, default=0) - min(fretted, default=0)
 
 
 def assign_fingers(voicing: Voicing) -> Optional[Fingering]:
@@ -202,11 +236,11 @@ def assign_fingers(voicing: Voicing) -> Optional[Fingering]:
     the shape either - a fretted note a third above an open string is still the bottom of
     the hand.
 
-    `None` means the shape needs **five distinct frets**, which four fingers cannot hold:
-    one finger holds one fret and no finger holds two. In this engine's vocabulary that is
-    not a generated grip - every family sounds at most four strings - it is the *merged* step
-    of §4.3, where the walking-bass note is added under a four-note shape. That is the hook
-    the §4.3 measurement reads (`assign_fingers(step.voicing) is None`), and the failure is a
+    `None` means the shape is beyond the hand, in one of two ways: **five distinct
+    frets**, which four fingers cannot hold, or a reach wider than `MAX_HAND_SPAN`.
+    Neither is a generated grip, so both are the *merged* step of §4.3, where the
+    walking-bass note is added under a four-note shape. That is the hook the §4.3
+    measurement reads (`assign_fingers(step.voicing) is None`), and the failure is a
     return value rather than an exception or a crossed fingering, which is convention 6's
     "make the failure mode visible".
     """

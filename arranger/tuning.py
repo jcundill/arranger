@@ -323,12 +323,20 @@ class Palette:
     is what makes an out-of-position shape explicable: the window is a preference and never
     a filter, so a shape outside it is played rather than dropped, and only the palette can
     say whether there was anything inside to play instead.
+
+    `dropped_for_bass` is the shape the ranking preferred from the palette **before** the
+    requested bass note narrowed it (`decisions.leaving_room_for_the_bass`). It is not
+    `alternative`: that is the fuller shape the tuple turned down on merit, while this one
+    was never ranked at all, because the thumb could not reach the line's note under it. A
+    step that carries no thumb line leaves it None, and so does a narrow that did not change
+    the winner - in both cases the shape played is the ranking's own first choice.
     """
 
     available: int
     alternative: Optional[Voicing] = None
     decided_by: Optional[int] = None
     inside_window: bool = False
+    dropped_for_bass: Optional[Voicing] = None
 
 
 @dataclass
@@ -442,11 +450,12 @@ class ArrangementStep:
     # returns more steps than the progression it was given under this texture, and this
     # field is how a renderer tells which is which.
     #
-    # It is a statement about the **left hand**, so it never coexists with
-    # `role == ROLE_TARGET`: a target states the harmony, and a step that re-states a
-    # chord cannot also be one that holds the previous shape. `decisions.is_bass_only`
-    # is what keeps the two apart: a walk-invented downbeat the melody moves onto can
-    # arrive carrying both, and a renderer that obeyed the flag would drop the chord.
+    # It is a statement about the **left hand**, so it says nothing about the role: a slot
+    # the walk invented can be a `target` (its beats are strong ones) and still have
+    # nothing to state above the thumb - the chord never changed and the melody is the
+    # note still ringing. `decisions.is_bass_only` decides it from those two facts, and
+    # clears `repeated` beside it, because a step that struck its soprano would be
+    # re-plucking the very note the hold leaves alone.
     bass_only: bool = False
     # The thumb note **sounds but is not struck** here: it is the previous attack still
     # ringing, under a shape this step plays. The mirror of `bass_only` - that one holds

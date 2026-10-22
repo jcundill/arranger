@@ -73,13 +73,10 @@ def _step_cells(step: ArrangementStep) -> List[str]:
     `bass_only` is the mirror image arithmetically - the thumb alone is new - but its
     upper voices are **held** from the previous shape rather than restruck. They are
     still printed as 'x': this renderer answers "what is plucked here", so a string the
-    player must not attack reads the same as a mute. It only ever describes a **fill**,
-    because a target states its harmony instead (`decisions.is_bass_only`) - a step
-    marked both rendered here as a blank column, which is how a chord the engine had
-    already voiced went missing. A step that is *both* `repeated` and `bass_only` is a
-    walking bass under a re-articulated melody, and it plays the soprano and the thumb -
-    so the two rules compose rather than override one another, which is the case an
-    `elif` chain would silently drop.
+    player must not attack reads the same as a mute. A step that is *both* `repeated` and
+    `bass_only` is a walking bass under a re-articulated melody, and it plays the soprano
+    and the thumb - so the two rules compose rather than override one another, which is
+    the case an `elif` chain would silently drop.
 
     The step still carries a full drop-2 `voicing`: the engine voice-leads from
     it and a caller wanting the literal shape still has `step.tab_line()`.

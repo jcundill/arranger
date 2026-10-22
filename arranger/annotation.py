@@ -127,6 +127,16 @@ def step_annotation(step: ArrangementStep) -> str:
         # rather than merely thin. A hand-built silent step with no recorded
         # reason reads as the grid's own answer.
         return _annotate(step, _silence_clause(step))
+    if step.bass_only:
+        # A hold, and the step exists for the thumb: nothing above it is struck, so the
+        # shape in the tab is the previous step's, still ringing. It was explained where
+        # it was chosen, so the line says what this step is - a bass note under a shape
+        # already down - and nothing about a shape of its own.
+        #
+        # **Before the comping branch**, because a lone thumb that has a shape ringing is
+        # also a step that does not voice the tune, and the two answers differ: the
+        # comping clause would name nothing here.
+        return _annotate(step, _held_clause(step))
     if not step.melody_voiced:
         # The comping route: the guitar states harmony and somebody else has the tune.
         # The partial branch below would call a single bass note "shell - 3rd & 7th",
@@ -174,23 +184,28 @@ def step_annotation(step: ArrangementStep) -> str:
                 )
             return _annotate(step, "duo - partial")
         return _annotate(step, f"{step.grip} - 3rd & 7th, partial")
-    if not step.non_chord_tone:
-        # A chord tone under the stated harmony: name the degree it is. The chord name
-        # alone does not say which note of it the tune is sitting on, and the shape can
-        # look like any other chord-melody without that fact.
-        degree = melody_degree_label(step)
-        if not degree:
-            # `melody_degree_label` blanks for two different reasons and only one of them
-            # is a thing to say: a slot the tune is silent at has no degree to name, while
-            # a melody over a chord no table can read is a fact the reader cannot get
-            # anywhere else - the chord column shows the spelling, not the problem.
-            if step.melody is None:
-                return _annotate(step)
-            return _annotate(step, "the chord symbol could not be read")
-        return _annotate(step, f"harmony under {degree}")
-    # A non-chord tone with no degree to name and no chord to restate: the substitution
-    # clause says what the strategies did, so this path has nothing left to add.
-    return _annotate(step)
+    return _annotate(step, _degree_clause(step))
+
+
+def _degree_clause(step: ArrangementStep) -> str:
+    """The degree of the chord the tune sits on, where nothing else has claimed the line.
+
+    A chord tone under the stated harmony is worth naming: the chord name alone does not
+    say which note of it the melody is on, and the shape can look like any other
+    chord-melody without that fact.
+
+    `melody_degree_label` blanks for two different reasons and only one is worth saying.
+    A slot the tune is silent at has no degree to name, while a melody over a chord no
+    table can read is a fact the reader cannot get anywhere else - the chord column shows
+    the spelling, not the problem. A non-chord tone with no degree to name and no chord to
+    restate leaves `_substitution_clause` to say what the strategies did.
+    """
+    if step.non_chord_tone:
+        return ""
+    degree = melody_degree_label(step)
+    if not degree:
+        return "" if step.melody is None else "the chord symbol could not be read"
+    return f"harmony under {degree}"
 
 
 def _transposition_clause(step: ArrangementStep) -> str:
@@ -228,21 +243,23 @@ def _substitution_clause(step: ArrangementStep) -> str:
 def _annotate(step: ArrangementStep, *clauses: str) -> str:
     """Wrap a step's clauses - with the clauses read from the step itself - into the line.
 
-    Eight clauses are derived here rather than passed in, so that every path out of
+    Ten clauses are derived here rather than passed in, so that every path out of
     `step_annotation` that can have one carries it. Two correct a **column** and so are
     restated on every line that suffers them - the **octave** the sounding melody is at
     (`_transposition_clause`) and the chord the part actually **states**
-    (`_substitution_clause`). Six explain the shape itself, and a hold is the one step that
+    (`_substitution_clause`). Five explain the shape itself, and a hold is the one step that
     suppresses them: the shape **count** (`_shape_clause`, which stays silent on a hold
     because it was explained where the shape was chosen), the **voices** it sounds and the
     degree each states (`_sounding_clause`), the chord **tone** it leaves out
     (`_omission_clause`), the **window** it had to leave
-    (`_window_clause`), the **written bass** it does not sound (`_slash_bass_clause`) and the
-    **held** shape above a moving thumb (`_held_clause`). The ninth is the thumb that could
-    not be placed at all (`_bass_refusal_clause`). The alternative is a dozen return
-    sites each remembering to append them, which is how a fact comes to be printed on one
-    route and silently dropped on another - and `_bass_annotation` is threaded the same way,
-    through this list, for the same reason.
+    (`_window_clause`) and the **written bass** it does not sound (`_slash_bass_clause`).
+    The **held shape above a moving thumb** (`_held_clause`) is not among them: it is what
+    such a step *is*, so it is the step's own statement, as `repeated`'s is. The eighth is
+    the shape given up so a **requested bass note** could sound (`_bass_room_clause`), and
+    the ninth is the thumb that could not be placed at all (`_bass_refusal_clause`). The
+    alternative is a dozen return sites each remembering to append them, which is how a
+    fact comes to be printed on one route and silently dropped on another - and
+    `_bass_annotation` is threaded the same way, through this list, for the same reason.
 
     Empty clauses are dropped, so a caller with nothing to say gets `_bass_annotation`'s
     own answer, which is the empty string for a step with no bass.
@@ -256,8 +273,8 @@ def _annotate(step: ArrangementStep, *clauses: str) -> str:
         _omission_clause(step),
         _window_clause(step),
         _slash_bass_clause(step),
-        _held_clause(step),
         _bass_alone_clause(step),
+        _bass_room_clause(step),
         _bass_refusal_clause(step),
     )
     for clause in derived:
@@ -276,12 +293,17 @@ def _shape_clause(step: ArrangementStep) -> str:
     from one that was chosen over a complete chord. `step.palette` is that answer: the
     most voices the palette offered, and the fuller shape it did not take.
 
-    Read only where the route *chose* the shape - `palette` is None on a comping shape,
-    whose voicing follows the caller's selection rather than a palette of its own - and
-    never on a hold, which is annotated by what is *struck* while the shape itself is
-    still ringing from the step before. Four voices is every string the right hand has,
-    so a complete shape gets the count and no reason (the voices themselves are named by
+    Read only where the route *chose* the shape for a **melody** it pins - never on a
+    comping shape, whose voice count belongs to `_comping_clause` because the selection
+    asked for that many voices rather than the ranking settling for them - and never on a
+    hold, which is annotated by what is *struck* while the shape itself is still ringing
+    from the step before. Four voices is every string the right hand has, so a complete
+    shape gets the count and no reason (the voices themselves are named by
     `_sounding_clause`).
+
+    A comping step does record a palette, because *which* shape was played is a choice the
+    request can force (`Palette.dropped_for_bass`); what a comping step's palette is not for
+    is this count.
 
     The routes that state the count in their **own** clause keep the count to themselves:
     an `NC` bar reads "(no chord - melody alone)" and a melody no shape could voice reads
@@ -290,7 +312,14 @@ def _shape_clause(step: ArrangementStep) -> str:
     only - the palette a lone note came from is still what `_window_clause` reads.
     """
     palette = step.palette
-    if palette is None or step.repeated or step.melody_only or step.chord_unvoiced:
+    if (
+        palette is None
+        or not step.melody_voiced
+        or step.repeated
+        or step.bass_only
+        or step.melody_only
+        or step.chord_unvoiced
+    ):
         return ""
     voices = len(step.voicing.upper_midi_notes())
     count = "melody alone" if voices == 1 else f"{voices} voices"
@@ -524,14 +553,15 @@ def _bass_refusal_clause(step: ArrangementStep) -> str:
     has no hole in it a reader could count, and the walk reads as complete -
     which is the false reading this clause corrects.
 
-    Three independent causes reach it, and the clause names **all three** rather
+    Four independent causes reach it, and the clause names **all four** rather
     than the one that fired, because they are indistinguishable from outside:
     no free string below the melody, no octave of the wanted pitch below the
-    shape's own lowest note, or a fifth fret for four fingers. Measured over the
-    committed heads the middle one is almost the whole of it
-    (`docs/open-issues.md` item 2), which is not the intuitive answer - so the
-    list is the honest form. A per-cause spelling would need `place_bass` to
-    return its reason, and that is the follow-on rather than the clause.
+    shape's own lowest note, a fifth fret for four fingers, or a reach wider than
+    the hand's five frets. Measured over the committed heads the second one is
+    almost the whole of it (`docs/open-issues.md` item 2), which is not the
+    intuitive answer - so the list is the honest form. A per-cause spelling would
+    need `place_bass` to return its reason, and that is the follow-on rather than
+    the clause.
 
     Not suppressed on a hold, and it cannot be one: `bass_only` restates nothing
     above the thumb, but the step still carries the refusal for *this* beat's
@@ -541,8 +571,32 @@ def _bass_refusal_clause(step: ArrangementStep) -> str:
         return ""
     return (
         f"no playable bass note for bass {step.bass_refused} - no free string "
-        f"below the melody, no octave of that pitch below the shape, or the hand "
-        f"would need a fifth fret; the step keeps its upper voicing"
+        f"below the melody, no octave of that pitch below the shape, the hand "
+        f"would need a fifth fret, or the reach is wider than five frets; the "
+        f"step keeps its upper voicing"
+    )
+
+
+def _bass_room_clause(step: ArrangementStep) -> str:
+    """Says a shape was placed where the requested bass note could sound under it.
+
+    A requested grid bass note is part of the request, so the palette is narrowed to the
+    shapes the thumb can reach that note under *before* the ranking runs. What a reader
+    counting strings cannot see is that the shape played is **not** the ranking's first
+    choice: a wider fret position or a lower grip is exactly what it looks like, and
+    neither says whether the engine had a better shape and gave it up.
+
+    `Palette.dropped_for_bass` is that shape, read here rather than re-derived - a clause
+    that recomputed "could the thumb reach it" would be the fact agreeing with itself. Not
+    suppressed on a hold: the shape chosen here is what a hold is holding.
+    """
+    palette = step.palette
+    if palette is None or palette.dropped_for_bass is None:
+        return ""
+    return (
+        "placed to leave room for the requested bass note, where the ranking's own "
+        "first choice "
+        f"{palette.dropped_for_bass.tab_string()} could not sound it"
     )
 
 
@@ -663,7 +717,12 @@ def _sounding_clause(step: ArrangementStep) -> str:
     A note may appear twice - a triad's fourth voice is its root doubled an octave
     below - and that is the shape rather than a defect, so duplicates are kept.
     """
-    if not step.melody_voiced or step.repeated or step.chord_unvoiced:
+    if (
+        not step.melody_voiced
+        or step.repeated
+        or step.bass_only
+        or step.chord_unvoiced
+    ):
         return ""
     if len(step.voicing.upper_midi_notes()) < 2:
         return ""

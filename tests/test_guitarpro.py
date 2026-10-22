@@ -26,7 +26,7 @@ import os
 import tempfile
 import unittest
 
-from arranger import ArrangementStep, VoiceLeadingEngine
+from arranger import ROLE_TARGET, ArrangementStep, VoiceLeadingEngine
 
 # The shared placement core, reached directly: these tests are about where events
 # land, which is decided in `tabscore` and only turned into beats by `tabgp`.
@@ -1545,6 +1545,49 @@ class TestARingingThumbIsNotRestruck(GuitarProTestCase):
         for beat in self.ring_beats[1:]:
             normal = [n for n in beat.notes if n.type == self.gp.NoteType.normal]
             self.assertTrue(normal, "a beat had nothing new in it")
+
+
+class TestAHeldTargetIsNotResticed(GuitarProTestCase):
+    """The reported fault: a tied melody re-plucked on every beat the walk invented.
+
+    `--bass-on 1,2,1and,2and` puts a thumb on the half-beats, and the tune of "But Not
+    For Me" ties across them. A slot the walk invented is a **target** there - its beats
+    are strong ones - but there is nothing to state above the thumb: the chord has not
+    changed and the melody is the note still ringing. So the step is `bass_only`, and the
+    beat writes the thumb as a new note and nothing else.
+
+    Read through `_sounding_frets`, the function the writer takes its notes from, so the
+    assertion is about what reaches the file rather than about a tab string. That a
+    `bass_only` beat writes the ringing shape as **ties** is
+    `TestWalkingBass.test_a_bass_only_beat_carries_the_held_shape_as_ties`.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from arranger import Request
+        from tests.support import arranged
+
+        self.steps, _head, _notes = arranged(
+            BUT_NOT_FOR_ME, request=Request(bass_on="1,2,1and,2and")
+        )
+
+    def test_a_target_the_walk_invented_strikes_only_the_thumb(self):
+        held = [
+            step for step in self.steps
+            if step.bass_only and step.role == ROLE_TARGET
+        ]
+        self.assertTrue(
+            held,
+            "the premise: the walk invented a target over a tied melody",
+        )
+        from tabgp import _sounding_frets
+
+        for step in held:
+            self.assertEqual(
+                [index for index, _fret in _sounding_frets(step)],
+                [bass_string(step)],
+                f"bar {step.bar} beat {step.beat}: the held beat re-struck the melody",
+            )
 
 
 class TestRepeatMarkers(GuitarProTestCase):

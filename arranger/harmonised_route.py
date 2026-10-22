@@ -21,10 +21,14 @@ from .bass_merge import attach_bass
 from .chords import ChordParser, normalised_harmony
 from .context import SlotContext
 from .decisions import (
+    dropped_for_the_bass,
     hold_the_melody_string,
     holds_the_shape,
     is_bass_only,
     is_repeated_step,
+    leaving_room_for_the_bass,
+    melody_is_ringing,
+    palette_facts,
     select_step_voicing,
     should_demote_to_melody_alone,
     should_promote_fill,
@@ -45,6 +49,33 @@ from .tuning import (
 )
 
 
+def _partial_attack(
+    arrangements: List[ArrangementStep],
+    slot: Slot,
+    context: SlotContext,
+    prepared: StepPreparation,
+    repeated: bool,
+) -> Tuple[bool, bool]:
+    """This step's two partial-attack flags: is nothing struck above the thumb, and does
+    the melody repeat?
+
+    `bass_only` is the hold `decisions.is_bass_only` decides - a slot the walk invented,
+    which the chord's rhythm did not name, over a harmony and a melody that are already
+    ringing - and `repeated` is the selector's answer **unless** nothing above the thumb
+    is struck. The two flags name opposite halves of one column, and a step carrying both
+    would strike the soprano the hold exists to leave alone.
+    """
+    harmony = normalised_harmony(prepared.chord_name, prepared.harmonized_as)
+    bass_only = is_bass_only(
+        slot.bass_only,
+        chord_attack=context.state.chord_attack,
+        holds=melody_is_ringing(
+            arrangements, Note(prepared.melody).midi_note(), harmony
+        ),
+    )
+    return bass_only, repeated and not bass_only
+
+
 def _emit_step(
     arrangements: List[ArrangementStep],
     slot: Slot,
@@ -60,8 +91,20 @@ def _emit_step(
 
     Select first, merge after: the bass is written into the fret vector only once
     the shape has been chosen, so it cannot enter the cost tuple by construction
-    rather than by discipline.
+    rather than by discipline. The request *does* narrow the palette before the ranking -
+    a shape whose player cannot reach the requested line's note is not offered - but that
+    is a narrowing of what `harmonised_step` hands the tuple, never a candidate carrying a
+    thumb and never a criterion reading one.
+
+    The two partial-attack flags are settled by `_partial_attack`, from the step's own
+    facts: `bass_only` asks whether anything above the thumb has to be struck at all
+    (`decisions.is_bass_only`, which reads what the slot came from and what the last step
+    is still sounding), and `repeated` is whatever the selector decided **unless** nothing
+    is struck above the thumb - the two flags name opposite halves of one column, and a
+    step carrying both would strike the soprano the hold exists to leave alone.
     """
+    bass_only, repeated = _partial_attack(
+        arrangements, slot, context, prepared, repeated)
     arrangements.append(ArrangementStep(
         chord=prepared.chord_name,
         melody=prepared.melody,
@@ -78,7 +121,7 @@ def _emit_step(
         duration=context.timing.duration,
         role=role,
         metric_weight=context.state.weight,
-        bass_only=is_bass_only(slot.bass_only, role),
+        bass_only=bass_only,
         # A position the chord's rhythm **named** - the stab `--chord-on melody,1and` puts
         # under a held note - is struck even when the shape is unchanged. A slot the
         # skeleton invented, where the tune merely sustains, is not: that is a hold, and
@@ -167,55 +210,6 @@ def _promoted_fill(
     )
 
 
-def _lost_to_the_bass_partition(
-    chosen: Voicing,
-    alternative: Voicing,
-    bass_pc: Optional[int],
-    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]],
-) -> bool:
-    """Whether the slash-bass partition would have dropped `alternative`."""
-    if bass_pc is None or slash_bass_cost is None:
-        return False
-    here = slash_bass_cost(chosen.midi_notes(), bass_pc)
-    there = slash_bass_cost(alternative.midi_notes(), bass_pc)
-    return here != there
-
-
-def _palette_facts(
-    candidates: List[Voicing],
-    chosen: Voicing,
-    criteria: _cost.SelectionCriteria,
-) -> Palette:
-    """What was on offer besides `chosen`, and the criterion that ranked it lower."""
-    def cost(voicing: Voicing) -> _cost.VoicingScore:
-        return criteria.cost(voicing)
-
-    available = max(len(candidate.active_frets()) for candidate in candidates)
-    inside_window = any(
-        all(
-            criteria.fret_min <= fret <= criteria.fret_max
-            for fret in candidate.active_frets()
-        )
-        for candidate in candidates
-    )
-    chosen_voices = len(chosen.active_frets())
-    fuller = [c for c in candidates if len(c.active_frets()) > chosen_voices]
-    if not fuller:
-        return Palette(available=available, inside_window=inside_window)
-    alternative = min(fuller, key=cost)
-    decided_by = _cost.decisive_criterion(cost(chosen), cost(alternative))
-    if _lost_to_the_bass_partition(
-        chosen, alternative, criteria.bass_pc, criteria.slash_bass_cost
-    ):
-        decided_by = _cost.PARTITION_CRITERION
-    return Palette(
-        available=available,
-        alternative=alternative,
-        decided_by=decided_by,
-        inside_window=inside_window,
-    )
-
-
 def _bass_group(
     voicing: Voicing,
     bass_pc: Optional[int],
@@ -238,9 +232,21 @@ class _Selection:
         """The shape the engine's own rule prefers, honouring a slash bass first."""
         return select_step_voicing(self.candidates, self.criteria)
 
-    def palette(self, chosen: Voicing) -> Palette:
-        """What was on offer besides `chosen`, and the criterion that ranked it lower."""
-        return _palette_facts(self.candidates, chosen, self.criteria)
+    def palette(self, chosen: Voicing, offered: Optional[List[Voicing]] = None) -> Palette:
+        """What was on offer besides `chosen`, and why it was not played.
+
+        `offered` is the palette **before** the requested bass note narrowed it. Passing it
+        records the shape the ranking preferred there (`Palette.dropped_for_bass`), which
+        is the only thing that tells a reader why a shape that is not the ranking's first
+        choice is the one on the page. The default - no separate palette - is for the
+        callers that never narrow.
+        """
+        facts = palette_facts(self.candidates, chosen, self.criteria)
+        dropped = dropped_for_the_bass(
+            offered if offered is not None else self.candidates,
+            self.candidates, chosen, self.criteria,
+        )
+        return facts if dropped is None else replace(facts, dropped_for_bass=dropped)
 
     def narrower_than(self, demoted: Voicing) -> Optional[Voicing]:
         """A tighter shape inside the budget that the tuple ranks at least as high."""
@@ -323,6 +329,36 @@ def _selection_for(
     )
 
 
+def _candidates_for_the_slot(
+    prepared: StepPreparation,
+    prev_step: Optional[ArrangementStep],
+    harmony: Tuple[Optional[str], Optional[str]],
+    slot: Slot,
+    arrangements: List[ArrangementStep],
+    chord_attack: bool,
+) -> Tuple[List[Voicing], List[Voicing]]:
+    """The palette the axis offered, and what is left once the bass note has its room.
+
+    Returned as a pair because both are needed: the second is what the ranking chooses
+    from, and the first is what tells the reader which shape the request took away
+    (`Palette.dropped_for_bass`). See `decisions.leaving_room_for_the_bass`.
+
+    The `bass_only` answer is asked here **as it will be asked when the step is emitted**,
+    because it decides what the thumb is measured against: a held step measures it against
+    the shape already down, so the placement is one for the whole palette rather than one
+    per candidate. Two spellings of the rule would let the narrow drop a shape for a reason
+    the merge would not raise.
+    """
+    offered = _held_candidates(prepared, prev_step, harmony)
+    held = melody_is_ringing(arrangements, Note(prepared.melody).midi_note(), harmony)
+    return offered, leaving_room_for_the_bass(
+        offered, slot.bass, arrangements,
+        bass_only=is_bass_only(
+            slot.bass_only, chord_attack=chord_attack, holds=held
+        ),
+    )
+
+
 def harmonised_step(
     arrangements: List[ArrangementStep],
     slot: Slot,
@@ -330,40 +366,39 @@ def harmonised_step(
 ) -> None:
     """The melody-bearing route: pin the tune, and voice the chord under it.
 
-    Reached when the guitar *sings* the slot - or when every other route declined
-    it - so a note is pinned by the `assert` below. This is the route the whole
-    library is built around: `prepare_step` supplies the candidates,
-    `voicing_cost` picks among them, and the last resort before silence is the
-    melody alone.
+    Reached when the guitar *sings* the slot - or when every other route declined it - so a
+    note is pinned by the `assert` below. `prepare_step` supplies the candidates,
+    `voicing_cost` picks among them, and the last resort before silence is the melody alone.
     """
 
     context: SlotContext = plan.context
     assert context.harmony.note_str is not None and context.harmony.melody_note is not None
     prev_sounding = last_sounding_step(arrangements)
-    prepared_and_role = _prepare_or_rescue(
-        arrangements, slot, plan, prev_sounding,
-    )
+    prepared_and_role = _prepare_or_rescue(arrangements, slot, plan, prev_sounding)
     if prepared_and_role is None:
         return
     prepared, role = prepared_and_role
 
     harmony = normalised_harmony(prepared.chord_name, prepared.harmonized_as)
     prev_step = arrangements[-1] if arrangements else None
-    candidates = _held_candidates(prepared, prev_step, harmony)
+    # The palette is what is left once every shape the thumb cannot reach the requested
+    # bass note under is taken out: a narrowing of what the axis offered, ranked by the
+    # same tuple, so the harmony makes room for the line instead of dropping its note.
+    offered, candidates = _candidates_for_the_slot(
+        prepared, prev_step, harmony, slot, arrangements, context.state.chord_attack)
 
     selection = _selection_for(
         context, prepared, candidates,
-        prev_sounding.voicing if prev_sounding is not None else None,
-    )
+        prev_sounding.voicing if prev_sounding is not None else None)
     best_voicing = selection.chosen()
     assert best_voicing is not None
-    palette = selection.palette(best_voicing)
+    palette = selection.palette(best_voicing, offered)
 
     if should_demote_to_melody_alone(best_voicing, role):
         narrower = selection.narrower_than(best_voicing)
         if narrower is not None:
             best_voicing = narrower
-            palette = selection.palette(best_voicing)
+            palette = selection.palette(best_voicing, offered)
         elif demoted_to_melody_alone(
             arrangements, slot, replace(context, state=replace(context.state, role=role)),
             top_strings=plan.inputs.top_strings,
