@@ -17,6 +17,7 @@ import sys
 
 # `print_step` is the demo's one-line writer, imported under a private alias so this
 # module does not publish it as API: `main()` is its only user.
+from .options import ArrangeOptions
 from .render import format_progression
 from .render import print_step as _print_step
 from .steps import VoiceLeadingEngine
@@ -119,7 +120,7 @@ def main() -> None:
         ("no timing - every note is a chord", {}),
         (
             "texture=targets - chords on beats 1 and 3, fills between",
-            {"timings": texture_timings, "texture": "targets"},
+            {"timings": texture_timings, "options": ArrangeOptions(texture="targets")},
         ),
     ):
         print(f"\n--- TEXTURE: one bar of Fmaj7, {label} ---")

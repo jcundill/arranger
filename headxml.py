@@ -74,7 +74,7 @@ from arranger import (
     rhythm_beats,
 )
 from arranger.chords import midi_to_note_name, promote_slash_chord
-from arranger.grouping import TimeSignature
+from arranger.grouping import COMMON_TIME, TimeSignature
 from arranger.options import (
     DEFAULT_REQUEST,
     ArrangeOptions,
@@ -83,7 +83,7 @@ from arranger.options import (
     format_request,
     resolve_request,
 )
-from arranger.resolution import resolve_axes
+from arranger.resolution import resolve_axes, settle_input_fact
 from arranger.slots import arrange_slots
 
 __all__ = [
@@ -2996,66 +2996,71 @@ def _head_request(
     options: Optional[ArrangeOptions],
     *,
     non_chord_tone: str,
-    texture: Optional[str],
-    bass: Optional[str],
-    parts: Optional[str],
-    harmony: Optional[str],
-    grid: Optional[str],
     request: Request,
-    grouping: str,
+    time_signature: TimeSignature,
 ) -> Tuple[ArrangeOptions, Optional[str]]:
     """The arrangement request for a loaded head, from either spelling.
 
-    The head owns the metre: a caller supplying `options` cannot know it before the
-    file is read, so the score's own count and denominator replace the object's.
-    Passing both spellings is a caller bug and raises rather than silently choosing.
+    The head owns the **count and the denominator**: they describe the bars the
+    slots came from, and a caller cannot know them before the file is read, so the
+    score's own replace whatever a supplied `TimeSignature` states. The metre's
+    third fact - its grouping - is the one fact of it a caller may set, and it is
+    read off that same `TimeSignature` rather than a parameter of its own.
 
-    The head also owns the **grouping** where its score states one, so `auto` means
-    "use what the file says, and the metre's convention if it says nothing". An
-    explicit `grouping=` - either spelling - is the caller's override.
+    `auto` means "use what the file says, and the metre's convention if it says
+    nothing", and it is also what the untouched `COMMON_TIME` default means, so a
+    bare `arrange_xml_head(path)` reads the score's metre. A caller who *did* set a
+    grouping meant the metre, so a count or denominator that disagrees with the file
+    is refused rather than silently replaced: a `TimeSignature` two of whose three
+    fields are ignored is a value that lies.
+
+    The five implementation axes live on `options` alone, so the two doors cannot
+    disagree about them. The request and the metre are **input facts** instead - *what
+    is being arranged* rather than *how to play it* - so they sit *beside* `options=`
+    rather than inside it, and `settle_input_fact` reconciles the two spellings: the
+    keyword wins, the object's own is read only when the keyword was left at its
+    default, and both stated raises. `non_chord_tone` is the one remaining knob, and a
+    keyword beside `options=` raises rather than silently choosing.
     """
-    stated = format_grouping(head.grouping) if head.grouping else GROUPING_AUTO
     if options is not None:
-        explicit_knobs = (
-            non_chord_tone != "extension"
-            or texture is not None
-            or bass is not None
-            or parts is not None
-            or harmony is not None
-            or grid is not None
-            or request != Request()
-            or grouping != GROUPING_AUTO
-        )
-        if explicit_knobs:
+        if non_chord_tone != "extension":
             raise ValueError(
                 "pass either options= or the individual arrangement knobs, not both"
             )
-        # The head owns the metre; only its grouping is a caller override.
-        options = replace(
-            options,
-            time_signature=TimeSignature(
-                head.beats_per_bar,
-                head.beat_type,
-                options.time_signature.grouping
-                if options.time_signature.grouping != GROUPING_AUTO
-                else stated,
-            ),
+        request = settle_input_fact(
+            request, options.request, DEFAULT_REQUEST, "request", "arrange_xml_head"
+        )
+        time_signature = settle_input_fact(
+            time_signature, options.time_signature, COMMON_TIME,
+            "time_signature", "arrange_xml_head",
         )
     else:
-        options = ArrangeOptions(
-            non_chord_tone=non_chord_tone,
-            texture=texture,
-            bass=bass,
-            parts=parts,
-            harmony=harmony,
-            grid=grid,
-            request=request,
-            time_signature=TimeSignature(
-                head.beats_per_bar,
-                head.beat_type,
-                grouping if grouping != GROUPING_AUTO else stated,
-            ),
+        options = ArrangeOptions(non_chord_tone=non_chord_tone, request=request)
+
+    stated = format_grouping(head.grouping) if head.grouping else GROUPING_AUTO
+    supplied = time_signature
+    grouping = supplied.grouping
+    if grouping != GROUPING_AUTO and (
+        supplied.beats_per_bar != head.beats_per_bar
+        or supplied.beat_type != head.beat_type
+    ):
+        raise ValueError(
+            f"the score is in {head.beats_per_bar}/{head.beat_type}, but "
+            f"time_signature= says {supplied.beats_per_bar}/{supplied.beat_type}; "
+            f"the file owns the count and the denominator, so only the grouping "
+            f"can be overridden"
         )
+    # One place builds the request and the metre, whichever door the caller came
+    # through: the settled `request` may be the keyword's rather than the object's.
+    options = replace(
+        options,
+        request=request,
+        time_signature=TimeSignature(
+            head.beats_per_bar,
+            head.beat_type,
+            grouping if grouping != GROUPING_AUTO else stated,
+        ),
+    )
     return _melodyless(head, options)
 
 
@@ -3125,13 +3130,8 @@ def arrange_xml_head(
     non_chord_tone: str = "extension",
     fallback: Optional[str] = None,
     section: Optional[Tuple[int, int]] = None,
-    texture: Optional[str] = None,
-    bass: Optional[str] = None,
-    parts: Optional[str] = None,
-    harmony: Optional[str] = None,
-    grid: Optional[str] = None,
     request: Request = DEFAULT_REQUEST,
-    grouping: str = GROUPING_AUTO,
+    time_signature: TimeSignature = COMMON_TIME,
     options: Optional[ArrangeOptions] = None,
 ) -> Tuple[List[ArrangementStep], Head, List[str]]:
     """Loads a MusicXML head, reduces it and arranges it, end to end.
@@ -3147,11 +3147,11 @@ def arrange_xml_head(
     `fallback` may be "diminished"; it replaces the written chord, so it is off
     unless asked for.
 
-    `bass` is the note rules the thumb states, `texture` the chord part's arity policy,
-    and `grid` when each part falls. `options=` is the same request as one value; when
-    it is given, the individual knobs must be left at their defaults, and the head's
-    own metre replaces the object's. That is the spelling `head` uses, because a
-    score already holds its metre and key together.
+    What to play is asked as `request=` - the six questions - and the implementation
+    axes (`texture`, `bass`, `parts`, `harmony`, `grid`) through
+    `options=ArrangeOptions(...)`, the one door to them. When `options=` is given the
+    individual knobs must be left at their defaults. That is the spelling `head`
+    uses, because a score already holds its metre and key together.
 
     The metre trap bites hardest here: three of the four committed scores are in cut
     time, whose beat is a half note, so a rule that assumed four beats to the bar
@@ -3163,25 +3163,22 @@ def arrange_xml_head(
     slot's whole-note `duration` into beats with it, and the one committed 3/4 head is
     where passing the count in its place shows up.
 
-    `grouping` is the metre's third fact - which denominator units are felt as one beat.
-    `auto` reads the score's own statement: an `N+N` direction, then the primary
-    beaming, then a metronome pulse, and finally the metre's convention (threes for
-    6/8, 9/8 and 12/8; one per beat otherwise). An explicit `3+2` overrides the file.
-    A conventional simple metre ignores its beaming, because a notation program's
-    beam pairs restate the beat rather than group it.
+    The metre is one value, `time_signature=`, and its **grouping** - which denominator
+    units are felt as one beat - is the one fact of it a caller may set. `auto` (the
+    default, and `COMMON_TIME`'s own) reads the score's statement: an `N+N` direction,
+    then the primary beaming, then a metronome pulse, and finally the metre's convention
+    (threes for 6/8, 9/8 and 12/8; one per beat otherwise). An explicit `3+2` overrides
+    the file, and the count and denominator must then agree with the score's, because
+    the file owns those two. A conventional simple metre ignores its beaming, because a
+    notation program's beam pairs restate the beat rather than group it.
     """
     head = load_musicxml(path, part)
     options, melodyless = _head_request(
         head,
         options,
         non_chord_tone=non_chord_tone,
-        texture=texture,
-        bass=bass,
-        parts=parts,
-        harmony=harmony,
-        grid=grid,
         request=request,
-        grouping=grouping,
+        time_signature=time_signature,
     )
     # Resolved once here, because this layer needs the tuple **before** the engine
     # sees it: `_merge_chord_slots` generates the comping positions, and the engine

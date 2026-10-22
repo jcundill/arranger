@@ -20,6 +20,7 @@ from arranger import (
     format_tab_staff,
 )
 from arranger.annotation import step_annotation
+from arranger.options import ArrangeOptions
 from tests.support import arranged, make_voicing, sweep_head_paths
 
 # The compact line's fixed layout, in columns: chord(8) + space + melody(3) + space =
@@ -277,7 +278,7 @@ class TestTextureAnnotation(unittest.TestCase):
                 ("F4", "maj7", "Fmaj7"),
             ],
             timings=[(0, 1.0, None), (0, 1.5, None), (0, 2.0, None), (0, 3.0, None)],
-            texture="targets",
+            options=ArrangeOptions(texture="targets"),
         )
         self.rendered = format_progression(self.steps)
 
@@ -299,8 +300,10 @@ class TestTextureAnnotation(unittest.TestCase):
         `step_annotation` - a fill does not get its own exception to it.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D5", "maj7", "Fmaj7")], timings=[(0, 2.0, None)], texture="targets"
-        )
+                [("D5", "maj7", "Fmaj7")], timings=[(0, 2.0, None)], options=ArrangeOptions(
+                    texture="targets",
+                ),
+            )
         step = steps[0]
         self.assertEqual(step.role, arranger.ROLE_FILL)
         self.assertTrue(step.non_chord_tone)
@@ -546,9 +549,9 @@ class TestTheExplanationWraps(unittest.TestCase):
         for head in sweep_head_paths():
             for config in (
                 {},
-                {"parts": "bass,chord"},
-                {"grid": "chord:freddie"},
-                {"texture": "targets"},
+                {"options": ArrangeOptions(parts="bass,chord")},
+                {"options": ArrangeOptions(grid="chord:freddie")},
+                {"options": ArrangeOptions(texture="targets")},
             ):
                 steps, _head, _notes = arranged(head, section=(1, 4), **config)
                 for step in steps:

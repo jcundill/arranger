@@ -16,6 +16,7 @@ from arranger import (
 from arranger.annotation import step_annotation
 from arranger.grips import drop2_template_for
 from arranger.melody_alone import melody_alone_shape
+from arranger.options import ArrangeOptions
 from arranger.render import print_step
 
 
@@ -322,7 +323,7 @@ class TestThePaletteRescue(unittest.TestCase):
 
     def test_the_step_survives_the_chord_it_cannot_voice(self):
         steps = VoiceLeadingEngine.arrange_progression(
-            [("Eb5", "maj", "Cmaj")], texture="chord1"
+            [("Eb5", "maj", "Cmaj")], options=ArrangeOptions(texture="chord1")
         )
         self.assertEqual(len(steps), 1, "the note went missing with the chord")
         step = steps[0]
@@ -336,7 +337,7 @@ class TestThePaletteRescue(unittest.TestCase):
     def test_the_renderer_says_the_chord_is_not_sounding(self):
         """A bare note under a chord symbol is the thing this label exists to prevent."""
         steps = VoiceLeadingEngine.arrange_progression(
-            [("Eb5", "maj", "Cmaj")], texture="chord1"
+            [("Eb5", "maj", "Cmaj")], options=ArrangeOptions(texture="chord1")
         )
         self.assertEqual(
             step_annotation(steps[0]), " (melody alone - no voicing for this chord)"
@@ -350,7 +351,7 @@ class TestThePaletteRescue(unittest.TestCase):
         Synthetic Waltz" bars 1 and 9; this is the unit form of it.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("Gb5", "6", "Eb6")], texture="chord1"
+            [("Gb5", "6", "Eb6")], options=ArrangeOptions(texture="chord1")
         )
         self.assertEqual(len(steps), 1)
         step = steps[0]

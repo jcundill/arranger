@@ -54,6 +54,7 @@ from arranger.bass_rules import (
     BASS_RULES,
     parse_bass_style,
 )
+from arranger.options import ArrangeOptions
 from tests.support import (
     MAJOR_CADENCE,
     MINOR_CADENCE,
@@ -88,7 +89,7 @@ class TestValidation(unittest.TestCase):
         """
         with self.assertRaises(ValueError) as caught:
             VoiceLeadingEngine.arrange_progression(
-                [("F5", "maj7", "Fmaj7")], texture="sorcery"
+                [("F5", "maj7", "Fmaj7")], options=ArrangeOptions(texture="sorcery")
             )
         self.assertIn("sorcery", str(caught.exception))
 
@@ -188,9 +189,11 @@ class TestTheWalkFollowsTheFeltBeats(unittest.TestCase):
         return VoiceLeadingEngine.arrange_progression(
             [("F5", "maj7", "Fmaj7")],
             timings=timings,
-            texture="targets",
-            bass=BASS_STYLE_WALK,
-            grid="melody:every_note,bass:walk",
+            options=ArrangeOptions(
+                texture="targets",
+                bass=BASS_STYLE_WALK,
+                grid="melody:every_note,bass:walk",
+            ),
             time_signature=TimeSignature(
                 beats_per_bar, beat_type, grouping if grouping is not None else "auto"
             ),
@@ -231,9 +234,11 @@ class TestTheWalkFollowsTheFeltBeats(unittest.TestCase):
         steps = VoiceLeadingEngine.arrange_progression(
             [("F5", "maj7", "Fmaj7"), ("F5", "maj7", "Fmaj7")],
             timings=timings,
-            texture="targets",
-            bass=BASS_STYLE_WALK,
-            grid="melody:every_note,bass:walk",
+            options=ArrangeOptions(
+                texture="targets",
+                bass=BASS_STYLE_WALK,
+                grid="melody:every_note,bass:walk",
+            ),
             time_signature=TimeSignature(12, 8),
         )
         last_of_first = next(
@@ -442,8 +447,13 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
             (3, 2.5, 0.25),
         ]
         return VoiceLeadingEngine.arrange_progression(
-            progression, timings=timings, texture="chord2", bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk", time_signature=TimeSignature(2, 4)
-        )
+                progression, timings=timings, options=ArrangeOptions(
+                    texture="chord2",
+                    bass="root,5th,approach,nearest",
+                    grid="melody:every_note,bass:walk",
+                ),
+                time_signature=TimeSignature(2, 4)
+            )
 
     def test_the_invented_downbeat_takes_the_sustaining_note_not_the_previous_one(self):
         """
@@ -540,8 +550,11 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
             steps = VoiceLeadingEngine.arrange_progression(
                 progression,
                 timings=timings,
-                texture="chord2", grid="melody:every_note,bass:walk",
-                bass=BASS_STYLE_WALK,
+                options=ArrangeOptions(
+                    texture="chord2",
+                    grid="melody:every_note,bass:walk",
+                    bass=BASS_STYLE_WALK,
+                ),
                 time_signature=TimeSignature(3, beat_type),
             )
             return [(step.chord, step.melody) for step in steps]
@@ -558,8 +571,11 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
             for step in VoiceLeadingEngine.arrange_progression(
                 progression,
                 timings=timings,
-                texture="chord2", grid="melody:every_note,bass:walk",
-                bass=BASS_STYLE_WALK,
+                options=ArrangeOptions(
+                    texture="chord2",
+                    grid="melody:every_note,bass:walk",
+                    bass=BASS_STYLE_WALK,
+                ),
                 time_signature=TimeSignature(3, 4),
             )
         ]
@@ -577,7 +593,11 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
         steps = VoiceLeadingEngine.arrange_progression(
             [("G4", "maj", "Ebmaj"), ("F4", "maj", "Ebmaj")],
             timings=[(2, 1.0, 0.5), (2, 2.0, 0.5)],
-            texture="chord2", bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk",
+            options=ArrangeOptions(
+                texture="chord2",
+                bass="root,5th,approach,nearest",
+                grid="melody:every_note,bass:walk",
+            ),
             time_signature=TimeSignature(4, 4),
         )
         first_onset = beat_offset(2, 1.0, 4)
@@ -602,7 +622,11 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
         steps = VoiceLeadingEngine.arrange_progression(
             [("G4", "maj", "Ebmaj"), ("G4", "maj", "Ebmaj")],
             timings=[(1, 1.0, 0.25), (1, 2.0, None)],
-            texture="chord2", bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk",
+            options=ArrangeOptions(
+                texture="chord2",
+                bass="root,5th,approach,nearest",
+                grid="melody:every_note,bass:walk",
+            ),
             time_signature=TimeSignature(4, 4),
         )
         held = [step for step in steps if step.melody == "G4" and step.bar == 1]
@@ -653,8 +677,13 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
             old_choice = progression[previous_melody][0]
         self.assertEqual(old_choice, "F4", "the fixture no longer reproduces the bug")
         steps = VoiceLeadingEngine.arrange_progression(
-            progression, timings=timings, texture="chord2", bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk", time_signature=TimeSignature(2, 4)
-        )
+                progression, timings=timings, options=ArrangeOptions(
+                    texture="chord2",
+                    bass="root,5th,approach,nearest",
+                    grid="melody:every_note,bass:walk",
+                ),
+                time_signature=TimeSignature(2, 4)
+            )
         new_choice = [
             step for step in steps if step.bar == 3 and step.beat == 1.0
         ][0].melody
@@ -776,7 +805,7 @@ class TestNoRegression(unittest.TestCase):
         arrangements = [
             VoiceLeadingEngine.arrange_progression(progression),
             VoiceLeadingEngine.arrange_progression(
-                progression, timings=timings, texture="targets"),
+                progression, timings=timings, options=ArrangeOptions(texture="targets")),
         ]
         for steps in arrangements:
             self.assertEqual(len(steps), 3)
@@ -854,7 +883,9 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
             (bar, beat, None) for bar, beat in self.ONSETS
         ]
         return VoiceLeadingEngine.arrange_progression(
-            self.PROGRESSION, timings=timings, **kwargs
+            self.PROGRESSION,
+            timings=timings,
+            options=ArrangeOptions(**kwargs),
         )
 
     def tabs(self, steps):
@@ -1012,7 +1043,9 @@ class TestAChordlessBarHasNoBassPart(unittest.TestCase):
 
     def arrange(self, **kwargs) -> List[arranger.ArrangementStep]:
         return VoiceLeadingEngine.arrange_progression(
-            self.PROGRESSION, timings=self.TIMINGS, **kwargs
+            self.PROGRESSION,
+            timings=self.TIMINGS,
+            options=ArrangeOptions(**kwargs),
         )
 
     def test_the_walked_bar_carries_no_thumb_note(self) -> None:

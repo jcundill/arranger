@@ -19,6 +19,7 @@ import os
 import unittest
 
 from arranger import Request
+from arranger.options import ArrangeOptions
 from headxml import arrange_xml_head
 from tabscore import score_events
 from tests.support import harmony, note, rest, score_bars, write_score
@@ -44,7 +45,9 @@ class TestAStabLastsItsFeltBeat(unittest.TestCase):
     def _steps(self, document: str, request: Request, **kwargs):
         path = write_score(document)
         self.addCleanup(os.unlink, path)
-        steps, _head, _notes = arrange_xml_head(path, request=request, **kwargs)
+        steps, _head, _notes = arrange_xml_head(
+            path, options=ArrangeOptions(request=request, **kwargs)
+        )
         return steps
 
     def test_four_four_stab_is_a_quarter(self):

@@ -76,11 +76,6 @@ def arrange_progression(
     fret_min: int = NECK_FRET_MIN,
     fret_max: int = NECK_FRET_MAX,
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]] = None,
-    texture: Optional[str] = None,
-    bass: Optional[str] = None,
-    parts: Optional[str] = None,
-    harmony: Optional[str] = None,
-    grid: Optional[str] = None,
     request: Request = DEFAULT_REQUEST,
     time_signature: TimeSignature = COMMON_TIME,
     melody_onsets: Optional[Container[int]] = None,
@@ -89,6 +84,11 @@ def arrange_progression(
     """
     Takes a progression of (Melody Note, Chord Quality, Name) tuples
     and computes the optimal voice-led arrangement.
+
+    What to play is asked as a `request=` - the six questions - and the
+    implementation axes (`texture`, `bass`, `parts`, `harmony`, `grid`) are
+    spelled through `options=ArrangeOptions(...)`, which is the one door to them.
+    A keyword given beside `options=` raises rather than being silently ignored.
     """
     _k = resolve_knobs(
         options,
@@ -96,11 +96,6 @@ def arrange_progression(
         non_chord_tone=non_chord_tone,
         fret_min=fret_min,
         fret_max=fret_max,
-        texture=texture,
-        bass=bass,
-        parts=parts,
-        harmony=harmony,
-        grid=grid,
         request=request,
         time_signature=time_signature,
         melody_onsets=melody_onsets,

@@ -66,6 +66,7 @@ from arranger.grip_tables import (
 from arranger.grips import (
     _interval_offsets,
 )
+from arranger.options import ArrangeOptions
 from arranger.texture import (
     FILL_THINNING,
     THIN_ENTRIES,
@@ -335,8 +336,7 @@ class TestRoles(unittest.TestCase):
         )
         steps = VoiceLeadingEngine.arrange_progression(
             MINOR_CADENCE,
-            texture="targets",
-            bass=BASS_STYLE_WALK,
+            options=ArrangeOptions(texture="targets", bass=BASS_STYLE_WALK),
             timings=[(0, 1.0 + 0.5 * i, None) for i in range(len(MINOR_CADENCE))],
         )
         self.assertTrue(steps)
@@ -477,7 +477,7 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
         """
         self.assertEqual(resolve_texture_grips(ROLE_TARGET, (), has_thumb=True), ())
         steps = VoiceLeadingEngine.arrange_progression(
-            MINOR_CADENCE, parts=PART_MELODY
+            MINOR_CADENCE, options=ArrangeOptions(parts=PART_MELODY)
         )
         self.assertTrue(steps, "the arrangement must not be lost")
         for step in steps:
@@ -527,7 +527,7 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
         """
         steps = VoiceLeadingEngine.arrange_progression(
             self.PROGRESSION,
-            texture="targets",
+            options=ArrangeOptions(texture="targets"),
             timings=[(0, 1.0, 1.0)],
         )
         self.assertEqual(len(steps), 1)
@@ -553,7 +553,9 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
         only what sits at the very top of the budget.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D4", "m7", "Dm7")], texture="targets", timings=[(0, 1.0, 1.0)]
+            [("D4", "m7", "Dm7")],
+            options=ArrangeOptions(texture="targets"),
+            timings=[(0, 1.0, 1.0)],
         )
         self.assertEqual(len(steps), 1)
         self.assertNotEqual(steps[0].voicing.grip, "melody")
@@ -721,8 +723,11 @@ class TestTheRightHandBudget(unittest.TestCase):
         timings = [(bar, 1.0 + 0.5 * n, None) for bar in range(4) for n in range(4)]
         with contextlib.redirect_stdout(io.StringIO()):
             steps = VoiceLeadingEngine.arrange_progression(
-                progression, timings=timings, texture="targets", bass="root,5th,approach,nearest"
-            )
+                    progression, timings=timings, options=ArrangeOptions(
+                        texture="targets",
+                        bass="root,5th,approach,nearest",
+                    ),
+                )
         checked = 0
         for step in steps:
             sounding = [fret for fret in step.voicing.frets if fret >= 0]
@@ -864,8 +869,10 @@ class TestBackwardCompatibility(unittest.TestCase):
         untouched, which is the trade `docs/engine.md` measures.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            BUT_NOT_FOR_ME, timings=BUT_NOT_FOR_ME_TIMINGS, texture="targets"
-        )
+                BUT_NOT_FOR_ME, timings=BUT_NOT_FOR_ME_TIMINGS, options=ArrangeOptions(
+                    texture="targets",
+                ),
+            )
         self.assertEqual(
             [s.tab_line() for s in steps],
             [
@@ -901,8 +908,10 @@ class TestBackwardCompatibility(unittest.TestCase):
         shells and its targets are drop-2, and neither takes a set that was removed.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            BUT_NOT_FOR_ME, timings=BUT_NOT_FOR_ME_TIMINGS, texture="uniform"
-        )
+                BUT_NOT_FOR_ME, timings=BUT_NOT_FOR_ME_TIMINGS, options=ArrangeOptions(
+                    texture="uniform",
+                ),
+            )
         self.assertEqual(
             [s.tab_line() for s in steps],
             [
@@ -943,8 +952,9 @@ class TestBackwardCompatibility(unittest.TestCase):
         """
         plain = VoiceLeadingEngine.arrange_progression(MINOR_CADENCE)
         explicit = VoiceLeadingEngine.arrange_progression(
-            MINOR_CADENCE, timings=None, texture="uniform", time_signature=COMMON_TIME
-        )
+                MINOR_CADENCE, timings=None, options=ArrangeOptions(texture="uniform"),
+                time_signature=COMMON_TIME
+            )
         self.assertEqual(
             [s.tab_line() for s in plain], [s.tab_line() for s in explicit]
         )
@@ -955,7 +965,9 @@ class TestBackwardCompatibility(unittest.TestCase):
         arrangement followed by a surprise.
         """
         with self.assertRaises(ValueError):
-            VoiceLeadingEngine.arrange_progression(MINOR_CADENCE, texture="sorcery")
+            VoiceLeadingEngine.arrange_progression(
+                MINOR_CADENCE, options=ArrangeOptions(texture="sorcery"),
+            )
 
 
 class TestTimingsDefensive(unittest.TestCase):
@@ -971,7 +983,7 @@ class TestTimingsDefensive(unittest.TestCase):
         for the same reason: a hand-built list must not silently shift the rhythm.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            MINOR_CADENCE, timings=[(0, 2.0, None)], texture="targets"
+            MINOR_CADENCE, timings=[(0, 2.0, None)], options=ArrangeOptions(texture="targets")
         )
         self.assertEqual(len(steps), len(MINOR_CADENCE))
         self.assertEqual(steps[0].metric_weight, 0)
@@ -985,7 +997,7 @@ class TestTimingsDefensive(unittest.TestCase):
         steps = VoiceLeadingEngine.arrange_progression(
             MINOR_CADENCE,
             timings=[(bar, 1.0, None) for bar in range(20)],
-            texture="targets",
+            options=ArrangeOptions(texture="targets"),
         )
         self.assertEqual(len(steps), len(MINOR_CADENCE))
 
@@ -1000,7 +1012,7 @@ class TestTimingsDefensive(unittest.TestCase):
         timed = VoiceLeadingEngine.arrange_progression(
             MINOR_CADENCE,
             timings=[(0, 1.0 + 0.5 * i, None) for i in range(len(MINOR_CADENCE))],
-            texture="targets",
+            options=ArrangeOptions(texture="targets"),
         )
         self.assertEqual([s.melody for s in plain], [s.melody for s in timed])
 
@@ -1023,7 +1035,9 @@ class TestMelodyOnlySelections(unittest.TestCase):
 
     def arrange(self, parts, **kwargs):
         return VoiceLeadingEngine.arrange_progression(
-            self.PROGRESSION, timings=self.TIMINGS, parts=parts, **kwargs
+            self.PROGRESSION,
+            timings=self.TIMINGS,
+            options=ArrangeOptions(parts=parts, **kwargs),
         )
 
     def test_every_slot_is_the_melody_alone(self):
@@ -1150,7 +1164,7 @@ class TestTargetsTexture(unittest.TestCase):
 
     def setUp(self):
         self.steps = VoiceLeadingEngine.arrange_progression(
-            self.PROGRESSION, timings=self.TIMINGS, texture="targets"
+            self.PROGRESSION, timings=self.TIMINGS, options=ArrangeOptions(texture="targets")
         )
         self.assertEqual(len(self.steps), len(self.PROGRESSION))
 
@@ -1201,10 +1215,10 @@ class TestTargetsTexture(unittest.TestCase):
         the strong beats.
         """
         uniform = VoiceLeadingEngine.arrange_progression(
-            self.PROGRESSION, timings=self.TIMINGS, texture="uniform"
+            self.PROGRESSION, timings=self.TIMINGS, options=ArrangeOptions(texture="uniform")
         )
         targets = VoiceLeadingEngine.arrange_progression(
-            self.PROGRESSION, timings=self.TIMINGS, texture="targets"
+            self.PROGRESSION, timings=self.TIMINGS, options=ArrangeOptions(texture="targets")
         )
 
         def mean_voices(steps):
@@ -1281,7 +1295,7 @@ class TestTargetsTexture(unittest.TestCase):
         steps = VoiceLeadingEngine.arrange_progression(
             [("C5", "NC", "NC"), ("C5", "maj7", "Fmaj7")],
             timings=[(0, 2.0, None), (0, 1.0, None)],
-            texture="targets",
+            options=ArrangeOptions(texture="targets"),
         )
         self.assertTrue(steps[0].melody_only)
         self.assertEqual(len(steps[0].voicing.active_frets()), 1)
@@ -1310,7 +1324,7 @@ class TestTargetsTexture(unittest.TestCase):
                 steps = VoiceLeadingEngine.arrange_progression(
                     [(melody, quality, chord)],
                     timings=[(0, 2.0, None)],
-                    texture="targets",
+                    options=ArrangeOptions(texture="targets"),
                 )
                 for step in steps:
                     checked += 1
@@ -1491,7 +1505,7 @@ class TestARepeatedMelodyHoldsItsString(unittest.TestCase):
         steps = VoiceLeadingEngine.arrange_progression(
             [("G4", "7", "Eb7")] * 4,
             timings=[(0, float(beat), None) for beat in (1, 2, 3, 4)],
-            texture="targets",
+            options=ArrangeOptions(texture="targets"),
         )
         self.assertEqual([step.melody for step in steps], ["G4"] * 4)
         self.assertEqual(
@@ -1510,7 +1524,7 @@ class TestARepeatedMelodyHoldsItsString(unittest.TestCase):
         from headxml import arrange_xml_head
 
         steps, _head, _notes = arrange_xml_head(
-            "tests/data/synthetic_common_8.musicxml", texture="targets"
+            "tests/data/synthetic_common_8.musicxml", options=ArrangeOptions(texture="targets")
         )
         bar_three = [step for step in steps if step.bar == 3]
         self.assertEqual([step.melody for step in bar_three], ["G4"] * 4)
@@ -1585,7 +1599,9 @@ class TestARepeatedMelodyHoldsItsString(unittest.TestCase):
         checked = held = 0
         for path in paths:
             for texture, bass in configs:
-                steps, _head, _notes = arranged(path, texture=texture, bass=bass)
+                steps, _head, _notes = arranged(
+                    path, options=ArrangeOptions(texture=texture, bass=bass),
+                )
                 for previous, step in zip(steps, steps[1:]):
                     if step.bass_only:
                         held += 1

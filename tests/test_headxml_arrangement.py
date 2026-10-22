@@ -5,14 +5,15 @@ as well as over written scores: they are what makes an imported tune a tab rathe
 parsed document. Reading the document is `test_headxml.py`.
 """
 
+import inspect
 import os
 import tempfile
 import unittest
 from typing import List, Tuple
 
 import arranger
-from arranger import NO_CHORD
-from arranger.options import ArrangeOptions
+from arranger import NO_CHORD, TimeSignature
+from arranger.options import ArrangeOptions, Request
 from arranger.slots import arrange_slots
 from headxml import (
     Head,
@@ -442,26 +443,33 @@ class TestReductionAndArranging(unittest.TestCase):
 class TestTheHeadRequestAsOneValue(unittest.TestCase):
     """`options=` and the keyword spellings are two spellings of one request."""
 
-    def test_options_and_keywords_produce_the_same_arrangement(self):
-        """The object entry point must not be a second arrangement path."""
-        keywords = arrange_xml_head(BUT_NOT_FOR_ME, texture="chord1")[0]
+    def test_the_request_keyword_and_the_object_agree(self):
+        """The object entry point must not be a second arrangement path.
+
+        The request is an **input fact**, so it may be spelled as a keyword beside
+        `options=` as well as inside it, and the two must reach one arrangement.
+        """
+        request = Request(melody=False)
+        keywords = arrange_xml_head(BUT_NOT_FOR_ME, request=request)[0]
         as_object = arrange_xml_head(
-            BUT_NOT_FOR_ME,
-            options=ArrangeOptions(texture="chord1"),
+            BUT_NOT_FOR_ME, options=ArrangeOptions(request=request)
         )[0]
         self.assertEqual(
             [step.tab_line() for step in keywords],
             [step.tab_line() for step in as_object],
         )
 
-    def test_the_two_spellings_cannot_be_combined(self):
-        """A caller who passes both has a bug, and hears about it."""
-        with self.assertRaises(ValueError):
-            arrange_xml_head(
-                BUT_NOT_FOR_ME,
-                texture="chord1",
-                options=ArrangeOptions(texture="targets"),
-            )
+    def test_the_axis_has_no_keyword_spelling(self):
+        """The five axes are the implementation, so `options=` is their one door.
+
+        This used to assert that a `texture=` keyword beside `options=` raised. With
+        the axis gone from the signature the two spellings are unspellable rather than
+        conflicting, so the assertion inverts to the *signature* - which is also the
+        form a type checker can agree with, where a call spelling the keyword is a
+        `reportCallIssue`. The conflict rule itself still has its witness, on the
+        metre's `test_the_two_metre_spellings_cannot_be_combined`.
+        """
+        self.assertNotIn("texture", inspect.signature(arrange_xml_head).parameters)
 
 
 class TestTheMetreHasADenominator(unittest.TestCase):
@@ -704,7 +712,9 @@ class TestHeadTexture(unittest.TestCase):
         Asserted through the real score rather than a hand-built one, because the metre
         is the thing under test and a hand-built fixture would supply its own.
         """
-        steps, head, _notes = arrange_xml_head(BUT_NOT_FOR_ME, texture="targets")
+        steps, head, _notes = arrange_xml_head(
+            BUT_NOT_FOR_ME, options=ArrangeOptions(texture="targets"),
+        )
         self.assertTrue(steps)
         self.assertEqual(head.beats_per_bar, 2, "this fixture must be in cut time")
         for step in steps:
@@ -737,8 +747,12 @@ class TestHeadTexture(unittest.TestCase):
         event - Ebmaj under G4 recurs five times - so pinning a number would be pinning
         the tune rather than the rule.
         """
-        uniform, _head, _n = arrange_xml_head(BUT_NOT_FOR_ME, texture="uniform")
-        targets, _head, _n = arrange_xml_head(BUT_NOT_FOR_ME, texture="targets")
+        uniform, _head, _n = arrange_xml_head(
+            BUT_NOT_FOR_ME, options=ArrangeOptions(texture="uniform"),
+        )
+        targets, _head, _n = arrange_xml_head(
+            BUT_NOT_FOR_ME, options=ArrangeOptions(texture="targets"),
+        )
         self.assertEqual(len(uniform), len(targets))
 
         def mean_voices(steps):
@@ -795,7 +809,9 @@ class TestANarrowPaletteNeverLosesTheTune(unittest.TestCase):
         can put there, which is what makes this a claim about the row rather than about
         which family happened to win.
         """
-        steps, _head, _notes = arrange_xml_head(BUT_NOT_FOR_ME, texture="chord1")
+        steps, _head, _notes = arrange_xml_head(
+            BUT_NOT_FOR_ME, options=ArrangeOptions(texture="chord1"),
+        )
         bar2 = [s for s in steps if s.bar == 2 and abs((s.beat or 0) - 2.0) < 1e-6]
         self.assertEqual(len(bar2), 1, "bar 2 beat 2 is missing")
         step = bar2[0]
@@ -819,7 +835,9 @@ class TestANarrowPaletteNeverLosesTheTune(unittest.TestCase):
         """
         for texture in ("chord1", "uniform"):
             with self.subTest(texture=texture):
-                steps, head, _notes = arrange_xml_head(BUT_NOT_FOR_ME, texture=texture)
+                steps, head, _notes = arrange_xml_head(
+                    BUT_NOT_FOR_ME, options=ArrangeOptions(texture=texture),
+                )
                 at = {(s.bar or 0, round(s.beat or 0.0, 6)) for s in steps}
                 for written in head.notes:
                     self.assertIn(
@@ -836,7 +854,9 @@ class TestANarrowPaletteNeverLosesTheTune(unittest.TestCase):
         """
         for texture in ("chord1", "uniform"):
             with self.subTest(texture=texture):
-                steps, _head, _notes = arrange_xml_head(BUT_NOT_FOR_ME, texture=texture)
+                steps, _head, _notes = arrange_xml_head(
+                    BUT_NOT_FOR_ME, options=ArrangeOptions(texture=texture),
+                )
                 self.assertEqual(
                     [s.bar for s in steps if s.chord_unvoiced], [],
                     f"texture={texture} left a chord unstated",
@@ -895,7 +915,7 @@ class TestOddMetres(unittest.TestCase):
         for beats in (5, 7):
             with self.subTest(beats=beats):
                 _head, path = self.load(beats, 4)
-                steps = arrange_xml_head(path, texture="targets")[0]
+                steps = arrange_xml_head(path, options=ArrangeOptions(texture="targets"))[0]
                 weights = {
                     (step.bar, step.beat): step.metric_weight
                     for step in steps
@@ -912,8 +932,11 @@ class TestOddMetres(unittest.TestCase):
             with self.subTest(beats=beats):
                 _head, path = self.load(beats, 4)
                 steps = arrange_xml_head(
-                    path, texture="targets", bass="root,5th,approach,nearest"
-                )[0]
+                        path, options=ArrangeOptions(
+                            texture="targets",
+                            bass="root,5th,approach,nearest",
+                        ),
+                    )[0]
                 self.assertEqual(sum(1 for s in steps if s.bass is not None), beats * 2)
                 self.assertEqual(
                     [s.beat for s in steps if s.bass is not None][:beats],
@@ -961,7 +984,7 @@ class TestCompoundMetres(unittest.TestCase):
 
     def test_targets_are_the_first_and_third_pulses(self):
         _head, path = self.load()
-        steps = arrange_xml_head(path, texture="targets")[0]
+        steps = arrange_xml_head(path, options=ArrangeOptions(texture="targets"))[0]
         bar_one = [s for s in steps if s.bar == 1]
         self.assertEqual([s.beat for s in bar_one], [1.0, 4.0, 7.0, 10.0])
         self.assertEqual([s.role for s in bar_one], ["target", "fill", "target", "fill"])
@@ -970,7 +993,7 @@ class TestCompoundMetres(unittest.TestCase):
     def test_a_walk_is_one_note_per_pulse(self):
         _head, path = self.load()
         steps = arrange_xml_head(
-            path, texture="targets", bass="root,5th,approach,nearest"
+            path, options=ArrangeOptions(texture="targets", bass="root,5th,approach,nearest")
         )[0]
         self.assertEqual(sum(1 for s in steps if s.bass is not None), 8)
         self.assertEqual(
@@ -982,7 +1005,9 @@ class TestCompoundMetres(unittest.TestCase):
         """12/8 as 4+4+4 is three four-eighth groups: targets on beats 1 and 9."""
         _head, path = self.load()
         steps = arrange_xml_head(
-            path, texture="targets", grid="chord:freddie", grouping="4+4+4"
+            path,
+            time_signature=TimeSignature(12, 8, "4+4+4"),
+            options=ArrangeOptions(texture="targets", grid="chord:freddie"),
         )[0]
         self.assertEqual(
             [s.beat for s in steps if s.bar == 1 and s.role == "target"],
@@ -994,25 +1019,35 @@ class TestCompoundMetres(unittest.TestCase):
 
     def test_auto_and_the_explicit_compound_grouping_agree(self):
         _head, path = self.load()
-        auto = arrange_xml_head(path, texture="targets")[0]
-        explicit = arrange_xml_head(path, texture="targets", grouping="3+3+3+3")[0]
+        auto = arrange_xml_head(path, options=ArrangeOptions(texture="targets"))[0]
+        explicit = arrange_xml_head(
+            path,
+            time_signature=TimeSignature(12, 8, "3+3+3+3"),
+            options=ArrangeOptions(texture="targets"),
+        )[0]
         self.assertEqual(
             [step.tab_line() for step in auto], [step.tab_line() for step in explicit]
         )
 
     def test_a_grouping_that_does_not_fill_the_bar_is_refused(self):
+        """The metre validates itself at construction, which is where a bar is known."""
         _head, path = self.load()
         with self.assertRaises(ValueError):
-            arrange_xml_head(path, grouping="4+4")
+            arrange_xml_head(path, time_signature=TimeSignature(12, 8, "4+4"))
 
-    def test_the_two_spellings_cannot_be_combined(self):
+    def test_the_two_metre_spellings_cannot_be_combined(self):
+        """A keyword and an `options=` that both state a metre is a bug, not a merge."""
         _head, path = self.load()
         with self.assertRaises(ValueError):
-            arrange_xml_head(path, grouping="3+3+3+3", options=ArrangeOptions())
+            arrange_xml_head(
+                path,
+                time_signature=TimeSignature(12, 8, "3+3+3+3"),
+                options=ArrangeOptions(time_signature=TimeSignature(12, 8, "4+4+4")),
+            )
 
 
 class TestGroupingFromTheScore(unittest.TestCase):
-    """The score states its grouping; `grouping=` is only an override.
+    """The score states its grouping; `time_signature=` is only an override.
 
     A written mark, the beaming and a metronome pulse are the three channels a
     MusicXML lead sheet has for the metre's third fact. The first two are committed
@@ -1039,7 +1074,7 @@ class TestGroupingFromTheScore(unittest.TestCase):
 
     def test_the_score_grouping_reaches_the_arrangement(self):
         """5/4 as 3+2 has two felt beats, so only the downbeat is a full target."""
-        steps = arrange_xml_head(FIVE_FOUR, texture="targets")[0]
+        steps = arrange_xml_head(FIVE_FOUR, options=ArrangeOptions(texture="targets"))[0]
         bar = [s for s in steps if s.bar == 1]
         self.assertEqual(
             [s.role for s in bar], ["target", "fill", "fill", "fill", "fill"]
@@ -1047,7 +1082,7 @@ class TestGroupingFromTheScore(unittest.TestCase):
         self.assertEqual([s.metric_weight for s in bar], [2, 0, 0, 0, 0])
 
     def test_a_compound_score_sets_targets_on_its_own_pulses(self):
-        steps = arrange_xml_head(TWELVE_EIGHT, texture="targets")[0]
+        steps = arrange_xml_head(TWELVE_EIGHT, options=ArrangeOptions(texture="targets"))[0]
         self.assertEqual(
             [s.beat for s in steps if s.bar == 1 and s.role == "target"],
             [1.0, 9.0],
@@ -1056,7 +1091,9 @@ class TestGroupingFromTheScore(unittest.TestCase):
     def test_a_caller_still_overrides_the_score(self):
         """The 12/8 file beams 4+4+4; asking for threes moves the targets to 1 and 7."""
         steps = arrange_xml_head(
-            TWELVE_EIGHT, texture="targets", grouping="3+3+3+3"
+            TWELVE_EIGHT,
+            time_signature=TimeSignature(12, 8, "3+3+3+3"),
+            options=ArrangeOptions(texture="targets"),
         )[0]
         self.assertEqual(
             [s.beat for s in steps if s.bar == 1 and s.role == "target"],

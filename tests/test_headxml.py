@@ -25,6 +25,7 @@ import zipfile
 from xml.etree import ElementTree
 
 from arranger import NO_CHORD, ChordParser
+from arranger.options import ArrangeOptions
 from headxml import (
     Head,
     _key_label,
@@ -650,7 +651,7 @@ class TestChordsOnlyHead(unittest.TestCase):
         claim: a melody-only selection has nothing to *play* here, which is not the same
         as a grid having nowhere to *place* a chord.
         """
-        steps, _head, _notes = arrange_xml_head(CHORDS_ONLY, parts="chord")
+        steps, _head, _notes = arrange_xml_head(CHORDS_ONLY, options=ArrangeOptions(parts="chord"))
         self.assertEqual(len(steps), 16, "four bars, four beats each")
         self.assertEqual((steps[0].bar, steps[0].beat), (1, 1.0))
         self.assertTrue(
@@ -669,7 +670,7 @@ class TestChordsOnlyHead(unittest.TestCase):
         union in `arrange_xml_head`, which is why this still returns nothing while
         `alto,tenor` above now returns all four bars.
         """
-        steps, _head, _notes = arrange_xml_head(CHORDS_ONLY, parts="melody")
+        steps, _head, _notes = arrange_xml_head(CHORDS_ONLY, options=ArrangeOptions(parts="melody"))
         self.assertEqual(steps, [])
 
     def test_a_named_grid_places_the_chords(self):
@@ -689,7 +690,7 @@ class TestChordsOnlyHead(unittest.TestCase):
         for grid, (first, count) in expected.items():
             with self.subTest(grid=grid):
                 steps, _head, _notes = arrange_xml_head(
-                    CHORDS_ONLY, parts="chord", grid=grid
+                    CHORDS_ONLY, options=ArrangeOptions(parts="chord", grid=grid)
                 )
                 self.assertEqual(len(steps), count, f"grid={grid}")
                 self.assertEqual((steps[0].beat, steps[0].chord), first)
@@ -916,10 +917,10 @@ class TestAnUnknownGridIsRefused(unittest.TestCase):
     def test_an_unknown_grid_raises_on_the_comping_route(self):
         """The path that used to coerce now refuses, naming the real vocabulary."""
         with self.assertRaises(ValueError) as caught:
-            arrange_xml_head(RAINY_DAY, parts="chord", grid="half-time")
+            arrange_xml_head(RAINY_DAY, options=ArrangeOptions(parts="chord", grid="half-time"))
         self.assertIn("joe_pass", str(caught.exception))
 
     def test_auto_is_no_longer_a_grid_a_library_caller_can_pass(self):
         """`auto` was withdrawn, so the library refuses it too - not just the CLI."""
         with self.assertRaises(ValueError):
-            arrange_xml_head(RAINY_DAY, parts="chord", grid="auto")
+            arrange_xml_head(RAINY_DAY, options=ArrangeOptions(parts="chord", grid="auto"))

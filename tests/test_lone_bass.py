@@ -14,6 +14,7 @@ import unittest
 
 from arranger import Request
 from arranger.annotation import step_annotation
+from arranger.options import ArrangeOptions
 from arranger.render import format_progression
 from tests.support import (
     COMMON_8,
@@ -138,7 +139,7 @@ class TestTheSingingRouteIsUntouched(unittest.TestCase):
         steps, _head, _notes = arranged(
             COMMON_8,
             section=(1, 2),
-            parts="melody,bass",
+            options=ArrangeOptions(parts="melody,bass"),
             request=Request(bass_on="1and"),
         )
         sounding = [

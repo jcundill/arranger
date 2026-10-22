@@ -47,6 +47,7 @@ from arranger import (
     Voicing,
     get_comping_voicings,
 )
+from arranger.options import ArrangeOptions
 
 #: The library's top-level modules: the shared score core, the renderers, the
 #: importer and the grip-chart generator. Shared by `meta_structure` (which budgets
@@ -618,8 +619,13 @@ def walk(
     if onsets is not None:
         timings = [(bar, beat, None) for bar, beat in onsets]
     return VoiceLeadingEngine.arrange_progression(
-        progression, timings=timings, texture="targets", bass=BASS_STYLE_WALK,
-        grid="melody:every_note,bass:walk",
+        progression,
+        timings=timings,
+        options=ArrangeOptions(
+            texture="targets",
+            bass=BASS_STYLE_WALK,
+            grid="melody:every_note,bass:walk",
+        ),
     )
 
 

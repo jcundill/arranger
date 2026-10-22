@@ -125,11 +125,6 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/cost.py": Budget(12, 140, 7),
     "arranger/decisions.py": Budget(11, 137, 9),
     "arranger/fingers.py": Budget(10, 41, 2),
-    # The grouping axis added one word to each entry point that names the metre:
-    # `arrange_progression` and its facade (15 -> 16 parameters), `resolve_knobs`
-    # (14 -> 15), `on_grid` (3 -> 4) and `arrange_xml_head` (11 -> 12). The three
-    # length rises are the comments and the `grouping` line those parameters carry;
-    # no function gained a second job.
     "arranger/grid.py": Budget(9, 25, 4),
     "arranger/grip_tables.py": Budget(7, 39, 3),
     "arranger/grip_place.py": Budget(19, 66, 5),
@@ -137,7 +132,11 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/grouping.py": Budget(6, 45, 3),
     "arranger/harmony.py": Budget(4, 21, 2),
     "arranger/melody_alone.py": Budget(6, 74, 14),
-    "arranger/resolution.py": Budget(9, 116, 15),
+    # The five axis keywords left `resolve_knobs` (15 -> 9 parameters), so the module
+    # ceiling is `resolve_policies`'s thirteen rather than the reconciler's. The length
+    # is unchanged: the axes are now one read of `options` and two `settle_input_fact`
+    # calls where the defaults and the assignments used to be.
+    "arranger/resolution.py": Budget(9, 116, 13),
     "arranger/slot_plan.py": Budget(6, 89, 5),
     "arranger/step_prepare.py": Budget(6, 74, 9),
     "arranger/harmonised_route.py": Budget(8, 54, 8),
@@ -146,38 +145,27 @@ BUDGETS: Dict[str, Budget] = {
     # longest entry is 19 lines because the two answers with nothing above the thumb
     # share one function and its reason.
     "arranger/route_dispatch.py": Budget(4, 19, 3),
-    # The public `request=` joined the five implementation axis keywords, so the
-    # facade takes one more parameter until Stage 8 of
-    # `docs/history/rhythm-request.md` retires the axis spellings. The body did
-    # not grow: it reads the resolved knobs and policies as values.
-    #
-    # The dispatch moved to `route_dispatch`, so this module is now the loop, the
-    # knobs and the merge: three functions, and the longest is `arrange_progression`
-    # reading the resolved values in order.
-    "arranger/movement.py": Budget(4, 89, 15),
+    # The five axis keywords left `arrange_progression` (15 -> 10 parameters): they are
+    # the engine's implementation, so `options=ArrangeOptions(...)` is the only door to
+    # one. The body did not grow - it reads the resolved knobs and policies as values -
+    # and the dispatch lives in `route_dispatch`, so this module is the loop, the knobs
+    # and the merge.
+    "arranger/movement.py": Budget(4, 89, 10),
     # `ArrangeOptions` is a flat dataclass of knobs with no methods today.
     "arranger/options.py": Budget(5, 30, 3),
     "arranger/parts.py": Budget(9, 45, 1),
     "arranger/render.py": Budget(11, 64, 2),
     "arranger/routes.py": Budget(6, 97, 12),
     "arranger/slots.py": Budget(9, 136, 12),
-    "arranger/steps.py": Budget(1, 54, 16),
+    # The facade's `arrange_progression` loses the same five (16 -> 10).
+    "arranger/steps.py": Budget(1, 54, 10),
     "arranger/texture.py": Budget(11, 57, 6),
     "arranger/tuning.py": Budget(5, 28, 2),
-    # `arrange_xml_head` keeps the keyword spellings as an adapter beside
-    # `options=`; the object path is what the CLI and the tests use. The extra
-    # parameter is the compatibility spelling, not a new decision.
-    #
-    # The metre axis added a word to three entry points and a line to the facade:
-    # `movement` and `steps` take `time_signature=` in place of the count and
-    # denominator pair, and `headxml` takes `grouping=` beside `grid`. Those
-    # increases are the axis's own spelling, not a function that grew a second job;
-    # `head_cli`'s branches moved into `_print_metre_notes` rather than raising its
-    # budget.
-    # One more parameter for the same reason as `movement`: `request=` is the
-    # public spelling and the axis keywords are the implementation, which Stage 8
-    # removes. The merge block moved to `_head_slots`, so the length did not grow.
-    "headxml.py": Budget(17, 125, 13),
+    # `arrange_xml_head` lost the five axis keywords and `grouping=` with them
+    # (13 -> 8): the metre is one value, `time_signature=`, whose grouping is the one
+    # fact of it a caller may set. `head_cli`'s branches live in `_print_metre_notes`,
+    # and the merge block in `_head_slots`, so neither raises this budget.
+    "headxml.py": Budget(17, 125, 8),
     "grip_chart.py": Budget(14, 84, 5),
     "tabgp.py": Budget(19, 151, 13),
     "tabscore.py": Budget(10, 98, 5),
@@ -463,6 +451,64 @@ class TestTheBudgets(unittest.TestCase):
             "a function over its budget is a function to split, not a budget to "
             "raise; if the increase is deliberate, edit BUDGETS in this file and "
             "say why in the commit",
+        )
+
+
+#: The entry points a caller arranges through, and the seams the two of them share.
+#: A retired axis keyword must not reappear on any of them.
+ENTRY_POINTS: Tuple[Tuple[str, str], ...] = (
+    ("arranger/movement.py", "arrange_progression"),
+    ("arranger/steps.py", "arrange_progression"),
+    ("arranger/resolution.py", "resolve_knobs"),
+    ("headxml.py", "arrange_xml_head"),
+    ("headxml.py", "_head_request"),
+)
+
+#: The five axes as the keyword each used to be spelled with, plus `grouping` - the
+#: metre's third fact, which is a field of `TimeSignature` and so has no keyword of
+#: its own either.
+RETIRED_AXIS_KEYWORDS = frozenset({"texture", "bass", "parts", "harmony", "grid", "grouping"})
+
+
+
+class TestTheAxesAreNotEntryPointKeywords(unittest.TestCase):
+    """An axis is the implementation, so no entry point takes one as a keyword.
+
+    The five axes answer *how* to play what the request asks for, so
+    `options=ArrangeOptions(...)` is the one door to them; a keyword beside `options=`
+    for the same thing is the second spelling this surface exists without. Nothing
+    about a signature says so, so this is the standing check - it fails on the commit
+    that adds one back, rather than on the first caller surprised by it.
+    """
+
+    def test_no_entry_point_takes_an_axis_keyword(self):
+        found: List[str] = []
+        for relative, function in ENTRY_POINTS:
+            matches = [
+                node
+                for node, _length, _complexity, _count in _functions(ROOT / relative)
+                if node.name == function
+            ]
+            self.assertTrue(matches, f"{relative} no longer defines {function}")
+            for node in matches:
+                # A catch-all would swallow the keyword rather than refuse it, which
+                # is the one way this check could go quiet.
+                self.assertIsNone(
+                    node.args.kwarg,
+                    f"{relative}: {function} takes **kwargs, so an axis keyword "
+                    f"would be swallowed rather than refused",
+                )
+                found.extend(
+                    f"{relative}: {function} takes {name}="
+                    for name in sorted(
+                        set(_parameter_names(node)) & RETIRED_AXIS_KEYWORDS
+                    )
+                )
+        self.assertEqual(
+            found,
+            [],
+            "an axis is the engine's implementation, so it has no keyword spelling: "
+            "reach it through options=ArrangeOptions(...)",
         )
 
 

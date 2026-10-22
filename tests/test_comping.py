@@ -8,6 +8,7 @@ melody's pitch never appears, because a guide tone can share its pitch class. Th
 invariant is the identical candidate set whatever melody is asked about.
 """
 
+import inspect
 import unittest
 from typing import List, Optional, Tuple
 
@@ -279,7 +280,9 @@ class TestTheAxisIsInertByDefault(unittest.TestCase):
     def test_auto_and_guitar_agree_with_each_other(self):
         """The sentinel resolves to the same arrangement as saying so."""
         auto = self.engine.arrange_progression(PROGRESSION)
-        explicit = self.engine.arrange_progression(PROGRESSION, parts=PART_NAMES_ARG)
+        explicit = self.engine.arrange_progression(
+            PROGRESSION, options=ArrangeOptions(parts=PART_NAMES_ARG)
+        )
         self.assertEqual(format_progression(auto), format_progression(explicit))
 
     def test_the_default_still_pins_the_melody_to_the_soprano(self):
@@ -290,19 +293,20 @@ class TestTheAxisIsInertByDefault(unittest.TestCase):
                 max(step.voicing.midi_notes()), Note(step.melody).midi_note()
             )
 
-    def test_the_keyword_and_the_option_spellings_agree(self):
-        """`arrange_progression` takes the axis both ways and they must not diverge.
+    def test_the_axis_is_spelled_through_the_options(self):
+        """`parts` is the engine's implementation, so `options=` is its one door.
 
-        Measured, because the two spellings *did* diverge: `ArrangeOptions.melody`
-        defaulted to the resolved `"guitar"` while the keyword defaulted to the
-        `"auto"` sentinel, so a caller passing the options was compared field-by-field
-        against a different default and told it had passed both.
+        It used to have a keyword spelling too, and the two *did* diverge:
+        `ArrangeOptions.parts` defaulted to the resolved `"guitar"` while the keyword
+        defaulted to the `"auto"` sentinel, so a caller passing the options was
+        compared field-by-field against a different default and told it had passed
+        both. One door is what makes that class of bug unspellable, and this is the
+        half that still means something: the field reaches the engine.
         """
-        by_keyword = self.engine.arrange_progression(PROGRESSION, parts=VOICES_ARG)
         by_option = self.engine.arrange_progression(
             PROGRESSION, options=ArrangeOptions(parts=VOICES_ARG)
         )
-        self.assertEqual(format_progression(by_keyword), format_progression(by_option))
+        self.assertTrue(all(not step.melody_voiced for step in by_option))
         self.assertEqual(
             format_progression(self.engine.arrange_progression(PROGRESSION)),
             format_progression(
@@ -310,17 +314,23 @@ class TestTheAxisIsInertByDefault(unittest.TestCase):
             ),
         )
 
-    def test_passing_both_spellings_raises(self):
-        """As for every other knob: two spellings of one value is a bug, not a merge."""
-        with self.assertRaises(ValueError):
-            self.engine.arrange_progression(
-                PROGRESSION, parts=VOICES_ARG, options=ArrangeOptions()
-            )
+    def test_the_axis_is_not_a_keyword_on_the_entry_point(self):
+        """The five axes are the implementation, so they have no keyword spelling.
+
+        This used to assert that passing `parts=` beside `options=` raised. With the
+        axis gone from the signature the two spellings are unspellable rather than
+        conflicting, so the assertion inverts; `tests/meta_structure.py` holds the
+        whole entry-point surface to it.
+        """
+        signature = inspect.signature(self.engine.arrange_progression)
+        self.assertNotIn("parts", signature.parameters)
 
     def test_an_unknown_policy_raises(self):
         """A spelling nobody recognises is a question, not something to default."""
         with self.assertRaises(ValueError):
-            self.engine.arrange_progression(PROGRESSION, parts="banjo")
+            self.engine.arrange_progression(
+                PROGRESSION, options=ArrangeOptions(parts="banjo")
+            )
 
 
 class TestTheCompingArrangement(unittest.TestCase):
@@ -336,7 +346,7 @@ class TestTheCompingArrangement(unittest.TestCase):
         # `comping_arity` reads the chord part and the hand, not how many parts are
         # named - so the shapes are the same as a chord-only selection's.
         steps = self.engine.arrange_progression(
-            PROGRESSION, parts=PARTS_WITH_BASS, **kwargs
+            PROGRESSION, options=ArrangeOptions(parts=PARTS_WITH_BASS, **kwargs)
         )
         self.assertTrue(steps, "an arrangement with no steps at all is a defect")
         return steps
@@ -461,33 +471,34 @@ class TestTheCompingArrangement(unittest.TestCase):
         for step in silent:
             self.assertFalse(step.melody_voiced)
 
-    def test_the_bass_axis_takes_the_option_spelling(self):
+    def test_the_bass_axis_reaches_the_engine_through_the_options(self):
         """`ArrangeOptions.bass` reaches the engine, which it never did before.
 
-        The test above spells `bass` as a keyword and this one spells it as an
-        options field, and the two diverged for the field's whole life: the engine
-        never read `options.bass` back out, so a walk handed over as options - which
-        is how the slot layer hands over every request, `arranger head` among them -
-        was silently dropped while the keyword test above stayed green.
+        The field diverged for its whole life: the engine never read `options.bass`
+        back out, so a walk handed over as options - which is how the slot layer hands
+        over every request, `arranger head` among them - was silently dropped while
+        the axis's own keyword test stayed green.
         """
-        by_keyword = self.comped(texture="targets", bass="root,5th,approach,nearest", timings=self.timings)
         by_option = self.engine.arrange_progression(
             PROGRESSION,
             options=ArrangeOptions(
-                parts=PARTS_WITH_BASS, texture="targets",
+                parts=PARTS_WITH_BASS,
+                texture="targets",
                 bass="root,5th,approach,nearest",
                 timings=self.timings,
             ),
         )
         self.assertTrue(any(step.bass is not None for step in by_option))
-        self.assertEqual(format_progression(by_keyword), format_progression(by_option))
 
-    def test_passing_both_bass_spellings_raises(self):
-        """As for every other knob: two spellings of one value is a bug, not a merge."""
-        with self.assertRaises(ValueError):
-            self.engine.arrange_progression(
-                PROGRESSION, bass="root,5th,approach,nearest", options=ArrangeOptions(parts=VOICES_ARG)
-            )
+    def test_the_bass_axis_is_not_a_keyword_on_the_entry_point(self):
+        """The five axes are the implementation, so they have no keyword spelling.
+
+        This used to assert that passing `bass=` beside `options=` raised. With the
+        axis gone from the signature the two spellings are unspellable rather than
+        conflicting, so the assertion inverts.
+        """
+        signature = inspect.signature(self.engine.arrange_progression)
+        self.assertNotIn("bass", signature.parameters)
 
     def test_the_bass_axis_survives_the_slot_layer(self):
         """The head command's own path: `--bass-style` becomes an `ArrangeOptions` here.
@@ -521,7 +532,7 @@ class TestTheCompingArrangement(unittest.TestCase):
         """
         steps = self.engine.arrange_progression(
             [("D5", "m7", "Dm7"), ("C5", "NC", "NC"), ("A4", "7", "A7")],
-            parts=VOICES_ARG,
+            options=ArrangeOptions(parts=VOICES_ARG),
         )
         self.assertEqual([step.chord for step in steps], ["Dm7", "NC", "A7"])
         self.assertEqual(steps[1].silence, "nc_comping")
@@ -541,7 +552,9 @@ class TestTheCompingArrangement(unittest.TestCase):
 
         path = "tests/data/Trouble_in_Mind_Blues.musicxml"
         for parts in (PART_BASS, PART_CHORD, "bass,chord"):
-            steps, head, _notes = arranged(path, parts=parts)
+            steps, head, _notes = arranged(
+                path, options=ArrangeOptions(parts=parts)
+            )
             bars = sorted(
                 bar for bar in {step.bar for step in steps} if bar is not None
             )
@@ -710,7 +723,9 @@ class TestTheSopranoIsPerSlotNotPerRoute(unittest.TestCase):
     def _arrange(self, parts=PART_NAMES_ARG, grid="chord:joe_pass"):
         from tests.support import arranged
 
-        return arranged(self._path(), parts=parts, grid=grid)
+        return arranged(
+            self._path(), options=ArrangeOptions(parts=parts, grid=grid)
+        )
 
     def test_a_singing_selection_comps_the_grid_positions_it_does_not_sing(self):
         """The grid is no longer ignored when the guitar has the tune."""
@@ -804,7 +819,10 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
 
     def _comp(self, progression, strategy, **kwargs):
         steps = VoiceLeadingEngine.arrange_progression(
-            progression, parts=VOICES_ARG, non_chord_tone=strategy, **kwargs
+            progression,
+            options=ArrangeOptions(
+                parts=VOICES_ARG, non_chord_tone=strategy, **kwargs
+            ),
         )
         self.assertTrue(steps, "an arrangement with no steps at all is a defect")
         return steps
@@ -940,8 +958,10 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
         # bass part is refused ("add 'bass' to parts"). This class is the one that
         # carries a thumb, so it takes both parts.
         steps = self.engine.arrange_progression(
-            PROGRESSION, parts=PARTS_WITH_BASS,
-            timings=self.timings, **kwargs,
+            PROGRESSION,
+            options=ArrangeOptions(
+                parts=PARTS_WITH_BASS, timings=self.timings, **kwargs
+            ),
         )
         self.assertTrue(steps, "an arrangement with no steps at all is a defect")
         return steps

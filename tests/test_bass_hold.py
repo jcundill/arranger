@@ -18,6 +18,7 @@ from typing import Any
 
 from arranger import Request
 from arranger.annotation import step_annotation
+from arranger.options import ArrangeOptions
 from headxml import arrange_xml_head
 from tabxml import format_musicxml
 from tests.support import COMMON_8, make_step
@@ -137,7 +138,7 @@ class TestTheRingEnds(unittest.TestCase):
         from arranger import VoiceLeadingEngine
 
         steps = VoiceLeadingEngine.arrange_progression(
-            [("E4", "maj7", "Cmaj7"), ("G4", "maj7", "Cmaj7")], bass="root"
+            [("E4", "maj7", "Cmaj7"), ("G4", "maj7", "Cmaj7")], options=ArrangeOptions(bass="root")
         )
         self.assertEqual([step.bass_held for step in steps], [False, False])
 

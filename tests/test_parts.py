@@ -25,6 +25,7 @@ from arranger import (
     resolve_parts,
     supported_string_sets,
 )
+from arranger.options import ArrangeOptions
 from arranger.render import _step_cells
 from arranger.tuning import MUTED_CELL
 from tests.support import (
@@ -77,7 +78,7 @@ class TestMelodyOnlySelections(unittest.TestCase):
         """
         for texture in TEXTURE_STYLES:
             steps = VoiceLeadingEngine().arrange_progression(
-                PROGRESSION, parts=VOICES_ARG, texture=texture,
+                PROGRESSION, options=ArrangeOptions(parts=VOICES_ARG, texture=texture),
             )
             self.assertTrue(steps, texture)
             self.assertTrue(
@@ -94,7 +95,7 @@ class TestMelodyOnlySelections(unittest.TestCase):
         statement of it.
         """
         steps = VoiceLeadingEngine().arrange_progression(
-            PROGRESSION, parts="melody"
+            PROGRESSION, options=ArrangeOptions(parts="melody")
         )
         self.assertTrue(steps)
         for step in steps:
@@ -114,7 +115,7 @@ class TestMelodyOnlySelections(unittest.TestCase):
         self.assertNotIn("melody_bass", TEXTURE_STYLES)
         with self.assertRaises(ValueError):
             VoiceLeadingEngine().arrange_progression(
-                PROGRESSION, texture="melody"
+                PROGRESSION, options=ArrangeOptions(texture="melody")
             )
 
     def test_an_nc_bar_under_soprano_takes_the_no_chord_route(self):
@@ -130,7 +131,7 @@ class TestMelodyOnlySelections(unittest.TestCase):
         in `docs/history/one-fact.md`'s build notes shows.
         """
         steps = VoiceLeadingEngine().arrange_progression(
-            [("F4", "NC", "NC"), ("E4", "7", "G7")], parts="melody"
+            [("F4", "NC", "NC"), ("E4", "7", "G7")], options=ArrangeOptions(parts="melody")
         )
         self.assertEqual([s.chord for s in steps], ["NC", "G7"])
         self.assertTrue(steps[0].melody_only)
@@ -155,8 +156,11 @@ class TestMelodyOnlySelections(unittest.TestCase):
         ]
         timings = [(0, 1.0, 1.0), (0, 2.5, 0.5), (1, 1.0, 1.0), (1, 3.0, 1.0)]
         steps = VoiceLeadingEngine.arrange_progression(
-            progression, timings=timings, parts="melody", grid="chord:joe_pass"
-        )
+                progression, timings=timings, options=ArrangeOptions(
+                    parts="melody",
+                    grid="chord:joe_pass",
+                ),
+            )
         self.assertEqual(len(steps), 4, "an off-grid slot of the tune went missing")
         for step in steps:
             self.assertEqual(len(step.voicing.active_frets()), 1)
@@ -245,7 +249,7 @@ class TestTheArityFollowsTheTexture(unittest.TestCase):
 
     def counts_for(self, texture: str) -> List[int]:
         steps = self.engine.arrange_progression(
-            PROGRESSION, parts=PART_CHORD, texture=texture
+            PROGRESSION, options=ArrangeOptions(parts=PART_CHORD, texture=texture)
         )
         self.assertTrue(steps, texture)
         return [len(step.voicing.active_frets()) for step in steps]
@@ -304,7 +308,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
         self.engine = VoiceLeadingEngine()
 
     def arrange(self, parts: str):
-        return self.engine.arrange_progression(PROGRESSION, parts=parts)
+        return self.engine.arrange_progression(PROGRESSION, options=ArrangeOptions(parts=parts))
 
     def test_an_inner_voice_is_not_addressable_as_a_part(self):
         """The axis has no spelling for one inner voice, and that is the fix.

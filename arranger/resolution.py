@@ -9,7 +9,7 @@ still needs.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Container, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Container, List, Mapping, Optional, Sequence, Tuple
 
 from .bass import (
     Slot,
@@ -191,12 +191,45 @@ def _conflicts(**values: object) -> List[str]:
     every sentinel default must equal the keyword's: a field defaulting to the
     *resolved* value would compare unequal on every call and make a bare
     `options=` look like a caller who had passed both spellings.
+
+    The two **input facts** are not here: `timings` and `time_signature` say what is
+    being arranged rather than how to play it, so they sit beside `options=` and are
+    reconciled by `settle_input_fact` instead. `resolve_knobs` holds the rule.
+    `request` is the third: it is *what to play*, so it rides beside `options=`, which
+    carries the implementation axes that answer *how*.
     """
     return sorted(
         name
         for name, value in values.items()
         if value != ArrangeOptions.__dataclass_fields__[name].default
     )
+
+
+def settle_input_fact(
+    keyword: Any,
+    stated: Any,
+    default: Any,
+    name: str,
+    caller: str,
+) -> Any:
+    """One **input fact** that both the keyword and `options=` may state.
+
+    The metre and the request say *what is being arranged* rather than *how to play
+    it*, so they sit beside `options=` rather than inside it - unlike the axes, which
+    are the implementation. The keyword wins; the object's own value is read only when
+    the keyword was left at its default. Both stated is two claims about one thing,
+    which raises rather than silently preferring one.
+
+    A rule of its own rather than `_conflicts`, because these two have a default that
+    is a real value (`COMMON_TIME`, the shipped request) rather than "no opinion", so
+    the object being at its default is what says it has nothing to add.
+    """
+    if keyword != default and stated != default:
+        raise ValueError(
+            f"{caller} got both {name}= and an options= that states one; "
+            f"pass one or the other, not both"
+        )
+    return stated if keyword == default else keyword
 
 
 def resolve_knobs(
@@ -206,11 +239,6 @@ def resolve_knobs(
     non_chord_tone: str,
     fret_min: int,
     fret_max: int,
-    texture: Optional[str] = None,
-    bass: Optional[str] = None,
-    parts: Optional[str] = None,
-    harmony: Optional[str] = None,
-    grid: Optional[str] = None,
     request: Request = DEFAULT_REQUEST,
     time_signature: TimeSignature = COMMON_TIME,
     melody_onsets: Optional[Container[int]],
@@ -226,42 +254,46 @@ def resolve_knobs(
     bug and would otherwise spend an afternoon finding out why their keyword had
     no effect.
 
+    The five axes - `texture`, `bass`, `parts`, `harmony`, `grid` - are **not**
+    among those keywords: they are the engine's implementation rather than a question
+    a caller asks, so they are read off `options` or derived from the request.
+
+    The request and the metre are **input facts** the other way - they say *what* is
+    being arranged - so `settle_input_fact` lets them sit *beside* `options=`: the
+    keyword wins, the object's own is read only when the keyword was left at its
+    default, and both stated raises.
+
     Extracted from `arrange_progression` so the conflict rule and the up-front
-    validation - the `non_chord_tone` and `texture` spellings - sit in one place
-    rather than at the top of a thousand-line loop. A typo costs a message rather
-    than a full arrangement followed by a surprise.
+    validation sit in one place rather than at the top of a thousand-line loop: a
+    typo costs a message rather than a full arrangement followed by a surprise.
     """
+    # `None` means "derive this from the request", which is what every axis means
+    # unless `options` spells it out - the only door left to one.
+    stated = options if options is not None else ArrangeOptions()
+    texture, bass, parts, harmony, grid = (
+        stated.texture, stated.bass, stated.parts, stated.harmony, stated.grid
+    )
     if options is not None:
         given = _conflicts(
-            top_strings=top_strings,
-            non_chord_tone=non_chord_tone,
-            fret_min=fret_min,
-            fret_max=fret_max,
-            texture=texture,
-            bass=bass,
-            parts=parts,
-            harmony=harmony,
-            grid=grid,
-            time_signature=time_signature,
-            melody_onsets=melody_onsets,
-            request=request,
+            top_strings=top_strings, non_chord_tone=non_chord_tone,
+            fret_min=fret_min, fret_max=fret_max, melody_onsets=melody_onsets,
         )
         if given:
             raise ValueError(
                 f"arrange_progression got both options= and the keyword(s) "
                 f"{sorted(given)}; pass one or the other, not both"
             )
+        request = settle_input_fact(
+            request, options.request, DEFAULT_REQUEST, "request", "arrange_progression"
+        )
+        time_signature = settle_input_fact(
+            time_signature, options.time_signature, COMMON_TIME,
+            "time_signature", "arrange_progression",
+        )
         top_strings = options.top_strings
         non_chord_tone = options.non_chord_tone
         fret_min = options.fret_min
         fret_max = options.fret_max
-        request = options.request
-        texture = options.texture
-        bass = options.bass
-        parts = options.parts
-        harmony = options.harmony
-        grid = options.grid
-        time_signature = options.time_signature
         melody_onsets = options.melody_onsets
         if options.timings is not None:
             timings = list(options.timings)

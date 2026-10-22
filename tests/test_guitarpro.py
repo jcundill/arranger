@@ -27,6 +27,7 @@ import tempfile
 import unittest
 
 from arranger import ROLE_TARGET, ArrangementStep, VoiceLeadingEngine
+from arranger.options import ArrangeOptions
 
 # The shared placement core, reached directly: these tests are about where events
 # land, which is decided in `tabscore` and only turned into beats by `tabgp`.
@@ -1261,8 +1262,11 @@ class TestWalkingBass(GuitarProTestCase):
         self.walk_steps = VoiceLeadingEngine.arrange_progression(
             [("F5", "maj7", "Fmaj7")],
             timings=[(0, 1.0, None)],
-            texture="targets", bass="root,5th,approach,nearest",
-            grid="melody:every_note,bass:walk",
+            options=ArrangeOptions(
+                texture="targets",
+                bass="root,5th,approach,nearest",
+                grid="melody:every_note,bass:walk",
+            ),
         )
         self.walk_song = _parse(io.BytesIO(format_gp5(self.walk_steps)))
         self.walk_beats = [
@@ -1367,9 +1371,13 @@ class TestWalkingBass(GuitarProTestCase):
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
             steps, _, _ = arrange_xml_head(
-                BUT_NOT_FOR_ME, texture="targets",
-                bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk",
-            )
+                    BUT_NOT_FOR_ME, options=ArrangeOptions(
+                        texture="targets",
+                        bass="root,5th,approach,nearest",
+                        grid="melody:every_note,bass:walk",
+                    ),
+
+                )
         song = _parse(
             io.BytesIO(format_gp5(steps, beats_per_bar=2, beat_type=2))
         )
@@ -1427,9 +1435,13 @@ class TestWalkingBass(GuitarProTestCase):
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
             steps, _, _ = arrange_xml_head(
-                BUT_NOT_FOR_ME, texture="targets",
-                bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk",
-            )
+                    BUT_NOT_FOR_ME, options=ArrangeOptions(
+                        texture="targets",
+                        bass="root,5th,approach,nearest",
+                        grid="melody:every_note,bass:walk",
+                    ),
+
+                )
 
         ringing = None
         collisions = 0

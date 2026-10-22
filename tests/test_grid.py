@@ -421,7 +421,7 @@ class TestTheDefaultIsInert(unittest.TestCase):
         self.assertEqual(
             format_progression(
                 VoiceLeadingEngine.arrange_progression(
-                    list(PROGRESSION), grid=_chord(GRID_FINAL_AND)
+                    list(PROGRESSION), options=ArrangeOptions(grid=_chord(GRID_FINAL_AND))
                 )
             ),
             format_progression(default),

@@ -325,11 +325,6 @@ class VoiceLeadingEngine:
         # a slot a caller could not place is `(None, None, None)`, so an entry point may
         # hold either shape. See `movement.arrange_progression` for the same note.
         timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]] = None,
-        texture: Optional[str] = None,
-        bass: Optional[str] = None,
-        parts: Optional[str] = None,
-        harmony: Optional[str] = None,
-        grid: Optional[str] = None,
         request: Request = DEFAULT_REQUEST,
         # The metre as one value: count, denominator and felt grouping, validated
         # together. Omitting it means `COMMON_TIME` (4/4). See
@@ -338,9 +333,11 @@ class VoiceLeadingEngine:
         # The progression indexes whose melody note articulates, for the §9.2
         # reharmonise rule on the comping route (§9.3 step C). `None` means every slot
         # is an onset - the correct answer for a hand-built progression with no
-        # timeline, and what keeps a bare `arrange_progression(..., parts="chord")`
+        # timeline, and what keeps a bare `arrange_progression(..., options=...)`
         # honouring `--non-chord-tone`. See `ArrangeOptions.melody_onsets`.
         melody_onsets: Optional[Container[int]] = None,
+        # The implementation axes - `texture`, `bass`, `parts`, `harmony`, `grid` -
+        # and the one door to them. See `resolution.resolve_knobs`.
         options: Optional[ArrangeOptions] = None,
     ) -> List[ArrangementStep]:
         """See `movement.arrange_progression` - the full docstring is there."""
@@ -351,11 +348,6 @@ class VoiceLeadingEngine:
             fret_min=fret_min,
             fret_max=fret_max,
             timings=timings,
-            texture=texture,
-            bass=bass,
-            parts=parts,
-            harmony=harmony,
-            grid=grid,
             request=request,
             time_signature=time_signature,
             melody_onsets=melody_onsets,

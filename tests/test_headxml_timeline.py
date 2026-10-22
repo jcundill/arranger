@@ -480,7 +480,7 @@ class TestChordSlots(unittest.TestCase):
         )
         self.assertEqual([s for s in steps if s.bar == 6], [])
 
-        axis, _head, _notes = arranged(RAINY_DAY, grid=GRID_DEFAULT)
+        axis, _head, _notes = arranged(RAINY_DAY, options=ArrangeOptions(grid=GRID_DEFAULT))
         silent = sorted((s.beat, s.chord) for s in axis if s.bar == 6)
         self.assertEqual(silent, [(2.0, "D9")])
         for step in axis:
@@ -499,7 +499,7 @@ class TestChordSlots(unittest.TestCase):
         """
         skeleton = head_skeleton(self.rainy, None)
         melody_bars = {bar for _triple, bar, _beat, _duration in skeleton}
-        steps, _head, _notes = arranged(RAINY_DAY, grid=GRID_DEFAULT)
+        steps, _head, _notes = arranged(RAINY_DAY, options=ArrangeOptions(grid=GRID_DEFAULT))
         added = {(s.bar, s.beat) for s in steps} - {
             (bar, round(beat, 6)) for _t, bar, beat, _d in skeleton
         }
@@ -525,7 +525,7 @@ class TestChordSlots(unittest.TestCase):
                     (bar, round(beat, 6))
                     for _t, bar, beat, _d in head_skeleton(head, None)
                 }
-                steps, _head, _notes = arranged(path, grid=GRID_DEFAULT)
+                steps, _head, _notes = arranged(path, options=ArrangeOptions(grid=GRID_DEFAULT))
                 for step in steps:
                     bar, beat = step.bar or 0, step.beat or 0.0
                     if (bar, round(beat, 6)) in written:
@@ -643,8 +643,12 @@ class TestChordSlots(unittest.TestCase):
         """
         def walked(grid):
             steps, _head, _notes = arrange_xml_head(
-                RAINY_DAY, texture="chord2", bass="root,5th,approach,nearest", grid=grid
-            )
+                    RAINY_DAY, options=ArrangeOptions(
+                        texture="chord2",
+                        bass="root,5th,approach,nearest",
+                        grid=grid,
+                    ),
+                )
             return {s.bar for s in steps}
 
         head = load_musicxml(RAINY_DAY)
@@ -910,7 +914,7 @@ class TestSilentSlotsCarryNoMelody(unittest.TestCase):
 
     def _arrange(self):
         """The comping union over `synthetic_repeat_slash`, whose melody ends before bar 6."""
-        return arranged(RAINY_DAY, parts="chord", grid="chord:freddie")
+        return arranged(RAINY_DAY, options=ArrangeOptions(parts="chord", grid="chord:freddie"))
 
     def test_a_slot_where_the_melody_stopped_carries_none(self):
         """The silent position in bar 6 sits under a chord and over no note."""

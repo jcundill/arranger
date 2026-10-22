@@ -47,6 +47,7 @@ from arranger.bass_place import (
     place_bass,
 )
 from arranger.fingers import MAX_HAND_SPAN, hand_span
+from arranger.options import ArrangeOptions
 from arranger.parts import PART_NAMES
 from arranger.texture import texture_palette
 from tabgp import _sounding_frets
@@ -91,9 +92,11 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
 
         steps, _, _ = arranged(
             BUT_NOT_FOR_ME,
-            texture="targets",
-            bass=BASS_STYLE_WALK,
-            grid="melody:every_note,bass:walk",
+            options=ArrangeOptions(
+                texture="targets",
+                bass=BASS_STYLE_WALK,
+                grid="melody:every_note,bass:walk",
+            ),
         )
         return steps
 
@@ -335,9 +338,11 @@ class TestAHeldStepChangesNothing(unittest.TestCase):
 
         steps, _, _ = arranged(
             BUT_NOT_FOR_ME,
-            texture="targets",
-            bass=BASS_STYLE_WALK,
-            grid="melody:every_note,bass:walk",
+            options=ArrangeOptions(
+                texture="targets",
+                bass=BASS_STYLE_WALK,
+                grid="melody:every_note,bass:walk",
+            ),
         )
         return steps
 
@@ -382,8 +387,7 @@ class TestAHeldStepChangesNothing(unittest.TestCase):
         """
         steps, _head, _notes = arranged(
             BUT_NOT_FOR_ME,
-            texture="targets",
-            bass=BASS_STYLE_WALK,
+            options=ArrangeOptions(texture="targets", bass=BASS_STYLE_WALK),
             request=Request(chord_on="every-beat", bass_on="every-beat"),
         )
         self.assertEqual(
@@ -902,7 +906,7 @@ class TestTheInvariant(unittest.TestCase):
             ):
                 with self.subTest(head=path, texture=texture, bass=bass):
                     steps, _head, _notes = arranged(
-                        path, texture=texture, bass=bass
+                        path, options=ArrangeOptions(texture=texture, bass=bass)
                     )
                     for step in steps:
                         plucks = len(_sounding_frets(step))
@@ -957,7 +961,7 @@ class TestTheInvariant(unittest.TestCase):
             ):
                 with self.subTest(head=path, texture=texture, bass=bass):
                     steps, _head, _notes = arranged(
-                        path, texture=texture, bass=bass
+                        path, options=ArrangeOptions(texture=texture, bass=bass)
                     )
                     held = None
                     for step in steps:
@@ -1044,7 +1048,11 @@ class TestASingleNoteStepHasNothingToHold(unittest.TestCase):
                 ("F4", "7", "Bb7"),
             ],
             timings=[(2, 1.0, 0.5), (2, 2.0, 0.25), (2, 2.5, 0.375), (3, 1.0, 0.375), (3, 1.5, 0.25)],
-            texture="targets", bass=BASS_STYLE_WALK, grid="melody:every_note,bass:walk",
+            options=ArrangeOptions(
+                texture="targets",
+                bass=BASS_STYLE_WALK,
+                grid="melody:every_note,bass:walk",
+            ),
             time_signature=TimeSignature(2, 4),
         )
 
@@ -1115,9 +1123,11 @@ class TestASingleNoteStepHasNothingToHold(unittest.TestCase):
 
         steps, _head, _notes = arranged(
             BUT_NOT_FOR_ME,
-            texture="targets",
-            bass=BASS_STYLE_WALK,
-            grid="melody:every_note,bass:walk",
+            options=ArrangeOptions(
+                texture="targets",
+                bass=BASS_STYLE_WALK,
+                grid="melody:every_note,bass:walk",
+            ),
         )
         target = [s for s in steps if s.bar == 3 and s.beat == 1.0][0]
         self.assertEqual(target.chord, "Cm7")

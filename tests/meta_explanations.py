@@ -49,6 +49,7 @@ from arranger import (
 )
 from arranger.annotation import _omission_clause, step_annotation
 from arranger.chords import melody_degree_name
+from arranger.options import ArrangeOptions
 from arranger.tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
@@ -72,14 +73,18 @@ HEADS: List[str] = sorted(
 #: sweep of every committed head, so each config costs seconds.
 CONFIGS: List[Dict[str, Any]] = [
     {},
-    {"texture": "chord1"},
-    {"texture": "targets"},
-    {"parts": "melody"},
-    {"parts": "bass"},
-    {"parts": "chord"},
-    {"parts": "bass,chord"},
-    {"bass": "root,5th,approach,nearest", "grid": "melody:every_note,bass:walk"},
-    {"grid": "chord:freddie"},
+    {"options": ArrangeOptions(texture="chord1")},
+    {"options": ArrangeOptions(texture="targets")},
+    {"options": ArrangeOptions(parts="melody")},
+    {"options": ArrangeOptions(parts="bass")},
+    {"options": ArrangeOptions(parts="chord")},
+    {"options": ArrangeOptions(parts="bass,chord")},
+    {
+        "options": ArrangeOptions(
+            bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk"
+        )
+    },
+    {"options": ArrangeOptions(grid="chord:freddie")},
     {"non_chord_tone": "sustain"},
     # A fill lives where no melody slot does, which is the one place a comping step
     # can exist without a note beside it. Both policies, because `comp` states more
@@ -539,8 +544,10 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         whatever the tune is doing, which is what keeps the slash-bass question asked.
         """
         steps, _head, _notes = arranged(
-            "tests/data/Trouble_in_Mind_Blues.musicxml", grid="chord:freddie"
-        )
+                "tests/data/Trouble_in_Mind_Blues.musicxml", options=ArrangeOptions(
+                    grid="chord:freddie",
+                ),
+            )
         lost = [
             step for step in steps
             if "/" in step.chord and "written bass" in step_annotation(step)
@@ -630,9 +637,13 @@ class TestTheLoneNoteKeepsTheWindowHonest(unittest.TestCase):
     #: fills, and the melody-only selection.
     CONFIGS: List[Dict[str, Any]] = [
         {},
-        {"grid": "chord:freddie"},
-        {"bass": "root,5th,approach,nearest", "grid": "melody:every_note,bass:walk"},
-        {"parts": "melody"},
+        {"options": ArrangeOptions(grid="chord:freddie")},
+        {
+            "options": ArrangeOptions(
+                bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk"
+            )
+        },
+        {"options": ArrangeOptions(parts="melody")},
     ]
 
     def test_every_lone_shape_reports_the_palette_it_came_from(self):

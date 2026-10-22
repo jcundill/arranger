@@ -172,9 +172,11 @@ class TestTheHandBuiltMetre(unittest.TestCase):
         steps = VoiceLeadingEngine.arrange_progression(
             self.PROGRESSION,
             timings=[(0, 1.0, None)],
-            texture="targets",
-            bass=BASS_STYLE_WALK,
-            grid="melody:every_note,bass:walk",
+            options=ArrangeOptions(
+                texture="targets",
+                bass=BASS_STYLE_WALK,
+                grid="melody:every_note,bass:walk",
+            ),
         )
         self.assertEqual([step.beat for step in steps], [1.0, 2.0, 3.0, 4.0])
 
@@ -183,9 +185,11 @@ class TestTheHandBuiltMetre(unittest.TestCase):
         steps = VoiceLeadingEngine.arrange_progression(
             self.PROGRESSION,
             timings=[(0, 1.0, None)],
-            texture="targets",
-            bass=BASS_STYLE_WALK,
-            grid="chord:freddie,bass:walk",
+            options=ArrangeOptions(
+                texture="targets",
+                bass=BASS_STYLE_WALK,
+                grid="chord:freddie,bass:walk",
+            ),
             time_signature=TimeSignature(7, 4, "2+2+3"),
         )
         self.assertEqual([step.beat for step in steps], [1.0, 3.0, 5.0])

@@ -91,7 +91,9 @@ def timings_for(count: int, beats_per_bar: int = 4):
 
 def through_library(triples, timings, texture, **kwargs):
     steps = VoiceLeadingEngine.arrange_progression(
-        triples, timings=timings, texture=texture, **kwargs
+        triples,
+        timings=timings,
+        options=ArrangeOptions(texture=texture, **kwargs),
     )
     return steps
 

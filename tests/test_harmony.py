@@ -55,9 +55,11 @@ class TestTheHarmonyAxis(unittest.TestCase):
         sentinel rather than a resolved value: `auto` resolves to `guide`, which is what
         the comping route has always said.
         """
-        default = VoiceLeadingEngine.arrange_progression(PROGRESSION, parts=VOICES_ARG)
+        default = VoiceLeadingEngine.arrange_progression(
+            PROGRESSION, options=ArrangeOptions(parts=VOICES_ARG),
+        )
         explicit = VoiceLeadingEngine.arrange_progression(
-            PROGRESSION, parts=VOICES_ARG, harmony="auto"
+            PROGRESSION, options=ArrangeOptions(parts=VOICES_ARG, harmony="auto")
         )
         self.assertEqual(
             [s.voicing.frets for s in default],
@@ -81,7 +83,7 @@ class TestTheHarmonyAxis(unittest.TestCase):
         - which is the property the test is for.
         """
         by_keyword = VoiceLeadingEngine.arrange_progression(
-            PROGRESSION, parts=PART_CHORD, harmony=HARMONY_SHELL_ROOT
+            PROGRESSION, options=ArrangeOptions(parts=PART_CHORD, harmony=HARMONY_SHELL_ROOT)
         )
         by_options = VoiceLeadingEngine.arrange_progression(
             PROGRESSION,
@@ -122,7 +124,7 @@ class TestTheHarmonyAxis(unittest.TestCase):
         """
         arrangements = [
             [s.voicing.frets for s in VoiceLeadingEngine.arrange_progression(
-                PROGRESSION, harmony=value
+                PROGRESSION, options=ArrangeOptions(harmony=value)
             )]
             for value in ("auto", HARMONY_GUIDE, HARMONY_SHELL_ROOT)
         ]
@@ -284,7 +286,7 @@ class TestTheHarmonyAxis(unittest.TestCase):
         """
         with self.assertRaises(ValueError) as caught:
             VoiceLeadingEngine.arrange_progression(
-                PROGRESSION, parts=PART_BASS, harmony=HARMONY_SHELL_ROOT,
+                PROGRESSION, options=ArrangeOptions(parts=PART_BASS, harmony=HARMONY_SHELL_ROOT),
             )
         message = str(caught.exception)
         self.assertIn(HARMONY_SHELL_ROOT, message)
@@ -298,7 +300,9 @@ class TestTheHarmonyAxis(unittest.TestCase):
         nothing at all - and the same argument `_resolve_melody` is resolved for.
         """
         with self.assertRaises(ValueError):
-            VoiceLeadingEngine.arrange_progression(PROGRESSION, harmony="nonsense")
+            VoiceLeadingEngine.arrange_progression(
+                PROGRESSION, options=ArrangeOptions(harmony="nonsense"),
+            )
 
     def test_the_lone_bass_states_a_root_or_a_fifth(self):
         """The degree rule for a one-note bass shape is `BASS_DEGREES_6432`, not a family.

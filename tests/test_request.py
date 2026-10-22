@@ -51,6 +51,7 @@ from arranger.bass_rules import (
 )
 from arranger.cli import HEAD_HELP, REQUEST_DESTS, add_common_arguments
 from arranger.harmony import HARMONY_AUTO
+from arranger.options import ArrangeOptions
 
 
 class TestTheShippedRequest(unittest.TestCase):
@@ -294,7 +295,7 @@ _HELD = (
 def _arrange(progression=_PROGRESSION, timings=_TIMINGS, **kwargs):
     """The library's own front door, with the request passed as one value."""
     return VoiceLeadingEngine.arrange_progression(
-        progression, timings=timings, **kwargs
+        progression, timings=timings, options=ArrangeOptions(**kwargs)
     )
 
 
@@ -395,6 +396,28 @@ class TestTheLibrarySpelling(unittest.TestCase):
         self.assertEqual(len(pedal), 4)
         self.assertEqual(len(set(pedal)), 1)
         self.assertGreater(len(set(walk)), 1)
+
+
+    def test_the_request_and_an_axis_override_compose(self):
+        """The two doors are not alternatives: an axis rides beside the request.
+
+        `request=` is *what to play* and `options=ArrangeOptions(...)` carries the
+        implementation axes that answer *how*, so one call may name both. The axis
+        wins where it speaks - that is what "the implementation" means - and every
+        other answer still comes from the request.
+        """
+        composed = VoiceLeadingEngine.arrange_progression(
+            _PROGRESSION,
+            timings=_TIMINGS,
+            request=Request(melody=False, chord_on="every-beat"),
+            options=ArrangeOptions(texture="targets"),
+        )
+        self.assertEqual([step.beat for step in composed], [1.0, 2.0, 3.0, 4.0])
+        # `melody=False` is the request's answer, and it survived the axis beside it.
+        self.assertTrue(all(not step.melody_voiced for step in composed))
+        self.assertEqual(
+            [step.role for step in composed], ["target", "fill", "target", "fill"]
+        )
 
 
 class TestTheTwoSpellingsAreOneVocabulary(unittest.TestCase):

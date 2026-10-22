@@ -22,7 +22,7 @@ from unittest.mock import patch
 import arranger.movement as movement
 from arranger.decisions import MELODY_ALONE_BASS, MELODY_ALONE_REST
 from arranger.grouping import COMMON_TIME
-from arranger.options import Request
+from arranger.options import ArrangeOptions, Request
 from arranger.route_dispatch import ROUTES, dispatch_step
 from arranger.slot_plan import SlotPlan
 
@@ -97,7 +97,9 @@ class TestTheDispatchTable(unittest.TestCase):
 
         with patch.object(movement, "dispatch_step", recording):
             movement.arrange_progression(
-                progression, time_signature=COMMON_TIME, **kwargs
+                progression,
+                time_signature=COMMON_TIME,
+                options=ArrangeOptions(**kwargs),
             )
         return seen
 
