@@ -1,79 +1,28 @@
-"""The grid axis: `grid`, and the rhythm a part places its notes on.
+"""The rhythm layer: the lattice a position is counted on, and the metre under it.
 
-`parts` answers *which parts sound* and `texture` *how many notes the chord part
-states*; this answers *where in the bar a part sounds*. Those are different questions
-and all three are needed for a comping style to mean anything: a shell on every beat
-and a shell on the ands are not variants of one another.
+`Rhythm` is the request - direct positions in felt beats - and it is tested where it
+lives, in `test_rhythm.py`. What is left here is the *unit* the layer counts in and the
+one thing a hand-built progression has to know about the metre:
 
-A grid is **rows of `part:pattern`**, because the parts do not move together:
-`joe_pass` is a chord on every upbeat and a bass note on every beat.
-
-What is verified, in order:
-
-- **the table**: every row name in `GRID_STYLES` is a pair the parts table allows,
-  and every pattern a part may take has a rule (`GRID_PATTERNS`) or is declared a
-  **timeline** pattern (`GRID_TIMELINE_PATTERNS`, whose positions come from the
-  harmony rather than the metre) - the same coupling `BASS_RULE_ROLES` asserts over
-  the bass axis;
-- **the metre**: positions are **bar-relative**, so `final_and` is the upbeat of the
-  bar's last beat in 2/2, 3/4 and 4/4 alike. This is the claim
-  `docs/history/comping-styles.md` section 4.2 makes about `LAST`, and it is a table of three
-  metres rather than a comment;
-- **the default**: `melody:every_note` is the default outright (there is no `auto`
-  sentinel), and it defers to the melody's own slots at every beat - so the axis is
-  inert and every existing arrangement is unaffected;
-- **the refusal**: a metre-relative figure asked of a metre it was not written for
-  raises and names the pattern, and the test is **one-directional** - a bar with no
-  note on a grid position is not a refusal, because that is the answer rather than an
-  error;
-- **the lattice**: the unit a position is counted in (`TICKS_PER_BEAT`, a
-  twenty-fourth of a beat) and the note values a **generated** bar may be subdivided
-  at (`grid_resolutions`, read through the metre) - the unit is `headxml._tick_key`'s,
-  and the vocabulary is `headxml._generated_beats`', so a metre's table moving is a
-  generated bar of the wrong density.
-
-The last one is the subtle half and it is why the last class below exists at all: a
-grid that refused whenever it placed nothing in a bar would refuse on almost every bar
-of real material, and a refusal that fires on the normal case teaches a reader to
-ignore refusals.
+- **the lattice**: `TICKS_PER_BEAT`, a twenty-fourth of a beat, and the note values a
+  generated bar may be subdivided at (`grid_resolutions`, read through the metre). The
+  unit is `headxml._tick_key`'s and the vocabulary is `headxml._generated_beats`', so a
+  metre's table moving is a generated bar of the wrong density.
+- **a progression with no timeline**: what it arranges to, with and without the metre's
+  own felt beats supplied. The claim is about the **shipped request**, and the class
+  below states the boundary rather than the slogan, because a texture that reads the
+  metric weight is not inert and never was.
 """
 
 import glob
 import unittest
-from contextlib import contextmanager
 from functools import reduce
 from math import gcd
 from pathlib import Path
 from typing import Dict, List, Tuple
 
 import headxml
-from arranger import (
-    GRID_ANCHORS,
-    GRID_CHARLESTON,
-    GRID_DEFAULT,
-    GRID_EVERY_NOTE,
-    GRID_FINAL_AND,
-    GRID_FREDDIE,
-    GRID_JOE_PASS,
-    GRID_PART_PATTERNS,
-    GRID_PATTERNS,
-    GRID_STYLES,
-    GRID_TIMELINE_PATTERNS,
-    GRID_WALK,
-    PART_BASS,
-    PART_CHORD,
-    RHYTHM_MELODY,
-    SUB,
-    TICKS_PER_BEAT,
-    GridPattern,
-    grid_allowed,
-    grid_defers_to_melody,
-    grid_positions,
-    grid_resolutions,
-    on_grid,
-    parse_grid,
-    resolve_grid,
-)
+from arranger import TICKS_PER_BEAT, grid_resolutions
 from arranger.options import ArrangeOptions
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -92,425 +41,60 @@ PROGRESSION: Tuple[Tuple[str, str, str], ...] = (
     ("G4", "maj7", "Gmaj7"),
 )
 
-
-#: A grid name no shipped row uses, so a test may add a pattern that genuinely
-#: cannot be placed and exercise the refusal the shipped vocabulary cannot reach.
-GRID_OUT_OF_METRE = "out_of_metre"
-
-
-def _chord(pattern: str) -> str:
-    """The **chord part's** row naming `pattern`, which is how a grid is spelled.
-
-    A bare pattern name is not a grid: `parse_grid` refuses it, because every row is
-    `part:pattern` and a pattern alone does not say which part moves. Every assertion
-    below that means "the chord part plays this figure" has to say so, and this is
-    that spelling in one place.
-    """
-    return f"{PART_CHORD}:{pattern}"
+#: The same progression on the metre's own felt beats, four to the bar. Written out
+#: rather than computed from a count of beats, because that is what the claim is about:
+#: these are the positions the metre gives, not the ones a caller invented.
+FELT_BEATS: List[Tuple[int, float, None]] = [
+    (1, 1.0, None), (1, 2.0, None), (1, 3.0, None), (1, 4.0, None),
+]
 
 
-@contextmanager
-def _temporary_pattern(name: str, pattern: GridPattern):
-    """Add one pattern to both tables for the duration of a `with` block.
+class TestAProgressionWithNoTiming(unittest.TestCase):
+    """What a hand-built progression arranges to, with and without a timeline.
 
-    The tables are module state and the axis is a closed set, so the only honest way
-    to test the refusal is to add a row and take it out again. **Both** tables are
-    patched, because a pattern with a rule and no part that may take it is not
-    reachable through `parse_grid` and would fail for the wrong reason. Restored in a
-    `finally` so a failing assertion cannot leave the vocabulary altered for the
-    next test - which would be a genuinely nasty failure mode, since every later
-    assertion in the suite would be reading a table this test corrupted.
-    """
-    GRID_PATTERNS[name] = pattern
-    GRID_PART_PATTERNS[PART_CHORD] = GRID_PART_PATTERNS[PART_CHORD] + (name,)
-    try:
-        yield
-    finally:
-        GRID_PATTERNS.pop(name, None)
-        GRID_PART_PATTERNS[PART_CHORD] = tuple(
-            p for p in GRID_PART_PATTERNS[PART_CHORD] if p != name
-        )
+    A bare `arrange_progression(P)` carries no timings at all, so every slot is
+    *unlocated* - which `metric_weight` reports as `-1`, not as a weak beat. The
+    shipped request states the full harmonisation under every note, and **that
+    selection does not read the weight**, so supplying the metre's felt beats moves
+    nothing: byte-identical, which is the claim this class pins.
 
-
-def refusal_text(call) -> str:
-    """The message a refused call raises, or "" when it raises nothing.
-
-    The refusals raise now rather than warning into a collector, so the assertion
-    reads the exception - which is stronger than the collector was: a refusal that
-    stopped refusing used to be invisible, and now it fails here.
-    """
-    try:
-        call()
-    except ValueError as exc:
-        return str(exc)
-    return ""
-
-
-class TestTheGridTable(unittest.TestCase):
-    """The vocabulary is closed, and every name in it has a rule."""
-
-    def test_every_style_is_a_pair_the_parts_table_allows(self):
-        """No row can be listed without a rule, or ruled without being askable.
-
-        The coupling is bidirectional on purpose. A pattern a part may take but which
-        has no row in `GRID_PATTERNS` would read `None` where a position set is
-        expected; a rule no part names is a pattern nobody can select, which is how an
-        axis quietly grows vocabulary it does not use. A **timeline** pattern is the
-        one exception and is declared as one: `anchors` has no within-bar rule at all,
-        because its positions come from the harmony rather than the metre.
-        """
-        self.assertEqual(
-            sorted(GRID_STYLES),
-            sorted(
-                f"{part}:{pattern}"
-                for part, patterns in GRID_PART_PATTERNS.items()
-                for pattern in patterns
-            ),
-        )
-        for part, patterns in GRID_PART_PATTERNS.items():
-            for pattern in patterns:
-                with self.subTest(part=part, pattern=pattern):
-                    self.assertTrue(
-                        pattern in GRID_PATTERNS
-                        or pattern in GRID_TIMELINE_PATTERNS,
-                        pattern,
-                    )
-        for pattern in GRID_PATTERNS:
-            with self.subTest(pattern=pattern):
-                self.assertTrue(
-                    any(pattern in ps for ps in GRID_PART_PATTERNS.values()), pattern
-                )
-        self.assertNotIn("auto", GRID_STYLES)
-
-    def test_the_melody_anchored_rows_are_derived_from_the_patterns(self):
-        """`grid_defers_to_melody` reads the chord row's own emptiness.
-
-        Derived rather than listed: a pattern cannot be emptied without becoming
-        melody-anchored, and a second one is a row rather than a branch at each call
-        site. `every_note` is the shipped pattern that does it, and a grid that names
-        no chord row defers for the same reason - the chord part then takes the
-        melody's slots. That is why the *bass* rows defer too: they say where the
-        thumb moves and nothing about the chord.
-        """
-        for part, patterns in GRID_PART_PATTERNS.items():
-            for pattern in patterns:
-                row = _chord(pattern) if part == PART_CHORD else f"{part}:{pattern}"
-                with self.subTest(row=row):
-                    self.assertEqual(
-                        grid_defers_to_melody(row),
-                        part != PART_CHORD or pattern == GRID_EVERY_NOTE,
-                        row,
-                    )
-        self.assertTrue(grid_defers_to_melody(GRID_DEFAULT))
-        self.assertTrue(grid_defers_to_melody(_chord(GRID_EVERY_NOTE)))
-        self.assertTrue(grid_defers_to_melody(f"{PART_BASS}:{GRID_WALK}"))
-        self.assertFalse(grid_defers_to_melody(_chord(GRID_FREDDIE)))
-        # A timeline row is not melody-anchored: it has positions, they just come
-        # from the harmony rather than the metre - a different claim from "none".
-        self.assertFalse(grid_defers_to_melody(_chord(GRID_ANCHORS)))
-
-    def test_a_row_is_spelled_part_colon_pattern(self):
-        """`parse_grid` reads what the documentation tells a user to type.
-
-        Spelled the way a caller passes it, because the surface is the string: a
-        parser that could not read its own documented vocabulary would be caught by
-        nothing else here. Case is **not** significant, a row's order is not a request
-        (the result is sorted and de-duplicated), and a spelling that names no pair -
-        a bare pattern, or a pattern the named part cannot take - is refused rather
-        than guessed at.
-        """
-        for style in GRID_STYLES:
-            self.assertEqual(parse_grid(style), style)
-            self.assertEqual(parse_grid(style.upper()), style)
-        self.assertEqual(parse_grid("Chord:Charleston"), _chord(GRID_CHARLESTON))
-        self.assertEqual(
-            parse_grid(f"melody:every_note,bass:{GRID_WALK}"),
-            f"bass:{GRID_WALK},{GRID_DEFAULT}",
-        )
-        # `auto` was withdrawn when the axis was named (it named the default rather
-        # than deferring to any context), so it is refused like any other unknown name.
-        with self.assertRaises(ValueError):
-            parse_grid("auto")
-        with self.assertRaises(ValueError):
-            parse_grid(GRID_FREDDIE)
-        with self.assertRaises(ValueError):
-            parse_grid(_chord(GRID_WALK))
-        with self.assertRaises(ValueError):
-            parse_grid("half-time")
-
-    def test_an_unknown_grid_is_a_question_not_a_guess(self):
-        """A spelling nobody recognises raises, and names the real vocabulary.
-
-        Falling back would comp a part somewhere the caller did not ask for, which is
-        worse than the error and worse than silence.
-        """
-        with self.assertRaises(ValueError) as caught:
-            parse_grid(_chord("half-time"))
-        self.assertIn("joe_pass", str(caught.exception))
-
-
-class TestPositionsAreBarRelative(unittest.TestCase):
-    """`LAST` resolves against the metre, so one pattern is one idea in three metres.
-
-    This is the claim `docs/history/comping-styles.md` section 4.2 makes and the reason the
-    positions are named rather than counted: spelled `[(4, SUB)]`, `final_and` would
-    look to a 2/2 head like a pattern naming a beat that does not exist.
+    **`texture="targets"` is the boundary of the claim, and the second test states
+    it.** A target selection reads the weight to decide which beats carry the
+    harmony, so a timeline is not decoration there - it is the difference between
+    four full chords and chords on the strong beats with fills between. Naming the
+    exception is what keeps the first claim from reading as a claim about the metre
+    rather than about the selection.
     """
 
-    def test_the_final_upbeat_is_the_upbeat_of_the_last_beat_in_every_metre(self):
-        """2.5 in 2/2, 3.5 in 3/4, 4.5 in 4/4 - the same figure three times over."""
-        for beats in (2, 3, 4):
-            with self.subTest(metre=f"{beats}/4"):
-                self.assertEqual(
-                    grid_positions(_chord(GRID_FINAL_AND), beats),
-                    ((beats, (beats + 0.5,)),),
-                )
-
-    def test_the_final_upbeat_is_not_the_first_upbeat(self):
-        """The sentinel means *last*, and this is what catches it meaning something else.
-
-        A beat is 1-based, so an off-by-one in the resolution puts the pattern on the
-        upbeat of the **first** beat - a position that exists in every metre, so every
-        other assertion in this file would still pass. That is why this is its own
-        test rather than a comment, and it is the bug this file was written against.
-        """
-        for beats in (2, 3, 4):
-            with self.subTest(metre=f"{beats}/4"):
-                self.assertTrue(on_grid(beats + 0.5, _chord(GRID_FINAL_AND), beats))
-                self.assertFalse(on_grid(1.5, _chord(GRID_FINAL_AND), beats))
-
-    def test_freddie_is_every_beat_the_metre_has(self):
-        """Two notes in 2/2, three in 3/4, four in 4/4.
-
-        A count without a denominator is not a metre (`AGENTS.md` trap 9), and this
-        is that trap applied to a rhythm: a four-beat bar has four of these and a
-        two-beat bar has two.
-        """
-        for beats in (2, 3, 4):
-            with self.subTest(metre=f"{beats}/4"):
-                self.assertEqual(
-                    [number for number, _ in grid_positions(_chord(GRID_FREDDIE), beats)],
-                    list(range(1, beats + 1)),
-                )
-
-    def test_joe_pass_is_the_upbeat_of_every_beat(self):
-        """The arranging guide's "the chord pops live primarily on the and"."""
-        for beats in (2, 3, 4):
-            with self.subTest(metre=f"{beats}/4"):
-                self.assertEqual(
-                    grid_positions(_chord(GRID_JOE_PASS), beats),
-                    tuple((n, (n + 0.5,)) for n in range(1, beats + 1)),
-                )
-
-
-class TestTheGroupingDecidesTheFeltBeats(unittest.TestCase):
-    """A grouped bar's figures are counted in felt beats, not denominator units.
-
-    In 12/8 the felt beat is a dotted quarter, so `freddie` is four stabs rather than
-    twelve and `joe_pass` answers on each pulse's third eighth. The simple-metre table
-    is unchanged, which is what makes the axis inert by default.
-    """
-
-    def test_freddie_is_every_felt_beat(self):
-        self.assertEqual(
-            grid_positions(_chord(GRID_FREDDIE), 12, (3, 3, 3, 3)),
-            ((1, (1.0,)), (2, (4.0,)), (3, (7.0,)), (4, (10.0,))),
-        )
-
-    def test_joe_pass_is_each_groups_last_eighth(self):
-        self.assertEqual(
-            grid_positions(_chord(GRID_JOE_PASS), 12, (3, 3, 3, 3)),
-            ((1, (3.0,)), (2, (6.0,)), (3, (9.0,)), (4, (12.0,))),
-        )
-
-    def test_final_and_is_the_last_groups_offbeat(self):
-        self.assertEqual(
-            grid_positions(_chord(GRID_FINAL_AND), 12, (3, 3, 3, 3)),
-            ((4, (12.0,)),),
-        )
-
-    def test_charleston_answers_in_the_second_group(self):
-        """The downbeat, then the offbeat of group 2 - beat 6 in 12/8."""
-        self.assertEqual(
-            grid_positions(_chord(GRID_CHARLESTON), 12, (3, 3, 3, 3)),
-            ((1, (1.0,)), (2, (6.0,))),
-        )
-
-    def test_a_five_four_bar_named_three_plus_two(self):
-        grouping = (3, 2)
-        self.assertEqual(
-            grid_positions(_chord(GRID_FREDDIE), 5, grouping),
-            ((1, (1.0,)), (2, (4.0,))),
-        )
-        self.assertEqual(
-            grid_positions(_chord(GRID_JOE_PASS), 5, grouping),
-            ((1, (3.0,)), (2, (5.0,))),
-        )
-        self.assertEqual(
-            grid_positions(_chord(GRID_FINAL_AND), 5, grouping),
-            ((2, (5.0,)),),
-        )
-
-    def test_a_group_the_bar_does_not_have_is_dropped(self):
-        """3/8 is one group of three, so `charleston` has no second group to answer in."""
-        self.assertEqual(
-            grid_positions(_chord(GRID_CHARLESTON), 3, (3,)),
-            ((1, (1.0,)),),
-        )
-
-    def test_a_simple_metre_is_unchanged(self):
-        for pattern in (GRID_FREDDIE, GRID_JOE_PASS, GRID_FINAL_AND, GRID_CHARLESTON):
-            with self.subTest(pattern=pattern):
-                self.assertEqual(
-                    grid_positions(_chord(pattern), 4),
-                    grid_positions(_chord(pattern), 4, (1, 1, 1, 1)),
-                )
-
-    def test_on_grid_reads_the_felt_beats(self):
-        self.assertTrue(on_grid(7.0, _chord(GRID_FREDDIE), 12, (3, 3, 3, 3)))
-        self.assertFalse(on_grid(2.0, _chord(GRID_FREDDIE), 12, (3, 3, 3, 3)))
-
-
-class TestTheDefaultIsInert(unittest.TestCase):
-    """`every_note` is the default and is on everywhere, which is what "no change" means."""
-
-    def test_the_default_request_defers_to_the_melody(self):
-        """The default is the shipped behaviour, not merely a harmless one.
-
-        The public spelling is the **rhythm**, so `ArrangeOptions()` names no preset:
-        its request says `chord_on=melody`, which places the chord at every written
-        melody onset - exactly what `melody:every_note` said before the request
-        existed. The preset remains the engine's internal axis, and is still the
-        fallback `on_grid` is asked about when a caller spells one.
-        """
-        self.assertIsNone(ArrangeOptions().grid)
-        self.assertEqual(ArrangeOptions().request.chord_on, RHYTHM_MELODY)
-
-    def test_every_note_is_on_the_grid_at_every_beat(self):
-        """So a caller that names no grid places exactly the chords it always did."""
-        for beat in (1.0, 1.5, 2.0, 2.5, 3.3333, 4.75):
-            with self.subTest(beat=beat):
-                self.assertTrue(on_grid(beat, GRID_DEFAULT, 4))
-
-    def test_an_unlocated_slot_is_on_the_grid(self):
-        """`beat=None` has no position to be off.
-
-        The rule `metric_weight` already follows with its `-1`: not being told
-        where a note falls is not being told it is weak. Without this, a
-        hand-written progression - which carries no timings at all - would lose
-        every chord the moment someone passed a grid, which is the opposite of an
-        opt-in.
-        """
-        for style in GRID_STYLES:
-            with self.subTest(style=style):
-                self.assertTrue(on_grid(None, style, 4))
-
-    def test_a_progression_with_no_timing_arranges_identically(self):
-        """The end-to-end version of the claim above, on a real arrangement.
-
-        Asserted through `format_progression` rather than through the predicate,
-        because "byte-identical" is a claim about what a player reads and the
-        predicate is only a step on the way to it.
+    def test_the_shipped_request_is_byte_identical_with_or_without_a_timeline(self):
+        """Asserted through `format_progression`, because the claim is about what a player
+        reads rather than about the fields a step happens to carry.
         """
         from arranger import VoiceLeadingEngine, format_progression
 
-        # `arrange_progression` returns the **list** of steps, not one step: indexing
-        # it here would hand `format_progression` a single `ArrangementStep`, which is
-        # dict-style and would be iterated as its field names.
-        default = VoiceLeadingEngine.arrange_progression(list(PROGRESSION))
-        self.assertEqual(
-            format_progression(
-                VoiceLeadingEngine.arrange_progression(
-                    list(PROGRESSION), options=ArrangeOptions(grid=_chord(GRID_FINAL_AND))
-                )
-            ),
-            format_progression(default),
+        bare = VoiceLeadingEngine.arrange_progression(list(PROGRESSION))
+        laid = VoiceLeadingEngine.arrange_progression(
+            list(PROGRESSION), timings=FELT_BEATS
         )
+        self.assertEqual(format_progression(laid), format_progression(bare))
 
+    def test_a_texture_that_reads_the_metric_weight_is_not_inert(self):
+        """The exception, measured rather than argued: `targets` moves the harmony.
 
-class TestTheRefusalIsOneDirectional(unittest.TestCase):
-    """Only a pattern that places *nothing anywhere* is a mismatch.
-
-    The other direction - "this bar had no note on one of the grid's positions" - has
-    a correct answer of "no, and that is fine", so warning there would fire on
-    almost every bar of real material.
-    """
-
-    def test_a_bar_relative_pattern_is_allowed_in_every_metre(self):
-        """`LAST` and `ALL` both resolve, so these can never be a mismatch."""
-        for style in (_chord(GRID_FREDDIE), _chord(GRID_FINAL_AND), GRID_DEFAULT):
-            for beats in (2, 3, 4, 5, 6):
-                with self.subTest(style=style, metre=beats):
-                    allowed, reason = grid_allowed(style, beats)
-                    self.assertTrue(allowed, reason)
-                    self.assertEqual(reason, "")
-
-    def test_no_shipped_row_is_a_mismatch_in_any_metre(self):
-        """Measured, and it is why the refusal is defensive rather than routine.
-
-        Every metre-relative row is asked of every metre from one beat up, and none
-        of them is ever refused: `charleston` keeps its beat 1, which exists
-        everywhere, and `joe_pass` is built on `ALL`, which always resolves. So the
-        refusal below is unreachable through the shipped vocabulary **today**.
-
-        That is worth stating rather than leaving implied. A check no input can fail
-        proves nothing about the axis, which is why the next two tests exercise it
-        against a row that genuinely cannot be expressed - and why this one exists
-        to keep the two claims apart.
+        Both arrangements keep their step count - the timeline moves which beats the
+        chord *states*, not which positions exist - so the assertion is on the tabs.
         """
-        for style in GRID_STYLES:
-            for beats in range(1, 9):
-                with self.subTest(style=style, metre=beats):
-                    allowed, reason = grid_allowed(style, beats)
-                    self.assertTrue(allowed, f"{style} in {beats}/4: {reason}")
+        from arranger import VoiceLeadingEngine
 
-    def test_a_metre_relative_figure_that_cannot_fit_raises_and_names_the_pattern(self):
-        """The refusal, exercised against a pattern that genuinely places nothing.
-
-        A row of the table, not a shipped one: the function is *derived* from
-        `GRID_PATTERNS`, so testing the derivation needs a row the derivation can
-        fail on. The alternative - asserting only that no shipped row is refused -
-        would leave both messages unexercised, and a message nothing can produce is
-        a message nothing has checked.
-        """
-        pattern = GridPattern(positions=((4, 0), (4, SUB)), bar_relative=False)
-        with _temporary_pattern(GRID_OUT_OF_METRE, pattern):
-            text = refusal_text(lambda: resolve_grid(_chord(GRID_OUT_OF_METRE), 3))
-        self.assertIn(GRID_OUT_OF_METRE, text)
-        self.assertIn("bar-relative", text)
-
-    def test_a_bar_relative_row_that_places_nothing_is_reported_as_a_defect(self):
-        """The two refusals are different claims, and each says which it is.
-
-        A bar-relative pattern that resolved nowhere would be a bug in the table,
-        because `LAST` and `ALL` are defined to resolve in any metre - so its warning
-        says so, and does not suggest the user asked for the wrong thing.
-        """
-        pattern = GridPattern(positions=((7, 0),), bar_relative=True)
-        with _temporary_pattern(GRID_OUT_OF_METRE, pattern):
-            allowed, reason = grid_allowed(_chord(GRID_OUT_OF_METRE), 3)
-        self.assertFalse(allowed)
-        self.assertIn("defect in the pattern", reason)
-
-    def test_a_pattern_that_places_nothing_in_a_bar_is_not_refused(self):
-        """A bar with no note on a grid position is the answer, not an error.
-
-        This is the measurement that keeps the refusal honest. `final_and` places one
-        chord per bar at 2.5, and a head whose bars carry no note there is a head
-        where the grid has nothing to do - which is what the user asked for by
-        choosing a sparse pattern. Resolving the grid consults only the metre, never
-        the material, so this holds before a single note is read.
-        """
-        self.assertEqual(
-            resolve_grid(_chord(GRID_FINAL_AND), 2), _chord(GRID_FINAL_AND)
+        options = ArrangeOptions(texture="targets")
+        bare = VoiceLeadingEngine.arrange_progression(list(PROGRESSION), options=options)
+        laid = VoiceLeadingEngine.arrange_progression(
+            list(PROGRESSION), timings=FELT_BEATS, options=options
         )
-
-    def test_the_default_grid_is_never_refused(self):
-        """`every_note` places everywhere, so the default resolves in every metre."""
-        for beats in (1, 2, 3, 4, 7):
-            with self.subTest(metre=beats):
-                self.assertEqual(resolve_grid(GRID_DEFAULT, beats), GRID_DEFAULT)
-
+        self.assertEqual(len(laid), len(bare))
+        self.assertNotEqual(
+            [step.tab_line() for step in laid], [step.tab_line() for step in bare]
+        )
 
 class TestTheLatticeAndItsResolutions(unittest.TestCase):
     """One unit for both halves of a bar: `TICKS_PER_BEAT`, and what a generated bar takes.
@@ -532,16 +116,14 @@ class TestTheLatticeAndItsResolutions(unittest.TestCase):
       a bar's strongest position silent.
     """
 
-    def test_the_beat_is_twenty_four_ticks_and_its_upbeat_is_half_of_one(self):
-        """The unit is a twenty-fourth of a beat, and `SUB` is the upbeat in those units.
+    def test_the_beat_is_twenty_four_ticks(self):
+        """The unit a position is counted in: a twenty-fourth of a beat.
 
-        `SUB` is a position *within* a beat rather than a note value, so it moves with the
-        unit: it was one eighth when a beat was counted in eighths and is twelve ticks now.
-        `GRID_CHARLESTON` and `GRID_JOE_PASS` name it as their position, so a change here
-        moves every named figure that plays an upbeat - hence pinning both.
+        `headxml._tick_key` rounds to it, `grid_resolutions` is expressed in it, and a
+        generated bar is subdivided by it - so a change here moves the lattice every
+        position in the library is measured against.
         """
         self.assertEqual(TICKS_PER_BEAT, 24)
-        self.assertEqual(SUB, TICKS_PER_BEAT // 2)
 
     def test_the_vocabulary_is_a_note_value_table_read_through_the_metre(self):
         """Common, cut, eighth-note and sixteenth-note beats, each with its own densities.

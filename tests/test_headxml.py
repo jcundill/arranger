@@ -25,7 +25,7 @@ import zipfile
 from xml.etree import ElementTree
 
 from arranger import NO_CHORD, ChordParser
-from arranger.options import ArrangeOptions
+from arranger.options import ArrangeOptions, Request
 from headxml import (
     Head,
     _key_label,
@@ -673,30 +673,35 @@ class TestChordsOnlyHead(unittest.TestCase):
         steps, _head, _notes = arrange_xml_head(CHORDS_ONLY, options=ArrangeOptions(parts="melody"))
         self.assertEqual(steps, [])
 
-    def test_a_named_grid_places_the_chords(self):
-        """`chord:freddie`, `chord:joe_pass` and `chord:final_and` each produce a part — the payoff.
+    def test_a_named_rhythm_places_the_chords(self):
+        """Three rhythms, three parts: the payoff, and the shape `--chord-on` asks with.
 
-        Exactly the rhythm each pattern names on a 4/4 bar: `freddie` a chord on every
-        beat (16 = 4 bars x 4), `joe_pass` on the *ands* (first at bar 1 beat 1.5), and
-        `final_and` on the final beat's upbeat (first at bar 1 beat 4.5). Every slot
+        Exactly the rhythm each names on a 4/4 bar: `every-beat` a chord on every beat
+        (16 = 4 bars x 4), the *ands* on the ands (first at bar 1 beat 1.5), and
+        `lastand` on the final beat's upbeat (first at bar 1 beat 4.5). Every slot
         carries `parts="None"`, because the file has no tune — the honest absence step B
         made expressible, not the deleted placeholder.
+
+        `lastand` is the metre-relative spelling of the old `final_and` preset: the
+        grammar's `last` resolves per bar, so one request is the last upbeat of every
+        bar of any metre.
         """
         expected = {
-            "chord:freddie": ((1.0, "Dm7"), 16),
-            "chord:joe_pass": ((1.5, "Dm7"), 16),
-            "chord:final_and": ((4.5, "Dm7"), 4),
+            "every-beat": ((1.0, "Dm7"), 16),
+            "1and,2and,3and,4and": ((1.5, "Dm7"), 16),
+            "lastand": ((4.5, "Dm7"), 4),
         }
-        for grid, (first, count) in expected.items():
-            with self.subTest(grid=grid):
+        for rhythm, (first, count) in expected.items():
+            with self.subTest(rhythm=rhythm):
                 steps, _head, _notes = arrange_xml_head(
-                    CHORDS_ONLY, options=ArrangeOptions(parts="chord", grid=grid)
+                    CHORDS_ONLY,
+                    request=Request(melody=False, chord_on=rhythm),
                 )
-                self.assertEqual(len(steps), count, f"grid={grid}")
+                self.assertEqual(len(steps), count, f"chord_on={rhythm}")
                 self.assertEqual((steps[0].beat, steps[0].chord), first)
                 self.assertTrue(
                     all(step.melody is None for step in steps),
-                    f"grid={grid} invented a melody for a chords-only head",
+                    f"chord_on={rhythm} invented a melody for a chords-only head",
                 )
 
 
@@ -901,26 +906,3 @@ class TestTheInstrumentTranspositionIsRead(unittest.TestCase):
         self.assertEqual([n.note_name for n in head.notes], ["C5"])
 
 
-class TestAnUnknownGridIsRefused(unittest.TestCase):
-    """§9.3 step A: the library refuses an unknown grid instead of coercing it.
-
-    `headxml._merge_chord_slots` used to coerce anything unrecognised to the
-    melody-anchored grid, so `arrange_xml_head(..., grid="half-time")` silently
-    returned `every_note`'s arrangement on the comping route - the exact guess
-    `parse_grid` refuses. The coercion is gone: `auto` was the only thing that ever
-    made it reachable, and once the sentinel was withdrawn the guess went with it.
-    The CLI is unaffected (argparse rejects an unknown choice first), so this is
-    observable only from library code - which is why it needs its own test rather
-    than being left to the gate.
-    """
-
-    def test_an_unknown_grid_raises_on_the_comping_route(self):
-        """The path that used to coerce now refuses, naming the real vocabulary."""
-        with self.assertRaises(ValueError) as caught:
-            arrange_xml_head(RAINY_DAY, options=ArrangeOptions(parts="chord", grid="half-time"))
-        self.assertIn("joe_pass", str(caught.exception))
-
-    def test_auto_is_no_longer_a_grid_a_library_caller_can_pass(self):
-        """`auto` was withdrawn, so the library refuses it too - not just the CLI."""
-        with self.assertRaises(ValueError):
-            arrange_xml_head(RAINY_DAY, options=ArrangeOptions(parts="chord", grid="auto"))

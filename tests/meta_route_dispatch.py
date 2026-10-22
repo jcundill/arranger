@@ -163,7 +163,7 @@ class TestTheDispatchTable(unittest.TestCase):
         """Two answers, one entry: the thumb's own note, or a rest that says why.
 
         They are one entry because nothing above the thumb sounds in either case -
-        the note is the bass line's claim on the slot, and the rest is the grid's -
+        the note is the bass line's claim on the slot, and the rest is the rhythm's -
         so a test that only saw one of them would leave half the entry unmeasured.
         """
         thumb = self._dispatch(**CASES[5][2])

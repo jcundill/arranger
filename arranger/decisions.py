@@ -156,7 +156,7 @@ def melody_alone_case(
     texture case comes back a bare melody note, which is exactly the part that belongs
     to somebody else - see the `--texture targets --bass-style root,5th,approach,nearest` example in
     `docs/engine.md`. The per-slot reading is what keeps that true for a note-less
-    grid position a *singing* selection receives: the guitar has no note there, so it
+    position a *singing* selection receives: the guitar has no note there, so it
     must not answer the texture case.
 
     So for a slot the guitar is not singing, only an `NC` bar may take this route - and
@@ -166,8 +166,8 @@ def melody_alone_case(
     instead, which keeps the tune's silence visible rather than quietly handing the
     horn's line to the guitarist.
 
-    **`on_grid=False` is the grid axis, and it is the one case where the guitar plays
-    nothing rather than one note.** Every other answer ends at
+    **`on_grid=False` is a position the chord's rhythm does not name, and it is the
+    one case where the guitar plays nothing rather than one note.** Every other answer ends at
     `get_melody_only_voicing`, which is the tune on its own; there is no such thing
     when the tune is somebody else's, so an off-grid slot on the comping route is a
     **rest** - `MELODY_ALONE_REST`, a fourth kind. This is `docs/history/comping-styles.md`
@@ -179,11 +179,11 @@ def melody_alone_case(
     # **The ordering of the three guards below is load-bearing, and each one has been
     # got wrong in a way its test caught.**
     #
-    # The grid is asked *inside* the voice guard rather than after it. Answering the
-    # voice guard first makes `grid` silently inert on the comping route - all
-    # four patterns come back byte-identical to the default, which
-    # `docs/history/comping-styles.md` records. Asking it inside is safe because a grid
-    # only ever *removes* chords, so it cannot reintroduce a soprano the voice
+    # The rhythm is asked *inside* the voice guard rather than after it. Answering the
+    # voice guard first makes the rhythm silently inert on the comping route - measured,
+    # all four patterns came back byte-identical to the default, which
+    # `docs/history/comping-styles.md` records. Asking it inside is safe because a
+    # rhythm only ever *removes* chords, so it cannot reintroduce a soprano the voice
     # selection removed.
     if not melody_voiced:
         # An `NC` bar is **not** a rest of this kind. It has no chord, so there is no guide
@@ -194,7 +194,7 @@ def melody_alone_case(
         # `test_an_nc_bar_is_reported_rather_than_silently_dropped` caught it
         # returning `['Dm7', 'NC', 'A7']` where it had returned `['Dm7', 'A7']`.
         #
-        # So the grid only decides whether the guitar is silent *about a chord it
+        # So the rhythm only decides whether the guitar is silent *about a chord it
         # could otherwise state*. "Nothing here to play" and "nothing to say here" are
         # different claims, and only the first is a rest.
         if quality == NO_CHORD or name == NO_CHORD:
@@ -218,16 +218,15 @@ def melody_alone_case(
         #   it sounds alone", and it is the *texture* case - the step has a harmony,
         #   it is simply not being spelled out here, so `melody_only` must stay False.
         # - not singing: there is no melody on this guitar to play alone, and the
-        #   tune belongs to the horn. The guitar is **silent**, which is what a comping
-        #   grid means - a stab on the ands and nothing on the beats - and it is a
+        #   tune belongs to the horn. The guitar is **silent**, which is what a rhythm
+        #   of the ands means - a stab there and nothing on the beats - and it is a
         #   fourth kind because no existing answer is that.
         #
         # Without the second case an off-grid slot fell through to the comping route
-        # and comped anyway, the exact opposite of what `grid="joe_pass"` asks for.
+        # and comped anyway, the exact opposite of what a rhythm of the ands asks for.
         # Without the first case it rested, and the guitar lost notes of the tune it
-        # was supposed to be singing - measured at 39 of 80 steps on
-        # `synthetic_cut_time` under `grid="freddie"`, where every note off the beat went
-        # silent instead of sounding alone.
+        # was supposed to be singing: every note off the beat went silent instead of
+        # sounding alone. `docs/history/comping-styles.md` holds the figures.
         # Reached only when the guitar **is** singing, since the guard above answers
         # the comping route - so this is unconditionally the texture case: the note of
         # the tune still sounds, alone.
@@ -269,8 +268,8 @@ def is_bass_only(
     """
     Whether this step's upper voices really are held across it.
 
-    `slot_bass_only` is what the **bass grid** said: the walk invented this beat, because
-    the bass moves on a finer grid than the melody does (decision B). That is a statement
+    `slot_bass_only` is what the **walk** said: it invented this beat, because the
+    bass moves on a finer grid than the melody does (decision B). That is a statement
     about where the beat came from, not about what the left hand plays, and the two come
     apart. What the flag means, and what all four renderers do with it, is the stronger
     claim: **nothing above the thumb is struck**. It is the only thing that keeps a tied
@@ -615,7 +614,7 @@ def leaving_room_for_the_bass(
 ) -> List[Voicing]:
     """The candidates a requested bass note can actually sound under.
 
-    A requested grid bass note is part of the **request**, so the harmony has to make room
+    A requested bass note is part of the **request**, so the harmony has to make room
     for it: a shape whose player cannot reach the line's note is not a shape that honours
     that request, however well it ranks. The question is asked before selection and with
     `bass_placement` - the very call `attach_bass` will make afterwards - so the filter

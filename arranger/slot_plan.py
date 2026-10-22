@@ -23,7 +23,7 @@ from .decisions import (
     melody_alone_case,
     resolve_texture_grips,
 )
-from .grid import Rhythm, on_grid
+from .grid import Rhythm
 from .options import CHORD_FILLS_NONE
 from .texture import (
     metric_weight,
@@ -70,8 +70,8 @@ class SlotPlan:
     slot_grips: Tuple[str, ...]
     melody_alone: str
     # Why a `MELODY_ALONE_REST` step sounds nothing, one of the SILENCE_* constants.
-    # Defaults to the grid's answer, which is the only reason the loop's rest route
-    # fired before the melody-only refusal learned to emit a step of its own.
+    # Defaults to the chord rhythm's answer, which is the only reason the loop's rest
+    # route fired before the melody-only refusal learned to emit a step of its own.
     silence: str = SILENCE_GRID
 
 
@@ -92,9 +92,8 @@ class SlotInputs:
     melody_voiced: bool
     melody_onsets: Optional[Container[int]]
     harmony_family: str
-    #: The chord's rhythm, read by `_chord_here` unless a `grid` preset was named.
+    #: The chord's rhythm, read by `_chord_here`.
     chord_rhythm: Optional[Rhythm]
-    grid_pattern: Optional[str]
     bass_rhythm: Rhythm
     chord_fills: str
     beats_per_bar: int
@@ -164,7 +163,7 @@ def _sings_here(
     except on a melody-only selection, whose note-less slots were skipped above.
 
     §9.2's onset signal is reused rather than re-derived: `melody_onsets` is the same
-    set the comping route's reharmonise guard reads, and a grid position the tune merely
+    set the comping route's reharmonise guard reads, and a position the tune merely
     *sustains* through is not an onset, so the guitar states the chord there rather than
     re-articulating a note it did not begin - which is why a note-bearing merged
     position still comps. `None` means every slot is an onset, the honest default for a
@@ -190,11 +189,11 @@ def _tune_silent_plan(
     A melody-only selection plays the tune and nothing else, so a position with no
     note has nothing for the guitar to play. The position is still **emitted**,
     silent: the tab keeps its bar count and its line-up against the band, and
-    `tune_silent` is what the line says rather than the grid's own reason.
+    `tune_silent` is what the line says rather than the loop's own reason.
 
     It is kept as the only *early* answer because §9.3 step D made the other case a
     real one: a *singing* selection (soprano named) now receives note-less slots from
-    the grid union - positions the tune is silent at - and the guitar **comps** them
+    the comping union - positions the tune is silent at - and the guitar **comps** them
     rather than being refused, which is why those fall through in `slot_state`.
     """
     bar, beat = slot.bar, slot.beat
@@ -302,12 +301,9 @@ def _chord_here(
 ) -> bool:
     """Whether the chord part attacks at this position.
 
-    Two spellings, one question, and a **preset wins** because it is the engine's
-    own axis: a caller who named `grid` is testing one pattern directly, and
-    reading the request's rhythm underneath it would answer a different question.
-    Otherwise the request's `chord_on` decides - `melody` at every written onset,
-    or the positions it names - and `wants_melody` is true for every slot for the
-    reason `on_grid` defers to the melody: the slots that exist are the melody's.
+    The request's `chord_on` decides - `melody` at every written onset, or the
+    positions it names - and `wants_melody` is true for every slot because the
+    slots that exist are the melody's.
 
     A slot with **no melody** is one the chord layer asked for: either a
     `--chord-on` target or a rest `--chord-fills` fills, and a slot nothing asked
@@ -317,8 +313,6 @@ def _chord_here(
     """
     if melody_absent and inputs.chord_fills != CHORD_FILLS_NONE:
         return True
-    if inputs.grid_pattern is not None:
-        return on_grid(beat, inputs.grid_pattern, inputs.beats_per_bar)
     if inputs.chord_rhythm is None or inputs.chord_rhythm.wants_melody:
         return True
     return inputs.chord_rhythm.includes(
@@ -352,14 +346,10 @@ def _chord_attacks(
     eighth-note skeleton invented, where the tune merely sustains, is neither - that is
     the hold `tabstaff._collapse_holds` and `tabscore._is_hold` exist for.
 
-    A `grid` preset keeps its own reading rather than being re-derived from the
-    request here, for the reason `_chord_here` gives: a preset is the engine's axis and
-    a caller who named one is testing that pattern, not the request's rhythm
-    underneath it.
     """
     if melody_note is None:
         return True
-    if inputs.grid_pattern is not None or inputs.chord_rhythm is None:
+    if inputs.chord_rhythm is None:
         return False
     return inputs.chord_rhythm.includes(
         slot.beat, inputs.beats_per_bar, inputs.grouping
@@ -410,11 +400,6 @@ def slot_state(
     # non-default routes build different steps: an NC bar sets
     # `melody_only=True`, a texture case must not, and an off-grid slot on the
     # comping route is a rest with no notes in it at all.
-    #
-    # `on_grid` is read from the **slot's own beat**, not from the bar it sits
-    # in: the grid is bar-relative, so the same beat number means different
-    # positions in different bars of different metres, and `grid.on_grid`
-    # is the one place that knows the metre.
     #
     # `melody_voiced` here is the **per-slot** `sings_here`, not the route: a
     # slot the guitar does not sing (no soprano, or no note at this position)

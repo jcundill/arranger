@@ -47,7 +47,6 @@ from xml.etree import ElementTree
 from arranger import (
     CHORD_FILLS_COMP,
     CHORD_FILLS_NONE,
-    GRID_DEFAULT,
     GROUPING_AUTO,
     NO_CHORD,
     PITCH_CLASS_NAMES,
@@ -60,16 +59,12 @@ from arranger import (
     beat_offset,
     default_grouping,
     format_grouping,
-    grid_defers_to_melody,
-    grid_positions,
     grid_resolutions,
     group_starts,
     grouping_allowed,
-    parse_grid,
     parse_grouping,
     parse_parts,
     parts_has_melody_only,
-    resolve_grid,
     resolve_grouping,
     rhythm_beats,
 )
@@ -2320,7 +2315,7 @@ def melody_at(head: Head, bar: int, beat: float) -> Optional[str]:
     """The written note sounding at `(bar, beat)`, by forward fill, or `None`.
 
     **The note-path twin of `chord_at`, and the reason `chord_slots` can carry a
-    melody.** A chord stab is placed by the grid, but the part still has to line up
+    melody.** A chord stab is placed by the comping union, but the part still has to line up
     against the tune it is comping under, so the step needs *a* note — and the honest one
     is the note actually sounding at that instant.
 
@@ -2479,7 +2474,7 @@ def _rest_at(head: Head, absolute: float, beats: float) -> MelodyRest:
 def _tick_key(bar: int, beat: float) -> Tuple[int, int]:
     """A position as a **grouping key**: its bar and its beat rounded to the nearest tick.
 
-    The union of the melody's slots with the grid's needs to ask whether two producers mean
+    The union of the melody's slots with `chord_slots`' needs to ask whether two producers mean
     the same instant, and that is the only question this answers. A beat is a float in
     practice - an eighth-note triplet's members land on 1.3333333333333333 and
     1.6666666666666665 - so comparing them directly is the comparison `BEAT_EPSILON` and
@@ -2541,7 +2536,7 @@ def _bar_resolution(
 def _generated_beats(
     head: Head, bar: int, beat_type: int, grouping: Optional[Sequence[int]] = None
 ) -> Tuple[float, ...]:
-    """Every position the default grid generates in one bar, at that bar's own resolution.
+    """Every position a bar's own rhythm generates, at that bar's own resolution.
 
     Positioned from beat 1 so the first is the downbeat in any metre, and stepping by the
     resolution `_bar_resolution` chose. **Every one of these is a candidate, not a decision**:
@@ -2572,26 +2567,23 @@ def _chord_grouping(
 def chord_slots(
     head: Head,
     section: Optional[Tuple[int, int]] = None,
-    grid: str = GRID_DEFAULT,
     grouping: Optional[Sequence[int]] = None,
 ) -> List[Tuple[Optional[str], str, str, int, float, float]]:
-    """Every position `grid` names, as slots, **including positions no melody note has**.
+    """Every position the bar's own rhythm generates, **including positions no melody has**.
 
     **The complement of `head_skeleton`, and the union of the two is what a comping part
     needs.** `head_skeleton` yields one slot per written note; this yields one per
-    position the grid places a chord on. On the melody-bearing route the melody is ours
+    position the bar's rhythm generates. On the melody-bearing route the melody is ours
     and "a chord under each note" is the chord-melody idiom, so the two must *not* be
     merged. On the comping route the guitar is not under the melody, so a position with no
     note is a position the chord of the tune still occupies — and open-issues item 1
-    measures what dropping those costs: **8 to 29 positions per fixture**, which is where
-    a quarter of a named grid's positions went.
+    measures what dropping those costs.
 
-    **A melody-anchored grid (`every_note`) places a position at every subdivision of the
-    bar's own rhythm**, from `_generated_beats`: a bar of sixteenths is generated at
-    sixteenths, a triplet bar at eighth-note triplets, and a bar whose tune is all on the
-    beat is generated at beats. So a position the tune *skips* inside a bar it occupies is
-    a position this function reports, which is what closes `docs/open-issues.md` item 1's
-    remaining half. A **named** grid places its own figure's positions as before.
+    **A position is generated at every subdivision of the bar's own rhythm**, from
+    `_generated_beats`: a bar of sixteenths is generated at sixteenths, a triplet bar at
+    eighth-note triplets, and a bar whose tune is all on the beat is generated at beats.
+    So a position the tune *skips* inside a bar it occupies is a position this function
+    reports, which is what closes `docs/open-issues.md` item 1's remaining half.
 
     Returns `(melody, quality, chord, bar, beat, duration)`, and **`melody` is the note in
     force at that position, not a written one** — the rule `bass._bass_slots` already uses
@@ -2606,25 +2598,17 @@ def chord_slots(
     arrives on beat 1.5 — so there is no harmony to state and `chord_at` returns `None`.
     That is the "never guess a chord" rule holding, not a gap in the union.
 
-    **`duration` is the distance to the next grid position, capped at the bar line**,
+    **`duration` is the distance to the next generated position, capped at the bar line**,
     because a stab is struck and released rather than tied onward. That is the arithmetic
-    open-issues item 1 says the note path gets wrong, done here deliberately: the grid is
-    placing the chord, so the grid decides how long it sounds. It is also why a chord is
-    not held across a barline when the next bar names nothing.
+    open-issues item 1 says the note path gets wrong, done here deliberately: this layer is
+    placing the chord, so it decides how long it sounds. It is also why a chord is not held
+    across a barline when the next bar names nothing.
 
     `section` is `head_skeleton`'s half-open `(first, last + 1)` bar range, so the two
     agree on which bars a part covers; the default is the whole head.
     """
     lo, hi = section if section is not None else head.bars
     beats_per_bar = head.beats_per_bar
-    # **Parsed here, because this function is public and takes a spelling.** Every
-    # reader below (`grid_defers_to_melody`, `grid_positions`) resolves *rows* and
-    # falls back to `every_note` for a row it does not recognise, which is right for a
-    # canonical policy and wrong for an argument: `chord_slots(head, grid="freddie")`
-    # would comp every beat of every bar without a word, which is exactly what
-    # `parse_grid` refuses to do. A resolved policy is itself a legal spelling, so the
-    # second caller (`_merge_chord_slots`) parses to itself.
-    grid = parse_grid(grid)
     # The other half of the same conversion, used the other way round: a *length* in
     # beats becomes whole notes by dividing by `beat_type`, because one whole note is
     # `beat_type` beats (four quarters at `4 / beat_type` quarters to the beat). Dividing
@@ -2639,31 +2623,15 @@ def chord_slots(
     # `(1,) * beats_per_bar`.
     grouping = _chord_grouping(head, grouping)
 
-    # Every position the grid names, in `(bar, beat)` order. Resolved through
-    # `grid_positions` because it is the one function that knows `ALL`, `LAST` and `SUB`,
-    # and re-deriving a position here is how a metre-relative pattern quietly became a
-    # bar-relative one.
-    #
-    # **A melody-anchored grid is the special case and needs saying out loud.** Its
-    # `GRID_PATTERNS` row is `positions=()` — "the absence of a pattern", which is why
-    # `on_grid` short-circuits on it and why reading "does it place anything?" off
-    # `grid_positions` correctly answers *nothing*. But "place a chord on every note" is
-    # precisely this function's job, so here a melody-anchored grid generates a position
-    # set of its own: **the bar's own subdivision**, from `_generated_beats`. That is the
-    # same distinction `on_grid` documents: *places nothing* and *has no positions to
-    # place* are different claims, and only the first is true of this row.
-    # `grid_defers_to_melody` is that distinction as a table read.
+    # Every position the bar's own rhythm generates, in `(bar, beat)` order. A bar of
+    # sixteenths is generated at sixteenths, a triplet bar at eighth-note triplets, and a
+    # bar whose tune is all on the beat is generated at beats - which is what lets a
+    # position the tune *skips* inside a bar it occupies become a slot.
     positions: List[Tuple[int, float]] = []
     for bar in range(lo, hi):
-        if grid_defers_to_melody(grid):
-            positions.extend(
-                (bar, beat)
-                for beat in _generated_beats(head, bar, beat_type, grouping)
-            )
-            continue
-        for _marker, beats in grid_positions(grid, beats_per_bar, grouping):
-            for beat in beats:
-                positions.append((bar, float(beat)))
+        positions.extend(
+            (bar, beat) for beat in _generated_beats(head, bar, beat_type, grouping)
+        )
     if not positions:
         return []
     positions.sort()
@@ -2741,7 +2709,7 @@ def _slots_at(
 ) -> List[Tuple[Optional[str], str, str, int, float, float]]:
     """One slot per position the caller resolved, with the harmony in force there.
 
-    Shared by the two position sources - a named grid's figure and a rhythm's
+    Shared by the two position sources - the generated positions and a rhythm's
     felt beats - so the harmony lookup, the slash-bass promotion and the
     "distance to the next position" duration cannot differ between them.
     """
@@ -3093,21 +3061,13 @@ def _head_slots(
     )
     if parts_has_melody_only(parse_parts(axes.parts)):
         return slots
-    # A **spelled axis** is the engine's own spelling, so the union keeps the
-    # melody-anchored behaviour those axes have always documented: a named preset
-    # when `grid` says which, and `every_note` otherwise. Only a pure request is
-    # answered by its own `chord-on` rhythm - that is what makes `head FILE` the
-    # melody and nothing added.
-    if any(
-        value is not None
-        for value in (
-            options.texture, options.bass, options.parts,
-            options.harmony, options.grid,
-        )
-    ):
-        return _merge_chord_slots(
-            slots, head, section, options.grid or GRID_DEFAULT, grouping
-        )
+    # **A requested rhythm wins, and the engine's own union is the fallback.** The
+    # request is the public vocabulary for where a chord falls, so a caller who names
+    # positions gets them whatever else is spelled - spelling `texture` must not
+    # silently answer a different question about the chord's rhythm. What is left for
+    # the fallback is the request that names nothing added, and the *engine's* own
+    # axes, which keep the bar-generated union those axes have always documented: a
+    # chord part states the chord of the tune in a bar the tune never enters.
     request = resolve_request(options.request, head.beats_per_bar, grouping)
     chord_on = request.chord_rhythm
     extra: List[Tuple[Optional[str], str, str, int, float, float]] = []
@@ -3115,6 +3075,13 @@ def _head_slots(
         # `melody` alone adds nothing: the skeleton already has one chord per
         # written note. A **positions** rhythm adds the attacks the caller named.
         extra = rhythm_slots(head, chord_on, section, grouping)
+    if not extra and any(
+        value is not None
+        for value in (
+            options.texture, options.bass, options.parts, options.harmony,
+        )
+    ):
+        return _merge_chord_slots(slots, head, section, grouping)
     extra.extend(fill_slots(head, request, section, grouping))
     if head.first_bar_implicit:
         # The anacrusis is not comping space, for the reason `_merge_chord_slots`
@@ -3148,7 +3115,7 @@ def arrange_xml_head(
     unless asked for.
 
     What to play is asked as `request=` - the six questions - and the implementation
-    axes (`texture`, `bass`, `parts`, `harmony`, `grid`) through
+    axes (`texture`, `bass`, `parts`, `harmony`) through
     `options=ArrangeOptions(...)`, the one door to them. When `options=` is given the
     individual knobs must be left at their defaults. That is the spelling `head`
     uses, because a score already holds its metre and key together.
@@ -3189,7 +3156,7 @@ def arrange_xml_head(
     triples = [slot[0] for slot in slots]
     timings = [(slot[1], slot[2], slot[3]) for slot in slots]
     # §9.3 step C: which slots the melody **articulates** on. On the note path every
-    # slot is a written note, so every one is an onset; the comping union adds grid
+    # slot is a written note, so every one is an onset; the comping union adds
     # positions a note only *sustains* through or is silent at, and §9.2 reharmonises at
     # an onset only - a held position was decided where the note began. Computed here
     # because `melody_state` reads the head's own notes, which only this layer has, and
@@ -3219,21 +3186,19 @@ def _merge_chord_slots(
     slots: List[Tuple[Tuple[Optional[str], str, str], int, float, float]],
     head: Head,
     section: Optional[Tuple[int, int]],
-    grid: str,
     grouping: Optional[Sequence[int]] = None,
 ) -> List[Tuple[Tuple[Optional[str], str, str], int, float, float]]:
     """`head_skeleton`'s slots plus `chord_slots`', in one ordered list.
 
     **A union on `(bar, beat)`, and the melody slot wins a collision.** A position that
-    has both a written note and a grid position is one slot, not two: the note carries a
+    has both a written note and a generated one is one slot, not two: the note carries a
     duration the score wrote and the exact pitch the horn is playing, so it is strictly
-    the better description of that instant. The grid's contribution is the positions where
-    there is no note, which is the only thing this function adds.
+    the better description of that instant. `chord_slots`' contribution is the positions
+    where there is no note, which is the only thing this function adds.
 
-    **A melody-anchored grid (`every_note`) contributes every position its bar's rhythm
-    allows, inside a melody bar included** — this is `docs/open-issues.md` item 1's
-    remaining half, and the two rules that say which of them become slots are what make it
-    a fix rather than a rewrite:
+    **Every position a bar's rhythm allows contributes, inside a melody bar included** —
+    this is `docs/open-issues.md` item 1's remaining half, and the two rules that say
+    which of them become slots are what make it a fix rather than a rewrite:
 
     - **the note path wins**, so a position the tune writes is left exactly as it was, with
       the note's own duration and pitch (`_tick_key` groups the two producers' spellings of
@@ -3243,10 +3208,9 @@ def _merge_chord_slots(
       re-stating a chord beneath it would re-decide a decision already made. Measured on
       the committed heads, that holds back far more positions than it admits.
 
-    A **named** grid contributes its figure's positions in every bar, and the melody-less
-    bar it may add is the case `chord_slots` has always covered.
+    A **melody-less bar** is the case `chord_slots` has always covered.
 
-    **A pickup bar is the one place no grid contributes.** `Head.first_bar_implicit` is
+    **A pickup bar is the one place nothing contributes.** `Head.first_bar_implicit` is
     the source's statement that bar 1 is an anacrusis, so its short bar is not space for
     an accompaniment: filling it would erase the pickup the renderers infer from the
     bar's content. The written melody slots stay, because they are what the pickup is.
@@ -3256,9 +3220,7 @@ def _merge_chord_slots(
     and a `bass_only`-style union that arrived out of order would attribute the wrong
     note to the wrong beat, reached from a new direction.
     """
-    grid_policy = resolve_grid(parse_grid(grid), head.beats_per_bar, grouping)
-
-    extra = chord_slots(head, section, grid_policy, grouping)
+    extra = chord_slots(head, section, grouping)
     if head.first_bar_implicit and extra:
         # **A pickup bar is not comping space.** Its missing time is the anacrusis the
         # renderers infer from the bar's content; a generated chord there fills the
@@ -3267,21 +3229,19 @@ def _merge_chord_slots(
         # are what the pickup *is* - and the accompaniment starts in bar 2.
         first = head.bars[0]
         extra = [slot for slot in extra if slot[3] != first]
-    if grid_defers_to_melody(grid_policy):
-        # **§9.2, and the whole of what the melody-anchored case holds back.** The
-        # positions `_generated_beats` produced are candidates for slots, and the tune's
-        # own written positions are already in `slots` - so all that is left to refuse is a
-        # position where a note is still *held*. It is refused here rather than in
-        # `chord_slots` because this is the union: `chord_slots` reports the geometry of
-        # the grid, and which of those positions become steps is this function's question.
-        # `chord_slots` has already skipped the positions with no chord in force, so a
-        # silent position with no `<harmony>` behind it still adds nothing and is never
-        # guessed a chord.
-        extra = [
-            slot
-            for slot in extra
-            if melody_state(head, slot[3], slot[4]) != "held"
-        ]
+    # **§9.2, and the whole of what this union holds back.** The positions
+    # `_generated_beats` produced are candidates for slots, and the tune's own written
+    # positions are already in `slots` - so all that is left to refuse is a position where
+    # a note is still *held*. It is refused here rather than in `chord_slots` because this
+    # is the union: `chord_slots` reports the geometry of the bar, and which of those
+    # positions become steps is this function's question. `chord_slots` has already skipped
+    # the positions with no chord in force, so a silent position with no `<harmony>` behind
+    # it still adds nothing and is never guessed a chord.
+    extra = [
+        slot
+        for slot in extra
+        if melody_state(head, slot[3], slot[4]) != "held"
+    ]
     return _unioned(slots, extra)
 
 

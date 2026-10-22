@@ -393,10 +393,6 @@ class ArrangeOptions:
     # `auto` - the derivation - is the full order under the melody and the guide
     # pair when comping, which is the shipped answer on each route.
     harmony: Optional[str] = None
-    # Where a chord falls, as one of the named presets in `grid.GRID_PATTERNS`.
-    # `None` means the request's `chord_on` rhythm decides, which is the public
-    # spelling; a preset here is the internal axis, and it wins.
-    grid: Optional[str] = None
     # The metre as one value: the count, the denominator and the grouping. The
     # denominator is not decoration - a beat is `4 / beat_type` quarters, so the
     # count alone says which beats exist but not how long one lasts. The grouping is

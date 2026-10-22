@@ -146,9 +146,10 @@ you whether a change is an improvement or a different library.
   `does not sound the written bass` means.
 
   Four more clauses answer the routes that choose no shape from a palette, each of which
-  used to read as something it was not: a **silent** step (`the guitar rests here - the grid
-  places no chord`, where the line previously claimed a harmony under a degree - and the
-  reason after the dash is now `step.silence`'s own, of five: the grid, an `NC` bar with
+  used to read as something it was not: a **silent** step (`the guitar rests here - no part
+  was asked to sound at this position`, where the line previously claimed a harmony under
+  a degree - and the reason after the dash is now `step.silence`'s own, of five: the
+  rhythm, an `NC` bar with
   nothing to comp, no shape for the chord or the tune, no string reaching the melody, or a
   melody-only selection with no tune here), a **comping**
   step (`comping - B 3, D 5 & F# 7; the guitar does not play the tune` — each voice read off
@@ -182,7 +183,7 @@ you whether a change is an improvement or a different library.
   written chord stands`, where before it read only `non-chord tone` — the words a route that
   never attempted a substitution would also print (`step.harmonized_as` is what separates the
   two, and `step.strategy` now carries the strategy *in force* rather than only the one that
-  succeeded). And a comping step reads `the tune is silent here` where the grid stabs at a
+  succeeded). And a comping step reads `the tune is silent here` where the chord's rhythm stabs at a
   position the tune has no note under, rather than claiming the guitar is declining a note
   that is not sounding.
 
@@ -377,7 +378,7 @@ published facade and delegates to it. The loop has two halves, and the seam betw
 is where most of this document's rules are decided.
 
 **Once per arrangement**, `resolve_knobs` reconciles `options=` with the keywords and
-validates the spellings, and `resolve_policies` resolves the six axes and builds the
+validates the spellings, and `resolve_policies` resolves the axes and builds the
 walked-beat union when a thumb line is running. Both live in **`resolution.py`**, which
 `movement.py` calls: the sentinels and spellings are answered there so the loop reads a
 concrete value on every axis. Both run before any slot is looked at,
@@ -783,7 +784,7 @@ still played, just outside it. A filter would silently drop every step whose mel
 has no in-window shape, and losing a chord of the tune is worse than being a fret out
 of position. `tests/test_grip_tables.py::TestFretWindow` pins that.
 
-## The request, and the six axes under it
+## The request, and the axes under it
 
 A caller asks six questions, and the six are one value (`options.Request`) spelled twice:
 by `head`'s flags and by `Request(...)` on the library's own front door,
@@ -795,7 +796,7 @@ holding the two spellings together, and `tests/test_request.py` asserts it.
 | the question | the flag | `Request(...)` | the axis it resolves to |
 |---|---|---|---|
 | who plays the tune? | `--no-melody` | `melody=False` | `parts` — the melody part is dropped from the selection |
-| when does the chord attack? | `--chord-on POSITIONS` | `chord_on="1and"` | the chord layer's rhythm (`grid`, rewritten around `Rhythm`) |
+| when does the chord attack? | `--chord-on POSITIONS` | `chord_on="1and"` | the chord layer's `Rhythm` — where a chord falls |
 | what does the chord state? | `--chord-notes full\|3\|2\|1` | `chord_notes="2"` | the texture axis — `uniform`, `chord3`, `chord2`, `chord1` |
 | what does it do in a melody rest? | `--chord-fills none\|hold\|comp` | `chord_fills="hold"` | chord slots in the tune's rests, plus `parts` including the chord |
 | when does the thumb attack? | `--bass-on POSITIONS` | `bass_on="every-beat"` | the bass layer's rhythm, and `bass` when it is not `none` |
@@ -968,11 +969,10 @@ The three metre-driven rules read the grouping and nothing else:
   downbeat target.
 - the walking bass invents one note per **felt beat** and takes its approach on the last
   one — four notes in 12/8, not twelve.
-- the named grid figures are group-relative. `freddie` is one stab per felt beat;
-  `joe_pass` and `final_and` answer on a group's **last unit** (the third eighth of a
-  dotted quarter, the `and` of a simple beat), so the simple-metre table is unchanged
-  and the compound one is musically placed. A group index the bar does not have is
-  dropped, never clamped.
+- a requested chord rhythm's **positions are felt beats**, so `every-beat` is one stab
+  per felt beat and `lastand` is the last felt beat's midpoint in any metre. A position
+  the bar does not have is refused by `parse_rhythm`, never clamped to the nearest one
+  it does have.
 
 **The score states the grouping, in three channels, and the importer reads them in this
 order:**
@@ -1344,7 +1344,7 @@ The thumb line used to be part of a texture's *name*, so one word meant both "a 
 the strong beats" and "a note on every beat below". Two separable decisions
 wearing one identifier. It is now `texture` (the left hand) crossed with `bass` (the
 thumb), and `ArrangeOptions(bass="auto")` — the default — means **no line at all**: a caller
-who wants one names the note rules or a `bass:walk` grid row. The sentinel still writes a
+who wants one names the rules (`root`, `root-5th`, or the full walk). The sentinel still writes a
 line in one case, and it is a selection rather than a texture:
 
 | selection | default bass | equivalent to |
@@ -1519,7 +1519,7 @@ shape. So a bass note that would need a fifth fret, or that would leave the hand
 than five, is refused there rather than inside a shape - and `AGENTS.md`'s playability invariants
 hold both.
 
-**The note is not only refused; the shape is asked to make room.** A requested grid bass note is
+**The note is not only refused; the shape is asked to make room.** A requested bass note is
 part of the request, so `decisions.leaving_room_for_the_bass` narrows the palette to the
 candidates `bass_placement` can put the note under, and the same cost tuple ranks what is left.
 That is a **narrowing and never a criterion**: no candidate carries a thumb, `cost` still sits
@@ -1535,7 +1535,6 @@ simply ranked lower.
 | `texture` | the **chord part's arity**, by metric weight | `uniform`, `targets`, `chord1`, `chord2`, `chord3` |
 | `harmony` | the chord part's **degree order** | `auto` *(default)*, `full`, `guide`, `shell_root` |
 | `bass` | the bass part's **note rules**, in the order they are tried | `auto` *(default)*, `none`, or an ordered list of `root`, `5th`, `approach`, `nearest` |
-| `grid` | **when each part sounds** | `PART:PATTERN` rows — see `` `grid` `` below |
 
 **Order carries no meaning, so the selection is canonicalised.** `parse_parts` returns
 `PART_NAMES` order, so `ArrangeOptions(parts="chord,bass")` and
@@ -1558,8 +1557,8 @@ selection, whose shapes are single frets.
 **An `NC` bar has no chord part and no bass part**, on every route, and the melody is
 unaffected: a part whose notes are chosen from a chord cannot state anything where there is
 no chord. That is a derivation rather than a rule about chordless bars, and it is deliberately
-*not* what an off-grid rest says — there the thumb still walks, because a grid thins the
-chords and not the bass line. "No chord here" and "silent here" are different facts, and only
+*not* what a slot the chord's rhythm does not name says — there the thumb still walks,
+because that rhythm thins the chords and not the bass line. "No chord here" and "silent here" are different facts, and only
 the second is a rest.
 
 ### `harmony`: which degrees the chord part states
@@ -1620,7 +1619,7 @@ whether the slot is **reharmonised**, and that needs three states rather than tw
 `headxml.melody_state` returns **onset** (the tune articulates here — reharmonise: the
 anticipation a comping player makes), **held** (a note already sounding — no: it was decided
 at its onset) and **silent** (nothing sounding — the chord symbol stands). In the measurement
-that produced the rule, **274 of 1,146** grid positions carry a held note rather than an
+that produced the rule, **274 of 1,146** generated positions carry a held note rather than an
 articulation — a quarter, so the middle state is not an edge case; `melody_at` keeps its
 two-way answer for callers that only need "is a note sounding".
 
@@ -1628,7 +1627,7 @@ two-way answer for callers that only need "is a note sounding".
 whole-note duration to beats with `beat_type` and compares it to the probe on one absolute
 beat line (`grid.beat_offset`): `duration * 4` is right only in 4/4, and a `(bar, beat)` pair
 cannot express a note that ends in a later bar. A 2/2 note written to the barline is therefore
-still sounding at the next bar's downbeat, and the default grid does not re-strike it there.
+still sounding at the next bar's downbeat, and the engine's own union does not re-strike it there.
 The end instant is inclusive — the release is still held — and that boundary is the open
 decision [docs/open-issues.md](open-issues.md) item 6 records, pinned by
 `tests/test_headxml_timeline.py::TestMelodyState::test_the_release_instant_counts_as_held_until_the_next_position`.
@@ -1758,71 +1757,51 @@ it twice or hand the horn's line back to the guitarist.
 
 
 
-## `grid` — where a chord falls
+## The chord's rhythm — where a chord falls
 
-`harmony` answers *which degrees* a stab states; this answers *where one lands*. A
-comping style needs both, and `bass` supplies a third orthogonal question (what plays the
-bottom). The vocabulary is `GRID_PART_PATTERNS` + `GRID_STYLES` + `GRID_PATTERNS` in
-`grid.py`, with `parse_grid` / `resolve_grid` / `grid_allowed` /
-`grid_defers_to_melody` beside the other axes' functions. A row is written **`part:pattern`**
-— `chord:freddie`, `bass:walk` — so the axis is positions crossed with parts, and each part
-may have a row of its own. There is **no `auto` grid value**: `GRID_DEFAULT` is
-`melody:every_note`, so the tune's own slots govern every part, and
-`ArrangeOptions(grid="auto")` is refused like any other unknown name (see
-[comping-styles.md](history/comping-styles.md) §9.3).
+`texture` answers *how many notes* the chord part states and `harmony` *which degrees*;
+this answers *where one lands*. It is the **request's**, not an axis: `--chord-on
+POSITIONS` and `Request(chord_on=...)` are its two spellings, and `grid.py`'s `Rhythm`
+is the value they resolve to (`parse_rhythm`, `felt_beat`, `rhythm_beats`, `beat_offset`).
 
-**Positions are `(beat, eighths)` pairs, and `beat` may be a sentinel.** `LAST` resolves
-to the metre's final beat and `ALL` to every beat of the bar, so a pattern names *a
-position* rather than a beat number — `final_and` is 2.5 in 2/2, 3.5 in 3/4 and 4.5 in
-4/4 from one row. `eighths` is an **integer count of eighths**, not a float, because a
-notated position is a float in practice (a 3/4 bar's second beat is 1.666...) and
-comparing floats for equality is a comparison that will eventually be false for the wrong
-reason — the same argument as `BEAT_EPSILON`. The subdivision is
-`grid.TICKS_PER_BEAT = 24` — a beat in whole twenty-fourths, integer on purpose — so a
-position is a tick number and never a rounding of one.
+**A position is a felt beat, not a beat number.** `every-beat` is one attack per felt
+beat — four in 12/8, not twelve — and `1and` is the midpoint of a **group**, so a group
+of three eighths has its `and` halfway through the pulse rather than half a denominator
+unit in. That is what makes one rhythm the same request in 2/2, 4/4 and 6/8, and it is
+why the grammar has no decimal: `1.5` would name a time rather than a place on the
+metre's grid, and could not express `lastand`. `last` resolves against the bar, so
+`lastand` is the last felt beat's midpoint in any metre.
 
-| pattern | positions | kind |
-|---|---|---|
-| `every_note` | **none** — the absence of a restriction | bar-relative |
-| `freddie` | `(ALL, 0)` | bar-relative |
-| `final_and` | `(LAST, SUB)` | bar-relative |
-| `charleston` | `(1, 0), (2, SUB)` | metre-relative |
-| `joe_pass` | `(ALL, SUB)` | metre-relative |
-| `walk` | `(ALL, 0)` | bar-relative |
-| `anchors` | the harmony **timeline**, not the metre | `GRID_TIMELINE_PATTERNS` |
+The grammar is `melody` (the written onsets), `none`, `every-beat`, or comma-separated
+positions (`1`, `1and`, `2e`, `lastand`). A list **replaces** the default, so `1and` is
+only the stab while `melody,1and` is the harmonisation plus the stab; `none` cannot be
+combined with either. A position the bar does not have is **refused** — `rhythm position
+'3' asks for felt beat 3, but this bar has 2` — and the midpoint is spelled `and`, never
+`&`, because an unquoted `&` is a shell's background operator. The run header prints the
+one spelling the parser accepts, in the player's own mirror order (`1`, `1e`, `1and`,
+`1a`).
 
-Not every part may use every row: `melody` has `every_note` alone, `chord` has
-`every_note`, `freddie`, `joe_pass`, `final_and` and `charleston`, and `bass` has
-`every_note`, `walk` and `anchors`. `GRID_PART_PATTERNS` is that table, and the parser
-refuses a row it does not hold.
+**A requested attack rings its felt beat and no further** (`headxml._stab_length`). The
+chord part states a harmony to somebody else's ear, so an attack that rang until the next
+one would still be sounding over a beat nobody asked for: `--chord-on 1` in 4/4 is one
+stab per bar rather than one chord held for four beats. Two attacks inside one beat are
+two stabs, not one.
 
-**`bar_relative` is a property of the pattern, not a comment.** It says whether a *silence*
-is the arranger's mistake: a bar-relative pattern resolves in any metre, while a
-metre-relative one is a named figure of a particular metre and is either right or is a 4/4
-figure asked of a 2/2 bar. That is the arranger's calling, not an engine defect, and
-recording it as data is what stops "the pattern silently did nothing" reading as a bug.
+**Two producers of positions, and the request decides between them.** A *requested*
+rhythm names its own positions (`headxml.rhythm_slots`). The engine's own union
+(`headxml.chord_slots`) generates one per subdivision of each bar's own rhythm, which is
+what lets a comping part state the chord of the tune in a bar the tune never enters — the
+measurement is [open-issues.md](open-issues.md) item 1. A requested rhythm **wins**
+whatever else is spelled, because spelling `texture` must not answer a different question
+about the chord's rhythm; the generated union is the fallback for a request that names
+nothing added, which is the shipped `chord_on="melody"`: a chord under each written note
+and nothing invented.
 
-**`every_note` is not a pattern with positions; it is the absence of one.** `grid_positions`
-returns nothing for it, so `grid_allowed` must test it explicitly — deriving the check from
-`grid_positions` made the *default* a mismatch in every metre, which is the false reading the
-check exists to avoid. "Places nothing" and "has no positions to place" are different
-claims and only the first is a mismatch.
+### What a slot the rhythm does not name does, and why it is a fourth kind
 
-**The refusal is unreachable through the shipped rows**, measured: every metre-relative
-pattern fits every metre, because `charleston` keeps its beat 1 and `joe_pass` is built on
-`ALL`. `grid_allowed` is therefore defensive, and the refusal and its reason are tested
-against a temporary row. `tests/test_grid.py::test_no_shipped_row_is_a_mismatch_in_any_metre`
-exists to keep that fact from being forgotten — a check no input can fail proves nothing.
-
-**`beat=None` is on the grid.** A slot nobody located has no position to be off, the same
-rule `metric_weight` follows with its `-1`. Without it a hand-written progression — which
-carries no timings — would lose every chord the moment a grid was passed, which is the
-opposite of an opt-in.
-
-### What an off-grid slot does, and why it is a fourth kind
-
-`decisions.melody_alone_case` returns a *kind*, and the grid added `MELODY_ALONE_REST`
-alongside `MELODY_ALONE_NONE`, `MELODY_ALONE_TEXTURE` and `MELODY_ALONE_NO_CHORD`:
+`decisions.melody_alone_case` returns a *kind*, and the chord's rhythm is what made
+`MELODY_ALONE_REST` a fourth one beside `MELODY_ALONE_NONE`, `MELODY_ALONE_TEXTURE` and
+`MELODY_ALONE_NO_CHORD`:
 
 - **guitar singing** → `MELODY_ALONE_TEXTURE`: the note of the tune sounds alone. No note
   is dropped, ever.
@@ -1830,35 +1809,32 @@ alongside `MELODY_ALONE_NONE`, `MELODY_ALONE_TEXTURE` and `MELODY_ALONE_NO_CHORD
   this guitar to play alone, and the tune is the horn's. The step is still emitted, so the
   part keeps its bar and beat and lines up against the tune; all six strings are muted, so
   every renderer draws silence rather than a held shape.
-- **`NC`** → unchanged per route. It has *no chord to place*, so "off the grid" is not a
-  claim about it: the comping route emits a rest step carrying `silence="nc_comping"`, the
-  singing route plays the note alone.
+- **`NC`** → unchanged per route. It has *no chord to place*, so "a slot the rhythm does
+  not name" is not a claim about it: the comping route emits a rest step carrying
+  `silence="nc_comping"`, the singing route plays the note alone.
 
 The **ordering of those guards is load-bearing and was got wrong twice** — see
 [../AGENTS.md](../AGENTS.md) trap 12 for the three orderings and what each one breaks.
 
-**The grid does not touch the bass line**, and that is orthogonality tested rather than
-asserted: measured on `synthetic_cut_time` with
-`ArrangeOptions(parts="chord", texture="targets", grid="melody:every_note,bass:walk")`, the
-walked notes are `[51, None, 52, None]` at both the `melody:every_note` and the
-`chord:freddie` chord row. A grid removes chords, never the thumb.
+**It is not the thumb's rhythm.** `bass_on` asks that question, and the two are
+independent requests: measured on `synthetic_cut_time` at
+`ArrangeOptions(parts="bass,chord", texture="targets", bass="root,5th,approach,nearest")`,
+the walked line begins `[None, 46, 46, 51, …]` under the default chord rhythm and
+`[None, 46, None, 51, …]` under `chord_on="every-beat"` — both 23 steps. The *rule* the
+thumb states is untouched; the *line* differs because a walk is written per slot and the
+chord's rhythm is what gives the slots their positions. A thumb note is placed only where
+`place_bass` can reach it, so a denser chord part is a thinner line.
 
 ### What is not built
 
-The **free-form** spelling (naming positions directly rather than choosing a row) and a
-**held baseline** (`hold=`). **Both were withdrawn on 2026-10-04, on measurement** — a stab
-already lasts as long as the melody note under it, because `step.duration` *is* that
-note's duration and every renderer already honours it, so "a held baseline" as a flag
-would add a second answer to a question the step model already answers. The real gap is
-the inverse one: a stab *outlasting* its note.
+A **held baseline** (`hold=`) is not a knob: a stab lasts the felt beat it lands in, and
+the melody under it already has its own duration, so a flag would add a second answer to
+a question the step model answers. The real gap is the inverse one — a stab *outlasting*
+its felt beat — and [comping-styles.md](history/comping-styles.md) §8 Stage D is where it
+was weighed.
 
-A **four-note comping chord** is the third, and it is a decision about string sets rather than
-about a longer degree order: `derived_arity` caps the chord part at `chord3`, and
+A **four-note comping chord** is the other, and it is a decision about string sets rather
+than about a longer degree order: `derived_arity` caps the chord part at `chord3`, and
 `get_comping_voicings` offers the `shell` family alone, because with no melody to support a
 fourth voice would be the root or the 5th — the two notes that say least about the quality.
 Its consequence for `harmony` is [open-issues.md](open-issues.md) item 3.
-
-Both withdrawals are [comping-styles.md](history/comping-styles.md) §8 Stage D, and
-[open-issues.md](open-issues.md) item 1 is the larger thing underneath them — a grid names
-positions the tune does not occupy, and sounding them took a union of the grid's positions
-with the melody's own slots.

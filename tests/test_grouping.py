@@ -17,13 +17,12 @@ from arranger.grouping import (
     TimeSignature,
     default_grouping,
     format_grouping,
-    group_offbeat,
     group_starts,
     grouping_allowed,
     parse_grouping,
     resolve_grouping,
 )
-from arranger.options import ArrangeOptions
+from arranger.options import ArrangeOptions, Request
 
 
 class TestTheVocabulary(unittest.TestCase):
@@ -120,19 +119,6 @@ class TestTheFeltBeats(unittest.TestCase):
         with self.assertRaises(ValueError):
             group_starts(7, (3, 3))
 
-    def test_a_simple_beat_answers_on_half_a_beat(self):
-        self.assertEqual(group_offbeat(1), 0.5)
-
-    def test_a_longer_group_answers_on_its_last_unit(self):
-        """A group of three eighths answers on the third eighth, not halfway."""
-        self.assertEqual(group_offbeat(3), 2.0)
-        self.assertEqual(group_offbeat(2), 1.0)
-        self.assertEqual(group_offbeat(4), 3.0)
-
-    def test_a_zero_length_group_is_refused(self):
-        with self.assertRaises(ValueError):
-            group_offbeat(0)
-
 
 class TestTimeSignature(unittest.TestCase):
     """The one value a hand-built arrangement declares, and its validation."""
@@ -175,7 +161,6 @@ class TestTheHandBuiltMetre(unittest.TestCase):
             options=ArrangeOptions(
                 texture="targets",
                 bass=BASS_STYLE_WALK,
-                grid="melody:every_note,bass:walk",
             ),
         )
         self.assertEqual([step.beat for step in steps], [1.0, 2.0, 3.0, 4.0])
@@ -188,7 +173,7 @@ class TestTheHandBuiltMetre(unittest.TestCase):
             options=ArrangeOptions(
                 texture="targets",
                 bass=BASS_STYLE_WALK,
-                grid="chord:freddie,bass:walk",
+                request=Request(chord_on="every-beat"),
             ),
             time_signature=TimeSignature(7, 4, "2+2+3"),
         )

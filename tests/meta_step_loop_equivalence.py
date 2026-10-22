@@ -218,7 +218,7 @@ class TestTheTwoLoopsAgree(unittest.TestCase):
             with self.subTest(texture=texture):
                 self.assert_same_arrangement(
                     TRIPLES[:4], texture,
-                    bass=BASS_STYLE_WALK, grid="melody:every_note,bass:walk",
+                    bass=BASS_STYLE_WALK,
                 )
 
 

@@ -410,7 +410,7 @@ property of the run rather than of the file, and the exact grouping is lost when
 arrangement is written out and read back. The importer can read the fact; the writers do
 not preserve the channel that stated it.
 
-A generation of the default comping grid does read it, though: `headxml._bar_resolution`
+A generated comping bar does read it, though: `headxml._bar_resolution`
 offers a **group-length** candidate ahead of the beat, so a 12/8 bar written in four
 dotted quarters generates four positions rather than twelve. The beat remains the
 fallback for a bar mixing subdivisions that no single finer resolution holds, so a busy
@@ -910,7 +910,7 @@ cause - and the three renderers spell the same decision differently:
 
 **An imported head also carries the source's own statement.** `Head.first_bar_implicit`
 is true when the score marks measure 1 `implicit="yes"` (or numbers it 0), and
-`headxml._merge_chord_slots` withholds the default grid's positions in that bar. A
+`headxml._merge_chord_slots` withholds the positions its union generates in that bar. A
 comping chord in the short bar would fill it, `score_events` would read a full first
 bar, and the pickup would be erased - which is why the accompaniment starts in bar 2
 while the written melody keeps the anacrusis.

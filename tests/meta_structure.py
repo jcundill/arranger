@@ -37,8 +37,8 @@ an entry that is no longer used cannot rot there.
 The axis graph is the third kind. Each axis is answered by exactly one function,
 in the module that owns its vocabulary, and this file reads those signatures to
 hold them to the dependencies they declare - `parts` reads nothing, `harmony` and
-`bass` read `parts`, and `bass` also reads the texture, while `grid` reads the
-metre's count and grouping rather than another axis. A signature is the one place
+`bass` read `parts`, and `bass` also reads the texture, while the metre is read by
+its own module rather than by an axis. A signature is the one place
 an implicit dependency cannot hide, which is why the table below is asserted
 against the AST rather than promised in a docstring.
 
@@ -125,19 +125,23 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/cost.py": Budget(12, 140, 7),
     "arranger/decisions.py": Budget(11, 137, 9),
     "arranger/fingers.py": Budget(10, 41, 2),
-    "arranger/grid.py": Budget(9, 25, 4),
+    # The named figures and their parser went, so what is left is the request's
+    # `Rhythm` and the lattice under it: re-measured, not lowered by eye.
+    "arranger/grid.py": Budget(8, 23, 3),
     "arranger/grip_tables.py": Budget(7, 39, 3),
     "arranger/grip_place.py": Budget(19, 66, 5),
     "arranger/grips.py": Budget(22, 128, 9),
-    "arranger/grouping.py": Budget(6, 45, 3),
+    "arranger/grouping.py": Budget(6, 36, 3),
     "arranger/harmony.py": Budget(4, 21, 2),
     "arranger/melody_alone.py": Budget(6, 74, 14),
     # The five axis keywords left `resolve_knobs` (15 -> 9 parameters), so the module
-    # ceiling is `resolve_policies`'s thirteen rather than the reconciler's. The length
-    # is unchanged: the axes are now one read of `options` and two `settle_input_fact`
-    # calls where the defaults and the assignments used to be.
-    "arranger/resolution.py": Budget(9, 116, 13),
-    "arranger/slot_plan.py": Budget(6, 89, 5),
+    # ceiling is `resolve_policies`'s twelve rather than the reconciler's: the grid
+    # parameter went with the axis. The axes are now one read of `options` and two
+    # `settle_input_fact` calls where the defaults and the assignments used to be.
+    "arranger/resolution.py": Budget(8, 114, 12),
+    # `slot_state`'s grid branches left with the axis, so the ceiling is what it
+    # measures rather than what it measured.
+    "arranger/slot_plan.py": Budget(6, 78, 5),
     "arranger/step_prepare.py": Budget(6, 74, 9),
     "arranger/harmonised_route.py": Budget(8, 54, 8),
     # The dispatch table: eleven small functions, each an entry's claim or emit, so
@@ -165,7 +169,7 @@ BUDGETS: Dict[str, Budget] = {
     # (13 -> 8): the metre is one value, `time_signature=`, whose grouping is the one
     # fact of it a caller may set. `head_cli`'s branches live in `_print_metre_notes`,
     # and the merge block in `_head_slots`, so neither raises this budget.
-    "headxml.py": Budget(17, 125, 8),
+    "headxml.py": Budget(17, 113, 8),
     "grip_chart.py": Budget(14, 84, 5),
     "tabgp.py": Budget(19, 151, 13),
     "tabscore.py": Budget(10, 98, 5),
@@ -674,14 +678,13 @@ class TestTheSplit(unittest.TestCase):
 #: `module.function` is the one place the axis is resolved, and it lives beside
 #: the vocabulary rather than beside the composition: `resolution` wires the
 #: answers together, but it does not own the words. The parameter names **are**
-#: the dependency graph, so a resolver that quietly grows a `grid` argument is a
+#: the dependency graph, so a resolver that quietly grows a `harmony` argument is a
 #: change to this table rather than an extra keyword nobody reviewed.
 AXIS_RESOLVERS: Dict[str, Tuple[str, str]] = {
     "parts": ("parts", "resolve_parts"),
     "texture": ("texture", "parse_texture"),
     "harmony": ("harmony", "resolve_harmony"),
     "bass": ("bass_rules", "resolve_bass"),
-    "grid": ("grid", "resolve_grid"),
 }
 
 AXIS_DEPENDENCIES: Dict[str, Tuple[str, ...]] = {
@@ -689,7 +692,6 @@ AXIS_DEPENDENCIES: Dict[str, Tuple[str, ...]] = {
     "texture": ("argument",),
     "harmony": ("harmony", "parts"),
     "bass": ("bass", "parts", "texture"),
-    "grid": ("grid", "beats_per_bar", "grouping"),
 }
 
 #: The wiring `resolution.resolve_policies` calls, in the order the axes depend.
@@ -700,7 +702,6 @@ POLICY_WIRING: Tuple[str, ...] = (
     "_resolve_parts",
     "resolve_bass",
     "_resolve_harmony",
-    "_resolve_grid",
 )
 
 
@@ -735,7 +736,7 @@ class TestTheAxisResolvers(unittest.TestCase):
     """Each axis is answered where its vocabulary lives, from named dependencies.
 
     The axes were once resolved by one function, so `harmony` could not be
-    reasoned about - or tested - without `parts`, `grid` and the metre in view,
+    reasoned about - or tested - without `parts`, `harmony` and the metre in view,
     and the dependency between two of them was prose rather than a signature.
     These two tests are the shape of the repair, and they fail in both
     directions: a resolver that moves away from its module, and one that grows a

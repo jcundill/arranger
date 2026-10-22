@@ -95,7 +95,6 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
             options=ArrangeOptions(
                 texture="targets",
                 bass=BASS_STYLE_WALK,
-                grid="melody:every_note,bass:walk",
             ),
         )
         return steps
@@ -341,7 +340,6 @@ class TestAHeldStepChangesNothing(unittest.TestCase):
             options=ArrangeOptions(
                 texture="targets",
                 bass=BASS_STYLE_WALK,
-                grid="melody:every_note,bass:walk",
             ),
         )
         return steps
@@ -1051,7 +1049,6 @@ class TestASingleNoteStepHasNothingToHold(unittest.TestCase):
             options=ArrangeOptions(
                 texture="targets",
                 bass=BASS_STYLE_WALK,
-                grid="melody:every_note,bass:walk",
             ),
             time_signature=TimeSignature(2, 4),
         )
@@ -1126,7 +1123,6 @@ class TestASingleNoteStepHasNothingToHold(unittest.TestCase):
             options=ArrangeOptions(
                 texture="targets",
                 bass=BASS_STYLE_WALK,
-                grid="melody:every_note,bass:walk",
             ),
         )
         target = [s for s in steps if s.bar == 3 and s.beat == 1.0][0]
@@ -1227,7 +1223,7 @@ class TestUpperVoicesExcludeTheThumbByStringNotPosition(unittest.TestCase):
 
 
 class TestTheHarmonyLeavesRoomForTheBass(unittest.TestCase):
-    """A requested grid bass note is part of the request: the shape moves, the note sounds.
+    """A requested bass note is part of the request: the shape moves, the note sounds.
 
     Two halves, and neither is enough alone. `fingers.can_fret` refuses a hand the player
     cannot make, which stops the unplayable stretch; selection **narrows the palette** to

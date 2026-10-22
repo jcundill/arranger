@@ -1,4 +1,4 @@
-"""What the caller asked for, resolved once: parts, grid, harmony, bass and the knobs.
+"""What the caller asked for, resolved once: parts, harmony, bass and the knobs.
 
 Every `*_AUTO` sentinel on the axes is answered here, against the selection and the
 texture, so the step loop only ever reads a concrete value. Pure policy: no voicing is
@@ -23,7 +23,7 @@ from .bass_rules import (
 from .chords import (
     NON_CHORD_TONE_STRATEGIES,
 )
-from .grid import Rhythm, parse_grid, resolve_grid
+from .grid import Rhythm
 from .grouping import COMMON_TIME, TimeSignature
 from .harmony import (
     parse_harmony,
@@ -84,25 +84,6 @@ def _resolve_harmony(
     return resolve_harmony(parse_harmony(harmony), parts)
 
 
-def _resolve_grid(
-    grid: str,
-    beats_per_bar: int,
-    grouping: Tuple[int, ...],
-) -> str:
-    """The grid to place chords on: parsed, `auto` resolved, validated.
-
-    The same two-step shape as `_resolve_melody` and `_resolve_harmony` above,
-    because it is the same rule about the same kind of thing: `harmony` owns the
-    vocabulary and the validation, this function owns only the wiring.
-
-    **Takes the metre rather than a texture**, and that is what distinguishes it from
-    `harmony`. Whether a rhythm fits is a property of the metre - `final_and` is the
-    upbeat of the last felt beat whatever the arrangement is doing - so it is
-    resolved against the count, the denominator and the grouping, and nothing else.
-    """
-    return resolve_grid(parse_grid(grid), beats_per_bar, grouping)
-
-
 @dataclass(frozen=True)
 class _Knobs:
     """The call's knobs, after `options=` and the keywords are reconciled.
@@ -123,7 +104,6 @@ class _Knobs:
     bass: str
     parts: str
     harmony: str
-    grid: Optional[str]
     request: ResolvedRequest
     beats_per_bar: int
     beat_type: int
@@ -254,7 +234,7 @@ def resolve_knobs(
     bug and would otherwise spend an afternoon finding out why their keyword had
     no effect.
 
-    The five axes - `texture`, `bass`, `parts`, `harmony`, `grid` - are **not**
+    The four axes - `texture`, `bass`, `parts`, `harmony` - are **not**
     among those keywords: they are the engine's implementation rather than a question
     a caller asks, so they are read off `options` or derived from the request.
 
@@ -270,8 +250,8 @@ def resolve_knobs(
     # `None` means "derive this from the request", which is what every axis means
     # unless `options` spells it out - the only door left to one.
     stated = options if options is not None else ArrangeOptions()
-    texture, bass, parts, harmony, grid = (
-        stated.texture, stated.bass, stated.parts, stated.harmony, stated.grid
+    texture, bass, parts, harmony = (
+        stated.texture, stated.bass, stated.parts, stated.harmony
     )
     if options is not None:
         given = _conflicts(
@@ -337,7 +317,6 @@ def resolve_knobs(
         bass=bass,
         parts=parts,
         harmony=harmony,
-        grid=grid,
         request=resolved,
         beats_per_bar=beats_per_bar,
         beat_type=beat_type,
@@ -354,8 +333,8 @@ class _Policies:
     """The axes and the walked-beat union, resolved once per arrangement.
 
     `parts`/`melody_voiced`/`melody_only` come off the parts axis, `bass` and
-    `has_thumb` off the bass policy, `harmony_family` and `grid_pattern` off the
-    two comping axes, and `slots` is the walked-beat union when a thumb line is
+    `has_thumb` off the bass policy, `harmony_family` off the comping axis, and
+    `slots` is the walked-beat union when a thumb line is
     running. Resolved up front because the band does not change halfway through a
     tune, and unpacked straight back into the names the loop has always used.
     """
@@ -366,10 +345,8 @@ class _Policies:
     bass: str
     has_thumb: bool
     harmony_family: str
-    #: The chord's rhythm. `None` when the caller spelled a `grid` preset instead,
-    #: which is the internal axis; the preset then decides where a chord falls.
+    #: The chord's rhythm, from the request's `chord_on`.
     chord_rhythm: Optional[Rhythm]
-    grid_pattern: Optional[str]
     #: The bass's rhythm, and what the chord states in a notated melody rest.
     bass_rhythm: Rhythm
     chord_fills: str
@@ -384,7 +361,6 @@ def resolve_policies(
     texture: str,
     bass: str,
     harmony: str,
-    grid: Optional[str],
     chord_rhythm: Optional[Rhythm],
     bass_rhythm: Rhythm,
     chord_fills: str,
@@ -439,16 +415,6 @@ def resolve_policies(
     # reported **once, up front**, rather than never at all on an arrangement where
     # the guitar happens to be singing - the same argument as `_resolve_melody`'s.
     harmony_family = _resolve_harmony(harmony, parts)
-    # The grid axis, resolved here for the same reason and read by **both** routes
-    # below rather than only the comping one - unlike `harmony`, which the guitar
-    # singing makes unreachable. A grid says where a chord lands, and that is a
-    # question about the part whether the guitar is singing it or comping under a
-    # horn, so scoping it to one route would make `grid` silently inert on a
-    # melody-bearing arrangement rather than doing nothing there.
-    grid_pattern = (
-        None if grid is None else _resolve_grid(grid, beats_per_bar, grouping)
-    )
-
     slots: Optional[List[Slot]] = None
     if has_thumb:
         # Decision B: the union is built here, before the melody loop, so the
@@ -475,7 +441,6 @@ def resolve_policies(
         has_thumb=has_thumb,
         harmony_family=harmony_family,
         chord_rhythm=chord_rhythm,
-        grid_pattern=grid_pattern,
         bass_rhythm=bass_rhythm,
         chord_fills=chord_fills,
         grouping=grouping,

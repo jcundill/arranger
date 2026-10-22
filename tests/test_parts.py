@@ -9,7 +9,6 @@ import unittest
 from typing import List
 
 from arranger import (
-    GRID_PART_PATTERNS,
     GRIP_STRING_SETS,
     PART_BASS,
     PART_CHORD,
@@ -25,7 +24,7 @@ from arranger import (
     resolve_parts,
     supported_string_sets,
 )
-from arranger.options import ArrangeOptions
+from arranger.options import ArrangeOptions, Request
 from arranger.render import _step_cells
 from arranger.tuning import MUTED_CELL
 from tests.support import (
@@ -140,15 +139,15 @@ class TestMelodyOnlySelections(unittest.TestCase):
 
     def test_an_off_grid_slot_under_soprano_still_sounds(self):
         """
-        The grid guard answers before the empty palette too, on both routes.
+        The rhythm guard answers before the empty palette too, on both routes.
 
-        An off-grid slot is the one case where the guitar may play nothing
-        rather than one note: under a comping selection it is a rest, and under
-        a melody-only selection the note of the tune still sounds, alone -
-        which is what every slot of that selection is anyway, so the ordering
-        is asserted rather than left to read as a coincidence. Measured under
-        `grid="joe_pass"`, which places no chord on beat 1.0: every slot of the
-        soprano-only arrangement still sounds its note.
+        A slot the chord's rhythm does not name is the one case where the guitar may
+        play nothing rather than one note: under a comping selection it is a rest, and
+        under a melody-only selection the note of the tune still sounds, alone - which
+        is what every slot of that selection is anyway, so the ordering is asserted
+        rather than left to read as a coincidence. Measured under a rhythm of the
+        **ands**, which places no chord on beat 1.0: every slot of the soprano-only
+        arrangement still sounds its note.
         """
         progression = [
             ("F5", "maj7", "Fmaj7"), ("E5", "7", "A7"),
@@ -158,19 +157,13 @@ class TestMelodyOnlySelections(unittest.TestCase):
         steps = VoiceLeadingEngine.arrange_progression(
                 progression, timings=timings, options=ArrangeOptions(
                     parts="melody",
-                    grid="chord:joe_pass",
+                    request=Request(chord_on="1and,2and,3and,4and"),
                 ),
             )
         self.assertEqual(len(steps), 4, "an off-grid slot of the tune went missing")
         for step in steps:
             self.assertEqual(len(step.voicing.active_frets()), 1)
 
-
-    def test_every_part_name_the_library_uses_is_in_the_vocabulary(self):
-        """So a table cannot name a part a caller could not have typed."""
-        for part in GRID_PART_PATTERNS:
-            self.assertIn(part, PART_NAMES, part)
-        self.assertEqual(set(GRID_PART_PATTERNS), set(PART_NAMES))
 
 
 class TestParseParts(unittest.TestCase):

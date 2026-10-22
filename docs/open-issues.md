@@ -22,13 +22,13 @@ items.
    palette narrow: a requested bass note moves the harmony instead of being dropped; see below.
 3. **`harmony=full` is accepted on the comping route and answered with a different family** — the
    one axis value refused by nothing that resolves to something other than itself.
-4. *(closed)* **A `bass:` grid row is accepted and changes nothing** — closed by the request; the
-   internal row survives with its own tests.
+4. *(closed)* **A `bass:` grid row is accepted and changes nothing** — closed by the request, and
+   then made unreachable: the row itself went with the `grid` axis.
 5. *(closed)* **A lone note the hand holds can leave the walk below the shape's reach** — closed by
    the hand's reach being bounded and the palette making room for the note; see below.
 6. **A position falling on a note's release is read as held** — `melody_at` keeps a note in
    force through its end instant; the boundary is pinned by a test and the reading stays open,
-   but the grid that used to name such a position went with `--grid`, so it now costs no step.
+   but only a **requested** rhythm names such a position, and it costs no step.
 
 Reproduce the measurements with the commands in [Reproducing](#reproducing).
 
@@ -142,21 +142,20 @@ chord's own tone set, which varies by quality and lives in `TONE_PRIORITY`.
 
 ## 4. A `bass:` grid row is accepted and changes nothing (closed)
 
-**Closed for a caller, and kept internal on purpose.** The bug was never the row: it was that the
-CLI offered a flag whose `bass:` half did nothing, so `--grid melody:every_note,bass:walk` printed
-a request back and then wrote no bass note. That flag is gone. The thumb's positions are
-`--bass-on` and its notes are `--bass-notes`, so the spelling that could lie to a user no longer
-exists.
+**Closed twice over.** The bug was never the row: it was that the CLI offered a flag whose
+`bass:` half did nothing, so `--grid melody:every_note,bass:walk` printed a request back and
+then wrote no bass note. That flag went with the rhythm-first request, whose two spellings of
+the thumb are `--bass-on` (when) and `--bass-notes` (what).
 
-**The internal row survives, and is deliberately unread.** `GRID_PART_PATTERNS` still validates
-`bass:every_note`, `bass:walk` and `bass:anchors`, and `grid_bass_pattern` still has no caller. It
-is kept because it is the axis's own vocabulary - `ArrangeOptions(parts=…)` / `grid` are the
-Python API under the
-request (design principle 9 of the plan) - and because `tests/test_grid.py` pins the property the
-row exists to state: a bass row **defers to the melody**, since the walk's beats come from
-`bass.py`'s own timeline rather than from a preset. A row that is parsed-but-unread *inside* the
-engine, with a test saying so, is not the failure this document is for; a flag that states a choice
-the library did not make is, and it is gone.
+**The row then went with the axis.** `GRID_PART_PATTERNS` / `grid_bass_pattern` named
+`bass:every_note`, `bass:walk` and `bass:anchors` and had no caller outside the axis's own
+parser, so the vocabulary was a name for something the engine did not do - which is the
+failure this document is for. The axis, the table and the parsed-but-unread row are gone;
+the thumb's positions come from `bass_on` and its notes from `bass_notes`.
+
+**What the row was trying to say is still true, and is now stated by the code that does it**:
+the walk's beats come from `bass.py`'s own timeline rather than from any chord figure, which
+is why the two are separate questions in the request.
 
 ---
 
@@ -209,7 +208,8 @@ carry it, which over the four thumb rows happens **22** times, every one of them
 its edge, so the instant a note stops sounding is treated as one it still holds. The reading is a
 decision, it is still what is built, and `tests/test_headxml_timeline.py` pins it; the arithmetic
 that finds the edge is not a decision, and it uses the head's own metre. What has changed is that
-the grid which used to *name* such a position no longer exists.
+no *figure* names such a position any more: only a requested rhythm does, and a request states
+its positions whatever the tune is doing.
 
 **The issue.** `melody_at` keeps a note in force while `position <= end`, where the position and
 the end are both on one absolute beat line and the end is
@@ -219,18 +219,18 @@ itself** still returns the note. `melody_state` then answers `held` there rather
 and §9.2's rule that a held position is not a slot declines it. A position where the tune has
 *stopped* is therefore treated exactly like one where it is still sounding.
 
-**The problem, and what became of it.** The measurement that made this an issue was taken when the
-default grid was the union — a position invented at the bar's own subdivision wherever the tune was
-silent — and under it 9 steps were lost across the corpus. That union went with the `--grid` flag
-(the rhythm-first request replaced it with `--chord-on` and `--chord-fills`, asked for by name), and
-the melody-anchored default now generates no positions of its own, so there is nothing left for the
-rule to decline: re-measured by patching the boundary alone — a `held` answer whose in-force note
+**The problem, and what became of it.** The measurement that made this an issue was taken when a
+figure named its own positions in every bar, and under it 9 steps were lost across the corpus. What
+replaced that figure is the request: the default names no added position, `--chord-on` names the ones
+the caller wants, and the engine's own union - still built, for a spelled axis - is the only thing
+that generates positions where the tune is silent, so the rule has almost nothing left to decline:
+re-measured by patching the boundary alone — a `held` answer whose in-force note
 ends at that exact position becomes `silent` — **every current row adds 0 steps** (685 under the
 default, 823 under `--chord-on every-beat`, 1,012 under `--chord-on 1,2,1and,2and`).
 
 **Where it still shows.** 27 positions in the corpus have a note releasing exactly on one the bar
-resolution generates. An **explicit** chord row asks for those positions directly (its grid is not
-melody-anchored, so the hold filter never runs), and each becomes a step carrying the released
+resolution generates. A **requested** rhythm asks for those positions directly (it is not the
+engine's union, so the hold filter never runs), and each becomes a step carrying the released
 note: `examples/But_Not_for_Me.mxl` bar 5 beat 1 is a `Ebmaj` whose melody is the `G4` that ends
 there. That is consistent with the reading rather than a second bug — a position the caller names
 is placed — but it is where a change of reading would be felt now, and the reason the item stays
@@ -259,9 +259,8 @@ silence, so it need not move with it.
 # a `tests/data`-only sweep, and mixing the two corpora is what made them disagree.
 #
 # Items 1, 2, 4 and 5 are closed (see above). Item 1's recipe went with the default union
-# it was written against, and item 4's with the `--grid` flag the rhythm-first request
-# removed; item 4's residual property - the `bass:` row is inert *inside* the engine - is
-# the snippet below, and items 2 and 5 own their figures in their own sections.
+# it was written against, and item 4's with the `grid` axis the rhythm-first request went on
+# to delete; items 2 and 5 own their figures in their own sections.
 #
 # Both of the closed engine items are re-measurable in one line each, which is the form
 # their fix took - no replica of `place_bass` is needed any more, because there is nothing
@@ -274,30 +273,6 @@ silence, so it need not move with it.
 #           `fingers.MAX_HAND_SPAN`, and neither does the merged hand of any step that
 #           carries a thumb.
 
-# the bass row is inert *inside the engine*: every head is byte-identical to the default row.
-# No CLI flag can reach it any more - the thumb's positions are `--bass-on` - so this
-# measures the Python-API property `tests/test_grid.py` pins.
-.venv/bin/python -c "
-import glob
-import headxml as H
-from arranger.options import ArrangeOptions
-rows = ['melody:every_note', 'bass:every_note', 'bass:walk', 'bass:anchors']
-heads = (sorted(glob.glob('tests/data/*.musicxml')) + sorted(glob.glob('tests/data/*.mxl'))
-         + sorted(glob.glob('examples/*.mxl')))
-same = 0
-for path in heads:
-    tabs = set()
-    for grid in rows:
-        steps, _h, _n = H.arrange_xml_head(
-            path, options=ArrangeOptions(
-                texture='targets', bass='root,5th,approach,nearest', grid=grid))
-        tabs.add(tuple(s.tab_line() for s in steps))
-    same += len(tabs) == 1
-print('inert rows: %d of %d heads identical' % (same, len(heads)))
-"
-# inert rows: 15 of 15 heads identical, all four spellings giving the same count and the same
-# tab lines on each - so the row is a no-op rather than an accident of one head. (The corpus is
-# 15 files and not the 10 this item was written against; re-measured, not remembered.)
 
 # 6. a position on a note's release is not generated: `melody_at` keeps a note in force
 # through its own end instant, so `melody_state` answers held where the tune has already

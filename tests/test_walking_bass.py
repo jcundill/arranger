@@ -192,7 +192,6 @@ class TestTheWalkFollowsTheFeltBeats(unittest.TestCase):
             options=ArrangeOptions(
                 texture="targets",
                 bass=BASS_STYLE_WALK,
-                grid="melody:every_note,bass:walk",
             ),
             time_signature=TimeSignature(
                 beats_per_bar, beat_type, grouping if grouping is not None else "auto"
@@ -237,7 +236,6 @@ class TestTheWalkFollowsTheFeltBeats(unittest.TestCase):
             options=ArrangeOptions(
                 texture="targets",
                 bass=BASS_STYLE_WALK,
-                grid="melody:every_note,bass:walk",
             ),
             time_signature=TimeSignature(12, 8),
         )
@@ -450,7 +448,6 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
                 progression, timings=timings, options=ArrangeOptions(
                     texture="chord2",
                     bass="root,5th,approach,nearest",
-                    grid="melody:every_note,bass:walk",
                 ),
                 time_signature=TimeSignature(2, 4)
             )
@@ -552,7 +549,6 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
                 timings=timings,
                 options=ArrangeOptions(
                     texture="chord2",
-                    grid="melody:every_note,bass:walk",
                     bass=BASS_STYLE_WALK,
                 ),
                 time_signature=TimeSignature(3, beat_type),
@@ -573,7 +569,6 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
                 timings=timings,
                 options=ArrangeOptions(
                     texture="chord2",
-                    grid="melody:every_note,bass:walk",
                     bass=BASS_STYLE_WALK,
                 ),
                 time_signature=TimeSignature(3, 4),
@@ -596,7 +591,6 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
             options=ArrangeOptions(
                 texture="chord2",
                 bass="root,5th,approach,nearest",
-                grid="melody:every_note,bass:walk",
             ),
             time_signature=TimeSignature(4, 4),
         )
@@ -625,7 +619,6 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
             options=ArrangeOptions(
                 texture="chord2",
                 bass="root,5th,approach,nearest",
-                grid="melody:every_note,bass:walk",
             ),
             time_signature=TimeSignature(4, 4),
         )
@@ -680,7 +673,6 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
                 progression, timings=timings, options=ArrangeOptions(
                     texture="chord2",
                     bass="root,5th,approach,nearest",
-                    grid="melody:every_note,bass:walk",
                 ),
                 time_signature=TimeSignature(2, 4)
             )
@@ -901,15 +893,14 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
         equivalence this asserts is therefore the other direction: the style and the
         four rules it is spelled from are one arrangement, and the default is not it.
         """
-        grid = "melody:every_note,bass:walk"
-        named = self.tabs(self.arrange(texture="targets", grid=grid, bass=BASS_STYLE_WALK))
+        named = self.tabs(self.arrange(texture="targets", bass=BASS_STYLE_WALK))
         spelled = self.tabs(
-            self.arrange(texture="targets", grid=grid, bass="root,5th,approach,nearest")
+            self.arrange(texture="targets", bass="root,5th,approach,nearest")
         )
         self.assertEqual(named, spelled)
         self.assertNotEqual(
             named,
-            self.tabs(self.arrange(texture="targets", grid=grid)),
+            self.tabs(self.arrange(texture="targets")),
             "the default produced the walk, so `bass` is not an axis",
         )
 
@@ -939,8 +930,8 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
         which is a shell on a strong beat and the melody alone between them, is about
         the *left* hand and is unaffected by how many notes the thumb writes.
         """
-        with_thumb = self.arrange(texture="chord2", grid="melody:every_note,bass:walk", bass=BASS_STYLE_WALK)
-        without = self.arrange(texture="chord2", grid="melody:every_note,bass:walk", bass="none")
+        with_thumb = self.arrange(texture="chord2", bass=BASS_STYLE_WALK)
+        without = self.arrange(texture="chord2", bass="none")
         self.assertTrue(any(s.bass is not None for s in with_thumb))
         self.assertEqual([s.bass for s in without], [None] * len(without))
         shells = [s for s in without if s.grip == "shell"]
@@ -956,8 +947,8 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
 
     def test_anchors_writes_fewer_notes_than_a_walk(self):
         """Same texture, two policies, and the line is measurably sparser."""
-        walked = self.arrange(texture="chord2", grid="melody:every_note,bass:walk", bass=BASS_STYLE_WALK)
-        anchored = self.arrange(texture="chord2", grid="melody:every_note,bass:walk", bass=BASS_STYLE_ANCHORS)
+        walked = self.arrange(texture="chord2", bass=BASS_STYLE_WALK)
+        anchored = self.arrange(texture="chord2", bass=BASS_STYLE_ANCHORS)
         # The notes actually *struck*: a carried note rings into the steps after it,
         # so counting `s.bass` would measure the bar rather than the line.
         walked_notes = sum(1 for s in walked if s.bass is not None and not s.bass_held)
@@ -1050,7 +1041,7 @@ class TestAChordlessBarHasNoBassPart(unittest.TestCase):
 
     def test_the_walked_bar_carries_no_thumb_note(self) -> None:
         """Under a texture that puts a note on every beat, the chordless bar has none."""
-        steps = self.arrange(texture="targets", grid="melody:every_note,bass:walk", bass=BASS_STYLE_WALK)
+        steps = self.arrange(texture="targets", bass=BASS_STYLE_WALK)
         walked = [s for s in steps if s.bar == 2]
         # One step, not four: with no chord there is no beat for the walk to be written
         # on, so the bar the grid would have invented collapses to its melody slot.
@@ -1069,7 +1060,7 @@ class TestAChordlessBarHasNoBassPart(unittest.TestCase):
 
     def test_the_melody_is_unaffected(self) -> None:
         """The third part is the one part an `NC` bar still states."""
-        nc = [s for s in self.arrange(texture="chord2", bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk") if s.chord == NO_CHORD]
+        nc = [s for s in self.arrange(texture="chord2", bass="root,5th,approach,nearest") if s.chord == NO_CHORD]
         self.assertEqual(len(nc), 1)
         self.assertEqual(nc[0].melody, "E4")
         self.assertTrue(nc[0].melody_voiced)
@@ -1095,7 +1086,7 @@ class TestAChordlessBarHasNoBassPart(unittest.TestCase):
         therefore changes the note *before* it as well as its own, and this pins the
         direction: a half step from G, not a half step from D.
         """
-        steps = self.arrange(texture="chord2", grid="melody:every_note,bass:walk", bass=BASS_STYLE_WALK)
+        steps = self.arrange(texture="chord2", bass=BASS_STYLE_WALK)
         last = [s for s in steps if s.bar == 1][-1]
         self.assertEqual(last.bass_role, BASS_ROLE_APPROACH)
         note = last.bass

@@ -624,7 +624,6 @@ def walk(
         options=ArrangeOptions(
             texture="targets",
             bass=BASS_STYLE_WALK,
-            grid="melody:every_note,bass:walk",
         ),
     )
 

@@ -92,7 +92,6 @@ flowchart TB
         texture --> grouping
         harmony --> parts
         grid --> grouping
-        grid --> parts
     end
 
     subgraph layer_explanation["explanation"]

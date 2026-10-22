@@ -50,7 +50,7 @@ ORDER = [
     "parts",        # the parts axis: which of melody / bass / chord the guitar takes
     "harmony",      # the harmony axis: which degrees the chord part states
     "grouping",     # the metre's third fact: which denominator units are felt as a beat
-    "grid",         # the grid axis: when each part sounds
+    "grid",         # the request's rhythm: when each part sounds
     "texture",      # the texture axis: how many notes the chord part states
     "bass_rules",   # the bass vocabulary, capacities and refusals
     "bass_place",   # the thumb's octave and string: the cost and `place_bass`

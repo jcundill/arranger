@@ -8,13 +8,13 @@ Takes `(melody note, chord quality, chord name)` triples, builds voicings in sev
 - **Melody pinned to soprano**, on high E, B or G string — low melody still harmonised in position.
 - **Playable or absent.** Frets 0–18, span ≤5 (4 for duos), real string set, ≤4 fingers, no fifth fret from a held shape. Neck window is *preference, not filter* — losing a chord of the tune beats a fret out of position.
 - **Non-chord melody notes**: extension, Barry Harris 6/dim7 substitution, or chord held under a passing tone ([non-chord melody notes](#non-chord-melody-notes)).
-- **Six orthogonal axes**: how thick the chord part is, who plays the bottom, which parts the guitar takes, which degrees a non-singing part states, when each part sounds, and how a compound metre is felt ([the request and the axes under it](#the-request-and-the-six-axes-under-it)).
+- **Six orthogonal axes**: how thick the chord part is, who plays the bottom, which parts the guitar takes, which degrees a non-singing part states, when each part sounds, and how a compound metre is felt ([the request and the axes under it](#the-request-and-the-axes-under-it)).
 - **Heads from real sources** — MusicXML score, read as harmony *timeline*.
 - **Dependency-light**: Python 3.11+ and [musthe](https://pypi.org/project/musthe/) only. MusicXML head *reading* needs no extra; MusicXML export and Guitar Pro export each behind own optional extra.
 
 > The **distribution** is `jazz-arranger` (PyPI name `arranger` taken by unrelated project). **Import** name is `arranger`.
 
-Why lives in [`docs/`](docs/): [engine.md](docs/engine.md) (the selector, the six axes, the cost tuple), [renderers.md](docs/renderers.md) (tab, MusicXML, GP5), and [open-issues.md](docs/open-issues.md) (the open bugs, each with its measurement). The plan documents that built this — parts, comping styles, generated grips, fingering, `voices=` — are in [`docs/history/`](docs/history/).
+Why lives in [`docs/`](docs/): [engine.md](docs/engine.md) (the selector, the axes, the cost tuple), [renderers.md](docs/renderers.md) (tab, MusicXML, GP5), and [open-issues.md](docs/open-issues.md) (the open bugs, each with its measurement). The plan documents that built this — parts, comping styles, generated grips, fingering, `voices=` — are in [`docs/history/`](docs/history/).
 
 ## Installation
 
@@ -59,7 +59,7 @@ G7       B4  13-x-12-12-12-x
 Cmaj7    C5  x-x-9-9-8-8
 ```
 
-**The six questions have a second spelling.** `Request` carries them as one value (`from arranger import Request`), so the same call asks for a walking line under the tune — `engine.arrange_progression(progression, request=Request(bass_on="every-beat", bass_notes="walk"))`. Both spellings and what each question means are in [the request and the axes under it](#the-request-and-the-six-axes-under-it).
+**The six questions have a second spelling.** `Request` carries them as one value (`from arranger import Request`), so the same call asks for a walking line under the tune — `engine.arrange_progression(progression, request=Request(bass_on="every-beat", bass_notes="walk"))`. Both spellings and what each question means are in [the request and the axes under it](#the-request-and-the-axes-under-it).
 
 Each step is an `ArrangementStep` (`chord`, `melody`, `voicing`, plus `non_chord_tone`, `strategy`, `harmonized_as`); `voicing` is a `Voicing` with `frets` (six entries, `-1` = muted), `top_fret`, `avg_fret` and helpers `tab_string()`, `fret_span()`, `midi_notes()`, `pitch_classes()`, `soprano_string()`.
 
@@ -125,7 +125,7 @@ python -m arranger head tests/data/synthetic_triplets.mxl --bars 1-3 --html head
 | `--bars-per-line` | `4` | with `--tab staff`: bars per staff line |
 | `--html` / `--musicxml` / `--gp5` | off | also write head to file — see [rendering](#rendering) |
 
-**The request is six questions, and each has two spellings.** The flags above are one; `Request(...)` is the other, so a library caller asks the same six — `engine.arrange_progression(progression, request=Request(melody=False, chord_on="every-beat"))` is the comp for a horn. Underneath both are the engine's own axes — `texture`, `bass`, `parts`, `harmony` and `grid` — which are the implementation, described in [the request and the axes under it](#the-request-and-the-six-axes-under-it); a band setting is a combination of them rather than a mode. **An axis is reached through `options=ArrangeOptions(...)`**, which is the one door to them, so `engine.arrange_progression(progression, request=Request(...), options=ArrangeOptions(texture="targets"))` is one call naming both. The metre is not an axis but an input fact like `timings=`: a score states it, and a progression built without a file declares it as one `TimeSignature`.
+**The request is six questions, and each has two spellings.** The flags above are one; `Request(...)` is the other, so a library caller asks the same six — `engine.arrange_progression(progression, request=Request(melody=False, chord_on="every-beat"))` is the comp for a horn. Underneath both are the engine's own axes — `texture`, `bass`, `parts` and `harmony` — which are the implementation, described in [the request and the axes under it](#the-request-and-the-axes-under-it); a band setting is a combination of them rather than a mode. **An axis is reached through `options=ArrangeOptions(...)`**, which is the one door to them, so `engine.arrange_progression(progression, request=Request(...), options=ArrangeOptions(texture="targets"))` is one call naming both. The metre is not an axis but an input fact like `timings=`: a score states it, and a progression built without a file declares it as one `TimeSignature`.
 
 **Every written note sounds.** No reduction: `arranger head` plays tune as written, one step per note, each on written beat. Where *chords* fall is a separate question — `--chord-on` — and a note is never quantised onto a position and dropped for sharing a slot.
 
@@ -299,7 +299,7 @@ Every run on a committed score in `tests/data/`, each one request changed. Outpu
 | a lone bass line | `--no-melody --chord-on none --bass-on every-beat` | `Request(melody=False, chord_on="none", bass_on="every-beat")` | [the thumb alone](#the-thumb-alone) |
 | reduced chord where nothing else fits | `--fallback diminished` | *(not a request field — `fallback=`)* | [non-chord melody notes](#non-chord-melody-notes) |
 
-## The request, and the six axes under it
+## The request, and the axes under it
 
 `head` asks **six questions**, and each has one flag: who plays the tune, when each accompaniment layer attacks, what each layer states, and what the chord does in a notated melody rest. A library caller asks the same six through `Request`, whose field names are the flags' own:
 
@@ -322,13 +322,12 @@ Every run on a committed score in `tests/data/`, each one request changed. Outpu
 | `ArrangeOptions(bass=…)` | which note rules the thumb line may state | `none`, `root`, `root,5th,approach,nearest` |
 | `ArrangeOptions(parts=…)` | which of melody, bass and chord the guitar takes | any subset of `melody`, `bass`, `chord` |
 | `ArrangeOptions(harmony=…)` | which **degrees** a part states when not singing | `full`, `guide`, `shell_root` |
-| `ArrangeOptions(grid=…)` | when each part sounds | `PART:PATTERN` rows — `melody:every_note,chord:freddie` |
 
 The request and the metre are the exception the other way: they are **input facts** — what is being arranged rather than how to play it — so `request=` and `time_signature=` sit beside `options=` and may be used in the same call. Every other keyword given beside `options=` raises rather than being silently ignored.
 
 The mapping is mechanical and one-way: `--chord-notes full` is `texture="uniform"` and `3`/`2`/`1` are `chord3`/`chord2`/`chord1`; `--bass-notes root` is `bass="root"`, `root-5th` is `"root,5th"` and `walk` the full four; `--chord-on` and `--bass-on` become each layer's rhythm; and `parts` is derived from which of the three the request leaves sounding. A value of `texture` that names a **rhythm** — `targets` — has no request spelling on purpose: its rhythm is `--chord-on 1,3`, and its automatic thinning between the strong beats is the Python API's own business (see [the strong beats](#the-strong-beats)).
 
-The metre's **third fact**, its grouping, is not an axis either. A count says how many denominator units a bar has and the denominator how long one lasts, but neither says that 12/8 is felt as four dotted-quarter beats rather than twelve eighths. **The score states it**, and the importer reads it in this order: an `N+N` direction (a 5/4 marked `3+2`), the primary beaming (a 7/4 beamed 2+2+3, a 12/8 beamed 4+4+4), then a metronome pulse (a dotted quarter in 12/8). `auto` falls back to the metre's convention — threes for 6/8, 9/8 and 12/8; one per beat otherwise — and a conventional simple metre ignores its beaming, because a notation program's beam pairs restate the beat rather than group it. **A progression built without a file declares the metre as one `TimeSignature`**: `engine.arrange_progression(progression, time_signature=TimeSignature(5, 4, grouping="3+2"))`. Omitting it means common time, and the signature validates the grouping against the bar when it is built. A caller overriding a score's grouping states the same value — `arrange_xml_head(path, time_signature=TimeSignature(12, 8, "3+3+3+3"))` — and its count and denominator must agree with the file's, because the file owns the bars the slots came from. The grouping moves the `--chord-on` positions, the walking bass and the named grid figures together — in 12/8 `every-beat` is four stabs, not twelve.
+The metre's **third fact**, its grouping, is not an axis either. A count says how many denominator units a bar has and the denominator how long one lasts, but neither says that 12/8 is felt as four dotted-quarter beats rather than twelve eighths. **The score states it**, and the importer reads it in this order: an `N+N` direction (a 5/4 marked `3+2`), the primary beaming (a 7/4 beamed 2+2+3, a 12/8 beamed 4+4+4), then a metronome pulse (a dotted quarter in 12/8). `auto` falls back to the metre's convention — threes for 6/8, 9/8 and 12/8; one per beat otherwise — and a conventional simple metre ignores its beaming, because a notation program's beam pairs restate the beat rather than group it. **A progression built without a file declares the metre as one `TimeSignature`**: `engine.arrange_progression(progression, time_signature=TimeSignature(5, 4, grouping="3+2"))`. Omitting it means common time, and the signature validates the grouping against the bar when it is built. A caller overriding a score's grouping states the same value — `arrange_xml_head(path, time_signature=TimeSignature(12, 8, "3+3+3+3"))` — and its count and denominator must agree with the file's, because the file owns the bars the slots came from. The grouping moves the `--chord-on` positions and the walking bass together — in 12/8 `every-beat` is four stabs, not twelve.
 
 Two need a caveat. `harmony="full"` is whole-chord chord-melody, which ordinary grip route voices; comping route has no implementation — asking there answered with `guide` today ([open issue 3](docs/open-issues.md)). And `texture` changes which shapes are on the table, not their cost: the arity is a **ceiling** the palette is built to, so "play fewer notes here" does not compete against "stay in position" — it changes what may be chosen at all, not a term in the cost tuple.
 
@@ -554,7 +553,7 @@ One stab, on the and of 1; the melody notes elsewhere are the tune alone. **A st
 
 **The rhythm places chords, not the thumb.** The thumb line's own positions come from `--bass-on`, so the thumb sounds on beats where the guitar strikes no chord at all — the `bass_only` steps above are exactly that. The chord rhythm *does* change the shape a thumb note is placed against: a different chord above can move the note or refuse it.
 
-The presets the old `grid` flag exposed are **spellings of positions**, not names: `freddie` is `every-beat`, `charleston` is `1,2and`, `joe_pass` is `1and,2and,3and,4and` and `final_and` is `lastand`.
+The old `--grid` figures were **presets of positions, and only of positions**: `freddie` was `--chord-on every-beat`, `charleston` `1,2and`, `joe_pass` `1and,2and,3and,4and` and `final_and` `lastand`. They were removed because they were a second spelling of the same question — and a slightly different one, since a preset also decided which union its positions were merged into, so `grid="chord:freddie"` and `--chord-on every-beat` could differ in shape while agreeing on every position. The request is the only spelling now.
 
 ### What the chord does in a rest: `--chord-fills`
 

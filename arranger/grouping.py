@@ -205,17 +205,3 @@ def group_starts(
         starts.append(start)
         start += length
     return tuple(starts)
-
-
-def group_offbeat(length: int) -> float:
-    """How far into a group its offbeat falls, in beats.
-
-    A one-beat group's offbeat is half a beat - the ``and`` this library has always
-    placed. A longer group's offbeat is its **last** unit, so a group of three
-    eighths answers on the third eighth rather than halfway between the second and
-    the third. That is the pulse's subdivision in a compound metre, and it reduces
-    to the simple rule at a group of one.
-    """
-    if length < 1:
-        raise ValueError(f"a group length must be at least 1, got {length!r}")
-    return 0.5 if length == 1 else float(length - 1)

@@ -1,7 +1,7 @@
 """The chord timeline: where a chord is in force, and where the tune is silent.
 
 `chord_at` answers for one beat and `chord_slots` for a bar, and the recording they do
-is what lets a grid generate a chord at a position the written symbols did not mark.
+is what lets the union generate a chord at a position the written symbols did not mark.
 The measurement this layer exists for is `docs/open-issues.md` item 1; the classes here
 do not restate its numbers, they pin the behaviour it describes.
 
@@ -13,8 +13,8 @@ import os
 import tempfile
 import unittest
 
-from arranger import GRID_DEFAULT, SILENCE_TUNE_SILENT, format_progression
-from arranger.options import ArrangeOptions
+from arranger import SILENCE_TUNE_SILENT, format_progression, parse_rhythm
+from arranger.options import ArrangeOptions, Request
 from arranger.slots import arrange_slots
 from headxml import (
     Head,
@@ -26,6 +26,7 @@ from headxml import (
     load_musicxml,
     melody_at,
     melody_state,
+    rhythm_slots,
 )
 from tabstaff import format_tab_staff, write_tab_html
 from tests.support import (
@@ -398,35 +399,20 @@ class TestChordAt(unittest.TestCase):
 
 
 class TestChordSlots(unittest.TestCase):
-    """`chord_slots` and the union: the comping route stops losing positions.
+    """`chord_slots` and the union: where a generated position comes from, and how long.
 
-    **Phase 3 of open-issues item 1, and the first phase that changes output.** Phases 1
-    and 2 were additive and left every arrangement byte-identical; this one adds steps.
-    The scope is pinned below: **only the comping route with a named grid**, because the
-    melody-bearing route's "a chord under each melody note" is the chord-melody idiom and
-    a grid must not add positions to it.
+    **Two producers of positions, and this class holds both to their own rule.** The
+    *generated* positions (`chord_slots`) come from each bar's own subdivision, which is
+    what lets a comping part state its chord in a bar the tune never enters; a
+    *requested* rhythm (`rhythm_slots`) places the positions the caller named, and rings
+    each one for its felt beat rather than until the next attack.
 
-    Phase 3 measured this over three fixtures and fourteen flag combinations: six
-    arrangements changed and thirty-six did not.
-
-    **The synthetic corpus is shorter, so the counts are smaller.** Current step counts
-    under `parts="chord"`:
-
-        comps+freddie   cut time 23, repeat slash 35, triplets 112
-        comps+joe_pass  cut time 28, repeat slash 39, triplets 114
-
-    Still only the comping route with a named grid, and still only the heads whose
-    chord timeline runs past their last note (`Trouble_in_Mind_Blues`,
-    `synthetic_repeat_slash`, `synthetic_triplets`).
-
-    **The default grid now generates too, and that is the phase after it.** `every_note`
-    places a chord at each bar's own subdivision, so an arrangement with no flags passed
-    is no longer byte-identical to the skeleton: measured over the ten heads it adds 150
-    positions, inside bars the melody *does* enter as well as the ones it never touches. The
-    step count therefore stops being the acceptance criterion; what replaces it is the
-    pair of invariants in `test_every_added_position_is_one_the_tune_is_silent_at` and
-    `TestANarrowPaletteNeverLosesTheTune` — no written note lost, and no chord added under
-    a note that is still sounding.
+    The step count is deliberately **not** the acceptance criterion: what a generated
+    union adds depends on the head's own rhythm, so the claims here are the invariants -
+    no written note lost, no chord added under a note that is still sounding
+    (`test_every_added_position_is_one_the_tune_is_silent_at`,
+    `TestANarrowPaletteNeverLosesTheTune`) - and `docs/open-issues.md` item 1 owns the
+    measurement.
     """
 
     def setUp(self):
@@ -436,14 +422,18 @@ class TestChordSlots(unittest.TestCase):
     def _melody_positions(self, head):
         return {(s[1], round(s[2], 6)) for s in head_skeleton(head)}
 
-    def _chord_positions(self, head, grid):
-        """The `(bar, beat)` set the **chord part's** row places.
+    def _chord_positions(self, head):
+        """The `(bar, beat)` set `chord_slots` generates: one per bar's own rhythm."""
+        return {(s[3], round(s[4], 6)) for s in chord_slots(head)}
 
-        `grid` is a row spelling (`chord:freddie`), not a bare pattern name: `chord_slots`
-        parses its argument, so an unspelled name is a `ValueError` rather than a silent
-        fallback to the default grid.
+    def _rhythm_positions(self, head, spelling):
+        """The same set for a **requested** rhythm, which places its named positions.
+
+        The other producer of positions, and the one a caller reaches with `--chord-on`:
+        `every-beat` is every felt beat of every bar, `1and,2and` the ands of a 2/2 one.
         """
-        return {(s[3], round(s[4], 6)) for s in chord_slots(head, grid=grid)}
+        rhythm = parse_rhythm(spelling, head.beats_per_bar, None)
+        return {(s[3], round(s[4], 6)) for s in rhythm_slots(head, rhythm)}
 
     def test_a_bar_with_no_notes_now_gets_its_chords(self):
         """Bar 6 of `synthetic_repeat_slash`: the defect, and the reason for the phase.
@@ -454,7 +444,7 @@ class TestChordSlots(unittest.TestCase):
         self.assertEqual([n.bar for n in self.rainy.notes if n.bar == 6], [])
         positions = sorted(
             (beat, chord) for _m, _q, chord, bar, beat, _d in
-            chord_slots(self.rainy, grid="chord:freddie") if bar == 6
+            chord_slots(self.rainy) if bar == 6
         )
         self.assertEqual(positions, [(1.0, "Am7"), (2.0, "D9")])
 
@@ -466,10 +456,12 @@ class TestChordSlots(unittest.TestCase):
         that union a *policy* (`--chord-fills`, and positions the caller names), so
         the default request now leaves a bar the tune never enters silent.
 
-        The grid **axis** is still reachable as `grid="melody:every_note"`, and it is
-        where this fixture's silent position is still added - bar 5's G4 is held
-        through beat 1.5, so only beat 2.0 is a position the tune has left. Keeping
-        both halves in one test is what says the behaviour moved rather than went.
+        **A spelled axis is where this fixture's silent position is still added** - the
+        engine's own union, which `ArrangeOptions(texture="uniform")` reaches because
+        spelling an axis is what asks for it (`uniform` being the request's own
+        derivation, so nothing else changes). Bar 5's G4 is held through beat 1.5, so
+        only beat 2.0 is a position the tune has left. Keeping both halves in one test
+        is what says the behaviour moved rather than went.
         """
         head = self.rainy
         skeleton = head_skeleton(head, None)
@@ -480,7 +472,9 @@ class TestChordSlots(unittest.TestCase):
         )
         self.assertEqual([s for s in steps if s.bar == 6], [])
 
-        axis, _head, _notes = arranged(RAINY_DAY, options=ArrangeOptions(grid=GRID_DEFAULT))
+        axis, _head, _notes = arranged(
+            RAINY_DAY, options=ArrangeOptions(texture="uniform")
+        )
         silent = sorted((s.beat, s.chord) for s in axis if s.bar == 6)
         self.assertEqual(silent, [(2.0, "D9")])
         for step in axis:
@@ -488,18 +482,20 @@ class TestChordSlots(unittest.TestCase):
                 self.assertIsNone(step.melody, step.tab_line())
                 self.assertFalse(step.melody_voiced, step.tab_line())
 
-    def test_a_bar_the_melody_does_enter_is_untouched_by_the_default_grid(self):
-        """The old bar-level claim, now a fact about the grid **axis** rather than the default.
+    def test_a_bar_the_melody_does_enter_is_untouched_by_the_engine_union(self):
+        """The old bar-level claim, now a fact about the **spelled axis** rather than the default.
 
-        `synthetic_repeat_slash`'s tune is continuous, so the positions the
-        melody-anchored axis generates inside its note-bearing bars are all ones a note
-        is still *holding* - and a held position is not a slot (§9.2). That is why that
-        axis adds positions in its melody-less bars only. The default request adds none
-        at all, which the test above states.
+        `synthetic_repeat_slash`'s tune is continuous, so the positions the union
+        generates inside its note-bearing bars are all ones a note is still *holding* -
+        and a held position is not a slot (§9.2). That is why the union adds positions in
+        its melody-less bars only. The default request adds none at all, which the test
+        above states.
         """
         skeleton = head_skeleton(self.rainy, None)
         melody_bars = {bar for _triple, bar, _beat, _duration in skeleton}
-        steps, _head, _notes = arranged(RAINY_DAY, options=ArrangeOptions(grid=GRID_DEFAULT))
+        steps, _head, _notes = arranged(
+            RAINY_DAY, options=ArrangeOptions(texture="uniform")
+        )
         added = {(s.bar, s.beat) for s in steps} - {
             (bar, round(beat, 6)) for _t, bar, beat, _d in skeleton
         }
@@ -508,9 +504,9 @@ class TestChordSlots(unittest.TestCase):
             self.assertNotIn(bar, melody_bars, f"bar {bar} has notes and was added to")
 
     def test_every_added_position_is_one_the_tune_is_silent_at(self):
-        """The rule the melody-anchored **axis** follows: only where the tune is silent.
+        """The rule the **engine's own union** follows: only where the tune is silent.
 
-        Swept with `grid` spelled, because that is the union this rule is about - the
+        Swept with an axis spelled, because that is the union this rule is about - the
         default request adds no position, and a requested position (`chord-on`) is
         deliberately allowed under a held note. The heads are
         `tests.support.sweep_head_paths()`: the rule is position-level and about the
@@ -525,7 +521,9 @@ class TestChordSlots(unittest.TestCase):
                     (bar, round(beat, 6))
                     for _t, bar, beat, _d in head_skeleton(head, None)
                 }
-                steps, _head, _notes = arranged(path, options=ArrangeOptions(grid=GRID_DEFAULT))
+                steps, _head, _notes = arranged(
+                    path, options=ArrangeOptions(texture="uniform")
+                )
                 for step in steps:
                     bar, beat = step.bar or 0, step.beat or 0.0
                     if (bar, round(beat, 6)) in written:
@@ -627,50 +625,52 @@ class TestChordSlots(unittest.TestCase):
 
         `walking_slots` walks the bars the *timings* touch, and the union writes its
         added slots into those timings - so the bass half of item 1 was already correct
-        wherever a named grid ran. `freddie` is the pre-existing witness. Under the
-        default the walk now reaches every bar `freddie` reaches **where the tune is
-        silent**; the one bar it withholds is bar 12, where the default grid adds no
-        position at all because bar 11's F4 is still held through it. That is §9.2, not
-        a default withholding a bar it should walk - `freddie` comps under the held note
-        because a *named* grid states its figure whatever the tune is doing.
+        wherever a figure ran. Two spellings are compared. The **engine's own union**
+        (`texture` spelled) reaches the bars the tune entered and bar 6, which the melody
+        never enters. A **requested** rhythm (`chord_on="every-beat"`) states its
+        positions whatever the tune is doing, so it also walks bar 12 - which the union
+        withholds because bar 11's F4 is still held through it. That is §9.2, not a
+        union withholding a bar it should walk.
 
         **Bars 6 and 7 still get no thumb note, and that is a different issue.**
         `place_bass` refuses them for the reason `docs/open-issues.md` **item 2** measures
         as dominant - no octave of the walk's pitch below the shape - and it refuses them
-        identically under `chord:freddie`, before and after this change. Asserting a thumb note
-        in bar 6 would be asserting item 2's fix, which is deliberately not built. So the
-        claim is about which bars the walk *visits*, not which it can place a note in.
+        identically under a requested rhythm, before and after this change. Asserting a
+        thumb note in bar 6 would be asserting item 2's fix, which is deliberately not
+        built. So the claim is about which bars the walk *visits*, not which it can place
+        a note in.
         """
-        def walked(grid):
-            steps, _head, _notes = arrange_xml_head(
-                    RAINY_DAY, options=ArrangeOptions(
-                        texture="chord2",
-                        bass="root,5th,approach,nearest",
-                        grid=grid,
-                    ),
-                )
+        def walked(**kwargs):
+            steps, _head, _notes = arrange_xml_head(RAINY_DAY, **kwargs)
             return {s.bar for s in steps}
 
         head = load_musicxml(RAINY_DAY)
         melody_bars = {n.bar for n in head.notes}
-        every = walked("chord:every_note")
-        named = walked("chord:freddie")
-        self.assertLessEqual(every, named, "the default walks a bar no named grid reaches")
-        self.assertEqual(every - melody_bars, {6})
+        union = walked(
+            options=ArrangeOptions(texture="chord2", bass="root,5th,approach,nearest")
+        )
+        named = walked(
+            request=Request(
+                chord_on="every-beat", bass_on="every-beat", bass_notes="walk"
+            )
+        )
+        self.assertLessEqual(union, named, "the union walks a bar no rhythm reaches")
+        self.assertEqual(union - melody_bars, {6})
         self.assertEqual(named - melody_bars, {6, 12})
-        for bar in every - melody_bars:
+        for bar in union - melody_bars:
             self.assertNotIn(bar, melody_bars)
 
     def test_the_union_adds_exactly_the_positions_without_a_note(self):
         """The two lists are disjoint where it matters, and the union is their sum.
 
         Stated as a count rather than eyeballed, because the claim is arithmetic: every
-        grid position either already had a melody note or was added. `chord_slots` returns
-        the grid's positions alone and `_merge_chord_slots` does the union, so this
-        measures the two separately and checks the arithmetic rather than trusting either.
+        generated position either already had a melody note or was added. `chord_slots`
+        returns the generated positions alone and `_merge_chord_slots` does the union, so
+        this measures the two separately and checks the arithmetic rather than trusting
+        either.
         """
         melody = self._melody_positions(self.rainy)
-        chords = self._chord_positions(self.rainy, "chord:freddie")
+        chords = self._chord_positions(self.rainy)
         added = chords - melody
         self.assertGreater(
             len(added), 0,
@@ -681,44 +681,40 @@ class TestChordSlots(unittest.TestCase):
         self.assertEqual(len(chords), len(chords & melody) + len(added))
         self.assertEqual(len(melody | chords), len(melody) + len(added))
 
-    def test_every_named_grid_places_something(self):
-        """Every named pattern places at least one chord in this head's own metre.
+    def test_every_requested_rhythm_places_something(self):
+        """Every spelling a caller can reach places at least one chord in this head's metre.
 
-        The point of the grid is that a position the melody never enters is still
-        reachable: a figure with no note to hang on must place its chord anyway, and a
-        pattern that places **nothing anywhere** is refused by `grid_allowed` rather than
-        quietly returning an empty part - so what is left here is the patterns that fit.
+        The point of a requested rhythm is that a position the melody never enters is
+        still reachable: a figure with no note to hang on must place its chord anyway,
+        and a position the metre does not have is refused by `parse_rhythm` rather than
+        quietly dropped - so what is left here is the rhythms that fit a 2/2 bar.
         """
-        for grid in ("chord:every_note", "chord:freddie", "chord:charleston",
-                     "chord:joe_pass", "chord:final_and"):
-            with self.subTest(grid=grid):
+        for spelling in ("every-beat", "1and,2and", "1,2", "lastand"):
+            with self.subTest(chord_on=spelling):
                 self.assertTrue(
-                    self._chord_positions(self.rainy, grid),
-                    f"grid={grid} places nothing at all",
+                    self._rhythm_positions(self.rainy, spelling),
+                    f"chord_on={spelling} places nothing at all",
                 )
 
     def test_a_stab_is_never_a_whole_note(self):
-        """The duration is the grid's, not the melody note's — which is the point.
+        """The duration is the position's, not the melody note's — which is the point.
 
-        `chord:freddie` is 0.5 throughout — one notated beat on this 2/2 fixture. A stab
-        that inherited the melody's length would be a whole note on a bar the melody
-        holds, which is the confusion item 1 records.
-
-        **The finer sets are the grid's own spacing and not a second rule.** `every_note`
-        generates at each bar's own subdivision now, so a bar of eighths spaces its stabs
-        a quarter of a whole note apart and a bar of sixteenths an eighth —
-        `{0.5, 0.25}` on this head; and `chord:joe_pass` names the *ands*, so the
-        distance to the next position is half a beat, `{0.25, 0.5}`. One rule producing
-        three numbers is what makes "the grid decides" a claim rather than a coincidence.
+        A generated position's stab runs to the next one, capped at the bar line: on this
+        2/2 fixture the ands are half a beat apart and the bar's last one a quarter, so
+        `{0.5, 0.25}`. A **requested** position rings for its own felt beat and no further
+        (`_stab_length`), which is what makes `--chord-on 1` a stab on each downbeat
+        rather than one chord per bar: `every-beat` is `{0.5}` and the ands `{0.25}`.
+        Two producers, three numbers, and no whole note anywhere.
         """
-        for grid, expected in (("chord:every_note", {0.5, 0.25}),
-                               ("chord:freddie", {0.5}),
-                               ("chord:joe_pass", {0.25, 0.5})):
-            with self.subTest(grid=grid):
-                durations = {round(s[5], 6) for s in chord_slots(self.rainy, grid=grid)}
-                self.assertEqual(durations, expected, f"grid={grid}")
-                # And never a whole note, whichever grid asked.
-                self.assertNotIn(1.0, durations, f"grid={grid} produced a whole note")
+        generated = {round(s[5], 6) for s in chord_slots(self.rainy)}
+        self.assertEqual(generated, {0.5, 0.25})
+        for spelling, expected in (("every-beat", {0.5}), ("1and,2and", {0.25})):
+            with self.subTest(chord_on=spelling):
+                rhythm = parse_rhythm(spelling, self.rainy.beats_per_bar, None)
+                durations = {round(s[5], 6) for s in rhythm_slots(self.rainy, rhythm)}
+                self.assertEqual(durations, expected, f"chord_on={spelling}")
+                self.assertNotIn(1.0, durations, f"chord_on={spelling} produced a whole note")
+        self.assertNotIn(1.0, generated, "a generated stab was a whole note")
 
     def test_a_position_with_no_chord_in_force_is_skipped(self):
         """Never guessed: bar 1 beat 1 of `synthetic_cut_time` is a rest under no harmony.
@@ -729,8 +725,7 @@ class TestChordSlots(unittest.TestCase):
         """
         head = load_musicxml(BUT_NOT_FOR_ME)
         self.assertIsNone(chord_at(head.chords, 1, 1.0))
-        first = min(beat for bar, beat in self._chord_positions(head, "chord:freddie")
-                    if bar == 1)
+        first = min(beat for bar, beat in self._chord_positions(head) if bar == 1)
         self.assertGreater(first, 1.0, "a position with no harmony was filled in")
 
     def test_the_singing_route_is_not_touched(self):
@@ -739,7 +734,7 @@ class TestChordSlots(unittest.TestCase):
         The regression that makes this necessary, and it was measured rather than
         predicted: `parse_parts("auto")` returns the **sentinel** `("auto",)`, which has
         no soprano, so testing the route on the parsed value alone classified the *default*
-        arrangement as the comping route. Fourteen steps of a singing `grid="freddie"`
+        arrangement as the comping route. Fourteen steps of a singing every-beat
         arrangement carried the placeholder melody before `resolve_parts` was added.
 
         **What is asserted is the absence of an invented pitch, not the step count.** The
@@ -764,7 +759,7 @@ class TestChordSlots(unittest.TestCase):
         """
         slots = [
             s
-            for s in chord_slots(self.rainy, grid="chord:freddie")
+            for s in chord_slots(self.rainy)
             if s[3] == 6 and abs(s[4] - 2.0) < 1e-9
         ]
         self.assertTrue(slots, "bar 6 beat 2 must place its chord")
@@ -913,8 +908,16 @@ class TestSilentSlotsCarryNoMelody(unittest.TestCase):
     """
 
     def _arrange(self):
-        """The comping union over `synthetic_repeat_slash`, whose melody ends before bar 6."""
-        return arranged(RAINY_DAY, options=ArrangeOptions(parts="chord", grid="chord:freddie"))
+        """A comping selection on every beat over `synthetic_repeat_slash`.
+
+        A **requested** rhythm rather than the generated union, because this is the test
+        about a position the tune is still *holding*: a requested position states its
+        chord whatever the tune is doing (§9.2 withholds the generated ones), and the
+        fixture's melody ends before bar 6, so every bar of the contrast is exercised.
+        """
+        return arranged(
+            RAINY_DAY, request=Request(melody=False, chord_on="every-beat")
+        )
 
     def test_a_slot_where_the_melody_stopped_carries_none(self):
         """The silent position in bar 6 sits under a chord and over no note."""

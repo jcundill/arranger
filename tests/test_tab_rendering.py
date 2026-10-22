@@ -20,7 +20,7 @@ from arranger import (
     format_tab_staff,
 )
 from arranger.annotation import step_annotation
-from arranger.options import ArrangeOptions
+from arranger.options import ArrangeOptions, Request
 from tests.support import arranged, make_voicing, sweep_head_paths
 
 # The compact line's fixed layout, in columns: chord(8) + space + melody(3) + space =
@@ -550,7 +550,7 @@ class TestTheExplanationWraps(unittest.TestCase):
             for config in (
                 {},
                 {"options": ArrangeOptions(parts="bass,chord")},
-                {"options": ArrangeOptions(grid="chord:freddie")},
+                {"request": Request(chord_on="every-beat")},
                 {"options": ArrangeOptions(texture="targets")},
             ):
                 steps, _head, _notes = arranged(head, section=(1, 4), **config)

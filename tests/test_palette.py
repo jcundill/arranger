@@ -12,7 +12,7 @@ import unittest
 from arranger import VoiceLeadingEngine
 from arranger.annotation import _criterion_phrase, step_annotation
 from arranger.cost import PARTITION_CRITERION, SPAN_CRITERION, VOICING_COST_CRITERIA
-from arranger.options import ArrangeOptions
+from arranger.options import ArrangeOptions, Request
 from tests.support import arranged, make_voicing, sweep_head_paths
 
 #: The voice-count criterion of the cost tuple, which a *fuller* shape can never lose on:
@@ -304,10 +304,11 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
 
         steps, _head, _notes = arrange_xml_head(
             "tests/data/synthetic_repeat_slash.musicxml",
-            section=(1, 2), options=ArrangeOptions(grid="chord:freddie", parts="chord"),
+            section=(1, 2),
+            options=ArrangeOptions(request=Request(melody=False, chord_on="every-beat")),
         )
         silent = [step for step in steps if not step.voicing.active_frets()]
-        self.assertTrue(silent, "the grid stopped leaving the guitar out")
+        self.assertTrue(silent, "the rhythm stopped leaving the guitar out")
         for step in silent:
             self.assertEqual(
                 step_annotation(step),
@@ -362,7 +363,6 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
             options=ArrangeOptions(
                 texture="targets",
                 bass="root,5th,approach,nearest",
-                grid="melody:every_note,bass:walk",
             ),
         )
         held = [step for step in steps if step.bass_only and step.palette]
@@ -461,7 +461,7 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
 
         steps, _head, _notes = arrange_xml_head(
                 "tests/data/Trouble_in_Mind_Blues.musicxml", options=ArrangeOptions(
-                    grid="chord:freddie",
+                    request=Request(chord_on="every-beat"),
                 ),
             )
         lost = [
@@ -505,8 +505,7 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
 
         steps, _head, _notes = arrange_xml_head(
                 "tests/data/synthetic_common_8.musicxml", section=(7, 9), options=ArrangeOptions(
-                    grid="chord:freddie",
-                    parts="chord",
+                    request=Request(melody=False, chord_on="every-beat"),
                 ),
 
             )

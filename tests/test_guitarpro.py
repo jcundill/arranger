@@ -1265,7 +1265,6 @@ class TestWalkingBass(GuitarProTestCase):
             options=ArrangeOptions(
                 texture="targets",
                 bass="root,5th,approach,nearest",
-                grid="melody:every_note,bass:walk",
             ),
         )
         self.walk_song = _parse(io.BytesIO(format_gp5(self.walk_steps)))
@@ -1374,7 +1373,6 @@ class TestWalkingBass(GuitarProTestCase):
                     BUT_NOT_FOR_ME, options=ArrangeOptions(
                         texture="targets",
                         bass="root,5th,approach,nearest",
-                        grid="melody:every_note,bass:walk",
                     ),
 
                 )
@@ -1438,7 +1436,6 @@ class TestWalkingBass(GuitarProTestCase):
                     BUT_NOT_FOR_ME, options=ArrangeOptions(
                         texture="targets",
                         bass="root,5th,approach,nearest",
-                        grid="melody:every_note,bass:walk",
                     ),
 
                 )

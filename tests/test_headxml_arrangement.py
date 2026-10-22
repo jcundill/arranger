@@ -978,7 +978,7 @@ class TestCompoundMetres(unittest.TestCase):
         """The bar's own rhythm is dotted quarters, so the default grid follows it."""
         head, _path = self.load()
         positions = [
-            round(slot[4], 6) for slot in chord_slots(head, (1, 2), "melody:every_note")
+            round(slot[4], 6) for slot in chord_slots(head, (1, 2))
         ]
         self.assertEqual(positions, [1.0, 4.0, 7.0, 10.0])
 
@@ -1007,7 +1007,7 @@ class TestCompoundMetres(unittest.TestCase):
         steps = arrange_xml_head(
             path,
             time_signature=TimeSignature(12, 8, "4+4+4"),
-            options=ArrangeOptions(texture="targets", grid="chord:freddie"),
+            options=ArrangeOptions(texture="targets", request=Request(chord_on="every-beat")),
         )[0]
         self.assertEqual(
             [s.beat for s in steps if s.bar == 1 and s.role == "target"],

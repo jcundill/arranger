@@ -42,7 +42,7 @@ from arranger.grips import (
     _search_comping_voicings,
     get_comping_voicings_for,
 )
-from arranger.options import ArrangeOptions
+from arranger.options import ArrangeOptions, Request
 from tests.support import (
     PROGRESSION,
     VOICES_ARG,
@@ -589,7 +589,7 @@ class TestCompingMelodyIndependence(unittest.TestCase):
     #: reaches the comping part, which eight bars of the tune settle.
     SECTION = (1, 8)
 
-    def _arrange(self, head, parts, grid="chord:freddie", non_chord_tone="extension"):
+    def _arrange(self, head, parts, non_chord_tone="extension"):
         """The `arrange_xml_head` comping path over an already-loaded head.
 
         `onsets` is computed the way `arrange_xml_head` computes it, so this exercises
@@ -606,7 +606,7 @@ class TestCompingMelodyIndependence(unittest.TestCase):
 
         slots = head_skeleton(head, self.SECTION)
         if not parts_has_melody_only(resolve_parts(parse_parts(parts))):
-            slots = _merge_chord_slots(slots, head, None, grid) or slots
+            slots = _merge_chord_slots(slots, head, None) or slots
         onsets = {
             index
             for index, slot in enumerate(slots)
@@ -617,7 +617,6 @@ class TestCompingMelodyIndependence(unittest.TestCase):
             [(slot[1], slot[2], slot[3]) for slot in slots],
             options=ArrangeOptions(
                 parts=parts,
-                grid=grid,
                 time_signature=TimeSignature(head.beats_per_bar, head.beat_type),
                 non_chord_tone=non_chord_tone,
             ),
@@ -700,13 +699,13 @@ class TestTheSopranoIsPerSlotNotPerRoute(unittest.TestCase):
     """§9.3 step D: the guitar sings a slot only where the tune *articulates*.
 
     `parts_have_melody` answers the arrangement-level half of the route; the other
-    half is per slot. A soprano-named selection still **comps** the grid positions its
-    tune is silent at, or merely sustains through, so `grid="chord:joe_pass"` with the
-    tune still ours places chords on the offbeats instead of ignoring the grid. The written
-    onsets are untouched - that is the acceptance criterion, and **the default grid
-    generates positions of its own** too (`every_note`, at each bar's own subdivision),
-    so the default is no longer inert but still invents no melody - see
-    `test_the_default_grid_invents_no_melody`.
+    half is per slot. A soprano-named selection still **comps** the positions its tune is
+    silent at, or merely sustains through, so a rhythm of the **ands** with the tune still
+    ours places chords on the offbeats instead of being ignored. The written onsets are
+    untouched - that is the acceptance criterion, and the engine's own union generates
+    positions of its own too (at each bar's own subdivision), so an axis spelling is not
+    inert either but still invents no melody - see
+    `test_the_default_request_invents_no_melody`.
 
     "Does the guitar sing this slot?" reuses §9.2's onset signal rather than re-deriving
     it: a position the melody only *holds* through is not an onset, so the guitar states
@@ -720,18 +719,26 @@ class TestTheSopranoIsPerSlotNotPerRoute(unittest.TestCase):
             os.path.dirname(os.path.abspath(__file__)), "data", "synthetic_cut_time.mxl"
         )
 
-    def _arrange(self, parts=PART_NAMES_ARG, grid="chord:joe_pass"):
+    def _arrange(self, parts=None, chord_on="1and,2and"):
+        """A **requested** rhythm over the cut-time head, so the comps land on the ands.
+
+        The rhythm is the request's, so `parts` is left unspelled for every caller but
+        the melody-only one: a spelled axis asks for the engine's own union, and a
+        request is what names positions of its own.
+        """
         from tests.support import arranged
 
         return arranged(
-            self._path(), options=ArrangeOptions(parts=parts, grid=grid)
+            self._path(),
+            request=Request(chord_on=chord_on),
+            options=None if parts is None else ArrangeOptions(parts=parts),
         )
 
-    def test_a_singing_selection_comps_the_grid_positions_it_does_not_sing(self):
-        """The grid is no longer ignored when the guitar has the tune."""
+    def test_a_singing_selection_comps_the_positions_it_does_not_sing(self):
+        """A requested rhythm is not ignored when the guitar has the tune."""
         steps, _head, _notes = self._arrange()
         comps = [s for s in steps if not s.melody_voiced]
-        self.assertTrue(comps, "the grid was ignored on a singing selection")
+        self.assertTrue(comps, "the rhythm was ignored on a singing selection")
         for step in comps:
             # A comp states the chord and invents no melody; the written symbol is kept.
             self.assertTrue(step.voicing.active_frets(), step.tab_line())
@@ -761,8 +768,8 @@ class TestTheSopranoIsPerSlotNotPerRoute(unittest.TestCase):
             sounding = {pitch % 12 for pitch in step.voicing.midi_notes()}
             self.assertTrue(sounding <= allowed, step.tab_line())
 
-    def test_no_written_note_is_dropped_by_the_grid(self):
-        """The grid *adds* positions; it never removes a written note's slot."""
+    def test_no_written_note_is_dropped_by_the_rhythm(self):
+        """The rhythm *adds* positions; it never removes a written note's slot."""
         from headxml import head_skeleton
 
         steps, head, _notes = self._arrange()
@@ -774,19 +781,19 @@ class TestTheSopranoIsPerSlotNotPerRoute(unittest.TestCase):
             self.assertIn((bar, beat), at, f"{note} at bar {bar} beat {beat} went missing")
             self.assertEqual(at[(bar, beat)].melody, note)
 
-    def test_the_default_grid_invents_no_melody(self):
-        """The default grid adds positions; it never adds a *note* of the tune.
+    def test_the_default_request_invents_no_melody(self):
+        """The default request adds no position, and never a *note* of the tune.
 
-        `every_note` generates a chord at each bar's own subdivision now (open-issues
-        item 1's remaining half), so the step count is no longer the skeleton's - what
-        must still hold is that **no invented pitch reaches a singing part**. Every step
-        either carries a written note at its written position, or carries none at all;
+        What must hold is that **no invented pitch reaches a singing part**: every step
+        either carries a written note at its written position, or carries none at all -
         and the ones that carry none are positions the tune is *silent* at rather than
-        positions it wrote.
+        positions it wrote. The engine's own union, which does add positions, is held to
+        the same rule by
+        `test_headxml_timeline.py::TestChordSlots::test_every_added_position_is_one_the_tune_is_silent_at`.
         """
         from headxml import head_skeleton, melody_state
 
-        steps, head, _notes = self._arrange(grid="melody:every_note")
+        steps, head, _notes = self._arrange(chord_on="melody")
         written = {(bar, round(beat, 6)) for _t, bar, beat, _d in head_skeleton(head, None)}
         self.assertTrue(steps)
         for step in steps:

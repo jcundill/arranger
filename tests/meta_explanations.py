@@ -81,10 +81,10 @@ CONFIGS: List[Dict[str, Any]] = [
     {"options": ArrangeOptions(parts="bass,chord")},
     {
         "options": ArrangeOptions(
-            bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk"
+            bass="root,5th,approach,nearest"
         )
     },
-    {"options": ArrangeOptions(grid="chord:freddie")},
+    {"request": Request(chord_on="every-beat")},
     {"non_chord_tone": "sustain"},
     # A fill lives where no melody slot does, which is the one place a comping step
     # can exist without a note beside it. Both policies, because `comp` states more
@@ -508,24 +508,29 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         self.assertGreater(checked, 500, "the sweep stopped arranging anything")
         self.assertEqual(missing[:10], [], f"{len(missing)} unexplained steps")
         # A count, because a clause that stops firing is silent: measured over this sweep,
-        # **139** of the steps it arranges give up a chord tone, and every one of them is
+        # **135** of the steps it arranges give up a chord tone, and every one of them is
         # asked about above. The three grouped fixtures (5/4, 7/4, 12/8) account for the
-        # last 40: they are melody-dense and every note carries a chord. A corpus, grip
+        # last 36: they are melody-dense and every note carries a chord. A corpus, grip
         # table or rule that stops reaching the clause would otherwise leave every
         # assertion here passing on its absence.
+        #
+        # The sweep's every-beat config is a **requested rhythm** (`chord_on`), and the
+        # three grouped heads are where it differs in shape from the deleted
+        # `grid="chord:freddie"` it replaced: one places the positions the caller named
+        # and the other placed the bar's, so the totals moved with it.
         self.assertEqual(
-            omitted, 139, "the number of steps owing an omitted-tone clause moved"
+            omitted, 135, "the number of steps owing an omitted-tone clause moved"
         )
         # The same reasoning for the voice list, which is the clause most steps carry:
-        # measured over this sweep, **1377** of the steps it arranges sound two or more
+        # measured over this sweep, **1345** of the steps it arranges sound two or more
         # upper voices on a route that sings the tune - so a change that thinned the
         # default palette, or that stopped the clause firing, moves this number. The
-        # grouped fixtures add 352, all of them from notes the old corpus did not have.
-        self.assertEqual(named, 1377, "the number of steps naming their voices moved")
+        # grouped fixtures add 320, all of them from notes the old corpus did not have.
+        self.assertEqual(named, 1345, "the number of steps naming their voices moved")
         # And for the comping part, whose voices are the only harmony the line can show:
         # measured over this sweep, **1827** of the steps it arranges state a comping shape
         # and name each of its voices, so the reading of a thin line cannot quietly become
-        # a list of degrees again. The grouped fixtures add 802, and the 116 rest fills
+        # a list of degrees again. The grouped fixtures add 701, and the 116 rest fills
         # (`--chord-fills`) are the newest addition: a fill is a comping step with no
         # melody beside it, which is why it counts here and nowhere else.
         self.assertEqual(comping, 1827, "the number of comping lines naming a voice moved")
@@ -538,14 +543,15 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         the head that exercises it instead: `Am7/D` loses its D and must say so, `Gmaj/D`
         sounds its F# and must stay quiet about it.
 
-        The witness is a **named** grid. The default grid now withholds a position the
-        tune is still holding (§9.2), and the `Am7/D` bars are exactly such a hold, so
-        the default arrangement no longer states them at all. `freddie` states its figure
-        whatever the tune is doing, which is what keeps the slash-bass question asked.
+        The witness is a **named rhythm**. The melody-anchored union withholds a
+        position the tune is still holding (§9.2), and the `Am7/D` bars are exactly such
+        a hold, so an arrangement that follows the tune no longer states them at all. A
+        requested rhythm states its positions whatever the tune is doing, which is what
+        keeps the slash-bass question asked.
         """
         steps, _head, _notes = arranged(
                 "tests/data/Trouble_in_Mind_Blues.musicxml", options=ArrangeOptions(
-                    grid="chord:freddie",
+                    request=Request(chord_on="every-beat"),
                 ),
             )
         lost = [
@@ -637,10 +643,10 @@ class TestTheLoneNoteKeepsTheWindowHonest(unittest.TestCase):
     #: fills, and the melody-only selection.
     CONFIGS: List[Dict[str, Any]] = [
         {},
-        {"options": ArrangeOptions(grid="chord:freddie")},
+        {"request": Request(chord_on="every-beat")},
         {
             "options": ArrangeOptions(
-                bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk"
+                bass="root,5th,approach,nearest"
             )
         },
         {"options": ArrangeOptions(parts="melody")},
