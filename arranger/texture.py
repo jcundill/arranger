@@ -280,7 +280,7 @@ def roles_for_slot(
       - `uniform` and the `chordN` rows make every slot a target, which is the
         default and the reason `arrange_progression` is unchanged unless a caller
         opts in;
-      - a weight below zero means no timing was supplied, so the slot is a target;
+      - a weight below zero means the position was stated as unplaced, so it is a target;
       - a strong beat is a target and any other beat is a fill.
 
     Raises ValueError for an unknown texture, checked before any voicing work so a

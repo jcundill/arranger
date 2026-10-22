@@ -402,12 +402,12 @@ def _bass_slots(
     written in: in 2/2 the walk never reaches beat 2.5. The grid is the grid; the
     precedence question below is separate and is answered over the melody timeline.
 
-    `timings` is `(bar, beat, duration)` per slot and a slot the caller never located
-    arrives as `(None, None, None)`: the corpus path supplies no timings at all, and
-    the head path supplies them for every note but not for the rests it skips. Such a
-    slot is skipped here, exactly as `arrange_slots` skips it - an unlocated slot has
-    no place on a grid, and inventing one would be the "a count without a denominator
-    is not a metre" mistake wearing a different hat.
+    `timings` is `(bar, beat, duration)` per slot and a slot placed nowhere arrives as
+    `(None, None, None)`: the head path positions every note but not the rests it skips,
+    and a caller may state an absence. Such a slot is skipped here, exactly as
+    `arrange_slots` skips it - an unlocated slot has no place on a grid, and inventing one
+    would be the "a count without a denominator is not a metre" mistake in a new hat. A
+    progression that supplied no timeline is laid out by `movement` before it gets here.
 
     Two properties are load-bearing and both are about ordering:
 

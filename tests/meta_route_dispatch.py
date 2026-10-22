@@ -50,12 +50,12 @@ CASES: Sequence[Tuple[str, Sequence[Tuple[str, str, str]], Dict[str, Any], Tuple
         {},
         ("melody_bearing", "no_chord"),
     ),
-    # one chord position in the bar: every other slot is a rest that says so
+    # one chord position in the bar, comped; every other slot is a rest that says so
     (
         "rested",
         PROGRESSION,
         {"request": Request(melody=False, chord_on="1")},
-        ("no_upper_voices",),
+        ("comping", "no_upper_voices"),
     ),
     # the thumb alone: the chord part was asked for nothing, the bass for every beat
     (
@@ -165,8 +165,16 @@ class TestTheDispatchTable(unittest.TestCase):
         They are one entry because nothing above the thumb sounds in either case -
         the note is the bass line's claim on the slot, and the rest is the rhythm's -
         so a test that only saw one of them would leave half the entry unmeasured.
+
+        The rest set is read off the plans *this entry* took, because the same
+        progression also comps the one position the request names: the entry answers
+        the positions the chord is not stated at, not every position of the bar.
         """
         thumb = self._dispatch(**CASES[5][2])
         rested = self._dispatch(**CASES[4][2])
         self.assertEqual({plan.melody_alone for _, plan in thumb}, {MELODY_ALONE_BASS})
-        self.assertEqual({plan.melody_alone for _, plan in rested}, {MELODY_ALONE_REST})
+        rests = [
+            plan.melody_alone for name, plan in rested if name == "no_upper_voices"
+        ]
+        self.assertEqual(set(rests), {MELODY_ALONE_REST})
+        self.assertEqual([name for name, _ in rested].count("comping"), 1)

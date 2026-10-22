@@ -567,8 +567,8 @@ class ArrangementStep:
     def has_timing(self) -> bool:
         """
         True when this step carries a bar and beat, i.e. it can be placed on a
-        rhythmic grid. A hand-written progression has no timing, so the renderer
-        has to fall back to a uniform grid for it.
+        rhythmic grid. A step a caller built by hand may state neither, and then the
+        renderer falls back to a uniform grid for it.
         """
         return self.bar is not None and self.beat is not None
 

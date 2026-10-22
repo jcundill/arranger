@@ -104,10 +104,10 @@ def main() -> None:
         _print_step(step)
 
     # Example 4: Texture. The same four melody notes under Fmaj7, arranged twice.
-    # Without timings every slot is a principal note and all four are full chords.
-    # Given the rhythm, the `targets` texture states the harmony on beats 1 and 3 and
-    # fills the notes between with a shell or an interval - the arranging guide's
-    # method, and the difference between an arrangement and a chord list.
+    # Under the default (uniform) texture all four are full chords; with `targets`
+    # the metre decides: the harmony is stated on beats 1 and 3 and the notes between
+    # are filled with a shell or an interval - the arranging guide's method, and the
+    # difference between an arrangement and a chord list.
     texture_progression = [
         ("C5", "maj7", "Fmaj7"),
         ("E5", "maj7", "Fmaj7"),
@@ -117,7 +117,7 @@ def main() -> None:
     texture_timings = [(0, 1.0, None), (0, 1.5, None), (0, 2.0, None), (0, 3.0, None)]
 
     for label, kwargs in (
-        ("no timing - every note is a chord", {}),
+        ("uniform - every note is a chord", {}),
         (
             "ArrangeOptions(texture=\"targets\") - chords on beats 1 and 3, fills between",
             {"timings": texture_timings, "options": ArrangeOptions(texture="targets")},
@@ -156,9 +156,10 @@ def main() -> None:
     # is the standard reading order - high E on top, chord names above, barlines
     # between bars - so it is what a player would actually read off the page. With
     # `show_timing` (the default) it also states the metre and the note value of
-    # every column; these steps carry no timing, so there is no rhythm to state and
-    # only the metre is drawn. A transcribed head (see `arranger corpus --tab
-    # staff`) has a written rhythm and gets the note values too.
+    # every column. These steps carry a bar and a beat from the metre but no notated
+    # duration, so the metre is drawn, the columns are spread across the bar, and the
+    # note-value row has nothing to say; a transcribed head has a written rhythm and
+    # gets the note values too.
     # The renderer is reached through the module's lazy export rather than imported
     # at the top, which is what keeps tabstaff importable on its own; see __getattr__.
     import tabstaff
@@ -166,9 +167,8 @@ def main() -> None:
     print("\n--- TAB RENDERING: format_tab_staff(), one progression on a six-line staff ---")
     print(tabstaff.format_tab_staff(result_major, show_melody=True))
 
-    # Example 8: The same cadence with the timing the corpus loader supplies, so the
-    # chords sit on their own beats, a barline falls between the two bars, and the
-    # note-value row has something to say.
+    # Example 8: The same cadence with a duration on every step and one chord per bar,
+    # so a barline falls between the bars and the note-value row has something to say.
     timed_major = engine.arrange_progression(major_progression)
     for index, step in enumerate(timed_major):
         step.bar, step.beat, step.duration = index, 1.0, 1.0

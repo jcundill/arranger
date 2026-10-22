@@ -926,9 +926,31 @@ class TestBackwardCompatibility(unittest.TestCase):
             ],
         )
 
-    def test_every_step_defaults_to_a_target_with_no_weight(self):
-        """No timing means role=target and metric_weight=-1 on every step."""
-        for step in VoiceLeadingEngine.arrange_progression(MINOR_CADENCE):
+    def test_a_progression_with_no_timeline_is_located_by_the_metre(self):
+        """A bare call is laid out on the metre's felt beats, so the beat decides the role.
+
+        The "we know nothing" rule below is about a *stated* unplaced position, not about
+        a caller who supplies no timeline at all: `arrange_progression` lays that out
+        itself, which is what lets `targets` state the chord on beat 1 and fill on beat 2.
+        """
+        steps = VoiceLeadingEngine.arrange_progression(
+            MINOR_CADENCE, options=ArrangeOptions(texture="targets")
+        )
+        self.assertEqual(
+            [(step.bar, step.beat) for step in steps],
+            [(1, 1.0), (1, 2.0), (1, 3.0), (1, 4.0)],
+        )
+        self.assertEqual([step.metric_weight for step in steps], [2, 0, 1, 0])
+        self.assertEqual(
+            [step.role for step in steps], [ROLE_TARGET, ROLE_FILL, ROLE_TARGET, ROLE_FILL]
+        )
+
+    def test_a_supplied_unplaced_slot_is_a_target_with_no_weight(self):
+        """A position the caller states as unplaced weighs -1, so it is a target."""
+        steps = VoiceLeadingEngine.arrange_progression(
+            MINOR_CADENCE, timings=[(None, None, None)] * len(MINOR_CADENCE)
+        )
+        for step in steps:
             self.assertEqual(step.role, ROLE_TARGET)
             self.assertEqual(step.metric_weight, -1)
 
@@ -978,9 +1000,11 @@ class TestTimingsDefensive(unittest.TestCase):
         Fewer timings than steps is not an error.
 
         The trailing steps were never located, so they are targets - the same
-        "we know nothing" rule that governs a progression with no timings at all.
+        "we know nothing" rule that governs a stated `(None, None, None)` entry.
         This is the guard `slots.arrange_slots` already applies to its own timings,
         for the same reason: a hand-built list must not silently shift the rhythm.
+        A progression given *no* list at all is a different case: `arrange_progression`
+        lays it out on the metre, so nothing of it is left unlocated.
         """
         steps = VoiceLeadingEngine.arrange_progression(
             MINOR_CADENCE, timings=[(0, 2.0, None)], options=ArrangeOptions(texture="targets")

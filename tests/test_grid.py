@@ -8,10 +8,12 @@ one thing a hand-built progression has to know about the metre:
   generated bar may be subdivided at (`grid_resolutions`, read through the metre). The
   unit is `headxml._tick_key`'s and the vocabulary is `headxml._generated_beats`', so a
   metre's table moving is a generated bar of the wrong density.
-- **a progression with no timeline**: what it arranges to, with and without the metre's
-  own felt beats supplied. The claim is about the **shipped request**, and the class
-  below states the boundary rather than the slogan, because a texture that reads the
-  metric weight is not inert and never was.
+- **a progression with no timeline**: it is laid out on the metre's own felt beats, so
+  `bar` and `beat` come back on every step. The class below pins that the layout **is**
+  the metre's own (an explicitly supplied felt-beat list arranges byte-identically),
+  that the shipped request does not read it, and that a texture which does read the
+  metric weight states the strong beats - which on a bare progression it could not do
+  before the layout existed.
 """
 
 import glob
@@ -50,23 +52,35 @@ FELT_BEATS: List[Tuple[int, float, None]] = [
 
 
 class TestAProgressionWithNoTiming(unittest.TestCase):
-    """What a hand-built progression arranges to, with and without a timeline.
+    """What a hand-built progression arranges to: the metre lays it out.
 
-    A bare `arrange_progression(P)` carries no timings at all, so every slot is
-    *unlocated* - which `metric_weight` reports as `-1`, not as a weak beat. The
-    shipped request states the full harmonisation under every note, and **that
-    selection does not read the weight**, so supplying the metre's felt beats moves
-    nothing: byte-identical, which is the claim this class pins.
+    A bare `arrange_progression(P)` states no timings, so the metre supplies the layout -
+    entry `i` on beat `i` of the bar - and `bar` and `beat` come back on every step.
 
-    **`texture="targets"` is the boundary of the claim, and the second test states
-    it.** A target selection reads the weight to decide which beats carry the
-    harmony, so a timeline is not decoration there - it is the difference between
-    four full chords and chords on the strong beats with fills between. Naming the
-    exception is what keeps the first claim from reading as a claim about the metre
-    rather than about the selection.
+    Two consequences, both pinned. The shipped request states the full harmonisation under
+    every note and **does not read the weight**, so an explicitly supplied felt-beat
+    timeline arranges byte-identically: the layout is the metre's own rather than
+    something a caller has to write out. A selection that *does* read the weight -
+    `texture="targets"` - states the harmony on the strong beats and fills between them,
+    and on a bare call it now agrees with the explicitly timed arrangement because it is
+    given the same positions. Before the layout existed it was handed nothing, so it
+    placed no fills at all on a hand-built progression.
     """
 
-    def test_the_shipped_request_is_byte_identical_with_or_without_a_timeline(self):
+    def test_the_metre_lays_out_the_progression(self):
+        """One entry per felt beat, four to the bar, and nothing else invented.
+
+        The duration stays `None`: a bar and a beat are positions the metre states, and a
+        notated length is not something a caller who supplied no timeline has said.
+        """
+        from arranger import VoiceLeadingEngine
+
+        bare = VoiceLeadingEngine.arrange_progression(list(PROGRESSION))
+        self.assertEqual([step.bar for step in bare], [1, 1, 1, 1])
+        self.assertEqual([step.beat for step in bare], [1.0, 2.0, 3.0, 4.0])
+        self.assertEqual([step.duration for step in bare], [None, None, None, None])
+
+    def test_the_shipped_request_does_not_read_the_layout(self):
         """Asserted through `format_progression`, because the claim is about what a player
         reads rather than about the fields a step happens to carry.
         """
@@ -77,24 +91,39 @@ class TestAProgressionWithNoTiming(unittest.TestCase):
             list(PROGRESSION), timings=FELT_BEATS
         )
         self.assertEqual(format_progression(laid), format_progression(bare))
+        self.assertEqual(
+            [step.metric_weight for step in laid], [step.metric_weight for step in bare]
+        )
 
-    def test_a_texture_that_reads_the_metric_weight_is_not_inert(self):
-        """The exception, measured rather than argued: `targets` moves the harmony.
+    def test_a_texture_that_reads_the_metric_weight_states_the_strong_beats(self):
+        """The measured claim, on a bare call rather than an explicitly timed one.
 
-        Both arrangements keep their step count - the timeline moves which beats the
-        chord *states*, not which positions exist - so the assertion is on the tabs.
+        `targets` puts the chord on beats 1 and 3 and fills between them; `uniform` states
+        the full harmonisation on all four. Both are laid out by the metre now, so the
+        difference is the texture's reading of the weight and not where the positions are.
         """
-        from arranger import VoiceLeadingEngine
+        from arranger import ROLE_FILL, ROLE_TARGET, VoiceLeadingEngine
 
-        options = ArrangeOptions(texture="targets")
-        bare = VoiceLeadingEngine.arrange_progression(list(PROGRESSION), options=options)
-        laid = VoiceLeadingEngine.arrange_progression(
-            list(PROGRESSION), timings=FELT_BEATS, options=options
+        steps = VoiceLeadingEngine.arrange_progression(
+            list(PROGRESSION), options=ArrangeOptions(texture="targets")
         )
-        self.assertEqual(len(laid), len(bare))
-        self.assertNotEqual(
-            [step.tab_line() for step in laid], [step.tab_line() for step in bare]
+        self.assertEqual([(step.bar, step.beat) for step in steps], [
+            (bar, beat) for bar, beat, _duration in FELT_BEATS
+        ])
+        self.assertEqual(
+            [step.metric_weight for step in steps], [2, 0, 1, 0]
         )
+        self.assertEqual(
+            [step.role for step in steps],
+            [ROLE_TARGET, ROLE_FILL, ROLE_TARGET, ROLE_FILL],
+        )
+        timed = VoiceLeadingEngine.arrange_progression(
+            list(PROGRESSION), timings=FELT_BEATS, options=ArrangeOptions(texture="targets")
+        )
+        self.assertEqual(
+            [step.tab_line() for step in timed], [step.tab_line() for step in steps]
+        )
+
 
 class TestTheLatticeAndItsResolutions(unittest.TestCase):
     """One unit for both halves of a bar: `TICKS_PER_BEAT`, and what a generated bar takes.

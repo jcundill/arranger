@@ -379,7 +379,7 @@ for step in steps:
 3.0 target x-7-7-5-6-x
 ```
 
-Expect a lighter arrangement stating the harmony on the beats and ringing between. Each step carries `role` — `target` or `fill` — and `metric_weight` (2 on beat 1, 1 on beat 3, 0 elsewhere, −1 when no timing was supplied).
+Expect a lighter arrangement stating the harmony on the beats and ringing between. Each step carries `role` — `target` or `fill` — and `metric_weight` (2 on beat 1, 1 on beat 3, 0 elsewhere, and −1 for a position you state as unplaced). A progression given no `timings` is laid out on the metre's own beats, one entry per beat of the bar, so a hand-built progression is arranged as the bars it names.
 
 **A fill never costs the tune a chord.** A fill slot with nothing thin to play is re-prepared as a principal note, not skipped — the texture is lighter, never missing. Measured effect in [docs/engine.md](docs/engine.md).
 

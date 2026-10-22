@@ -849,13 +849,20 @@ Five decisions are load-bearing:
   texture → the chord part's arity, `texture_palette` turns that into the families a
   role may use at this position, and `arrange_progression` passes the role's tuple to
   the generator. Generation and selection stay separate exactly as they already were.
-- **"No timing" is not "a weak note".** `metric_weight` returns **-1** when `bar` or
-  `beat` is `None`, and `roles_for_slot` treats anything below zero as a target. This
-  is the single line that makes the feature opt-in: with `timings=None` every slot is a
-  target and the output is byte-identical to what it always was.
-  `tests/test_texture.py::TestBackwardCompatibility` pins that against the exact tab
-  of the library's own demo cadences, and it was written *before* any behaviour
-  changed so every later step is checked against pre-existing output.
+- **A stated absence is not "a weak note" - and it is no longer the default.**
+  `metric_weight` returns **-1** when `bar` or `beat` is `None`, and `roles_for_slot`
+  treats anything below zero as a target. That `-1` is what a caller **states** - a
+  `(None, None, None)` entry in `timings=`, which is how the importer says "the tune is
+  silent here" - rather than what a bare call gets. `arrange_progression` lays a
+  progression that supplied no timeline out on the metre's own felt beats
+  (`resolution.felt_beat_timings`: entry `i` on beat `i` of the bar), so `bar` and `beat`
+  come back on every step and a requested chord rhythm has somewhere to land. Two limits
+  are deliberate: the duration stays `None`, because a bar and a beat are positions the
+  metre states and a notated length is not, and the bar is **not completed**, because
+  inventing the fourth beat would state a chord the caller never wrote.
+  `tests/test_grid.py::TestAProgressionWithNoTiming` pins the layout, that the shipped
+  request's output is unchanged by it, and that `texture="targets"` now states the strong
+  beats on a hand-built progression instead of placing no fills at all.
 - **A beat is a counting position, not a quarter note.** `TARGET_BEATS = (1, 3)` names
   felt beats, and `beats_per_bar` and `grouping` decide which exist: a 3/4 head targets
   1 and 3, a 2/2 head has only the downbeat, and a 12/8 bar's grouping `(3,3,3,3)` puts

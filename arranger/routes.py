@@ -292,8 +292,8 @@ def _comping_harmony(
 
     A held position was decided where the note began, and a silent one has nothing to
     resolve, so only an onset is reharmonised. `melody_onsets` is the caller's onset
-    set; None means every slot is an onset, which is the right answer for a hand-built
-    progression that carries no timeline.
+    set; None means every slot is an onset, which is what a hand-built progression gets
+    when the caller never said which notes it begins.
 
     `D5` over `Cmaj7` therefore gives `Cmaj9` (extension) or `Bdim7` (diminished)
     under the guide-tone voices, exactly as the melody route re-voices it.

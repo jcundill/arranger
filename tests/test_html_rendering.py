@@ -112,15 +112,22 @@ class TestHtmlTab(unittest.TestCase):
         A column is one cell on every row, which is what keeps the chord names,
         the melody notes and the six string rows vertically aligned - the whole
         reason for rendering a table rather than a block of text.
+
+        Counted on the tag prefix rather than the bare `<td>`, because a cell may carry a
+        class: the note-value row's silent column is `<td class="rest">`, and a counter
+        that skipped it would report the rhythm row as a cell short when it is aligned.
         """
         measure = re.search(r'<div class="measure"><table>(.*?)</table>', self.html, re.S)
         self.assertIsNotNone(measure)
         assert measure is not None  # pyright does not narrow through assertIsNotNone
         counts = {
-            row.count("<td>") + row.count('<th')
+            row.count("<td") + row.count("<th")
             for row in re.findall(r'<tr class="[^"]+">.*?</tr>', measure.group(1), re.S)
         }
         self.assertEqual(len(counts), 1, counts)
+        # The note-value row is drawn because the steps are laid out on the metre, so the
+        # count above covers it rather than silently skipping a row that did not exist.
+        self.assertIn('class="rhythm"', measure.group(1))
 
     def test_frets_from_the_voicing_appear(self):
         """The Dm7 shape's frets are on the page, on their own strings."""

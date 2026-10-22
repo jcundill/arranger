@@ -166,9 +166,8 @@ def _sings_here(
     set the comping route's reharmonise guard reads, and a position the tune merely
     *sustains* through is not an onset, so the guitar states the chord there rather than
     re-articulating a note it did not begin - which is why a note-bearing merged
-    position still comps. `None` means every slot is an onset, the honest default for a
-    hand-built progression with no timeline, which keeps a bare `arrange_progression`
-    unchanged.
+    position still comps. `None` means every slot is an onset - the honest answer for a
+    caller who said nothing about onsets.
     """
     return (
         inputs.melody_voiced

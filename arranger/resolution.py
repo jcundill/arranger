@@ -34,6 +34,7 @@ from .options import (
     ArrangeOptions,
     Request,
     ResolvedRequest,
+    Timing,
     resolve_request,
 )
 from .parts import (
@@ -210,6 +211,31 @@ def settle_input_fact(
             f"pass one or the other, not both"
         )
     return stated if keyword == default else keyword
+
+
+def felt_beat_timings(count: int, beats_per_bar: int) -> List[Timing]:
+    """The metre's own layout for a progression that supplied no timeline.
+
+    Entry `i` lands on bar `i // beats_per_bar + 1`, beat `i % beats_per_bar + 1`, one
+    entry per felt beat in the bar - so a hand-built progression is arranged as the bars
+    it names rather than as a run of positions the metric layer knows nothing about. It
+    is the same bar-and-beat numbering `headxml` writes, and it is what lets a requested
+    chord rhythm have somewhere to land: before it, `chord_on` on a timing-less
+    progression placed no chord at all.
+
+    **The duration stays `None`.** A bar and a beat are positions the metre states; a
+    duration is a *notated* length the caller never gave, and inventing one would also
+    move the staff renderers, which space a column by it.
+
+    **The bar is not completed.** Four entries make one bar in 4/4; three make three
+    beats of it, because inventing the fourth would state a chord the caller did not
+    write. A caller that wants whole bars - the MusicXML importer does - supplies its
+    own timings, one per position.
+    """
+    return [
+        (index // beats_per_bar + 1, float(index % beats_per_bar + 1), None)
+        for index in range(count)
+    ]
 
 
 def resolve_knobs(

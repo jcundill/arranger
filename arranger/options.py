@@ -427,9 +427,9 @@ class ArrangeOptions:
     # The progression indexes whose melody note **articulates** (an onset), for the
     # §9.2 reharmonise rule on the comping route: a non-chord melody note is
     # substituted where it begins, not under a held note and not where the tune is
-    # silent. `None` means *every* slot is an onset - the honest default for a
-    # hand-built progression that carries no timeline, so a bare
-    # `arrange_progression(..., parts=chord)` still honours `--non-chord-tone`.
+    # silent. `None` means *every* slot is an onset - the honest answer for a caller who
+    # said nothing about onsets, so a bare `arrange_progression(..., parts=chord)` still
+    # honours `--non-chord-tone`.
     # The head layer computes it from `headxml.melody_state`, which is the one place
     # that knows a note is sounding rather than merely in force.
     #
