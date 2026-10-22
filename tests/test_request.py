@@ -50,7 +50,6 @@ from arranger.bass_rules import (
     BASS_STYLE_NONE,
 )
 from arranger.cli import HEAD_HELP, REQUEST_DESTS, add_common_arguments
-from arranger.harmony import HARMONY_AUTO
 from arranger.options import ArrangeOptions
 
 
@@ -66,10 +65,6 @@ class TestTheShippedRequest(unittest.TestCase):
     def test_the_full_harmonisation_is_the_derivation(self):
         """`chord_notes=full` is `uniform`: the most the right hand can fit."""
         self.assertEqual(resolve_request(Request(), 4).texture, "uniform")
-
-    def test_the_degree_order_is_the_engine_s_auto(self):
-        """`harmony` is not a public question; the shipped answer is its `auto`."""
-        self.assertEqual(resolve_request(Request(), 4).harmony, HARMONY_AUTO)
 
     def test_the_chord_attacks_at_the_written_melody(self):
         """`chord_on=melody` is the written onsets, and no bass attacks at all."""

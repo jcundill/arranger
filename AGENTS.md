@@ -35,7 +35,7 @@ gate and the conventions — not the explanation.
 | a **note held over a bar line**, when the melody's end is reached, or a pickup bar (`Head.first_bar_implicit`) | [docs/engine.md](docs/engine.md) | `headxml.py` (`melody_at`, `melody_state`, `_merge_chord_slots`), `arranger/grid.py` (`beat_offset`), `tests/test_headxml_timeline.py` |
 | which finger frets which string, or a per-finger cost criterion; which strings the right hand's `p-i-m-a` pluck, the gaps between them, and how far the thumb reaches | [docs/history/fingering.md](docs/history/fingering.md) | `arranger/fingers.py` (not inert: `bass_place` and `bass_merge` read `can_fret` for the four-finger budget **and the hand's five-fret reach** — `tests/test_fingers.py` holds the caller set to exactly `{bass_place, bass_merge}`; no per-finger cost yet). Its §4.3 measurement landed a *right-hand* rule first (`grip_tables.thumb_safe_grips`, read by `decisions.resolve_texture_grips`) and then a *left-hand* one (`fingers.can_fret`, read by `bass_place.place_bass`); its **§4.4 finger-skip half is now built**, not recorded: the four `drop24` sets that carried the skip were removed from `GRIP_STRING_SETS` (`grip_tables.finger_skip_count` is the rule and `tests/test_grip_tables.py` holds the tables to it), at a price counted in chords, and the three rejected forms of the same lever are in §4.4 rather than here. Its thumb's-reach half still changes no count (`tests/test_texture.py::TestTheThumbReach` pins the reach), and **§4.3's follow-on — should the *selector* leave room for the thumb? — is now built**, as a palette narrow rather than a criterion (`decisions.leaving_room_for_the_bass`), so a requested bass note moves the shape instead of being dropped; its numbers are in [docs/open-issues.md](docs/open-issues.md) item 2 rather than here, because that item is where they are re-measured by hand and a figure repeated in this table would be a second source for one fact. **Item 5** of that document, the same §4.3 question asked from the lone-note end, closed on the same change together with `MAX_HAND_SPAN` |
 | `ArrangeOptions(parts=…)`, which of melody / bass / chord the guitar plays | [docs/engine.md](docs/engine.md) | `arranger/parts.py` (`PART_NAMES`, `parse_parts`, `parts_have_melody`, `parts_has_melody_only`) |
-| the harmonisation axes — `ArrangeOptions(parts=…)`, `texture`, `harmony`, `bass`, and the metre — the four-string arithmetic, and what replaced `voices=` and the grip-family axis | [docs/engine.md](docs/engine.md) | `arranger/parts.py`, `arranger/harmony.py`, `arranger/grid.py`, `arranger/grouping.py`, `arranger/texture.py`, `arranger/bass.py`, `arranger/resolution.py`, `arranger/grips.py` |
+| the harmonisation axes — `ArrangeOptions(parts=…)`, `texture`, `bass`, and the metre — the four-string arithmetic, and what replaced `voices=` and the grip-family axis | [docs/engine.md](docs/engine.md) | `arranger/parts.py`, `arranger/grid.py`, `arranger/grouping.py`, `arranger/texture.py`, `arranger/bass.py`, `arranger/resolution.py`, `arranger/grips.py` |
 | a **held thumb**, a **restruck chord**, a **held shape the walk invented** (`bass_only`, `is_bass_only`, `melody_is_ringing`) or a stab's length — `bass_held`, `chord_attack`, `carry_bass`, `_stab_length`, and what each renderer draws for a note that sounds and is not plucked | [docs/renderers.md](docs/renderers.md) §"What the four renderers must agree about", and [docs/engine.md](docs/engine.md) §"The other hold: a beat the thumb invented" | `arranger/decisions.py` (`is_bass_only`, `melody_is_ringing`), `arranger/bass_merge.py` (`carry_bass`), `arranger/slot_plan.py` (`_chord_attacks`), `headxml.py` (`_stab_length`), `tabscore.py` (`_is_hold`, `_capped_span`), `tabstaff.py` (`_strikes_here`, `_moved_thumb`, `_draws`), `tabxml.py` (`_sounding`, `_build_note`), `tabgp.py` (`_sounding_frets`, `_strike_notes`), `tests/test_bass_hold.py`, `tests/test_chord_attack.py`, `tests/test_staff_thumb.py`, `tests/test_bass_placement.py`, `tests/test_guitarpro.py` |
 | a **lone bass line**, or a slot with nothing above the thumb (`bass_alone_step`, `lone_bass_case`, `is_shape_held`) | [docs/engine.md](docs/engine.md) | `arranger/decisions.py`, `arranger/routes.py`, `arranger/bass_place.py`, `arranger/annotation.py`, `tests/test_lone_bass.py` |
 
@@ -66,7 +66,7 @@ thing to read before quoting one.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1309 feature + 84 meta tests OK (skipped=2)**, pyright
+Current measured state: **1296 feature + 84 meta tests OK (skipped=2)**, pyright
 **0 errors 0 warnings**, ruff **0 errors**. If your change moves any of those numbers, that
 is the signal — not the absence of an error message. A quiet run is not evidence; a moved
 count is.
@@ -104,8 +104,7 @@ door to them** - no entry point takes an axis as a keyword, which
 `tests/meta_structure.py::TestTheAxesAreNotEntryPointKeywords` holds. `texture` (how many
 chord tones the part states, `TEXTURE_STYLES`), `bass` (the note rules the thumb states,
 `BASS_RULES` in `bass_rules`), `parts` (which of melody / bass /
-chord the guitar takes, `PART_NAMES`), `harmony` (which *degrees* the part states when it is
-not singing, `HARMONY_STYLES`) and the metre (`TimeSignature`: its count, denominator and
+chord the guitar takes, `PART_NAMES`) and the metre (`TimeSignature`: its count, denominator and
 felt grouping, `GROUPING_AUTO` plus the `N+N+…` algebra in `grouping.py`) are
 **orthogonal**, and a band setting is a combination
 rather than a mode: `ArrangeOptions(bass="none", parts="melody")` is a bassist on the root,
@@ -118,8 +117,6 @@ two mutually exclusive ones.
 The request's mapping is one-way and stated in `docs/engine.md` §"The request, and the
 axes under it": `--chord-notes` is `texture`, `--bass-notes` is `bass`, the two rhythms are
 the layers' `Rhythm`s, and `parts` is derived from what the request leaves sounding.
-**`harmony` is the one axis with no request spelling**, because it is read only on the
-comping route and the request that route answers is `--no-melody`.
 Adding an axis means a new vocabulary (`*_STYLES` / `*_POLICIES`, or a note-rule
 `*_RULES` table like `bass`'s `BASS_RULE_ROLES`) and a `*_AUTO`
 sentinel that is deliberately **not** in the vocabulary, plus a `*_allowed` refusal function
@@ -143,38 +140,13 @@ means `COMMON_TIME` (4/4), and an explicit grouping is the caller's override whe
 does say. A conventional simple metre (2/4, 3/4, 4/4, 2/2) ignores its
 beaming: a notation program's beam pairs restate the beat rather than group it.
 
-**`harmony` was added by following that rule, and the three traps below are what it cost.**
-`HARMONY_STYLES` + `HARMONY_POLICIES` + `HARMONY_AUTO` + `harmony_allowed` in
-`harmony.py`, resolved once per arrangement next to `_resolve_melody`, and inert twice
-over: `auto` resolves to the shipped `guide`, and the axis is read only by the comping
-route, so it cannot touch a melody-bearing arrangement. Three things to know before adding
-a fifth:
-
-- **A degree family is not an arity.** `guide` and `shell_root` are two different claims
-  that both need three notes available, so `harmony_allowed` refuses on **how many notes
-  were asked for** and not on a table of combinations. Deriving the rule is what kept it
-  to two entries instead of a list to extend.
-- **A family that "contains" a degree is not that family.** The first `shell_root`
-  implementation asked whether *some* root or 5th was sounding, and on an `Ebmaj` whose
-  guide tones are D and G the plain shape `D G Bb` already contains the 5th — so the new
-  family was silently a synonym for `guide` and every other test still passed. The check
-  is on the **lowest** note. `test_shell_root_is_not_merely_a_shape_that_contains_a_bass_degree`
-  exists only because of that, and its docstring says so.
-- **The shell chord-melody is not on this axis.** Which *grip* a chord-melody is voiced
-  with is the selector's business - the melody is pinned to the soprano string and the
-  family comes from `GRIP_PREFERENCE`, the caller's grip *order* having gone with the
-  family axis. `ArrangeOptions(harmony="guide")` is the melody-free part, so `harmony` is
-  inert on any arrangement the guitar sings and cannot reach that route at all - see the
-  `harmony` section of [docs/engine.md](docs/engine.md). Option (A) in the retired
-  [docs/history/comping-styles.md](docs/history/comping-styles.md) §6 Q2 - routing
-  `harmony="guide"` with a melody through the shell grip - would have given the axis one
-  spelling for both routes, and it is **moot now**: the axis that expresses "the tune and
-  nothing else" is `ArrangeOptions(parts="melody")`, which is what the `--voices` rename
-  became. A **comping-content** axis inherits the constraint: scope it to the comping
-  route, and do not let it reach the melody-bearing one by accident. The metre is the
-  counter-example and is deliberately not one: `TimeSignature` is a metre fact rather than
-  a choice about the chord part, so the metric layer, the walk and the chord's rhythm read it on
-  **both** routes.
+**A comping-content axis has to be scoped to the comping route**, and that is the shape
+of the trap when one is added: the melody-bearing route pins the tune to the soprano
+string and takes its family from `GRIP_PREFERENCE`, so an axis claiming to say which
+*degrees* a shape states cannot reach it by accident. The metre is the counter-example
+and is deliberately not one: `TimeSignature` is a metre fact rather than a choice about
+the chord part, so the metric layer, the walk and the chord's rhythm read it on **both**
+routes.
 
 **`make check` is what CI runs**, in one job (`.github/workflows/ci.yml`, Python
 3.11–3.14, with the `xml` and `gp` extras so the optional-extra tests are not silently
@@ -216,7 +188,6 @@ arranger/
 │   ├── cost.py          #   voicing_cost - the library's central invariant
 │   ├── annotation.py    #   the trailing explanation, composed from the step's fields
 │   ├── parts.py         #   which of melody / bass / chord the guitar takes
-│   ├── harmony.py       #   which degrees the chord part states
 │   ├── grouping.py      #   TimeSignature and the metre's grouping algebra
 │   ├── grid.py          #   the request's rhythm: `Rhythm`, felt beats, the lattice
 │   ├── texture.py       #   how many notes the chord part states; metric roles
@@ -267,7 +238,7 @@ The engine was one 4290-line module until Phase 5 of the package refactor. It is
 now a package of focused modules in a strict dependency order:
 
 ```
-tuning -> fingers -> chords -> grip_tables -> grip_place -> grips -> cost -> annotation -> parts -> harmony
+tuning -> fingers -> chords -> grip_tables -> grip_place -> grips -> cost -> annotation -> parts
                              -> grouping -> grid -> texture -> bass_rules -> bass_place -> bass -> bass_merge
                              -> options -> resolution
                                                                     |
@@ -901,7 +872,7 @@ Each of these cost real time, or nearly shipped a defect.
 | document | what it holds |
 |---|---|
 | [README.md](README.md) | user-facing overview, worked examples, limitations |
-| [docs/engine.md](docs/engine.md) | the engine: grips, the selector, the cost tuple, the axes (`ArrangeOptions(parts=…)`, `texture`, `harmony`, `bass`, and `TimeSignature`), the chord's rhythm, non-chord tones, and the recipe for adding a chord quality |
+| [docs/engine.md](docs/engine.md) | the engine: grips, the selector, the cost tuple, the axes (`ArrangeOptions(parts=…)`, `texture`, `bass`, and `TimeSignature`), the chord's rhythm, non-chord tones, and the recipe for adding a chord quality |
 | [docs/renderers.md](docs/renderers.md) | tab staff, MusicXML import/export, GP5, and their traps |
 | [docs/dependency-dag.md](docs/dependency-dag.md) | the enforced import graphs, drawn: the engine package's layers and their main dependencies, and the front ends' recorded edges |
 | [docs/open-issues.md](docs/open-issues.md) | the open bugs, each stated as **issue / problem / why it exists** with its measurement; a fixed one is removed, and its record lives in git |

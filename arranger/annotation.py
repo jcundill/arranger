@@ -360,8 +360,7 @@ def _comping_clause(step: ArrangementStep) -> str:
 
     A comping step is thin because the *selection* asked for that many voices - one per
     voice named - so the voice count is not the question a reader has. Which voices sound
-    is, and they are the family as well: `harmony="guide"` states the 3rd and the 7th,
-    `shell_root` puts a root or a 5th under them, and a one-voice bass selection states
+    is: the guide pair states the 3rd and the 7th, and a one-voice bass selection states
     the root alone. They are read off the shape against the harmony it states, which is
     `harmonized_as` where the horn's note was accommodated with a substitute.
 

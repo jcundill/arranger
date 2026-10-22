@@ -809,10 +809,7 @@ is how the axis tests hold a texture or a bass policy to its own behaviour. The 
 the metre are **input facts**, so `request=` and `time_signature=` sit beside `options=`
 rather than inside it, and one call may name both.
 
-`harmony` is not on that list: it is the one axis with no request spelling, because it
-is read only on the comping route and the request that route answers is `melody=False`,
-whose chord content is `chord_notes`'s. The metre is read from the score (its grouping,
-below) rather than from a flag.
+The metre is read from the score (its grouping, below) rather than from a flag.
 
 **The resolution is a derivation with refusals, not a set of defaults**, and it happens
 before any voicing work (`options.resolve_request` → `resolution`). A content question
@@ -1540,7 +1537,6 @@ simply ranked lower.
 |---|---|---|
 | `parts` | which of melody / bass / chord the guitar takes | any subset of `melody`, `bass`, `chord`; `auto` *(default)* is all three |
 | `texture` | the **chord part's arity**, by metric weight | `uniform`, `targets`, `chord1`, `chord2`, `chord3` |
-| `harmony` | the chord part's **degree order** | `auto` *(default)*, `full`, `guide`, `shell_root` |
 | `bass` | the bass part's **note rules**, in the order they are tried | `auto` *(default)*, `none`, or an ordered list of `root`, `5th`, `approach`, `nearest` |
 
 **Order carries no meaning, so the selection is canonicalised.** `parse_parts` returns
@@ -1557,9 +1553,8 @@ silence — silence is not an arrangement — and `ArrangeOptions(parts="melody"
 opposite, the tune and nothing else.
 
 **Naming a part is a request for it to sound, and a policy for a part the selection leaves
-out is refused**, naming the part that would work. Two axes are inert rather than refused:
-`harmony` is read only by the comping route, and `texture` says nothing on a melody-only
-selection, whose shapes are single frets.
+out is refused**, naming the part that would work. One axis is inert rather than refused:
+`texture` says nothing on a melody-only selection, whose shapes are single frets.
 
 **An `NC` bar has no chord part and no bass part**, on every route, and the melody is
 unaffected: a part whose notes are chosen from a chord cannot state anything where there is
@@ -1568,11 +1563,11 @@ no chord. That is a derivation rather than a rule about chordless bars, and it i
 because that rhythm thins the chords and not the bass line. "No chord here" and "silent here" are different facts, and only
 the second is a rest.
 
-### `harmony`: which degrees the chord part states
+### Which degrees the chord part states
 
-`texture` says **how many** notes the chord part states; `harmony` says **which**. The
-order is `TONE_PRIORITY`'s row for the quality, read at the chord part's own degrees, so the
-arity `texture` takes is a **prefix** of that row and a reduced shape gives up its **tail**.
+`texture` says **how many** notes the chord part states; the chord's own priority row says
+**which**. The order is `TONE_PRIORITY`'s row for the quality, read at the chord part's own
+degrees, so the arity is a **prefix** of that row and a reduced shape gives up its **tail**.
 For `Cmaj7` (`3rd, 7th, root, 5th`): at three voices the 5th goes, at two the shape is the
 guide pair, and at one it is the 3rd alone.
 
@@ -1584,24 +1579,12 @@ Two facts sit beside the row, and both are already in the tables rather than new
 - an **altered 5th** — `Bbm7b5`'s `b5`, a `#11`, a `b13` — is kept over the root, so a
   reduced shape gives the **root** up before it.
 
-`HARMONY_STYLES` is `auto`, `full`, `guide` and `shell_root`, and `HARMONY_AUTO` is the one
-sentinel on any axis that **decides** rather than naming its own default: it resolves to the
-**full order** when the melody is the guitar's and to the **guide pair** when it is not,
-because the two shipped defaults are different shapes and one value cannot be both.
-`shell_root` is the guide pair **plus a register note**, so it is one degree order rather
-than a conjunction of two tables welded together inside `_shell_voicing`.
-
-The refusals are derived from the rows rather than listed: `HARMONY_LENGTH` names the two
-families with a fixed arity — `guide` (2) and `shell_root` (3) — so a selection without room
-for that many notes is refused from the row's own length, naming the part that would work.
-`full` is absent from that table because its length is the chord's own tone set, and its
-consequence is [open-issues.md](open-issues.md) item 3: on the comping route `full` is
-accepted and answered with a different family.
-
-**The axis is read only by the comping route.** A grip is a claim about a chord's 3rd and
-7th and takes its arity from `texture`, so `harmony` cannot reach an arrangement the
-guitar sings; a policy named for a part the selection leaves out is refused before anything
-is generated.
+**The comping part states the guide pair.** A chord stated to somebody else's ear with no
+tune on top is a claim about the chord's 3rd and 7th — `SHELL_DEGREES`' pair — because those
+are the two notes that say whether the ear hears a major or a minor chord, and a shape
+sounding a root and a 5th instead would be a different part with the same arity. The
+generator that builds it is [`get_comping_voicings`](#get_comping_voicings-a-chord-with-no-melody-on-top),
+and the degree rule it ships with is asserted in `tests/test_comping.py`.
 
 ### `get_comping_voicings`: a chord with no melody on top
 
@@ -1766,8 +1749,8 @@ it twice or hand the horn's line back to the guitarist.
 
 ## The chord's rhythm — where a chord falls
 
-`texture` answers *how many notes* the chord part states and `harmony` *which degrees*;
-this answers *where one lands*. It is the **request's**, not an axis: `--chord-on
+`texture` answers *how many notes* the chord part states; this answers *where one lands*.
+It is the **request's**, not an axis: `--chord-on
 POSITIONS` and `Request(chord_on=...)` are its two spellings, and `grid.py`'s `Rhythm`
 is the value they resolve to (`parse_rhythm`, `felt_beat`, `rhythm_beats`, `beat_offset`).
 
@@ -1844,4 +1827,3 @@ A **four-note comping chord** is the other, and it is a decision about string se
 than about a longer degree order: `derived_arity` caps the chord part at `chord3`, and
 `get_comping_voicings` offers the `shell` family alone, because with no melody to support a
 fourth voice would be the root or the 5th — the two notes that say least about the quality.
-Its consequence for `harmony` is [open-issues.md](open-issues.md) item 3.

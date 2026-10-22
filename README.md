@@ -125,7 +125,7 @@ python -m arranger head tests/data/synthetic_triplets.mxl --bars 1-3 --html head
 | `--bars-per-line` | `4` | with `--tab staff`: bars per staff line |
 | `--html` / `--musicxml` / `--gp5` | off | also write head to file — see [rendering](#rendering) |
 
-**The request is six questions, and each has two spellings.** The flags above are one; `Request(...)` is the other, so a library caller asks the same six — `engine.arrange_progression(progression, request=Request(melody=False, chord_on="every-beat"))` is the comp for a horn. Underneath both are the engine's own axes — `texture`, `bass`, `parts` and `harmony` — which are the implementation, described in [the request and the axes under it](#the-request-and-the-axes-under-it); a band setting is a combination of them rather than a mode. **An axis is reached through `options=ArrangeOptions(...)`**, which is the one door to them, so `engine.arrange_progression(progression, request=Request(...), options=ArrangeOptions(texture="targets"))` is one call naming both. The metre is not an axis but an input fact like `timings=`: a score states it, and a progression built without a file declares it as one `TimeSignature`.
+**The request is six questions, and each has two spellings.** The flags above are one; `Request(...)` is the other, so a library caller asks the same six — `engine.arrange_progression(progression, request=Request(melody=False, chord_on="every-beat"))` is the comp for a horn. Underneath both are the engine's own axes — `texture`, `bass` and `parts` — which are the implementation, described in [the request and the axes under it](#the-request-and-the-axes-under-it); a band setting is a combination of them rather than a mode. **An axis is reached through `options=ArrangeOptions(...)`**, which is the one door to them, so `engine.arrange_progression(progression, request=Request(...), options=ArrangeOptions(texture="targets"))` is one call naming both. The metre is not an axis but an input fact like `timings=`: a score states it, and a progression built without a file declares it as one `TimeSignature`.
 
 **Every written note sounds.** No reduction: `arranger head` plays tune as written, one step per note, each on written beat. Where *chords* fall is a separate question — `--chord-on` — and a note is never quantised onto a position and dropped for sharing a slot.
 
@@ -321,7 +321,6 @@ Every run on a committed score in `tests/data/`, each one request changed. Outpu
 | `ArrangeOptions(texture=…)` | how many chord tones the chord part states, and where the fuller positions are | `uniform`, `targets`, `chord3`, `chord2`, `chord1` |
 | `ArrangeOptions(bass=…)` | which note rules the thumb line may state | `none`, `root`, `root,5th,approach,nearest` |
 | `ArrangeOptions(parts=…)` | which of melody, bass and chord the guitar takes | any subset of `melody`, `bass`, `chord` |
-| `ArrangeOptions(harmony=…)` | which **degrees** a part states when not singing | `full`, `guide`, `shell_root` |
 
 The request and the metre are the exception the other way: they are **input facts** — what is being arranged rather than how to play it — so `request=` and `time_signature=` sit beside `options=` and may be used in the same call. Every other keyword given beside `options=` raises rather than being silently ignored.
 
@@ -329,7 +328,7 @@ The mapping is mechanical and one-way: `--chord-notes full` is `texture="uniform
 
 The metre's **third fact**, its grouping, is not an axis either. A count says how many denominator units a bar has and the denominator how long one lasts, but neither says that 12/8 is felt as four dotted-quarter beats rather than twelve eighths. **The score states it**, and the importer reads it in this order: an `N+N` direction (a 5/4 marked `3+2`), the primary beaming (a 7/4 beamed 2+2+3, a 12/8 beamed 4+4+4), then a metronome pulse (a dotted quarter in 12/8). `auto` falls back to the metre's convention — threes for 6/8, 9/8 and 12/8; one per beat otherwise — and a conventional simple metre ignores its beaming, because a notation program's beam pairs restate the beat rather than group it. **A progression built without a file declares the metre as one `TimeSignature`**: `engine.arrange_progression(progression, time_signature=TimeSignature(5, 4, grouping="3+2"))`. Omitting it means common time, and the signature validates the grouping against the bar when it is built. A caller overriding a score's grouping states the same value — `arrange_xml_head(path, time_signature=TimeSignature(12, 8, "3+3+3+3"))` — and its count and denominator must agree with the file's, because the file owns the bars the slots came from. The grouping moves the `--chord-on` positions and the walking bass together — in 12/8 `every-beat` is four stabs, not twelve.
 
-Two need a caveat. `harmony="full"` is whole-chord chord-melody, which ordinary grip route voices; comping route has no implementation — asking there answered with `guide` today ([open issue 3](docs/open-issues.md)). And `texture` changes which shapes are on the table, not their cost: the arity is a **ceiling** the palette is built to, so "play fewer notes here" does not compete against "stay in position" — it changes what may be chosen at all, not a term in the cost tuple.
+One needs a caveat: `texture` changes which shapes are on the table, not their cost: the arity is a **ceiling** the palette is built to, so "play fewer notes here" does not compete against "stay in position" — it changes what may be chosen at all, not a term in the cost tuple.
 
 ## How thick the chord part is: `--chord-notes`
 
@@ -430,19 +429,11 @@ Three separate questions, one flag each: **does the guitar sing the tune**, **wh
 
 **A combination the left hand cannot accommodate at all is refused outright** (`ValueError`); a single note the thumb cannot reach is dropped and named on its own step (`bass_refused`), and the arrangement proceeds without it — a walking line with gaps is worse than none, but losing the bass costs less than losing the tune.
 
-### Which degrees a non-singing part states: `ArrangeOptions(harmony=…)` (Python API)
+### Which degrees a non-singing part states
 
-`harmony` is read only when the guitar has no tune of its own, and it is a **library-only** value: there is no request flag, because it changes nothing on the route the guitar sings — a chord-melody's shell is a **grip** the selector picks, not a degree family.
+The chord part states the **guide pair** — the 3rd and the 7th, the two notes that say major or minor — whenever the guitar is comping rather than singing. It is not a setting: a chord stated to somebody else's ear with no tune on top *is* a claim about its 3rd and 7th, and the guitar's own chord-melody takes its shape from the grip the selector picks instead.
 
-| `ArrangeOptions(harmony=…)` | the shapes it admits | needs |
-|---|---|---|
-| `guide` (default) | the guide pair — 3rd and 7th, the notes that say major or minor | two notes |
-| `shell_root` | both guide tones **and** a root or 5th as the lowest note | three notes |
-| `full` | the whole chord | ordinary chord-melody route — see [the request](#the-request-and-the-six-axes-under-it) |
-
-It is a **constraint on the palette, not a shape**: `guide` and `shell_root` often choose the same voicing, because a shape whose lowest note is already a root or a 5th satisfies both. What changes is which shapes are on the table — `get_comping_voicings("m7", "Cm7", notes=3, shell_root=True)[0]` is `x-x-x-12-11-11` where the plain palette's first is `x-x-x-3-4-3`.
-
-`harmony="shell_root"` with `parts="bass,chord"` is the ensemble: horn on the tune, guitar stating the quality *and* the root underneath — `8-x-8-8-x-x`, the root under the b7 and b3. A degree order named for a part the selection leaves out is **refused outright** (`ValueError`), not quietly thinned: `ArrangeOptions(harmony="guide", parts="melody")` says *"harmony="guide" is a degree order for the chord part, and parts="melody" does not take it - add 'chord' to parts, or drop the harmony"*.
+So `ArrangeOptions(parts="bass,chord")` is the ensemble: horn on the tune, bassist on the root, guitar stating the quality in between — `8-x-8-8-x-x` for a `Cm7`, the root under the guide pair. What the comping part varies is *where* its chords fall (`--chord-on`), not which degrees they state.
 
 ### The thumb alone
 

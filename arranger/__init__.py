@@ -5,7 +5,7 @@ dependency order, and nothing above imports anything below it by accident:
 
     tuning -> fingers -> chords -> grips -> cost
                  |
-              parts -> harmony/grid/texture
+              parts -> grid/texture
                               |
                              bass_place -> bass -> bass_merge -> options
                                          |
@@ -72,7 +72,6 @@ from . import (
     grid,
     grip_place,
     harmonised_route,
-    harmony,
     melody_alone,
     movement,
     options,
@@ -169,18 +168,6 @@ from .grouping import (
     grouping_allowed,
     parse_grouping,
     resolve_grouping,
-)
-from .harmony import (
-    HARMONY_AUTO,
-    HARMONY_AUTO_POLICIES,
-    HARMONY_FULL,
-    HARMONY_GUIDE,
-    HARMONY_LENGTH,
-    HARMONY_SHELL_ROOT,
-    HARMONY_STYLES,
-    harmony_allowed,
-    parse_harmony,
-    resolve_harmony,
 )
 from .options import (
     BASS_NOTES,
@@ -389,16 +376,6 @@ __all__ = [
     "parse_bar_range",
     "parse_rhythm",
     "rhythm_beats",
-    "HARMONY_AUTO",
-    "HARMONY_AUTO_POLICIES",
-    "HARMONY_LENGTH",
-    "HARMONY_FULL",
-    "HARMONY_GUIDE",
-    "HARMONY_SHELL_ROOT",
-    "HARMONY_STYLES",
-    "harmony_allowed",
-    "parse_harmony",
-    "resolve_harmony",
     "GRIP_PREFERENCE",
     "GRIP_STRING_SETS",
     "GROUPING_AUTO",
@@ -488,7 +465,6 @@ __all__ = [
     "harmonised_route",
     "grip_tables",
     "grips",
-    "harmony",
     "main",
     "melody_alone",
     "normalised_harmony",

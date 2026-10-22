@@ -780,8 +780,7 @@ def _shell_voicing(
     that asks for *more* than a plain guide-tone shape: both guide tones, and a bass
     degree underneath them, so the ear hears which chord it is as well as what quality.
     It is checked as the conjunction of the two rules above rather than as a third list,
-    which is why it can be added without deciding anything new about degrees - see
-    `HARMONY_STYLES` in `harmony.py`, which is where the *vocabulary* lives.
+    which is why it can be added without deciding anything new about degrees.
     """
     guide = SHELL_DEGREES.get(canonical)
     if guide is None:
@@ -924,8 +923,8 @@ def _search_comping_voicings(request: CompingRequest) -> List[Voicing]:
     the claim neither flag above can state: `bass_voice` spends the whole shape on the
     bass, and the default spends it on the guide tones alone. It is a `harmony` value
     rather than a change of arity, because it is a claim about *which degrees sound* and
-    not about how many notes there are - the same reason `HARMONY_STYLES` is a table of
-    degree families and not a count. It resolves on the **existing** `(5,4,3)` shell sets,
+    not about how many notes there are - a degree family is not a count. It resolves on the
+    **existing** `(5,4,3)` shell sets,
     so no new string set is involved - `docs/history/comping-styles.md` holds the measurement.
 
     Every candidate sounds only chord tones, holds a fret span of at most

@@ -118,7 +118,7 @@ def arrange_progression(
     and computes the optimal voice-led arrangement.
 
     What to play is asked as a `request=` - the six questions - and the
-    implementation axes (`texture`, `bass`, `parts`, `harmony`) are
+    implementation axes (`texture`, `bass`, `parts`) are
     spelled through `options=ArrangeOptions(...)`, which is the one door to them.
     A keyword given beside `options=` raises rather than being silently ignored.
 
@@ -146,7 +146,6 @@ def arrange_progression(
         parts_arg=_k.parts,
         texture=_k.texture,
         bass=_k.bass,
-        harmony=_k.harmony,
         chord_rhythm=_k.request.chord_rhythm,
         bass_rhythm=_k.request.bass_rhythm,
         chord_fills=_k.request.chord_fills,
@@ -166,7 +165,6 @@ def arrange_progression(
         melody_only=_p.melody_only,
         melody_voiced=_p.melody_voiced,
         melody_onsets=_k.melody_onsets,
-        harmony_family=_p.harmony_family,
         chord_rhythm=_p.chord_rhythm,
         bass_rhythm=_p.bass_rhythm,
         chord_fills=_p.chord_fills,

@@ -91,7 +91,6 @@ class SlotInputs:
     melody_only: bool
     melody_voiced: bool
     melody_onsets: Optional[Container[int]]
-    harmony_family: str
     #: The chord's rhythm, read by `_chord_here`.
     chord_rhythm: Optional[Rhythm]
     bass_rhythm: Rhythm

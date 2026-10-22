@@ -4,10 +4,10 @@ The **request** is the public vocabulary: who plays the tune, when each
 accompaniment layer attacks, what each states, and what the chord does in a melody
 rest - six questions. `head`'s six flags and `Request(...)` are two spellings of
 them, and `resolve_request` turns either into the engine's internal axes - `parts`,
-`texture`, `harmony`, `bass` and the chord's rhythm - which is what the step loop
+`texture`, `bass` and the chord's rhythm - which is what the step loop
 actually reads.
 
-**This object is the only door to the five axes.** They are the engine's implementation
+**This object is the only door to the four axes.** They are the engine's implementation
 rather than a question a caller asks, so no entry point takes one as a keyword - a caller
 who wants a texture or a bass policy names it here, and the axis tests hold each to its own
 behaviour that way. `None` means "derive this from the request"; a value means "the
@@ -43,7 +43,6 @@ from .grid import (
 )
 from .grip_tables import RIGHT_HAND_STRINGS
 from .grouping import COMMON_TIME, TimeSignature
-from .harmony import HARMONY_AUTO
 from .parts import PART_BASS, PART_CHORD, PART_MELODY, PART_NAMES
 from .tuning import MELODY_STRING_CHOICES_FULL, NECK_FRET_MAX, NECK_FRET_MIN
 
@@ -154,7 +153,6 @@ class ResolvedRequest:
     parts: Tuple[str, ...]
     texture: str
     bass: str
-    harmony: str = HARMONY_AUTO
 
     @property
     def chord_on(self) -> str:
@@ -389,10 +387,6 @@ class ArrangeOptions:
     # the request, because the three questions already decide it: the tune, a chord
     # position, a bass position.
     parts: Optional[str] = None
-    # Which degrees the chord states when it is not singing (`HARMONY_STYLES`).
-    # `auto` - the derivation - is the full order under the melody and the guide
-    # pair when comping, which is the shipped answer on each route.
-    harmony: Optional[str] = None
     # The metre as one value: the count, the denominator and the grouping. The
     # denominator is not decoration - a beat is `4 / beat_type` quarters, so the
     # count alone says which beats exist but not how long one lasts. The grouping is

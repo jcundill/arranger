@@ -3056,7 +3056,6 @@ def _head_slots(
         options.texture,
         options.bass,
         options.parts,
-        options.harmony,
         options.time_signature,
     )
     if parts_has_melody_only(parse_parts(axes.parts)):
@@ -3078,7 +3077,7 @@ def _head_slots(
     if not extra and any(
         value is not None
         for value in (
-            options.texture, options.bass, options.parts, options.harmony,
+            options.texture, options.bass, options.parts,
         )
     ):
         return _merge_chord_slots(slots, head, section, grouping)
@@ -3115,7 +3114,7 @@ def arrange_xml_head(
     unless asked for.
 
     What to play is asked as `request=` - the six questions - and the implementation
-    axes (`texture`, `bass`, `parts`, `harmony`) through
+    axes (`texture`, `bass`, `parts`) through
     `options=ArrangeOptions(...)`, the one door to them. When `options=` is given the
     individual knobs must be left at their defaults. That is the spelling `head`
     uses, because a score already holds its metre and key together.

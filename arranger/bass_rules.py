@@ -242,10 +242,9 @@ def comping_capacity(notes: int, bass_voice: bool = False) -> int:
     Every comping shape on that head sounds on strings `(2, 3, 4, 5)` and never once on
     the low E or the A, so the refusal was false on the facts too.
 
-    **Derived from the generator rather than listed**, on the rule `harmony_allowed`
-    follows and for the same reason: a family that can be voiced is not a list of
-    combinations somebody has to remember to extend. The worst case over the
-    sets `comping_string_sets` may pick at each arity:
+    **Derived from the generator rather than listed**: a family that can be voiced is
+    not a list of combinations somebody has to remember to extend. The worst case over
+    the sets `comping_string_sets` may pick at each arity:
 
         1 note (an inner voice)   3 free
         1 note (`bass_voice`)     2 free

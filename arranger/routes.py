@@ -30,7 +30,6 @@ from .decisions import (
     palette_facts,
     select_step_voicing,
 )
-from .harmony import HARMONY_SHELL_ROOT
 from .melody_alone import melody_alone_shape, sounding_melody
 from .parts import PART_BASS
 from .texture import comping_arity
@@ -339,7 +338,6 @@ def _comping_candidates(
     *,
     notes: int,
     bass_voice: bool,
-    harmony_family: str,
 ) -> List[Voicing]:
     """The melody-free shapes a comping step may state, in a playable position.
 
@@ -360,10 +358,6 @@ def _comping_candidates(
     the bass voice has a register that is part of what it *is*. Derived from the
     resolved parts rather than an extra flag, so the two spellings of one request
     cannot disagree.
-
-    **`shell_root`** is whether this part states both guide tones **and** a root or 5th
-    under them - the one degree family neither `notes` nor `bass_voice` can express.
-    Derived from the resolved family for the same reason.
     """
     return _grips.get_comping_voicings_for(_grips.CompingRequest(
         chord_type=harmony.chord_type,
@@ -372,7 +366,6 @@ def _comping_candidates(
         fret_max=context.fret_max,
         notes=notes,
         bass_voice=bass_voice,
-        shell_root=harmony_family == HARMONY_SHELL_ROOT,
     ))
 
 
@@ -552,7 +545,6 @@ def comping_step(
     chord_type: str,
     melody_onsets: Optional[Container[int]],
     parts: Tuple[str, ...],
-    harmony_family: str,
 ) -> bool:
     """The comping route: the guitar harmonises, somebody else sings.
 
@@ -612,7 +604,6 @@ def comping_step(
         context, harmony,
         notes=notes,
         bass_voice=standalone_bass,
-        harmony_family=harmony_family,
     )
     if not candidates:
         if context.harmony.melody_note is None:

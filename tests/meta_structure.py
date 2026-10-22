@@ -36,8 +36,8 @@ an entry that is no longer used cannot rot there.
 
 The axis graph is the third kind. Each axis is answered by exactly one function,
 in the module that owns its vocabulary, and this file reads those signatures to
-hold them to the dependencies they declare - `parts` reads nothing, `harmony` and
-`bass` read `parts`, and `bass` also reads the texture, while the metre is read by
+hold them to the dependencies they declare - `parts` reads nothing, `bass` reads
+`parts` and the texture, while the metre is read by
 its own module rather than by an axis. A signature is the one place
 an implicit dependency cannot hide, which is why the table below is asserted
 against the AST rather than promised in a docstring.
@@ -132,9 +132,8 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/grip_place.py": Budget(19, 66, 5),
     "arranger/grips.py": Budget(22, 128, 9),
     "arranger/grouping.py": Budget(6, 36, 3),
-    "arranger/harmony.py": Budget(4, 21, 2),
     "arranger/melody_alone.py": Budget(6, 74, 14),
-    # The five axis keywords left `resolve_knobs` (15 -> 9 parameters), so the module
+    # The axis keywords left `resolve_knobs` (15 -> 9 parameters), so the module
     # ceiling is `resolve_policies`'s twelve rather than the reconciler's: the grid
     # parameter went with the axis. The axes are now one read of `options` and two
     # `settle_input_fact` calls where the defaults and the assignments used to be.
@@ -468,9 +467,10 @@ ENTRY_POINTS: Tuple[Tuple[str, str], ...] = (
     ("headxml.py", "_head_request"),
 )
 
-#: The five axes as the keyword each used to be spelled with, plus `grouping` - the
-#: metre's third fact, which is a field of `TimeSignature` and so has no keyword of
-#: its own either.
+#: The axis names, live or retired, as the keyword each used to be spelled with, plus
+#: `grouping` - the metre's third fact, which is a field of `TimeSignature` and so has
+#: no keyword of its own either. `harmony` and `grid` are retired names kept here so a
+#: future keyword cannot re-introduce one.
 RETIRED_AXIS_KEYWORDS = frozenset({"texture", "bass", "parts", "harmony", "grid", "grouping"})
 
 
@@ -678,30 +678,26 @@ class TestTheSplit(unittest.TestCase):
 #: `module.function` is the one place the axis is resolved, and it lives beside
 #: the vocabulary rather than beside the composition: `resolution` wires the
 #: answers together, but it does not own the words. The parameter names **are**
-#: the dependency graph, so a resolver that quietly grows a `harmony` argument is a
+#: the dependency graph, so a resolver that quietly grows a `parts` argument is a
 #: change to this table rather than an extra keyword nobody reviewed.
 AXIS_RESOLVERS: Dict[str, Tuple[str, str]] = {
     "parts": ("parts", "resolve_parts"),
     "texture": ("texture", "parse_texture"),
-    "harmony": ("harmony", "resolve_harmony"),
     "bass": ("bass_rules", "resolve_bass"),
 }
 
 AXIS_DEPENDENCIES: Dict[str, Tuple[str, ...]] = {
     "parts": ("parts",),
     "texture": ("argument",),
-    "harmony": ("harmony", "parts"),
     "bass": ("bass", "parts", "texture"),
 }
 
 #: The wiring `resolution.resolve_policies` calls, in the order the axes depend.
-#: `_resolve_parts` first because the other three read its answer: `bass` measures
-#: the thumb against the route the selection names, and `harmony` picks its degree
-#: order from whether the guitar sings.
+#: `_resolve_parts` first because `bass` reads its answer: it measures
+#: the thumb against the route the selection names.
 POLICY_WIRING: Tuple[str, ...] = (
     "_resolve_parts",
     "resolve_bass",
-    "_resolve_harmony",
 )
 
 
@@ -735,8 +731,8 @@ def _call_lines(node: FunctionNode) -> Dict[str, int]:
 class TestTheAxisResolvers(unittest.TestCase):
     """Each axis is answered where its vocabulary lives, from named dependencies.
 
-    The axes were once resolved by one function, so `harmony` could not be
-    reasoned about - or tested - without `parts`, `harmony` and the metre in view,
+    The axes were once resolved by one function, so `bass` could not be
+    reasoned about - or tested - without `parts` and the texture in view,
     and the dependency between two of them was prose rather than a signature.
     These two tests are the shape of the repair, and they fail in both
     directions: a resolver that moves away from its module, and one that grows a

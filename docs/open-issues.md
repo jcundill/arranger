@@ -3,14 +3,14 @@
 Each item states the **issue**, the **problem it produces**, and **why it exists**, with the
 measurement behind it. A fixed issue is **removed** from this file rather than kept as history —
 its record lives in the commit that fixed it and in the document it belongs to. **One exception,
-stated so it is not a silent one:** items **1, 2, 4 and 5** are closed **in place** with their numbers,
+stated so it is not a silent one:** items **1, 2, 3, 4 and 5** are closed **in place** with their numbers,
 because `docs/history/` is frozen and cites items by number — removing them and renumbering would
 silently repoint about fifty references at a different item, which is the contradiction between
 documents this project treats as a bug. A closed item says how it closed and **keeps the
 measurement that closed it** — that measurement is the item's evidence, and the recipe beside it is
 what keeps it re-measurable — but it states each figure once, where the item's own subject puts it.
 
-Two are open, and each figure is stated **once**, in its own item: a summary here would be a
+One is open, and each figure is stated **once**, in its own item: a summary here would be a
 second source for it, which is how the numbers in this paragraph rotted three times before the
 *recipes* below were made explicit. **Every figure in this file is re-measured by hand from the
 recipe beside it**: they are this document's own business, and the gate is not keyed to these
@@ -20,8 +20,8 @@ items.
    rhythm-first request; see below.
 2. *(closed)* **A refused thumb note is usually not the shape being unplayable** — closed by the
    palette narrow: a requested bass note moves the harmony instead of being dropped; see below.
-3. **`harmony=full` is accepted on the comping route and answered with a different family** — the
-   one axis value refused by nothing that resolves to something other than itself.
+3. *(closed)* **`harmony=full` is accepted on the comping route and answered with a different family** —
+   closed by the axis being removed; see below.
 4. *(closed)* **A `bass:` grid row is accepted and changes nothing** — closed by the request, and
    then made unreachable: the row itself went with the `grid` axis.
 5. *(closed)* **A lone note the hand holds can leave the walk below the shape's reach** — closed by
@@ -109,34 +109,38 @@ confined to one texture and no step of the reported row among them, it is not wo
 
 ---
 
-## 3. `harmony` set to `full` is accepted on the comping route and answered with a different family
+## 3. `harmony` set to `full` is accepted on the comping route and answered with a different family (closed)
 
-**Status: open, diagnosed.**
+**Closed by the axis being removed.** The item's subject was a value on an axis nobody could
+reach: `harmony` had no request spelling and no flag, its only Python caller was its own test
+module, and one of its three values was this one — measured inert on **0 of 13** committed
+heads, where `shell_root` differed from the guide pair on **12 of 13**. Deleting the axis
+removes the value with it, so the failure it named (a value refused by nothing that resolves
+to something other than itself) cannot recur: the comping part states the guide pair, and
+nothing spells a degree family at all.
 
-**The issue.** `harmony` is read only by the comping route, and `grips.get_comping_voicings`
-implements the degree families it is handed through *arity* — the guide tones, or a lone bass
-note. It has no implementation of `full` ("state every tone the quality defines"), because the
-whole-chord chord-melody is the **grip** route's job, reached when the guitar sings. But
-`harmony_allowed("full", ...)` returns True for every voice selection, so `resolve_harmony`
-passes the value through and the comping generator voices guide tones anyway.
+**The measurement**, re-taken against the commit before the axis was removed — a worktree of
+it, because the tree under test must be the one that still has the axis:
 
-**The problem.** The same flag is *honoured* on the route that does not read it and *dropped* on
-the route that does, and it is now the **only** value on this axis that does either silently:
-`root` and `shell_root` **raise** `ValueError` when the voice selection has no room for them, so
-a refusal on this axis is loud everywhere except here. Measured on
-`[("D5","m7","Dm7"), ("C5","maj7","Cmaj7"), ("A4","7","A7"), ("G4","maj7","Gmaj7")]`,
-`ArrangeOptions(harmony="full", parts="chord")` gives guide tones — byte-identical to the same
-arrangement with no `harmony` at all. It is the one value refused by nothing that resolves to
-something other than itself, which is the failure `resolve_harmony`'s own docstring names.
-
-**Why it exists / not fixed.** The fix is undecided and both directions are live: **refuse it**,
-which weakens `harmony_allowed`'s "derived from arity" property (it would be the first entry not
-derived), or **build it**, which is [docs/history/comping-styles.md](history/comping-styles.md) §9.4's four-note
-comping chord — new string sets, deliberately not done. Recorded rather than fixed because it is
-a behaviour change on an axis whose document still lists four-note comping as a proposal. The
-*record* is now correct: `HARMONY_LENGTH` in `harmony.py` names the two families with a fixed
-arity — `guide` (2) and `shell_root` (3) — and `full` is absent from it because its length is the
-chord's own tone set, which varies by quality and lives in `TONE_PRIORITY`.
+```bash
+git worktree add /tmp/pre 7894c2f
+cd /tmp/pre && PYTHONPATH=/tmp/pre .venv/bin/python - <<'PY'   # the repository's own interpreter
+import os
+from headxml import arrange_xml_head
+from arranger.options import ArrangeOptions
+DATA = "tests/data"
+heads = sorted(n for n in os.listdir(DATA) if n.endswith((".musicxml", ".mxl")))
+differ = {}
+for value in ("full", "guide", "shell_root"):
+    differ[value] = 0
+    for head in heads:
+        path = os.path.join(DATA, head)
+        base = [s.voicing.frets for s in arrange_xml_head(path, options=ArrangeOptions(parts="chord"))[0]]
+        tried = [s.voicing.frets for s in arrange_xml_head(path, options=ArrangeOptions(parts="chord", harmony=value))[0]]
+        differ[value] += tried != base
+print(len(heads), differ)   # 13 {'full': 0, 'guide': 0, 'shell_root': 12}
+PY
+```
 
 ---
 
@@ -258,9 +262,9 @@ silence, so it need not move with it.
 # figure about "the committed heads" - the 720 and 435 this file used to quote came from
 # a `tests/data`-only sweep, and mixing the two corpora is what made them disagree.
 #
-# Items 1, 2, 4 and 5 are closed (see above). Item 1's recipe went with the default union
+# Items 1, 2, 3, 4 and 5 are closed (see above). Item 1's recipe went with the default union
 # it was written against, and item 4's with the `grid` axis the rhythm-first request went on
-# to delete; items 2 and 5 own their figures in their own sections.
+# to delete; items 2, 3 and 5 own their figures in their own sections.
 #
 # Both of the closed engine items are re-measurable in one line each, which is the form
 # their fix took - no replica of `place_bass` is needed any more, because there is nothing

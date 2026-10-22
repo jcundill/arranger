@@ -432,6 +432,24 @@ class TestTheCompingArrangement(unittest.TestCase):
             )
             self.assertTrue(step.partial)
 
+    def test_every_step_states_the_guide_pair(self):
+        """Both guide tones sound: the 3rd and the 7th, which is what a shell claims.
+
+        The degree rule the comping route ships with, asserted here because nothing else
+        pins it: a shell states *which* chord it is through its 3rd and 7th, so a shape
+        that sounds a root and a 5th instead would be a different part with the same
+        arity. The chord part states the guide pair, and `texture` is what decides how
+        many of the chord's other tones join them.
+        """
+        for step, triple in zip(self.comped(), PROGRESSION):
+            name = triple[2]
+            sounding = {midi % 12 for midi in step.voicing.upper_midi_notes()}
+            self.assertTrue(
+                guide_pcs(name) <= sounding,
+                f"{name}: {step.tab_line()} sounds {sorted(sounding)} without both "
+                f"guide tones {sorted(guide_pcs(name))}",
+            )
+
     def test_the_texture_axis_still_decides_where_notes_fall(self):
         """`voices` and `texture` are orthogonal, not one mode between them."""
         steps = self.comped(texture="targets", timings=self.timings)

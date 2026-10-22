@@ -146,7 +146,6 @@ def _emit_comping(
         chord_type=plan.context.harmony.chord_type,
         melody_onsets=plan.inputs.melody_onsets,
         parts=plan.inputs.parts,
-        harmony_family=plan.inputs.harmony_family,
     )
 
 
