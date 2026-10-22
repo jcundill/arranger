@@ -1,10 +1,11 @@
 """The knobs an arrangement is made with, as one value.
 
-The **request** is the public vocabulary: who sings the tune, when each
-accompaniment layer attacks, and what each states. The four questions and their
-grammar are in `docs/history/rhythm-request.md`; `resolve_request` turns them into
-the engine's internal axes - `parts`, `texture`, `harmony`, `bass` and the chord's
-rhythm - which is what the step loop actually reads.
+The **request** is the public vocabulary: who plays the tune, when each
+accompaniment layer attacks, what each states, and what the chord does in a melody
+rest - six questions. `head`'s six flags and `Request(...)` are two spellings of
+them, and `resolve_request` turns either into the engine's internal axes - `parts`,
+`texture`, `harmony`, `bass` and the chord's rhythm - which is what the step loop
+actually reads.
 
 The axes are still spellable as keyword overrides on `ArrangeOptions` and
 `arrange_progression`, because they are the engine's implementation and the axis
@@ -96,7 +97,11 @@ CHORD_FILLS: Tuple[str, ...] = (
 
 @dataclass(frozen=True)
 class Request:
-    """The four questions a caller asks, before they become the engine's axes.
+    """The six questions a caller asks, before they become the engine's axes.
+
+    The same six `head`'s flags ask, so a command line and a library name one
+    request: passing this value to `arrange_progression` is the library spelling,
+    and the axis keywords beside it are overrides rather than a second request.
 
     One value rather than six loose keywords, because the six are one request: a
     caller that names the chord's rhythm and the bass's content is describing one
@@ -365,8 +370,8 @@ class ArrangeOptions:
     fret_min: int = NECK_FRET_MIN
     fret_max: int = NECK_FRET_MAX
     # --- the request ---
-    # The four questions as one value: who sings, when each accompaniment layer
-    # attacks, and what each states. Everything else in this dataclass is the
+    # The six questions as one value: who plays the tune, when each accompaniment
+    # layer attacks, and what each states. Everything else in this dataclass is the
     # engine's **implementation axis**; `None` means "derive it from the request",
     # and a value is the axis spelled out - which is how the axis tests hold a
     # texture or a bass policy directly to its own behaviour.
