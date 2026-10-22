@@ -797,7 +797,7 @@ holding the two spellings together, and `tests/test_request.py` asserts it.
 |---|---|---|---|
 | who plays the tune? | `--no-melody` | `melody=False` | `parts` — the melody part is dropped from the selection |
 | when does the chord attack? | `--chord-on POSITIONS` | `chord_on="1and"` | the chord layer's `Rhythm` — where a chord falls |
-| what does the chord state? | `--chord-notes full\|3\|2\|1` | `chord_notes="2"` | the texture axis — `uniform`, `chord3`, `chord2`, `chord1` |
+| what does the chord state? | `--chord-notes full\|targets\|3\|2\|1` | `chord_notes="2"` | the texture axis — `uniform`, `targets`, `chord3`, `chord2`, `chord1` |
 | what does it do in a melody rest? | `--chord-fills none\|hold\|comp` | `chord_fills="hold"` | chord slots in the tune's rests, plus `parts` including the chord |
 | when does the thumb attack? | `--bass-on POSITIONS` | `bass_on="every-beat"` | the bass layer's rhythm, and `bass` when it is not `none` |
 | what does each thumb note state? | `--bass-notes root\|root-5th\|walk` | `bass_notes="walk"` | the bass axis — `"root"`, `"root,5th"`, or the full four rules |
@@ -829,6 +829,12 @@ hides it in the *drawing*; the selection never made the decision.
 `ArrangeOptions(texture="targets")` is that decision. It is the arranging guide's method —
 full chords on the principal melody notes, something lighter in the gaps — expressed as
 **a change to what may be played**, never as a change to what is preferred.
+
+**The request names it too**, as `--chord-notes targets` / `Request(chord_notes="targets")`,
+so every `TEXTURE_STYLES` value has a request spelling and the two vocabularies are a
+bijection (`tests/test_request.py` holds the two sets to each other). What the request names
+is the **policy** rather than the positions: where the strong beats fall is the metre's and
+the grouping's business (`TARGET_BEATS`, below), and `--chord-on` names the attacks.
 
 `uniform` is **derived, not listed**: it is the most notes the arithmetic allows at that
 position — with the tune on top and no thumb that is three, the four-note shape this library

@@ -44,6 +44,7 @@ from .grid import (
 from .grip_tables import RIGHT_HAND_STRINGS
 from .grouping import COMMON_TIME, TimeSignature
 from .parts import PART_BASS, PART_CHORD, PART_MELODY, PART_NAMES
+from .texture import texture_arity
 from .tuning import MELODY_STRING_CHOICES_FULL, NECK_FRET_MAX, NECK_FRET_MIN
 
 # `(bar, beat, duration)` for one slot. `bar` is signed - a pickup is negative -
@@ -56,13 +57,21 @@ Timing = Tuple[Optional[int], Optional[float], Optional[float]]
 # --- the request: two rhythm questions and two content questions -------------
 
 CHORD_NOTES_FULL = "full"
+CHORD_NOTES_TARGETS = "targets"
 
 #: The chord part's arity, as the request names it, mapped to the texture that
 #: states it. `full` is the **derivation** rather than a number: it means the most
 #: the right hand can fit at that position - three notes under the melody, and two
 #: when a bass note takes a string - which is why it is `uniform` and not `chord3`.
+#:
+#: `targets` is the one value whose answer **varies by position**: the same maximum
+#: as `full` on a strong beat, and a thinner shape between them (`texture.TARGET_BEATS`).
+#: It is a content answer rather than a rhythm one - where those strong beats *are* is
+#: the metre's and the grouping's business, not the caller's - which is why it belongs
+#: on this question rather than on `chord_on`.
 CHORD_NOTES: Dict[str, str] = {
     CHORD_NOTES_FULL: "uniform",
+    CHORD_NOTES_TARGETS: "targets",
     "3": "chord3",
     "2": "chord2",
     "1": "chord1",
@@ -117,7 +126,8 @@ class Request:
     #: When the chord attacks: `melody` (the written onsets), `none`, or
     #: positions such as `1and`. See `grid.parse_rhythm`.
     chord_on: str = RHYTHM_MELODY
-    #: How many chord notes to state, `full` being "the most that fits".
+    #: How many chord notes to state, `full` being "the most that fits" and
+    #: `targets` "the most that fits on a strong beat, thinner between".
     chord_notes: str = CHORD_NOTES_FULL
     #: When the bass attacks. `none` is no bass line.
     bass_on: str = RHYTHM_NONE
@@ -338,15 +348,19 @@ def _refuse_bass_content(resolved: ResolvedRequest) -> None:
 def _refuse_capacity(resolved: ResolvedRequest) -> None:
     """`melody + bass + chord <= RIGHT_HAND_STRINGS`, checked as arithmetic.
 
-    `full` is absent deliberately: it means "the most that fits", so it can never
-    ask for more than the hand has. A **number** can, and a four-note chord under a
-    melody with a bass beneath it is five strings - a request no voicing can honour
-    and no renderer could show.
+    **The arity is read from the texture table, not from the request's spelling.** A
+    spelling that names a *number* is the only one that can over-ask - `full` and
+    `targets` mean "the most that fits", so they cannot - and `texture.texture_arity`
+    is what says which spellings those are. Parsing the request's own string would be
+    the same fact written twice, and it would have to grow a branch per value: a
+    four-note chord under a melody with a bass beneath it is five strings, a request
+    no voicing can honour and no renderer could show.
     """
-    if resolved.chord_notes == CHORD_NOTES_FULL:
+    arity = texture_arity(resolved.texture, resolved.parts)
+    if arity is None:
         return
     strings = (
-        int(resolved.chord_notes)
+        arity
         + int(resolved.melody)
         + int(PART_BASS in resolved.parts)
     )

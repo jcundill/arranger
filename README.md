@@ -115,7 +115,7 @@ python -m arranger head tests/data/synthetic_triplets.mxl --bars 1-3 --html head
 | `--fallback` | off | `diminished` — see [non-chord melody notes](#non-chord-melody-notes) |
 | `--no-melody` | off | the guitar does not sing: the tune belongs to somebody else, and the chord defaults to every felt beat |
 | `--chord-on` | `melody` | when the chord attacks: the written onsets, `none`, or positions such as `1and` or `every-beat` |
-| `--chord-notes` | `full` | how many chord tones it states: `full`, `3`, `2`, `1` |
+| `--chord-notes` | `full` | how many chord tones it states: `full`, `targets`, `3`, `2`, `1` |
 | `--chord-fills` | `none` | what it states in a notated melody rest: `hold` one chord, or `comp` a felt beat at a time |
 | `--bass-on` | `none` | when the thumb attacks: positions, or `every-beat` |
 | `--bass-notes` | `root` | what each thumb note is: the root, root-then-5th, or a walk |
@@ -307,7 +307,7 @@ Every run on a committed score in `tests/data/`, each one request changed. Outpu
 |---|---|---|---|
 | who plays the tune? | `--no-melody` | `melody=False` | the guitar does, unless this is passed |
 | when does the chord attack? | `--chord-on` | `chord_on="1and"` | positions in felt beats, or `melody`, `none`, `every-beat` |
-| what does the chord state? | `--chord-notes` | `chord_notes="2"` | `full`, `3`, `2`, `1` |
+| what does the chord state? | `--chord-notes` | `chord_notes="2"` | `full`, `targets`, `3`, `2`, `1` |
 | what does it do in a melody rest? | `--chord-fills` | `chord_fills="hold"` | `none`, `hold`, `comp` |
 | when does the thumb attack? | `--bass-on` | `bass_on="every-beat"` | positions, `every-beat`, or `none` |
 | what does each thumb note state? | `--bass-notes` | `bass_notes="walk"` | `root`, `root-5th`, `walk` |
@@ -324,7 +324,7 @@ Every run on a committed score in `tests/data/`, each one request changed. Outpu
 
 The request and the metre are the exception the other way: they are **input facts** — what is being arranged rather than how to play it — so `request=` and `time_signature=` sit beside `options=` and may be used in the same call. Every other keyword given beside `options=` raises rather than being silently ignored.
 
-The mapping is mechanical and one-way: `--chord-notes full` is `texture="uniform"` and `3`/`2`/`1` are `chord3`/`chord2`/`chord1`; `--bass-notes root` is `bass="root"`, `root-5th` is `"root,5th"` and `walk` the full four; `--chord-on` and `--bass-on` become each layer's rhythm; and `parts` is derived from which of the three the request leaves sounding. A value of `texture` that names a **rhythm** — `targets` — has no request spelling on purpose: its rhythm is `--chord-on 1,3`, and its automatic thinning between the strong beats is the Python API's own business (see [the strong beats](#the-strong-beats)).
+The mapping is mechanical and one-way: `--chord-notes full` is `texture="uniform"`, `targets` is `texture="targets"` and `3`/`2`/`1` are `chord3`/`chord2`/`chord1`, so **every `texture` value has a request spelling**; `--bass-notes root` is `bass="root"`, `root-5th` is `"root,5th"` and `walk` the full four; `--chord-on` and `--bass-on` become each layer's rhythm; and `parts` is derived from which of the three the request leaves sounding. `targets` is a **content** answer rather than a rhythm one, because where the strong beats are is the metre's and the grouping's business rather than the caller's: the request names the policy, and `--chord-on` names the attacks (see [the strong beats](#the-strong-beats)).
 
 The metre's **third fact**, its grouping, is not an axis either. A count says how many denominator units a bar has and the denominator how long one lasts, but neither says that 12/8 is felt as four dotted-quarter beats rather than twelve eighths. **The score states it**, and the importer reads it in this order: an `N+N` direction (a 5/4 marked `3+2`), the primary beaming (a 7/4 beamed 2+2+3, a 12/8 beamed 4+4+4), then a metronome pulse (a dotted quarter in 12/8). `auto` falls back to the metre's convention — threes for 6/8, 9/8 and 12/8; one per beat otherwise — and a conventional simple metre ignores its beaming, because a notation program's beam pairs restate the beat rather than group it. **A progression built without a file declares the metre as one `TimeSignature`**: `engine.arrange_progression(progression, time_signature=TimeSignature(5, 4, grouping="3+2"))`. Omitting it means common time, and the signature validates the grouping against the bar when it is built. A caller overriding a score's grouping states the same value — `arrange_xml_head(path, time_signature=TimeSignature(12, 8, "3+3+3+3"))` — and its count and denominator must agree with the file's, because the file owns the bars the slots came from. The grouping moves the `--chord-on` positions and the walking bass together — in 12/8 `every-beat` is four stabs, not twelve.
 
@@ -337,6 +337,7 @@ One needs a caveat: `texture` changes which shapes are on the table, not their c
 | `--chord-notes` | the chord part states | the engine's axis |
 |---|---|---|
 | `full` *(default)* | the most the arithmetic allows — four strings, less one for the melody and one for a thumb line that sounds | `ArrangeOptions(texture="uniform")` |
+| `targets` | that same maximum on a strong beat, and a thinner shape between them | `ArrangeOptions(texture="targets")` |
 | `3` | at most three chord tones | `ArrangeOptions(texture="chord3")` |
 | `2` | at most two — the guide pair | `ArrangeOptions(texture="chord2")` |
 | `1` | at most one | `ArrangeOptions(texture="chord1")` |
@@ -353,7 +354,7 @@ The selector ranks **completeness above position**, so a bar of running eighths 
 python -m arranger head tests/data/synthetic_common_8.musicxml --bars 1-2 --chord-on 1,3
 ```
 
-The engine's `ArrangeOptions(texture="targets")` does the same thing **and** thins the fills between the targets automatically — a shell, a third or sixth, or the melody alone. That automatic half has no request spelling: it is a Python-API value, and a `--chord-between` would be its CLI form. The rhythm half is `--chord-on`, which is why the two are no longer one flag.
+The engine's `ArrangeOptions(texture="targets")` does the same thing **and** thins the fills between the targets automatically — a shell, a third or sixth, or the melody alone. That automatic half is the same request value: `--chord-notes targets` says *how much of the chord sounds at a target and between them*, while `--chord-on` says *when* a chord attacks. The two are separate questions, which is why they are two flags: `--chord-on 1,3 --chord-notes targets` is a chord on 1 and 3 only, thinned inside each one.
 
 ```python
 progression = [
@@ -376,6 +377,19 @@ for step in steps:
 1.5 fill x-x-x-10-10-12
 2.0 fill x-x-10-9-10-x
 3.0 target x-7-7-5-6-x
+```
+
+The same request from the command line — `--chord-notes targets` **is** `texture="targets"`, and the run header prints the spelling back:
+
+```bash
+python -m arranger head tests/data/synthetic_common_8.musicxml --bars 1-2 --chord-notes targets
+```
+
+```text
+Cmaj7    E4  3    7-x-5-5-5-x       (harmony under 3 - 4 voices - sounding: B 7, G 5, C Root, E 3)
+Cmaj7    G4  5    x-x-9-9-8-x       (shell - 3rd & 7th, partial -
+                                    3 voices, the most a fill's palette offers -
+                                    sounding: B 7, E 3, G 5)
 ```
 
 Expect a lighter arrangement stating the harmony on the beats and ringing between. Each step carries `role` — `target` or `fill` — and `metric_weight` (2 on beat 1, 1 on beat 3, 0 elsewhere, and −1 for a position you state as unplaced). A progression given no `timings` is laid out on the metre's own beats, one entry per beat of the bar, so a hand-built progression is arranged as the bars it names.

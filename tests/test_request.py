@@ -33,10 +33,12 @@ from arranger import (
     BASS_NOTES_ROOT_FIFTH,
     BASS_NOTES_WALK,
     CHORD_FILLS_HOLD,
+    CHORD_NOTES,
     PART_BASS,
     PART_CHORD,
     PART_MELODY,
     PART_NAMES,
+    TEXTURE_STYLES,
     Note,
     Request,
     VoiceLeadingEngine,
@@ -131,6 +133,28 @@ class TestTheContentQuestions(unittest.TestCase):
                     resolve_request(Request(chord_notes=notes), 4).texture, texture
                 )
 
+    def test_targets_is_the_arity_that_varies_by_position(self):
+        """`targets` is a content answer, so it belongs on this question.
+
+        It is the one spelling whose answer depends on *where* the chord falls - the
+        same maximum as `full` on a strong beat and a thinner shape between them - and
+        it is not a `chord_on` value: that says *when* a chord attacks, this says how
+        much of it sounds there. Where the strong beats are is the metre's and the
+        grouping's business rather than the caller's, which is why the request names
+        the policy and not the positions.
+        """
+        self.assertEqual(
+            resolve_request(Request(chord_notes="targets"), 4).texture, "targets"
+        )
+
+    def test_the_request_vocabulary_reaches_every_texture(self):
+        """Every `TEXTURE_STYLES` entry has a request spelling, so none is API-only.
+
+        A style the request cannot name is a style the command line cannot ask for, and
+        nothing would report the gap: the flag would simply not offer it.
+        """
+        self.assertEqual(set(CHORD_NOTES.values()), set(TEXTURE_STYLES))
+
     def test_the_bass_names_are_note_rules(self):
         """The names say *what*, so `root` on a beat is a pedal rather than an anchor."""
         resolved = resolve_request(Request(bass_on="every-beat", bass_notes="root"), 4)
@@ -209,6 +233,19 @@ class TestTheRefusals(unittest.TestCase):
         )
         self.assertEqual(resolved.texture, "uniform")
 
+    def test_the_capacity_check_reads_the_texture_and_not_the_spelling(self):
+        """`targets` is a derivation too, so a thumb under it cannot over-ask.
+
+        The check is `texture.texture_arity`'s answer rather than the request's own
+        string, because a spelling that names a *number* is the only one that can
+        over-ask. Written against the string it would have had to grow a branch per
+        value, and `targets` would have reached it as an `int()` on a word.
+        """
+        resolved = resolve_request(
+            Request(chord_notes="targets", bass_on="every-beat"), 4
+        )
+        self.assertEqual(resolved.texture, "targets")
+
 
 class TestTheCanonicalSpelling(unittest.TestCase):
     """The run header prints a request that parses back to the same value."""
@@ -236,6 +273,8 @@ class TestTheCanonicalSpelling(unittest.TestCase):
             (Request(melody=False, chord_on="every-beat"), 4),
             (Request(chord_on="none", chord_fills="hold"), 3),
             (Request(bass_on="every-beat", chord_on="none"), 2),
+            (Request(chord_notes="targets"), 4),
+            (Request(chord_notes="targets", bass_on="every-beat"), 4),
         ):
             with self.subTest(request=request, beats=beats):
                 resolved = resolve_request(request, beats)
@@ -357,6 +396,29 @@ class TestTheLibrarySpelling(unittest.TestCase):
         self.assertTrue(all(_sounded(step) > 2 for step in derived))
         self.assertTrue(all(_sounded(step) == 2 for step in pair))
 
+    def test_chord_notes_targets_is_the_texture_the_request_names(self):
+        """The request's `targets` and the axis's are one arrangement, not two.
+
+        Asserted on the frets rather than on the axis, because the claim is that the
+        *spelling* reaches the behaviour: a value that resolved to the right texture
+        name and then arranged differently would pass an axis-level test. The second
+        assertion is what keeps the first from being two spellings of the default
+        agreeing with themselves.
+        """
+        by_request = _arrange(request=Request(chord_notes="targets"))
+        by_axis = VoiceLeadingEngine.arrange_progression(
+            _PROGRESSION, timings=_TIMINGS, options=ArrangeOptions(texture="targets")
+        )
+        self.assertEqual(
+            [step.voicing.frets for step in by_request],
+            [step.voicing.frets for step in by_axis],
+        )
+        self.assertNotEqual(
+            [step.voicing.frets for step in _arrange(request=Request())],
+            [step.voicing.frets for step in by_request],
+            "targets arranged exactly as full, so this proves nothing",
+        )
+
     def test_chord_fills_states_the_chord_in_a_rest_the_tune_left(self):
         """A slot with no melody note is silent by default, and sounds with `hold`."""
         rests = (("C5", "maj7", "Cmaj7"), (None, "m7", "Cm7"))
@@ -441,6 +503,20 @@ class TestTheTwoSpellingsAreOneVocabulary(unittest.TestCase):
         for field, dest in REQUEST_DESTS:
             with self.subTest(field=field):
                 self.assertIn(dest, vars(namespace))
+
+    def test_every_chord_notes_value_is_one_the_parser_accepts(self):
+        """The run header prints a spelling, so the parser has to take it back.
+
+        `--chord-notes targets` is the line the header prints for a `targets` request,
+        and a vocabulary entry the parser does not offer is a request a reader can copy
+        out of the output and not paste back in.
+        """
+        parser = argparse.ArgumentParser()
+        add_common_arguments(parser, HEAD_HELP)
+        for value in CHORD_NOTES:
+            with self.subTest(value=value):
+                namespace = parser.parse_args(["--chord-notes", value])
+                self.assertEqual(namespace.chord_notes, value)
 
 
 if __name__ == "__main__":

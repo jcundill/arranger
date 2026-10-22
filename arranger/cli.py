@@ -173,7 +173,8 @@ HEAD_HELP = CommonHelp(
     chord_notes=(
         "how many chord notes to state: 'full' (the default) is the most the right "
         "hand can fit - three under the melody, two once a bass note takes a string "
-        "- or 3, 2 or 1 for exactly that many"
+        "- 'targets' is that same maximum on a strong beat and a thinner shape "
+        "between them, and 3, 2 or 1 is exactly that many everywhere"
     ),
     chord_fills=(
         "what the chord does in a notated melody rest: 'none' (the default) rests "
