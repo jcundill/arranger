@@ -417,9 +417,12 @@ caller can ask for.
 The four handlers other than `harmonised_step` live in **`routes.py`**. That one -
 prepare, select, demote, or rest - lives in **`harmonised_route.py`**, and the
 candidates it selects among are built by `prepare_step` in **`step_prepare.py`**,
-which is also what the facade reaches for a single step. That split is why the loop
-reads as sequencing rather than as a 250-line handler: `movement.py` is the
-sequencing - the knobs, the slot list, the loop, the bass merge.
+which is also what the facade reaches for a single step. What the hand was still
+holding when a slot arrived - "the last step" and "the last step whose shape the hand
+held" are different questions, because a declined position is emitted silent - is
+**`step_history.py`**'s, since the melody-bearing route and the dispatch table ask it
+too. That split is why the loop reads as sequencing rather than as a 250-line handler:
+`movement.py` is the sequencing - the knobs, the slot list, the loop, the bass merge.
 
 **The order is load-bearing**, and `AGENTS.md`'s trap 12 is what reordering it costs: the
 same slot can reach three of the five depending on its plan, and every ordering is right

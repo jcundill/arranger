@@ -405,13 +405,15 @@ def make_voicing(
 def make_step(
     frets: List[int],
     chord: str = "Cmaj7",
-    melody: str = "B4",
+    melody: Optional[str] = "B4",
     **kwargs: Any,
 ) -> ArrangementStep:
     """An `ArrangementStep` over a raw fret list, with the derived voicing fields.
 
     Extra keyword arguments go straight to `ArrangementStep`, which is how a
-    renderer test asks for `melody_only=True` or a `bass_only` slot.
+    renderer test asks for `melody_only=True` or a `bass_only` slot. `melody` is
+    Optional because a position the guitar *declined* is emitted with nothing sung
+    and nothing plucked.
     """
     return ArrangementStep(
         chord=chord,

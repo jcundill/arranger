@@ -2,10 +2,9 @@
 
 The rest, the thinned fill, the `NC` bar and the comping route each build their step
 without re-entering the step loop; `harmonised_step` is in `harmonised_route` because it is
-the orchestrating route, retrying through `prepare_step`. `last_sounding_step` lives
-here because a route reads the arrangement it is appending to, and
-`resolve_substitute_harmony` lives in `chords`, where the non-chord-tone routing it
-composes already is.
+the orchestrating route, retrying through `prepare_step`. What the hand was holding
+when a slot arrived is `step_history`'s question, and `resolve_substitute_harmony`
+lives in `chords`, where the non-chord-tone routing it composes already is.
 """
 
 from __future__ import annotations
@@ -32,6 +31,7 @@ from .decisions import (
 )
 from .melody_alone import melody_alone_shape, sounding_melody
 from .parts import PART_BASS
+from .step_history import last_sounding_step
 from .step_types import ArrangementStep, Palette, Voicing
 from .texture import comping_arity
 from .tuning import (
@@ -41,36 +41,6 @@ from .tuning import (
     SILENCE_OUT_OF_REACH,
     STANDARD_TUNING,
 )
-
-
-def last_sounding_step(
-    arrangements: List[ArrangementStep],
-) -> Optional[ArrangementStep]:
-    """The last step whose shape the hand was actually holding.
-
-    A position the guitar declined is emitted silent for the tab's line-up, but
-    its all-muted voicing is not a shape anybody held: scoring the next shape's
-    voice-leading against it would measure every candidate against fret 0,
-    which is not a position the hand was ever in. While such positions were
-    dropped entirely, the look-back found the last sounding step by accident;
-    this is the same answer written down, so the selector's behaviour is
-    unchanged by a hole appearing in the tab.
-    """
-    for step in reversed(arrangements):
-        if step.silence is None:
-            return step
-    return None
-
-
-def previous_shape(arrangements: List[ArrangementStep]) -> Optional[Voicing]:
-    """The voicing of the last sounding step, or None.
-
-    A rest carries an all-muted voicing, so asking the last step directly would
-    hand the selector a shape nobody held; the melody may also have ended, in
-    which case there is nothing to hold at all.
-    """
-    previous = last_sounding_step(arrangements)
-    return previous.voicing if previous is not None else None
 
 
 def rest_step(

@@ -35,8 +35,9 @@ from .decisions import (
 )
 from .grip_tables import GRIP_MAX_SPAN
 from .melody_alone import demoted_to_melody_alone, rescue_melody_alone
-from .routes import last_sounding_step, previous_shape, rest_step
+from .routes import rest_step
 from .slot_plan import SlotPlan
+from .step_history import last_sounding_step, previous_shape
 from .step_prepare import StepPreparation, prepare_step
 from .step_types import ArrangementStep, Palette, Voicing
 from .tuning import (

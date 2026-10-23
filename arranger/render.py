@@ -28,8 +28,9 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from .annotation import annotation_lines, melody_degree_label, step_annotation
+from .annotation import melody_degree_label, step_annotation
 from .step_types import MUTED_CELL, STAFF_CELL_WIDTH, ArrangementStep, cells_from_frets
+from .text_layout import annotation_lines
 
 __all__ = ["MUTED_CELL", "STAFF_CELL_WIDTH", "format_progression", "print_step"]
 

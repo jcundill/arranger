@@ -48,6 +48,7 @@ ORDER = [
     "grips",        # the grip builders and candidate generators
     "cost",         # voicing_cost: which candidate is played
     "annotation",   # the trailing explanation a step carries, as composed clauses
+    "text_layout",  # the pure string layout: clause units, word chunks, line breaking
     "parts",        # the parts axis: which of melody / bass / chord the guitar takes
     "grouping",     # the metre's third fact: which denominator units are felt as a beat
     "grid",         # the request's rhythm: when each part sounds
@@ -59,6 +60,7 @@ ORDER = [
     "options",      # the knobs, as one value
     "resolution",   # what the caller asked for, resolved once: the six resolvers
     "decisions",    # the decisions both step loops share
+    "step_history", # reading the arrangement's own history: the last sounding step, its shape
     "melody_alone", # where a lone note is fretted: the tune alone, with or without harmony
     "routes",       # the route handlers: rest, fill, NC and the comping route
     "slot_plan",    # one slot's plan: `slot_state` and the value it returns

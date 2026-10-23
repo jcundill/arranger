@@ -35,11 +35,11 @@ from .routes import (
     bass_alone_step,
     comping_step,
     no_chord_step,
-    previous_shape,
     rest_step,
     texture_fill_step,
 )
 from .slot_plan import SlotPlan
+from .step_history import previous_shape
 from .step_types import ArrangementStep
 
 __all__ = ["Route", "ROUTES", "dispatch_step"]

@@ -107,7 +107,11 @@ BUDGETS: Dict[str, Budget] = {
     # each with the comment that says what it demonstrates - so its ceiling is the
     # measurement, not a target. It imports `steps` and `render` and nothing else.
     "arranger/demo.py": Budget(14, 151, 0),
-    "arranger/annotation.py": Budget(18, 130, 2),
+    "arranger/annotation.py": Budget(18, 124, 2),
+    # The pure string layout an annotation is broken into: the clause units, the word
+    # chunks and the line breaker. Split out of `annotation`, measured as it stood when
+    # it moved, so the ceiling is the measurement.
+    "arranger/text_layout.py": Budget(8, 40, 2),
     "arranger/bass_place.py": Budget(16, 79, 6),
     "arranger/bass_rules.py": Budget(10, 82, 6),
     # `walking_slots` takes a seventh parameter at Stage 3 of
@@ -146,6 +150,10 @@ BUDGETS: Dict[str, Budget] = {
     # `ArrangementStep`, `Palette` and the six-line block renderer. Measured as it
     # stood when it moved, so the ceiling is the measurement.
     "arranger/step_types.py": Budget(5, 23, 1),
+    # Reading the arrangement's own history - the last sounding step and the shape the
+    # hand held - split out of `routes`: two readers of the value types above it.
+    # Measured as it stood when it moved.
+    "arranger/step_history.py": Budget(3, 17, 1),
     "arranger/harmonised_route.py": Budget(8, 54, 8),
     # The dispatch table: eleven small functions, each an entry's claim or emit, so
     # the ceiling is `dispatch_step`'s four branches rather than any one route. The
@@ -162,7 +170,11 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/options.py": Budget(5, 30, 3),
     "arranger/parts.py": Budget(9, 45, 1),
     "arranger/render.py": Budget(11, 64, 2),
-    "arranger/routes.py": Budget(6, 97, 12),
+    # The step-history readers left for `step_history`, so the ceiling is what this
+    # module measures rather than what it measured. The parameter ceiling moves with
+    # it: the widest signature here takes six, and a ceiling of twelve was permission
+    # for a function twice the size of anything in the file.
+    "arranger/routes.py": Budget(6, 93, 6),
     "arranger/slots.py": Budget(9, 136, 12),
     # The facade's `arrange_progression` loses the same five (16 -> 10).
     "arranger/steps.py": Budget(1, 54, 10),

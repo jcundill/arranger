@@ -49,17 +49,21 @@ flowchart TB
         routes["routes"]
         slot_plan["slot_plan"]
         melody_alone["melody_alone"]
+        step_history["step_history"]
         decisions["decisions"]
         movement --> route_dispatch
         movement --> slot_plan
         route_dispatch --> harmonised_route
         route_dispatch --> routes
         route_dispatch --> slot_plan
+        route_dispatch --> step_history
         harmonised_route --> step_prepare
         harmonised_route --> routes
         harmonised_route --> slot_plan
         harmonised_route --> melody_alone
+        harmonised_route --> step_history
         routes --> melody_alone
+        routes --> step_history
         melody_alone --> decisions
         slot_plan --> decisions
     end
@@ -95,6 +99,7 @@ flowchart TB
     subgraph layer_explanation["explanation"]
         direction TB
         annotation["annotation"]
+        text_layout["text_layout"]
     end
 
     subgraph layer_grips["grips and selection"]
@@ -137,7 +142,12 @@ What the drawing makes visible:
   value types (`Voicing`, `ArrangementStep`, `Palette`) with the tab-cell primitives;
   `context` is one slot's request; `parts` is the parts vocabulary. Because nothing
   is below them, every other module can depend on them without narrowing what may
-  import it.
+  import it. `text_layout` is a fifth - a string and a column count, with no engine
+  type in it - drawn in the explanation layer because that is the concern it serves.
+- **The explanation layer is two halves.** `annotation` composes the words a step's
+  explanation is made of, out of the step's own fields; `text_layout` decides where
+  those words break. `render` is the only module that needs both, which is why the
+  pair sits below it and beside one another.
 - **`movement` is the loop, `route_dispatch` is the branch table, and
   `harmonised_route` is the route it usually takes.** `movement` owns the slot loop,
   the resolved knobs and the bass merge; `route_dispatch` holds the five entries that
@@ -149,7 +159,9 @@ What the drawing makes visible:
   sound" step beneath it. They reach the axes, the request and the grips; the
   surfaces' one way into the loop is still `movement`. A new axis is normally
   wired through `options` and `resolution` first, which is why both sit between
-  it and the axes.
+  it and the axes. `step_history` is the loop's memory of itself - what the hand was
+  still holding when a slot arrived - and all three of `routes`, `harmonised_route`
+  and `route_dispatch` read it.
 - **The surfaces do not feed back.** `steps`, `slots`, `render`, `cli` and `demo` sit
   at the top and import downwards; no layer below imports them. `demo` is the
   printing front end: it imports `steps` and `render`, and nothing imports it but
