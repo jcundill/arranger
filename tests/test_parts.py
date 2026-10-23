@@ -275,8 +275,16 @@ class TestTheArityFollowsTheTexture(unittest.TestCase):
                 )
 
 
+# The three selections this class reads, spelled as the requests they are.
+CHORD_ONLY = Request(melody=False)
+# The thumb alone, on the tune's own onsets: one low note per written attack.
+LONE_BASS = Request(melody=False, chord_on="none", bass_on="melody", bass_notes="root")
+# The pair: a thumb line under a comped chord.
+BASS_AND_CHORD = Request(melody=False, bass_on="melody", bass_notes="root")
+
+
 class TestABassPartIsABassNote(unittest.TestCase):
-    """`parts="bass"` sounds a bass note: low, and a root or a 5th.
+    """A lone bass line sounds a bass note: low, and a root or a 5th.
 
     Three defects, all measured on `tests/data/synthetic_cut_time.mxl` before this class
     existed, and all three had to be fixed together - which is why the tests are three
@@ -294,19 +302,21 @@ class TestABassPartIsABassNote(unittest.TestCase):
       sounds like the wrong chord, which is what `BASS_DEGREES_6432` says in as many
       words. So register alone would have produced a *low 3rd*, still wrong.
 
-    `parts` names **parts**, not voices, which is what makes the first defect
-    unreachable through the API: there is one bass part and it is addressed by name, so
-    two different requests cannot collapse to one arrangement. The inner voices are
-    reached as the chord part - both guide tones together - and
-    `test_an_inner_voice_is_not_addressable_as_a_part` is the inversion of the old
-    per-voice test.
+    **A part is derived from the layers that attack, never named.** `melody`,
+    `chord_on` and `bass_on` decide the selection, so the first defect is unreachable
+    through the API: there is one bass part, and two different requests cannot collapse
+    to one arrangement. An inner voice has no spelling at all - the chord part states
+    both guide tones together - and `test_an_inner_voice_is_not_addressable_as_a_part`
+    is the inversion of the old per-voice test.
     """
 
     def setUp(self):
         self.engine = VoiceLeadingEngine()
 
-    def arrange(self, parts: str):
-        return self.engine.arrange_progression(PROGRESSION, options=ArrangeOptions(parts=parts))
+    def arrange(self, request: Request):
+        return self.engine.arrange_progression(
+            PROGRESSION, options=ArrangeOptions(request=request)
+        )
 
     def test_an_inner_voice_is_not_addressable_as_a_part(self):
         """The axis has no spelling for one inner voice, and that is the fix.
@@ -324,7 +334,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
             parse_parts("tenor")
         # The part that does carry them states a complete comping shape, and the
         # guide-tone pair is *inside* it rather than being the whole of it.
-        for step in self.arrange(PART_CHORD):
+        for step in self.arrange(CHORD_ONLY):
             self.assertEqual(len(step.voicing.active_frets()), 3, step.tab_line())
             self.assertLessEqual(guide_pcs(step.chord), {m % 12 for m in step.voicing.midi_notes()})
 
@@ -337,9 +347,9 @@ class TestABassPartIsABassNote(unittest.TestCase):
         about how many notes happen to sound.
         """
         self.assertEqual(
-            {len(s.voicing.active_frets()) for s in self.arrange(PART_CHORD)}, {3}
+            {len(s.voicing.active_frets()) for s in self.arrange(CHORD_ONLY)}, {3}
         )
-        for step in self.arrange(PART_BASS):
+        for step in self.arrange(LONE_BASS):
             self.assertEqual(len(step.voicing.active_frets()), 1, step.tab_line())
 
     def test_the_chord_part_still_sounds_its_guide_tones(self):
@@ -348,7 +358,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
         Asserted separately from the register above because a generator that moved the
         pair to low strings while leaving its degrees alone would pass that one.
         """
-        for step in self.arrange(PART_CHORD):
+        for step in self.arrange(CHORD_ONLY):
             self.assertLessEqual(
                 guide_pcs(step.chord),
                 {m % 12 for m in step.voicing.midi_notes()},
@@ -368,7 +378,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
                 self.assertIn(
                     min(voicing.active_strings), (0, 1, 2), voicing.tab_string()
                 )
-        for step in self.arrange("bass"):
+        for step in self.arrange(LONE_BASS):
             self.assertLessEqual(min(step.voicing.active_strings), 2, step.tab_line())
 
     def test_a_bass_voice_sounds_a_root_or_a_fifth(self):
@@ -441,7 +451,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
                         supported,
                         voicing.tab_string(),
                     )
-        for step in self.arrange(PART_BASS):
+        for step in self.arrange(LONE_BASS):
             self.assertIn(
                 frozenset(step.voicing.active_strings),
                 supported,
@@ -455,8 +465,8 @@ class TestABassPartIsABassNote(unittest.TestCase):
         fret-number comparison would not survive the octave transposition that moves the
         same pitch between strings.
         """
-        chord = [max(s.voicing.midi_notes()) for s in self.arrange(PART_CHORD)]
-        bass = [max(s.voicing.midi_notes()) for s in self.arrange(PART_BASS)]
+        chord = [max(s.voicing.midi_notes()) for s in self.arrange(CHORD_ONLY)]
+        bass = [max(s.voicing.midi_notes()) for s in self.arrange(LONE_BASS)]
         self.assertEqual(len(chord), len(bass))
         self.assertLess(
             sum(bass), sum(chord), "the bass part is not below the chord part"
@@ -477,15 +487,19 @@ class TestABassPartIsABassNote(unittest.TestCase):
         survives is the pair of claims that do not depend on it: the lone bass is one
         low note, and nothing else is the lone-bass case.
         """
-        lone = [len(s.voicing.active_frets()) for s in self.arrange(PART_BASS)]
+        lone = [len(s.voicing.active_frets()) for s in self.arrange(LONE_BASS)]
         self.assertEqual(set(lone), {1}, "the lone bass states more than one note")
-        for step in self.arrange(PART_BASS):
+        for step in self.arrange(LONE_BASS):
             self.assertLessEqual(min(step.voicing.active_strings), 2, step.tab_line())
         counts = {
             len(s.voicing.active_frets())
-            for s in self.arrange("bass,chord")
+            for s in self.arrange(BASS_AND_CHORD)
         }
-        self.assertEqual(counts, {3}, "a pair selection is not the lone-bass case")
+        self.assertEqual(
+            counts,
+            {4},
+            "a pair is not the lone-bass case: the chord part plus the thumb",
+        )
 
     def test_an_unreadable_chord_still_gets_no_bass_note(self):
         """No root, no claim - the same rule, on the branch that was added.
