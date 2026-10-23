@@ -20,9 +20,8 @@ from arranger import (
     VoiceLeadingEngine,
     format_progression,
     get_comping_voicings,
-    parse_parts,
     parts_has_melody_only,
-    resolve_parts,
+    resolve_request,
     supported_string_sets,
 )
 from arranger.grip_place import snapshot
@@ -38,7 +37,6 @@ from arranger.grips import (
     get_comping_voicings_for,
 )
 from arranger.options import ArrangeOptions, Request
-from arranger.parts import PART_BASS, PART_CHORD, PART_MELODY
 from arranger.tuning import NECK_FRET_MAX, NECK_FRET_MIN
 from tests.support import (
     PROGRESSION,
@@ -533,7 +531,7 @@ class TestTheCompingArrangement(unittest.TestCase):
     def test_the_bass_axis_still_decides_the_bottom(self):
         """`bass_notes="walk"` walks under a comping part, and `bass_on="none"` does not.
 
-        This is the band setting as a whole: both axes named, and neither inferred
+        This is the band setting as a whole: both layers named, and neither inferred
         from the other.
         """
         walked = self.comped(
@@ -619,7 +617,7 @@ class TestTheCompingArrangement(unittest.TestCase):
         """The measured case: `Trouble_in_Mind_Blues` bar 1 is `NC`.
 
         It used to be absent from the comping part's tab - **12** positions over
-        the three voice selections that reach the comping route, all of them this
+        the three selections that reach the comping route, all of them this
         bar - while the horn played in it, so a reader lining the two parts up was
         one bar short with nothing to say which bar went. The bar is now present
         under every one of those selections, and every position in it is silent
@@ -628,25 +626,31 @@ class TestTheCompingArrangement(unittest.TestCase):
         from tests.support import arranged
 
         path = "tests/data/Trouble_in_Mind_Blues.musicxml"
-        for parts in (PART_BASS, PART_CHORD, "bass,chord"):
-            steps, head, _notes = arranged(
-                path, options=ArrangeOptions(parts=parts)
-            )
+        rows = (
+            ("chord", Request(melody=False)),
+            ("chord+bass", Request(melody=False, bass_on="melody", bass_notes="root")),
+            (
+                "bass",
+                Request(melody=False, chord_on="none", bass_on="melody", bass_notes="root"),
+            ),
+        )
+        for label, selection in rows:
+            steps, head, _notes = arranged(path, request=selection)
             bars = sorted(
                 bar for bar in {step.bar for step in steps} if bar is not None
             )
-            self.assertIn(1, bars, f"bar 1 vanished under parts={parts}")
+            self.assertIn(1, bars, f"bar 1 vanished under {label}")
             nc = [step for step in steps if step.silence == "nc_comping"]
-            self.assertTrue(nc, f"no silent NC position under parts={parts}")
+            self.assertTrue(nc, f"no silent NC position under {label}")
             self.assertTrue(
                 all(not step.voicing.active_frets() for step in nc),
-                f"a silent NC position sounds something under parts={parts}",
+                f"a silent NC position sounds something under {label}",
             )
             # Every bar the tune has is in the tab, bar 1 included.
             tune_bars = {note.bar for note in head.notes}
             self.assertTrue(
                 tune_bars <= set(bars),
-                f"bars missing under parts={parts}: {sorted(tune_bars - set(bars))}",
+                f"bars missing under {label}: {sorted(tune_bars - set(bars))}",
             )
 
 
@@ -666,7 +670,7 @@ class TestCompingMelodyIndependence(unittest.TestCase):
     #: reaches the comping part, which eight bars of the tune settle.
     SECTION = (1, 8)
 
-    def _arrange(self, head, parts, non_chord_tone="extension"):
+    def _arrange(self, head, request, non_chord_tone="extension"):
         """The `arrange_xml_head` comping path over an already-loaded head.
 
         `onsets` is computed the way `arrange_xml_head` computes it, so this exercises
@@ -682,7 +686,8 @@ class TestCompingMelodyIndependence(unittest.TestCase):
         from headxml import _merge_chord_slots, head_skeleton, melody_state
 
         slots = head_skeleton(head, self.SECTION)
-        if not parts_has_melody_only(resolve_parts(parse_parts(parts))):
+        resolved = resolve_request(request, head.beats_per_bar, head.grouping)
+        if not parts_has_melody_only(resolved.parts):
             slots = _merge_chord_slots(slots, head, None) or slots
         onsets = {
             index
@@ -693,7 +698,7 @@ class TestCompingMelodyIndependence(unittest.TestCase):
             [slot[0] for slot in slots],
             [(slot[1], slot[2], slot[3]) for slot in slots],
             options=ArrangeOptions(
-                parts=parts,
+                request=request,
                 time_signature=TimeSignature(head.beats_per_bar, head.beat_type),
                 non_chord_tone=non_chord_tone,
             ),
@@ -731,19 +736,24 @@ class TestCompingMelodyIndependence(unittest.TestCase):
         """
         from headxml import load_musicxml
 
-        for parts in (
-            PART_CHORD,
-            PART_BASS,
-            "bass,chord",
+        for label, selection in (
+            ("chord", Request(melody=False)),
+            ("chord+bass", Request(melody=False, bass_on="melody", bass_notes="root")),
+            (
+                "bass",
+                Request(melody=False, chord_on="none", bass_on="melody", bass_notes="root"),
+            ),
         ):
-            with self.subTest(parts=parts):
+            with self.subTest(selection=label):
                 head = load_musicxml(self._path())
-                before = self._arrange(head, parts, non_chord_tone="sustain")
+                before = self._arrange(head, selection, non_chord_tone="sustain")
                 self.assertTrue(before, "an arrangement with no steps at all is a defect")
                 self.assertEqual(
-                    self._arrange(self._scrambled(head), parts, non_chord_tone="sustain"),
+                    self._arrange(
+                        self._scrambled(head), selection, non_chord_tone="sustain"
+                    ),
                     before,
-                    f"{parts}: a melody pitch reached the comping part with no strategy",
+                    f"{label}: a melody pitch reached the comping part with no strategy",
                 )
 
     def test_a_substituted_melody_reaches_the_harmony_and_not_the_placement(self):
@@ -758,8 +768,10 @@ class TestCompingMelodyIndependence(unittest.TestCase):
 
         head = load_musicxml(self._path())
         scrambled = self._scrambled(head)
-        substituted = self._arrange(scrambled, PART_CHORD)  # default extension
-        unsubstituted = self._arrange(scrambled, PART_CHORD, non_chord_tone="sustain")
+        substituted = self._arrange(scrambled, Request(melody=False))  # default extension
+        unsubstituted = self._arrange(
+            scrambled, Request(melody=False), non_chord_tone="sustain"
+        )
         self.assertEqual(
             [(step[0], step[1]) for step in substituted],
             [(step[0], step[1]) for step in unsubstituted],
@@ -796,19 +808,18 @@ class TestTheSopranoIsPerSlotNotPerRoute(unittest.TestCase):
             os.path.dirname(os.path.abspath(__file__)), "data", "synthetic_cut_time.mxl"
         )
 
-    def _arrange(self, parts=None, chord_on="1and,2and"):
+    def _arrange(self, request=None, chord_on="1and,2and"):
         """A **requested** rhythm over the cut-time head, so the comps land on the ands.
 
-        The rhythm is the request's, so `parts` is left unspelled for every caller but
-        the melody-only one: a comping axis spelling asks for the engine's own union,
-        and a request is what names positions of its own.
+        `chord_on` spells the rhythm for the callers that want the shipped selection; a
+        caller with a selection of its own passes the whole request, because a
+        melody-only selection names no chord position for a rhythm to move.
         """
         from tests.support import arranged
 
         return arranged(
             self._path(),
-            request=Request(chord_on=chord_on),
-            options=None if parts is None else ArrangeOptions(parts=parts),
+            request=Request(chord_on=chord_on) if request is None else request,
         )
 
     def test_a_singing_selection_comps_the_positions_it_does_not_sing(self):
@@ -884,9 +895,9 @@ class TestTheSopranoIsPerSlotNotPerRoute(unittest.TestCase):
                 step.tab_line(),
             )
 
-    def test_a_parts_has_melody_only_adds_nothing(self):
-        """`soprano` plays the tune and nothing else, so it never comps a grid position."""
-        steps, _head, _notes = self._arrange(parts=PART_MELODY)
+    def test_a_melody_only_selection_adds_nothing(self):
+        """The guitar plays the tune and nothing else, so it never comps a grid position."""
+        steps, _head, _notes = self._arrange(request=Request(chord_on="none"))
         self.assertTrue(steps)
         self.assertTrue(all(step.melody_voiced for step in steps))
         self.assertTrue(all(len(step.voicing.active_frets()) == 1 for step in steps))
@@ -1014,18 +1025,18 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
 
     **`bass_allowed` was asked about `TEXTURE_GRIPS` on a route where it is inert.**
     That table describes the shapes `get_all_grip_voicings` generates; on the comping
-    route the shapes come from `get_comping_voicings` and the texture is a meaningless
-    name - measured on `tests/data/synthetic_cut_time.mxl`, all 80 comping shapes are
-    byte-identical under `texture="uniform"` and `texture="targets"`.
+    route the shapes come from `get_comping_voicings` and the chord content is a
+    meaningless name there - measured on `tests/data/synthetic_cut_time.mxl`, all 80
+    comping shapes are byte-identical under `chord_notes="full"` and `chord_notes="targets"`.
 
-    So `parts="chord", bass="root,5th,approach,nearest"` under the **default** texture was refused with
-    "uniform leaves no bass string free for a target" and emitted no thumb at all, while
-    the same request under `texture="targets"` emitted 127. The warning named a setting
-    that could not change the outcome.
+    So the walk beside a comping selection - `Request(melody=False, bass_on="every-beat",
+    bass_notes="walk")` - was refused under the default content, naming a chord setting
+    that could not change the outcome, and emitted no thumb at all; the same request with
+    `chord_notes="targets"` emitted 127.
 
-    The existing `test_the_bass_axis_still_decides_the_bottom` passed throughout,
-    because it spelled `texture="targets"` - the one texture that happened to fit. These
-    tests pin the invariant rather than the workaround: **the texture is inert on this
+    The existing `test_the_bass_axis_still_decides_the_bottom` passed throughout, because
+    it spelled `chord_notes="targets"` - the one content that happened to fit. These tests
+    pin the invariant rather than the workaround: **the chord content is inert on this
     route, so it must not appear in the decision.**
     """
 
@@ -1113,7 +1124,7 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
         barely visits still carries four quarters, and the part has more steps than the
         head had notes.
 
-        **Compared against `bass="none"` and not against a texture.** The first draft of
+        **Compared against `bass_on="none"` and not against a texture.** The first draft of
         this test compared `uniform` against `targets` and failed, which was the fix
         working: both now build the same union, because the texture no longer reaches
         the decision. A test asserting the texture *changes* the step count here would
