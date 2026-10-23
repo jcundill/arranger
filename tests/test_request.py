@@ -53,6 +53,7 @@ from arranger.bass_rules import (
 )
 from arranger.cli import HEAD_HELP, REQUEST_DESTS, add_common_arguments
 from arranger.options import ArrangeOptions
+from arranger.resolution import resolve_axes
 
 
 class TestTheShippedRequest(unittest.TestCase):
@@ -121,6 +122,41 @@ class TestTheRhythmsDecideTheParts(unittest.TestCase):
             resolved.parts,
             tuple(name for name in PART_NAMES if name in resolved.parts),
         )
+
+
+class TestTheAxesMeetTheRequest(unittest.TestCase):
+    """`resolve_axes` is where a caller's axis override and the request meet.
+
+    The two are **coupled** there: a spelled bass policy takes the bass part with
+    it, because a line with no part to play it is not a line. The selection it
+    hands back is still a *set*, so a request that already named that part does not
+    get it a second time.
+    """
+
+    def test_a_spelled_bass_policy_takes_the_bass_part(self):
+        """The axis-only spelling: the request named no bass, the policy does."""
+        axes = resolve_axes(Request(), None, BASS_RULE_ROOT, None)
+        self.assertEqual(axes.parts, ",".join(PART_NAMES))
+
+    def test_a_bass_policy_beside_a_named_bass_part_adds_nothing(self):
+        """`bass_on=` already took the part, so the selection is rebuilt, not appended.
+
+        A name written twice is two spellings of one part, and `parts` is a set:
+        `melody,bass,chord,bass` is not a selection the engine can mean.
+        """
+        axes = resolve_axes(Request(bass_on="every-beat"), None, BASS_RULE_ROOT, None)
+        self.assertEqual(axes.parts, ",".join(PART_NAMES))
+
+    def test_a_narrower_selection_is_not_widened_by_the_policy(self):
+        """The duplicate is loudest where the request's own selection is a subset.
+
+        `chord_on=none` with a bass line is the tune and the thumb; spelling the
+        policy as well must not add a second `bass` to that pair.
+        """
+        axes = resolve_axes(
+            Request(chord_on="none", bass_on="every-beat"), None, BASS_RULE_ROOT, None
+        )
+        self.assertEqual(axes.parts, f"{PART_MELODY},{PART_BASS}")
 
 
 class TestTheContentQuestions(unittest.TestCase):

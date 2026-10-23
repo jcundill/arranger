@@ -35,6 +35,7 @@ from .options import (
 )
 from .parts import (
     PART_BASS,
+    PART_NAMES,
     parse_parts,
     parts_has_melody_only,
     parts_have_melody,
@@ -105,6 +106,17 @@ class ResolvedAxes:
     parts: str
 
 
+def _selection_with_bass(parts: Tuple[str, ...]) -> str:
+    """`parts` plus the bass part, canonicalised to `PART_NAMES` order.
+
+    A spelled bass policy takes the bass part with it, because a line with no part
+    to play it is not a line. The selection is a **set** of part names, so a request
+    that already named the bass part is not given it a second time: appending the
+    name would write one part twice and hand back two spellings of one part.
+    """
+    return ",".join(name for name in PART_NAMES if name in parts or name == PART_BASS)
+
+
 def resolve_axes(
     request: Request,
     texture: Optional[str],
@@ -127,7 +139,7 @@ def resolve_axes(
     if bass is None:
         bass = resolved.bass if parts is None else BASS_STYLE_AUTO
     elif parts is None and bass not in (BASS_STYLE_AUTO, BASS_STYLE_NONE):
-        parts = ",".join(resolved.parts + (PART_BASS,))
+        parts = _selection_with_bass(resolved.parts)
     return ResolvedAxes(
         request=resolved,
         texture=texture,
