@@ -69,7 +69,7 @@ thing to read before quoting one.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1315 feature + 84 meta tests OK (skipped=2)**, pyright
+Current measured state: **1307 feature + 85 meta tests OK (skipped=2)**, pyright
 **0 errors 0 warnings**, ruff **0 errors**. If your change moves any of those numbers, that
 is the signal — not the absence of an error message. A quiet run is not evidence; a moved
 count is.
@@ -91,10 +91,9 @@ because that half runs first, so a mis-filed test is seen early rather than neve
 `tests/meta_structure.py::TestTheSplit` fails on a module matching neither pattern, which
 is the only way a pattern-based gate could go quiet, and `test` running both is what keeps
 the split a way *in* rather than a smaller gate. The split is a reading aid, not a speed
-fix: **84 of 1399 tests are meta**, and the minutes are in the four feature modules that
-sweep every quality or every committed head (`test_comping`, `test_fingers`,
-`test_musicxml`, `meta_explanations`) — so `make test-one` on the module you are touching
-is the loop that actually saves time.
+fix: **85 of 1392 tests are meta**, and both halves run in seconds, so `make test-one` on
+the module you are touching is a convenience rather than the difference between a fast
+loop and a slow one.
 
 **A public request in front of the axes.** `head` asks six questions - who plays the
 tune, when each accompaniment layer attacks, what each states, and what the chord does in a

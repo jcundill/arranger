@@ -131,11 +131,15 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/context.py": Budget(5, 30, 3),
     "arranger/cost.py": Budget(12, 140, 7),
     "arranger/decisions.py": Budget(11, 137, 9),
-    "arranger/fingers.py": Budget(10, 41, 2),
+    # Re-measured when the per-finger assignment layer went: the ceiling is the hand
+    # budget's own size now (`can_fret`, 22 lines), not `assign_fingers`'s 41.
+    "arranger/fingers.py": Budget(2, 22, 1),
     # The named figures and their parser went, so what is left is the request's
     # `Rhythm` and the lattice under it: re-measured, not lowered by eye.
     "arranger/grid.py": Budget(8, 23, 3),
-    "arranger/grip_tables.py": Budget(7, 39, 3),
+    # Re-measured when `finger_skip_count` moved to the tests: the ceiling is
+    # `comping_string_sets`'s 37 lines.
+    "arranger/grip_tables.py": Budget(7, 37, 3),
     "arranger/grip_place.py": Budget(19, 66, 5),
     "arranger/grips.py": Budget(22, 128, 9),
     "arranger/grouping.py": Budget(6, 36, 3),
