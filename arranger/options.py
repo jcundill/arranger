@@ -7,13 +7,13 @@ them, and `resolve_request` turns either into the engine's internal axes - `part
 `texture`, `bass` and the chord's rhythm - which is what the step loop
 actually reads.
 
-**This object is the only door to the four axes.** They are the engine's implementation
-rather than a question a caller asks, so no entry point takes one as a keyword - a caller
-who wants a texture or a bass policy names it here, and the axis tests hold each to its own
-behaviour that way. `None` means "derive this from the request"; a value means "the
-implementation axis, spelled out". The request and the metre are the exception the other
-way: they are **input facts**, so `request=` and `time_signature=` sit beside `options=` on
-the entry points and `resolution.settle_input_fact` reconciles the two spellings.
+**The axes are derived from the request; this object carries the rest of the knobs.** They
+are the engine's implementation rather than a question a caller asks, so no entry point takes
+one as a keyword, and nothing here spells one either. What it holds is what is *not* a
+question about the music: the neck window, the strings a shape may use, the non-chord-tone
+strategy. The request and the metre are **input facts** the other way, so `request=` and
+`time_signature=` sit beside `options=` on the entry points and
+`resolution.settle_input_fact` reconciles the two spellings.
 
 Frozen, because an options object that can be mutated halfway through arranging is
 worse than the keyword list it replaces - the failure would depend on *when* it was
@@ -111,7 +111,7 @@ class Request:
 
     The same six `head`'s flags ask, so a command line and a library name one
     request: passing this value to `arrange_progression` is the library spelling,
-    and the axis keywords beside it are overrides rather than a second request.
+    and it is the only spelling - every axis below is derived from it.
 
     One value rather than six loose keywords, because the six are one request: a
     caller that names the chord's rhythm and the bass's content is describing one

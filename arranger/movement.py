@@ -118,10 +118,10 @@ def arrange_progression(
     Takes a progression of (Melody Note, Chord Quality, Name) tuples
     and computes the optimal voice-led arrangement.
 
-    What to play is asked as a `request=` - the six questions - and the
-    implementation axes (`texture`, `bass`, `parts`) are
-    spelled through `options=ArrangeOptions(...)`, which is the one door to them.
-    A keyword given beside `options=` raises rather than being silently ignored.
+    What to play is asked as a `request=` - the six questions - and the implementation
+    axes are derived from it rather than spelled. `options=ArrangeOptions(...)` carries the
+    knobs that are not a question about the music, and a keyword given beside `options=`
+    raises rather than being silently ignored.
 
     `timings=` says where each entry falls. Omitted, the progression is laid out on the
     metre's own felt beats - one entry per beat of the bar - so a hand-built progression

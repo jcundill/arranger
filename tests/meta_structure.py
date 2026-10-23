@@ -149,7 +149,7 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/melody_alone.py": Budget(6, 74, 14),
     # The axis keywords left `resolve_knobs` (15 -> 9 parameters), so the module
     # ceiling is `resolve_policies`'s eleven rather than the reconciler's: the grid
-    # parameter went with the axis. The axes are now one read of `options` and two
+    # parameter went with the axis. The axes are now one read of the request and two
     # `settle_input_fact` calls where the defaults and the assignments used to be.
     # The injected slash-bass ranking left with the cycle it was avoiding, so
     # `resolve_knobs` lost its conditional and the ceiling is re-measured.
@@ -173,8 +173,8 @@ BUDGETS: Dict[str, Budget] = {
     # share one function and its reason.
     "arranger/route_dispatch.py": Budget(4, 19, 3),
     # The five axis keywords left `arrange_progression` (15 -> 10 parameters): they are
-    # the engine's implementation, so `options=ArrangeOptions(...)` is the only door to
-    # one. The body did not grow - it reads the resolved knobs and policies as values -
+    # the engine's implementation, derived from the request rather than spelled. The body
+    # did not grow - it reads the resolved knobs and policies as values -
     # and the dispatch lives in `route_dispatch`, so this module is the loop, the knobs
     # and the merge.
     "arranger/movement.py": Budget(4, 89, 10),
@@ -521,9 +521,9 @@ RETIRED_AXIS_KEYWORDS = frozenset({"texture", "bass", "parts", "harmony", "grid"
 class TestTheAxesAreNotEntryPointKeywords(unittest.TestCase):
     """An axis is the implementation, so no entry point takes one as a keyword.
 
-    The five axes answer *how* to play what the request asks for, so
-    `options=ArrangeOptions(...)` is the one door to them; a keyword beside `options=`
-    for the same thing is the second spelling this surface exists without. Nothing
+    The axes answer *how* to play what the request asks for, and they are derived from it
+    rather than spelled; a keyword beside `options=` for the same thing is the second
+    spelling this surface exists without. Nothing
     about a signature says so, so this is the standing check - it fails on the commit
     that adds one back, rather than on the first caller surprised by it.
     """

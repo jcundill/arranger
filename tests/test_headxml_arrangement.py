@@ -461,7 +461,7 @@ class TestTheHeadRequestAsOneValue(unittest.TestCase):
         )
 
     def test_the_axis_has_no_keyword_spelling(self):
-        """The five axes are the implementation, so `options=` is their one door.
+        """The five axes are the implementation, so no signature takes one as a keyword.
 
         This used to assert that a `texture=` keyword beside `options=` raised. With
         the axis gone from the signature the two spellings are unspellable rather than

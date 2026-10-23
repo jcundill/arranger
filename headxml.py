@@ -2997,9 +2997,10 @@ def _head_request(
     is refused rather than silently replaced: a `TimeSignature` two of whose three
     fields are ignored is a value that lies.
 
-    The five implementation axes live on `options` alone, so the two doors cannot
-    disagree about them. The request and the metre are **input facts** instead - *what
-    is being arranged* rather than *how to play it* - so they sit *beside* `options=`
+    The implementation axes are derived from the request, so the two spellings of the
+    request have nothing to disagree about. The request and the metre are **input facts**
+    instead - *what is being arranged* rather than *how to play it* - so they sit *beside*
+    `options=`
     rather than inside it, and `settle_input_fact` reconciles the two spellings: the
     keyword wins, the object's own is read only when the keyword was left at its
     default, and both stated raises. `non_chord_tone` is the one remaining knob, and a
@@ -3118,11 +3119,10 @@ def arrange_xml_head(
     `fallback` may be "diminished"; it replaces the written chord, so it is off
     unless asked for.
 
-    What to play is asked as `request=` - the six questions - and the implementation
-    axes (`texture`, `bass`, `parts`) through
-    `options=ArrangeOptions(...)`, the one door to them. When `options=` is given the
-    individual knobs must be left at their defaults. That is the spelling `head`
-    uses, because a score already holds its metre and key together.
+    What to play is asked as `request=` - the six questions - and the implementation axes
+    are derived from it. `options=ArrangeOptions(...)` carries the knobs that are not a
+    question about the music, which must be left at their defaults when the score states
+    the metre and the key: that is the spelling `head` uses.
 
     The metre trap bites hardest here: three of the four committed scores are in cut
     time, whose beat is a half note, so a rule that assumed four beats to the bar

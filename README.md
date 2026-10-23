@@ -773,7 +773,7 @@ Am7      G4  b7   8-x-7-9-8-x       (harmony under b7 - 4 voices -
 
 Expect tune changed: written `Am7` gone, fallback states full `Bdim7` where default gave up with two voices. Colour to opt into, not default — why run counts steps it touched.
 
-On **comping** selection (`voices=` with no soprano — guitar states chord while somebody else sings) same flag moves chord guitar *states*, never anything it sings. Non-chord note at an **onset** reharmonises guitar's chord: `D5` over `Cmaj7` under `voices="alto,tenor"` gives `Cmaj9` (`extension`) or `Bdim7` (`diminished`) in guide-tone voices, `harmonized_as` reports, diagnostic naming forcing note. Held note and silent grid position state written chord unchanged; `sustain` leaves comping part's harmony exactly as chord symbol writes it.
+On a **comping** selection (`Request(melody=False)` — guitar states the chord while somebody else sings) the same flag moves the chord the guitar *states*, never anything it sings. A non-chord note at an **onset** reharmonises the guitar's chord: `D5` over `Cmaj7` under a comping selection gives `Cmaj9` (`extension`) or `Bdim7` (`diminished`) in guide-tone voices, `harmonized_as` reports it, and the annotation names the note that forced it. Held note and silent grid position state written chord unchanged; `sustain` leaves comping part's harmony exactly as chord symbol writes it.
 
 ## Supported chord qualities
 

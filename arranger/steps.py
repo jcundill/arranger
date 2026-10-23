@@ -333,8 +333,8 @@ class VoiceLeadingEngine:
         # timeline, and what keeps a bare `arrange_progression(..., options=...)`
         # honouring `--non-chord-tone`. See `ArrangeOptions.melody_onsets`.
         melody_onsets: Optional[Container[int]] = None,
-        # The implementation axes - `texture`, `bass`, `parts`, `harmony`, `grid` -
-        # and the one door to them. See `resolution.resolve_knobs`.
+        # The knobs that are not a question about the music; the axes themselves are
+        # derived from the request. See `resolution.resolve_knobs`.
         options: Optional[ArrangeOptions] = None,
     ) -> List[ArrangementStep]:
         """See `movement.arrange_progression` - the full docstring is there."""

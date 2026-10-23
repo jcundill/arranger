@@ -299,8 +299,8 @@ class TestTheAxisIsInertByDefault(unittest.TestCase):
                 max(step.voicing.midi_notes()), Note(step.melody).midi_note()
             )
 
-    def test_the_axis_is_spelled_through_the_options(self):
-        """The request is the vocabulary, so `options=` is the one door to the engine.
+    def test_one_request_two_places_to_name_it(self):
+        """One request reaches the engine whether it sits beside `options=` or inside it.
 
         Both halves are what a second spelling would cost: the comping selection
         reaches the engine as `Request(melody=False)`, and the bare call is the shipped

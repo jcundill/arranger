@@ -21,10 +21,10 @@ safe to depend on is
 `ORDER` in `tests/meta_package_dag.py`, drawn in
 [docs/dependency-dag.md](../docs/dependency-dag.md).
 
-`ArrangeOptions` is re-exported because it is the one door to the implementation axes:
-`arrange_progression` and `arrange_xml_head` take `request=` and the input facts, and an
-axis override - `texture="targets"`, a `grid` preset - is spelled
-`options=ArrangeOptions(...)`. See `options.py`.
+`ArrangeOptions` is re-exported because it carries the knobs that are not a question about
+the music: `arrange_progression` and `arrange_xml_head` take `request=` and the input facts,
+and the implementation axes are derived from the request rather than spelled. See
+`options.py`.
 
 `demo` holds `main()` - the built-in demonstration and the `head` hand-off - and is
 re-exported as `arranger.main` so the console script and `python -m arranger` name one

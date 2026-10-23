@@ -138,8 +138,8 @@ def parse_bass_style(argument: str) -> Tuple[str, ...]:
     request. **The order is part of the request**, not formatting - it is the resolution
     order, so `"approach,root"` and `"root,approach"` are two styles even though they
     admit the same roles. A repeat is dropped keeping its first occurrence, and nothing
-    is re-sorted, for the same reason `grips.parse_grips` keeps its order and
-    `parts.parse_parts` does not (a sequence is ordered, a selection is a set).
+    is re-sorted, for the same reason `grips.parse_grips` keeps its order: a sequence
+    is ordered and a set is not.
 
     `none` is **not** a rule and is refused here: it is the absence of a style,
     resolved before this runs. Refusing it keeps the rule vocabulary to things that

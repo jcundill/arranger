@@ -301,10 +301,10 @@ def resolve_policies(
     # that route, the same way it is on the comping one.
     melody_only = parts_has_melody_only(parts)
 
-    # The bass policy. `auto` means "whatever this selection means", and the shipped
-    # answer is no line at all; a melody-only selection that also names the bass part
-    # is the one case that walks. An explicit style overrides both, which is what lets
-    # a texture that was never written for a thumb line carry one.
+    # The bass policy. The shipped answer is no line at all; a melody-only selection
+    # that also names the bass part is the one case that walks. A request that names
+    # `bass_notes` overrides both, which is what lets a content that was never written
+    # for a thumb line carry one.
     #
     # `resolve_bass` lives in `bass_rules` and takes the resolved `parts` rather than
     # the flags derived from them - the route, the arity and the lone-bass case are

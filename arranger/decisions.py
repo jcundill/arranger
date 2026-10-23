@@ -153,10 +153,10 @@ def melody_alone_case(
     `get_melody_only_voicing`, which is the melody on its own - so this function cannot
     be allowed to answer `MELODY_ALONE_TEXTURE` for a slot the guitar is not singing, or
     a fill would put the tune straight back on the guitar and the axis would be honoured
-    only on targets: under `--texture targets --bass-style root,5th,approach,nearest` a fill that answers the
-    texture case comes back a bare melody note, which is exactly the part that belongs
-    to somebody else - see the `--texture targets --bass-style root,5th,approach,nearest` example in
-    `docs/engine.md`. The per-slot reading is what keeps that true for a note-less
+    only on targets: under `chord_notes="targets"` with a walk under it, a fill that answers
+    the texture case comes back a bare melody note, which is exactly the part that belongs
+    to somebody else - see the `Request(chord_notes="targets", bass_on="every-beat",
+    bass_notes="walk")` example in `docs/engine.md`. The per-slot reading is what keeps that true for a note-less
     position a *singing* selection receives: the guitar has no note there, so it
     must not answer the texture case.
 
@@ -520,8 +520,8 @@ def select_step_voicing(
     **combined, not applied in sequence**. The candidates are partitioned by how
     well they honour the bass, and the engine's own selection rule then decides
     *within the best group*. Applying them one after the other would let whichever
-    ran last always override the other, which is precisely the bug that was fixed
-    by writing them this way in the first place.
+    ran last always override the other, so the two are one decision rather than two
+    in sequence.
 
     The partition is skipped when the bass is unsatisfiable (`best > 2`), so an
     unachievable slash chord behaves exactly as if it had not been written - which
