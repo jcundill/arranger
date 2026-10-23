@@ -652,7 +652,9 @@ class TestChordsOnlyHead(unittest.TestCase):
         claim: a melody-only selection has nothing to *play* here, which is not the same
         as a grid having nowhere to *place* a chord.
         """
-        steps, _head, _notes = arrange_xml_head(CHORDS_ONLY, options=ArrangeOptions(parts="chord"))
+        steps, _head, _notes = arrange_xml_head(
+            CHORDS_ONLY, options=ArrangeOptions(request=Request(melody=False))
+        )
         self.assertEqual(len(steps), 16, "four bars, four beats each")
         self.assertEqual((steps[0].bar, steps[0].beat), (1, 1.0))
         self.assertTrue(
@@ -661,7 +663,8 @@ class TestChordsOnlyHead(unittest.TestCase):
         )
 
     def test_a_soprano_only_selection_arranges_nothing(self):
-        """Naming soprano routes to the melody-bearing branch, where there is no tune.
+        """A melody-only selection routes to the melody-bearing branch, where there is
+        no tune.
 
         **This is the one refusal left, and it is not the same claim as the grid's
         deference.** `every_note` used to be silent here too, and that was the defect; a
@@ -671,7 +674,9 @@ class TestChordsOnlyHead(unittest.TestCase):
         union in `arrange_xml_head`, which is why this still returns nothing while
         `alto,tenor` above now returns all four bars.
         """
-        steps, _head, _notes = arrange_xml_head(CHORDS_ONLY, options=ArrangeOptions(parts="melody"))
+        steps, _head, _notes = arrange_xml_head(
+            CHORDS_ONLY, options=ArrangeOptions(request=Request(chord_on="none"))
+        )
         self.assertEqual(steps, [])
 
     def test_a_named_rhythm_places_the_chords(self):
