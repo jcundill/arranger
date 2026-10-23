@@ -18,14 +18,13 @@ from arranger import (
     supported_string_sets,
 )
 from arranger.grip_tables import GRIP_STRING_SETS
-from arranger.options import ArrangeOptions, Request
+from arranger.options import CHORD_NOTES, ArrangeOptions, Request
 from arranger.parts import PART_BASS, PART_CHORD, PART_MELODY, PART_NAMES, PARTS_AUTO
 from arranger.render import _step_cells
 from arranger.step_types import MUTED_CELL
 from arranger.texture import TEXTURE_STYLES
 from tests.support import (
     PROGRESSION,
-    VOICES_ARG,
     bass_comping,
     chord_pcs,
     comping,
@@ -69,15 +68,18 @@ class TestMelodyOnlySelections(unittest.TestCase):
         Before the collapse, `parts="alto,tenor"` on a melody-only texture was
         refused with a warning and the melody handed back to the guitar. With
         the claim keyed on the selection, the same request comps, on every
-        texture, without a refusal.
+        chord content, without a refusal.
         """
-        for texture in TEXTURE_STYLES:
+        for chord_notes in CHORD_NOTES:
             steps = VoiceLeadingEngine().arrange_progression(
-                PROGRESSION, options=ArrangeOptions(parts=VOICES_ARG, texture=texture),
+                PROGRESSION,
+                options=ArrangeOptions(
+                    request=Request(melody=False, chord_notes=chord_notes)
+                ),
             )
-            self.assertTrue(steps, texture)
+            self.assertTrue(steps, chord_notes)
             self.assertTrue(
-                all(not step.melody_voiced for step in steps), texture
+                all(not step.melody_voiced for step in steps), chord_notes
             )
 
     def test_soprano_alone_arranges_the_melody_and_nothing_else(self):
@@ -90,7 +92,7 @@ class TestMelodyOnlySelections(unittest.TestCase):
         statement of it.
         """
         steps = VoiceLeadingEngine().arrange_progression(
-            PROGRESSION, options=ArrangeOptions(parts="melody")
+            PROGRESSION, options=ArrangeOptions(request=Request(chord_on="none"))
         )
         self.assertTrue(steps)
         for step in steps:
@@ -126,7 +128,8 @@ class TestMelodyOnlySelections(unittest.TestCase):
         in `docs/history/one-fact.md`'s build notes shows.
         """
         steps = VoiceLeadingEngine().arrange_progression(
-            [("F4", "NC", "NC"), ("E4", "7", "G7")], options=ArrangeOptions(parts="melody")
+            [("F4", "NC", "NC"), ("E4", "7", "G7")],
+            options=ArrangeOptions(request=Request(chord_on="none")),
         )
         self.assertEqual([s.chord for s in steps], ["NC", "G7"])
         self.assertTrue(steps[0].melody_only)
@@ -141,9 +144,13 @@ class TestMelodyOnlySelections(unittest.TestCase):
         play nothing rather than one note: under a comping selection it is a rest, and
         under a melody-only selection the note of the tune still sounds, alone - which
         is what every slot of that selection is anyway, so the ordering is asserted
-        rather than left to read as a coincidence. Measured under a rhythm of the
-        **ands**, which places no chord on beat 1.0: every slot of the soprano-only
-        arrangement still sounds its note.
+        rather than left to read as a coincidence.
+
+        A melody-only selection names no chord position at all (`chord_on="none"`), so
+        **every** slot is one the chord's rhythm does not name, and each still sounds
+        its note. The rhythm this used to spell beside `parts="melody"` was discarded by
+        the door, so the measurement was of the default all along; naming no position is
+        the same claim made honestly.
         """
         progression = [
             ("F5", "maj7", "Fmaj7"), ("E5", "7", "A7"),
@@ -151,11 +158,10 @@ class TestMelodyOnlySelections(unittest.TestCase):
         ]
         timings = [(0, 1.0, 1.0), (0, 2.5, 0.5), (1, 1.0, 1.0), (1, 3.0, 1.0)]
         steps = VoiceLeadingEngine.arrange_progression(
-                progression, timings=timings, options=ArrangeOptions(
-                    parts="melody",
-                    request=Request(chord_on="1and,2and,3and,4and"),
-                ),
-            )
+            progression,
+            timings=timings,
+            options=ArrangeOptions(request=Request(chord_on="none")),
+        )
         self.assertEqual(len(steps), 4, "an off-grid slot of the tune went missing")
         for step in steps:
             self.assertEqual(len(step.voicing.active_frets()), 1)
