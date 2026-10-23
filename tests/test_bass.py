@@ -655,9 +655,10 @@ class TestCompingCapacity(unittest.TestCase):
                            bass string free for a target"
         texture=targets   166 steps, 127 thumb notes, no warning
 
-    The warning was false on the facts too: those 80 comping shapes sound on strings
-    `(2, 3, 4, 5)` and never once on the low E or the A, so the thumb had the whole
-    bottom of the neck.
+    The warning was false on the facts too: the comping shapes on that head sound within
+    strings `(1, 2, 3)`, `(2, 3, 4)` and `(1, 3, 4)` - never on the low E or the A, so the
+    thumb had the whole bottom of the neck, and never on the high E, which
+    `comping_string_sets` excludes at every arity.
     """
 
     def test_the_capacity_is_measured_at_every_arity(self):

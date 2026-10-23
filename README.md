@@ -482,10 +482,12 @@ python -m arranger head tests/data/synthetic_repeat_slash.musicxml --bars 1-2 \
 ```
 
 ```text
-Gmaj9    D4  5    x-x-x-x-7-7       (comping - B 3 & F# 7; the guitar does not play the tune)
-Gmaj9    D4  5    x-x-x-x-7-7       (comping - B 3 & F# 7; the guitar does not play the tune)
-Gmaj9/F# D4  5    x-x-x-x-7-7       (comping - B 3 & F# 7; the guitar does not play the tune)
+Gmaj9    D4  5    x-x-x-11-12-x     (comping - B 3 & F# 7; the guitar does not play the tune)
+Gmaj9    D4  5    x-x-x-11-12-x     (comping - B 3 & F# 7; the guitar does not play the tune)
+Gmaj9/F# D4  5    x-x-x-11-12-x     (comping - B 3 & F# 7; the guitar does not play the tune)
 ```
+
+**The high E is not on the comping palette** — the same two guide tones, on the G and B strings rather than the B and high E. That string is where the tune itself is pinned first, and a comping part has no tune to put there: a chord whose top voice sits on it is heard as a melody, and heard *above* the horn playing the real one. Dropping it is a palette narrow rather than a cost criterion, so the chord is never lost — it moves.
 
 Expect **the arity** per step — two here, three under `--chord-notes 3` and one under `1` — not a count of layers. The comp falls on the **tune's own onsets**: this bar of the head states three notes (beat 1, the and of 1 and the and of 2), so there are three attacks and no rests. Ask for a rhythm of its own and the positions it does not name become **rests**, emitted rather than dropped so the part keeps its place against the tune — `--chord-on 1,2` on the same bar comps beats 1 and 2 and rests the two offbeats the tune states between them. `step.melody` still carries the horn's note and `step.melody_voiced` is False — the first is the written tune, the second is who sounds it.
 

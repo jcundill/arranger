@@ -328,6 +328,12 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         the chord**, because the chord part's arity is the texture's and not the number of
         parts named - so the two three-note rows state the same voices and differ only in
         the thumb.
+
+        The voices named here are the ones the palette settles on, and the palette no
+        longer offers the high E (`grip_tables.COMPING_EXCLUDED_STRINGS`), so this chord's
+        shell moved to `x-12-x-11-12-x` - a 9th, a 3rd and a 7th where it used to state a
+        3rd, a 5th and a 7th. A pinned expectation is the point: the clause is read off the
+        shape, and the shape is what moved.
         """
         from headxml import arrange_xml_head
 
@@ -335,8 +341,8 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         comping = "; the guitar does not play the tune)"
         expected = {
             "bass": f" (comping - D 5{comping}",
-            "chord": f" (comping - B 3, D 5 & F# 7{comping}",
-            "bass,chord": f" (comping - B 3, D 5 & F# 7{comping}",
+            "chord": f" (comping - A 9, B 3 & F# 7{comping}",
+            "bass,chord": f" (comping - A 9, B 3 & F# 7{comping}",
         }
         for parts, text in expected.items():
             steps, _head, _notes = arrange_xml_head(

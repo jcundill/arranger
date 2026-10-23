@@ -310,8 +310,9 @@ BOTTOM_FOUR = frozenset((0, 1, 2, 3))
 # (`BOTTOM_FOUR`) is about four voices crowding there, and does not apply to one.
 #
 # An invariant a shape can violate is not an invariant, and the one-voice comping shape is
-# what showed it: it is generated on the *top* string of a `duo` pair - strings 5, 4 and 3 -
-# while `tests/test_grips.py` asserted the invariant per *shape* and only for its note
+# what showed it: it is generated on the *top* string of a `duo` pair - strings 4 and 3,
+# once `COMPING_EXCLUDED_STRINGS` has taken the high E off the comping part - while
+# `tests/test_grips.py` asserted the invariant per *shape* and only for its note
 # count, so nothing noticed. Which of the six a given voice *may* use is a separate
 # question, and that question is `BASS_VOICE_STRING_SETS` below.
 SINGLE_NOTE_STRING_SETS: Tuple[Tuple[int, ...], ...] = tuple((s,) for s in range(6))
@@ -501,10 +502,23 @@ def stated_tones(
 INTERVAL_NAMES: Dict[int, str] = {3: "3rd", 8: "b6", 9: "6th"}
 
 
-def comping_string_sets(
-    notes: int, bass_voice: bool = False
-) -> List[Tuple[int, ...]]:
-    """The string sets a comping shape of `notes` voices may occupy, most preferred first.
+# The one string a **comping shape** never sounds, whatever its arity: the high E.
+#
+# It is the string the tune itself is pinned to first (`MELODY_STRING_CHOICES_FULL` tries
+# it before the B and the G), and a comping part has no tune to put there. A shape whose
+# top voice sits on it is therefore heard as a melody - and heard *above* the horn that is
+# playing the real one, which is the opposite of what a comping part is for.
+#
+# Every set that carries it has it as its **soprano** (it is the highest string there is),
+# so the filter below reads as one sentence: a comping shape never puts its top voice on
+# the high E. Dropping the sets is what makes that a property of the palette rather than a
+# criterion in `cost.voicing_cost`; `docs/engine.md` §"`get_comping_voicings`: a chord with
+# no melody on top" holds the register that buys and what it costs in shapes.
+COMPING_EXCLUDED_STRINGS: Tuple[int, ...] = (5,)
+
+
+def _comping_family(notes: int, bass_voice: bool) -> List[Tuple[int, ...]]:
+    """The sets the arity's own family offers, before the high E is taken off them.
 
     **The arity picks the family, rather than truncating one.** Truncating a `shell` set
     to two strings looks free and is not: it yields pairs the library has never vetted -
@@ -516,6 +530,30 @@ def comping_string_sets(
     Three notes take the `shell` sets unchanged, which is the whole point of the shell.
     One note takes the `duo` sets' top strings, since a single note is the limiting case
     of a pair and any of those strings will do.
+    """
+    if notes <= 1:
+        if bass_voice:
+            return list(BASS_VOICE_STRING_SETS)
+        return [(strings[0],) for strings, _ in GRIP_STRING_SETS["duo"]]
+    if notes == 2:
+        return [strings for strings, _ in GRIP_STRING_SETS["duo"]]
+    return [strings for strings, _ in GRIP_STRING_SETS["shell"]]
+
+
+def comping_string_sets(
+    notes: int, bass_voice: bool = False
+) -> List[Tuple[int, ...]]:
+    """The string sets a comping shape of `notes` voices may occupy, most preferred first.
+
+    **The high E is not offered at any arity** (`COMPING_EXCLUDED_STRINGS` carries the
+    reason). The sets that carry it are dropped rather than ranked lower, so the rule is a
+    property of the palette the generator is handed and no criterion has to know about it -
+    and no arity reaches the string, because every family is filtered by the same constant.
+    Which family an arity takes, and why it is not a truncated one, is `_comping_family`.
+
+    **A set is offered once.** Two `duo` pairs share the G string as their top, so the
+    one-note arity would otherwise name the same shape twice - harmless to the ranking, and
+    wrong as a palette: it hands the selector the identical candidate twice.
 
     **`bass_voice` moves the one-note case to the bottom of the neck, and it is a
     different question rather than a different arity.** "A single note is the limiting
@@ -526,17 +564,16 @@ def comping_string_sets(
 
     This is why the flag is a parameter and not a fourth arity: `alto`, `tenor` and `bass`
     all request **one note** and all reach this function, so arity alone cannot tell them
-    apart. See `docs/history/voices-axis.md` §8a for what that cost.
-
-    It applies only at arity one, because that is the only arity where the selection
-    names nothing but the bass: at two or more voices the shape is a pair or a shell
-    whose lowest note is placed by its own string set, and moving that would be
-    re-deciding a shape that is already correct.
+    apart. See `docs/history/voices-axis.md` §8a for what that cost. It applies only at
+    arity one, the only arity whose selection names nothing but the bass: at two or more
+    voices the lowest note is placed by the shape's own string set, and moving that would
+    re-decide a shape that is already correct.
     """
-    if notes <= 1:
-        if bass_voice:
-            return list(BASS_VOICE_STRING_SETS)
-        return [(strings[0],) for strings, _ in GRIP_STRING_SETS["duo"]]
-    if notes == 2:
-        return [strings for strings, _ in GRIP_STRING_SETS["duo"]]
-    return [strings for strings, _ in GRIP_STRING_SETS["shell"]]
+    # One pass, because both rules are about a set that must not be *offered* rather than
+    # about a shape that must not be chosen.
+    offered: List[Tuple[int, ...]] = []
+    for strings in _comping_family(notes, bass_voice):
+        if set(strings) & set(COMPING_EXCLUDED_STRINGS) or strings in offered:
+            continue
+        offered.append(strings)
+    return offered

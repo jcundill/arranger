@@ -111,6 +111,35 @@ class TestCompingGenerator(unittest.TestCase):
                     voicing.fret_span(), GRIP_MAX_SPAN["shell"], voicing.tab_string()
                 )
 
+    def test_the_high_e_is_not_on_the_palette_at_any_arity(self):
+        """The tune's own string is off the comping part's palette.
+
+        `COMPING_EXCLUDED_STRINGS` carries the reason: the high E is where
+        `MELODY_STRING_CHOICES_FULL` pins a tune first, and a comping shape has no tune
+        to put there, so a shape whose top voice sits on it is heard as a melody - above
+        the horn playing the real one.
+
+        Asserted on the **sets** rather than on a chosen tab, because a set that is
+        offered and merely not chosen today is a set that can be chosen tomorrow; and
+        over every arity including the bass voice, so a new family cannot reintroduce it.
+        """
+        for notes in range(1, 5):
+            for bass_voice in (False, True):
+                sets = comping_string_sets(notes, bass_voice)
+                self.assertTrue(sets, (notes, bass_voice))
+                for strings in sets:
+                    self.assertNotIn(5, strings, (notes, bass_voice, strings))
+
+    def test_a_one_note_shape_is_offered_once_per_string(self):
+        """Two `duo` pairs share a top string, and one note is one shape.
+
+        A duplicate is harmless to the ranking and wrong as a palette: it says the same
+        position was offered two ways, and it would hand the selector the identical
+        candidate twice.
+        """
+        sets = comping_string_sets(1)
+        self.assertEqual(len(sets), len(set(sets)), sets)
+
     def test_a_chord_with_no_root_gets_nothing(self):
         """A guide tone is a claim about *this* chord, so no root means no claim.
 
@@ -352,8 +381,9 @@ class TestTheCompingArrangement(unittest.TestCase):
         """The load-bearing claim of the whole feature, stated so it cannot pass by luck.
 
         The first version of this test asserted that no comping step *contains* the
-        melody's pitch, which reads well and is false: measured over three corpus
-        heads, **409 of 2,069 steps do contain it**. That is not a defect but it is
+        melody's pitch, which reads well and is false: measured over the three committed
+        sweep heads under `--no-melody --chord-notes 2`, **37 of the 93 comping steps do
+        contain it**. That is not a defect but it is
         worth being exact about, because the two claims are not the same claim:
 
         - the guitar is not *singing* - the shape was chosen from the chord alone;
@@ -404,6 +434,42 @@ class TestTheCompingArrangement(unittest.TestCase):
                 i for i, fret in enumerate(step.voicing.frets) if fret >= 0
             )
             self.assertIn(active, comping_sets, step.tab_line())
+
+    def test_no_comping_step_over_the_committed_heads_sounds_the_high_e(self):
+        """The palette's rule, asserted at the level the tab is read at.
+
+        `comping_string_sets` drops the high E; this is the same claim about the
+        **step**, because a rule stated over a shape says nothing about a step the
+        engine builds afterwards - and a thumb line merges into the fret vector after
+        selection. It cannot put the string back (the thumb lives on the low E, the A
+        and the D), which is why the assertion is on the whole step's sounding strings
+        rather than on the upper shape's.
+
+        Every arity is swept, since each takes a different family. A count as well as an
+        assertion, because a palette that stopped offering shapes at all would satisfy
+        "nothing sounds the high E" silently.
+        """
+        from tests.support import arranged, sweep_head_paths
+
+        checked = 0
+        for path in sweep_head_paths():
+            for notes in ("1", "2", "3"):
+                steps, _head, _notes = arranged(
+                    path, request=Request(melody=False, chord_notes=notes)
+                )
+                for step in steps:
+                    active = [
+                        i for i, fret in enumerate(step.voicing.frets) if fret >= 0
+                    ]
+                    if not active:
+                        continue
+                    checked += 1
+                    self.assertNotIn(
+                        5,
+                        active,
+                        f"{path} --chord-notes {notes}: {step.tab_line()}",
+                    )
+        self.assertGreater(checked, 50, "the sweep found too few comping steps")
 
     def test_the_step_still_carries_the_written_melody(self):
         """It is the horn's line, and the band lines up against it.

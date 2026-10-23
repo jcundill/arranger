@@ -1666,6 +1666,18 @@ note meant.
 that carry no information about the chord's quality. That is why only the `shell` family is
 offered at all.
 
+**The high E is off the palette, at every arity.** `grip_tables.COMPING_EXCLUDED_STRINGS`
+carries the reason: that string is where the tune itself is pinned first
+(`MELODY_STRING_CHOICES_FULL` tries it before the B and the G), and a comping part has no
+tune to put there — so a shape whose top voice sits on it is heard as a melody, and heard
+*above* the horn that is playing the real one. It is a **palette narrow rather than a cost
+criterion**: the sets that carry the string are dropped rather than ranked lower, so nothing
+in `cost.voicing_cost` knows about the rule, and no other arity can reach it because every
+family is filtered by the same constant. Measured over the three committed sweep heads under
+the default comping request, the steps whose top voice lands above the melody's fall from
+**37 to 12 of 85** (and from 20 to 8 of 51 at `--chord-on 1,2`); no comping step sounds the
+string at any arity.
+
 **A quality with no readable root gets nothing**, on the same rule as every other
 guide-tone generator here: a shell is a claim about *this* chord's 3rd and 7th, and guessing
 them without a root is how a wrong note gets into the tab.
@@ -1676,21 +1688,25 @@ matching family, and holds a span within that family's `GRIP_MAX_SPAN`. The drop
 is "the melody is on the topmost string", and it is dropped for the only reason there is:
 there is no melody.
 
-Measured over 2,069 comping steps:
+Measured over the 93 comping steps of the three committed sweep heads, under
+`--no-melody --chord-notes 2`:
 
 ```
-notes per step          2        (2069 of 2069)
-melody_voiced           False    (2069 of 2069)
-supported string set    yes      (2069 of 2069)
+notes per step          2        (93 of 93)
+melody_voiced           False    (93 of 93)
+supported string set    yes      (93 of 93)
+high E sounding         0
 over GRIP_MAX_SPAN      0
 wrong notes             0
 guide tone missing      0
-unreadable chord        610      (no tone set at all; the library's own rule is not to
-                                  judge a chord it could not read - see cost.voicing_cost)
+unreadable chord        0        (none of the committed heads writes a symbol the library
+                                  cannot read; the row is here because the library's own
+                                  rule is not to judge a chord it could not read - see
+                                  cost.voicing_cost)
 ```
 
 **What is *not* claimed, measured rather than assumed.** A comping step may well contain the
-melody's own pitch: **409 of 2,069 steps do.** That is coincidence, not the guitar
+melody's own pitch: **37 of those 93 steps do.** That is coincidence, not the guitar
 singing — the melody's pitch class is often a chord tone the shell needs anyway. What the
 axis guarantees is that the shape was *chosen from the chord alone*, and that
 `step.melody_voiced` is `False`. An earlier version of this document and of the test suite

@@ -239,8 +239,10 @@ def comping_capacity(notes: int, bass_voice: bool = False) -> int:
     route never uses - `bass_allowed("uniform", "root,5th,approach,nearest")` refuses
     `melody="alto,tenor", bass="root,5th,approach,nearest"` under the default texture.
 
-    Every comping shape on that head sounds on strings `(2, 3, 4, 5)` and never once on
-    the low E or the A, so the refusal was false on the facts too.
+    The warning was false on the facts too: the comping shapes on that head sound within
+    strings `(1, 2, 3)`, `(2, 3, 4)` and `(1, 3, 4)` - never on the low E or the A, so
+    the thumb had the whole bottom of the neck, and never on the high E, which
+    `comping_string_sets` excludes at every arity.
 
     **Derived from the generator rather than listed**: a family that can be voiced is
     not a list of combinations somebody has to remember to extend. The worst case over
@@ -255,7 +257,8 @@ def comping_capacity(notes: int, bass_voice: bool = False) -> int:
     **Never zero, at any arity** - which is the finding rather than a coincidence, and
     the reason `bass_allowed` cannot refuse this route at all: the comping shapes are
     built from the `duo` and `shell` families, which live on the top half of the neck
-    precisely because the bottom of it belongs to the thumb.
+    precisely because the bottom of it belongs to the thumb - and the very top string is
+    off the palette too (`grip_tables.COMPING_EXCLUDED_STRINGS`).
 
     A one-note `bass_voice` shape is the one case that reaches the bottom of the neck
     (`BASS_VOICE_STRING_SETS` is `(0, 1, 2)`), and it still leaves two strings free -

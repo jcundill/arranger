@@ -861,10 +861,14 @@ def _search_comping_voicings(request: CompingRequest) -> List[Voicing]:
     instead of against a pinned note. Because the window is exactly `GRIP_MAX_SPAN`,
     the search stays exhaustive within the playability invariant.
 
-    Only the `shell` string sets are offered, and that is the musical claim rather
-    than a limitation: with no melody to support, a fourth voice would be the root or
-    the 5th - the two notes that carry no information about the chord's quality. The
-    guide tones are what state whether the ear hears a major or a minor chord.
+    The family is the arity's own, read from `comping_string_sets`: a pair is a `duo`, a
+    three-voice shape is a `shell`, and a one-note inner voice takes the `duo` tops. The
+    three-voice claim is the musical one rather than a limitation: with no melody to
+    support, a fourth voice would be the root or the 5th - the two notes that carry no
+    information about the chord's quality. The guide tones are what state whether the ear
+    hears a major or a minor chord. That function also drops the **high E** at every
+    arity, so a comping shape never puts its top voice on the string a tune would be
+    pinned to, where it would be heard as a melody above the horn playing the real one.
 
     `notes` is the **arity asked for**, and it is honoured rather than treated as a
     preference: `2` is the alto-and-tenor comping pair, `3` the shell. A string set too
@@ -880,11 +884,12 @@ def _search_comping_voicings(request: CompingRequest) -> List[Voicing]:
     a 3rd). Both are needed and neither is enough: a low 3rd is still not a bass note.
 
     Every candidate sounds only chord tones, holds a fret span of at most
-    `GRIP_MAX_SPAN["shell"]`, and occupies one string set from `GRIP_STRING_SETS["shell"]`
-    - or, for a bass voice, one from `BASS_VOICE_STRING_SETS` / the `duo` tops. **Unlike
-    every other candidate in the library, none of these carries a melody**, so the
-    invariant that a voicing sounds the melody on its topmost string does not apply to
-    them and is not asserted - see `tests/test_comping.py`.
+    `GRIP_MAX_SPAN["shell"]`, and occupies one string set from `comping_string_sets` -
+    the arity's family (`duo` pairs, `shell` sets, `duo` tops, or
+    `BASS_VOICE_STRING_SETS` for a bass voice) **minus the high E**, for the reason that
+    function gives. **Unlike every other candidate in the library, none of these carries
+    a melody**, so the invariant that a voicing sounds the melody on its topmost string
+    does not apply to them and is not asserted - see `tests/test_comping.py`.
 
     `fret_min`/`fret_max` bound the search the way they bound the selector everywhere
     else: as a **preference**, never a filter. A chord whose comping shape sits
@@ -945,8 +950,8 @@ def _comping_palette(request: CompingRequest) -> Tuple[ShapeSnapshot, ...]:
 
     The enumeration is a **pure function of the request**, and the request is exactly
     what it reads: the chord, the neck window, the arity and the two degree flags. The
-    rest - `GRIP_STRING_SETS`, `BASS_VOICE_STRING_SETS`, `GRIP_MAX_SPAN`,
-    `NECK_FRET_MIN`, `NECK_FRET_MAX`, `STANDARD_TUNING` and
+    rest - `GRIP_STRING_SETS`, `BASS_VOICE_STRING_SETS`, `COMPING_EXCLUDED_STRINGS`,
+    `GRIP_MAX_SPAN`, `NECK_FRET_MIN`, `NECK_FRET_MAX`, `STANDARD_TUNING` and
     `ChordParser.CHORD_TONES_FROM_ROOT` - is fixed when this module is imported. That is
     what makes the key sufficient and the memo need no invalidation, and it is why those
     tables must not be reassigned at runtime. Same argument, and the same snapshot, as
