@@ -538,7 +538,7 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         # (`--chord-fills`) are the newest addition: a fill is a comping step with no
         # melody beside it, which is why it counts here and nowhere else. The union's gate
         # reading the **selection** took the other 372: a singing selection's axis spelling
-        # no longer comps the bars its tune does not enter - `chord1`, `targets` and
+        # does not comp the bars its tune does not enter - `chord1`, `targets` and
         # `bass=walk` each drop to the default's 28 comping steps - and a lone bass line
         # has no chord part to state at such a position. The last **20** are the release
         # instant: a note sounds over `[onset, end)`, so the union admits the position
@@ -564,7 +564,7 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
 
         The witness is a **named rhythm**. The melody-anchored union withholds a
         position the tune is still holding (§9.2), and the `Am7/D` bars are exactly such
-        a hold, so an arrangement that follows the tune no longer states them at all. A
+        a hold, so an arrangement that follows the tune states nothing there at all. A
         requested rhythm states its positions whatever the tune is doing, which is what
         keeps the slash-bass question asked.
         """

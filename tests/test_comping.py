@@ -1094,11 +1094,9 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
         barely visits still carries four quarters, and the part has more steps than the
         head had notes.
 
-        **Compared against `bass_on="none"` and not against a texture.** The first draft of
-        this test compared `uniform` against `targets` and failed, which was the fix
-        working: both now build the same union, because the texture no longer reaches
-        the decision. A test asserting the texture *changes* the step count here would
-        have pinned the bug.
+        **Compared against `bass_on="none"` and not against a texture.** Both textures build
+        the same union, because the texture does not reach this decision. A test asserting
+        the texture *changes* the step count here would pin a bug.
         """
         walked = self.comped(bass_on="every-beat", bass_notes="walk")
         silent = self.comped(bass_on="none")

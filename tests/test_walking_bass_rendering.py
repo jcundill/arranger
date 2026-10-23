@@ -217,7 +217,7 @@ class TestWalkingBassRendering(unittest.TestCase):
 
     def test_the_annotation_names_the_bass_and_its_role(self):
         """
-        The role is printed because the thumb is no longer uniformly chord tones, so a
+        The role is printed because the thumb is not uniformly chord tones, so a
         reader counting strings would wonder why the bass is not playing the chord.
 
         The connect note on the fill is `E2`, not `E3`: the hand is at the open position

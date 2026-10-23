@@ -684,7 +684,7 @@ class TestBassPlacement(unittest.TestCase):
         fingers, so every placement it refuses is more than five frets from the hand's
         lowest fret, and
         every one it allows is within five - which means a refused candidate can never be
-        nearer than an accepted one. Proximity is no longer able to override playability,
+        nearer than an accepted one. Proximity cannot override playability,
         by construction rather than by ordering.
 
         What is worth pinning is the reach half of that: the same note, string and fret
@@ -1073,7 +1073,7 @@ class TestASingleNoteStepHasNothingToHold(unittest.TestCase):
         self.assertEqual(
             len(fill.voicing.upper_midi_notes()),
             1,
-            "the premise changed: bar 2 beat 2.5 is no longer a single note",
+            "the fixture must have one note at bar 2 beat 2.5",
         )
         self.assertFalse(
             target.repeated,

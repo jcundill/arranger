@@ -2,7 +2,7 @@
 
 `GRIP_STRING_SETS`, the soprano-string choices, the neck window and the known gaps are
 properties of the tables and not of any one shape, so they are asked here rather than
-through a generated voicing: a set the engine no longer offers still has to answer
+through a generated voicing: every set the tables hold has to answer
 `finger_skip_count`, and a window has to admit a position no family in
 `GRIP_PREFERENCE` reaches. What the families build is `test_grips.py`.
 """
@@ -82,7 +82,7 @@ class TestStringSetTable(unittest.TestCase):
         the asymmetry the rule is stated with.
 
         The four sets the ban removed are asked directly, since the point of the rule is
-        that it flags them and not merely that the table no longer lists them.
+        that it flags them rather than merely that the table does not list them.
         """
         self.assertEqual(THUMB_REACH_STRINGS, frozenset((0, 1, 2, 3)))
         self.assertEqual(
@@ -481,7 +481,7 @@ class TestKnownTableGaps(unittest.TestCase):
         The two pools are built from qualities that still differ in reach: a C13 with the
         9th in the melody is now voiced correctly, while a C13 whose melody has no
         playable four-note shape at all still yields the impure quality-only fallback
-        further down the neck. If either pool ever empties the ordering is no longer being
+        further down the neck. If either pool ever empties the ordering stops being
         tested, so both are asserted present.
         """
         tones = set(ChordParser.get_chord_tones("13", "C13"))

@@ -1302,9 +1302,9 @@ class TestTheFamilyIsNotASpelling(unittest.TestCase):
     def test_the_palette_is_still_the_generation_order(self):
         """`GRIP_PREFERENCE` survives as the order candidates are generated in.
 
-        It is no longer a caller's preference list, but an exact tie between two
-        candidates still goes to the family generated first - so the tuple is the
-        ranking and `cost.best_voicing` is its argmin.
+        It is the engine's own order rather than a caller's preference list, but an exact
+        tie between two candidates still goes to the family generated first - so the tuple
+        is the ranking and `cost.best_voicing` is its argmin.
         """
         self.assertEqual(
             tuple(sorted(GRIP_PREFERENCE, key=GRIP_PREFERENCE.index)), GRIP_PREFERENCE
@@ -1320,9 +1320,9 @@ class TestPartialHarmonisation(unittest.TestCase):
         renderers said so, because a chord name above a duo describes a harmony that is
         not fully sounding.
 
-        `drop24` in the palette then gave F7 under F5 a complete four-note chord -
-        `x-12-13-x-13-13` - where only the duo fitted before, so this test asserted that
-        nothing in the progression was partial any more. It is no longer four notes.
+        `drop24` in the palette gives F7 under F5 a complete four-note chord -
+        `x-12-13-x-13-13` - where only the duo fits, so nothing in the progression is
+        partial. This one is not four notes.
 
         **That is the ban's cost, and it is asserted rather than re-pinned away.**
         `x-12-13-x-13-13` was one of the four inner-skip `drop24` sets, removed because a

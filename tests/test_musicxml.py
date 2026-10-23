@@ -343,7 +343,7 @@ class TestMusicXMLVoices(MusicXMLTestCase):
 
         The pitch list is the arrangement itself on a notation staff; the *fretting*
         is `tabgp`'s job now, so this is checked on the pitches rather than on
-        `<fret>`/`<string>`, which the document no longer contains.
+        `<fret>`/`<string>`, which the document does not contain.
 
         Each note is written **an octave above** the pitch it sounds - guitar's own
         transposition - so the written list is `_sounding` raised by

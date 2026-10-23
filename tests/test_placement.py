@@ -575,9 +575,9 @@ class TestTheGripDistribution(unittest.TestCase):
         # pre-existing heads' distribution is unchanged. A moved count here still
         # means a shape moved; the fixture delta is the only expected difference.
         #
-        # **387, nine fewer than before the request redesign**, and the nine are all
-        # `shell`: they were the default union's comping steps in the tune's rests,
-        # which `head FILE` no longer invents (`docs/history/rhythm-request.md`).
+        # **387**, and the nine that are not counted are all `shell`: they are the default
+        # union's comping steps in the tune's rests, which `head FILE` does not invent
+        # (`docs/history/rhythm-request.md`).
         self.assertEqual(total, 387)
         self.assertEqual(
             counts,
@@ -592,8 +592,8 @@ class TestTheGripDistribution(unittest.TestCase):
                 "duo": 4,
             },
         )
-        # The shell count is the comping steps the default grid no longer states under a
-        # note the tune is still holding (§9.2); a named grid still states them, which is
+        # The shell count is the comping steps the default grid does not state under a
+        # note the tune is still holding (§9.2); a named grid states them, which is
         # why this table moves when the timeline does. `melody` is the one key that is not
         # a family - a step whose chord nothing could voice - and the set assertion below
         # is what keeps the table a distribution rather than a list of survivors.

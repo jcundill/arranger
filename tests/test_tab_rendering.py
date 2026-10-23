@@ -161,9 +161,9 @@ class TestFormatProgression(unittest.TestCase):
     def test_a_short_explanation_is_one_line_per_step(self):
         """A step whose explanation fits the width is one line, as it always was.
 
-        The renderer is no longer "one line per step" for *every* step - a long
-        explanation continues below its step - but nothing about the short case changed:
-        the four columns are on the one line, with the annotation trailing them.
+        The renderer is not "one line per step" for *every* step - a long explanation
+        continues below its step - but nothing about the short case differs: the four
+        columns are on the one line, with the annotation trailing them.
         """
         steps = self.engine.arrange_progression([("F4", NO_CHORD, NO_CHORD)])
         lines = format_progression(steps).split("\n")
@@ -197,8 +197,8 @@ class TestFormatProgression(unittest.TestCase):
             self.assertIn(step_annotation(step).strip(), line)
             self.assertIn(step.chord, line)
 
-    def test_vertical_is_no_longer_an_argument(self):
-        """`format_progression` no longer takes `vertical`, and says so by raising.
+    def test_vertical_is_not_an_argument(self):
+        """`format_progression` does not take `vertical`, and says so by raising.
 
         The inversion of the test this replaces, which asserted that `vertical=True`
         gave seven lines per step. That branch is gone: the compact one-line form is

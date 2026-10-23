@@ -352,7 +352,7 @@ class TestRoles(unittest.TestCase):
         for a texture, and the backward-compatibility guarantee would be a fiction.
         The set is compared rather than the order: the palette is read off
         `GRIP_STRING_SETS` (families at *this* arity first), while
-        `GRIP_PREFERENCE` is the authored ranking, and the tuple no longer names a
+        `GRIP_PREFERENCE` is the authored ranking, and the tuple does not name a
         family - so an order difference is not a behavioural one here. The order
         that *is* load-bearing is the generation order, and that is pinned by
         `TestBackwardCompatibility` and by the exact fingerings in `test_grips.py`:
@@ -846,7 +846,7 @@ class TestBackwardCompatibility(unittest.TestCase):
 
         The very last fill is `x-x-10-9-10-x` rather than `x-x-x-5-5-5`: span 0 and
         span 1 are bucketed together at the span index of `voicing_cost`, so a
-        zero-span barre no longer beats a one-fret shape sitting where the hand
+        zero-span barre does not beat a one-fret shape sitting where the hand
         already is. Both are legal and both are tight - the previous fill is at
         frets 9-10 - so the selector holds the position instead of jumping to fret 5
         for the last chord of the phrase. Span 2 and above still outrank position

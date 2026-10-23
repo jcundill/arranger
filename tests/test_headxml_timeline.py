@@ -603,10 +603,10 @@ class TestChordSlots(unittest.TestCase):
     def test_the_default_grid_adds_no_bar_a_head_does_not_have(self):
         """`synthetic_cut_time` and `synthetic_tab_export` have no melody-less bar, so no bar is added.
 
-        **The bar half of the default grid's change, and the count is no longer the claim.**
+        **The bar half of the default grid's change, and the count is not the claim.**
         A bar the melody never enters is still the only thing the union adds *wholesale*;
         the positions it adds inside a bar the tune occupies come from the bar's own
-        subdivision, so the step count is no longer the skeleton's. What these two fixtures
+        subdivision, so the step count is not the skeleton's. What these two fixtures
         pin is that every bar that appears is one the file wrote, and that every written
         note is still a step at its own position.
         """

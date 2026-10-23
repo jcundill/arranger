@@ -181,11 +181,10 @@ class TestReductionAndArranging(unittest.TestCase):
     def test_a_chord_change_sounds_under_every_note_it_governs(self):
         """Two chords in the bar, six notes, and the harmony changes part-way through.
 
-        **This inverts the test that stood here**, which asserted the `chords` strategy
-        gave one slot per chord change - two slots for these six notes. That was a
-        reduction of the melody, which is the thing this module no longer does: the
-        soprano plays the tune. What survives is the part of it that was not about
-        reduction at all - **the harmony in force is right on every note**, and the
+        The `chords` strategy gives one slot per chord change, not one per melody note: a
+        reduction of the melody would put something other than the tune on the soprano.
+        What this asserts is the part that is not about reduction at all - **the harmony
+        in force is right on every note**, and the
         change lands where the file put it rather than on a downbeat.
         """
         head = self.load(

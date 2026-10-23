@@ -450,7 +450,7 @@ class TestTriadSusAndAlteredQualities(unittest.TestCase):
         correct.
 
         The *first* voicing is pinned exactly, because that is what a caller who takes
-        `[0]` gets and it is the idiomatic fingering. The full list is no longer pinned:
+        `[0]` gets and it is the idiomatic fingering. The full list is not pinned:
         a four-note shape may place its bass on a lower string than the block would
         (the bass-skipping sets in GRIP_STRING_SETS), which adds a second, equally
         correct candidate for the same melody. Asserting the whole list would make this

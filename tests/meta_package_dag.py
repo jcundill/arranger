@@ -20,7 +20,7 @@ Three things are asserted:
 `ALLOWED_EDGES` is the honest escape hatch: a list of named edges rather than a
 blanket exemption, because the split could not be done without them and naming
 each one is what makes a seventh visible. It is empty now - every import points
-up the order - and a stale entry fails, so an edge that is no longer needed
+up the order - and a stale entry fails, so an edge that is not needed
 cannot sit there as permission for the next one.
 """
 

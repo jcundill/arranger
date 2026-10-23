@@ -32,7 +32,7 @@ The other tests here are structural rather than numerical. A name another module
 imports is public, whatever its spelling says - and the rule covers the two ways
 to import it: the name itself, and a module alias followed by a private
 attribute. Both allowlists fail in both directions, so a new reach is caught and
-an entry that is no longer used cannot rot there.
+an entry that is not used cannot rot there.
 
 The axis graph is the third kind. Each axis is answered by exactly one function,
 in the module that owns its vocabulary, and this file reads those signatures to
@@ -100,9 +100,9 @@ class Budget:
 # function yet gets a small policy ceiling rather than a measurement, so the
 # first method it grows is still a deliberate size.
 BUDGETS: Dict[str, Budget] = {
-    # `__dir__` grew from `sorted(__all__)` to `__all__` plus the submodules the facade
-    # binds: they are no longer in `__all__`, so returning that list alone would hide a
-    # path (`arranger.grips`) that resolves. The ceiling is re-measured, deliberately.
+    # `__dir__` returns `__all__` plus the submodules the facade binds: they are not in
+    # `__all__`, so returning that list alone would hide a path (`arranger.grips`) that
+    # resolves.
     "arranger/__init__.py": Budget(3, 12, 1),
     "arranger/__main__.py": Budget(5, 10, 2),
     # The printing front end, measured as it stood when it moved out of the facade:
@@ -220,7 +220,7 @@ ALLOWED_PRIVATE_ATTRIBUTES: Set[str] = set()
 # is named. TEST_SEAMS records every private name a test file imports from an
 # arranger module, so a refactor that renames or removes one fails here rather
 # than silently breaking a test. The test below fails in both directions: a new
-# reach is caught, and a seam that no longer exists cannot rot.
+# reach is caught, and a seam that does not exist cannot rot.
 #
 # Each entry is `test_module -> arranger.module._private_name`, the same shape
 # the encapsulation meter uses for library modules.
@@ -561,7 +561,7 @@ class TestTheEncapsulationRule(unittest.TestCase):
         """No private name crosses a module boundary outside the recorded debt.
 
         The allowlist is the debt from before the rule, and it shrinks. An entry
-        that is no longer needed fails here too, so the list cannot quietly keep
+        that is not needed fails here too, so the list cannot quietly keep
         a name that has since been made public.
         """
         found: Set[str] = set()

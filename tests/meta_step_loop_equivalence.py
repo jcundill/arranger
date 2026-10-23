@@ -190,9 +190,8 @@ class TestTheTwoLoopsAgree(unittest.TestCase):
     def test_a_request_the_axes_refuse_agrees(self):
         """Both loops refuse one request with one message.
 
-        **Rewritten from `test_a_grip_the_texture_never_uses_agrees`.** The request used to
-        be a `grips=` narrowing; the family axis is deleted, so what is compared here is the
-        bass refusal - a bass *content* beside a layer the request leaves silent. One entry
+        The request compared here is a refusal rather than a narrowing: a bass *content*
+        beside a layer the request leaves silent. One entry
         point silently accepting what the other refuses is what this catches.
         """
         for label, request in (

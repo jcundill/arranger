@@ -691,7 +691,7 @@ def a_shape_on(strings):
 
     Frets are all zero - nothing here is about where the hand is - so the shape's *strings*
     are the only thing under test. Built rather than taken from a generator because these
-    questions are asked of sets the tables may no longer offer: `finger_skip_count` is what
+    questions are asked of sets the tables may not offer: `finger_skip_count` is what
     flagged the four removed `drop24` sets, and a test that could only ask about offered
     sets could not show what the rule costs.
     """
