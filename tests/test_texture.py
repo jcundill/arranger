@@ -14,6 +14,7 @@ dependency and no database.
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import io
 import unittest
 from typing import List, Optional, Tuple
@@ -59,7 +60,7 @@ from arranger.grips import (
     _interval_offsets,
 )
 from arranger.grouping import COMMON_TIME
-from arranger.options import ArrangeOptions
+from arranger.options import CHORD_NOTES, CHORD_NOTES_FULL, ArrangeOptions
 from arranger.parts import PART_BASS, PART_CHORD, PART_MELODY, PART_NAMES
 from arranger.texture import (
     _FILL_THINNING,
@@ -474,7 +475,7 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
         """
         self.assertEqual(resolve_texture_grips(ROLE_TARGET, (), has_thumb=True), ())
         steps = VoiceLeadingEngine.arrange_progression(
-            MINOR_CADENCE, options=ArrangeOptions(parts=PART_MELODY)
+            MINOR_CADENCE, options=ArrangeOptions(request=Request(chord_on="none"))
         )
         self.assertTrue(steps, "the arrangement must not be lost")
         for step in steps:
@@ -1042,26 +1043,28 @@ class TestTimingsDefensive(unittest.TestCase):
 
 
 class TestMelodyOnlySelections(unittest.TestCase):
-    """`parts="melody"` and `parts="melody,bass"`: the tune alone, and the tune
-    with a thumb under it.
+    """The tune alone, and the tune with a thumb under it.
 
     Both answer "lead sheet in, melody out". They are **part selections** rather
     than grips because what they change is *which parts sound at all* - a grip
     would have to win a cost comparison it should not be in, and
     `GRIP_PREFERENCE` deliberately leaves `melody` out for exactly that reason.
-    They were the `melody` and `melody_bass` textures, then the `voices=` axis,
-    and they are the `parts` axis now - see `docs/history/one-fact.md` and
-    `docs/history/parts.md`.
+    See `docs/history/one-fact.md` and `docs/history/parts.md`.
     """
 
     PROGRESSION = BUT_NOT_FOR_ME
     TIMINGS = BUT_NOT_FOR_ME_TIMINGS
 
-    def arrange(self, parts, **kwargs):
+    #: The two selections this class is about, as the requests that derive them:
+    #: the tune alone, and the tune with a walk under it.
+    MELODY_ALONE = Request(chord_on="none")
+    MELODY_AND_BASS = Request(chord_on="none", bass_on="every-beat", bass_notes="walk")
+
+    def arrange(self, request):
         return VoiceLeadingEngine.arrange_progression(
             self.PROGRESSION,
             timings=self.TIMINGS,
-            options=ArrangeOptions(parts=parts, **kwargs),
+            options=ArrangeOptions(request=request),
         )
 
     def test_every_slot_is_the_melody_alone(self):
@@ -1073,8 +1076,11 @@ class TestMelodyOnlySelections(unittest.TestCase):
         test is that the **left hand** plays one note, and that is what the
         upper voices are.
         """
-        for parts in ("melody", "melody,bass"):
-            steps = self.arrange(parts)
+        for parts, request in (
+            ("melody", self.MELODY_ALONE),
+            ("melody,bass", self.MELODY_AND_BASS),
+        ):
+            steps = self.arrange(request)
             self.assertTrue(steps, parts)
             for step in steps:
                 self.assertEqual(step.grip, "melody", f"{parts} {step.melody}")
@@ -1098,9 +1104,12 @@ class TestMelodyOnlySelections(unittest.TestCase):
                 )
 
     def test_the_two_differ_only_in_the_thumb_line(self):
-        """`melody` alone has no bass; `melody,bass` walks one under every bar."""
-        for parts in ("melody", "melody,bass"):
-            steps = self.arrange(parts)
+        """The tune alone has no bass; the tune with a bass walks one under every bar."""
+        for parts, request in (
+            ("melody", self.MELODY_ALONE),
+            ("melody,bass", self.MELODY_AND_BASS),
+        ):
+            steps = self.arrange(request)
             with_bass = [s for s in steps if s.bass is not None]
             if parts == "melody":
                 self.assertEqual(with_bass, [], "melody alone must not carry a thumb")
@@ -1122,31 +1131,40 @@ class TestMelodyOnlySelections(unittest.TestCase):
         it, which is what `is_bass_only` decides from the role - so a bar of running
         notes must still sound every note it was given.
         """
-        played = [s.melody for s in self.arrange("melody,bass") if not s.bass_only]
+        played = [
+            s.melody for s in self.arrange(self.MELODY_AND_BASS) if not s.bass_only
+        ]
         self.assertEqual(
             played,
             [t[0] for t in self.PROGRESSION],
             "melody,bass dropped, duplicated or reordered the melody",
         )
 
-    def test_no_texture_can_thicken_a_melody_only_selection(self):
-        """A melody-only selection states the tune whatever the *other* axes say.
+    def test_no_chord_content_can_be_asked_of_a_melody_only_selection(self):
+        """A melody-only selection refuses a chord content choice, rather than ignoring it.
 
-        The loop hands it an empty chord palette without consulting the texture at
-        all - the selection means the left hand plays no chord whatever the arity
-        asks for - so no arity can add a voice to a line nobody asked to harmonise.
-
-        **Inverted rather than deleted.** It used to loop over `grips=("duo",)`,
-        `("shell",)` and so on, asserting the same thing about the axis that was
-        deleted; `texture` is the axis that survived, and it is the one that can
-        change how many notes the chord part states.
+        **Inverted rather than deleted** (AGENTS.md trap 5), twice over. It used to loop
+        over `grips=("duo",)` and so on, asserting that the deleted grip axis could not
+        thicken a melody-only selection; `texture` replaced it and asserted the same
+        thing. Both were *accepted and ignored*, which is what the request redesign
+        removes: a question about a layer the request leaves silent is answered with a
+        reason, so a `chord_notes` choice beside `chord_on="none"` is refused - and no
+        arity can be asked of a line nobody asked to harmonise. `chord_notes="full"` is
+        the default rather than a choice, so it is not refused.
         """
-        for parts in ("melody", "melody,bass"):
-            for texture in TEXTURE_STYLES:
-                steps = self.arrange(parts, texture=texture)
-                self.assertTrue(steps, f"{parts} {texture} produced nothing")
-                for step in steps:
-                    self.assertEqual(step.grip, "melody", f"{parts} {texture}")
+        for name, request in (
+            ("melody", self.MELODY_ALONE),
+            ("melody,bass", self.MELODY_AND_BASS),
+        ):
+            for chord_notes in CHORD_NOTES:
+                if chord_notes == CHORD_NOTES_FULL:
+                    continue
+                with self.subTest(selection=name, chord_notes=chord_notes):
+                    with self.assertRaises(ValueError) as caught:
+                        self.arrange(
+                            dataclasses.replace(request, chord_notes=chord_notes)
+                        )
+                    self.assertIn("chord-on=none", str(caught.exception))
 
     def test_a_solo_note_is_a_supported_single_string_set(self):
         """A solo note is a singleton, and the invariant now says so.
@@ -1167,7 +1185,7 @@ class TestMelodyOnlySelections(unittest.TestCase):
         Measured alongside: the same gap existed for the one-note *comping* shape, which
         `_SINGLE_NOTE_STRING_SETS` also closes; see `tests/test_comping.py`.
         """
-        for step in self.arrange("melody"):
+        for step in self.arrange(self.MELODY_ALONE):
             self.assertEqual(len(step.voicing.active_frets()), 1)
             self.assertIn(
                 frozenset(step.voicing.active_strings),
