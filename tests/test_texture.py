@@ -283,8 +283,8 @@ class TestRoles(unittest.TestCase):
 
         **This assertion was inverted, not deleted.** It used to name the one
         empty palette a texture *did* carry - `walking_bass`'s fill - and assert
-        that it was the only one. `walking_bass` is not a texture any more (it is
-        `bass="BASS_ALL_RULES"` over `texture="targets"`), and the arity rule leaves
+        that it was the only one. `walking_bass` is not a texture any more (it is the full
+        bass vocabulary over `chord_notes="targets"`), and the arity rule leaves
         no row that can be empty: a fill one thinner than a one-note target is the
         `melody` entry rather than nothing. What survives is the rule the test was
         for, and it is now stated over the whole palette table rather than over a
@@ -322,7 +322,7 @@ class TestRoles(unittest.TestCase):
         It used to be a texture of its own (`texture="walking_bass"`), which made
         one name cover two claims: which note the thumb states (a *bass* fact) and
         how many notes the chord part states (a *texture* fact). `docs/history/parts.md` §6
-        splits them - `bass="BASS_ALL_RULES"` with `texture="targets"` - and the
+        splits them - the full bass vocabulary with `chord_notes="targets"` - and the
         arrangement is the same, so what is asserted here is the pair rather than
         the one spelling.
         """
@@ -596,7 +596,7 @@ class TestTheRightHandBudget(unittest.TestCase):
     only, and only while a thumb line is running.
 
     A target's palette is the arity ceiling, which is where a four-string family comes
-    from: `texture="chord3"` with a thumb states four strings unless the budget is
+    from: `chord_notes="3"` with a thumb states four strings unless the budget is
     applied, because a *fixed* arity is what the caller asked for and the thumb is a
     separate question. `derived_arity` counts the thumb into the ceiling; the fixed rows
     do not, and that is exactly the gap this rule closes.
@@ -636,7 +636,7 @@ class TestTheRightHandBudget(unittest.TestCase):
 
         The whole defect is a four-note target voiced on a beat the thumb is also playing.
         A **fixed** arity is the caller's own request, so the thumb does not reduce it the
-        way `derived_arity`'s ceiling folds the thumb in: `texture="chord3"` still names
+        way `derived_arity`'s ceiling folds the thumb in: `chord_notes="3"` still names
         the four-string families, and `resolve_texture_grips` is the only thing between
         that palette and a five-string step. Both halves are asserted - the fixed row
         that needs the rule, and the derived row that is already inside the budget.

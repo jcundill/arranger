@@ -643,11 +643,11 @@ class TestCompingCapacity(unittest.TestCase):
     warning telling the player to change a setting that could not affect the result.
 
     Measured on `tests/data/synthetic_cut_time.mxl` before the fix, with
-    `parts="chord", bass="root,5th,approach,nearest"`:
+    `Request(melody=False, bass_on="every-beat", bass_notes="walk")`:
 
-        texture=uniform    80 steps, **0 thumb notes**, warning "uniform leaves no
-                           bass string free for a target"
-        texture=targets   166 steps, 127 thumb notes, no warning
+        chord_notes=full     80 steps, **0 thumb notes**, warning "uniform leaves no
+                             bass string free for a target"
+        chord_notes=targets 166 steps, 127 thumb notes, no warning
 
     The warning was false on the facts too: the comping shapes on that head sound within
     strings `(1, 2, 3)`, `(2, 3, 4)` and `(1, 3, 4)` - never on the low E or the A, so the

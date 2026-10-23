@@ -801,9 +801,9 @@ def _shell_voicing(
         # the **first** guide tone (the 3rd, or the 4th on a sus chord) and drops the second,
         # which is the same preference order `_duo_offsets` already applies.
         #
-        # Refusing here would instead make `texture="chord1"` fall through to the ordinary
-        # melody-bearing route, which states the horn's line on the guitar on every step
-        # and hands it back - the opposite of what asking for one note meant.
+        # Refusing here would instead make `Request(chord_notes="1")` fall through to the
+        # ordinary melody-bearing route, which states the horn's line on the guitar and
+        # hands it back - the opposite of what asking for one note meant.
         keep = 2 if notes >= 2 else 1
         needed = {(root_pc + degree) % 12 for degree in guide[:keep]}
         allowed = {(root_pc + tone) % 12 for tone in tones}

@@ -307,7 +307,7 @@ class TestThePaletteRescue(unittest.TestCase):
     (`chord_unvoiced`) and reported by the renderers rather than inferred from the
     shape, which a deliberate melody-alone **fill** shares.
 
-    **The thin palette is `texture="chord1"` now.** It asks the chord part for a
+    **The thin palette is `Request(chord_notes="1")` now.** It asks the chord part for a
     single note, and the one family that states one note under a melody is `duo` -
     which is a *pair* of specific degrees, so a melody it cannot pair with leaves the
     chord unstated. That is the shipped spelling of the case; the `grips=` argument

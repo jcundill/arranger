@@ -616,11 +616,12 @@ class TestTheExplanationWraps(unittest.TestCase):
         union's own contribution and not a lost note.
 
         It moved 94 -> 82 when the comping palette stopped offering the high E: **all
-        twelve** are the waltz under `parts="bass,chord"` (17 wrapping steps -> 5), whose
-        comping shape left the G-B-E set for `x-6-5-5-x-x` on the A, D and G strings. The
-        shape states a different set of degrees there - `G 3, Bb 5 & C 6` where it said
-        `Eb Root, G 3 & C 6` - which is three characters shorter, and three characters is
-        the whole of the difference at this width. No other head and no other config moved.
+        twelve** are the waltz under a comping request with a thumb line (17 wrapping steps
+        -> 5), whose comping shape left the G-B-E set for `x-6-5-5-x-x` on the A, D and G
+        strings. The shape states a different set of degrees there - `G 3, Bb 5 & C 6`
+        where it said `Eb Root, G 3 & C 6` - which is three characters shorter, and three
+        characters is the whole of the difference at this width. No other head and no other
+        config moved.
         """
         from arranger.render import _format_step
 

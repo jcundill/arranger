@@ -355,7 +355,7 @@ def should_promote_fill(
     a penalty rather than a filter.
 
     Disabled wherever a fill is *meant* to be empty - under a thumb line on a fill, and
-    on a melody-only selection (`parts="melody"`) - because the melody-alone branch has
+    on a melody-only selection (`chord_on="none"`) - because the melody-alone branch has
     already handled it, so promoting here would undo the selection one step at a
     time. The caller passes the selection fact, so it is derived in one place rather
     than re-decided here.

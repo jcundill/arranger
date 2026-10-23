@@ -426,8 +426,8 @@ def slot_state(
     note_str, chord_type, name = inputs.arrangement.progression[index]
     if note_str is None:
         # A melody-only selection's note-less slot is **tune silent** unless the thumb
-        # has something there: `parts="melody,bass"` plays the bass part, and a position
-        # the walk invented is the one place this selection sounds anything at all.
+        # has something there: `chord_on="none"` with a thumb plays the bass part, and a
+        # position the walk invented is the one place it sounds anything at all.
         if inputs.arrangement.melody_only and slot.bass is None:
             return _tune_silent_plan(car, slot, chord_type, name, inputs)
         melody_note = None

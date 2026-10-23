@@ -62,10 +62,10 @@ class TestAProgressionWithNoTiming(unittest.TestCase):
     every note and **does not read the weight**, so an explicitly supplied felt-beat
     timeline arranges byte-identically: the layout is the metre's own rather than
     something a caller has to write out. A selection that *does* read the weight -
-    `texture="targets"` - states the harmony on the strong beats and fills between them,
-    and on a bare call it now agrees with the explicitly timed arrangement because it is
-    given the same positions. Before the layout existed it was handed nothing, so it
-    placed no fills at all on a hand-built progression.
+    `Request(chord_notes="targets")` - states the harmony on the strong beats and fills
+    between them, and on a bare call it now agrees with the explicitly timed arrangement
+    because it is given the same positions. Before the layout existed it was handed
+    nothing, so it placed no fills at all on a hand-built progression.
     """
 
     def test_the_metre_lays_out_the_progression(self):

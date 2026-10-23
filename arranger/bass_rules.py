@@ -317,7 +317,7 @@ def bass_allowed(
     the other, and only the engine's own route decision knows which.
 
     **`melody_only` is the melody-only route's half, and it is unbounded rather than
-    measured.** A selection that plays the tune and no chord part (`parts="melody"`,
+    measured.** A selection that plays the tune and no chord part (`chord_on="none"`,
     with or without the bass part named) puts a single fret above the thumb on every
     slot, so all three thumb strings are free whatever the texture's palette says -
     asking the palette would refuse a line with the whole neck to walk under, on the
