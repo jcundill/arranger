@@ -58,7 +58,7 @@ Timing = Tuple[Optional[int], Optional[float], Optional[float]]
 # --- the request: two rhythm questions and two content questions -------------
 
 CHORD_NOTES_FULL = "full"
-CHORD_NOTES_TARGETS = "targets"
+_CHORD_NOTES_TARGETS = "targets"
 
 #: The chord part's arity, as the request names it, mapped to the texture that
 #: states it. `full` is the **derivation** rather than a number: it means the most
@@ -72,14 +72,14 @@ CHORD_NOTES_TARGETS = "targets"
 #: on this question rather than on `chord_on`.
 CHORD_NOTES: Dict[str, str] = {
     CHORD_NOTES_FULL: "uniform",
-    CHORD_NOTES_TARGETS: "targets",
+    _CHORD_NOTES_TARGETS: "targets",
     "3": "chord3",
     "2": "chord2",
     "1": "chord1",
 }
 
 BASS_NOTES_ROOT = "root"
-BASS_NOTES_ROOT_FIFTH = "root-5th"
+_BASS_NOTES_ROOT_FIFTH = "root-5th"
 BASS_NOTES_WALK = "walk"
 
 #: What a bass note states, mapped to the note rules the thumb line is written on.
@@ -88,19 +88,19 @@ BASS_NOTES_WALK = "walk"
 #: `bass_notes root` is a pedal, not the old "root only where the harmony anchors".
 BASS_NOTES: Dict[str, str] = {
     BASS_NOTES_ROOT: BASS_RULE_ROOT,
-    BASS_NOTES_ROOT_FIFTH: f"{BASS_RULE_ROOT},{BASS_RULE_5TH}",
+    _BASS_NOTES_ROOT_FIFTH: f"{BASS_RULE_ROOT},{BASS_RULE_5TH}",
     BASS_NOTES_WALK: BASS_ALL_RULES,
 }
 
 CHORD_FILLS_NONE = "none"
-CHORD_FILLS_HOLD = "hold"
+_CHORD_FILLS_HOLD = "hold"
 CHORD_FILLS_COMP = "comp"
 
 #: What the chord states in a **notated melody rest**. Not a rhythm: a rest has no
 #: melody note to attach to, and the flag is a policy for a different span.
 CHORD_FILLS: Tuple[str, ...] = (
     CHORD_FILLS_NONE,
-    CHORD_FILLS_HOLD,
+    _CHORD_FILLS_HOLD,
     CHORD_FILLS_COMP,
 )
 

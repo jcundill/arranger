@@ -934,7 +934,7 @@ class TestTheInvariant(unittest.TestCase):
           holding - it is already sounding elsewhere. Charging for its string counts **10**
           steps instead of 1, which is the item-4 mistake made backwards;
         - the previous thumb note **is** included: that string is still ringing, so it is
-          still fretted. `bass.held_shape` drops it from `structure` for harmonic reasons,
+          still fretted. `bass._held_shape` drops it from `structure` for harmonic reasons,
           which is right for the three questions it answers - and on the committed heads the
           two readings give the same answer, so this one is chosen on the physics rather than
           on a count.

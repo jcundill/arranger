@@ -59,7 +59,7 @@ def grid_resolutions(beat_type: int) -> Tuple[int, ...]:
 RHYTHM_MELODY = "melody"
 RHYTHM_NONE = "none"
 RHYTHM_EVERY_BEAT = "every-beat"
-RHYTHM_LAST = "last"
+_RHYTHM_LAST = "last"
 
 #: The subdivisions the grammar names, and the fraction of a felt beat each is.
 #: Ordered so a position's one canonical spelling sorts as `1`, `1e`, `1and`, `1a`
@@ -211,7 +211,7 @@ def _parse_position(token: str, felt_beats: int) -> float:
             f"or a position such as 1, 1and or lastand"
         )
     named = match.group("beat")
-    beat = felt_beats if named == RHYTHM_LAST else int(named)
+    beat = felt_beats if named == _RHYTHM_LAST else int(named)
     if not 1 <= beat <= felt_beats:
         raise ValueError(
             f"rhythm position {token!r} asks for felt beat {beat}, but this bar "

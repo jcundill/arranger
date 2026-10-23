@@ -17,7 +17,7 @@
 - **the library's own front door answers the same six questions**, asserted on the
   tab rather than on the axes, so a request built in Python is the request the
   flags build;
-- **the two spellings are one vocabulary**, held together by `cli.REQUEST_DESTS`
+- **the two spellings are one vocabulary**, held together by `cli._REQUEST_DESTS`
   rather than by convention.
 
 The step loop's behaviour is elsewhere; this is the request's own arithmetic and
@@ -43,11 +43,11 @@ from arranger.bass_rules import (
     BASS_RULE_ROOT,
     BASS_STYLE_NONE,
 )
-from arranger.cli import HEAD_HELP, REQUEST_DESTS, add_common_arguments
+from arranger.cli import _REQUEST_DESTS, HEAD_HELP, add_common_arguments
 from arranger.options import (
-    BASS_NOTES_ROOT_FIFTH,
+    _BASS_NOTES_ROOT_FIFTH,
+    _CHORD_FILLS_HOLD,
     BASS_NOTES_WALK,
-    CHORD_FILLS_HOLD,
     CHORD_NOTES,
     ArrangeOptions,
 )
@@ -93,7 +93,7 @@ class TestTheRhythmsDecideTheParts(unittest.TestCase):
     def test_root_and_fifth_is_a_two_rule_line(self):
         """`root-5th` is the two rules, not the whole walk."""
         resolved = resolve_request(
-            Request(bass_on="1", bass_notes=BASS_NOTES_ROOT_FIFTH), 4
+            Request(bass_on="1", bass_notes=_BASS_NOTES_ROOT_FIFTH), 4
         )
         self.assertEqual(resolved.bass, f"{BASS_RULE_ROOT},5th")
 
@@ -111,10 +111,10 @@ class TestTheRhythmsDecideTheParts(unittest.TestCase):
     def test_a_rest_policy_keeps_the_chord_part_alive(self):
         """`chord-on none` with `chord-fills hold` comps in the rests, so it exists."""
         resolved = resolve_request(
-            Request(chord_on="none", chord_fills=CHORD_FILLS_HOLD), 4
+            Request(chord_on="none", chord_fills=_CHORD_FILLS_HOLD), 4
         )
         self.assertIn(PART_CHORD, resolved.parts)
-        self.assertEqual(resolved.chord_fills, CHORD_FILLS_HOLD)
+        self.assertEqual(resolved.chord_fills, _CHORD_FILLS_HOLD)
 
     def test_a_rule_list_is_the_axis_s_own_spelling(self):
         """`root,approach` is the rules themselves: a subset the three names do not offer.
@@ -643,7 +643,7 @@ class TestTheTwoSpellingsAreOneVocabulary(unittest.TestCase):
     """`head`'s flags and `Request`'s fields are the same six questions.
 
     The request is spelled twice - once for a command line and once for a library
-    caller - and the two are held together by `cli.REQUEST_DESTS` rather than by
+    caller - and the two are held together by `cli._REQUEST_DESTS` rather than by
     convention. A seventh question added to one spelling and not the other is a
     question one of the two front ends cannot ask, and nothing else would notice:
     the flag would parse and be ignored, or the field would be unreachable from a
@@ -652,8 +652,8 @@ class TestTheTwoSpellingsAreOneVocabulary(unittest.TestCase):
 
     def test_the_list_names_every_field_exactly_once(self):
         """One entry per `Request` field, and no two questions sharing a flag."""
-        fields = [field for field, _ in REQUEST_DESTS]
-        dests = [dest for _, dest in REQUEST_DESTS]
+        fields = [field for field, _ in _REQUEST_DESTS]
+        dests = [dest for _, dest in _REQUEST_DESTS]
         self.assertEqual(sorted(fields), sorted(Request.__dataclass_fields__))
         self.assertEqual(len(dests), len(set(dests)))
 
@@ -662,7 +662,7 @@ class TestTheTwoSpellingsAreOneVocabulary(unittest.TestCase):
         parser = argparse.ArgumentParser()
         add_common_arguments(parser, HEAD_HELP)
         namespace = parser.parse_args([])
-        for field, dest in REQUEST_DESTS:
+        for field, dest in _REQUEST_DESTS:
             with self.subTest(field=field):
                 self.assertIn(dest, vars(namespace))
 

@@ -43,7 +43,7 @@ from musthe import Note
 from arranger import ChordParser, Request
 from arranger.annotation import _omission_clause, step_annotation
 from arranger.chords import melody_degree_name
-from arranger.options import CHORD_FILLS_COMP, CHORD_FILLS_HOLD, ArrangeOptions
+from arranger.options import _CHORD_FILLS_HOLD, CHORD_FILLS_COMP, ArrangeOptions
 from arranger.step_types import ArrangementStep, Palette
 from arranger.tuning import (
     NECK_FRET_MAX,
@@ -84,7 +84,7 @@ CONFIGS: List[Dict[str, Any]] = [
     # can exist without a note beside it. Both policies, because `comp` states more
     # attacks than `hold` and a clause that fired for one and not the other would be
     # invisible in a sweep that only ever asked for one.
-    {"request": Request(chord_on="none", chord_fills=CHORD_FILLS_HOLD)},
+    {"request": Request(chord_on="none", chord_fills=_CHORD_FILLS_HOLD)},
     {"request": Request(chord_on="none", chord_fills=CHORD_FILLS_COMP)},
     # A lone bass line: no melody part, no chord part, and the thumb at every beat.
     # The steps it emits are the only ones with nothing above the thumb at all, which is

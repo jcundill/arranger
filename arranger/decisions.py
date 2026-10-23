@@ -48,7 +48,7 @@ from .tuning import NO_CHORD, ROLE_FILL, ROLE_TARGET
 
 # The three answers to "how is this slot played". Named rather than a bool because
 # the two non-default routes build different steps - see `melody_alone_case`.
-MELODY_ALONE_NONE = "none"        # look it up through the grips, as usual
+_MELODY_ALONE_NONE = "none"        # look it up through the grips, as usual
 MELODY_ALONE_TEXTURE = "texture"  # a texture case: has a harmony, not spelled out
 MELODY_ALONE_NO_CHORD = "nc"      # an NC bar: no harmony to voice at all
 MELODY_ALONE_BASS = "bass"        # the thumb alone: there is no chord here to state
@@ -111,7 +111,7 @@ def melody_alone_case(
 ) -> str:
     """Which of the three "play this as a single note" routes this slot takes.
 
-    Returns one of `MELODY_ALONE_NONE`, `MELODY_ALONE_TEXTURE` or
+    Returns one of `_MELODY_ALONE_NONE`, `MELODY_ALONE_TEXTURE` or
     `MELODY_ALONE_NO_CHORD`. The two non-default answers reach the same *route* -
     `get_melody_only_voicing` rather than grip lookup - but they build different
     steps, which is why this returns a kind rather than a bool: an `NC` bar sets
@@ -163,7 +163,7 @@ def melody_alone_case(
     So for a slot the guitar is not singing, only an `NC` bar may take this route - and
     that one is *also* wrong, for a different reason: an NC bar has no chord, so there is
     no guide tone to state and nothing for the guitar to play. It is answered as
-    `MELODY_ALONE_NONE` and the caller emits a rest step carrying its own reason
+    `_MELODY_ALONE_NONE` and the caller emits a rest step carrying its own reason
     instead, which keeps the tune's silence visible rather than quietly handing the
     horn's line to the guitarist.
 
@@ -199,8 +199,8 @@ def melody_alone_case(
         # could otherwise state*. "Nothing here to play" and "nothing to say here" are
         # different claims, and only the first is a rest.
         if quality == NO_CHORD or name == NO_CHORD:
-            return MELODY_ALONE_NONE
-        return MELODY_ALONE_REST if not on_grid else MELODY_ALONE_NONE
+            return _MELODY_ALONE_NONE
+        return MELODY_ALONE_REST if not on_grid else _MELODY_ALONE_NONE
     # The singing route answers `NC` the way it always has, and it must keep doing so
     # even though the comping route above returns `NONE` for the same slot: the two
     # routes build different steps there (the caller emits a rest step that says why, versus
@@ -234,7 +234,7 @@ def melody_alone_case(
         return MELODY_ALONE_TEXTURE
     if (has_thumb and role == ROLE_FILL) or slot_grips == ():
         return MELODY_ALONE_TEXTURE
-    return MELODY_ALONE_NONE
+    return _MELODY_ALONE_NONE
 
 
 def lone_bass_case(

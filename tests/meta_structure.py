@@ -265,7 +265,18 @@ TEST_SEAMS: Set[str] = {
     # Tab rendering reads the step formatter directly.
     "test_tab_rendering -> arranger.render._format_step",
     # Repeat/volta rendering reads the as-written formatting.
-    "test_headxml_repeats -> arranger.cli._as_written",
+    "test_headxml_repeats -> arranger.cli._as_written",    # The texture axis's own tables, read directly by its tests.
+    "test_texture -> arranger.texture._FILL_THINNING",
+    "test_texture -> arranger.texture._THIN_ENTRIES",
+    # The request's spellings, and the one list holding the two of them.
+    "test_request -> arranger.options._BASS_NOTES_ROOT_FIFTH",
+    "meta_explanations -> arranger.options._CHORD_FILLS_HOLD",
+    "test_chord_fills -> arranger.options._CHORD_FILLS_HOLD",
+    "test_request -> arranger.options._CHORD_FILLS_HOLD",
+    "test_request -> arranger.cli._REQUEST_DESTS",
+    # The CLI's help formatter, exercised on its own.
+    "test_cli -> arranger.cli._CommonHelp",
+
 }
 
 

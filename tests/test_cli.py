@@ -10,7 +10,7 @@ trusting the structure:
 - **every flag reaches the parser** - the nineteen are named, so a flag registered without
   a decision behind it fails;
 - **the help text is not one shared string**: eleven flags take their prose from
-  `CommonHelp` and eight are written inline, and every declared field reaches its flag with
+  `_CommonHelp` and eight are written inline, and every declared field reaches its flag with
   that text, which catches a field added to the dataclass and never passed to
   `add_argument`.
 
@@ -33,8 +33,8 @@ from typing import Dict, List
 import arranger
 from arranger.cli import (
     HEAD_HELP,
-    CommonHelp,
     ScoreMeta,
+    _CommonHelp,
     add_common_arguments,
     render_and_write,
 )
@@ -179,7 +179,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         self.assertEqual(parsed.file, "head.musicxml")
 
     def test_the_help_text_is_not_one_shared_string(self):
-        """Sixteen flags take their prose from `CommonHelp`, four are written inline.
+        """Sixteen flags take their prose from `_CommonHelp`, four are written inline.
 
         Measured before `arranger/cli.py` existed: of the seventeen shared flags,
         all seventeen agreed on every field of *meaning*, and eleven disagreed on
@@ -189,7 +189,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
 
         With one parser there is no "differing" set any more, so this asserts the
         partition that produced it instead: **sixteen flags get their text from
-        `CommonHelp` and four get it written inline**, and both halves are named.
+        `_CommonHelp` and four get it written inline**, and both halves are named.
         That is the property the split was built on - a flag whose help is the same
         wherever it is read is written once at the `add_argument` call, and one
         whose wording carries an arrangement of its own lives in the table.
@@ -204,7 +204,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         from dataclasses import fields
 
         flags = self.parser()
-        declared = {field.name for field in fields(CommonHelp)}
+        declared = {field.name for field in fields(_CommonHelp)}
         self.assertEqual(
             sorted(flags),
             [
@@ -262,7 +262,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
 
         `corpus` told the user what its fret window defaulted to and `head` said
         nothing. That read like an oversight, so it was pinned as a *deliberate*
-        difference (`Optional[str]` in `CommonHelp` exists for exactly it), which
+        difference (`Optional[str]` in `_CommonHelp` exists for exactly it), which
         turned "tidying it up" into a change someone had to look at.
 
         Someone looked, and filled it: a flag the reader can pass but cannot

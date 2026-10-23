@@ -418,7 +418,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
         violated "the sounding strings are exactly one supported set". Nothing caught
         it because the per-shape assertions in `tests/test_grips.py` never generated
         one. It is asserted here over the **generator**, since the parts axis cannot
-        ask for an inner voice on its own; the fix added `SINGLE_NOTE_STRING_SETS`
+        ask for an inner voice on its own; the fix added `_SINGLE_NOTE_STRING_SETS`
         rather than leaving a shape outside the contract.
         """
         supported = {frozenset(s) for s in supported_string_sets()}

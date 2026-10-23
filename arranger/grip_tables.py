@@ -314,7 +314,7 @@ BOTTOM_FOUR = frozenset((0, 1, 2, 3))
 # `tests/test_grips.py` asserted the invariant per *shape* and only for its note
 # count, so nothing noticed. Which of the six a given voice *may* use is a separate
 # question, and that question is `BASS_VOICE_STRING_SETS` below.
-SINGLE_NOTE_STRING_SETS: Tuple[Tuple[int, ...], ...] = tuple((s,) for s in range(6))
+_SINGLE_NOTE_STRING_SETS: Tuple[Tuple[int, ...], ...] = tuple((s,) for s in range(6))
 
 
 # The strings a **single bass voice** may occupy: the bottom three - low E, A and D.
@@ -346,9 +346,9 @@ def supported_string_sets() -> List[frozenset]:
     The bottom four strings are excluded, deliberately: see `BOTTOM_FOUR`.
 
     The single-string sets are included, and that is a **consequence** rather than an
-    addition: `SINGLE_NOTE_STRING_SETS` states that one note on one string is playable
+    addition: `_SINGLE_NOTE_STRING_SETS` states that one note on one string is playable
     anywhere, and an invariant a shape can violate is not an invariant. See
-    `SINGLE_NOTE_STRING_SETS` for how the one-note comping shape showed it.
+    `_SINGLE_NOTE_STRING_SETS` for how the one-note comping shape showed it.
     """
     sets = {
         frozenset(range(top - 3, top + 1))
@@ -357,7 +357,7 @@ def supported_string_sets() -> List[frozenset]:
     }
     for shapes in GRIP_STRING_SETS.values():
         sets.update(frozenset(strings) for strings, _ in shapes)
-    sets.update(frozenset(strings) for strings in SINGLE_NOTE_STRING_SETS)
+    sets.update(frozenset(strings) for strings in _SINGLE_NOTE_STRING_SETS)
     return sorted(sets, key=lambda s: sorted(s))
 
 

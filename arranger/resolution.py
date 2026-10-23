@@ -91,7 +91,7 @@ class _Knobs:
 
 
 @dataclass(frozen=True)
-class ResolvedAxes:
+class _ResolvedAxes:
     """The request, and the three axes the step loop reads.
 
     `parts`, `texture` and `bass` are the engine's implementation; this
@@ -122,7 +122,7 @@ def resolve_axes(
     bass: Optional[str],
     parts: Optional[str],
     time_signature: TimeSignature = COMMON_TIME,
-) -> ResolvedAxes:
+) -> _ResolvedAxes:
     """The request's derivation, with a caller's axis override winning.
 
     `bass` and `parts` are **coupled**, and this is where the two spellings meet.
@@ -139,7 +139,7 @@ def resolve_axes(
         bass = resolved.bass if parts is None else BASS_STYLE_AUTO
     elif parts is None and bass not in (BASS_STYLE_AUTO, BASS_STYLE_NONE):
         parts = _selection_with_bass(resolved.parts)
-    return ResolvedAxes(
+    return _ResolvedAxes(
         request=resolved,
         texture=texture,
         bass=bass,

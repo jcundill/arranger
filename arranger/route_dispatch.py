@@ -42,11 +42,11 @@ from .slot_plan import SlotPlan
 from .step_history import previous_shape
 from .step_types import ArrangementStep
 
-__all__ = ["Route", "ROUTES", "dispatch_step"]
+__all__ = ["_Route", "ROUTES", "dispatch_step"]
 
 
 @dataclass(frozen=True)
-class Route:
+class _Route:
     """One entry in the dispatch order: when it claims a slot, and what it emits.
 
     `claims` is the precondition and `emit` the answer, both reading the plan the
@@ -174,12 +174,12 @@ def _emit_melody(
 #: `texture_fill` before `melody_bearing` is what stops a fill from being voiced as
 #: a chord; `no_chord` before `comping` is what keeps an `NC` bar from being
 #: reharmonised. `tests/meta_route_dispatch.py` pins the sequence.
-ROUTES: Tuple[Route, ...] = (
-    Route("no_upper_voices", _claims_no_upper_voices, _emit_no_upper_voices),
-    Route("texture_fill", _claims_texture, _emit_texture_fill),
-    Route("no_chord", _claims_no_chord, _emit_no_chord),
-    Route("comping", _claims_comping, _emit_comping),
-    Route("melody_bearing", _claims_always, _emit_melody),
+ROUTES: Tuple[_Route, ...] = (
+    _Route("no_upper_voices", _claims_no_upper_voices, _emit_no_upper_voices),
+    _Route("texture_fill", _claims_texture, _emit_texture_fill),
+    _Route("no_chord", _claims_no_chord, _emit_no_chord),
+    _Route("comping", _claims_comping, _emit_comping),
+    _Route("melody_bearing", _claims_always, _emit_melody),
 )
 
 

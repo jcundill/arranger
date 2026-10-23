@@ -17,7 +17,7 @@ from dataclasses import dataclass
 from typing import Optional, Sequence, Tuple, Union
 
 GROUPING_AUTO = "auto"
-GROUPING_SEPARATOR = "+"
+_GROUPING_SEPARATOR = "+"
 
 #: A parsed grouping: the sentinel, or one group length per felt beat.
 ParsedGrouping = Union[str, Tuple[int, ...]]
@@ -78,7 +78,7 @@ class TimeSignature:
 
 def format_grouping(grouping: Sequence[int]) -> str:
     """A grouping in its one written spelling, e.g. ``3+3+3+3``."""
-    return GROUPING_SEPARATOR.join(str(length) for length in grouping)
+    return _GROUPING_SEPARATOR.join(str(length) for length in grouping)
 
 
 def parse_grouping(argument: str) -> ParsedGrouping:
@@ -101,14 +101,14 @@ def parse_grouping(argument: str) -> ParsedGrouping:
             f"'3+3+3+3'"
         )
     lengths = []
-    for row in text.split(GROUPING_SEPARATOR):
+    for row in text.split(_GROUPING_SEPARATOR):
         row = row.strip()
         try:
             length = int(row)
         except ValueError:
             raise ValueError(
                 f"Unknown grouping {argument!r}; expected {GROUPING_AUTO!r} or "
-                f"positive lengths joined by {GROUPING_SEPARATOR!r}, such as '3+3+3+3'"
+                f"positive lengths joined by {_GROUPING_SEPARATOR!r}, such as '3+3+3+3'"
             ) from None
         if length < 1:
             raise ValueError(

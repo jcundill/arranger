@@ -132,7 +132,7 @@ def carry_bass(steps: List[ArrangementStep]) -> None:
     no bar line to stop at, so carrying across it would ring a note through an
     arrangement that never asked for a rhythm.
     """
-    ringing: Optional[Ring] = None
+    ringing: Optional[_Ring] = None
     for step in steps:
         if step.bass is not None and not step.bass_held:
             ringing = _struck(step)
@@ -146,10 +146,10 @@ def carry_bass(steps: List[ArrangementStep]) -> None:
 
 
 #: A thumb note as the ring carries it: (midi, string, fret, the bar it began in).
-Ring = Tuple[int, int, int, int]
+_Ring = Tuple[int, int, int, int]
 
 
-def _struck(step: ArrangementStep) -> Optional[Ring]:
+def _struck(step: ArrangementStep) -> Optional[_Ring]:
     """The note this step plucks, as a ring, or None when it plucks none.
 
     `bass_pc` is the lowest sounding voice, so it is present exactly when the step
@@ -162,7 +162,7 @@ def _struck(step: ArrangementStep) -> Optional[Ring]:
     return (step.bass, string, step.voicing.frets[string], step.bar)
 
 
-def _takes_the_ring(step: ArrangementStep, ringing: Ring) -> bool:
+def _takes_the_ring(step: ArrangementStep, ringing: _Ring) -> bool:
     """Whether `step` can sound `ringing` under what it plays. See `carry_bass`."""
     midi, string, fret, bar = ringing
     if step.bar != bar or not step.voicing.active_frets():
@@ -176,7 +176,7 @@ def _takes_the_ring(step: ArrangementStep, ringing: Ring) -> bool:
     return can_fret(merged)
 
 
-def _carry(step: ArrangementStep, ringing: Ring) -> None:
+def _carry(step: ArrangementStep, ringing: _Ring) -> None:
     """Write the ringing note into `step`: sounding, and not plucked."""
     midi, string, fret, _bar = ringing
     step.voicing.frets[string] = fret

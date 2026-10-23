@@ -14,7 +14,7 @@ from typing import Any
 
 import headxml
 from arranger import Request
-from arranger.options import CHORD_FILLS_COMP, CHORD_FILLS_HOLD, CHORD_FILLS_NONE, resolve_request
+from arranger.options import _CHORD_FILLS_HOLD, CHORD_FILLS_COMP, CHORD_FILLS_NONE, resolve_request
 from headxml import Head, HeadChange, HeadNote, melody_rests
 from tests.support import arranged
 
@@ -118,7 +118,7 @@ class TestHold(unittest.TestCase):
 
     def test_one_chord_per_rest_stating_the_harmony_in_force(self):
         """Bar 1's three beats of silence are one attack, not three."""
-        slots = fills(hand_head(), chord_on="none", chord_fills=CHORD_FILLS_HOLD)
+        slots = fills(hand_head(), chord_on="none", chord_fills=_CHORD_FILLS_HOLD)
         self.assertEqual(
             [(bar, beat, quality) for _m, quality, _n, bar, beat, _d in slots],
             [(1, 2.0, "maj"), (3, 3.0, "maj7")],
@@ -132,7 +132,7 @@ class TestHold(unittest.TestCase):
         """
         head = hand_head()
         head.chords.insert(1, HeadChange(bar=1, beat=3.0, chord="Dm7", quality="m7"))
-        slots = fills(head, chord_on="none", chord_fills=CHORD_FILLS_HOLD)
+        slots = fills(head, chord_on="none", chord_fills=_CHORD_FILLS_HOLD)
         self.assertEqual(
             [(bar, beat, name) for _m, _q, name, bar, beat, _d in slots],
             [(1, 2.0, "C"), (1, 3.0, "Dm7"), (3, 3.0, "Cmaj7")],
@@ -145,14 +145,14 @@ class TestHold(unittest.TestCase):
         it, because a target is the caller's explicit choice. The fill at beat 2 is
         still there, and the fill that would have begun at beat 3 is the target.
         """
-        slots = fills(hand_head(), chord_on="3", chord_fills=CHORD_FILLS_HOLD)
+        slots = fills(hand_head(), chord_on="3", chord_fills=_CHORD_FILLS_HOLD)
         positions = [(bar, beat) for _m, _q, _n, bar, beat, _d in slots]
         self.assertEqual(positions, [(1, 2.0), (1, 3.0), (3, 3.0)])
         self.assertEqual(positions.count((1, 3.0)), 1)
 
     def test_a_rest_with_no_chord_gets_no_fill(self):
         """Bar 4 is silent under `NC`: there is no chord to state."""
-        slots = fills(hand_head(), chord_on="none", chord_fills=CHORD_FILLS_HOLD)
+        slots = fills(hand_head(), chord_on="none", chord_fills=_CHORD_FILLS_HOLD)
         self.assertEqual([bar for _m, _q, _n, bar, _b, _d in slots], [1, 3])
 
     def test_the_fill_lasts_to_the_end_of_the_rest(self):
@@ -164,12 +164,12 @@ class TestHold(unittest.TestCase):
         """
         head = hand_head()
         head.chords.insert(1, HeadChange(bar=1, beat=3.0, chord="Dm7", quality="m7"))
-        slots = fills(head, chord_on="none", chord_fills=CHORD_FILLS_HOLD)
+        slots = fills(head, chord_on="none", chord_fills=_CHORD_FILLS_HOLD)
         self.assertEqual([round(slot[5], 6) for slot in slots], [0.25, 0.5, 0.5])
 
     def test_no_fill_slot_carries_a_melody(self):
         """A fill states the chord and never invents a note: the tune is resting."""
-        for slot in fills(hand_head(), chord_on="none", chord_fills=CHORD_FILLS_HOLD):
+        for slot in fills(hand_head(), chord_on="none", chord_fills=_CHORD_FILLS_HOLD):
             self.assertIsNone(slot[0])
 
 
@@ -179,7 +179,7 @@ class TestComp(unittest.TestCase):
     def test_a_felt_beat_inside_a_long_rest_is_a_second_attack(self):
         """Bar 1's three-beat rest attacks on each beat; `hold` states one chord."""
         comp = fills(hand_head(), chord_on="none", chord_fills=CHORD_FILLS_COMP)
-        hold = fills(hand_head(), chord_on="none", chord_fills=CHORD_FILLS_HOLD)
+        hold = fills(hand_head(), chord_on="none", chord_fills=_CHORD_FILLS_HOLD)
         self.assertEqual(
             [(bar, beat) for _m, _q, _n, bar, beat, _d in comp],
             [(1, 2.0), (1, 3.0), (1, 4.0), (3, 3.0), (3, 4.0)],
@@ -202,7 +202,7 @@ class TestComp(unittest.TestCase):
         answer, which is the shape of most rests in the committed heads.
         """
         comp = fills(hand_head(), chord_on="none", chord_fills=CHORD_FILLS_COMP)
-        hold = fills(hand_head(), chord_on="none", chord_fills=CHORD_FILLS_HOLD)
+        hold = fills(hand_head(), chord_on="none", chord_fills=_CHORD_FILLS_HOLD)
         by_position = {(slot[3], slot[4]): slot for slot in comp}
         for slot in hold:
             self.assertEqual(by_position[(slot[3], slot[4])][1], slot[1])
@@ -245,16 +245,16 @@ class TestTheRequestKeepsItsShape(unittest.TestCase):
         the rests.
         """
         resolved = resolve_request(
-            Request(chord_on="none", chord_fills=CHORD_FILLS_HOLD), 4, (1, 1, 1, 1)
+            Request(chord_on="none", chord_fills=_CHORD_FILLS_HOLD), 4, (1, 1, 1, 1)
         )
         self.assertIn("chord", resolved.parts)
-        self.assertEqual(resolved.chord_fills, CHORD_FILLS_HOLD)
+        self.assertEqual(resolved.chord_fills, _CHORD_FILLS_HOLD)
 
     def test_fills_asked_for_by_a_guitar_that_does_not_sing_are_refused(self):
         """There are no melody rests on a part that has no melody."""
         with self.assertRaises(ValueError) as error:
             resolve_request(
-                Request(melody=False, chord_on="every-beat", chord_fills=CHORD_FILLS_HOLD),
+                Request(melody=False, chord_on="every-beat", chord_fills=_CHORD_FILLS_HOLD),
                 4,
                 (1, 1, 1, 1),
             )
@@ -280,7 +280,7 @@ class TestAFillInARealHead(unittest.TestCase):
         steps, _head, _notes = arranged(
             SLASH,
             section=(5, 7),
-            request=Request(chord_on="none", chord_fills=CHORD_FILLS_HOLD),
+            request=Request(chord_on="none", chord_fills=_CHORD_FILLS_HOLD),
         )
         fill = [step for step in steps if step.melody is None]
         self.assertEqual(
@@ -311,7 +311,7 @@ class TestAFillInARealHead(unittest.TestCase):
         steps, head, _notes = arranged(
             SLASH,
             section=(6, 7),
-            request=Request(chord_on="none", chord_fills=CHORD_FILLS_HOLD),
+            request=Request(chord_on="none", chord_fills=_CHORD_FILLS_HOLD),
         )
         staff = format_tab_staff(
             steps,

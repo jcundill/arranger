@@ -797,7 +797,7 @@ A caller asks six questions, and the six are one value (`options.Request`) spell
 by `head`'s flags and by `Request(...)` on the library's own front door,
 `arrange_progression(progression, request=Request(...))`. This document describes the
 axes, because they are the implementation: **a request is resolved into them once, and
-nothing below this section reads the request again.** `cli.REQUEST_DESTS` is the one list
+nothing below this section reads the request again.** `cli._REQUEST_DESTS` is the one list
 holding the two spellings together, and `tests/test_request.py` asserts it.
 
 | the question | the flag | `Request(...)` | the axis it resolves to |
@@ -1830,8 +1830,8 @@ came through, so a request and its axis spelling arrange the same music.
 ### What a slot the rhythm does not name does, and why it is a fourth kind
 
 `decisions.melody_alone_case` returns a *kind*, and the chord's rhythm is what made
-`MELODY_ALONE_REST` a fourth one beside `MELODY_ALONE_NONE`, `MELODY_ALONE_TEXTURE` and
-`MELODY_ALONE_NO_CHORD`:
+`MELODY_ALONE_REST` a fourth one beside `_MELODY_ALONE_NONE` (the default answer, which
+only `decisions` returns or compares), `MELODY_ALONE_TEXTURE` and `MELODY_ALONE_NO_CHORD`:
 
 - **guitar singing** → `MELODY_ALONE_TEXTURE`: the note of the tune sounds alone. No note
   is dropped, ever.

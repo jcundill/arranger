@@ -5,7 +5,7 @@ a flag cannot be added in one place and silently missed in another. The idea beh
 split is that **the duplication worth removing is the *argument*, not the *prose***: the
 flags whose help is identical are written once here, and prose that genuinely differs is
 kept and lives in one table. `HEAD_HELP` holds the prose for every flag whose wording
-carries a musical decision, and `CommonHelp` is one dataclass with one field per such
+carries a musical decision, and `_CommonHelp` is one dataclass with one field per such
 flag, so a flag added here has nowhere else to be forgotten - `tests/test_cli.py`
 asserts every declared field reaches `add_argument` with its text.
 
@@ -46,15 +46,15 @@ if TYPE_CHECKING:  # pragma: no cover - the annotations are strings at runtime
 
 __all__ = [
     "HEAD_HELP",
-    "REQUEST_DESTS",
-    "CommonHelp",
+    "_REQUEST_DESTS",
+    "_CommonHelp",
     "ScoreMeta",
     "add_common_arguments",
     "render_and_write",
 ]
 
 @dataclass(frozen=True)
-class CommonHelp:
+class _CommonHelp:
     """The `--help` prose for the flags whose wording is not mechanical.
 
     One field per flag whose help is *written* rather than derived. A flag absent
@@ -102,7 +102,7 @@ class CommonHelp:
 #: states the shipped default. The order is the flags' own, grouped by layer, which is
 #: why it is not the dataclass field order; `tests/test_request.py` holds the two
 #: spellings to this list as a set rather than a sequence.
-REQUEST_DESTS: Tuple[Tuple[str, str], ...] = (
+_REQUEST_DESTS: Tuple[Tuple[str, str], ...] = (
     ("melody", "no_melody"),
     ("chord_on", "chord_on"),
     ("chord_notes", "chord_notes"),
@@ -144,7 +144,7 @@ class ScoreMeta:
 #: than either state. What survives says what the deleted half could not - that the
 #: window is an aim, not a filter, and that a head read from a score may want a
 #: narrower one than a solo would.
-HEAD_HELP = CommonHelp(
+HEAD_HELP = _CommonHelp(
     bars="narrow to a half-open LO-HI bar range; bounds may be negative",
     bars_per_line="bars per system on the staff",
     fret_min=f"lowest fret to aim for (default {NECK_FRET_MIN}; an aim, not a filter)",
@@ -198,7 +198,7 @@ HEAD_HELP = CommonHelp(
 
 def add_common_arguments(
     parser: argparse.ArgumentParser,
-    help_text: CommonHelp,
+    help_text: _CommonHelp,
 ) -> None:
     """Add the flags the front end takes, to `parser`.
 

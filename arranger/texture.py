@@ -55,14 +55,14 @@ TEXTURE_ARITY: Dict[str, Optional[int]] = {
 #: beats: beats 1 and 7 of 12/8, and the downbeat alone of 6/8 or 2/2.
 TARGET_BEATS: Tuple[int, ...] = (1, 3)
 
-FILL_THINNING = 1
+_FILL_THINNING = 1
 
-THIN_ENTRIES: Dict[str, int] = {
+_THIN_ENTRIES: Dict[str, int] = {
     "interval": 1,
     "melody": 0,
 }
 
-FILL_ONLY_EXCLUDED: Tuple[str, ...] = ("duo",)
+_FILL_ONLY_EXCLUDED: Tuple[str, ...] = ("duo",)
 
 
 def families_up_to_arity(arity: int) -> Tuple[str, ...]:
@@ -92,14 +92,14 @@ def families_up_to_with_thin(arity: int) -> Tuple[str, ...]:
     because neither states a chord part. They come **last**, which is where the
     voice-count criterion would put them anyway.
 
-    `FILL_ONLY_EXCLUDED` is removed first, so the 3rd/7th reading is not offered where
+    `_FILL_ONLY_EXCLUDED` is removed first, so the 3rd/7th reading is not offered where
     the loose one is - the two are the same thickness, and an exact tie between them
     would otherwise be decided by the order of this tuple rather than by the rule.
     """
     return tuple(
         family for family in families_up_to_arity(arity)
-        if family not in FILL_ONLY_EXCLUDED
-    ) + tuple(name for name, size in THIN_ENTRIES.items() if size <= arity)
+        if family not in _FILL_ONLY_EXCLUDED
+    ) + tuple(name for name, size in _THIN_ENTRIES.items() if size <= arity)
 
 
 def parse_texture(argument: str) -> str:
@@ -183,7 +183,7 @@ def texture_palette(
     """The palette a slot of this role may use, and nothing else.
 
     A **target** states the chord part's full arity; a **fill** states
-    `FILL_THINNING` notes fewer, which is the thickness claim the role
+    `_FILL_THINNING` notes fewer, which is the thickness claim the role
     has always made. Both are **ceilings rather than exact counts** - see
     `families_up_to_arity` - so the fullest shape a position admits is the one
     generated first, and a position only a shell fits is a shell rather than silence.
@@ -198,7 +198,7 @@ def texture_palette(
     arity = derived_arity(texture, parts, has_thumb)
     if role == ROLE_TARGET:
         return families_up_to_arity(arity)
-    return families_up_to_with_thin(arity - FILL_THINNING)
+    return families_up_to_with_thin(arity - _FILL_THINNING)
 
 
 BEAT_EPSILON = 1e-6

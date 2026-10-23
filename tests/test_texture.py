@@ -61,10 +61,10 @@ from arranger.grouping import COMMON_TIME
 from arranger.options import ArrangeOptions
 from arranger.parts import PART_BASS, PART_CHORD, PART_MELODY, PART_NAMES
 from arranger.texture import (
-    FILL_THINNING,
+    _FILL_THINNING,
+    _THIN_ENTRIES,
     TEXTURE_ARITY,
     TEXTURE_STYLES,
-    THIN_ENTRIES,
     families_up_to_arity,
     families_up_to_with_thin,
     metric_weight,
@@ -310,8 +310,8 @@ class TestRoles(unittest.TestCase):
         # The thinnest fill is the melody alone, which is a real entry rather than
         # an empty palette - the distinction the emptied row used to blur.
         self.assertEqual(families_up_to_with_thin(0), ("melody",))
-        self.assertEqual(THIN_ENTRIES["melody"], 0)
-        self.assertEqual(FILL_THINNING, 1)
+        self.assertEqual(_THIN_ENTRIES["melody"], 0)
+        self.assertEqual(_FILL_THINNING, 1)
 
     def test_the_walking_line_is_a_bass_style_not_a_texture(self):
         """
@@ -410,7 +410,7 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
             with self.subTest(texture=texture, role=ROLE_FILL):
                 self.assertEqual(
                     texture_palette(ROLE_FILL, texture, PART_NAMES),
-                    families_up_to_with_thin(arity - FILL_THINNING),
+                    families_up_to_with_thin(arity - _FILL_THINNING),
                 )
 
     def test_the_three_fixed_arities_are_three_different_palettes(self):
@@ -493,7 +493,7 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
         """
         self.assertNotIn("interval", GRIP_PREFERENCE)
         self.assertNotIn("melody", GRIP_PREFERENCE)
-        for name in THIN_ENTRIES:
+        for name in _THIN_ENTRIES:
             with self.subTest(entry=name):
                 self.assertIn(name, texture_palette(ROLE_FILL, "targets", PART_NAMES))
                 self.assertNotIn(
@@ -1154,14 +1154,14 @@ class TestMelodyOnlySelections(unittest.TestCase):
         `supported_string_sets()` entry", and a melody-only selection violates it on every
         slot, so the library shipped shapes it had not agreed to be playable.
 
-        `grips.SINGLE_NOTE_STRING_SETS` fixes that rather than excusing it: one note on
+        `grips._SINGLE_NOTE_STRING_SETS` fixes that rather than excusing it: one note on
         one string has no span to exceed and no second voice to clash with, so it is
         playable anywhere, and `supported_string_sets()` now lists all six singletons.
         The claim this test protects is unchanged - that the solo note is one string, and
         that the library says so in one place - only the direction of it has moved.
 
         Measured alongside: the same gap existed for the one-note *comping* shape, which
-        `SINGLE_NOTE_STRING_SETS` also closes; see `tests/test_comping.py`.
+        `_SINGLE_NOTE_STRING_SETS` also closes; see `tests/test_comping.py`.
         """
         for step in self.arrange("melody"):
             self.assertEqual(len(step.voicing.active_frets()), 1)
