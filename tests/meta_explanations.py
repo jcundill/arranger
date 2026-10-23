@@ -69,10 +69,16 @@ CONFIGS: List[Dict[str, Any]] = [
     {},
     {"options": ArrangeOptions(request=Request(chord_notes="1"))},
     {"options": ArrangeOptions(request=Request(chord_notes="targets"))},
-    {"options": ArrangeOptions(parts="melody")},
-    {"options": ArrangeOptions(parts="bass")},
-    {"options": ArrangeOptions(parts="chord")},
-    {"options": ArrangeOptions(parts="bass,chord")},
+    {"options": ArrangeOptions(request=Request(chord_on="none"))},
+    {"options": ArrangeOptions(request=Request(melody=False))},
+    # The pair, spelled as the request spells it: the chord part plus a thumb line. The
+    # door's `bass,chord` named the bass part and then sounded no bass layer at all, so
+    # it was this row's chord-only config twice over.
+    {
+        "options": ArrangeOptions(
+            request=Request(melody=False, bass_on="melody", bass_notes="root")
+        )
+    },
     {
         "options":ArrangeOptions(
                        request=Request(bass_on="every-beat", bass_notes="walk"),
@@ -538,7 +544,15 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         # instant: a note sounds over `[onset, end)`, so the union admits the position
         # where the tune has just stopped and the comp there names its voices
         # (`docs/history/open-issues.md` item 6).
-        self.assertEqual(comping, 1475, "the number of comping lines naming a voice moved")
+        #
+        # A request row replaced the door's, and the count moved **-247**. The
+        # `parts="bass"` config was a one-note comping on every head - which the
+        # `chord_notes="1"` row above already states - and `parts="bass,chord"` named a
+        # bass part and then sounded no bass layer at all, so it was the `chord` row
+        # twice over. What it becomes (`melody=False` plus a thumb line) states the same
+        # three voices with the thumb below them, so this sweep's *clause* coverage is
+        # unchanged: what went is two configs that arranged what other rows already did.
+        self.assertEqual(comping, 1228, "the number of comping lines naming a voice moved")
 
     def test_the_slash_bass_clause_is_not_a_tautology(self):
         """The one decision the witness table cannot hold, pinned in both directions.
@@ -654,7 +668,7 @@ class TestTheLoneNoteKeepsTheWindowHonest(unittest.TestCase):
                            request=Request(bass_on="every-beat", bass_notes="walk"),
                        )
         },
-        {"options": ArrangeOptions(parts="melody")},
+        {"options": ArrangeOptions(request=Request(chord_on="none"))},
     ]
 
     def test_every_lone_shape_reports_the_palette_it_came_from(self):
