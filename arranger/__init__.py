@@ -151,31 +151,6 @@ from .tuning import GuitarFretboard
 
 # Library version. The single source of truth: `pyproject.toml` reads it through
 # [tool.setuptools.dynamic] rather than duplicating the number.
-# 0.4.0 added the optional Weimar Jazz Database corpus integration (wjazzd.py).
-# 0.5.0 added MusicXML export (tabxml.py), behind the optional `xml` extra.
-# 0.7.0 gave the engine metric and textural awareness (TEXTURE_STYLES).
-# 0.8.0 added 6-4-3-2 (grip `drop2_6432`) and a root-or-5th bass tie-break, so the
-# lowest voice can be a root by decision rather than by string-set accident.
-# 0.9.0 adds the walking-bass texture: a thumb line on the bass strings under a
-# light left hand.
-# 0.10.0 REMOVES the Weimar Jazz Database path: the `wjazzd` and `lead_sheet`
-# modules, the `arranger corpus` subcommand, and the `--skeleton`/`--pick` flags.
-# That is a breaking change to the public surface - hence the minor bump on a
-# 0.x version, where the minor digit is the breaking one. `arrange_slots` moved
-# into the package as `arranger.slots`, so the slot layer it always was is now
-# importable from the engine. The MusicXML path is unchanged: byte-identical
-# output on every committed fixture across sixteen flag combinations.
-# 0.11.0 collapses one fact to one home: `ArrangementStep.grip` and
-# `ArrangementStep.bass` become read-only derived views of the voicing's own
-# fields, and the melody-only claim moves from the texture axis to the voices
-# axis - `voices=soprano` is the melody and nothing else, and the `melody` and
-# `melody_bass` textures are removed (a breaking change to the public surface,
-# same rule as 0.10.0). Measured byte-identical against the old spellings on
-# both committed heads and the engine's own fixture - see `docs/history/one-fact.md`.
-# 0.13.0 NARROWS the facade to the API a caller *names*: the vocabulary constants and
-# the engine's submodule names leave `__all__`, so a constant is reached as
-# `arranger.options.CHORD_NOTES_FULL` and a submodule as `arranger.grips`. A breaking
-# change to the public surface, same rule as 0.10.0 and 0.11.0.
 __version__ = "0.13.0"
 
 
