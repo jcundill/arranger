@@ -42,7 +42,6 @@ from arranger.parts import PART_BASS, PART_CHORD, PART_MELODY
 from arranger.tuning import NECK_FRET_MAX, NECK_FRET_MIN
 from tests.support import (
     PROGRESSION,
-    VOICES_ARG,
     chord_pcs,
     comping,
     guide_pcs,
@@ -313,17 +312,14 @@ class TestTheAxisIsInertByDefault(unittest.TestCase):
             )
 
     def test_the_axis_is_spelled_through_the_options(self):
-        """`parts` is the engine's implementation, so `options=` is its one door.
+        """The request is the vocabulary, so `options=` is the one door to the engine.
 
-        It used to have a keyword spelling too, and the two *did* diverge:
-        `ArrangeOptions.parts` defaulted to the resolved `"guitar"` while the keyword
-        defaulted to the `"auto"` sentinel, so a caller passing the options was
-        compared field-by-field against a different default and told it had passed
-        both. One door is what makes that class of bug unspellable, and this is the
-        half that still means something: the field reaches the engine.
+        Both halves are what a second spelling would cost: the comping selection
+        reaches the engine as `Request(melody=False)`, and the bare call is the shipped
+        request rather than a different default.
         """
         by_option = self.engine.arrange_progression(
-            PROGRESSION, options=ArrangeOptions(parts=VOICES_ARG)
+            PROGRESSION, options=ArrangeOptions(request=Request(melody=False))
         )
         self.assertTrue(all(not step.melody_voiced for step in by_option))
         self.assertEqual(
@@ -480,8 +476,9 @@ class TestTheCompingArrangement(unittest.TestCase):
     def test_every_step_is_a_guide_tone_shape_of_the_requested_arity(self):
         """`partial` is set, because the chord name above describes the harmony only.
 
-        The arity is asserted rather than assumed, because `VOICES_ARG` is two voices and
-        the first version of the generator always built a three-note shell regardless.
+        The arity is asserted rather than assumed, because `Request(melody=False)` states
+        the chord alone, and the first version of the generator always built a three-note
+        shell regardless.
         """
         for step in self.comped():
             self.assertEqual(step.grip, "shell")
@@ -612,7 +609,7 @@ class TestTheCompingArrangement(unittest.TestCase):
         """
         steps = self.engine.arrange_progression(
             [("D5", "m7", "Dm7"), ("C5", "NC", "NC"), ("A4", "7", "A7")],
-            options=ArrangeOptions(parts=VOICES_ARG),
+            options=ArrangeOptions(request=Request(melody=False)),
         )
         self.assertEqual([step.chord for step in steps], ["Dm7", "NC", "A7"])
         self.assertEqual(steps[1].silence, "nc_comping")
@@ -908,7 +905,7 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
         steps = VoiceLeadingEngine.arrange_progression(
             progression,
             options=ArrangeOptions(
-                parts=VOICES_ARG, non_chord_tone=strategy, **kwargs
+                request=Request(melody=False), non_chord_tone=strategy, **kwargs
             ),
         )
         self.assertTrue(steps, "an arrangement with no steps at all is a defect")
@@ -1003,7 +1000,7 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
         steps, rescued, _notes = arrange_slots(
             progression,
             timings,
-            options=ArrangeOptions(parts=VOICES_ARG),
+            options=ArrangeOptions(request=Request(melody=False)),
             fallback="diminished",
             onsets={0},
         )
