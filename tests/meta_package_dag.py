@@ -38,7 +38,8 @@ PACKAGE = Path(arranger.__file__).parent
 # The declared dependency order. A module may import itself and anything above it
 # in this list, and nothing else. This is the whole rule, in one place.
 ORDER = [
-    "tuning",       # the instrument, and the Voicing / ArrangementStep value types
+    "tuning",       # the instrument: tuning, fretboard, neck limits, sentinels
+    "step_types",   # the Voicing / ArrangementStep / Palette value types and tab-cell primitives
     "context",      # one slot's request, shared by the two step routes
     "fingers",      # which finger holds which fret; `bass` reads it for the four-fret budget
     "chords",       # chord symbols and the non-chord-tone routing
@@ -230,8 +231,8 @@ class TestPackageDag(unittest.TestCase):
             ("VoiceLeadingEngine", "steps", "VoiceLeadingEngine"),
             ("StepPreparation", "steps", "StepPreparation"),
             ("ChordParser", "chords", "ChordParser"),
-            ("Voicing", "tuning", "Voicing"),
-            ("ArrangementStep", "tuning", "ArrangementStep"),
+            ("Voicing", "step_types", "Voicing"),
+            ("ArrangementStep", "step_types", "ArrangementStep"),
             ("GuitarFretboard", "tuning", "GuitarFretboard"),
             ("bass_cost", "bass_place", "bass_cost"),
             ("format_progression", "render", "format_progression"),

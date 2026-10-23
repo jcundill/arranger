@@ -46,6 +46,7 @@ from .grip_tables import (
     comping_string_sets,
     stated_tones,
 )
+from .step_types import Voicing
 from .tuning import (
     HIGH_FRET_LIMIT,
     MELODY_STRING_CHOICES,
@@ -54,7 +55,6 @@ from .tuning import (
     NECK_FRET_MIN,
     STANDARD_TUNING,
     GuitarFretboard,
-    Voicing,
     note_name,
 )
 

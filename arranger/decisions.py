@@ -43,7 +43,8 @@ from .grip_tables import (
     GRIP_PREFERENCE,
     thumb_safe_grips,
 )
-from .tuning import NO_CHORD, ROLE_FILL, ROLE_TARGET, ArrangementStep, Palette, Voicing
+from .step_types import ArrangementStep, Palette, Voicing
+from .tuning import NO_CHORD, ROLE_FILL, ROLE_TARGET
 
 # The three answers to "how is this slot played". Named rather than a bool because
 # the two non-default routes build different steps - see `melody_alone_case`.

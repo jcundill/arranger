@@ -28,8 +28,9 @@ from musthe import Note
 
 from .chords import bass_pitch_class, slash_bass, slash_bass_cost
 from .options import ArrangeOptions, resolve_request
+from .step_types import ArrangementStep
 from .steps import VoiceLeadingEngine
-from .tuning import NO_CHORD, ArrangementStep
+from .tuning import NO_CHORD
 
 __all__ = [
     "arrange_slots",

@@ -3,15 +3,15 @@
 This module is a **facade**. The engine is a package of modules with a strict
 dependency order, and nothing above imports anything below it by accident:
 
-    tuning -> fingers -> chords -> grips -> cost
-                 |
-              parts -> grid/texture
+    tuning -> step_types -> fingers -> chords -> grips -> cost
                               |
-                             bass_place -> bass -> bass_merge -> options
-                                         |
-                            decisions -> melody_alone -> routes
-                                                       |
-                                              movement -> steps -> slots -> render -> cli
+                           parts -> grid/texture
+                                           |
+                                          bass_place -> bass -> bass_merge -> options
+                                                      |
+                                         decisions -> melody_alone -> routes
+                                                                    |
+                                                           movement -> steps -> slots -> render -> cli
 
 `fingers` is a second edge off `tuning`, and the diagram above omits it: it is the
 left-hand fingering module of `docs/history/fingering.md`, and `bass_place` is the one engine
@@ -82,6 +82,7 @@ from . import (
     slot_plan,
     slots,
     step_prepare,
+    step_types,
     texture,
 )
 from .bass import (
@@ -202,6 +203,7 @@ from .parts import (
 )
 from .render import format_progression
 from .slots import arrange_slots, parse_bar_range, unresolved_steps
+from .step_types import ArrangementStep, Voicing
 from .steps import StepPreparation, VoiceLeadingEngine
 from .texture import (
     TARGET_BEATS,
@@ -230,9 +232,7 @@ from .tuning import (
     SILENCE_TUNE_SILENT,
     STANDARD_TUNING,
     STRING_NAMES,
-    ArrangementStep,
     GuitarFretboard,
-    Voicing,
 )
 
 # Library version. The single source of truth: `pyproject.toml` reads it through
@@ -479,6 +479,7 @@ __all__ = [
     "routes",
     "slot_plan",
     "step_prepare",
+    "step_types",
     "slots",
     "sounding_harmony",
     "steps",

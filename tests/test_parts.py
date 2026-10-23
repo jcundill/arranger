@@ -26,7 +26,7 @@ from arranger import (
 )
 from arranger.options import ArrangeOptions, Request
 from arranger.render import _step_cells
-from arranger.tuning import MUTED_CELL
+from arranger.step_types import MUTED_CELL
 from tests.support import (
     PROGRESSION,
     VOICES_ARG,
@@ -566,7 +566,7 @@ class TestRepeatedStepsHoldTheShape(unittest.TestCase):
         the difference between a *muted* string ('x') and a *held* one (blank) is the
         library's, not this test's - and a literal here would re-state it wrongly.
         """
-        from arranger.tuning import cells_from_frets
+        from arranger.step_types import cells_from_frets
         from tests.support import make_step
 
         step = make_step([-1, -1, -1, 10, 12, 10], repeated=True, melody_voiced=False)

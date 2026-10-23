@@ -27,11 +27,11 @@ from typing import TYPE_CHECKING, Dict, Optional, Sequence, Tuple
 
 from musthe import Note
 
+from .step_types import ArrangementStep
 from .tuning import NO_CHORD, PITCH_CLASS_NAMES
 
 if TYPE_CHECKING:  # pragma: no cover - type only, never imported at runtime
-    from .tuning import ArrangementStep
-
+    pass
 
 class ChordParser:
     """Parses chord symbols and identifies harmonic degrees."""

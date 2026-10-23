@@ -24,6 +24,7 @@ from .chords import (
 )
 from .cost import SPAN_CRITERION, VOICING_COST_CRITERIA
 from .grip_tables import INTERVAL_NAMES
+from .step_types import ArrangementStep, Voicing
 from .tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
@@ -34,8 +35,6 @@ from .tuning import (
     SILENCE_NO_SHAPE,
     SILENCE_OUT_OF_REACH,
     SILENCE_TUNE_SILENT,
-    ArrangementStep,
-    Voicing,
     note_name,
 )
 

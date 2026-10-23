@@ -38,7 +38,8 @@ from .options import (
     CHORD_NOTES_FULL,
 )
 from .render import format_progression
-from .tuning import NECK_FRET_MAX, NECK_FRET_MIN, ArrangementStep
+from .step_types import ArrangementStep
+from .tuning import NECK_FRET_MAX, NECK_FRET_MIN
 
 if TYPE_CHECKING:  # pragma: no cover - the annotations are strings at runtime
     import argparse

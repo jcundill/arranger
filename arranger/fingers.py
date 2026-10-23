@@ -59,7 +59,7 @@ from dataclasses import dataclass
 from itertools import combinations
 from typing import Dict, Iterable, Iterator, List, Optional, Tuple
 
-from .tuning import Voicing
+from .step_types import Voicing
 
 # Left-hand finger numbers, in the order a monotone assignment hands them out: the index
 # takes the lowest fret and the pinky the highest. They are the numbers a player reads off

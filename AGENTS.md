@@ -40,7 +40,7 @@ gate and the conventions — not the explanation.
 | a **lone bass line**, or a slot with nothing above the thumb (`bass_alone_step`, `lone_bass_case`, `is_shape_held`) | [docs/engine.md](docs/engine.md) | `arranger/decisions.py`, `arranger/routes.py`, `arranger/bass_place.py`, `arranger/annotation.py`, `tests/test_lone_bass.py` |
 
 | how a **compound metre is felt** — `time_signature=`, `TimeSignature`, `TARGET_BEATS` as felt beats, a walk on the pulses, a requested chord rhythm's positions in groups, the `n+n+…` refusal, and the direction / beaming / metronome channels a lead sheet states it through | [docs/engine.md](docs/engine.md) | `arranger/grouping.py` (`TimeSignature`, `COMMON_TIME`), `arranger/texture.py`, `arranger/grid.py`, `arranger/bass.py`, `headxml.py` (`Head.grouping`, `Head.grouping_source`, `_score_grouping`, `_beam_partition`, `_grouping_hint`, `_metronome_pulse`), `tests/test_grouping.py`, `tests/test_headxml_arrangement.py` |
-| the step/voicing mirrored fields (`step.grip`, `step.bass`), or which selection is melody-only | [docs/engine.md](docs/engine.md), and [docs/history/one-fact.md](docs/history/one-fact.md) for why | `arranger/tuning.py`, `arranger/movement.py` |
+| the step/voicing mirrored fields (`step.grip`, `step.bass`), or which selection is melody-only | [docs/engine.md](docs/engine.md), and [docs/history/one-fact.md](docs/history/one-fact.md) for why | `arranger/step_types.py`, `arranger/movement.py` |
 | how something was decided, historically — `voices=`, the comping styles, the parts redesign, the generated grips, the fingering notes, the Stage-2 collapse | [docs/history/](docs/history/) | — |
 | user-facing behaviour and examples | [README.md](README.md) | — |
 
@@ -189,7 +189,8 @@ arranger/
 ├── arranger/            # the engine - a package, not a module
 │   ├── __init__.py      #   facade: re-exports, __version__, main()
 │   ├── __main__.py      #   `python -m arranger`
-│   ├── tuning.py        #   STANDARD_TUNING, Voicing, ArrangementStep
+│   ├── tuning.py        #   STANDARD_TUNING, GuitarFretboard, the neck window
+│   ├── step_types.py    #   Voicing, ArrangementStep, Palette, the tab-cell primitives
 │   ├── context.py       #   one slot's request, shared by the two step routes
 │   ├── fingers.py       #   which finger holds which fret; read by bass_place for the fret budget
 │   ├── chords.py        #   ChordParser, non-chord-tone routing
@@ -249,7 +250,7 @@ The engine was one 4290-line module until Phase 5 of the package refactor. It is
 now a package of focused modules in a strict dependency order:
 
 ```
-tuning -> fingers -> chords -> grip_tables -> grip_place -> grips -> cost -> annotation -> parts
+tuning -> step_types -> fingers -> chords -> grip_tables -> grip_place -> grips -> cost -> annotation -> parts
                              -> grouping -> grid -> texture -> bass_rules -> bass_place -> bass -> bass_merge
                              -> options -> resolution
                                                                     |
@@ -303,9 +304,11 @@ Three consequences worth knowing:
 - **The Makefile names the package as a directory**, so a new engine module cannot be
   forgotten by lint or typecheck. A new *top-level* module must be added to `MODULES`
   and to the `typecheck` target in the same commit that creates it.
-- **`Voicing` and `ArrangementStep` live in `tuning`, not `steps`**, because `grips`
-  constructs a `Voicing` and both dataclasses default `role` to `ROLE_TARGET`. That
-  placement is forced by edges, not by taste.
+- **`Voicing` and `ArrangementStep` live in `step_types`, not `tuning` or `steps`**,
+  because `grips` constructs a `Voicing` and both dataclasses default `role` to
+  `ROLE_TARGET`. `tuning` is the instrument alone; `step_types` is the value types and
+  the tab-cell primitives they render through. That placement is forced by edges, not
+  by taste.
 
 ## Requirements and licence
 

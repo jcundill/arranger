@@ -27,10 +27,10 @@ from .options import DEFAULT_REQUEST, ArrangeOptions, Request
 from .resolution import felt_beat_timings, resolve_knobs, resolve_policies
 from .route_dispatch import dispatch_step
 from .slot_plan import Carried, SlotInputs, slot_state
+from .step_types import ArrangementStep
 from .tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
-    ArrangementStep,
 )
 
 __all__ = ["arrange_progression"]

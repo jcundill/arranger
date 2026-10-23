@@ -50,7 +50,8 @@ import re
 from typing import Any, Container, Dict, List, Optional, Sequence, Tuple
 from xml.etree import ElementTree
 
-from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES, ArrangementStep, GuitarFretboard
+from arranger.step_types import ArrangementStep
+from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES, GuitarFretboard
 from tabscore import score_events, substitute_steps
 
 # Guitar sounds an octave below its written pitch, so a score is written an octave

@@ -36,7 +36,8 @@ from musthe import Note
 from . import chords as _chords
 from .bass_place import BassNote, bass_placement
 from .fingers import can_fret
-from .tuning import PITCH_CLASS_NAMES, ArrangementStep
+from .step_types import ArrangementStep
+from .tuning import PITCH_CLASS_NAMES
 
 
 def attach_bass(

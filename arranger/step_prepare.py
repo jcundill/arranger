@@ -24,10 +24,10 @@ from .bass_merge import next_resolution_melody
 from .chords import ChordParser, resolve_substitute_harmony
 from .grip_tables import GRIP_PREFERENCE
 from .grips import MELODY_STRING_CHOICES_FULL
+from .step_types import Voicing
 from .tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
-    Voicing,
     note_name,
 )
 

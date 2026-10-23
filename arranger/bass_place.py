@@ -21,7 +21,8 @@ from .bass_rules import (
     BASS_STRING_INDICES,
 )
 from .fingers import can_fret
-from .tuning import STANDARD_TUNING, ArrangementStep, Voicing
+from .step_types import ArrangementStep, Voicing
+from .tuning import STANDARD_TUNING
 
 
 @dataclass

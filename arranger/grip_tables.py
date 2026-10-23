@@ -12,7 +12,8 @@ from __future__ import annotations
 from typing import Dict, List, Tuple
 
 from .chords import ChordParser
-from .tuning import MELODY_STRING_CHOICES_FULL, Voicing
+from .step_types import Voicing
+from .tuning import MELODY_STRING_CHOICES_FULL
 
 # Grip families, in the order they are generated in - which is *also* the order an exact
 # tie is broken in: `cost.best_voicing` is a stable `min` and no criterion in

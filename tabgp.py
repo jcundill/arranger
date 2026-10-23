@@ -59,7 +59,8 @@ from __future__ import annotations
 import io
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from arranger.tuning import NO_CHORD, ArrangementStep
+from arranger.step_types import ArrangementStep
+from arranger.tuning import NO_CHORD
 from tabscore import score_events, substitute_steps
 
 # The GP file version written. (5, 1, 0) is the 5.1 format, which Guitar Pro 5 and

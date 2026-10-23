@@ -32,6 +32,7 @@ from .decisions import (
 )
 from .melody_alone import melody_alone_shape, sounding_melody
 from .parts import PART_BASS
+from .step_types import ArrangementStep, Palette, Voicing
 from .texture import comping_arity
 from .tuning import (
     NO_CHORD,
@@ -39,9 +40,6 @@ from .tuning import (
     SILENCE_NO_SHAPE,
     SILENCE_OUT_OF_REACH,
     STANDARD_TUNING,
-    ArrangementStep,
-    Palette,
-    Voicing,
 )
 
 

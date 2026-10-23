@@ -50,6 +50,7 @@ from arranger import (
 from arranger.annotation import _omission_clause, step_annotation
 from arranger.chords import melody_degree_name
 from arranger.options import ArrangeOptions
+from arranger.step_types import ArrangementStep, Palette
 from arranger.tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
@@ -58,8 +59,6 @@ from arranger.tuning import (
     SILENCE_NO_SHAPE,
     SILENCE_OUT_OF_REACH,
     SILENCE_TUNE_SILENT,
-    ArrangementStep,
-    Palette,
 )
 from tests.support import arranged, make_step
 

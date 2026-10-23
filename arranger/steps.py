@@ -47,11 +47,10 @@ from .step_prepare import (
     StepPreparation,
     prepare_step,
 )
+from .step_types import ArrangementStep, Voicing
 from .tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
-    ArrangementStep,
-    Voicing,
 )
 
 __all__ = [

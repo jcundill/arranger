@@ -29,7 +29,7 @@ from __future__ import annotations
 from typing import List, Optional
 
 from .annotation import annotation_lines, melody_degree_label, step_annotation
-from .tuning import MUTED_CELL, STAFF_CELL_WIDTH, ArrangementStep, cells_from_frets
+from .step_types import MUTED_CELL, STAFF_CELL_WIDTH, ArrangementStep, cells_from_frets
 
 __all__ = ["MUTED_CELL", "STAFF_CELL_WIDTH", "format_progression", "print_step"]
 

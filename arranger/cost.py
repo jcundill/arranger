@@ -17,7 +17,8 @@ from dataclasses import dataclass
 from typing import Callable, Container, List, NamedTuple, Optional, Sequence
 
 from .grips import BASS_DEGREES_6432
-from .tuning import NECK_FRET_MAX, NECK_FRET_MIN, GuitarFretboard, Voicing
+from .step_types import Voicing
+from .tuning import NECK_FRET_MAX, NECK_FRET_MIN, GuitarFretboard
 
 
 class VoicingScore(NamedTuple):

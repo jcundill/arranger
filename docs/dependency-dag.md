@@ -9,7 +9,7 @@ the code stops matching them. Nothing compares this file with the tree.
 An arrow means **"imports"**: `A --> B` is an import of `B` by `A`, whether it is
 spelled `from .b import x` or `from . import b`. The diagrams are drawn
 top-to-bottom, so a module sits above everything it imports and the foundation
-(`tuning`) is at the bottom.
+(`tuning`, with `step_types` just above it) is at the bottom.
 
 The engine diagram shows the **main** dependencies rather than every edge: the
 boxes are the layers of the declared order, an arrow between two boxes is a direct
@@ -113,9 +113,11 @@ flowchart TB
         fingers["fingers"]
         chords["chords"]
         context["context"]
+        step_types["step_types"]
         tuning["tuning"]
-        fingers --> tuning
+        fingers --> step_types
         chords --> tuning
+        step_types --> tuning
     end
 
     layer_surface --> layer_loop
@@ -131,7 +133,8 @@ flowchart TB
 
 What the drawing makes visible:
 
-- **The leaves import no sibling.** `tuning` is the instrument and the value types;
+- **The leaves import no sibling.** `tuning` is the instrument and `step_types` the
+  value types (`Voicing`, `ArrangementStep`, `Palette`) with the tab-cell primitives;
   `context` is one slot's request; `parts` is the parts vocabulary. Because nothing
   is below them, every other module can depend on them without narrowing what may
   import it.

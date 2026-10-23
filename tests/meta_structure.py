@@ -142,6 +142,10 @@ BUDGETS: Dict[str, Budget] = {
     # measures rather than what it measured.
     "arranger/slot_plan.py": Budget(6, 78, 5),
     "arranger/step_prepare.py": Budget(6, 74, 9),
+    # The value types and tab-cell primitives, split out of `tuning`: `Voicing`,
+    # `ArrangementStep`, `Palette` and the six-line block renderer. Measured as it
+    # stood when it moved, so the ceiling is the measurement.
+    "arranger/step_types.py": Budget(5, 23, 1),
     "arranger/harmonised_route.py": Budget(8, 54, 8),
     # The dispatch table: eleven small functions, each an entry's claim or emit, so
     # the ceiling is `dispatch_step`'s four branches rather than any one route. The
@@ -163,7 +167,11 @@ BUDGETS: Dict[str, Budget] = {
     # The facade's `arrange_progression` loses the same five (16 -> 10).
     "arranger/steps.py": Budget(1, 54, 10),
     "arranger/texture.py": Budget(11, 57, 6),
-    "arranger/tuning.py": Budget(5, 28, 2),
+    # The instrument: tuning, the fretboard, the neck limits and the sentinels. The
+    # value types (`Voicing`, `ArrangementStep`, `Palette`) and the tab-cell
+    # primitives moved to `step_types`, so this ceiling is what is left after that
+    # split rather than what the module measured before it.
+    "arranger/tuning.py": Budget(4, 11, 2),
     # `arrange_xml_head` lost the five axis keywords and `grouping=` with them
     # (13 -> 8): the metre is one value, `time_signature=`, whose grouping is the one
     # fact of it a caller may set. `head_cli`'s branches live in `_print_metre_notes`,

@@ -25,7 +25,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from arranger.tuning import MUTED_CELL, STAFF_CELL_WIDTH, STRING_NAMES, ArrangementStep
+from arranger.step_types import MUTED_CELL, STAFF_CELL_WIDTH, ArrangementStep
+from arranger.tuning import STRING_NAMES
 
 # The MusicXML and Guitar Pro renderers are ordinary top-level imports, re-exported
 # from `arranger` so that `from arranger import format_musicxml` - the spelling in

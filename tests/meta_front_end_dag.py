@@ -186,7 +186,7 @@ class TestTheRuntimeCycle(unittest.TestCase):
             " sys.modules['arranger'] = blank;"
             " import tabscore, tabstaff, tabxml, tabgp;"
             " assert sys.modules['arranger'] is blank, 'a front end ran the facade';"
-            " from arranger.tuning import ArrangementStep;"
+            " from arranger.step_types import ArrangementStep;"
             " assert tabscore.ArrangementStep is ArrangementStep;"
             " assert tabstaff.ArrangementStep is ArrangementStep;"
             " assert tabxml.ArrangementStep is ArrangementStep;"
