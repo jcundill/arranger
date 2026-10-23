@@ -87,11 +87,10 @@ _SEARCHED_GRIPS: Tuple[str, ...] = ("shell", "drop2_6432")
 # strategies rewrite the chord before generation, which is why a b6 arrives here as the
 # 9th or 13th of a resolved chord rather than as a passing note with a duo under it.
 #
-# It is still the root and the 5th, and still for the reason stated above: they are the
-# two notes that carry no information about the chord's quality, so a pair built on
-# either leaves the guide tone to do the work. `BASS_DEGREES_6432` below is the same
-# rule applied to the bass rather than to a melody.
-DUO_DEGREES: Tuple[int, int] = (0, 7)
+# The pair is the root and the 5th, for the reason stated above: they are the two notes
+# that carry no information about the chord's quality, so a pair built on either leaves
+# the guide tone to do the work. `_duo_offsets` builds it; `BASS_DEGREES_6432` below is
+# the same rule applied to the bass rather than to a melody.
 
 # The degrees the low-E note may take in a 6-4-3-2 shape. The same rule as
 # DUO_DEGREES, applied to the bass rather than to the melody, and for a stronger reason:
@@ -357,7 +356,7 @@ def _interval_offsets(
     **texture, not a harmony**, and that distinction is the whole reason it is a
     separate grip rather than a widening of `_duo_offsets`:
 
-      - It is NOT gated on `DUO_DEGREES`. A duo refuses to sound under a 3rd or a 7th
+      - It is NOT gated on the duo's root-or-5th rule. A duo refuses to sound under a 3rd or a 7th
         in the melody, because there those two notes *are* the chord's function and a
         bare pair sounds like a mistake. An interval is not claiming the harmony, so
         it is free to sit under any melody note - which is exactly the case a fill
@@ -1029,7 +1028,7 @@ def get_grip_voicings(
       drop24  four voices, a close stack with the second *and* fourth dropped
       closed  four voices in close position under the melody
       shell   three voices: the 3rd, the 7th, and one more
-      duo     two voices, and only under a root or a 5th (see DUO_DEGREES)
+      duo     two voices, and only under a root or a 5th (see `_duo_offsets`)
       interval  two voices a 3rd, 6th or 10th apart - a fill, and under *any*
                melody degree (see _interval_offsets for why that is safe)
 

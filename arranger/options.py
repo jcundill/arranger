@@ -29,6 +29,7 @@ from dataclasses import dataclass
 from typing import Container, Dict, Mapping, Optional, Sequence, Tuple
 
 from .bass_rules import (
+    BASS_ALL_RULES,
     BASS_RULE_5TH,
     BASS_RULE_ROOT,
     BASS_RULES,
@@ -88,7 +89,7 @@ BASS_NOTES_WALK = "walk"
 BASS_NOTES: Dict[str, str] = {
     BASS_NOTES_ROOT: BASS_RULE_ROOT,
     BASS_NOTES_ROOT_FIFTH: f"{BASS_RULE_ROOT},{BASS_RULE_5TH}",
-    BASS_NOTES_WALK: ",".join(BASS_RULES),
+    BASS_NOTES_WALK: BASS_ALL_RULES,
 }
 
 CHORD_FILLS_NONE = "none"

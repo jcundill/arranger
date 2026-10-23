@@ -37,7 +37,7 @@ from musthe import Note
 
 import arranger
 from arranger import ArrangementStep, ChordParser, VoiceLeadingEngine, Voicing, get_comping_voicings
-from arranger.bass_rules import BASS_STYLE_WALK
+from arranger.bass_rules import BASS_ALL_RULES
 from arranger.grip_tables import SHELL_DEGREES
 from arranger.options import ArrangeOptions
 from arranger.tuning import PITCH_CLASS_NAMES, STANDARD_TUNING
@@ -618,7 +618,7 @@ def walk(
         timings=timings,
         options=ArrangeOptions(
             texture="targets",
-            bass=BASS_STYLE_WALK,
+            bass=BASS_ALL_RULES,
         ),
     )
 

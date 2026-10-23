@@ -35,6 +35,7 @@ from musthe import Note
 
 from .bass_place import BassNote, bass_cost
 from .bass_rules import (
+    BASS_ALL_RULES,
     BASS_ROLE_ANCHOR,
     BASS_ROLE_APPROACH,
     BASS_ROLE_CONNECT,
@@ -49,7 +50,6 @@ from .bass_rules import (
     BASS_RULE_ROOT,
     BASS_RULES,
     BASS_STYLE_NONE,
-    BASS_STYLE_WALK,
     parse_bass_style,
 )
 from .chords import NON_CHORD_TONE_EXTENSIONS, ChordParser, normalised_harmony
@@ -146,7 +146,7 @@ def walking_slots(
     # while the melody *timeline* those beats are attributed through converts each slot's
     # whole-note `duration` to beats, which needs this. See `_melody_timeline`.
     beat_type: int = 4,
-    bass: str = BASS_STYLE_WALK,
+    bass: str = BASS_ALL_RULES,
     # The metre's felt beats, as group lengths. `None` means one per denominator
     # unit, the reading this function had before grouping existed. The walk invents
     # one note per **felt** beat, so 12/8 walks four dotted-quarter pulses rather

@@ -38,10 +38,10 @@ from arranger.bass_place import (
     place_bass,
 )
 from arranger.bass_rules import (
+    BASS_ALL_RULES,
     BASS_ROLE_ANCHOR,
     BASS_STRING_INDICES,
     BASS_STYLE_ANCHORS,
-    BASS_STYLE_WALK,
 )
 from arranger.fingers import MAX_HAND_SPAN, hand_span
 from arranger.grip_tables import GRIP_MAX_SPAN
@@ -93,7 +93,7 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
             BUT_NOT_FOR_ME,
             options=ArrangeOptions(
                 texture="targets",
-                bass=BASS_STYLE_WALK,
+                bass=BASS_ALL_RULES,
             ),
         )
         return steps
@@ -338,7 +338,7 @@ class TestAHeldStepChangesNothing(unittest.TestCase):
             BUT_NOT_FOR_ME,
             options=ArrangeOptions(
                 texture="targets",
-                bass=BASS_STYLE_WALK,
+                bass=BASS_ALL_RULES,
             ),
         )
         return steps
@@ -384,7 +384,7 @@ class TestAHeldStepChangesNothing(unittest.TestCase):
         """
         steps, _head, _notes = arranged(
             BUT_NOT_FOR_ME,
-            options=ArrangeOptions(texture="targets", bass=BASS_STYLE_WALK),
+            options=ArrangeOptions(texture="targets", bass=BASS_ALL_RULES),
             request=Request(chord_on="every-beat", bass_on="every-beat"),
         )
         self.assertEqual(
@@ -896,9 +896,9 @@ class TestTheInvariant(unittest.TestCase):
         checked = 0
         for path in paths:
             for texture, bass in (
-                ("targets", BASS_STYLE_WALK),
+                ("targets", BASS_ALL_RULES),
                 ("targets", BASS_STYLE_ANCHORS),
-                ("chord2", BASS_STYLE_WALK),
+                ("chord2", BASS_ALL_RULES),
                 ("chord2", BASS_STYLE_ANCHORS),
             ):
                 with self.subTest(head=path, texture=texture, bass=bass):
@@ -951,9 +951,9 @@ class TestTheInvariant(unittest.TestCase):
         checked = 0
         for path in paths:
             for texture, bass in (
-                ("targets", BASS_STYLE_WALK),
+                ("targets", BASS_ALL_RULES),
                 ("targets", BASS_STYLE_ANCHORS),
-                ("chord2", BASS_STYLE_WALK),
+                ("chord2", BASS_ALL_RULES),
                 ("chord2", BASS_STYLE_ANCHORS),
             ):
                 with self.subTest(head=path, texture=texture, bass=bass):
@@ -1047,7 +1047,7 @@ class TestASingleNoteStepHasNothingToHold(unittest.TestCase):
             timings=[(2, 1.0, 0.5), (2, 2.0, 0.25), (2, 2.5, 0.375), (3, 1.0, 0.375), (3, 1.5, 0.25)],
             options=ArrangeOptions(
                 texture="targets",
-                bass=BASS_STYLE_WALK,
+                bass=BASS_ALL_RULES,
             ),
             time_signature=TimeSignature(2, 4),
         )
@@ -1121,7 +1121,7 @@ class TestASingleNoteStepHasNothingToHold(unittest.TestCase):
             BUT_NOT_FOR_ME,
             options=ArrangeOptions(
                 texture="targets",
-                bass=BASS_STYLE_WALK,
+                bass=BASS_ALL_RULES,
             ),
         )
         target = [s for s in steps if s.bar == 3 and s.beat == 1.0][0]

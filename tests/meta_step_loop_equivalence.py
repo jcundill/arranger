@@ -41,7 +41,7 @@ from typing import List, Optional, Tuple
 
 from arranger import VoiceLeadingEngine, slots
 from arranger.bass_rules import (
-    BASS_STYLE_WALK,
+    BASS_ALL_RULES,
 )
 from arranger.options import ArrangeOptions
 
@@ -202,7 +202,7 @@ class TestTheTwoLoopsAgree(unittest.TestCase):
         for parts in ("chord", "melody"):
             with self.subTest(parts=parts):
                 self.assert_same_refusal(
-                    TRIPLES[:4], "targets", parts=parts, bass=BASS_STYLE_WALK
+                    TRIPLES[:4], "targets", parts=parts, bass=BASS_ALL_RULES
                 )
 
     def test_a_narrowed_palette_agrees(self):
@@ -218,7 +218,7 @@ class TestTheTwoLoopsAgree(unittest.TestCase):
             with self.subTest(texture=texture):
                 self.assert_same_arrangement(
                     TRIPLES[:4], texture,
-                    bass=BASS_STYLE_WALK,
+                    bass=BASS_ALL_RULES,
                 )
 
 

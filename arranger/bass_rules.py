@@ -118,10 +118,15 @@ BASS_RULE_ROLES: Dict[str, FrozenSet[str]] = {
     BASS_RULE_NEAREST: frozenset({BASS_ROLE_CONNECT}),
 }
 
-# The two shipped styles, as rule lists, derived from `BASS_RULES` rather than listed so
-# the table above stays the one source. `walk` is the whole vocabulary; `anchors` is the
-# root rule alone. These are the spellings a style takes.
-BASS_STYLE_WALK = ",".join(BASS_RULES)
+# `BASS_ALL_RULES` is the bass axis's own default - every rule, in the table's order,
+# derived rather than listed so the table above stays the one source - and it is the same
+# string the request's `walk` maps to.
+#
+# `BASS_STYLE_ANCHORS` is the root rule alone, and it is a **style name with no request
+# spelling**: `bass_notes="root"` asks for one root at every position a *named* rhythm
+# names (`_simple_bass_line`), which is deliberately not the walk filtered to its root
+# role. Nothing but an axis override reaches this value.
+BASS_ALL_RULES = ",".join(BASS_RULES)
 BASS_STYLE_ANCHORS = BASS_RULE_ROOT
 
 # "no thumb line" and "whatever this texture means". Neither is a rule. `none` is the
@@ -397,7 +402,7 @@ def resolve_bass(
 
     if bass == BASS_STYLE_AUTO:
         bass = (
-            BASS_STYLE_WALK
+            BASS_ALL_RULES
             if melody_only and parts_have_bass(parts)
             else BASS_STYLE_NONE
         )

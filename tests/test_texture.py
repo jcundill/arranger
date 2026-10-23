@@ -29,9 +29,9 @@ from arranger import (
     texture_palette,
 )
 from arranger.bass_rules import (
+    BASS_ALL_RULES,
     BASS_RULES,
     BASS_STRING_INDICES,
-    BASS_STYLE_WALK,
     parse_bass_style,
 )
 
@@ -282,7 +282,7 @@ class TestRoles(unittest.TestCase):
         **This assertion was inverted, not deleted.** It used to name the one
         empty palette a texture *did* carry - `walking_bass`'s fill - and assert
         that it was the only one. `walking_bass` is not a texture any more (it is
-        `bass="BASS_STYLE_WALK"` over `texture="targets"`), and the arity rule leaves
+        `bass="BASS_ALL_RULES"` over `texture="targets"`), and the arity rule leaves
         no row that can be empty: a fill one thinner than a one-note target is the
         `melody` entry rather than nothing. What survives is the rule the test was
         for, and it is now stated over the whole palette table rather than over a
@@ -320,11 +320,11 @@ class TestRoles(unittest.TestCase):
         It used to be a texture of its own (`texture="walking_bass"`), which made
         one name cover two claims: which note the thumb states (a *bass* fact) and
         how many notes the chord part states (a *texture* fact). `docs/history/parts.md` §6
-        splits them - `bass="BASS_STYLE_WALK"` with `texture="targets"` - and the
+        splits them - `bass="BASS_ALL_RULES"` with `texture="targets"` - and the
         arrangement is the same, so what is asserted here is the pair rather than
         the one spelling.
         """
-        self.assertEqual(set(parse_bass_style(BASS_STYLE_WALK)), set(BASS_RULES))
+        self.assertEqual(set(parse_bass_style(BASS_ALL_RULES)), set(BASS_RULES))
         # A walk's targets are the arity a thumb leaves room for, so the chord part
         # states a shell or a duo and nothing wider.
         self.assertEqual(
@@ -332,7 +332,7 @@ class TestRoles(unittest.TestCase):
         )
         steps = VoiceLeadingEngine.arrange_progression(
             MINOR_CADENCE,
-            options=ArrangeOptions(texture="targets", bass=BASS_STYLE_WALK),
+            options=ArrangeOptions(texture="targets", bass=BASS_ALL_RULES),
             timings=[(0, 1.0 + 0.5 * i, None) for i in range(len(MINOR_CADENCE))],
         )
         self.assertTrue(steps)
@@ -1612,9 +1612,9 @@ class TestARepeatedMelodyHoldsItsString(unittest.TestCase):
         configs = (
             ("uniform", "auto"),
             ("targets", "auto"),
-            ("targets", BASS_STYLE_WALK),
+            ("targets", BASS_ALL_RULES),
             ("targets", "root"),
-            ("chord1", BASS_STYLE_WALK),
+            ("chord1", BASS_ALL_RULES),
         )
         checked = held = 0
         for path in paths:

@@ -37,6 +37,7 @@ from arranger.bass import (
     _walking_bass_line,
 )
 from arranger.bass_rules import (
+    BASS_ALL_RULES,
     BASS_ROLE_ANCHOR,
     BASS_ROLE_APPROACH,
     BASS_ROLE_CONNECT,
@@ -51,7 +52,6 @@ from arranger.bass_rules import (
     BASS_RULES,
     BASS_STYLE_ANCHORS,
     BASS_STYLE_NONE,
-    BASS_STYLE_WALK,
     _comping_no_room_reason,
 )
 from arranger.parts import PART_NAMES
@@ -62,7 +62,7 @@ from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES, ROLE_FILL, ROLE_TARGET
 # rule vocabulary; `anchors` is the root rule alone. `none` and `auto` are not styles a
 # caller asks `bass_allowed` about directly - `auto` is resolved first, and `none` is
 # answered without a capacity question - so they are not in this list.
-SHIPPED_STYLES = (BASS_STYLE_WALK, BASS_STYLE_ANCHORS)
+SHIPPED_STYLES = (BASS_ALL_RULES, BASS_STYLE_ANCHORS)
 
 
 def line(chords, onsets, beats_per_bar=4):
@@ -503,14 +503,14 @@ class TestTheBassStyleRegistry(unittest.TestCase):
             parse_bass_style("none")
 
     def test_the_shipped_walk_is_the_whole_vocabulary_in_order(self):
-        """`BASS_STYLE_WALK` is every rule, and its order is the resolution order.
+        """`BASS_ALL_RULES` is every rule, and its order is the resolution order.
 
         `approach` before `nearest` is what makes the walk byte-identical to the old
         `walk` policy: on the last beat the approach outranks the connective note.
         """
-        self.assertEqual(BASS_STYLE_WALK, ",".join(BASS_RULES))
+        self.assertEqual(BASS_ALL_RULES, ",".join(BASS_RULES))
         self.assertEqual(
-            parse_bass_style(BASS_STYLE_WALK),
+            parse_bass_style(BASS_ALL_RULES),
             (BASS_RULE_ROOT, BASS_RULE_5TH, BASS_RULE_APPROACH, BASS_RULE_NEAREST),
         )
 
@@ -541,7 +541,7 @@ class TestTheBassStyleRegistry(unittest.TestCase):
         # timing list in this suite.
         chords: List[Tuple[Optional[str], str, str]] = [("C", "maj7", "Cmaj7")] * 8
         onsets: List[Tuple[int, float]] = [(1, 1.0 + 0.5 * i) for i in range(8)]
-        walked = bass_line_for(BASS_STYLE_WALK, chords, onsets, 4)
+        walked = bass_line_for(BASS_ALL_RULES, chords, onsets, 4)
         anchored = bass_line_for(BASS_STYLE_ANCHORS, chords, onsets, 4)
         self.assertGreater(len(walked), len(anchored))
         self.assertEqual({n.role for n in anchored}, {BASS_ROLE_ANCHOR})
@@ -598,7 +598,7 @@ class TestThumbCapacityAndRefusal(unittest.TestCase):
         # route is known - `bass_allowed`'s `melody_only`, unbounded by
         # construction rather than measured.
         allowed, _why = bass_allowed(
-            PART_NAMES, "uniform", BASS_STYLE_WALK, melody_only=True
+            PART_NAMES, "uniform", BASS_ALL_RULES, melody_only=True
         )
         self.assertTrue(allowed, "a single-fret upper shape leaves every string free")
 

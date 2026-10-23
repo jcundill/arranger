@@ -41,10 +41,10 @@ from arranger.bass import (
     walking_slots,
 )
 from arranger.bass_rules import (
+    BASS_ALL_RULES,
     BASS_ROLE_APPROACH,
     BASS_RULES,
     BASS_STYLE_ANCHORS,
-    BASS_STYLE_WALK,
     parse_bass_style,
 )
 from arranger.options import ArrangeOptions
@@ -69,10 +69,10 @@ class TestValidation(unittest.TestCase):
         It used to be a texture of its own (`texture="walking_bass"`), which made one
         name cover two claims - what the thumb states, and how many notes the chord
         part states. `docs/history/parts.md` §6 splits them, so what "accepted" means here is that
-        `bass="BASS_STYLE_WALK"` parses and the arrangement it makes is one bar of four
+        `bass="BASS_ALL_RULES"` parses and the arrangement it makes is one bar of four
         beats.
         """
-        self.assertEqual(set(parse_bass_style(BASS_STYLE_WALK)), set(BASS_RULES))
+        self.assertEqual(set(parse_bass_style(BASS_ALL_RULES)), set(BASS_RULES))
         self.assertEqual(len(walk([("F5", "maj7", "Fmaj7")], [(0, 1.0)])), 4)
 
     def test_an_unknown_texture_is_still_rejected_before_any_voicing(self):
@@ -185,7 +185,7 @@ class TestTheWalkFollowsTheFeltBeats(unittest.TestCase):
             timings=timings,
             options=ArrangeOptions(
                 texture="targets",
-                bass=BASS_STYLE_WALK,
+                bass=BASS_ALL_RULES,
             ),
             time_signature=TimeSignature(
                 beats_per_bar, beat_type, grouping if grouping is not None else "auto"
@@ -229,7 +229,7 @@ class TestTheWalkFollowsTheFeltBeats(unittest.TestCase):
             timings=timings,
             options=ArrangeOptions(
                 texture="targets",
-                bass=BASS_STYLE_WALK,
+                bass=BASS_ALL_RULES,
             ),
             time_signature=TimeSignature(12, 8),
         )
@@ -543,7 +543,7 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
                 timings=timings,
                 options=ArrangeOptions(
                     texture="chord2",
-                    bass=BASS_STYLE_WALK,
+                    bass=BASS_ALL_RULES,
                 ),
                 time_signature=TimeSignature(3, beat_type),
             )
@@ -563,7 +563,7 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
                 timings=timings,
                 options=ArrangeOptions(
                     texture="chord2",
-                    bass=BASS_STYLE_WALK,
+                    bass=BASS_ALL_RULES,
                 ),
                 time_signature=TimeSignature(3, 4),
             )
@@ -887,7 +887,7 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
         equivalence this asserts is therefore the other direction: the style and the
         four rules it is spelled from are one arrangement, and the default is not it.
         """
-        named = self.tabs(self.arrange(texture="targets", bass=BASS_STYLE_WALK))
+        named = self.tabs(self.arrange(texture="targets", bass=BASS_ALL_RULES))
         spelled = self.tabs(
             self.arrange(texture="targets", bass="root,5th,approach,nearest")
         )
@@ -924,7 +924,7 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
         which is a shell on a strong beat and the melody alone between them, is about
         the *left* hand and is unaffected by how many notes the thumb writes.
         """
-        with_thumb = self.arrange(texture="chord2", bass=BASS_STYLE_WALK)
+        with_thumb = self.arrange(texture="chord2", bass=BASS_ALL_RULES)
         without = self.arrange(texture="chord2", bass="none")
         self.assertTrue(any(s.bass is not None for s in with_thumb))
         self.assertEqual([s.bass for s in without], [None] * len(without))
@@ -941,7 +941,7 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
 
     def test_anchors_writes_fewer_notes_than_a_walk(self):
         """Same texture, two policies, and the line is measurably sparser."""
-        walked = self.arrange(texture="chord2", bass=BASS_STYLE_WALK)
+        walked = self.arrange(texture="chord2", bass=BASS_ALL_RULES)
         anchored = self.arrange(texture="chord2", bass=BASS_STYLE_ANCHORS)
         # The notes actually *struck*: a carried note rings into the steps after it,
         # so counting `s.bass` would measure the bar rather than the line.
@@ -962,7 +962,7 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
     def test_a_texture_that_never_had_a_thumb_can_carry_one(self):
         """`targets` harmonises in full, and a thumb line under it is now expressible."""
         plain = self.arrange(texture="targets")
-        walked = self.arrange(texture="targets", bass=BASS_STYLE_WALK)
+        walked = self.arrange(texture="targets", bass=BASS_ALL_RULES)
         self.assertEqual([s.bass for s in plain], [None] * len(plain))
         self.assertTrue(any(s.bass is not None for s in walked))
 
@@ -982,7 +982,7 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
         the arrangement still sounds, one step per melody note - so a silently dropped
         chord cannot pass for a working bass line.
         """
-        steps = self.arrange(texture="uniform", bass=BASS_STYLE_WALK)
+        steps = self.arrange(texture="uniform", bass=BASS_ALL_RULES)
         self.assertTrue(
             any(s.bass is not None for s in steps), "the walk wrote no note at all"
         )
@@ -1035,7 +1035,7 @@ class TestAChordlessBarHasNoBassPart(unittest.TestCase):
 
     def test_the_walked_bar_carries_no_thumb_note(self) -> None:
         """Under a texture that puts a note on every beat, the chordless bar has none."""
-        steps = self.arrange(texture="targets", bass=BASS_STYLE_WALK)
+        steps = self.arrange(texture="targets", bass=BASS_ALL_RULES)
         walked = [s for s in steps if s.bar == 2]
         # One step, not four: with no chord there is no beat for the walk to be written
         # on, so the bar the grid would have invented collapses to its melody slot.
@@ -1080,7 +1080,7 @@ class TestAChordlessBarHasNoBassPart(unittest.TestCase):
         therefore changes the note *before* it as well as its own, and this pins the
         direction: a half step from G, not a half step from D.
         """
-        steps = self.arrange(texture="chord2", bass=BASS_STYLE_WALK)
+        steps = self.arrange(texture="chord2", bass=BASS_ALL_RULES)
         last = [s for s in steps if s.bar == 1][-1]
         self.assertEqual(last.bass_role, BASS_ROLE_APPROACH)
         note = last.bass
