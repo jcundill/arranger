@@ -49,11 +49,7 @@ from tests.support import (
     quality_of,
 )
 
-# The comping part **with** the thumb line, which is a different selection rather than a
-# different setting: a bass style is a claim about the bass part.
-PARTS_WITH_BASS = "bass,chord"
 PART_NAMES_ARG = "auto"
-
 
 
 class TestCompingGenerator(unittest.TestCase):
@@ -363,13 +359,16 @@ class TestTheCompingArrangement(unittest.TestCase):
         self.engine = VoiceLeadingEngine()
         self.timings = [(0, 1.0, 1.0), (0, 2.0, 1.0), (0, 3.0, 1.0), (0, 4.0, 1.0)]
 
-    def comped(self, **kwargs):
-        # `bass,chord`: the thumb line is the **bass part**, and a bass style is
-        # refused without it ("add 'bass' to parts"). The arity is unaffected -
-        # `comping_arity` reads the chord part and the hand, not how many parts are
-        # named - so the shapes are the same as a chord-only selection's.
+    def comped(self, timings=None, **request_kwargs):
+        # `melody=False` with a chord position: the thumb line is the **bass part**,
+        # and a bass style is refused without it ("add 'bass' to parts"). The arity is
+        # unaffected - `comping_arity` reads the chord part and the hand, not how many
+        # parts are named - so the shapes are the same as a chord-only selection's.
         steps = self.engine.arrange_progression(
-            PROGRESSION, options=ArrangeOptions(parts=PARTS_WITH_BASS, **kwargs)
+            PROGRESSION,
+            options=ArrangeOptions(
+                request=Request(melody=False, **request_kwargs), timings=timings
+            ),
         )
         self.assertTrue(steps, "an arrangement with no steps at all is a defect")
         return steps
@@ -512,7 +511,7 @@ class TestTheCompingArrangement(unittest.TestCase):
 
     def test_the_texture_axis_still_decides_where_notes_fall(self):
         """`voices` and `texture` are orthogonal, not one mode between them."""
-        steps = self.comped(texture="targets", timings=self.timings)
+        steps = self.comped(chord_notes="targets", timings=self.timings)
         roles = [step.role for step in steps]
         self.assertIn("target", roles)
         self.assertIn("fill", roles)
@@ -526,7 +525,7 @@ class TestTheCompingArrangement(unittest.TestCase):
         assertion is on the *shape*, not on the melody's pitch class, which a comping
         shape may legitimately share; see `test_the_generator_never_reads_the_melody`.
         """
-        for step in self.comped(texture="targets", timings=self.timings):
+        for step in self.comped(chord_notes="targets", timings=self.timings):
             self.assertEqual(
                 len(step.voicing.active_frets()), 3,
                 step.tab_line(),
@@ -535,16 +534,19 @@ class TestTheCompingArrangement(unittest.TestCase):
             self.assertFalse(step.melody_voiced, step.tab_line())
 
     def test_the_bass_axis_still_decides_the_bottom(self):
-        """`bass="walk"` walks under a comping part, and `bass="none"` does not.
+        """`bass_notes="walk"` walks under a comping part, and `bass_on="none"` does not.
 
         This is the band setting as a whole: both axes named, and neither inferred
         from the other.
         """
         walked = self.comped(
-            texture="targets", bass="root,5th,approach,nearest", timings=self.timings
+            chord_notes="targets",
+            bass_on="every-beat",
+            bass_notes="walk",
+            timings=self.timings,
         )
         self.assertTrue(any(step.bass is not None for step in walked))
-        silent = self.comped(texture="targets", bass="none", timings=self.timings)
+        silent = self.comped(chord_notes="targets", bass_on="none", timings=self.timings)
         self.assertTrue(all(step.bass is None for step in silent))
         for step in silent:
             self.assertFalse(step.melody_voiced)
@@ -1038,26 +1040,27 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
         # so they are spread over four beats rather than sitting on all four slots.
         self.timings = [(0, 1.0, 1.0), (0, 2.0, 1.0), (0, 2.5, 0.5), (0, 3.5, 0.5)]
 
-    def comped(self, **kwargs):
-        # `bass,chord`: the thumb line is the bass part, and a bass style with no
-        # bass part is refused ("add 'bass' to parts"). This class is the one that
-        # carries a thumb, so it takes both parts.
+    def comped(self, **request_kwargs):
+        # `melody=False` with a bass position: the thumb line is the bass part, and a
+        # bass style with no bass part is refused ("add 'bass' to parts"). This class
+        # is the one that carries a thumb, so it names both.
         steps = self.engine.arrange_progression(
             PROGRESSION,
             options=ArrangeOptions(
-                parts=PARTS_WITH_BASS, timings=self.timings, **kwargs
+                request=Request(melody=False, **request_kwargs),
+                timings=self.timings,
             ),
         )
         self.assertTrue(steps, "an arrangement with no steps at all is a defect")
         return steps
 
     def test_the_default_texture_no_longer_refuses_a_thumb_line(self):
-        """The regression itself: `bass="walk"` under the default texture.
+        """The regression itself: a walk under the default texture.
 
         Asserted on the *thumb notes* rather than on the warning, because a fix that
         merely quieted the warning while still dropping the line would pass otherwise.
         """
-        steps = self.comped(bass="root,5th,approach,nearest")
+        steps = self.comped(bass_on="every-beat", bass_notes="walk")
         self.assertTrue(
             any(step.bass is not None for step in steps),
             "the comping route emitted no thumb notes at all",
@@ -1075,10 +1078,10 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
         structure and the role are untouched by it.
         """
         baseline: Optional[list] = None
-        for texture, ceiling in (
-            ("chord1", 1), ("chord2", 2), ("chord3", 3), ("uniform", 3),
+        for notes, ceiling in (
+            ("1", 1), ("2", 2), ("3", 3), ("full", 3),
         ):
-            steps = self.comped(bass="root,5th,approach,nearest", texture=texture)
+            steps = self.comped(bass_on="every-beat", bass_notes="walk", chord_notes=notes)
             for step in steps:
                 # The **upper** voices: the thumb is merged into the fret vector
                 # after the comping shape is chosen, so it is not one of the notes
@@ -1092,7 +1095,7 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
                 continue
             self.assertEqual(
                 structure, baseline,
-                f"texture={texture} moved a slot rather than thinning one",
+                f"chord_notes={notes} moved a slot rather than thinning one",
             )
 
     def test_bass_none_is_still_honoured_on_this_route(self):
@@ -1101,7 +1104,7 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
         Without this, "the thumb line now appears" and "the thumb line always appears"
         would be indistinguishable, and the second is the bug's mirror image.
         """
-        steps = self.comped(bass="none", texture="uniform")
+        steps = self.comped(bass_on="none", chord_notes="full")
         self.assertTrue(all(step.bass is None for step in steps))
 
     def test_the_walked_beats_reach_the_part(self):
@@ -1119,8 +1122,8 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
         the decision. A test asserting the texture *changes* the step count here would
         have pinned the bug.
         """
-        walked = self.comped(bass="root,5th,approach,nearest")
-        silent = self.comped(bass="none")
+        walked = self.comped(bass_on="every-beat", bass_notes="walk")
+        silent = self.comped(bass_on="none")
         # Four written notes, and the walk adds the two beats the melody skips.
         self.assertEqual(len(silent), 4, "the head is four notes in one bar")
         self.assertEqual(len(walked), 6, "the walk should add the two empty beats")
