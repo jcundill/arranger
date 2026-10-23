@@ -40,10 +40,7 @@ import unittest
 from typing import List, Optional, Tuple
 
 from arranger import VoiceLeadingEngine, slots
-from arranger.bass_rules import (
-    BASS_ALL_RULES,
-)
-from arranger.options import ArrangeOptions
+from arranger.options import ArrangeOptions, Request
 
 # (melody, quality, name) triples chosen to cover the decision points rather than to
 # be a tune: a chord tone, a 9th the extension strategy absorbs, a note with no route
@@ -60,7 +57,7 @@ TRIPLES: List[Tuple[str, str, str]] = [
     ("B4", "NC", "NC"),        # no harmony at all
 ]
 
-TEXTURES = ("uniform", "targets", "chord2")
+CHORD_CONTENTS = ("full", "targets", "2")
 
 # The decisions the step loop makes: one implementation each, all of them called from
 # `arranger.movement` rather than re-derived there.
@@ -89,20 +86,20 @@ def timings_for(count: int, beats_per_bar: int = 4):
     return out
 
 
-def through_library(triples, timings, texture, **kwargs):
+def through_library(triples, timings, request, **kwargs):
     steps = VoiceLeadingEngine.arrange_progression(
         triples,
         timings=timings,
-        options=ArrangeOptions(texture=texture, **kwargs),
+        options=ArrangeOptions(request=request, **kwargs),
     )
     return steps
 
 
-def through_slots(triples, timings, texture, **kwargs):
+def through_slots(triples, timings, request, **kwargs):
     steps, _rescued, notes = slots.arrange_slots(
         triples,
         timings=timings,
-        options=ArrangeOptions(texture=texture, **kwargs),
+        options=ArrangeOptions(request=request, **kwargs),
     )
     return steps, notes
 
@@ -124,51 +121,55 @@ def source_of(module_name: str) -> str:
 class TestTheTwoLoopsAgree(unittest.TestCase):
     """The property Phase 3 exists to establish."""
 
-    def assert_same_arrangement(self, triples, texture, **kwargs):
+    def assert_same_arrangement(self, triples, request, label, **kwargs):
         timings = timings_for(len(triples))
-        mine = through_library(triples, timings, texture, **kwargs)
-        theirs, their_notes = through_slots(triples, timings, texture, **kwargs)
+        mine = through_library(triples, timings, request, **kwargs)
+        theirs, their_notes = through_slots(triples, timings, request, **kwargs)
 
         self.assertEqual(
             [step.tab_line() for step in mine],
             [step.tab_line() for step in theirs],
-            f"{texture}: the two entry points voiced one slot differently",
+            f"{label}: the two entry points voiced one slot differently",
         )
         for field in ("grip", "partial", "repeated", "role", "metric_weight", "melody_only"):
             self.assertEqual(
                 [getattr(step, field) for step in mine],
                 [getattr(step, field) for step in theirs],
-                f"{texture}: the two entry points disagree about {field!r}",
+                f"{label}: the two entry points disagree about {field!r}",
             )
         self.assertEqual(
             their_notes,
             [],
-            f"{texture}: the slot wrapper added notes of its own",
+            f"{label}: the slot wrapper added notes of its own",
         )
         return mine
 
-    def test_every_texture_over_the_shared_fixtures(self):
-        for texture in TEXTURES:
-            with self.subTest(texture=texture):
-                self.assert_same_arrangement(TRIPLES, texture)
+    def test_every_chord_content_over_the_shared_fixtures(self):
+        for content in CHORD_CONTENTS:
+            with self.subTest(chord_notes=content):
+                self.assert_same_arrangement(TRIPLES, Request(chord_notes=content), content)
 
     def test_each_pair_of_adjacent_triples(self):
         """Every *transition* in the fixture, because most of the decisions compare a
         step with the one before it: the repeated-melody hold, the fill promotion,
         and the NC route all read the previous step."""
-        for texture in TEXTURES:
+        for content in CHORD_CONTENTS:
             for first in range(len(TRIPLES) - 1):
                 pair = TRIPLES[first: first + 2]
-                with self.subTest(texture=texture, pair=pair):
-                    self.assert_same_arrangement(pair, texture)
+                with self.subTest(chord_notes=content, pair=pair):
+                    self.assert_same_arrangement(
+                        pair, Request(chord_notes=content), content
+                    )
 
     def test_a_melody_alone_walk_agrees(self):
         """A single melody over one bar, the shape the walking-bass tests use."""
-        for texture in TEXTURES:
-            with self.subTest(texture=texture):
-                self.assert_same_arrangement([("F5", "maj7", "Fmaj7")], texture)
+        for content in CHORD_CONTENTS:
+            with self.subTest(chord_notes=content):
+                self.assert_same_arrangement(
+                    [("F5", "maj7", "Fmaj7")], Request(chord_notes=content), content
+                )
 
-    def assert_same_refusal(self, triples, texture, **kwargs):
+    def assert_same_refusal(self, triples, request, label, **kwargs):
         """Both entry points refuse one request identically.
 
         **Rewritten from `test_a_grip_the_texture_never_uses_agrees`.** That test
@@ -182,13 +183,13 @@ class TestTheTwoLoopsAgree(unittest.TestCase):
         """
         timings = timings_for(len(triples))
         with self.assertRaises(ValueError) as from_library:
-            through_library(triples, timings, texture, **kwargs)
+            through_library(triples, timings, request, **kwargs)
         with self.assertRaises(ValueError) as from_slots:
-            through_slots(triples, timings, texture, **kwargs)
+            through_slots(triples, timings, request, **kwargs)
         self.assertEqual(
             str(from_library.exception),
             str(from_slots.exception),
-            f"{texture}: the two entry points refuse one request differently",
+            f"{label}: the two entry points refuse one request differently",
         )
 
     def test_a_request_the_axes_refuse_agrees(self):
@@ -196,29 +197,34 @@ class TestTheTwoLoopsAgree(unittest.TestCase):
 
         **Rewritten from `test_a_grip_the_texture_never_uses_agrees`.** The request used to
         be a `grips=` narrowing; the family axis is deleted, so what is compared here is the
-        parts refusal - a bass *style* with a selection that does not take the bass part.
-        One entry point silently accepting what the other refuses is what this catches.
+        bass refusal - a bass *content* beside a layer the request leaves silent. One entry
+        point silently accepting what the other refuses is what this catches.
         """
-        for parts in ("chord", "melody"):
-            with self.subTest(parts=parts):
-                self.assert_same_refusal(
-                    TRIPLES[:4], "targets", parts=parts, bass=BASS_ALL_RULES
-                )
+        for label, request in (
+            ("chord", Request(melody=False, bass_notes="walk")),
+            ("melody", Request(chord_on="none", bass_notes="walk")),
+        ):
+            with self.subTest(selection=label):
+                self.assert_same_refusal(TRIPLES[:4], request, label)
 
     def test_a_narrowed_palette_agrees(self):
         """A narrowed palette is the texture's now, and the thumb line is where it bites.
 
         **Rewritten from `test_a_grip_the_role_does_use_agrees`.** What a caller narrowed
-        was a `grips=` list, and the family axis is deleted; the texture owns the arity, so
-        `test_every_texture_over_the_shared_fixtures` above sweeps every narrowing there
-        is. What is left here is the path a walk needs - a style that merges a thumb note
-        into a shape the hand is holding, which no other test in this file asks for.
+        was a `grips=` list, and the family axis is deleted; the chord content owns the
+        arity, so `test_every_chord_content_over_the_shared_fixtures` above sweeps every
+        narrowing there is. What is left here is the path a walk needs - a rule that merges
+        a thumb note into a shape the hand is holding, which no other test in this file
+        asks for.
         """
-        for texture in ("targets", "uniform"):
-            with self.subTest(texture=texture):
+        for content in ("targets", "full"):
+            with self.subTest(chord_notes=content):
                 self.assert_same_arrangement(
-                    TRIPLES[:4], texture,
-                    bass=BASS_ALL_RULES,
+                    TRIPLES[:4],
+                    Request(
+                        chord_notes=content, bass_on="every-beat", bass_notes="walk"
+                    ),
+                    content,
                 )
 
 
