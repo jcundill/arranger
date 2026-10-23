@@ -854,8 +854,8 @@ class TestStaffNoteValues(unittest.TestCase):
         """
         A long silence must not print a longer-than-a-bar note.
 
-        Measured on melid 451, whose head has a four-beat hole in it: measuring to
-        the next sound put a six-quarter "note" in one cell.
+        Measuring to the next sound rather than to the bar's end puts a six-quarter
+        "note" in one cell, which is the defect this pins.
         """
         steps = _timed(["Dm7", "G7"], beats=[(0, 1.0), (3, 1.0)])
         for cell in self.cells(steps):

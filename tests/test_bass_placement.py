@@ -823,12 +823,10 @@ class TestTheInvariant(unittest.TestCase):
     **And the amendment has a second half, whose absence shipped a five-pluck tab.** The
     upper-voices rule above is satisfied by a *four*-string upper shape plus a thumb: two
     supported sets' worth of notes in one step, and one more string than the right hand
-    has digits. Stating the rule over the upper voices was correct for the texture it was
-    written for - a `walking_bass` target is a shell - and silently wrong for `targets`,
-    whose targets were four-note drop-2s. Measured before the fix, over the six committed
-    heads: `--texture targets --bass-style root,5th,approach,nearest` sounded five strings on **151** steps,
-    `--bass-style root` on **130**, while `walking_bass` and `uniform` sounded none. The
-    budget is now `grips.thumb_safe_grips`.
+    has digits. Stating the rule over the upper voices alone is right only while a target is a shell:
+    a `targets` palette offers four-note drop-2s, so a four-string upper shape plus a
+    thumb is two supported sets' worth of notes in one step. The budget is
+    `grips.thumb_safe_grips`, which is what this class holds.
     """
 
     def test_the_upper_voices_are_one_supported_set_and_the_thumb_is_outside_it(self):
@@ -945,13 +943,9 @@ class TestTheInvariant(unittest.TestCase):
           two readings give the same answer, so this one is chosen on the physics rather than
           on a count.
 
-        Measured both ways, because a sweep that has only ever seen a clean tree proves
-        nothing: **1** step violates this on the commit before the fix - "Synthetic Tab Export"
-        in the reported bar under `targets`/`--bass-style root`, pinned also in
-        `test_fingers.TestTheFourFretBudget` - and **0** after it.
-
         The arrangements are `tests.support.arranged`'s, shared with the string-budget
-        sweep above: the two tests ask the same twelve questions.
+        sweep above: the two tests ask the same twelve questions, and
+        `test_fingers.TestTheFourFretBudget` pins the same bar from the other side.
         """
         paths = sweep_head_paths()
         checked = 0

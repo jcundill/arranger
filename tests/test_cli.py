@@ -432,14 +432,9 @@ class TestTheSharedDispatch(unittest.TestCase):
         calls = self.captured_calls(beats_per_bar=2, beat_type=2)
         for name in ("staff", "html", "musicxml", "gp5"):
             self.assertEqual(calls[name]["beats_per_bar"], 2, name)
-        # `beat_type` used to reach only the two score writers, and this test asserted
-        # the staff and the HTML did *not* take it - on the stated grounds that
-        # "neither the ASCII staff nor the HTML page writes a time signature at all".
-        # Both now do, from `show_timing`: a staff that shows where a chord falls but
-        # not how long it sounds, and prints no metre, is half a score. So the
-        # assertion is inverted rather than dropped: all four renderers must now
-        # carry the notated metre, or a 2/2 head is laid out on the wrong grid and
-        # displayed as common time.
+        # All four renderers carry the notated metre, or a 2/2 head is laid out on the
+        # wrong grid and displayed as common time: a staff that shows where a chord falls
+        # but not how long it sounds, and prints no metre, is half a score.
         for name in ("staff", "html", "musicxml", "gp5"):
             self.assertEqual(calls[name]["beat_type"], 2, name)
 

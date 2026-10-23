@@ -341,8 +341,8 @@ class TestThePaletteRescue(unittest.TestCase):
         """The rescue drops a high note an octave *and* leaves the chord unstated.
 
         Gb5 is fret 14 on the high E string, past `HIGH_FRET_LIMIT`, so the melody-alone
-        shape sounds F#4 - and both facts have to reach the reader. Measured on "The
-        Synthetic Waltz" bars 1 and 9; this is the unit form of it.
+        shape sounds F#4 - and both facts have to reach the reader. This is the unit form
+        of the waltz's bars 1 and 9.
         """
         steps = VoiceLeadingEngine.arrange_progression(
             [("Gb5", "6", "Eb6")], options=ArrangeOptions(request=Request(chord_notes="1"))

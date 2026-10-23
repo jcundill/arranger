@@ -609,19 +609,13 @@ class TestTheExplanationWraps(unittest.TestCase):
         long for the width, so each of them continues below the step. A clause that stopped
         being printed, or a width that stopped being honoured, would move this number.
 
-        It moved 93 -> 94 with the union's gate reading the **selection**: `targets` no
-        longer comps a position before the waltz's first note, so that note is harmonised
-        rather than read as a repeat of the comping shape, and its clause is the one that
-        wraps. The step count of that one config moved with it (18 -> 17), which is the
-        union's own contribution and not a lost note.
-
-        It moved 94 -> 82 when the comping palette stopped offering the high E: **all
-        twelve** are the waltz under a comping request with a thumb line (17 wrapping steps
-        -> 5), whose comping shape left the G-B-E set for `x-6-5-5-x-x` on the A, D and G
-        strings. The shape states a different set of degrees there - `G 3, Bb 5 & C 6`
-        where it said `Eb Root, G 3 & C 6` - which is three characters shorter, and three
-        characters is the whole of the difference at this width. No other head and no other
-        config moved.
+        The count is a function of the width and the clauses, and two things set it: the
+        union's gate reading the **selection** (`targets` does not comp a position before
+        the waltz's first note, so that note is harmonised rather than read as a repeat of
+        the comping shape) and the comping palette's string set - the waltz's comping shape
+        left the G-B-E set for `x-6-5-5-x-x` on the A, D and G strings, which states
+        `G 3, Bb 5 & C 6` where the G-B-E set stated `Eb Root, G 3 & C 6`, three
+        characters shorter. Three characters is the whole of the difference at this width.
         """
         from arranger.render import _format_step
 

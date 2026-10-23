@@ -318,8 +318,8 @@ def _comping_candidates(
     `derived_arity` counts the melody only when the selection takes it. `comping_arity`,
     not `derived_arity`: this position has no note of the tune for the soprano string
     to carry - the tune belongs to the horn or is held across this beat - so the string
-    is free for the chord part. Measured on the committed heads under a thumb line:
-    reserving it anyway cost the chord its 5th on 72 steps.
+    is free for the chord part. Reserving it anyway costs the chord its 5th, which is
+    what this arity avoids.
 
     **`bass_voice`** is whether this selection is the bass voice and nothing else,
     which arity cannot say: an inner voice and the bass both ask for one note, and only

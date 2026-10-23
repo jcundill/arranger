@@ -634,17 +634,10 @@ class TestCompingCapacity(unittest.TestCase):
     inert, so passing a texture there refused a playable combination - and produced a
     warning telling the player to change a setting that could not affect the result.
 
-    Measured on `tests/data/synthetic_cut_time.mxl` before the fix, with
-    `Request(melody=False, bass_on="every-beat", bass_notes="walk")`:
-
-        chord_notes=full     80 steps, **0 thumb notes**, warning "uniform leaves no
-                             bass string free for a target"
-        chord_notes=targets 166 steps, 127 thumb notes, no warning
-
-    The warning was false on the facts too: the comping shapes on that head sound within
-    strings `(1, 2, 3)`, `(2, 3, 4)` and `(1, 3, 4)` - never on the low E or the A, so the
-    thumb had the whole bottom of the neck, and never on the high E, which
-    `comping_string_sets` excludes at every arity.
+    The comping shapes on this head sound within strings `(1, 2, 3)`, `(2, 3, 4)` and
+    `(1, 3, 4)` - never on the low E or the A, so the thumb has the whole bottom of the
+    neck, and never on the high E, which `comping_string_sets` excludes at every arity.
+    A warning about thumb strings would be false on the facts as well as on the route.
     """
 
     def test_the_capacity_is_measured_at_every_arity(self):
@@ -683,10 +676,9 @@ class TestCompingCapacity(unittest.TestCase):
     def test_every_texture_is_allowed_on_the_comping_route(self):
         """The bug in one assertion: no texture may refuse, because none is consulted.
 
-        This is the inverted form of `test_uniform_is_refused_for_every_policy_and_the
-        _reason_names_a_texture` above. That test is **not** deleted and its premise is
-        still true - `uniform` really does occupy all three thumb strings on the route it
-        describes. What was wrong was asking it about a route where `uniform` is a
+        `uniform` really does occupy all three thumb strings on the route
+        `test_uniform_is_refused_for_every_policy_and_the_reason_names_a_texture` above
+        describes. What is wrong is asking it about a route where `uniform` is a
         meaningless name.
         """
         for texture in TEXTURE_STYLES:

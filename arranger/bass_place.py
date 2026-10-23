@@ -277,8 +277,8 @@ def _thumb_frame(
         # The hand covers the **whole** held vector, including the note the thumb last
         # played: that string is still ringing, so it is still fretted. `structure` is the
         # base the three questions above need, because it excludes that note - right for
-        # harmony, wrong for fingers. Measured on the committed heads the two readings give
-        # the same answer, so this one is chosen on the physics rather than on a count.
+        # harmony, wrong for fingers. A string that is still ringing is still fretted, so
+        # this is the reading the physics asks for.
         hand_base = list(held_frets)
     return lowest_upper, sounding_frets, hand_base, hand_fret
 

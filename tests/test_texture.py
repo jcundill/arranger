@@ -1521,9 +1521,9 @@ class TestARepeatedMelodyHoldsItsString(unittest.TestCase):
     def test_a_fill_on_a_repeated_note_keeps_the_melody_string(self):
         """The reported bar, reduced: four G4s over `Eb7` under `--texture targets`.
 
-        Beats 1 and 3 are targets and beats 2 and 4 are fills. Measured before the fix,
-        the soprano string ran `[4, 3, 4, 3]` - the B string for the targets and the G
-        string for the fills, four frets apart, on a note that never moves.
+        Beats 1 and 3 are targets and beats 2 and 4 are fills, and the melody string must
+        not move between them: a fill that re-places the tune four frets away on a note
+        that never moves is the defect this pins.
         """
         steps = VoiceLeadingEngine.arrange_progression(
             [("G4", "7", "Eb7")] * 4,

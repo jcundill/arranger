@@ -580,9 +580,9 @@ class TestChordSlots(unittest.TestCase):
         `chord_at` forward-fills, so a bar the melody never enters inherits the last change
         before it - bar 2 of `synthetic_repeat_slash` states the chord that was already in
         force. But a bar with **nothing** behind it has no chord to inherit, and
-        `chord_slots` skips the position rather than inventing one. Measured on a head whose
-        only harmony is absent: the melody-less bar produces no step, so the rule adds a bar
-        the *timeline* can speak for and stays silent where it cannot.
+        `chord_slots` skips the position rather than inventing one: the melody-less bar
+        produces no step, so the rule adds a bar the *timeline* can speak for and stays
+        silent where it cannot.
 
         This is `Head.unmapped`'s rule and `chord_at`'s `None` doing their job through the
         union rather than beside it - the union does not have its own idea of what a bar

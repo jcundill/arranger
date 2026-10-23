@@ -425,12 +425,10 @@ def holds_the_shape(
     one note, there are no inner voices ringing to hold, and marking the *next* step
     `repeated` then instructs every renderer to suppress that step's inner voices.
 
-    That is not a cosmetic flag error. Measured on "But Not For Me" bar 3 under a
-    walking line: the engine voiced `C3 Bb3 Eb4` for a `Cm7` target, and
-    `_step_cells` returned a single `8` on the G string - `C3` and `Bb3`, the two notes
-    that make it a `Cm7` rather than a bare melody note, reached **none** of the four
-    renderers. The chord of the tune was voiced and then thrown away by a rule that
-    meant "hold what is already ringing", applied when nothing was.
+    That is not a cosmetic flag error: `_step_cells` returns a single `8` on the G
+    string, so the two notes that make the chord a `Cm7` rather than a bare melody note
+    reach **none** of the four renderers. The chord is voiced and then thrown away by a
+    rule that means "hold what is already ringing", applied when nothing is.
 
     So the test is on what the previous step **sounds**, not on its flag: one active
     fret means there is nothing to hold. `melody_only` is then a special case of it

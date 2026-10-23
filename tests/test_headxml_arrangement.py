@@ -136,10 +136,9 @@ class TestReductionAndArranging(unittest.TestCase):
         longer than the notes in it; `tabscore.score_events` caps a note at the length the
         file wrote, so the surplus became a **rest of about 1e-06 quarters** - a
         length MusicXML cannot express, and which music21 inflates to a whole
-        triplet note. Measured on `synthetic_triplets.mxl`: **13 such rests and
-        133 events before, 0 and 120 after.** Each one put an extra note inside a
-        `3` bracket and stretched the bar, so "Trouble in Mind" bar 1 came out two
-        beats long instead of one.
+        triplet note. Each such rest puts an extra note inside a `3` bracket and
+        stretches the bar, so "Trouble in Mind" bar 1 comes out two beats long
+        instead of one.
 
         Asserted on the events rather than on the XML, because that is where the rest
         is born and it needs no optional dependency to see it.
@@ -589,15 +588,14 @@ class TestTheMetreHasADenominator(unittest.TestCase):
     def test_the_waltz_keeps_its_onsets_through_a_round_trip(self):
         """Export → read back leaves the beats where they are, bar 1 excepted.
 
-        The compounded symptom, and the one a user meets: before the fix each cycle
-        scaled every onset by another 0.75, so the file's eighths came back at 1.0,
-        1.281, 1.562 … - a head that shrinks by a quarter every time it is written out
-        and read in.
+        A round trip must not scale the onsets: a beat is `4 / beat_type` quarters, and a
+        writer that read the count instead would shorten the head by a quarter on every
+        cycle.
 
         **Bar 1's pickup is excluded because the exporter loses it, which is a separate
-        defect and not this one.** Measured: the written bar 1 is an eighth rest then five
-        eighths (1.5 … 3.5), and the exported-then-re-read bar 1 is five eighths from 1.0,
-        the rest dropped rather than written. That is wrong under either spelling of the
+        defect and not this one.** The written bar 1 is an eighth rest then five eighths
+        (1.5 … 3.5), and the exported-then-re-read bar 1 is five eighths from 1.0, the rest
+        dropped rather than written. That is wrong under either spelling of the
         conversion, so it is recorded rather than encoded here.
 
         **The count is re-scoped, not kept** (AGENTS.md trap 5). It used to assert
