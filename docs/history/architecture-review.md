@@ -1,8 +1,20 @@
-# Architecture Review — jazz-arranger
+> **Retired into `docs/history/` — the record of a completed review and its plan.** All seven
+> stages landed (P1–P7), and the pair the review deliberately did not stage — F8 (the explanation
+> invariant) and F10 (`grips.py`'s size) — are covered by the standing tests and the recipes in
+> [AGENTS.md](../../AGENTS.md) rather than by a refactor. **Nothing here is live.** The structure the
+> review produced is stated where it is read from: the module map and the dependency order are
+> [AGENTS.md](../../AGENTS.md), asserted from the AST by `tests/meta_package_dag.py`; the per-module
+> budgets and the test seams are `tests/meta_structure.py` (`BUDGETS`, `TEST_SEAMS`); the dispatch
+> table is `arranger/route_dispatch.py` with `tests/meta_route_dispatch.py`; the selection rule is
+> `cost.voicing_cost` and `VoicingScore`, whose field order `tests/test_grip_selection.py` pins;
+> the `SlotContext` composition is `arranger/context.py`; and the `arranger ↔ tabstaff` runtime
+> cycle is pinned by `tests/meta_front_end_dag.py::TestTheRuntimeCycle`. Paths below are as they
+> were when each stage landed.
 
-**Status:** working document. Updated as each stage lands.  
-**Author:** Cline (AI coding agent), acting as software architect.  
-**Gate:** `make check` (lint + typecheck + test) must stay green after every stage.
+# Architecture Review — jazz-arranger (retired)
+
+**Author:** Cline (AI coding agent), acting as software architect.
+**Gate:** `make check` (lint + typecheck + test) stayed green after every stage.
 
 ## Source of the review
 

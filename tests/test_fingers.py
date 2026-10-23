@@ -507,7 +507,7 @@ class TestTheHandsReach(unittest.TestCase):
     hand is three fingers and eight frets - so the two are separate refusals in `can_fret`,
     and neither implies the other.
 
-    The figures and the bar they came from are `docs/open-issues.md` item 5's business; what
+    The figures and the bar they came from are `docs/history/open-issues.md` item 5's business; what
     this class holds is the rule, at the level it is stated: a bare fret vector, which is
     what `bass_place.place_bass` and `bass_merge._takes_the_ring` ask about.
     """

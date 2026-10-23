@@ -532,7 +532,7 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         # around a position the union used to add.
         self.assertEqual(named, 1347, "the number of steps naming their voices moved")
         # And for the comping part, whose voices are the only harmony the line can show:
-        # measured over this sweep, **1455** of the steps it arranges state a comping shape
+        # measured over this sweep, **1475** of the steps it arranges state a comping shape
         # and name each of its voices, so the reading of a thin line cannot quietly become
         # a list of degrees again. The grouped fixtures add 413, and the 116 rest fills
         # (`--chord-fills`) are the newest addition: a fill is a comping step with no
@@ -540,8 +540,11 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         # reading the **selection** took the other 372: a singing selection's axis spelling
         # no longer comps the bars its tune does not enter - `chord1`, `targets` and
         # `bass=walk` each drop to the default's 28 comping steps - and a lone bass line
-        # has no chord part to state at such a position.
-        self.assertEqual(comping, 1455, "the number of comping lines naming a voice moved")
+        # has no chord part to state at such a position. The last **20** are the release
+        # instant: a note sounds over `[onset, end)`, so the union admits the position
+        # where the tune has just stopped and the comp there names its voices
+        # (`docs/history/open-issues.md` item 6).
+        self.assertEqual(comping, 1475, "the number of comping lines naming a voice moved")
 
     def test_the_slash_bass_clause_is_not_a_tautology(self):
         """The one decision the witness table cannot hold, pinned in both directions.

@@ -2,7 +2,7 @@
 
 `chord_at` answers for one beat and `chord_slots` for a bar, and the recording they do
 is what lets the union generate a chord at a position the written symbols did not mark.
-The measurement this layer exists for is `docs/open-issues.md` item 1; the classes here
+The measurement this layer exists for is `docs/history/open-issues.md` item 1; the classes here
 do not restate its numbers, they pin the behaviour it describes.
 
 `chord_or_fail` lives here rather than in `support` because it is an assertion, not a
@@ -411,7 +411,7 @@ class TestChordSlots(unittest.TestCase):
     union adds depends on the head's own rhythm, so the claims here are the invariants -
     no written note lost, no chord added under a note that is still sounding
     (`test_every_added_position_is_one_the_tune_is_silent_at`,
-    `TestANarrowPaletteNeverLosesTheTune`) - and `docs/open-issues.md` item 1 owns the
+    `TestANarrowPaletteNeverLosesTheTune`) - and `docs/history/open-issues.md` item 1 owns the
     measurement.
     """
 
@@ -647,7 +647,7 @@ class TestChordSlots(unittest.TestCase):
         union withholding a bar it should walk.
 
         **Bars 6 and 7 still get no thumb note, and that is a different issue.**
-        `place_bass` refuses them for the reason `docs/open-issues.md` **item 2** measures
+        `place_bass` refuses them for the reason `docs/history/open-issues.md` **item 2** measures
         as dominant - no octave of the walk's pitch below the shape - and it refuses them
         identically under a requested rhythm, before and after this change. Asserting a
         thumb note in bar 6 would be asserting item 2's fix, which is deliberately not
@@ -825,8 +825,9 @@ class TestMelodyState(unittest.TestCase):
         """The merged note ends in the bar it reaches, not in the bar it began.
 
         Two half notes in 2/2 tied across the bar line are one whole note: from bar 1
-        beat 2.0 to bar 2 beat 2.0. Every position in between is `held`, including the
-        downbeat of bar 2, and the position after the end is `silent`.
+        beat 2.0 to bar 2 beat 2.0. Every position strictly inside it is `held`,
+        including the downbeat of bar 2, and its own end instant is already `silent` -
+        the note sounds over `[onset, end)`.
         """
         measures = (
             f"{rest(8)}{note('E', duration=8, tie='start')}"
@@ -838,18 +839,20 @@ class TestMelodyState(unittest.TestCase):
         head = load_musicxml(path)
         self.assertEqual(len(head.notes), 1)
         self.assertEqual(head.notes[0].duration, 1.0)
-        for beat in (1.0, 1.5, 2.0):
+        for beat in (1.0, 1.5):
             with self.subTest(beat=beat):
                 self.assertEqual(melody_state(head, 2, beat), "held")
+        self.assertEqual(melody_state(head, 2, 2.0), "silent")
         self.assertEqual(melody_state(head, 3, 1.0), "silent")
 
-    def test_the_release_instant_counts_as_held_until_the_next_position(self):
-        """The end is inclusive: the note still sounds *at* its release instant.
+    def test_the_release_instant_is_already_silence(self):
+        """The end is exclusive: the note has stopped *at* its release instant.
 
-        `docs/open-issues.md` item 6 records the unresolved question; this pins the
-        answer the code gives, so changing it is a decision rather than a drift. A half
-        note in 2/2 ends at beat 2.0, where a rest begins: beat 2.0 is held and 2.1 is
-        silent.
+        A half note in 2/2 ends at beat 2.0, where a rest begins - so beat 2.0 is the
+        first position the tune has left, and `melody_at` returns `None` there rather
+        than lending the released pitch to a comp. The boundary is what
+        `docs/history/open-issues.md` item 6 measured, and the rest arithmetic agrees with it:
+        `melody_rests` begins the rest where the note ended.
         """
         path = write_score(
             score(
@@ -861,7 +864,9 @@ class TestMelodyState(unittest.TestCase):
         )
         self.addCleanup(os.unlink, path)
         head = load_musicxml(path)
-        self.assertEqual(melody_state(head, 1, 2.0), "held")
+        self.assertEqual(melody_state(head, 1, 1.5), "held")
+        self.assertEqual(melody_state(head, 1, 2.0), "silent")
+        self.assertIsNone(melody_at(head, 1, 2.0))
         self.assertEqual(melody_state(head, 1, 2.1), "silent")
 
     def test_a_position_inside_a_sounding_note_reports_held(self):
@@ -891,11 +896,12 @@ class TestMelodyState(unittest.TestCase):
 
         Bar 6 of `synthetic_repeat_slash` has no written note of its own, but it is
         not silent at its start: bar 5's G4 (0.75 whole notes, 1.5 beats in 2/2) is
-        held through beat 1.5. The first position the tune has actually left is beat
-        2.0, and that is the one this pins.
+        held through beat 1.0. That note ends at beat 1.5, and the release instant is
+        the first position the tune has actually left - the tune sounds over
+        `[onset, end)`, so this pins beat 1.5 and not beat 2.0.
         """
         self.assertEqual(melody_state(self.head, 6, 1.0), "held")
-        self.assertEqual(melody_state(self.head, 6, 1.5), "held")
+        self.assertEqual(melody_state(self.head, 6, 1.5), "silent")
         self.assertEqual(melody_state(self.head, 6, 2.0), "silent")
 
     def test_the_onset_test_rounds_the_beat_like_head_note_key(self):
@@ -1020,3 +1026,61 @@ class TestSilentSlotsCarryNoMelody(unittest.TestCase):
         self.assertNotEqual(steps[0].silence, SILENCE_TUNE_SILENT)
         self.assertIn("comping", format_progression([steps[0]]))
         self.assertIn("the tune is silent here", format_progression([steps[0]]))
+
+
+class TestTheUnionAdmitsTheReleaseInstant(unittest.TestCase):
+    """§9.2's hold rule at the step level: a release is not a hold.
+
+    `melody_at` reads a note as sounding over `[onset, end)`, so the position a note is
+    released on is one the tune has left - and the union states the chord there rather than
+    declining it, which is what `docs/history/open-issues.md` item 6 closed on. A position *inside*
+    the note is still withheld: the chord beneath it was decided where the note began,
+    under the very note that motivated it.
+    """
+
+    def _steps(self):
+        """A half note then a rest in 4/4, comped by the union rather than by a rhythm.
+
+        `Request(melody=False)` with no named rhythm is the one selection that reaches the
+        union, so the generated positions are this fixture's whole subject.
+        """
+        path = write_score(
+            score(
+                f"{harmony('C', 'major')}{note('E', duration=8)}{rest(8)}",
+                divisions=4,
+                beats=4,
+                beat_type=4,
+            )
+        )
+        self.addCleanup(os.unlink, path)
+        return arrange_xml_head(path, request=Request(melody=False))[0]
+
+    def test_the_position_a_note_is_released_on_is_comped(self):
+        """Beat 3.0 is where the half note ends, and the union states the chord there.
+
+        The note sounds over `[1.0, 3.0)`, so of the bar's four generated positions beat
+        2.0 is **inside** it and withheld while beat 3.0 is its release and admitted, with
+        beat 4.0 the silence the union has always covered. The withheld position is the
+        contrast that makes this the boundary rather than a blanket "the union fills the
+        bar": only the instant the tune stops is the one that moved.
+        """
+        steps = self._steps()
+        self.assertEqual(
+            [(step.bar, step.beat, step.melody) for step in steps],
+            [(1, 1.0, "E4"), (1, 3.0, None), (1, 4.0, None)],
+        )
+
+    def test_the_released_position_says_why_it_carries_no_melody(self):
+        """The comp on the release prints the true claim, not a borrowed pitch.
+
+        A line that showed the released `E4` would read as the guitar singing a note it
+        has already stopped - the failure `ArrangementStep.melody`'s `None` exists to
+        prevent - so the column is blank and the clause names the reason.
+        """
+        steps = self._steps()
+        released = [step for step in steps if step.beat == 3.0]
+        self.assertEqual(len(released), 1)
+        line = format_progression(released)
+        self.assertIn("the tune is silent here", line)
+        self.assertNotIn("E4", line)
+

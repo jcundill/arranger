@@ -14,7 +14,7 @@ Takes `(melody note, chord quality, chord name)` triples, builds voicings in sev
 
 > The **distribution** is `jazz-arranger` (PyPI name `arranger` taken by unrelated project). **Import** name is `arranger`.
 
-Why lives in [`docs/`](docs/): [engine.md](docs/engine.md) (the selector, the axes, the cost tuple), [renderers.md](docs/renderers.md) (tab, MusicXML, GP5), and [open-issues.md](docs/open-issues.md) (the open bugs, each with its measurement). The plan documents that built this — parts, comping styles, generated grips, fingering, `voices=` — are in [`docs/history/`](docs/history/).
+Why lives in [`docs/`](docs/): [engine.md](docs/engine.md) (the selector, the axes, the cost tuple), [renderers.md](docs/renderers.md) (tab, MusicXML, GP5), and [open-issues.md](docs/open-issues.md) (the issue ledger — none open; the six it filed, each with its measurement, are the record in [docs/history/open-issues.md](docs/history/open-issues.md)). The plan documents that built this — parts, comping styles, generated grips, fingering, `voices=` — are in [`docs/history/`](docs/history/).
 
 ## Installation
 
@@ -422,7 +422,7 @@ Expect **more steps than the melody had** — four here for three notes, because
 
 Each bass note says its purpose in `step.bass_role`: `anchor` (the chord's root where the line marks the bar), `connect` (a passing note between chords), `approach` (a semitone from the next root), `pedal` (a root on a position that is not the bar's first), `enclosure`, `hold` (a repeat). The thumb is placed against the **shape the hand holds**, not the melody: adjacent bass strings are five semitones apart, so "prefer the lowest string" and "stay where the hand is" are in permanent opposition, and placement takes the fret nearest the upper voicing — within the hand's reach. When the ranking's first shape cannot reach the requested note at all, the **harmony moves** to one that can, so the note sounds instead of going missing.
 
-A step whose bass note cannot be played keeps its upper voicing and says so rather than writing unplayable tab (`no playable bass note for bass ... - no free string below the melody, no octave of that pitch below the shape, the hand would need a fifth fret, or the reach is wider than five frets`). **The chord moves first**: a requested note the shape cannot reach is played by re-voicing the chord where the thumb *can* reach it, and the line says so (`placed to leave room for the requested bass note`). Dropping the note is the last resort, for the slots where no shape can carry it; counts over the committed heads are in [docs/open-issues.md](docs/open-issues.md) item 2.
+A step whose bass note cannot be played keeps its upper voicing and says so rather than writing unplayable tab (`no playable bass note for bass ... - no free string below the melody, no octave of that pitch below the shape, the hand would need a fifth fret, or the reach is wider than five frets`). **The chord moves first**: a requested note the shape cannot reach is played by re-voicing the chord where the thumb *can* reach it, and the line says so (`placed to leave room for the requested bass note`). Dropping the note is the last resort, for the slots where no shape can carry it; counts over the committed heads are in [docs/history/open-issues.md](docs/history/open-issues.md) item 2.
 
 ## Who plays what: `--no-melody` and the two layer flags
 
@@ -836,7 +836,7 @@ Engine lives in `arranger` package, fourteen modules in strict dependency order 
 - `sustain` strategy structural — API takes only `(note, quality, name)` triples, rhythm and duration cannot spot brief passing tone.
 - Neck window preference not filter, so `--fret-min`/`--fret-max` may not be honoured where nothing playable inside. Header echoes window either way.
 - Slash bass honoured as preference not hard constraint: selector narrows candidates by it, engine's own rule within that set — voicing that cannot honour bass still playable.
-- Beat melody skips *inside* a bar it occupies has no chord of its own, chord in force stored per melody note. Bar-level half built — bar melody never enters arranged under every route — rest is [open issue 1](docs/open-issues.md).
+- Beat melody skips *inside* a bar it occupies has no chord of its own — chord in force stored per melody note. Bar-level half built: a comping selection states the chord of a bar the melody never enters, and `--chord-on` names the positions a singing selection adds.
 - No release published to PyPI.
 
 ## License

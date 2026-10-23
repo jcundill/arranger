@@ -441,7 +441,7 @@ def place_bass(
     `annotation._bass_refusal_clause` phrases them all because none of them is visible from
     outside: no free string below the melody, **no octave of the wanted pitch below the
     shape's own lowest note**, or a fifth fret for four fingers. The middle clause is
-    the common case; the counts are in `docs/open-issues.md` item 2, and the caller
+    the common case; the counts are in `docs/history/open-issues.md` item 2, and the caller
     records the wanted pitch class on `ArrangementStep.bass_refused` rather than the
     reason, so the split is measured rather than read off the step.
 

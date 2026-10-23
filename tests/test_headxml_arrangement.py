@@ -606,7 +606,7 @@ class TestTheMetreHasADenominator(unittest.TestCase):
         **The count is re-scoped, not kept** (AGENTS.md trap 5). It used to assert
         `len(again.notes) == len(head.notes)`, which was true only because the default grid
         produced no steps in a bar the melody never entered - the silence
-        `docs/open-issues.md` item 1 measures. Those bars are arranged now, and the
+        `docs/history/open-issues.md` item 1 measures. Those bars are arranged now, and the
         exporter has always written a comping step as a note: `freddie` and `joe_pass`
         already round-tripped **22 and 27** extra beats on this head before this change.
         The claim that actually matters is the one the assertion was a proxy for - every

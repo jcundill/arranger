@@ -196,7 +196,7 @@ def can_fret(frets: Iterable[int]) -> bool:
     Neither implies the other, and that is the trap this predicate exists to close: a
     merged walking-bass vector can need three fingers and still put the thumb seven frets
     under the shape (`[1, 8, -1, 8, 9, -1]`), which the count passes and the hand cannot.
-    The two were one test until that hand was measured; `docs/open-issues.md` item 5 holds
+    The two were one test until that hand was measured; `docs/history/open-issues.md` item 5 holds
     the figures, and `tests/test_fingers.py::TestTheHandsReach` holds the rule.
 
     `bass_place.place_bass` and `bass_merge._takes_the_ring` are the callers, and both ask

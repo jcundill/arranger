@@ -57,7 +57,7 @@ def attach_bass(
       intuitive one: no free string below the melody, **no octave of the wanted
       pitch below the shape's own lowest note**, a fifth fret for four fingers, or a
       reach wider than the hand's five frets. The counts are in
-      `docs/open-issues.md` item 2, and the field carries the wanted pitch rather
+      `docs/history/open-issues.md` item 2, and the field carries the wanted pitch rather
       than the cause, so a reader who needs the split has to re-measure it there.
       Same argument as the neck window being a penalty rather than a filter: losing a
       step is worse than losing its bass.

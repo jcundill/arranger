@@ -590,7 +590,7 @@ class TestTheRightHandBudget(unittest.TestCase):
     selection (`VoiceLeadingEngine.attach_bass`), so no check ever saw the two together.
     A four-note target on a strong beat with a bass note placed under it is five
     simultaneous plucks - one more hand than a player has. The counts are in
-    [docs/open-issues.md](../docs/open-issues.md) item 2.
+    [docs/history/open-issues.md](../docs/history/open-issues.md) item 2.
 
     The rule is a **budget** rather than a preference, so it narrows the *target* palette
     only, and only while a thumb line is running.

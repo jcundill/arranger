@@ -557,7 +557,7 @@ def _bass_refusal_clause(step: ArrangementStep) -> str:
     no free string below the melody, no octave of the wanted pitch below the
     shape's own lowest note, a fifth fret for four fingers, or a reach wider than
     the hand's five frets. Measured over the committed heads the second one is
-    almost the whole of it (`docs/open-issues.md` item 2), which is not the
+    almost the whole of it (`docs/history/open-issues.md` item 2), which is not the
     intuitive answer - so the list is the honest form. A per-cause spelling would
     need `place_bass` to return its reason, and that is the follow-on rather than
     the clause.

@@ -145,7 +145,7 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
         for the same note fails here by name of bar and beat.
 
         Measured over the committed heads the worst reach is 5 and the median 1, against
-        the 7 the defect produced; `docs/open-issues.md` item 5 measures the case over
+        the 7 the defect produced; `docs/history/open-issues.md` item 5 measures the case over
         every committed head, and §4.3's open question is the lever that would remove it.
         """
         steps = self._arrangement()
@@ -747,7 +747,7 @@ class TestTheRefusal(unittest.TestCase):
     warning text itself, which was asserted nowhere and named only the first and third of
     those causes. Measured over the committed heads: **0 / 38 / 1** of 39 refusals, so the
     clause that was missing is the one a reader actually meets
-    (`docs/open-issues.md` item 2).
+    (`docs/history/open-issues.md` item 2).
     """
 
     # Item 2's worked case: the shape's own `Ab2` (44) is the pitch class the walk wants,
@@ -1232,7 +1232,7 @@ class TestTheHarmonyLeavesRoomForTheBass(unittest.TestCase):
     without the refusal still writes seven-fret hands through `bass_merge.carry_bass`,
     where no selection happens at all.
 
-    The measurements behind the numbers are `docs/open-issues.md` item 5's business. What
+    The measurements behind the numbers are `docs/history/open-issues.md` item 5's business. What
     is asserted here is the pair of rules, over the committed heads and at the one bar the
     report named.
     """

@@ -30,10 +30,10 @@ gate and the conventions — not the explanation.
 | an imported head's **repeats, volta endings or jumps** — why it is longer than the file's measure count, or the `|:` / `:|` / `1.` / `2.` / `D.C.` / `D.S.` / `Coda` / `Fine` the writers draw | [docs/renderers.md](docs/renderers.md) | `headxml.py` (`_parse_barline`, `_parse_direction`, `_parse_sound`, `_expand_play_order`, `expand_repeats`, `BarInstruction`, `BarMarker`, `Head.markers`, `HeadNote.written_bar`); each writer's `markers=` parameter |
 | the slot layer: triples to steps, the diminished retry, the slash bass | [docs/engine.md](docs/engine.md) | `arranger/slots.py` |
 | the **request** — the six questions, spelled by `--chord-on`, `--bass-on`, `--chord-notes`, `--bass-notes`, `--chord-fills`, `--no-melody` and by `Request(...)` — or a new one, and how a request becomes the axes (`Rhythm`, `parse_rhythm`, `felt_beat`, the refusals) | [docs/engine.md](docs/engine.md) §"The request, and the axes under it" | `arranger/options.py` (`Request`, `resolve_request`, `format_request`), `arranger/grid.py` (`Rhythm`, `parse_rhythm`, `felt_beat`), `arranger/cli.py` (`REQUEST_DESTS` is the one list holding the two spellings to the same six), `tests/test_rhythm.py`, `tests/test_request.py` |
-| the MusicXML **importer's chord timeline**, or a bar the melody skips | [docs/engine.md](docs/engine.md), and [docs/open-issues.md](docs/open-issues.md) item 6 for the release instant | `headxml.py` (`chord_at`, `rhythm_slots`, `fill_slots`, `melody_rests`, `_bar_resolution`, `_tick_key`) and `grid.py` (`grid_resolutions`, `TICKS_PER_BEAT`) — **built**: a position the request names is emitted with `melody=None`, a rest policy places chords in the tune's notated silences, and §9.2 refuses a position the tune is still **holding**. The engine's own union - one position per subdivision of each bar's rhythm - is what a selection that **comps** gets when the request names nothing added: a chord part with no tune to play, which is how it states the chord in a bar the tune never enters. The gate reads that selection and not the *spelling*, so a request and its axis spelling are one arrangement |
-| an open bug, with its measurement | [docs/open-issues.md](docs/open-issues.md) | — the figures and the behaviour are that document's own business; no test compares them with the prose or is keyed to these items |
+| the MusicXML **importer's chord timeline**, or a bar the melody skips | [docs/engine.md](docs/engine.md), and [docs/history/open-issues.md](docs/history/open-issues.md) item 6 for the release instant — closed by reading a note as sounding over `[onset, end)` | `headxml.py` (`chord_at`, `rhythm_slots`, `fill_slots`, `melody_rests`, `_bar_resolution`, `_tick_key`) and `grid.py` (`grid_resolutions`, `TICKS_PER_BEAT`) — **built**: a position the request names is emitted with `melody=None`, a rest policy places chords in the tune's notated silences, and §9.2 refuses a position the tune is still **holding** while admitting the instant it is released. The engine's own union - one position per subdivision of each bar's rhythm - is what a selection that **comps** gets when the request names nothing added: a chord part with no tune to play, which is how it states the chord in a bar the tune never enters. The gate reads that selection and not the *spelling*, so a request and its axis spelling are one arrangement |
+| an issue — where a new one is filed, and where the closed ones are recorded | [docs/open-issues.md](docs/open-issues.md) (the live ledger; none is open) and [docs/history/open-issues.md](docs/history/open-issues.md) (the record of the six it filed) | — each item is stated as **issue / problem / why it exists** with its measurement, and the figures and the behaviour are that document's own business: no test compares them with the prose or is keyed to these items |
 | a **note held over a bar line**, when the melody's end is reached, or a pickup bar (`Head.first_bar_implicit`) | [docs/engine.md](docs/engine.md) | `headxml.py` (`melody_at`, `melody_state`, `_merge_chord_slots`), `arranger/grid.py` (`beat_offset`), `tests/test_headxml_timeline.py` |
-| which finger frets which string, or a per-finger cost criterion; which strings the right hand's `p-i-m-a` pluck, the gaps between them, and how far the thumb reaches | [docs/history/fingering.md](docs/history/fingering.md) | `arranger/fingers.py` (not inert: `bass_place` and `bass_merge` read `can_fret` for the four-finger budget **and the hand's five-fret reach** — `tests/test_fingers.py` holds the caller set to exactly `{bass_place, bass_merge}`; no per-finger cost yet). Its §4.3 measurement landed a *right-hand* rule first (`grip_tables.thumb_safe_grips`, read by `decisions.resolve_texture_grips`) and then a *left-hand* one (`fingers.can_fret`, read by `bass_place.place_bass`); its **§4.4 finger-skip half is now built**, not recorded: the four `drop24` sets that carried the skip were removed from `GRIP_STRING_SETS` (`grip_tables.finger_skip_count` is the rule and `tests/test_grip_tables.py` holds the tables to it), at a price counted in chords, and the three rejected forms of the same lever are in §4.4 rather than here. Its thumb's-reach half still changes no count (`tests/test_texture.py::TestTheThumbReach` pins the reach), and **§4.3's follow-on — should the *selector* leave room for the thumb? — is now built**, as a palette narrow rather than a criterion (`decisions.leaving_room_for_the_bass`), so a requested bass note moves the shape instead of being dropped; its numbers are in [docs/open-issues.md](docs/open-issues.md) item 2 rather than here, because that item is where they are re-measured by hand and a figure repeated in this table would be a second source for one fact. **Item 5** of that document, the same §4.3 question asked from the lone-note end, closed on the same change together with `MAX_HAND_SPAN` |
+| which finger frets which string, or a per-finger cost criterion; which strings the right hand's `p-i-m-a` pluck, the gaps between them, and how far the thumb reaches | [docs/history/fingering.md](docs/history/fingering.md) | `arranger/fingers.py` (not inert: `bass_place` and `bass_merge` read `can_fret` for the four-finger budget **and the hand's five-fret reach** — `tests/test_fingers.py` holds the caller set to exactly `{bass_place, bass_merge}`; no per-finger cost yet). Its §4.3 measurement landed a *right-hand* rule first (`grip_tables.thumb_safe_grips`, read by `decisions.resolve_texture_grips`) and then a *left-hand* one (`fingers.can_fret`, read by `bass_place.place_bass`); its **§4.4 finger-skip half is now built**, not recorded: the four `drop24` sets that carried the skip were removed from `GRIP_STRING_SETS` (`grip_tables.finger_skip_count` is the rule and `tests/test_grip_tables.py` holds the tables to it), at a price counted in chords, and the three rejected forms of the same lever are in §4.4 rather than here. Its thumb's-reach half still changes no count (`tests/test_texture.py::TestTheThumbReach` pins the reach), and **§4.3's follow-on — should the *selector* leave room for the thumb? — is now built**, as a palette narrow rather than a criterion (`decisions.leaving_room_for_the_bass`), so a requested bass note moves the shape instead of being dropped; its numbers are in [docs/history/open-issues.md](docs/history/open-issues.md) item 2 rather than here, because that item is where they are re-measured by hand and a figure repeated in this table would be a second source for one fact. **Item 5** of that document, the same §4.3 question asked from the lone-note end, closed on the same change together with `MAX_HAND_SPAN` |
 | `ArrangeOptions(parts=…)`, which of melody / bass / chord the guitar plays | [docs/engine.md](docs/engine.md) | `arranger/parts.py` (`PART_NAMES`, `parse_parts`, `parts_have_melody`, `parts_has_melody_only`) |
 | the harmonisation axes — `ArrangeOptions(parts=…)`, `texture`, `bass`, and the metre — the four-string arithmetic, and what replaced `voices=` and the grip-family axis | [docs/engine.md](docs/engine.md) | `arranger/parts.py`, `arranger/grid.py`, `arranger/grouping.py`, `arranger/texture.py`, `arranger/bass.py`, `arranger/resolution.py`, `arranger/grips.py` |
 | a **held thumb**, a **restruck chord**, a **held shape the walk invented** (`bass_only`, `is_bass_only`, `melody_is_ringing`) or a stab's length — `bass_held`, `chord_attack`, `carry_bass`, `_stab_length`, and what each renderer draws for a note that sounds and is not plucked | [docs/renderers.md](docs/renderers.md) §"What the four renderers must agree about", and [docs/engine.md](docs/engine.md) §"The other hold: a beat the thumb invented" | `arranger/decisions.py` (`is_bass_only`, `melody_is_ringing`), `arranger/bass_merge.py` (`carry_bass`), `arranger/slot_plan.py` (`_chord_attacks`), `headxml.py` (`_stab_length`), `tabscore.py` (`_is_hold`, `_capped_span`), `tabstaff.py` (`_strikes_here`, `_moved_thumb`, `_draws`), `tabxml.py` (`_sounding`, `_build_note`), `tabgp.py` (`_sounding_frets`, `_strike_notes`), `tests/test_bass_hold.py`, `tests/test_chord_attack.py`, `tests/test_staff_thumb.py`, `tests/test_bass_placement.py`, `tests/test_guitarpro.py` |
@@ -48,15 +48,18 @@ gate and the conventions — not the explanation.
 it records why a decision was made and is never revised. If the code has moved on, the history
 is still true *about the past* — so read the current documents above first and treat a
 contradiction between them as a bug in one of them. A retired document is added once and then
-frozen like the rest; it is not a home for an open plan. Nine are retired there:
+frozen like the rest; it is not a home for an open plan. Eleven are retired there:
 `reharmonisation-proposals.md`, whose corpus went away; the six plan documents whose live
 halves are now stated in [docs/engine.md](docs/engine.md) — `voices-axis.md`, `one-fact.md`,
 `parts.md`, `generated-grips.md`, `comping-styles.md` and `fingering.md`; `restructuring.md`,
 the round-2 plan, whose live half is the module map below and the budget table in
-`tests/meta_structure.py`; and `rhythm-request.md`, the rhythm-first request, whose live
+`tests/meta_structure.py`; `rhythm-request.md`, the rhythm-first request, whose live
 half is the flag table in [README.md](README.md), the request-to-axes mapping in
 `docs/engine.md` and the four renderers' agreement in
-[docs/renderers.md](docs/renderers.md). Each of the plan documents carries a retirement
+[docs/renderers.md](docs/renderers.md); `open-issues.md`, the ledger whose six items all
+closed, whose live half is the index in [docs/open-issues.md](docs/open-issues.md); and
+`architecture-review.md`, the review and its seven-stage plan, whose live half is the module
+map, the budgets and the dispatch table its own header names. Each of them carries a retirement
 header saying which half of it is the record and where the live rule went, which is the one
 thing to read before quoting one.
 
@@ -66,7 +69,7 @@ thing to read before quoting one.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1310 feature + 84 meta tests OK (skipped=2)**, pyright
+Current measured state: **1312 feature + 84 meta tests OK (skipped=2)**, pyright
 **0 errors 0 warnings**, ruff **0 errors**. If your change moves any of those numbers, that
 is the signal — not the absence of an error message. A quiet run is not evidence; a moved
 count is.
@@ -88,7 +91,7 @@ because that half runs first, so a mis-filed test is seen early rather than neve
 `tests/meta_structure.py::TestTheSplit` fails on a module matching neither pattern, which
 is the only way a pattern-based gate could go quiet, and `test` running both is what keeps
 the split a way *in* rather than a smaller gate. The split is a reading aid, not a speed
-fix: **84 of 1394 tests are meta**, and the minutes are in the four feature modules that
+fix: **84 of 1396 tests are meta**, and the minutes are in the four feature modules that
 sweep every quality or every committed head (`test_comping`, `test_fingers`,
 `test_musicxml`, `meta_explanations`) — so `make test-one` on the module you are touching
 is the loop that actually saves time.
@@ -411,7 +414,8 @@ for that space, and only the first belongs in the source:
   true. The reason it is *always* the wrong place is that it has no test: nothing fails
   when it goes stale, so it rots silently while the gate stays green.
 - **A measurement, and its number** — move it to the document that already holds it:
-  [docs/open-issues.md](docs/open-issues.md) for a diagnosed bug, the relevant
+  [docs/open-issues.md](docs/open-issues.md) for a diagnosed bug (the ledger; the closed items
+  are the record in [docs/history/open-issues.md](docs/history/open-issues.md)), the relevant
   `docs/*.md` for anything else, [docs/history/](docs/history/) for a completed plan. A
   count in a docstring is the fastest-rotting string in the repository and is stored
   where it is least likely to be re-measured. Leave a one-line pointer instead.
@@ -447,7 +451,7 @@ correct:
   the step keeps its upper voicing and the omission is reported, exactly as when no string
   is free. Measured over the committed heads: **1** such step before the first fix, **0**
   after; the reach half arrived with **44** steps over five frets and a worst of **9**, and
-  `docs/open-issues.md` item 5 holds the figures and the bar. It is the smaller twin of the
+  `docs/history/open-issues.md` item 5 holds the figures and the bar. It is the smaller twin of the
   bullet above: the same trap, the rule asserted on the part of the whole that happened to
   be checked;
 - **the note is not merely refused: the shape is asked to make room.** A requested bass
@@ -845,7 +849,7 @@ Each of these cost real time, or nearly shipped a defect.
     casualties above were visible there before any test ran.
 
 16. **A number a document states has no test, so it rots where it is least likely to be
-    re-measured.** `docs/open-issues.md` states each item **with its measurement** — that is what
+    re-measured.** The issue ledger states each item **with its measurement** — that is what
     makes an item an issue rather than a complaint — and three separate commits moved those
     measurements without touching a word of the prose beside them: deleting the `Diagnostics`
     collector left six documents describing a warning that phrases a choice, when the phrasing
@@ -854,13 +858,15 @@ Each of these cost real time, or nearly shipped a defect.
     counting every refused thumb where the old warning counted one call site took item 2 from
     **39** to **161**. `make check` was green through all of it, because the doc checker
     that existed then compared only a document's *version*, *module count* and *links* — and
-    nothing checked a count.
+    nothing checked a count. That ledger is retired with all six items closed (its record is
+    [docs/history/open-issues.md](docs/history/open-issues.md)) and a new issue is filed in
+    [docs/open-issues.md](docs/open-issues.md), the same way: a figure with a recipe.
 
     Two things follow, though neither is enforced by the gate now. **A figure repeated in
     two documents is a second source for one fact** — AGENTS.md's own `step.bass` rule — so the
     routing rows here *point* at the document that owns a number instead of restating it; the four
     counts that lived in three places at once are what made this rot invisible. And **a stated
-    figure gets a recipe**: `docs/open-issues.md` now carries the snippet that takes each of its
+    figure gets a recipe**: the ledger carries the snippet that takes each of its
     numbers, so the figure is re-measurable without the suite. That re-measurement is **by hand**:
     the module that once compared the document's numbers with the tree was cut back to the
     *behaviour* those items describe, and has since been removed with the rest of the
@@ -883,8 +889,9 @@ Each of these cost real time, or nearly shipped a defect.
 | [docs/engine.md](docs/engine.md) | the engine: grips, the selector, the cost tuple, the axes (`ArrangeOptions(parts=…)`, `texture`, `bass`, and `TimeSignature`), the chord's rhythm, non-chord tones, and the recipe for adding a chord quality |
 | [docs/renderers.md](docs/renderers.md) | tab staff, MusicXML import/export, GP5, and their traps |
 | [docs/dependency-dag.md](docs/dependency-dag.md) | the enforced import graphs, drawn: the engine package's layers and their main dependencies, and the front ends' recorded edges |
-| [docs/open-issues.md](docs/open-issues.md) | the open bugs, each stated as **issue / problem / why it exists** with its measurement; a fixed one is removed, and its record lives in git |
-| [docs/history/](docs/history/) | the retired documents - the completed plans (corpus, walking bass, texture, arranging guide, `voices=`, the Stage-2 collapse, parts, generated grips, comping styles, fingering, restructuring, the rhythm-first request) and the retired reharmonisation proposals. A plan that landed whole carries a header saying where its live rules went: `docs/engine.md` |
+| [docs/open-issues.md](docs/open-issues.md) | the issue ledger: **none is open**, and the six it filed are indexed here by number; a new issue is filed here as **issue / problem / why it exists** with its measurement and the recipe that re-measures it |
+| [docs/history/open-issues.md](docs/history/open-issues.md) | the retired ledger: the record of those six, each with the measurement that closed it, stated **once** and re-measurable by hand from the recipe beside it |
+| [docs/history/](docs/history/) | the retired documents - the completed plans (corpus, walking bass, texture, arranging guide, `voices=`, the Stage-2 collapse, parts, generated grips, comping styles, fingering, restructuring, the rhythm-first request, the architecture review), the retired reharmonisation proposals, and the retired issue ledger. A plan that landed whole carries a header saying where its live rules went: `docs/engine.md` |
 | [.github/workflows/ci.yml](.github/workflows/ci.yml) | what CI runs, and which tests it does *not* run |
 
 `common_grips.md` is generated from the engine's own tables by `grip_chart.py` and

@@ -612,7 +612,7 @@ class TestChordsOnlyHead(unittest.TestCase):
     selected on the note count alone. It now reads, reports its metre and bar count, and
     arranges **the whole head**.
 
-    The default grid's silence here was `docs/open-issues.md` item 1's extreme case, and
+    The default grid's silence here was `docs/history/open-issues.md` item 1's extreme case, and
     it is now fixed: a bar the melody never enters is added beat for beat, so a head with
     *no* melody at all gets all of its bars. A **melody-only** selection still gets
     nothing — it plays the tune and nothing else, and there is no tune — and that is the
@@ -640,7 +640,7 @@ class TestChordsOnlyHead(unittest.TestCase):
         **This assertion is inverted, not deleted** (AGENTS.md trap 5). It used to assert
         `steps == []`, and the premise it rested on was step A' decision 2: "an empty
         arrangement is the default grid's own instruction rather than a hole to report."
-        That premise is exactly what `docs/open-issues.md` item 1 measures as the defect —
+        That premise is exactly what `docs/history/open-issues.md` item 1 measures as the defect —
         a chord in force that produces **no part at all**, not quiet, absent, on every
         export path. The rule now unions at the level of the **bar**, so a melody-less
         head is fully arranged and a note-bearing bar is untouched; `every_note`'s

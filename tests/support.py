@@ -470,7 +470,7 @@ def nearest_reach_for_note(
     The **note**, not the pitch class: this asks where the engine could have put the note it
     decided to play, not whether another octave would have been nearer. Which octave the
     walk wants is its register decision - documented in `bass`, measured in
-    `docs/open-issues.md` item 5 - and re-deciding it here would be the replica choosing
+    `docs/history/open-issues.md` item 5 - and re-deciding it here would be the replica choosing
     for the engine.
 
     Returns the smallest `abs(fret - hand_fret)` over those candidates, where `hand_fret` is

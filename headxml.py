@@ -452,7 +452,7 @@ class HeadChange:
     A `<harmony>` followed by no note is not a synthetic edge case: 6 of the 154
     `<harmony>` elements across the committed scores precede no note, and one of those
     bars carries **no notes at all**. Such a change is in force for the rest of the bar
-    and **no note ever records it**, which is the loss `docs/open-issues.md` item 1
+    and **no note ever records it**, which is the loss `docs/history/open-issues.md` item 1
     measures and this field exists to make representable.
 
     `beat` is the beat **within the bar**, as everywhere else in this module, and
@@ -1412,7 +1412,7 @@ class _NotesWalk:
         #
         # 6 of the 154 `<harmony>` elements on the committed scores are followed by no
         # note at all, so this is a real loss and not an edge case. See `HeadChange`
-        # and `docs/open-issues.md` item 1.
+        # and `docs/history/open-issues.md` item 1.
         self.changes.append(
             HeadChange(
                 bar=self.bar,
@@ -1530,7 +1530,7 @@ class _NotesWalk:
         *merged* with *lost*: bar 2's A4 eighth and bar 3's A4 half are one note of 3.5 beats,
         so bar 3 has no downbeat note because its downbeat is still sounding the one written
         in bar 2. `tests/test_headxml.py` states this rule directly, and
-        `docs/open-issues.md` item 1 holds the measurement.
+        `docs/history/open-issues.md` item 1 holds the measurement.
         """
         if not self.group:
             return
@@ -2282,7 +2282,7 @@ def chord_at(
     - **The last change at a position wins.** Bars 33 and 35 of `synthetic_triplets`
       each carry two `<harmony>` elements at beat 1.0, and the note in each bar carries the
       second one — so "the last declared" is the rule the note path already follows, and
-      taking the first would disagree with it. `docs/open-issues.md` item 1 holds the
+      taking the first would disagree with it. `docs/history/open-issues.md` item 1 holds the
       measurement.
     - **`None` before the first change**, never a guess. A position no chord has reached
       has no harmony, and inventing one is the failure this module refuses everywhere
@@ -2331,6 +2331,14 @@ def melody_at(head: Head, bar: int, beat: float) -> Optional[str]:
     is the onset plus that length in **beats**; this is why the function returns `None`
     for a position after the melody ends rather than carrying the last note forever.
 
+    **A note sounds over `[onset, end)`, so its release instant is already silence.** A
+    position exactly on the end returns `None`: the tune has stopped there, and a comp
+    placed on it carries no melody rather than borrowing the pitch that just stopped.
+    That is the boundary `melody_rests` already reads, since the rest after a note begins
+    where that note ended. The one position that is never a release is an **onset** — a
+    note's own `HeadNote.key` — because a zero-length note would otherwise be ended by its
+    own release instant.
+
     **The end is computed on one absolute beat line, and a beat is not a quarter.** A
     note may end in a later bar than it began, so the onset and the probe are both
     placed by `grid.beat_offset` before they are compared; a `(bar, beat)` pair cannot
@@ -2355,9 +2363,13 @@ def melody_at(head: Head, bar: int, beat: float) -> Optional[str]:
             found = note
     if found is None:
         return None
+    # A position that is also an onset is never a release, so it is answered before the
+    # end is computed: a zero-length note would otherwise be ended by its own release.
+    if found.key == position:
+        return found.note_name
     beats_per_bar = head.beats_per_bar
     end = beat_offset(found.bar, found.beat, beats_per_bar) + found.duration * head.beat_type
-    if beat_offset(bar, beat, beats_per_bar) > round(end, 6):
+    if beat_offset(bar, beat, beats_per_bar) >= round(end, 6):
         return None
     return found.note_name
 
@@ -2377,6 +2389,12 @@ def melody_state(head: Head, bar: int, beat: float) -> str:
     - **held** — a note begun earlier still sounds here, so the position inherits it;
     - **silent** — nothing sounds, the melody has stopped or has not begun, which is
       exactly when `melody_at` returns `None`.
+
+    **The first silent position after a note is that note's own release instant.** A note
+    sounds over `[onset, end)`, so a position exactly on its end is silent rather than
+    held: the tune has stopped, and §9.2 is free to put a chord there. A note whose
+    release coincides with the next note's onset is the other way round — the position is
+    that next note's onset, and the release is not what it is read as.
 
     **The onset test is `HeadNote.key`'s rounding, not a tolerance of its own.**
     The timelines this library compares against each other — `chord_at` against a
@@ -2585,7 +2603,7 @@ def chord_slots(
     `_generated_beats`: a bar of sixteenths is generated at sixteenths, a triplet bar at
     eighth-note triplets, and a bar whose tune is all on the beat is generated at beats.
     So a position the tune *skips* inside a bar it occupies is a position this function
-    reports, which is what closes `docs/open-issues.md` item 1's remaining half.
+    reports, which is what closes `docs/history/open-issues.md` item 1's remaining half.
 
     Returns `(melody, quality, chord, bar, beat, duration)`, and **`melody` is the note in
     force at that position, not a written one** — the rule `bass._bass_slots` already uses
@@ -3048,7 +3066,7 @@ def _head_slots(
     to play: a melody-only selection plays the tune and nothing else, and a **lone bass
     line** has no chord to state at a position the tune left. Both `parse_parts` and
     `resolve_parts` are needed: the parsed `auto` sentinel names no melody, which would
-    classify the default arrangement as the comping route. `docs/open-issues.md` item 1
+    classify the default arrangement as the comping route. `docs/history/open-issues.md` item 1
     holds the measurement.
     """
     slots = head_skeleton(head, section)
@@ -3196,7 +3214,7 @@ def _merge_chord_slots(
     where there is no note, which is the only thing this function adds.
 
     **Every position a bar's rhythm allows contributes, inside a melody bar included** —
-    this is `docs/open-issues.md` item 1's remaining half, and the two rules that say
+    this is `docs/history/open-issues.md` item 1's remaining half, and the two rules that say
     which of them become slots are what make it a fix rather than a rewrite:
 
     - **the note path wins**, so a position the tune writes is left exactly as it was, with
@@ -3231,9 +3249,12 @@ def _merge_chord_slots(
     # **§9.2, and the whole of what this union holds back.** The positions
     # `_generated_beats` produced are candidates for slots, and the tune's own written
     # positions are already in `slots` - so all that is left to refuse is a position where
-    # a note is still *held*. It is refused here rather than in `chord_slots` because this
-    # is the union: `chord_slots` reports the geometry of the bar, and which of those
-    # positions become steps is this function's question. `chord_slots` has already skipped
+    # a note is still *held*. A note sounds over `[onset, end)`, so the instant it is
+    # released is not one of them: the tune has stopped and the chord part states the
+    # chord, which is what `docs/history/open-issues.md` item 6 measured. It is refused here
+    # rather than in `chord_slots` because this is the union: `chord_slots` reports the
+    # geometry of the bar, and which of those positions become steps is this function's
+    # question. `chord_slots` has already skipped
     # the positions with no chord in force, so a silent position with no `<harmony>` behind
     # it still adds nothing and is never guessed a chord.
     extra = [

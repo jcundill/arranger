@@ -1626,9 +1626,12 @@ whole-note duration to beats with `beat_type` and compares it to the probe on on
 beat line (`grid.beat_offset`): `duration * 4` is right only in 4/4, and a `(bar, beat)` pair
 cannot express a note that ends in a later bar. A 2/2 note written to the barline is therefore
 still sounding at the next bar's downbeat, and the engine's own union does not re-strike it there.
-The end instant is inclusive — the release is still held — and that boundary is the open
-decision [docs/open-issues.md](open-issues.md) item 6 records, pinned by
-`tests/test_headxml_timeline.py::TestMelodyState::test_the_release_instant_counts_as_held_until_the_next_position`.
+The note sounds over `[onset, end)`, so its **release instant is already silence** — the union
+admits the position where the tune has just stopped, and a comp placed there carries no melody
+rather than the pitch that just stopped. That is the boundary `melody_rests` reads too, where the
+rest after a note begins where the note ended; the reading and what it moved are
+[docs/history/open-issues.md](history/open-issues.md) item 6, pinned by
+`tests/test_headxml_timeline.py::TestMelodyState::test_the_release_instant_is_already_silence`.
 
 **The arity is the length of the selection, and it is honoured.** `notes` says how many
 voices the guitar was asked for, and a two-voice request is **two notes**. The first
@@ -1789,7 +1792,7 @@ two stabs, not one.
 rhythm names its own positions (`headxml.rhythm_slots`). The engine's own union
 (`headxml.chord_slots`) generates one per subdivision of each bar's own rhythm, which is
 what lets a comping part state the chord of the tune in a bar the tune never enters — the
-measurement is [open-issues.md](open-issues.md) item 1. A requested rhythm **wins**
+measurement is [open-issues.md](history/open-issues.md) item 1. A requested rhythm **wins**
 whatever else is spelled, because spelling `texture` must not answer a different question
 about the chord's rhythm; the generated union is the fallback for a request that names
 nothing added **and a selection that comps** — a chord part with no tune to play, which is

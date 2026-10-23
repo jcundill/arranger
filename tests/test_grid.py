@@ -130,7 +130,7 @@ class TestTheLatticeAndItsResolutions(unittest.TestCase):
 
     `headxml._generated_beats` subdivides a generated bar in these, and `headxml._tick_key`
     rounds a position to one to decide whether the melody and the grid mean the same
-    instant - so this is where `docs/open-issues.md` item 1's two halves meet. Three things
+    instant - so this is where `docs/history/open-issues.md` item 1's two halves meet. Three things
     follow, and each is asserted rather than assumed:
 
     - **the unit holds every onset of every committed head already**, which is what the
