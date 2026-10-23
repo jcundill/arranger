@@ -526,10 +526,10 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         # upper voices on a route that sings the tune - so a change that thinned the
         # default palette, or that stopped the clause firing, moves this number. The
         # grouped fixtures add 320, all of them from notes the old corpus did not have.
-        # Two of the 1347 arrived with the union's gate reading the *selection*: a
-        # comping position no longer precedes the waltz's first note (so that note is
-        # harmonised rather than read as a repeat), and the walk re-plans one line
-        # around a position the union used to add.
+        # Two of the 1347 come from the union's gate reading the *selection* rather than
+        # the spelling: the waltz's first note is harmonised rather than read as a repeat
+        # of a comping position, and the walk re-plans one line around a position the
+        # union adds.
         self.assertEqual(named, 1347, "the number of steps naming their voices moved")
         # And for the comping part, whose voices are the only harmony the line can show:
         # measured over this sweep, **1475** of the steps it arranges state a comping shape
@@ -650,10 +650,10 @@ class TestTheToneAFourVoiceShapeGivesUp(unittest.TestCase):
 class TestTheLoneNoteKeepsTheWindowHonest(unittest.TestCase):
     """A lone note is chosen from a palette, so its window fact is measured, not defaulted.
 
-    This is the exemption that went. A melody-alone shape used to carry no palette, which
-    meant `annotation._window_clause` could say nothing about it - and a step that *did* carry
-    one (a fill) recorded `inside_window` at its `False` default, so the clause read as an
-    engine judgement nobody had made. Every lone note now records the palette it was chosen
+    A melody-alone shape that carried no palette would leave `annotation._window_clause`
+    with nothing to say - and a step that did carry one (a fill) would record
+    `inside_window` at its `False` default, so the clause would read as an engine
+    judgement nobody had made. Every lone note records the palette it was chosen
     from, and the two halves of the fact can be asserted together: the clause appears where
     the note is out of position, and the palette behind it has nothing inside the window.
     """

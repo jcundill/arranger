@@ -211,9 +211,8 @@ BUDGETS: Dict[str, Budget] = {
 ALLOWED_PRIVATE_IMPORTS: Set[str] = set()
 
 # Reaching a sibling's `_`-prefixed name through a module alias is the same coupling
-# as importing it by name, and it was invisible while only `ImportFrom` was read.
-# The list is empty now: every name another module reaches is public, and the six
-# dead delegates that used to spell the rest are gone. The test fails in both
+# as importing it by name, and reading only `ImportFrom` would not see it.
+# The list is empty: every name another module reaches is public. The test fails in both
 # directions, so a new reach is caught and a deleted one cannot leave a stale entry.
 ALLOWED_PRIVATE_ATTRIBUTES: Set[str] = set()
 
@@ -410,9 +409,9 @@ def _module_aliases(tree: ast.Module) -> Dict[str, str]:
 def _private_attributes(path: Path) -> Iterator[str]:
     """`importer -> home.private_name` for every private attribute reached by alias.
 
-    A module alias is how the engine spelled the imports the import meter could not
-    see: `alias._helper` is the same coupling as `from .module import _helper`, and
-    only the second used to fail the gate.
+    A module alias is how the engine spells an import the import meter cannot see:
+    `alias._helper` is the same coupling as `from .module import _helper`, and both fail
+    the gate.
     """
     tree = ast.parse(path.read_text(encoding="utf-8"))
     aliases = _module_aliases(tree)

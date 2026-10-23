@@ -1,18 +1,13 @@
 """The two step loops must produce the same arrangement.
 
 `VoiceLeadingEngine.arrange_progression` and `arrange_slots` are two loops
-over the same slots. They used to hold two copies of six decisions, kept in step
-by a comment reading *"Both copies must agree"* - which is not a mechanism, and the
-project had already paid for that once: a second caller was built separately,
-drifted, and voiced an `Am7` under a written `Bbm7` for twenty-five transcriptions
-before anyone noticed.
+over the same slots. Two copies of one decision kept in step by a comment is not a
+mechanism - a second caller built separately drifts, and the drift is silent - so each
+decision has one implementation in `decisions`, and `arrange_slots` is a pre-pass plus
+a call rather than a second loop.
 
-Phase 3 moved five of those decisions into `decisions`, so each had one
-implementation. Phase 4 then removed the second loop outright: `arrange_slots` is
-now a pre-pass plus a call.
-
-**What this file tests changed with that, and it is worth being explicit about.**
-"Both entry points produce the same arrangement" is now true *by construction* -
+**What this file tests is worth being explicit about.** "Both entry points produce the
+same arrangement" is true *by construction* -
 there is one implementation - so as a statement about the engine it is close to
 vacuous. It is not vacuous as a statement about the **adapter**: `arrange_slots`
 still has to pass the right texture, the right grips, the right metre, the right

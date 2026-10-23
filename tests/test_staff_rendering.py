@@ -260,9 +260,10 @@ class TestStaffTab(unittest.TestCase):
         """
         A head that enters part-way through its first bar shows the rest before it.
 
-        The grid used to start at the first *onset*, which silently dropped a leading
-        rest inside that bar: a pickup came out with its first fret hard against the
-        opening barline and read as a downbeat. the synthetic cut-time head bar 1 is written that
+        The grid starts at the bar, not at the first *onset*, so a leading rest inside that
+        bar is not silently dropped: a pickup otherwise comes out with its first fret hard
+        against the opening barline and reads as a downbeat. The synthetic cut-time head bar
+        1 is written that
         way - a quarter rest and then three notes - and TuxGuitar's export draws the
         rest as dashes and puts the fret where it falls. The start is now rounded down
         to the bar containing the first onset, which keeps the rest without inventing
@@ -1153,9 +1154,9 @@ class TestTabstaffModuleBoundary(unittest.TestCase):
 def _systems(staff: str) -> List[List[str]]:
     """A rendered staff split into systems, each a list of its own lines.
 
-    The staff now wraps, so the invariant that used to hold of the whole output -
-    every row the same width, every barline in the same column - holds of one
-    *system* at a time. Two systems are separated by a blank line and are free to be
+    The staff wraps, so the invariant holds of one *system* at a time rather than of the
+    whole output: every row the same width, every barline in the same column. Two systems
+    are separated by a blank line and are free to be
     different widths, because the last one is short by definition. Asserting across
     the whole output would therefore assert something false, and would stop being
     the alignment check it was written to be.

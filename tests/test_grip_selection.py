@@ -94,10 +94,9 @@ class TestSelectionDeterminism(unittest.TestCase):
     def test_pinning_a_family_is_no_longer_possible(self):
         """The family is the engine's search space, so there is nothing to pin.
 
-        `grips=("drop2",)` with the old soprano set used to reproduce this library's
-        original output, and that is exactly what `docs/history/parts.md` §4 deletes: a caller
-        chooses the *arity* (`texture`) and the parts, and `TONE_PRIORITY` plus the
-        neck window decide which family states those notes. The arrangement here is
+        A caller chooses the *arity* (`chord_notes`) and the parts, and `TONE_PRIORITY` plus
+        the neck window decide which family states those notes - so naming a family is
+        naming the search space (`docs/history/parts.md` §4). The arrangement here is
         therefore the engine's own - and where it disagrees with the old pinned tabs it
         is because the wider palette found a **purer** shape: `G7` under B4 on the high
         E string is `x-8-x-7-8-7` (root, 3rd, 5th, b7) rather than `x-x-5-7-6-7`, which
@@ -516,8 +515,7 @@ class TestVoicingCost(unittest.TestCase):
         Two families can generate the very same tab, and a four-note drop-2 never even
         reaches a tie with a shell - criterion 2 separates them on note count - so a grip
         term could only choose a *name*, or paper over a genuine tie. The width is pinned
-        because the element that used to sit at the end is gone and must not be replaced
-        by something else there, which would move bass function off it.
+        because bass function must stay where it is: a term added at the end would move it.
         """
         v = self.engine.get_drop2_voicings(Note("C5"), "maj7", chord_name="Cmaj7")[0]
         self.assertEqual(

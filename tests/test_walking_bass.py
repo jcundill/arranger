@@ -846,11 +846,11 @@ class TestNoRegression(unittest.TestCase):
 
 
 class TestTheBassPolicyIsAnAxis(unittest.TestCase):
-    """`bass` selects the pattern; the texture no longer carries it.
+    """The bass policy selects the pattern; a texture does not carry it.
 
-    `walking_bass` used to mean "a thumb line" as part of its name. Now it means "a
-    thumb line, by default", and the same line is reachable from a texture that has
-    never heard of walking bass. What must not change is that the default produces
+    `walking_bass` means "a thumb line, by default", and the same line is reachable
+    from a texture that has never heard of walking bass. What must not change is that
+    the default produces
     exactly what it always did - which is the whole of the equivalence below.
     """
 
@@ -882,9 +882,8 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
     def test_the_named_walk_is_the_pinned_line(self):
         """The walk is **named** now, and the named spelling is what the tabs are pinned to.
 
-        `auto` used to resolve to a walk because `texture="walking_bass"` *meant* a
-        thumb line, and every published walking-bass tab is pinned against that
-        arrangement. With the walk on the bass axis there is no texture left that
+        Every published walking-bass tab is pinned against the arrangement the walk
+        makes, so the walk is spelled on the bass axis rather than left to a texture that
         implies one, so the shipped answer is no line (`docs/history/parts.md` §9) - the
         equivalence this asserts is therefore the other direction: the style and the
         four rules it is spelled from are one arrangement, and the default is not it.

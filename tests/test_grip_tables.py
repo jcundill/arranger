@@ -50,10 +50,9 @@ class TestStringSetTable(unittest.TestCase):
         `docs/history/fingering.md` §4.4's rule, held against the tables rather than restated: a
         gap between two sounding strings is the **thumb's** while the note below it is
         inside `THUMB_REACH_STRINGS`, and any other gap costs the middle or ring finger
-        (`finger_skip_count`). Four `drop24` sets used to fail this and were **removed for
-        it** - 260 of 1,204 selections change shape, and 41 of the default row's four-note
-        steps lose their chord with it (§4.4 holds the price) - so this asserts the rule
-        holds of what remains, and that the one exception is the `(5,3,2)` shell, which is
+        (`finger_skip_count`). No `drop24` set in the tables fails it - the four that did are
+        **removed for it** (§4.4 holds the price) - so this asserts the rule holds of what
+        remains, and that the one exception is the `(5,3,2)` shell, which is
         kept on purpose for the walking bass's three-layer split rather than tolerated by
         accident.
 

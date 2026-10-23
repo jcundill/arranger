@@ -124,7 +124,7 @@ ROLE_FILL = "fill"
 # per route that can decline to play:
 # The grid - the layer that decides when each part sounds - placed nothing here. The
 # phrase a reader sees (`annotation._SILENCE_PHRASES`) names the *request* rather than
-# the grid, because the flag that used to expose one no longer exists.
+# the grid, which is the vocabulary a caller has.
 SILENCE_GRID = "grid"
 SILENCE_NC_COMPING = "nc_comping"  # an NC bar: nothing for a comping part to state
 SILENCE_NO_SHAPE = "no_shape"    # no shape in the palette, and the tune cannot stand alone

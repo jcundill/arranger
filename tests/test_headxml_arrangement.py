@@ -81,9 +81,8 @@ class TestReductionAndArranging(unittest.TestCase):
         committed triplet head, and it is gone: `--skeleton` is a melody-*selection* flag
         and no setting of it removes a note of the tune.
 
-        The density decision that this test used to make is not lost, it **moved**: where
-        chords fall is now the rhythm axis's question rather than this flag's, and it is
-        not built yet. Until it is, every setting plays the tune and differs only in
+        Where chords fall is the rhythm axis's question rather than this flag's: every
+        setting plays the tune and differs only in
         nothing at all - which is the honest state of the flag and the reason it wants a
         floor (`beats` / `eighths` / `sixteenths` are placeholders for that axis) rather
         than five live densities.
@@ -641,7 +640,7 @@ class TestTheMetreHasADenominator(unittest.TestCase):
         self.assertTrue(original <= surviving, sorted(original - surviving)[:5])
         # And every extra is a position the tune is silent at - the rule the default grid
         # generates by, restated through a round trip. Empty on this head is a pass: the
-        # one position it used to add was a release instant, now correctly held.
+        # release instant is held rather than filled.
         for bar, beat in sorted(surviving - original):
             self.assertIsNone(
                 melody_at(head, bar, beat),
@@ -654,9 +653,9 @@ class TestANoteHeldAcrossABarLine(unittest.TestCase):
 
     `synthetic_cut_time.mxl` ends bar 2 with an E♭4 tied to bar 3's first eighth. The
     importer merges the halves into one `HeadNote`, but the default grid still names
-    bar 3's downbeat as a position - and the comping union used to call the tune silent
+    bar 3's downbeat as a position - and the comping union must not call the tune silent
     there and fill it with a fresh Cm7 shape. That is a re-strike of a note the left
-    hand is still holding, which is what `But_Not_for_Me` demonstrated.
+    hand is still holding, which is what `But_Not_for_Me` demonstrates.
     """
 
     def test_the_held_note_is_not_restruck_at_the_next_downbeat(self):

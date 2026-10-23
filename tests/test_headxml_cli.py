@@ -95,9 +95,8 @@ class TestHeadCli(unittest.TestCase):
     def test_the_written_files_carry_the_notated_metre(self):
         """A head in cut time is written 2/2, not left on the writers' 4/4 default.
 
-        `head_cli` passes the notated metre to the staff and the HTML but used to
-        pass nothing to the two file writers, so each fell back to its own
-        `beats_per_bar=4`. A 2/2 head was therefore written as 4/4: every bar laid
+        `head_cli` passes the notated metre to all four renderers; a writer left on its own
+        `beats_per_bar=4` writes a 2/2 head as 4/4: every bar laid
         out against the wrong grid, and a tune in cut time displayed as common time.
         The denominator matters too - 2/2 and 2/4 are the same bar length but not
         the same metre, and only the notated `beat_type` tells them apart.
@@ -268,9 +267,9 @@ class TestHeadCli(unittest.TestCase):
         than uninstalled, so the test says what it means on a machine that has
         music21 installed.
 
-        **The stub moved with the code.** It used to patch `arranger`, because
-        `head_cli` reached the writer through the facade's lazy `__getattr__` and
-        an attribute assignment there was what `from arranger import` then saw.
+        **The stub patches where the writer is read.** Patching `arranger` would not be
+        seen: `head_cli` reaches the writer through the facade's lazy `__getattr__`, so
+        the attribute assignment has to land where the import reads it.
         Phase 7 moved the dispatch into `arranger.cli`, which imports the writer
         from its real home in `tabxml` - which is where the extra is actually
         checked. The property under test is untouched; only the seam the test

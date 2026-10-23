@@ -1288,9 +1288,8 @@ class TestTheFamilyIsNotASpelling(unittest.TestCase):
     The families are the chord part's *internal search space* (`docs/history/parts.md` §4):
     `parts` says which parts sound, `texture` says how many notes the chord part
     states, and `TONE_PRIORITY` plus the neck window decide which family states
-    them. So the spelling this class used to test - a comma-separated list of
-    families, in the order the caller ranked them - is deleted rather than
-    deprecated, and what is asserted here is that it stays deleted.
+    them. A comma-separated list of families, in the order the caller ranked them, is not
+    a spelling this library accepts, and what is asserted here is that it stays that way.
     """
 
     def test_the_flag_and_the_parser_are_both_gone(self):
@@ -1317,7 +1316,7 @@ class TestPartialHarmonisation(unittest.TestCase):
 
     def test_a_partial_step_is_flagged_and_annotated(self):
         """
-        F5 over F7 high on the neck used to resolve to a two-note duo, and the
+        F5 over F7 high on the neck resolves to a two-note duo, and the
         renderers said so, because a chord name above a duo describes a harmony that is
         not fully sounding.
 

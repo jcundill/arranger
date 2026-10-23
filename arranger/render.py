@@ -131,7 +131,7 @@ def _format_step(
     The first three columns are fixed width, and the annotation - whose text length
     varies - is **appended after the tab** rather than printed between the melody and
     it. That is what stops the shape drifting: an inline annotation is as wide as its
-    own text, so every annotated step used to start its tab in a different column
+    own text, so an annotated step would otherwise start its tab in a different column
     from every unannotated one.
 
     Each tab is **hyphen-joined and ragged** - `x-11-x` is wider than `x-x-x` - so a

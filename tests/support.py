@@ -798,7 +798,7 @@ MISTY = os.path.join(DATA, "synthetic_pickup_common.musicxml")
 
 
 # A lead sheet with **no melody at all**: four bars, six `<harmony>` symbols and not
-# one pitched note (§9.3 step A'). It is the fixture the loader used to refuse.
+# one pitched note (§9.3 step A'). It is the fixture a melody-only loader would refuse.
 CHORDS_ONLY = os.path.join(DATA, "synthetic_chords_only.musicxml")
 
 

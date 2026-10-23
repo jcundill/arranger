@@ -217,10 +217,10 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
     def test_no_anchor_is_left_without_its_thumb_note(self):
         """Every anchor in the committed head carries its thumb, and this set says so.
 
-        It used to have one member: bar 3's downbeat was a *held* melody step whose own
-        shell stated the root C as its lowest voice, so the walk's root had no octave
-        below the shape to take. The shape now sits a position higher (the root is the
-        A string at fret 3), because selection leaves room for the note the request asks
+        Bar 3's downbeat is a *held* melody step whose own shell states the root C as its
+        lowest voice, so the walk's root needs an octave below the shape: the shape sits a
+        position higher (the root is the A string at fret 3), because selection leaves room
+        for the note the request asks
         for - so the gap closed rather than the line losing a note. An entry here means a
         change cost a note rather than moved one.
 
@@ -679,10 +679,10 @@ class TestBassPlacement(unittest.TestCase):
     def test_the_hand_bounds_the_placement_so_a_nearer_one_cannot_be_unplayable(self):
         """Playability outranks comfort - and the two now measure the same axis.
 
-        The claim this test used to make was that a *nearer* placement refused for the
-        fret budget loses to a *farther* one that is playable. That has no member left:
-        `fingers.can_fret` bounds the hand's reach as well as its fingers, so every
-        placement it refuses is more than five frets from the hand's lowest fret, and
+        A *nearer* placement refused for the fret budget cannot lose to a *farther* one
+        that is playable: `fingers.can_fret` bounds the hand's reach as well as its
+        fingers, so every placement it refuses is more than five frets from the hand's
+        lowest fret, and
         every one it allows is within five - which means a refused candidate can never be
         nearer than an accepted one. Proximity is no longer able to override playability,
         by construction rather than by ordering.
@@ -1150,10 +1150,10 @@ class TestUpperVoicesExcludeTheThumbByStringNotPosition(unittest.TestCase):
     it to name an interval or a duo, so getting it wrong is not cosmetic: it returns the
     wrong *notes*.
 
-    This is a regression test for a real defect. The method used to `enumerate(...)` the
-    sounding **pitches** and compare that counter - a position in the filtered list -
-    against `bass_string`, which is a string index. The two coincide only when the thumb
-    is the lowest-indexed active string, which for a low-E thumb under a shell they do:
+    This is a regression test for a real defect: the method must not compare a counter
+    over the sounding **pitches** - a position in the filtered list - against
+    `bass_string`, which is a string index. The two coincide only when the thumb is the
+    lowest-indexed active string, which for a low-E thumb under a shell they do:
     every existing walking-bass fixture put the thumb on the 6th string, so the suite was
     green over a method that returned the *thumb* and dropped the melody the moment the
     thumb moved to the 5th or 4th. The comment above the code said "filtered by string

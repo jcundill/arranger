@@ -40,9 +40,8 @@ class TestMelodyOnlySelections(unittest.TestCase):
     and nothing else. That refusal dissolved when the melody-only claim moved
     onto the voice selection: a soprano-less selection simply comps, on every
     texture, and nothing is self-contradictory anywhere. What the class still
-    owes the suite is the fact the two textures used to state, asserted on its
-    new home - the same shape as trap 5: the premise moved, the protection
-    moved with it.
+    owes the suite is the fact the two textures stated, asserted on its home: the premise
+    moved, and the protection moved with it.
     """
 
     def test_the_predicate_is_derived_from_the_selection(self):
@@ -146,9 +145,8 @@ class TestMelodyOnlySelections(unittest.TestCase):
 
         A melody-only selection names no chord position at all (`chord_on="none"`), so
         **every** slot is one the chord's rhythm does not name, and each still sounds
-        its note. The rhythm this used to spell beside `parts="melody"` was discarded by
-        the door, so the measurement was of the default all along; naming no position is
-        the same claim made honestly.
+        its note. Naming no position is the honest form of the claim: a rhythm spelled
+        beside a melody-only selection has no chord to place.
         """
         progression = [
             ("F5", "maj7", "Fmaj7"), ("E5", "7", "A7"),

@@ -1039,9 +1039,10 @@ class TestMusicXMLRepeatMarkers(MusicXMLTestCase):
 class TestACrossBarHoldIsWrittenAsATie(unittest.TestCase):
     """A note held over a bar line is one note in the document, joined by `<tie>`.
 
-    The importer merges the source's tie, but the arrangement used to re-strike the
-    note at the next downbeat, so the exporter had nothing to tie and wrote no `<tie>`
-    at all. With the hold preserved, bar 2's event starts the tie and bar 3's first
+    The importer merges the source's tie, and the arrangement must not re-strike the
+    note at the next downbeat - a re-strike leaves the exporter nothing to tie, so it
+    writes no `<tie>` at all. With the hold preserved, bar 2's event starts the tie and
+    bar 3's first
     event stops it.
     """
 

@@ -1,7 +1,7 @@
 """The package is a DAG, and this is what holds it to that.
 
-`arranger.py` was one 4290-line module. It is now a package of focused modules, and
-the *structure* carries an invariant the comments used to carry in prose: a module may
+`arranger` is a package of focused modules, and
+the *structure* carries the invariant rather than a comment in prose: a module may
 import only the ones below it. That is worth enforcing mechanically precisely
 because the maintainers here are LLM agents, which edit what they can find and
 cannot infer that a decision documented in one place is duplicated in another - so

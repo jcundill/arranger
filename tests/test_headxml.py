@@ -605,10 +605,9 @@ class TestAHeldNoteIsOneNoteAcrossABarline(unittest.TestCase):
 class TestChordsOnlyHead(unittest.TestCase):
     """§9.3 step A': a chords-only lead sheet is a valid input.
 
-    Four bars, six `<harmony>` elements, **zero pitched notes** — measured, the loader
-    used to refuse it outright (`has no readable melody part`) because `_choose_part`
-    selected on the note count alone. It now reads, reports its metre and bar count, and
-    arranges **the whole head**.
+    Four bars, six `<harmony>` elements, **zero pitched notes**. It reads, reports its
+    metre and bar count, and arranges **the whole head**: a part is chosen by what it
+    holds, not by its note count alone.
 
     The default grid's silence here was `docs/history/open-issues.md` item 1's extreme case, and
     it is now fixed: a bar the melody never enters is added beat for beat, so a head with

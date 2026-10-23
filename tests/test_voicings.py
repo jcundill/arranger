@@ -145,8 +145,8 @@ class TestExtendedQualities(unittest.TestCase):
                 self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()))
 
     def test_rootless_dominant_root_in_top_inversion(self):
-        """7b9 and 7alt are voiced rootless, so a root melody used to fall through to
-        a wrong chord; each now has a root-in-top inversion that contains its root."""
+        """7b9 and 7alt are voiced rootless, so each has a root-in-top inversion that
+        contains its root - otherwise a root melody falls through to a wrong chord."""
         for quality, chord_name in (("7b9", "G7b9"), ("7alt", "G7alt")):
             tones = set(ChordParser.get_chord_tones(quality, chord_name))
             voicings = self.engine.get_drop2_voicings(Note("G5"), quality, chord_name=chord_name)
@@ -568,7 +568,7 @@ class TestQualityTableInvariants(unittest.TestCase):
 
         The rule's own shapes are checked in `test_generated_grips`; this is one level out -
         a shape the rule builds still has to be fretted on a supported string set, and the
-        coverage a retired degree row used to bound is now every chord tone the chord has.
+        coverage is every chord tone the chord has, rather than a row of degrees.
         """
         for quality, chord_tones in ChordParser.CHORD_TONES_FROM_ROOT.items():
             chord_name = "C" + quality

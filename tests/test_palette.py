@@ -240,9 +240,9 @@ class TestTheShapeClause(unittest.TestCase):
         So a caller who asks for a bass **without** writing a slash into the chord
         symbol gets the partition too: `Gmaj9` alone states four voices on its root,
         and `Gmaj9` with F# asked for as data drops to the shell whose lowest voice is
-        the F#. The field used to need the library's own ranking supplied beside it, so
-        a caller who set the pitch class and nothing else got no narrowing at all - a
-        knob with an invisible effect, which is the defect this pins shut.
+        the F#. The field needs nothing supplied beside it: a caller who set the pitch
+        class and nothing else would get no narrowing at all - a knob with an invisible
+        effect, which is the defect this pins shut.
         """
         triple = (("D4", "maj9", "Gmaj9"),)
         f_sharp = Note("F#3").midi_note() % 12
@@ -360,9 +360,9 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
 
         The voices named here are the ones the palette settles on, and the palette no
         longer offers the high E (`grip_tables.COMPING_EXCLUDED_STRINGS`), so this chord's
-        shell moved to `x-12-x-11-12-x` - a 9th, a 3rd and a 7th where it used to state a
-        3rd, a 5th and a 7th. A pinned expectation is the point: the clause is read off the
-        shape, and the shape is what moved.
+        shell is `x-12-x-11-12-x` - a 9th, a 3rd and a 7th rather than a 3rd, a 5th and a
+        7th. A pinned expectation is the point: the clause is read off the shape, and the
+        shape is what the palette decides.
         """
         from headxml import arrange_xml_head
 

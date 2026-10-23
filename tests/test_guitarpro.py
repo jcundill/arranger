@@ -845,12 +845,12 @@ class TestRhythm(GuitarProTestCase):
         """No beat of "All the Things You Are" re-strikes a note it still holds.
 
         The intra-bar twin of `test_every_split_step_in_a_written_head_is_tied`,
-        measured over a real export rather than a fixture: six beats of this head
+        over a real export rather than a fixture: six beats of this head
         are the continuation parts of a length split - bar 2's dotted half among
-        them - and every one of them used to go out as an ordinary note, so a
-        dotted half played as a half and then a re-struck quarter. The writer's
-        own model, `_measures` and `_duration_split`, says which parts continue
-        an earlier one; the assertion is on the parsed bytes, which is the only
+        them - and written as ordinary notes a dotted half would play as a half and then a
+        re-struck quarter. The writer's own model, `_measures` and `_duration_split`, says
+        which parts continue an earlier one; the assertion is on the parsed bytes, which is
+        the only
         place the note type survives.
         """
         import guitarpro
@@ -911,7 +911,7 @@ class TestRhythm(GuitarProTestCase):
         name chords in the same places, and a continuation part (the rest of a
         split, a hold crossing a bar line) never carries a label of its own. The
         reported case is bar 2 of this head: a dotted half over a quarter, written
-        as three beats, which used to show `Bbm7` three times where the score has
+        as three beats, which must not show `Bbm7` three times where the score has
         two notes.
         """
         from arranger.tuning import NO_CHORD

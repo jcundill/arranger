@@ -310,9 +310,9 @@ class TestThePaletteRescue(unittest.TestCase):
     **The thin palette is `Request(chord_notes="1")` now.** It asks the chord part for a
     single note, and the one family that states one note under a melody is `duo` -
     which is a *pair* of specific degrees, so a melody it cannot pair with leaves the
-    chord unstated. That is the shipped spelling of the case; the `grips=` argument
-    that used to pin it is gone (`docs/history/parts.md` §6 item 6), because a grip family is
-    the search space rather than a choice.
+    chord unstated. That is the shipped spelling of the case, and a grip family is the
+    search space rather than a choice, so no `grips=` argument pins it
+    (`docs/history/parts.md` §6 item 6).
     """
 
     def test_the_step_survives_the_chord_it_cannot_voice(self):

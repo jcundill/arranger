@@ -305,7 +305,7 @@ class TestRoles(unittest.TestCase):
             "and the route that has to read it",
         )
         # The thinnest fill is the melody alone, which is a real entry rather than
-        # an empty palette - the distinction the emptied row used to blur.
+        # an empty palette - the distinction this keeps.
         self.assertEqual(families_up_to_with_thin(0), ("melody",))
         self.assertEqual(_THIN_ENTRIES["melody"], 0)
         self.assertEqual(_FILL_THINNING, 1)
@@ -504,9 +504,9 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
         chords whose only shape is a five-fret stretch fall back to the melody
         alone, which is the rule this asserts.
 
-        The *answer* has moved once already (drop-2's `x-6-5-3-8-x` used to leave
-        nothing playable, then drop-3's `3-x-1-3-4-x` did) and it has moved again
-        with the palette: `closed` now states this chord inside the hand
+        The *answer* moves with the tables (drop-2's `x-6-5-3-8-x` leaves nothing
+        playable, where drop-3's `3-x-1-3-4-x` does), and the palette decides it:
+        `closed` states this chord inside the hand
         (`x-10-8-8-8-x`, span 2). So what is asserted is the *rule* rather than the
         shape - a `targets` target is always either a complete chord or the melody
         alone, never a partial one, and never a melody with a stale chord name.
@@ -1458,7 +1458,7 @@ class TestIntervalGrip(unittest.TestCase):
         and its second voice is the chord's guide tone.
 
         This is what makes the pair above a *harmony* rather than a renamed interval -
-        the assertion the old "a duo refuses these" check used to stand for.
+        is the claim this asserts.
         """
         for quality, name, melody in (
             ("m7", "Dm7", "C5"),      # the b7 in the melody

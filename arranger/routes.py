@@ -346,8 +346,8 @@ def _comping_choice(
 ) -> Tuple[Voicing, Palette]:
     """The comping shape the selector prefers, and the palette it chose from.
 
-    The root is read once for the bass-function tie-break. `get_comping_voicings` has
-    already refused to generate anything without one, so by this point it is never
+    The root is read once for the bass-function tie-break. `get_comping_voicings`
+    refuses to generate anything without one, so by this point it is never
     None - the check is read from the same place the generator read it rather than
     re-derived, so the two cannot disagree.
 

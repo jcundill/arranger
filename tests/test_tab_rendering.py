@@ -630,7 +630,8 @@ class TestOneLineColumns(unittest.TestCase):
 
     Two guarantees. The **tab column is fixed**, so shapes line up down the page: the
     annotation, whose length varies, trails the line instead of sitting between the
-    melody and the tab, where it used to push every annotated shape out of line. And
+    melody and the tab, where its varying width would push every annotated shape out of
+    line. And
     the **degree column** names the melody's chord tone - or, for a note outside the
     chord, the tension it spells - immediately after the melody note.
     """

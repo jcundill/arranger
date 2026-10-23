@@ -570,12 +570,11 @@ class TestThumbCapacityAndRefusal(unittest.TestCase):
     """A thumb line needs a string, and the capacity is derived not listed."""
 
     def test_capacity_is_read_from_the_grip_tables(self):
-        """No texture can fill every thumb string: the set that could is gone.
+        """No texture fills every thumb string: every palette leaves one free.
 
-        `uniform` used to answer **0** here, because `drop24`'s `(4,2,1,0)` set spanned the
-        low E, the A and the D at once. That was one of the four inner-skip `drop24` sets
-        removed for a *finger* reason (`docs/history/fingering.md` §4.4), and this capacity is
-        derived from the tables rather than listed, so it followed on its own: one string is
+        `drop24`'s `(4,2,1,0)` set spanned the low E, the A and the D at once, and it is
+        gone for a *finger* reason (`docs/history/fingering.md` §4.4). This capacity is
+        derived from the tables rather than listed, so it follows on its own: one string is
         the worst case now - which is the rule's threshold, not a special case.
         """
         self.assertEqual(thumb_capacity("uniform", ROLE_TARGET), 1)
