@@ -458,12 +458,11 @@ class TestChordSlots(unittest.TestCase):
         the default request now leaves a bar the tune never enters silent.
 
         **A comping selection is where this fixture's silent position is still
-        added** - the engine's own union, which `ArrangeOptions(parts="chord")`
-        reaches because a selection with no tune to play is what asks for it. The
-        gate reads the **selection** and not the spelling, so the axis spelling of a
-        *singing* request is the default arrangement and adds nothing either; the
-        last loop here is that half, and it is what keeps "one arrangement per
-        request" from being an accident of which door the caller came through.
+        added** - the engine's own union, which `Request(melody=False)` reaches
+        because a selection with no tune to play is what asks for it. The gate reads
+        the **selection** and not the spelling, so a *singing* request is the default
+        arrangement and adds nothing either - which is the assertion at the top of
+        this test.
         """
         head = self.rainy
         skeleton = head_skeleton(head, None)
@@ -475,7 +474,7 @@ class TestChordSlots(unittest.TestCase):
         self.assertEqual([s for s in steps if s.bar == 6], [])
 
         comping, _head, _notes = arranged(
-            RAINY_DAY, options=ArrangeOptions(parts="chord")
+            RAINY_DAY, options=ArrangeOptions(request=Request(melody=False))
         )
         silent = sorted((s.beat, s.chord) for s in comping if s.bar == 6)
         self.assertEqual(silent, [(2.0, "D9")])
@@ -483,19 +482,6 @@ class TestChordSlots(unittest.TestCase):
             if step.bar == 6:
                 self.assertIsNone(step.melody, step.tab_line())
                 self.assertFalse(step.melody_voiced, step.tab_line())
-
-        for spelling in (
-            ArrangeOptions(parts="melody,chord"),
-            ArrangeOptions(request=Request(chord_notes="full")),
-            ArrangeOptions(request=Request(bass_on="none")),
-        ):
-            with self.subTest(spelling=spelling):
-                singing, _head, _notes = arranged(RAINY_DAY, options=spelling)
-                self.assertEqual(
-                    {(s.bar, round(s.beat or 0.0, 6)) for s in singing},
-                    written,
-                    "a singing selection is the default arrangement",
-                )
 
     def test_a_bar_the_melody_does_enter_is_untouched_by_the_engine_union(self):
         """The old bar-level claim, now a fact about the **comping selection**.
@@ -509,7 +495,7 @@ class TestChordSlots(unittest.TestCase):
         skeleton = head_skeleton(self.rainy, None)
         melody_bars = {bar for _triple, bar, _beat, _duration in skeleton}
         steps, _head, _notes = arranged(
-            RAINY_DAY, options=ArrangeOptions(parts="chord")
+            RAINY_DAY, options=ArrangeOptions(request=Request(melody=False))
         )
         added = {(s.bar, s.beat) for s in steps} - {
             (bar, round(beat, 6)) for _t, bar, beat, _d in skeleton
@@ -537,7 +523,7 @@ class TestChordSlots(unittest.TestCase):
                     for _t, bar, beat, _d in head_skeleton(head, None)
                 }
                 steps, _head, _notes = arranged(
-                    path, options=ArrangeOptions(parts="chord")
+                    path, options=ArrangeOptions(request=Request(melody=False))
                 )
                 for step in steps:
                     bar, beat = step.bar or 0, step.beat or 0.0
@@ -748,7 +734,7 @@ class TestChordSlots(unittest.TestCase):
         self.assertGreater(first, 1.0, "a position with no harmony was filled in")
 
     def test_the_singing_route_is_not_touched(self):
-        """`parts="auto"` invents no melody: a note-less position carries `None`.
+        """The default request invents no melody: a note-less position carries `None`.
 
         The regression that makes this necessary, and it was measured rather than
         predicted: `parse_parts("auto")` returns the **sentinel** `("auto",)`, which has
@@ -1017,7 +1003,6 @@ class TestSilentSlotsCarryNoMelody(unittest.TestCase):
         steps, _rescued, _notes = arrange_slots(
             [(None, "m7", "Dm7"), ("C5", "maj7", "Cmaj7")],
             [(1, 1.0, 0.5), (1, 2.0, 0.5)],
-            options=ArrangeOptions(parts="auto"),
         )
         self.assertEqual([s.chord for s in steps], ["Dm7", "Cmaj7"])
         self.assertIsNone(steps[0].melody)
