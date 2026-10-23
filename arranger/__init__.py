@@ -145,7 +145,6 @@ from .steps import StepPreparation, VoiceLeadingEngine
 from .texture import (
     comping_arity,
     derived_arity,
-    families_for_arity,
     texture_arity,
     texture_palette,
 )
@@ -275,7 +274,6 @@ __all__ = [
     "comping_capacity",
     "default_grouping",
     "derived_arity",
-    "families_for_arity",
     "felt_beat",
     "format_gp5",
     "format_grouping",

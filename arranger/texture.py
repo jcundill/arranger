@@ -65,26 +65,6 @@ THIN_ENTRIES: Dict[str, int] = {
 FILL_ONLY_EXCLUDED: Tuple[str, ...] = ("duo",)
 
 
-def families_for_arity(arity: int) -> Tuple[str, ...]:
-    """The grip families that state exactly `arity` notes under the melody.
-
-    Derived from the string tables rather than listed, so a family added to the
-    search space joins at its own size rather than needing a row here. `arity` below
-    one is the empty palette - "the left hand plays nothing" - which is a real answer
-    rather than an error, because that is what a one-note fill means.
-    """
-    if arity < 1:
-        return ()
-    families: List[str] = []
-    for family in GRIP_PREFERENCE:
-        sets = GRIP_STRING_SETS.get(family, ())
-        if not sets:
-            continue
-        if min(len(strings) for strings, _soprano in sets) == arity + 1:
-            families.append(family)
-    return tuple(families)
-
-
 def families_up_to_arity(arity: int) -> Tuple[str, ...]:
     """Every family that states **at most** `arity` notes under the melody.
 
