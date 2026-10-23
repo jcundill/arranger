@@ -737,10 +737,10 @@ class TestChordSlots(unittest.TestCase):
         """The default request invents no melody: a note-less position carries `None`.
 
         The regression that makes this necessary, and it was measured rather than
-        predicted: `parse_parts("auto")` returns the **sentinel** `("auto",)`, which has
+        predicted: `parse_parts("auto")` **returned** the sentinel `("auto",)`, which had
         no soprano, so testing the route on the parsed value alone classified the *default*
         arrangement as the comping route. Fourteen steps of a singing every-beat
-        arrangement carried the placeholder melody before `resolve_parts` was added.
+        arrangement carried the placeholder melody before the derivation replaced them.
 
         **What is asserted is the absence of an invented pitch, not the step count.** The
         default grid now generates note-less positions of its own, and the honest report
