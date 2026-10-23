@@ -17,13 +17,12 @@ lay an arrangement along **one staff in reading order**, and they live outside t
 `tab_block()` in `arranger/tuning.py`: they are a different shape of output, and
 `Voicing.tab_block()` is called from the dataclass itself.
 
-`format_progression` also rendered a six-line block per chord, behind a `vertical`
-argument that `--vertical` existed only to reach. Both were removed: a staff with
-the chords on their real beats is what a player reads, and this module renders one.
-`format_progression` now prints the four columns on the step's own line and lays the
+`format_progression` prints the four columns on the step's own line and lays the
 **explanation** out over as many lines as it needs, each indented to the column the
 explanation starts in (`render._PROGRESSION_WIDTH`, and `width=None` for one line per
-step). The vertical form survives only as `Voicing.tab_block()` for a single voicing.
+step). A staff with the chords on their real beats is what a player reads, and this
+module renders one; a six-line block per chord is `format_tab_staff`'s, and the vertical
+form of a single voicing is `Voicing.tab_block()`.
 
 **They are split together, never separately**, because the two renderings share
 `_staff_columns` — which places each step on an absolute beat and decides what is a
@@ -46,10 +45,10 @@ duplicated or imported across the boundary.
 **A barline and a system break are two different questions, and the split is load-bearing.**
 `_staff_barlines` marks **every** bar — that is the mark saying where the metre falls —
 while `_staff_breaks` marks every `measures_per_line` bars, which is only where a printed
-line *ends*. They used to be the same setting, which meant the staff ruled one bar in four
-and never wrapped at all: `measures_per_line` decided where the barlines went, and a flag
-named for bars-per-line governed nothing else. TuxGuitar's ASCII export closes every
-measure and wraps at a fixed width, and copying it is what forced the split. Both sets come
+line *ends*. One setting for both would rule one bar in four
+and never wrap at all, with `measures_per_line` deciding where the barlines went.
+TuxGuitar's ASCII export closes every measure and wraps at a fixed width, which is the
+shape the split has to follow. Both sets come
 from one `_staff_bars` list, so a barline and a wrap can never disagree about where a bar
 ends.
 
@@ -101,13 +100,12 @@ Two consequences worth knowing:
 
 - **A `TYPE_CHECKING` import** in `arranger/__init__.py` gives the type checker and
   IDEs the real declarations, since a checker cannot follow `__getattr__`. Without it
-  pyright reports the names as "not present in module". The same import was in
-  `tabstaff.py` for the two `tabxml` names, and without it pyright flagged their
-  `__all__` entries; Phase 6 removed that one along with the `__getattr__` it fed.
-- **`__all__` is an explicit list**, not computed from `globals()`. It had to be
-  added: the module never had one, so `from arranger import *` used to export every
-  public name, and the lazy `__getattr__` hides the re-exported ones from a star
-  import. `TestTabstaffModuleBoundary::test_dunder_all_matches_the_public_surface`
+  pyright reports the names as "not present in module". `tabstaff.py` needs no such
+  import: it re-exports the two `tabxml` names directly.
+- **`__all__` is an explicit list**, not computed from `globals()`. The lazy
+  `__getattr__` hides the re-exported names from a star import, so a computed list
+  would export less than the module has.
+  `TestTabstaffModuleBoundary::test_dunder_all_matches_the_public_surface`
   fails if the list and the module's public names diverge, in either direction. It is
   spelled as one literal in both modules rather than with `+=`, which a checker
   cannot follow either.
@@ -154,9 +152,9 @@ the tab and in both files.
 lowest pitch on every beat, so including it would mark every column a strike and turn the
 arrangement back into the chord list the collapse exists to prevent. The cost of that choice
 is a column whose shape is held and whose thumb moves — a hold for the shape and a new attack
-for the bass — and it used to draw nothing at all, so the note was in the one-line tab and in
+for the bass — and drawing nothing at all would leave the note in the one-line tab and in
 the score while the ASCII staff and the HTML showed silence. `_moved_thumb` is that fact and
-`_draws` is the one predicate both renderers now ask. The comparison is by `(midi, string)`
+`_draws` is the one predicate both renderers ask. The comparison is by `(midi, string)`
 rather than by role, because a thumb can move to another octave of the same pitch class and
 that is a note being plucked.
 
@@ -376,19 +374,17 @@ onsets with the first of the two - right in 4/4 and 2/2, and 25% early in the 3/
 factor before it was kept: a test for a metre bug that cannot fail on the old
 arithmetic is not a test, and all five of them do.
 
-So `beat_type` is now a parameter of `format_musicxml` and `format_gp5` (and of
+So `beat_type` is a parameter of `format_musicxml` and `format_gp5` (and of
 `tabscore.score_events`, `_measures`, `_build_part`, `_build_song`), it is what makes a 2/2 head
 read as **2/2 rather than 2/4** in the file, and `head_cli` passes
 `head.beats_per_bar` and `head.beat_type` to every renderer.
 
-**`tabstaff` needs it too, and stopped claiming otherwise.** It used to work in
-*beats* throughout and never converted to a length — which was true, and is why
-`docs/renderers.md` said so: the staff placed a chord on a beat and drew a fret
-under it, and never said how long the chord sounded. A whole note and a quarter
-were drawn identically, because on that grid both were one column of frets. Adding
-the **metre row** and the **note-value row** (`show_timing`) ended it: naming a
-length means measuring it, a length is measured in quarters, and quarters come from
-`4 / beat_type`. So `beat_type` is now a parameter of `format_tab_staff` and
+**`tabstaff` needs it too.** It works in
+*beats* throughout and converts to a length only where a length is drawn: a chord is
+placed on a beat with a fret under it, and a whole note and a quarter are one column of
+frets on that grid. The **metre row** and the **note-value row** (`show_timing`) are what
+need the length: a length is measured in quarters, and quarters come from
+`4 / beat_type`. So `beat_type` is a parameter of `format_tab_staff` and
 `format_tab_html` too, and `head_cli` passes it to all four renderers.
 
 ### Grouping is read from the score, but not written back
@@ -444,7 +440,7 @@ Three things about the six string rows below them, all of them forced by compari
 output with TuxGuitar's ASCII export of the same GP5 file:
 
 - **Each string is a continuous line of dashes**, with the frets sitting *in* it. The
-  cell that used to be a space is now a `-`, which costs nothing and is the whole
+  cell that would otherwise be a space is a `-`, which costs nothing and is the whole
   difference between a staff that reads as tab and one that reads as a chord list.
 - **The rows above are *not* filled.** The chord name, the melody note and the note
   value are text, and a dash through a chord name is a line through the word. So the
@@ -459,10 +455,9 @@ output with TuxGuitar's ASCII export of the same GP5 file:
 
 ### Width is duration, and that is what the rhythm row was standing in for
 
-**A column used to be one beat wide whatever the note was worth**, so a quarter and a
-half note came out identical and the ASCII staff said nothing about how long anything
-sounded. That is why the `q`/`w` rhythm row existed at all: it was carrying information
-the tab could have drawn. A note now occupies as many *slots* as it is worth, one slot
+**A column is as wide as the note is worth**, so a quarter and a
+half note are not identical and the ASCII staff says how long anything
+sounds. A note occupies as many *slots* as it is worth, one slot
 being one fret cell.
 
 Three things the grid has to get right, each of which was wrong at once and each measured
@@ -500,26 +495,25 @@ written for a barline puts one separator there too.
 `current = onset + 1.0`, assuming a step was a beat long. It is not: `duration` is in whole
 notes and the default `eighths` skeleton puts steps half a beat apart, so **every gap
 shorter than a beat was stepped over**. Bar 11 of the synthetic cut-time head lost its downbeat column
-entirely that way, and with it the tie into the bar's early beat. `_rest_grain` is now the
+entirely that way, and with it the tie into the bar's early beat. `_rest_grain` is the
 shortest thing the progression actually writes, bounded to a beat, so an untimed
-progression keeps the one-column-per-beat grid it always had.
+progression keeps the one-column-per-beat grid.
 
-This is the one defect that was **not** in the ASCII renderer alone: `_staff_columns` is
-shared with `format_tab_html` and `_staff_rhythm`, so the page had the same missing rests
-until this was fixed.
+The defect is **not** in the ASCII renderer alone: `_staff_columns` is
+shared with `format_tab_html` and `_staff_rhythm`, so a missing rest reaches the page too.
 
 Three further grid facts, measured the same way:
 
 - **A leading rest inside the first bar is kept.** `_staff_columns` started at the first
-  *onset*, which silently dropped a rest inside that bar: a pickup came out with its
-  first fret hard against the opening barline and read as a downbeat. the synthetic cut-time head
-  bar 1 is written that way — a quarter rest and then three notes. The start is now
+  *onset*, which would silently drop a rest inside that bar: a pickup comes out with its
+  first fret hard against the opening barline and reads as a downbeat. The synthetic cut-time
+  head's bar 1 is written that way — a quarter rest and then three notes. The start is
   rounded down to the **bar** containing the first onset, which keeps the rest without
   inventing whole empty bars ahead of it. Rounding to the bar rather than to zero is
-  the whole of that change; rounding to zero would pad out a head selected from bar 12.
-- **The last bar is padded out to its own length.** The grid filled the holes *between*
-  onsets but stopped at the last one, so a head whose final note ended early closed its
-  barline mid-bar. The rest after the last note is still time. Only the *last* bar is
+  the whole of that rule; rounding to zero would pad out a head selected from bar 12.
+- **The last bar is padded out to its own length.** The grid fills the holes *between*
+  onsets, so a head whose final note ends early would close its
+  barline mid-bar: the rest after the last note is still time. Only the *last* bar is
   padded: every earlier one is closed by the next onset or the next bar's first column,
   and padding those would invent silence the score does not write.
 - **An untimed progression is not subdivided.** No written rhythm means no durations to
@@ -581,28 +575,27 @@ the error survives any test that only checks bar lengths. The test that catches 
 is reading the *first note's own beat* off the committed file, which is
 `test_a_cut_time_head_opens_on_the_beat_its_first_note_is_written_on`.
 
-Fixing it exposed a second one, in the renderer rather than the loader. GP5 has
-no anacrusis, and `tabgp._measures` represented a pickup by opening an **empty**
-first measure and dropping it again at the end - which is not a representation of a
-pickup, it is its deletion, and the music after it slid forward by the length of
-the rest to fill the gap. It is now a **rest beat** at the head of the first
+A second one is in the renderer rather than the loader. GP5 has
+no anacrusis, so `tabgp._measures` opens an **empty** first measure to hold the
+pickup - which is not a representation of a pickup but its deletion, with the music
+after it slid forward by the length of the rest to fill the gap. A pickup is a
+**rest beat** at the head of the first
 measure, with the cursor offset to follow it, so the bar is full *and* the music
-sits where the score puts it. A knock-on effect worth knowing: a note that used to
-be split across a bar line is often no longer split, because the rest is time
-rather than a hole. `test_a_step_crossing_a_bar_line_is_split_not_stretched` pins
-the new placement, and `test_a_long_step_is_split_across_a_bar_line_rather_than_stretched`
+sits where the score puts it. A knock-on effect worth knowing: the rest is time rather
+than a hole, so a note crossing a bar line is split where the score splits it.
+`test_a_step_crossing_a_bar_line_is_split_not_stretched` pins
+the placement, and `test_a_long_step_is_split_across_a_bar_line_rather_than_stretched`
 covers the split itself without a pickup in the way.
 
-`_slot_key`'s clamp is now `beats_per_bar + 1 - grid` — the last grid position
-**inside** the bar — rather than `beats_per_bar`. It still catches what it was
-written to catch (a note that rounds onto the bar line is pulled back), which is
-what `test_a_bar_line_overflow_is_still_pulled_back_inside` pins, because a fix
-that kept those notes must not lose the protection.
+`_slot_key`'s clamp is `beats_per_bar + 1 - grid` — the last grid position
+**inside** the bar — rather than `beats_per_bar`. It catches the note that rounds
+onto the bar line and pulls it back, which is
+what `test_a_bar_line_overflow_is_still_pulled_back_inside` pins.
 
 The general lesson, and the one to apply to the next importer: **a count without a
 denominator is not a metre.** 2/2 and 2/4 are both two beats to the bar, so
 `beats_per_bar` alone cannot say which - which is why `Head` carries `beat_type`
-and why it is now plumbed all the way to the file headers.
+and why it is plumbed all the way to the file headers.
 
 - **A `<chord>` group reduces to its highest note.** MusicXML does not order a
   group by pitch: only the first member is unmarked, and in a chord-melody part
@@ -640,9 +633,8 @@ other caller. A second implementation of the step loop is how this importer came
 disagree with the library once already; the whole point of the extraction is that it
 cannot happen again.
 
-That function *was* the corpus loader's `arrange_slots`, and its own docstring described it as
-"the corpus path's own step loop" while MusicXML was most of its callers. The database and the
-module are gone and it is now named for what it does.
+That function is `arrange_slots`, named for what it does: it is the one step loop, and
+MusicXML is most of its callers.
 
 **Imports are lazy where they keep the module cheap** — `argparse` inside
 `head_cli`, and the renderers inside it too, so `load_musicxml` costs nothing.
@@ -710,8 +702,7 @@ convention, not chosen:
   transposing instrument - a Bb part, say - is arranged at concert pitch rather than
   shifted.
 - **The document is post-processed with `ElementTree` after music21 writes it** - for
-  `_drop_empty_inversions` and `_downgrade_kinds`, and `_unique_instrument_ids`. The
-  two passes that used to repair a tab staff are gone with it.
+  `_drop_empty_inversions` and `_downgrade_kinds`, and `_unique_instrument_ids`.
 - **Steps are placed by `tabxml`, not by `tabstaff._staff_columns`.** The column grid
   is deliberately lossy - two steps on one onset collapse into one column, "the first
   step in a column owns that column" - which is right for a fixed-width ASCII staff
@@ -855,10 +846,10 @@ write less and music21 aborts rather than rounding; nothing this library generat
 shorter than an eighth. A triplet onset that does not divide the bar evenly would hit
 the same wall - untested. The provenance notes the HTML page carries (`notes=`) are
 not written into the score.
-- **`__all__` is an explicit list**, not computed from `globals()`. It had to be
-  added: the module never had one, so `from arranger import *` used to export every
-  public name, and the lazy `__getattr__` hides the re-exported ones from a star
-  import. `TestTabstaffModuleBoundary::test_dunder_all_matches_the_public_surface`
+- **`__all__` is an explicit list**, not computed from `globals()`. The lazy
+  `__getattr__` hides the re-exported names from a star import, so a computed list
+  would export less than the module has.
+  `TestTabstaffModuleBoundary::test_dunder_all_matches_the_public_surface`
   fails if the list and the module's public names diverge, in either direction.
 ## Guitar Pro 5 export
 
@@ -880,9 +871,9 @@ MusicXML score, and it is **not a replacement for MusicXML** — see below.
 **Why a third renderer rather than a replacement.** GP5 is a *tab* format, so it
 stores a fret and a string per note natively and a shape survives the round trip
 exactly — which is why the mapping here is a few lines with no post-processing at
-all. That is not merely tidier than the MusicXML tab staff used to be: it is the
+all. That is not merely tidier than a MusicXML tab staff: it is the
 **only** one that works, since music21 cannot write a tab staff a notation program
-renders correctly (see [MusicXML export](#musicxml-export)). So the division is now
+renders correctly (see [MusicXML export](#musicxml-export)). So the division is
 by capability, not by preference: GP5 carries the fingering, MusicXML carries the
 notation, and neither renderer tries to do the other's job. But GP5 has no notation
 staff and is a closed (undocumented) format, so what reads it is the family of *tab*
@@ -977,17 +968,17 @@ notation program was run against the output.
   written as `value.bit_length() - 3` and read back as `1 << (n + 2)`, so a length
   that is not a power of two has to be *split*, not rounded. A dotted half (3
   quarters) rounded to the nearest legal value is a **whole note** — a quarter too
-  long, and a bar summing to more than its 4/4 signature. It is now written as a
+  long, and a bar summing to more than its 4/4 signature. It is written as a
   half plus a quarter.
   **And the parts are tied, which is what makes them one note rather than two.**
-  The note type used to be decided by `tie` from `_measures` alone, which marks a
-  note continuing an *earlier bar* — so every part of an intra-bar split went out
-  as an ordinary note, and a dotted half played as a half and then a **re-struck**
+  The note type is decided by `tie` from `_measures`, which marks a
+  note continuing an *earlier bar* — so the parts of an intra-bar split would go out
+  as ordinary notes, and a dotted half would play as a half and then a **re-struck**
   quarter in the middle of its own hold. Measured over every head
   `arrange_xml_head` arranges: every continuation beat is tied, and
   `tests/test_guitarpro.py` walks the writer's own model against the parsed bytes
   for each one. The chord name was duplicated with the note:
-  it is now written only where the chord changes (see "What is shared" above), so
+  it is written only where the chord changes (see "What is shared" above), so
   bar 2 of "synthetic common time" — a dotted half over a quarter, three written
   beats — shows **one** `Bbm7` where it showed three, and plays two attacks rather
   than three. `test_a_dotted_length_is_tied_within_a_bar_not_re_struck` is the
