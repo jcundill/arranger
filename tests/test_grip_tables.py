@@ -154,10 +154,7 @@ class TestStringSetTable(unittest.TestCase):
         The `interval` grip sits on the three **adjacent** pairs, which the duo declares
         too - but not on the duo's two skipped-string pairs.
 
-        This assertion was inverted rather than deleted. It previously demanded the two
-        families' sets be *equal*, which was true while both were three adjacent pairs
-        and stopped being true when the duo gained `(5,2)` and `(3,1)`. The invariant
-        worth keeping is the one that explains the difference in both directions:
+        The difference is deliberate in both directions:
 
           - an interval keeps to the adjacent pairs, because a 3rd or a 6th has tuning
             to spare and the extra reach of a skipped string buys it nothing;
@@ -429,13 +426,11 @@ class TestFretWindow(unittest.TestCase):
 
 
 class TestKnownTableGaps(unittest.TestCase):
-    """The gap this class was written for, and what closed it.
+    """The 13-chord 9th: the tone-priority rule answers for every chord tone.
 
-    It pinned the 13-chord 9th. A melody that is a chord tone with no template of its own
-    used to fall through to the quality-only fallback, which was free to sound a note the
-    chord does not contain. The tone-priority rule now answers for **every** chord tone, so
-    there is no such melody left to pin - and the assertion is inverted rather than
-    deleted, so a regression re-opens the gap and fails here.
+    A melody that is a chord tone with no template of its own is built a shape rather than
+    falling through to the quality-only fallback, which is free to sound a note the chord
+    does not contain. A regression re-opens that gap and fails here.
     """
 
     def setUp(self):
@@ -460,11 +455,10 @@ class TestKnownTableGaps(unittest.TestCase):
         ]
         # The gap this class existed to pin has closed - and closed for every chord tone,
         # not just this one melody: the tone-priority rule builds the shape for a 9th in
-        # the melody of a 13 (`1 3 b7 9`, both guide tones), where the table had no
-        # inversion for it and the quality-only fallback offered `x-x-10-8-10-10`, 1 b3 6 9
-        # against a chord whose identity is 3 and b7. The assertion is inverted rather than
-        # deleted, so a regression re-opens the gap and fails here instead of passing
-        # silently.
+        # the melody of a 13 (`1 3 b7 9`, both guide tones), where the table has no
+        # inversion for it and the quality-only fallback would offer `x-x-10-8-10-10`,
+        # 1 b3 6 9 against a chord whose identity is 3 and b7. A regression re-opens the
+        # gap and fails here instead of passing silently.
         self.assertFalse(
             impure,
             f"the 13-chord 9th gap reopened: {[v.tab_string() for v in impure]}",

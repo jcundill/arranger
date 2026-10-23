@@ -166,13 +166,11 @@ class TestStaffTab(unittest.TestCase):
         With timing, a barline is drawn where the bar changes: a step in bar 1 is
         followed by one in bar 2, and the barline sits between them.
 
-        **Every bar is ruled**, not every `measures_per_line`th one. This asserted
-        the opposite once - that a barline was rare - and that was the decision
-        TuxGuitar's export contradicted. The assertion is inverted rather than
-        dropped: the barline is now the mark that says where the metre falls, and a
-        staff that drew one only every fourth bar could not show a two-bar phrase
-        apart from a four-bar one. What is still load-bearing here is *where* it
-        falls relative to the shape, so that is what the test states.
+        **Every bar is ruled**, not every `measures_per_line`th one: the barline is the
+        mark that says where the metre falls, and a staff that drew one only every fourth
+        bar could not show a two-bar phrase apart from a four-bar one. What is
+        load-bearing here is *where* it falls relative to the shape, so that is what the
+        test states.
         """
         timed = self.engine.arrange_progression(
             [("D5", "m7", "Dm7"), ("C5", "maj7", "Cmaj7")]
@@ -786,13 +784,11 @@ class TestStaffNoteValues(unittest.TestCase):
 
     def test_show_timing_off_is_the_default(self):
         """
-        `show_timing=False` is now what you get without asking - the staff is the tab.
+        `show_timing=False` is what you get without asking - the staff is the tab.
 
-        It used to be the opposite: `show_timing` was on by default and this was the
-        escape hatch back to a plainer staff. The assertion is inverted rather than
-        dropped, because the property it protects is unchanged - the metre and the
-        note-value rows are still the two that `show_timing` governs, and still the
-        only way to get them - only which value is the default has moved.
+        The metre and the note-value rows are the two that `show_timing` governs, and the
+        only way to get them, so this asserts the default and the two rows it
+        withholds.
         """
         steps = _timed(["Dm7", "G7"], beats=[(0, 1.0), (0, 2.0)])
         without = format_tab_staff(steps, show_melody=True)

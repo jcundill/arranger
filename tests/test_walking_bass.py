@@ -997,10 +997,9 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
         them, so the worst case `uniform` can reach now leaves one string free - the rule's
         threshold - and the line is written.
 
-        **Inverted rather than deleted.** It used to demand the refusal message and no bass
-        notes; it now demands the opposite, and keeps the half that made the refusal safe -
-        the arrangement still sounds, one step per melody note - so a silently dropped
-        chord cannot pass for a working bass line.
+        The line is written rather than refused, and the half that made the refusal safe
+        still holds: the arrangement sounds one step per melody note, so a silently
+        dropped chord cannot pass for a working bass line.
         """
         steps = self.arrange(
             chord_notes="full", bass_on="every-beat", bass_notes="walk"

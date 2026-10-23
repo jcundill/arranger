@@ -273,13 +273,10 @@ class TestABassPartIsABassNote(unittest.TestCase):
         )
 
     def test_an_inner_voice_is_not_addressable_as_a_part(self):
-        """The selection has no spelling for one inner voice, and that is the fix.
+        """The selection has no spelling for one inner voice: there is no part for it.
 
-        **Inverted rather than deleted.** It used to assert that `bass`, `alto` and
-        `tenor` produce three *different* arrangements, because they used to produce
-        one - the voice identity was discarded and only the count survived. There is
-        no part for an inner voice to name: the inner voices are what the **chord**
-        part is for, both of them at once.
+        The inner voices are what the **chord** part is for, both of them at once, so the
+        chord part states a complete comping shape rather than a named inner voice.
         """
         # The part that does carry them states a complete comping shape, and the
         # guide-tone pair is *inside* it rather than being the whole of it.
@@ -430,10 +427,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
         already correct: the lowest note of a two-note chord belongs to the chord's own
         string set, not to the bass register rule (`BASS_DEGREES_6432`).
 
-        **Inverted rather than deleted.** It used to assert `len(active_frets) ==
-        len(voices)` for `tenor,bass` and `alto,tenor,bass` - one note per *named
-        voice* - which was the old arity rule. The arity is the texture's now, so what
-        survives is the pair of claims that do not depend on it: the lone bass is one
+        The claims are the two that do not depend on the arity: the lone bass is one
         low note, and nothing else is the lone-bass case.
         """
         lone = [len(s.voicing.active_frets()) for s in self.arrange(LONE_BASS)]

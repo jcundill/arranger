@@ -5,9 +5,9 @@ generated grip's own bounds are stricter: a shape merged with a thumb note can n
 finger or reach further than the hand spans. `can_fret` is the predicate, and the two
 refusals in it are separate - neither implies the other.
 
-`TestTheEngineUsesItForOneQuestion` is what holds the module to its callers: it was
-`TestTheModuleIsInert` and is inverted rather than deleted (AGENTS.md trap 5), because the
-premise it asserted is exactly what the caller set answers now.
+`TestTheEngineUsesItForOneQuestion` is what holds the module to its callers: it names
+the exact set of engine modules that read it, so a second caller is as visible as the
+first.
 """
 
 from __future__ import annotations
@@ -142,14 +142,10 @@ class TestTheHandsReach(unittest.TestCase):
 
 
 class TestTheEngineUsesItForOneQuestion(unittest.TestCase):
-    """§4.3's left-hand half - not inert any more, and exactly two modules read it.
+    """The left-hand budget's callers: exactly two modules read it, and these are they.
 
-    This class **was** `TestTheModuleIsInert`, and it is inverted rather than deleted for the
-    reason AGENTS.md trap 5 gives: the premise it asserted ("nothing in the engine imports
-    this") is what §5 step 3 was waiting on, and the §4.3 measurement falsified it. The useful
-    assertion is now "exactly these do, and here is what moved", so a *second* engine
-    caller is as visible as the first was - which is the whole reason to name the set rather
-    than count it.
+    Naming the set rather than counting it is the point: a *second* engine caller has to
+    be added here deliberately, so a new caller is as visible as the first.
     """
 
     def test_the_only_engine_callers_are_the_two_thumb_questions(self) -> None:

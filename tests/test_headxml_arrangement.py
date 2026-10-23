@@ -120,14 +120,10 @@ class TestReductionAndArranging(unittest.TestCase):
         # The tuplets are marked as written, and they are a third of a beat apart.
         self.assertEqual([n.tuplet for n in head.notes], [True, True, False])
         beats = [beat for _t, _bar, beat, _d in head_skeleton(head)]
-        # **The slot carries the note's own float, and this assertion was inverted to
-        # say so.** It used to compare against `round(n.beat, 6)`, because the slot
-        # stored the rounded beat: `head_skeleton` grouped notes by a six-place key
-        # and then emitted that key as the position. A triplet is where that costs
-        # something - `1/3` has no exact binary form, so rounding the first note of
-        # a triplet DOWN and the next UP made the gap between them longer than the
-        # note itself, and the surplus was written as a rest. Measured on the
-        # committed triplet head: 13 such rests, and none since. See
+        # **The slot carries the note's own float.** A triplet is where rounding costs
+        # something: `1/3` has no exact binary form, so rounding the first note of a
+        # triplet DOWN and the next UP makes the gap between them longer than the note
+        # itself, and the surplus is written as a rest. See
         # `test_a_triplet_head_writes_no_rest_it_cannot_express`, which asserts that
         # on the real score rather than on this fixture's hand-written durations.
         self.assertEqual(beats, [n.beat for n in head.notes])

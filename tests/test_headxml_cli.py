@@ -382,11 +382,9 @@ class TestHeadCli(unittest.TestCase):
     def test_no_melody_keeps_the_chord_on_the_tune_s_rhythm(self):
         """`--no-melody` hands the tune away and comps the tune's own onsets.
 
-        **This assertion is inverted, not deleted** (AGENTS.md trap 5). The header used
-        to print the derived positions (`chord-on=1,2,3,4`) because the `melody` default
-        was rewritten to `every-beat` for a request with no tune; the written onsets are
-        a fact about the *score*, so the header prints `chord-on=melody` and the comp
-        falls where the tune does. Every felt beat is a request of its own.
+        The written onsets are a fact about the *score*, so the header prints
+        `chord-on=melody` and the comp falls where the tune does; every felt beat is a
+        request of its own.
         """
         output = self.run_cli(RAINY_DAY, "--bars", "1-3", "--no-melody")
         self.assertEqual(self.code, 0)

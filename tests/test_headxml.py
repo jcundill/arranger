@@ -569,15 +569,12 @@ class TestAHeldNoteIsOneNoteAcrossABarline(unittest.TestCase):
         self.assertAlmostEqual(end - 8.0, 1.0, places=6)
 
     def test_the_held_note_outlasts_the_last_note_and_bars_reports_the_file(self):
-        """`Head.bars` is now a fact about the *file*, so it does not stop at the note.
+        """`Head.bars` is a fact about the *file*, so it does not stop at the note.
 
-        **Inverted rather than deleted** (§9.3 step A', and AGENTS.md trap 5). The old
-        assertion was `(1, 16)` and its premise was *"`Head.bars` stops at the last
-        note"*. Step A' made `bars` the file's measure extent, because a chords-only
-        head has no notes to measure and still knows how long it is - so the premise
-        is gone and the assertion would be wrong to keep. The file runs to measure 17,
-        so the range is `(1, 18)`: the last note begins in bar 15 and is held to bar 17
-        beat 2.0, and the range now reaches that bar rather than stopping short of it.
+        A chords-only head has no notes to measure and still knows how long it is, so the
+        measure extent is the file's. This file runs to measure 17, so the range is
+        `(1, 18)`: the last note begins in bar 15 and is held to bar 17 beat 2.0, and the
+        range reaches that bar rather than stopping short of it.
 
         The note's own sound past bar 15 is still carried by its duration, and the
         arithmetic that proves it is kept - that part was never about `bars`.
@@ -638,15 +635,11 @@ class TestChordsOnlyHead(unittest.TestCase):
     def test_the_default_grid_arranges_every_bar(self):
         """A bar the melody never enters is added, so a head with no melody gets all of it.
 
-        **This assertion is inverted, not deleted** (AGENTS.md trap 5). It used to assert
-        `steps == []`, and the premise it rested on was step A' decision 2: "an empty
-        arrangement is the default grid's own instruction rather than a hole to report."
-        That premise is exactly what `docs/history/open-issues.md` item 1 measures as the defect —
-        a chord in force that produces **no part at all**, not quiet, absent, on every
-        export path. The rule now unions at the level of the **bar**, so a melody-less
-        head is fully arranged and a note-bearing bar is untouched; `every_note`'s
-        deference to the melody survives where it was load-bearing, which is inside a bar
-        the tune already articulates.
+        The union is at the level of the **bar**, so a melody-less head is fully arranged
+        and a note-bearing bar is untouched; `every_note`'s deference to the melody
+        survives where it is load-bearing, which is inside a bar the tune already
+        articulates. A chord in force must produce a part rather than nothing at all —
+        `docs/history/open-issues.md` item 1 is that defect.
 
         The soprano refusal below is the one case that did not move, and it is a different
         claim: a melody-only selection has nothing to *play* here, which is not the same

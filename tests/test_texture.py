@@ -281,14 +281,9 @@ class TestRoles(unittest.TestCase):
         without consulting this table at all - so a texture that harmonises
         something cannot lose its harmony by being absent from a table.
 
-        **This assertion was inverted, not deleted.** It used to name the one
-        empty palette a texture *did* carry - `walking_bass`'s fill - and assert
-        that it was the only one. `walking_bass` is not a texture any more (it is the full
-        bass vocabulary over `chord_notes="targets"`), and the arity rule leaves
-        no row that can be empty: a fill one thinner than a one-note target is the
-        `melody` entry rather than nothing. What survives is the rule the test was
-        for, and it is now stated over the whole palette table rather than over a
-        hand-written subset of it.
+        The arity rule leaves no row that can be empty: a fill one thinner than a one-note
+        target is the `melody` entry rather than nothing. So the rule is stated over the
+        whole palette table rather than over a hand-written subset of it.
         """
         selections = (
             (PART_MELODY,), (PART_BASS,), (PART_CHORD,), PART_NAMES,
@@ -382,14 +377,11 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
     """
     The families are the chord part's **search space**, not a caller's choice.
 
-    This class replaces `TestGripsIntersectTheTexture`, whose subject - the
-    intersection of a requested grip list with the texture's - no longer exists
-    (`docs/history/parts.md` §4 and §6): what a caller chooses is the *arity*, and the
-    families that state exactly that many notes under the melody are the ones the
-    selector may use. **Inverted rather than deleted**, so the fact that there is
-    nothing left to intersect is still asserted, and the two rules that survived
-    the change - a target is thicker than a fill, and a target that cannot be
-    played falls back to the melody alone - keep their own tests below.
+    What a caller chooses is the *arity*, and the families that state exactly that many
+    notes under the melody are the ones the selector may use - there is no grip list to
+    intersect with the texture (`docs/history/parts.md` §4 and §6). The two rules that
+    go with it - a target is thicker than a fill, and a target that cannot be played
+    falls back to the melody alone - keep their own tests below.
     """
 
     # the synthetic cut-time head's strong beats, in a form both paths can read.
@@ -468,12 +460,8 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
         answer that must not be "fixed" by handing the hand a chord nobody offered.
         The thumb budget leaves it alone for the same reason.
 
-        **Inverted rather than deleted.** It used to be the companion of an
-        `--grips shell` on a walk's fill, whose palette was empty by design: the
-        point was that an empty palette is *not* a caller error while a non-empty
-        palette lacking the request was. There is no requested palette any more, so
-        what survives is the first half - an empty palette is honoured rather than
-        reported - and it is now stated on the route that produces one.
+        An empty palette is honoured rather than reported, which is stated on the route
+        that produces one.
         """
         self.assertEqual(resolve_texture_grips(ROLE_TARGET, (), has_thumb=True), ())
         steps = VoiceLeadingEngine.arrange_progression(
@@ -705,11 +693,8 @@ class TestTheRightHandBudget(unittest.TestCase):
         """A palette of nothing but four-string grips is not an error, and not silence.
 
         It resolves to the widest statement that leaves a finger free, because a target
-        still has to state the harmony. **Inverted rather than deleted**: this used to
-        assert the *caller* was refused for asking for such a grip (`--grips drop2`
-        under a thumb), which was right while a request could be intersected with the
-        budget. There is no request any more - the palette arrives from the arity rule -
-        so the surviving half is what the budget does with one.
+        still has to state the harmony: the palette arrives from the arity rule, and the
+        budget's job is what it does with one.
         """
         self.assertEqual(resolve_texture_grips(ROLE_TARGET, ("drop2",), has_thumb=True), ("shell",))
         self.assertEqual(thumb_safe_grips(("drop2", "closed")), ("shell",))
@@ -1145,14 +1130,10 @@ class TestMelodyOnlySelections(unittest.TestCase):
     def test_no_chord_content_can_be_asked_of_a_melody_only_selection(self):
         """A melody-only selection refuses a chord content choice, rather than ignoring it.
 
-        **Inverted rather than deleted** (AGENTS.md trap 5), twice over. It used to loop
-        over `grips=("duo",)` and so on, asserting that the deleted grip axis could not
-        thicken a melody-only selection; `texture` replaced it and asserted the same
-        thing. Both were *accepted and ignored*, which is what the request redesign
-        removes: a question about a layer the request leaves silent is answered with a
-        reason, so a `chord_notes` choice beside `chord_on="none"` is refused - and no
-        arity can be asked of a line nobody asked to harmonise. `chord_notes="full"` is
-        the default rather than a choice, so it is not refused.
+        A question about a layer the request leaves silent is answered with a reason, so a
+        `chord_notes` choice beside `chord_on="none"` is refused - and no arity can be
+        asked of a line nobody asked to harmonise. `chord_notes="full"` is the default
+        rather than a choice, so it is not refused.
         """
         for name, request in (
             ("melody", self.MELODY_ALONE),
@@ -1169,14 +1150,12 @@ class TestMelodyOnlySelections(unittest.TestCase):
                     self.assertIn("chord-on=none", str(caught.exception))
 
     def test_a_solo_note_is_a_supported_single_string_set(self):
-        """A solo note is a singleton, and the invariant now says so.
+        """A solo note is a singleton, and the invariant says so.
 
-        **This assertion was inverted, not deleted.** It previously read
-        `assertNotIn(..., supported_string_sets())`, pinning the fact that a one-string
-        shape was *outside* the playability invariant. That was true and it was a real
-        gap: the invariant claims "the sounding strings are exactly one
-        `supported_string_sets()` entry", and a melody-only selection violates it on every
-        slot, so the library shipped shapes it had not agreed to be playable.
+        A one-string shape is *inside* the playability invariant: it claims "the sounding
+        strings are exactly one `supported_string_sets()` entry", and a melody-only
+        selection sounds one string on every slot, so a singleton entry is what makes that
+        claim true of it rather than an exception to it.
 
         `grips._SINGLE_NOTE_STRING_SETS` fixes that rather than excusing it: one note on
         one string has no span to exceed and no second voice to clash with, so it is
@@ -1455,13 +1434,10 @@ class TestIntervalGrip(unittest.TestCase):
         The guide asks for "2-note intervals (3rds or 6ths)" as a *fill*, so a 3rd or a
         7th in the melody has to be playable.
 
-        The second half of this test was **inverted rather than deleted**. It used to
-        assert that a duo refuses those same three melodies, and cited that refusal as
-        the reason `interval` is a distinct family. A duo no longer refuses them: its
-        second voice is the chord's guide tone, and a guide tone *beneath* a 3rd or a 7th
-        is what states the chord's function rather than losing it. So the distinction
-        between the two families is no longer the melody degree, and asserting the old
-        difference would assert a rule the engine does not have.
+        A duo does not refuse those melodies: its second voice is the chord's guide tone,
+        and a guide tone *beneath* a 3rd or a 7th is what states the chord's function
+        rather than losing it. So the distinction between the two families is not the
+        melody degree, and the second half of this test asserts what it is instead.
 
         What still distinguishes them is asserted below: a duo is a **harmony** and must
         sound a guide tone, while an interval is a **texture** and pairs the melody with

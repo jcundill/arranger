@@ -232,11 +232,9 @@ class TestTheRefusals(unittest.TestCase):
     def test_no_melody_keeps_the_tune_s_own_rhythm(self):
         """`--no-melody` reads the written onsets, as every other request does.
 
-        **This assertion is inverted, not deleted** (AGENTS.md trap 5). The default
-        used to be *derived* to `every-beat` on the grounds that "this guitar has no
-        melody to attach it to"; the written onsets are a fact about the *score*, which
-        is how `bass_on="melody"` has always read them, so the comp states the chord
-        where the tune states a note. Every felt beat is the request that names it.
+        The written onsets are a fact about the *score*, which is how `bass_on="melody"`
+        reads them too, so the comp states the chord where the tune states a note. Every
+        felt beat is the request that names it.
         """
         for spelling in ("melody", ""):
             request = Request(melody=False, **({"chord_on": spelling} if spelling else {}))

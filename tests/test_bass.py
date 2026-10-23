@@ -339,13 +339,11 @@ class TestGridAndHarmonyEdges(unittest.TestCase):
         self.assertEqual([entry[1] for entry in walked], [1.0, 2.0, 3.0, 4.0])
 
     def test_an_nc_bar_yields_no_notes_rather_than_continuing_the_harmony(self):
-        """A chordless bar states no bass part - and the assertion inverts with the rule.
+        """A chordless bar states no bass part, whatever the bar before it stated.
 
-        This asserted the opposite until `docs/history/parts.md` §4 derived the other answer: a
-        part whose notes are chosen from a chord cannot state anything where there is no
-        chord, so continuing the last known harmony across the gap is the *guess* here —
-        it is the right pitch class for the wrong music. Per AGENTS.md trap 5 the test is
-        inverted rather than deleted, because the rule it protects is the same one.
+        A part whose notes are chosen from a chord cannot state anything where there is no
+        chord, so continuing the last known harmony across the gap is the *guess* here — the
+        right pitch class for the wrong music. `docs/history/parts.md` §4 derives that.
 
         It sits beside the unspeakable-quality case on purpose: that one also yields no
         notes, but for the opposite reason. An `NC` bar has no chord to state; an
@@ -600,20 +598,14 @@ class TestThumbCapacityAndRefusal(unittest.TestCase):
         self.assertTrue(allowed, "a single-fret upper shape leaves every string free")
 
     def test_no_texture_refuses_a_policy_now_that_uniform_leaves_a_string(self):
-        """
-        The tree's only refusal dissolved with the set that caused it.
+        """No shipped texture refuses a bass policy, and `bass_allowed` says so.
 
-        `uniform` failed every policy because its palette held `drop24`'s `(4,2,1,0)` - the
-        one reachable set that spanned all three thumb strings - so `bass_allowed` refused
-        and the caller was told which texture to use instead. Removing the four inner-skip
-        `drop24` sets (`docs/history/fingering.md` §4.4) left one string free in the worst case,
-        which is the rule's threshold, so every texture now carries every policy.
-
-        **This test was inverted rather than deleted.** It used to assert that `uniform` was
-        refused for every policy *and* that the reason named a usable texture. The rule
-        still exists and still derives its answer from the tables - `TestCompingCapacity`
-        below holds the other route's half - so what is asserted here is the outcome: no
-        shipped texture refuses, and the reason machinery is simply not reached.
+        `uniform`'s palette leaves a string free for the thumb in the worst case, which is
+        the rule's threshold, so every texture carries every policy. The rule derives its
+        answer from the tables - `TestCompingCapacity` below holds the other route's half -
+        so what is asserted here is the outcome, and the reason machinery is simply not
+        reached. `docs/history/fingering.md` §4.4 holds the palette that made the worst
+        case.
         """
         for texture in TEXTURE_STYLES:
             for style in SHIPPED_STYLES:

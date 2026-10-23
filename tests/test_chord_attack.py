@@ -28,11 +28,9 @@ class TestTheEngineRule(unittest.TestCase):
     def test_a_comp_strikes_every_position_the_rhythm_names(self):
         """`every-beat` is four attacks a bar, and `melody` the tune's own onsets.
 
-        **This assertion is inverted, not deleted** (AGENTS.md trap 5): `--no-melody`
-        used to derive `every-beat` from the chord's default, so a comp was four attacks
-        a bar by default. The written onsets are a fact about the *score*, so a comping
-        request keeps them - and bar 2 of this head is where the two rhythms part
-        company, because its tune holds through the middle of the bar.
+        The written onsets are a fact about the *score*, so a comping request keeps them
+        without being asked. Bar 2 of this head is where the two rhythms part company,
+        because its tune holds through the middle of the bar.
         """
         every, _head, _notes = arrange_xml_head(
             COMMON_8,

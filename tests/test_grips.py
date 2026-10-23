@@ -155,18 +155,14 @@ class TestShellVoicings(unittest.TestCase):
 class TestDuoSecondVoice(unittest.TestCase):
     """A duo sounds the chord's own guide tone beneath the melody, whatever the melody is.
 
-    This class replaced one that asserted the opposite. `DUO_DEGREES` used to gate the
-    whole family on a root or a 5th in the *melody*, on the reasoning that a 3rd or a 7th
-    there is "the entire definition of the chord's function" and a bare pair under it
-    sounds like a mistake. That does not hold against a duo built from the guide tone:
-    the guide tone *beneath* a 3rd or a 7th is what states the function, and it is the
-    clearest possible statement that the two notes are this chord and not two passing
-    notes. The old test is therefore **inverted rather than deleted** - it still guards
-    the same risk, which is a duo sounding two arbitrary chord tones.
+    A 3rd or a 7th in the melody is not a reason to withhold the pair: the guide tone
+    *beneath* it is what states the function, and it is the clearest possible statement
+    that the two notes are this chord rather than two passing notes.
 
-    The pitch-class subset check in TestGripGeneration cannot see that risk, because such
-    a duo is made of genuine chord tones and would pass it. So these assertions are about
-    *which* chord tones sound, not merely that they are chord tones.
+    The pitch-class subset check in TestGripGeneration cannot see the risk this guards,
+    because a duo sounding two arbitrary chord tones is made of genuine chord tones and
+    would pass it. So these assertions are about *which* chord tones sound, not merely
+    that they are chord tones.
     """
 
     def setUp(self):
@@ -1048,15 +1044,9 @@ class TestDerivedGripShapes(unittest.TestCase):
         strings inside a five-fret span - the low voice lands below where a contiguous
         block can reach - and the answer is the **bass taking a lower string**, never a
         finger skipping an inner one. The four sets that made an inner gap frettable were
-        removed for exactly that (crossing the G, the B, the D and the G again), at a
-        measured cost of 260 of 1,204 selections with no pool emptied; the table's comment
-        holds the full price.
-
-        This assertion was **inverted rather than deleted**. It used to demand that
-        `(5,4,2,1)` and `(4,3,1,0)` - this family's two measured winners - be *present*.
-        What survives the change is the reason they are gone, so the check is against the
-        rule rather than against a list, and a set edited back in without the reasoning
-        fails here rather than in a comment nobody re-reads.
+        finger skipping an inner one. So no set in this family crosses an inner string:
+        the check is against the rule rather than against a list, and a set edited back in
+        without the reasoning fails here rather than in a comment nobody re-reads.
         """
         # The table stores string *indices* high to low, like every entry in it, so the
         # conventional set names read 1-2-4-5 as (5, 4, 2, 1) and 2-3-5-6 as (4, 3, 1, 0).

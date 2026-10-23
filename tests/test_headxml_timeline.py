@@ -452,10 +452,8 @@ class TestChordSlots(unittest.TestCase):
     def test_the_default_request_adds_nothing_in_a_melody_less_bar(self):
         """`head FILE` is the melody plus one chord per note - no position invented.
 
-        **This assertion is inverted, not deleted** (AGENTS.md trap 5). It used to
-        pin the default union's silent position in bar 6; the request redesign makes
-        that union a *policy* (`--chord-fills`, and positions the caller names), so
-        the default request now leaves a bar the tune never enters silent.
+        The union is a *policy* (`--chord-fills`, and positions the caller names), so the
+        default request leaves a bar the tune never enters silent.
 
         **A comping selection is where this fixture's silent position is still
         added** - the engine's own union, which `Request(melody=False)` reaches

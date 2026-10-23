@@ -638,15 +638,12 @@ class TestTheCompingArrangement(unittest.TestCase):
 
 
 class TestCompingMelodyIndependence(unittest.TestCase):
-    """Step 0 of `docs/history/comping-styles.md` §9.3, **re-scoped by step C**.
+    """What a melody pitch may and may not change on the comping route.
 
-    Step 0 pinned the comping route as melody-independent: scramble every melody pitch
-    and no fret moves. It landed *before* step C deliberately, because C is the first
-    step in which the melody affects the comping **harmony** - and once C lands the
-    original claim is false by design. So it is **inverted rather than deleted**
-    (AGENTS.md trap 5): the *placement* invariant survives (a slot's `bar`/`beat` never
-    depends on the melody) while the *harmony* now does, under a strategy that
-    substitutes. Both halves are asserted below.
+    The *placement* invariant holds: a slot's `bar`/`beat` never depends on the melody, so
+    scrambling every pitch moves no fret. The *harmony* does depend on it, under a
+    strategy that substitutes. Both halves are asserted below;
+    `docs/history/comping-styles.md` §9.3 holds the reasoning.
     """
 
     #: The bars these tests arrange. See `_arrange`: the claim is about how a melody pitch
@@ -1060,13 +1057,9 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
     def test_the_texture_changes_the_arity_and_nothing_else_on_this_route(self):
         """How many notes the comping part states is the texture's; the slots are not.
 
-        **Inverted rather than deleted.** It used to assert the frets were identical
-        under every texture, and that was true while the arity came from the *number of
-        voice names* - so the texture could not reach this route at all, and a texture
-        that thinned a comping part was a defect. The arity is the texture's now
-        (`chord1`/`chord2`/`chord3`), so the surviving claim is the split between the
-        two: the texture decides the count, and the harmony timeline, the slot
-        structure and the role are untouched by it.
+        The claim is the split between the two: the texture decides the count
+        (`chord1`/`chord2`/`chord3`), and the harmony timeline, the slot structure and the
+        role are untouched by it.
         """
         baseline: Optional[list] = None
         for notes, ceiling in (

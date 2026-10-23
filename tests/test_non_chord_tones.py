@@ -690,13 +690,11 @@ class TestNoChordSteps(unittest.TestCase):
         self.assertEqual(ChordParser.canonical_quality(NO_CHORD), NO_CHORD)
 
     def test_unreachable_nc_note_is_emitted_silent_not_raised(self):
-        """An unplayable NC note warns and its position is emitted silent.
+        """An unplayable NC note is emitted silent, carrying its bar and the reason.
 
-        **Inverted, not deleted** (AGENTS.md trap 5): this used to assert `[]`,
-        which left the bar the note sat in absent from the tab with nothing in it
-        to say which bar went. The step is still not *voiced* - no string reaches
-        D2 - but it carries the bar, the beat and the reason, which is what keeps
-        a reader's line-up against the rest of the band.
+        The step is not *voiced* - no string reaches D2 - but it carries the bar, the beat
+        and the reason, which is what keeps a reader's line-up against the rest of the band
+        and what keeps the bar from vanishing from the tab.
         """
         steps = self.engine.arrange_progression([("D2", NO_CHORD, NO_CHORD)])
         self.assertEqual(len(steps), 1)
