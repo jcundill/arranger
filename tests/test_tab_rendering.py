@@ -605,16 +605,22 @@ class TestTheExplanationWraps(unittest.TestCase):
     def test_the_number_of_steps_that_wrap(self):
         """A count, because a step that stops wrapping is silent.
 
-        Measured over this sweep: **93** of the steps it renders carry an explanation too
+        Measured over this sweep: **94** of the steps it renders carry an explanation too
         long for the width, so each of them continues below the step. A clause that stopped
         being printed, or a width that stopped being honoured, would move this number.
+
+        It moved 93 -> 94 with the union's gate reading the **selection**: `targets` no
+        longer comps a position before the waltz's first note, so that note is harmonised
+        rather than read as a repeat of the comping shape, and its clause is the one that
+        wraps. The step count of that one config moved with it (18 -> 17), which is the
+        union's own contribution and not a lost note.
         """
         from arranger.render import _format_step
 
         wrapped = sum(
             len(_format_step(step, self.WIDTH)) > 1 for _head, step in self.rendered_steps()
         )
-        self.assertEqual(wrapped, 93, "the number of steps that wrap moved")
+        self.assertEqual(wrapped, 94, "the number of steps that wrap moved")
 
 
 class TestOneLineColumns(unittest.TestCase):

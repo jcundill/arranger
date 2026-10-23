@@ -1790,8 +1790,11 @@ what lets a comping part state the chord of the tune in a bar the tune never ent
 measurement is [open-issues.md](open-issues.md) item 1. A requested rhythm **wins**
 whatever else is spelled, because spelling `texture` must not answer a different question
 about the chord's rhythm; the generated union is the fallback for a request that names
-nothing added, which is the shipped `chord_on="melody"`: a chord under each written note
-and nothing invented.
+nothing added **and a selection that comps** — a chord part with no tune to play, which is
+`parts="chord"` and `parts="bass,chord"` and the comping requests. The shipped
+`chord_on="melody"` with the tune ours is the skeleton alone: a chord under each written
+note and nothing invented. The gate reads that selection rather than which door the caller
+came through, so a request and its axis spelling arrange the same music.
 
 ### What a slot the rhythm does not name does, and why it is a fourth kind
 

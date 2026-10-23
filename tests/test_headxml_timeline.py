@@ -456,12 +456,13 @@ class TestChordSlots(unittest.TestCase):
         that union a *policy* (`--chord-fills`, and positions the caller names), so
         the default request now leaves a bar the tune never enters silent.
 
-        **A spelled axis is where this fixture's silent position is still added** - the
-        engine's own union, which `ArrangeOptions(texture="uniform")` reaches because
-        spelling an axis is what asks for it (`uniform` being the request's own
-        derivation, so nothing else changes). Bar 5's G4 is held through beat 1.5, so
-        only beat 2.0 is a position the tune has left. Keeping both halves in one test
-        is what says the behaviour moved rather than went.
+        **A comping selection is where this fixture's silent position is still
+        added** - the engine's own union, which `ArrangeOptions(parts="chord")`
+        reaches because a selection with no tune to play is what asks for it. The
+        gate reads the **selection** and not the spelling, so the axis spelling of a
+        *singing* request is the default arrangement and adds nothing either; the
+        last loop here is that half, and it is what keeps "one arrangement per
+        request" from being an accident of which door the caller came through.
         """
         head = self.rainy
         skeleton = head_skeleton(head, None)
@@ -472,18 +473,31 @@ class TestChordSlots(unittest.TestCase):
         )
         self.assertEqual([s for s in steps if s.bar == 6], [])
 
-        axis, _head, _notes = arranged(
-            RAINY_DAY, options=ArrangeOptions(texture="uniform")
+        comping, _head, _notes = arranged(
+            RAINY_DAY, options=ArrangeOptions(parts="chord")
         )
-        silent = sorted((s.beat, s.chord) for s in axis if s.bar == 6)
+        silent = sorted((s.beat, s.chord) for s in comping if s.bar == 6)
         self.assertEqual(silent, [(2.0, "D9")])
-        for step in axis:
+        for step in comping:
             if step.bar == 6:
                 self.assertIsNone(step.melody, step.tab_line())
                 self.assertFalse(step.melody_voiced, step.tab_line())
 
+        for spelling in (
+            ArrangeOptions(parts="melody,chord"),
+            ArrangeOptions(texture="uniform"),
+            ArrangeOptions(bass="none"),
+        ):
+            with self.subTest(spelling=spelling):
+                singing, _head, _notes = arranged(RAINY_DAY, options=spelling)
+                self.assertEqual(
+                    {(s.bar, round(s.beat or 0.0, 6)) for s in singing},
+                    written,
+                    "a singing selection is the default arrangement",
+                )
+
     def test_a_bar_the_melody_does_enter_is_untouched_by_the_engine_union(self):
-        """The old bar-level claim, now a fact about the **spelled axis** rather than the default.
+        """The old bar-level claim, now a fact about the **comping selection**.
 
         `synthetic_repeat_slash`'s tune is continuous, so the positions the union
         generates inside its note-bearing bars are all ones a note is still *holding* -
@@ -494,7 +508,7 @@ class TestChordSlots(unittest.TestCase):
         skeleton = head_skeleton(self.rainy, None)
         melody_bars = {bar for _triple, bar, _beat, _duration in skeleton}
         steps, _head, _notes = arranged(
-            RAINY_DAY, options=ArrangeOptions(texture="uniform")
+            RAINY_DAY, options=ArrangeOptions(parts="chord")
         )
         added = {(s.bar, s.beat) for s in steps} - {
             (bar, round(beat, 6)) for _t, bar, beat, _d in skeleton
@@ -506,8 +520,8 @@ class TestChordSlots(unittest.TestCase):
     def test_every_added_position_is_one_the_tune_is_silent_at(self):
         """The rule the **engine's own union** follows: only where the tune is silent.
 
-        Swept with an axis spelled, because that is the union this rule is about - the
-        default request adds no position, and a requested position (`chord-on`) is
+        Swept with a comping selection, because that is the union this rule is about -
+        the default request adds no position, and a requested position (`chord-on`) is
         deliberately allowed under a held note. The heads are
         `tests.support.sweep_head_paths()`: the rule is position-level and about the
         metre, so three of them answer it, and `synthetic_cut_time` and the waltz
@@ -522,7 +536,7 @@ class TestChordSlots(unittest.TestCase):
                     for _t, bar, beat, _d in head_skeleton(head, None)
                 }
                 steps, _head, _notes = arranged(
-                    path, options=ArrangeOptions(texture="uniform")
+                    path, options=ArrangeOptions(parts="chord")
                 )
                 for step in steps:
                     bar, beat = step.bar or 0, step.beat or 0.0
@@ -647,7 +661,9 @@ class TestChordSlots(unittest.TestCase):
         head = load_musicxml(RAINY_DAY)
         melody_bars = {n.bar for n in head.notes}
         union = walked(
-            options=ArrangeOptions(texture="chord2", bass="root,5th,approach,nearest")
+            options=ArrangeOptions(
+                parts="bass,chord", bass="root,5th,approach,nearest"
+            )
         )
         named = walked(
             request=Request(

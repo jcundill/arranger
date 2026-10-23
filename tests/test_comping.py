@@ -738,8 +738,8 @@ class TestTheSopranoIsPerSlotNotPerRoute(unittest.TestCase):
         """A **requested** rhythm over the cut-time head, so the comps land on the ands.
 
         The rhythm is the request's, so `parts` is left unspelled for every caller but
-        the melody-only one: a spelled axis asks for the engine's own union, and a
-        request is what names positions of its own.
+        the melody-only one: a comping axis spelling asks for the engine's own union,
+        and a request is what names positions of its own.
         """
         from tests.support import arranged
 

@@ -65,6 +65,8 @@ from arranger import (
     parse_grouping,
     parse_parts,
     parts_has_melody_only,
+    parts_have_chord,
+    parts_have_melody,
     resolve_grouping,
     rhythm_beats,
 )
@@ -3040,10 +3042,11 @@ def _head_slots(
 ) -> List[Tuple[Tuple[Optional[str], str, str], int, float, float]]:
     """The head's melody slots, with the projected chord positions unioned in.
 
-    **The union is gated on whether the guitar comps at all, not on the route.**
-    A chord selection states the chord where the tune is silent - `docs/comping-styles.md`
-    §9.3 step D - while a *melody-only* selection plays the tune and nothing else, so
-    a position with no tune has nothing for it to play. Both `parse_parts` and
+    **The union is gated on whether the guitar comps at all - not on the route, and
+    not on the spelling.** A selection that *comps* states the chord where the tune is
+    silent - `docs/comping-styles.md` §9.3 step D - which is a chord part with no tune
+    to play: a melody-only selection plays the tune and nothing else, and a **lone bass
+    line** has no chord to state at a position the tune left. Both `parse_parts` and
     `resolve_parts` are needed: the parsed `auto` sentinel names no melody, which would
     classify the default arrangement as the comping route. `docs/open-issues.md` item 1
     holds the measurement.
@@ -3058,15 +3061,17 @@ def _head_slots(
         options.parts,
         options.time_signature,
     )
-    if parts_has_melody_only(parse_parts(axes.parts)):
+    parts = parse_parts(axes.parts)
+    if parts_has_melody_only(parts):
         return slots
     # **A requested rhythm wins, and the engine's own union is the fallback.** The
     # request is the public vocabulary for where a chord falls, so a caller who names
     # positions gets them whatever else is spelled - spelling `texture` must not
     # silently answer a different question about the chord's rhythm. What is left for
-    # the fallback is the request that names nothing added, and the *engine's* own
-    # axes, which keep the bar-generated union those axes have always documented: a
-    # chord part states the chord of the tune in a bar the tune never enters.
+    # the fallback is a request that names nothing added *and* a selection with no
+    # tune to play: that part states the chord of the tune in a bar the tune never
+    # enters, while a selection that sings the tune already articulates every bar it
+    # enters.
     request = resolve_request(options.request, head.beats_per_bar, grouping)
     chord_on = request.chord_rhythm
     extra: List[Tuple[Optional[str], str, str, int, float, float]] = []
@@ -3074,12 +3079,7 @@ def _head_slots(
         # `melody` alone adds nothing: the skeleton already has one chord per
         # written note. A **positions** rhythm adds the attacks the caller named.
         extra = rhythm_slots(head, chord_on, section, grouping)
-    if not extra and any(
-        value is not None
-        for value in (
-            options.texture, options.bass, options.parts,
-        )
-    ):
+    if not extra and parts_have_chord(parts) and not parts_have_melody(parts):
         return _merge_chord_slots(slots, head, section, grouping)
     extra.extend(fill_slots(head, request, section, grouping))
     if head.first_bar_implicit:

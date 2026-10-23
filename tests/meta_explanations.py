@@ -522,18 +522,26 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
             omitted, 135, "the number of steps owing an omitted-tone clause moved"
         )
         # The same reasoning for the voice list, which is the clause most steps carry:
-        # measured over this sweep, **1345** of the steps it arranges sound two or more
+        # measured over this sweep, **1347** of the steps it arranges sound two or more
         # upper voices on a route that sings the tune - so a change that thinned the
         # default palette, or that stopped the clause firing, moves this number. The
         # grouped fixtures add 320, all of them from notes the old corpus did not have.
-        self.assertEqual(named, 1345, "the number of steps naming their voices moved")
+        # Two of the 1347 arrived with the union's gate reading the *selection*: a
+        # comping position no longer precedes the waltz's first note (so that note is
+        # harmonised rather than read as a repeat), and the walk re-plans one line
+        # around a position the union used to add.
+        self.assertEqual(named, 1347, "the number of steps naming their voices moved")
         # And for the comping part, whose voices are the only harmony the line can show:
-        # measured over this sweep, **1827** of the steps it arranges state a comping shape
+        # measured over this sweep, **1455** of the steps it arranges state a comping shape
         # and name each of its voices, so the reading of a thin line cannot quietly become
-        # a list of degrees again. The grouped fixtures add 701, and the 116 rest fills
+        # a list of degrees again. The grouped fixtures add 413, and the 116 rest fills
         # (`--chord-fills`) are the newest addition: a fill is a comping step with no
-        # melody beside it, which is why it counts here and nowhere else.
-        self.assertEqual(comping, 1827, "the number of comping lines naming a voice moved")
+        # melody beside it, which is why it counts here and nowhere else. The union's gate
+        # reading the **selection** took the other 372: a singing selection's axis spelling
+        # no longer comps the bars its tune does not enter - `chord1`, `targets` and
+        # `bass=walk` each drop to the default's 28 comping steps - and a lone bass line
+        # has no chord part to state at such a position.
+        self.assertEqual(comping, 1455, "the number of comping lines naming a voice moved")
 
     def test_the_slash_bass_clause_is_not_a_tautology(self):
         """The one decision the witness table cannot hold, pinned in both directions.

@@ -49,7 +49,10 @@ emits for a note-less slot, so the hand-built path and the imported one are one 
 now: `--chord-on` names them (`1and`, `every-beat`, a list), `--chord-fills` places chords in the
 tune's notated rests, and `headxml.rhythm_slots` / `fill_slots` emit one triple per position with
 `melody=None`. The default grid's union is gone with the flag that exposed it, so nothing invents
-a position nobody asked for.
+a position nobody asked for. What the engine's own union still generates, it generates for a
+selection that **comps** — a chord part with no tune to play, which is what a bar the tune never
+enters needs — and never for one that sings the tune, so a request and its axis spelling are one
+arrangement.
 
 **The duration.** The item's last open bullet was that "a stab's duration belongs to the producer
 that made the step". It has one rule now, and the rule is the request's: a position the chord
@@ -226,7 +229,7 @@ and §9.2's rule that a held position is not a slot declines it. A position wher
 **The problem, and what became of it.** The measurement that made this an issue was taken when a
 figure named its own positions in every bar, and under it 9 steps were lost across the corpus. What
 replaced that figure is the request: the default names no added position, `--chord-on` names the ones
-the caller wants, and the engine's own union - still built, for a spelled axis - is the only thing
+the caller wants, and the engine's own union - still built, for a selection that comps - is the only thing
 that generates positions where the tune is silent, so the rule has almost nothing left to decline:
 re-measured by patching the boundary alone — a `held` answer whose in-force note
 ends at that exact position becomes `silent` — **every current row adds 0 steps** (685 under the

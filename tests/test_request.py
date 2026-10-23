@@ -27,6 +27,7 @@ its refusals.
 from __future__ import annotations
 
 import argparse
+import os
 import unittest
 
 from arranger import (
@@ -54,6 +55,7 @@ from arranger.bass_rules import (
 from arranger.cli import HEAD_HELP, REQUEST_DESTS, add_common_arguments
 from arranger.options import ArrangeOptions
 from arranger.resolution import resolve_axes
+from tests.support import arranged, sweep_head_paths
 
 
 class TestTheShippedRequest(unittest.TestCase):
@@ -511,6 +513,78 @@ class TestTheLibrarySpelling(unittest.TestCase):
         self.assertEqual(
             [step.role for step in composed], ["target", "fill", "target", "fill"]
         )
+
+
+#: The requests the two doors must agree about - one per question the engine asks, so
+#: a question whose derivation drifts is covered by its own row rather than by another
+#: row's.
+_REQUESTS = (
+    Request(),
+    Request(chord_notes="2"),
+    Request(chord_notes="targets"),
+    Request(chord_on="1and"),
+    Request(chord_on="none"),
+    Request(bass_on="every-beat"),
+    Request(bass_on="every-beat", bass_notes="walk"),
+    Request(melody=False),
+    Request(melody=False, chord_on="every-beat"),
+    Request(melody=False, chord_on="none", bass_on="every-beat"),
+    Request(melody=False, bass_on="every-beat", bass_notes="walk"),
+    Request(chord_on="none", chord_fills="hold"),
+)
+
+
+def _axes_spelling(request: Request, beats_per_bar: int) -> ArrangeOptions:
+    """The request's own derivation, spelled out as the three axes.
+
+    Derived rather than written by hand, because that is what the claim is: the axes
+    *are* what `resolve_request` derived, so a spelling that states each of them must
+    arrange the same music. Spelling `parts` alone is deliberately **not** the same
+    request - a spelled selection leaves the bass on its `auto` sentinel, which keeps no
+    line - so every axis the request decided is stated here, `bass` included.
+    """
+    resolved = resolve_request(request, beats_per_bar)
+    return ArrangeOptions(
+        parts=",".join(resolved.parts),
+        bass=resolved.bass,
+        texture=resolved.texture,
+        request=request,
+    )
+
+
+class TestTheAxisSpellingIsTheRequest(unittest.TestCase):
+    """A request spelled as axes arranges **the same music** - one question, one answer.
+
+    The request is the public vocabulary and the axes are the implementation, so a
+    caller who spells them must get the arrangement the request gets. Asserted on the
+    **tab**, over committed heads, because the disagreement this holds shut was not in
+    the resolution at all: the importer's comping union was gated on whether an axis had
+    been *spelled* rather than on what the selection meant, so a no-op axis spelling was
+    a different arrangement (22 against 25 steps on `synthetic_common_8`, and a bar the
+    tune never enters comped for one door only).
+
+    The heads are `tests.support.sweep_head_paths()`, whose cases are the ones that
+    differed: the melody-less bar, the note a comping position used to precede, and the
+    note the tune is still holding.
+    """
+
+    def test_the_two_doors_are_one_arrangement(self):
+        """Every request agrees with its own derivation, on every head, step for step."""
+        for path in sweep_head_paths():
+            for request in _REQUESTS:
+                with self.subTest(head=os.path.basename(path), request=request):
+                    by_request, head, _notes = arranged(
+                        path, section=(1, 4), request=request
+                    )
+                    by_axes, _head, _notes = arranged(
+                        path,
+                        section=(1, 4),
+                        options=_axes_spelling(request, head.beats_per_bar),
+                    )
+                    self.assertEqual(
+                        [step.voicing.frets for step in by_request],
+                        [step.voicing.frets for step in by_axes],
+                    )
 
 
 class TestTheTwoSpellingsAreOneVocabulary(unittest.TestCase):
