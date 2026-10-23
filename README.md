@@ -118,7 +118,7 @@ python -m arranger head tests/data/synthetic_triplets.mxl --bars 1-3 --html head
 | `--chord-notes` | `full` | how many chord tones it states: `full`, `targets`, `3`, `2`, `1` |
 | `--chord-fills` | `none` | what it states in a notated melody rest: `hold` one chord, or `comp` a felt beat at a time |
 | `--bass-on` | `none` | when the thumb attacks: positions, or `every-beat` |
-| `--bass-notes` | `root` | what each thumb note is: the root, root-then-5th, or a walk |
+| `--bass-notes` | `root` | what each thumb note is: the root, root-then-5th, a walk, or the note rules themselves (`root,approach`) |
 | `--fret-min` / `--fret-max` | `2` / `13` | neck window to aim for |
 | `--tab` | `line` | `staff` lays head on one six-line staff, spaced on real rhythm |
 | `--note-names` / `--mutes` | off | with `--tab staff`: name each step's melody note / spell muted strings as `x` |
@@ -319,7 +319,7 @@ Every run on a committed score in `tests/data/`, each one request changed. Outpu
 | axis | the question it answers | values |
 |---|---|---|
 | `ArrangeOptions(texture=…)` | how many chord tones the chord part states, and where the fuller positions are | `uniform`, `targets`, `chord3`, `chord2`, `chord1` |
-| `ArrangeOptions(bass=…)` | which note rules the thumb line may state | `none`, `root`, `root,5th,approach,nearest` |
+| `ArrangeOptions(bass=…)` | which note rules the thumb line may state | `none`, or any comma-separated subset of `root`, `5th`, `approach`, `nearest` in resolution order (`root`, `root,5th`, `root,5th,approach,nearest`) |
 | `ArrangeOptions(parts=…)` | which of melody, bass and chord the guitar takes | any subset of `melody`, `bass`, `chord` |
 
 The request and the metre are the exception the other way: they are **input facts** — what is being arranged rather than how to play it — so `request=` and `time_signature=` sit beside `options=` and may be used in the same call. Every other keyword given beside `options=` raises rather than being silently ignored.
@@ -439,7 +439,7 @@ Three separate questions, one flag each: **does the guitar sing the tune**, **wh
 
 **The tune is the guitar's unless `--no-melody` is passed**, and that flag is a complete request on its own: the chord's default is the written onsets, and those are a fact about the *score* rather than about who plays it, so the comp falls where the tune does — the tune's own rhythm, not a substitute for it. Every felt beat is the one flag away it always was (`--chord-on every-beat`), and the run header prints the resolved rhythm (`chord-on=melody`, or `1,2,3,4` for the explicit ask), so what the comp is doing is on the line rather than assumed.
 
-`--bass-notes` names what each thumb note is: `root` is the chord's root, `root-5th` alternates root and fifth, and `walk` is the full `root,5th,approach,nearest` chain — a note on every requested position, moving toward the next chord rather than repeating a grid. The rhythm is `--bass-on`'s, so `--bass-on every-beat --bass-notes root` is a pedal on every felt beat, which is what it says.
+`--bass-notes` names what each thumb note is: `root` is the chord's root, `root-5th` alternates root and fifth, and `walk` is the full `root,5th,approach,nearest` chain — a note on every requested position, moving toward the next chord rather than repeating a grid. **The three names are sugar over the four rules**, so a chain the names do not offer is spelled out: `--bass-notes root,approach` is the root with an approach note between it and the next chord, and the order is the resolution order rather than formatting. The rhythm is `--bass-on`'s, so `--bass-on every-beat --bass-notes root` is a pedal on every felt beat, which is what it says.
 
 **A combination the left hand cannot accommodate at all is refused outright** (`ValueError`); a single note the thumb cannot reach is dropped and named on its own step (`bass_refused`), and the arrangement proceeds without it — a walking line with gaps is worse than none, but losing the bass costs less than losing the tune.
 

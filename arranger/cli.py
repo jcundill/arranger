@@ -31,7 +31,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, 
 from .chords import NON_CHORD_TONE_STRATEGIES
 from .grid import RHYTHM_NONE
 from .options import (
-    BASS_NOTES,
     BASS_NOTES_ROOT,
     CHORD_FILLS,
     CHORD_FILLS_NONE,
@@ -189,9 +188,10 @@ HEAD_HELP = CommonHelp(
     ),
     bass_notes=(
         "what each bass attack states: 'root' (the default), 'root-5th' "
-        "alternating, or 'walk' for the anchor/connect/approach line. The rhythm is "
-        "--bass-on's, so 'root' on every beat is a pedal rather than the old "
-        "anchors-only rule"
+        "alternating, 'walk' for the anchor/connect/approach line, or the note "
+        "rules themselves as a comma-separated list ('root,approach'). The order "
+        "is the resolution order. The rhythm is --bass-on's, so 'root' on every "
+        "beat is a pedal rather than the old anchors-only rule"
     ),
 )
 
@@ -253,7 +253,7 @@ def add_common_arguments(
     )
     parser.add_argument(
         "--bass-notes",
-        choices=list(BASS_NOTES),
+        metavar="RULES",
         default=BASS_NOTES_ROOT,
         help=help_text.bass_notes,
     )

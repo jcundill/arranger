@@ -117,6 +117,40 @@ class TestTheRhythmsDecideTheParts(unittest.TestCase):
         self.assertIn(PART_CHORD, resolved.parts)
         self.assertEqual(resolved.chord_fills, CHORD_FILLS_HOLD)
 
+    def test_a_rule_list_is_the_axis_s_own_spelling(self):
+        """`root,approach` is the rules themselves: a subset the three names do not offer.
+
+        The names are sugar over one vocabulary - `walk` is the four rules in their
+        resolution order - so a caller who wants part of that chain asks for the rules.
+        The order **is** the request: `approach,root` is a different line.
+        """
+        resolved = resolve_request(
+            Request(bass_on="every-beat", bass_notes="root,approach"), 4
+        )
+        self.assertEqual(resolved.bass, f"{BASS_RULE_ROOT},{BASS_RULE_APPROACH}")
+        self.assertEqual(resolved.bass_notes, "root,approach")
+        self.assertEqual(
+            resolve_request(
+                Request(bass_on="every-beat", bass_notes="approach,root"), 4
+            ).bass,
+            f"{BASS_RULE_APPROACH},{BASS_RULE_ROOT}",
+            "the order is the resolution order, not formatting",
+        )
+
+    def test_a_rule_list_is_reported_the_way_it_parses_back(self):
+        """`ROOT, approach` is one request with one canonical header line."""
+        resolved = resolve_request(
+            Request(bass_on="every-beat", bass_notes=" ROOT , approach "), 4
+        )
+        self.assertEqual(resolved.bass_notes, "root,approach")
+        self.assertIn("bass-notes=root,approach", format_request(resolved))
+
+    def test_a_silent_bass_refuses_a_rule_list_too(self):
+        """The content question is answered the same way whichever spelling asks it."""
+        with self.assertRaises(ValueError) as caught:
+            resolve_request(Request(bass_on="none", bass_notes="root,approach"), 4)
+        self.assertIn("bass-notes=root,approach", str(caught.exception))
+
     def test_the_parts_are_canonicalised(self):
         """A derived selection is written in `PART_NAMES` order, as `parse_parts` is."""
         resolved = resolve_request(Request(bass_on="1", chord_on="none"), 4)
@@ -209,6 +243,19 @@ class TestTheContentQuestions(unittest.TestCase):
                 with self.assertRaises(ValueError) as caught:
                     resolve_request(request, 4)
                 self.assertIn(label, str(caught.exception))
+
+    def test_the_bass_refusal_names_both_spellings_of_the_vocabulary(self):
+        """A name the request does not know is answered with the names *and* the rules.
+
+        The two are one vocabulary - `walk` is `root,5th,approach,nearest` - so a
+        caller who wrote something else is told both rather than being handed a list of
+        the three names it already rejected.
+        """
+        with self.assertRaises(ValueError) as caught:
+            resolve_request(Request(bass_on="every-beat", bass_notes="swing"), 4)
+        message = str(caught.exception)
+        self.assertIn("root-5th", message)
+        self.assertIn("approach", message)
 
     def test_a_bad_position_names_the_metre(self):
         """`3` in a 2/2 bar is refused by the metre, not clamped or dropped."""
@@ -531,6 +578,7 @@ _REQUESTS = (
     Request(chord_on="none"),
     Request(bass_on="every-beat"),
     Request(bass_on="every-beat", bass_notes="walk"),
+    Request(bass_on="every-beat", bass_notes="root,approach"),
     Request(melody=False),
     Request(melody=False, chord_on="every-beat"),
     Request(melody=False, chord_on="none", bass_on="every-beat"),
@@ -632,6 +680,20 @@ class TestTheTwoSpellingsAreOneVocabulary(unittest.TestCase):
             with self.subTest(value=value):
                 namespace = parser.parse_args(["--chord-notes", value])
                 self.assertEqual(namespace.chord_notes, value)
+
+    def test_a_bass_rule_list_is_one_the_parser_accepts(self):
+        """`--bass-notes` is a vocabulary the *module* validates, so the list is one token.
+
+        The three names and the rules are one question, and the flag takes either - the
+        refusal for a value that is neither comes from `options`, which is what lets it
+        name both spellings.
+        """
+        parser = argparse.ArgumentParser()
+        add_common_arguments(parser, HEAD_HELP)
+        for value in ("walk", "nearest", "root,approach", "root,5th,approach,nearest"):
+            with self.subTest(value=value):
+                namespace = parser.parse_args(["--bass-notes", value])
+                self.assertEqual(namespace.bass_notes, value)
 
 
 if __name__ == "__main__":

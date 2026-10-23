@@ -800,7 +800,7 @@ holding the two spellings together, and `tests/test_request.py` asserts it.
 | what does the chord state? | `--chord-notes full\|targets\|3\|2\|1` | `chord_notes="2"` | the texture axis — `uniform`, `targets`, `chord3`, `chord2`, `chord1` |
 | what does it do in a melody rest? | `--chord-fills none\|hold\|comp` | `chord_fills="hold"` | chord slots in the tune's rests, plus `parts` including the chord |
 | when does the thumb attack? | `--bass-on POSITIONS` | `bass_on="every-beat"` | the bass layer's rhythm, and `bass` when it is not `none` |
-| what does each thumb note state? | `--bass-notes root\|root-5th\|walk` | `bass_notes="walk"` | the bass axis — `"root"`, `"root,5th"`, or the full four rules |
+| what does each thumb note state? | `--bass-notes root\|root-5th\|walk\|rules` | `bass_notes="walk"` | the bass axis — the three names, or the rules themselves as a list (`root,approach`), which is what the names are sugar over |
 
 The values are the flags' own strings, so a request read off a run header is one a caller
 can paste into Python. The axes those questions resolve to are the engine's implementation,

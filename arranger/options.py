@@ -33,6 +33,7 @@ from .bass_rules import (
     BASS_RULE_ROOT,
     BASS_RULES,
     BASS_STYLE_NONE,
+    parse_bass_style,
 )
 from .grid import (
     RHYTHM_MELODY,
@@ -205,10 +206,11 @@ def _resolved(
 ) -> ResolvedRequest:
     """The value `resolve_request` returns, from the request and its parsed rhythms."""
     fills = _named(request.chord_fills, _identity(CHORD_FILLS), "chord-fills")
+    bass_notes = _bass_notes_name(request.bass_notes)
     resolved = ResolvedRequest(
         melody=request.melody,
         chord_notes=request.chord_notes,
-        bass_notes=request.bass_notes,
+        bass_notes=bass_notes,
         chord_fills=fills,
         chord_rhythm=chord_rhythm,
         bass_rhythm=bass_rhythm,
@@ -218,7 +220,7 @@ def _resolved(
             not bass_rhythm.is_none,
         ),
         texture=_named(request.chord_notes, CHORD_NOTES, "chord-notes"),
-        bass=_bass_policy(request.bass_notes, bass_rhythm),
+        bass=_bass_policy(bass_notes, bass_rhythm),
     )
     _refuse(resolved)
     return resolved
@@ -262,16 +264,57 @@ def _named(value: str, vocabulary: Dict[str, str], label: str) -> str:
     return vocabulary[value]
 
 
+def _bass_notes_name(bass_notes: str) -> str:
+    """The caller's answer to the content question, in one canonical spelling.
+
+    A **name** is already canonical - it is the vocabulary's own word - and a rule
+    list is written the way `parse_bass_style` reads it back: lowercase, no whitespace
+    around the commas, in the order given. That is what `format_request` prints and
+    what a reader pastes back, so the two are the same string, and the value is
+    validated here rather than at the point of use.
+    """
+    if bass_notes in BASS_NOTES:
+        return bass_notes
+    return _bass_rules(bass_notes)
+
+
 def _bass_policy(bass_notes: str, bass_rhythm: Rhythm) -> str:
     """The note rules to run, or no line when the bass never attacks.
 
     The rhythm decides *whether* there is a line at all, and the names decide what
     it states - so `bass_on none` is no line whatever it is asked to state, rather
     than a policy that silently exists with nothing to play it.
+
+    A value is either one of the three **names** or the rules themselves as a
+    comma-separated list, which is the axis's own spelling: `walk` is
+    `root,5th,approach,nearest`, so a caller who wants a subset the names do not
+    offer (`root,approach`) asks for it in the request rather than reaching for
+    `options=`. The list is validated by `bass_rules.parse_bass_style`, which owns the
+    vocabulary, its order and its message - the order **is** the resolution order, so
+    it is kept as spelled rather than sorted.
     """
     if bass_rhythm.is_none:
         return BASS_STYLE_NONE
-    return _named(bass_notes, BASS_NOTES, "bass-notes")
+    if bass_notes in BASS_NOTES:
+        return BASS_NOTES[bass_notes]
+    return _bass_rules(bass_notes)
+
+
+def _bass_rules(bass_notes: str) -> str:
+    """`bass_notes` read as the rule list itself, or a refusal naming both spellings.
+
+    The names and the rules are one vocabulary written two ways, so the message lists
+    both: a caller who wrote `swing` is told what `root`/`root-5th`/`walk` mean and
+    what the rules are, rather than being handed the parser's list of the three.
+    """
+    try:
+        return ",".join(parse_bass_style(bass_notes))
+    except ValueError:
+        raise ValueError(
+            f"Unknown bass-notes {bass_notes!r}; expected any of "
+            f"{', '.join(BASS_NOTES)}, or a comma-separated list of "
+            f"{', '.join(BASS_RULES)}"
+        ) from None
 
 
 def _request_parts(melody: bool, has_chord: bool, has_bass: bool) -> Tuple[str, ...]:
