@@ -27,7 +27,7 @@ import tempfile
 import unittest
 
 from arranger import ArrangementStep, VoiceLeadingEngine
-from arranger.options import ArrangeOptions
+from arranger.options import ArrangeOptions, Request
 from arranger.tuning import ROLE_TARGET
 
 # The shared placement core, reached directly: these tests are about where events
@@ -1264,9 +1264,10 @@ class TestWalkingBass(GuitarProTestCase):
             [("F5", "maj7", "Fmaj7")],
             timings=[(0, 1.0, None)],
             options=ArrangeOptions(
-                texture="targets",
-                bass="root,5th,approach,nearest",
-            ),
+                        request=Request(
+                            chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+                        ),
+                    ),
         )
         self.walk_song = _parse(io.BytesIO(format_gp5(self.walk_steps)))
         self.walk_beats = [
@@ -1372,9 +1373,10 @@ class TestWalkingBass(GuitarProTestCase):
         with contextlib.redirect_stdout(buffer):
             steps, _, _ = arrange_xml_head(
                     BUT_NOT_FOR_ME, options=ArrangeOptions(
-                        texture="targets",
-                        bass="root,5th,approach,nearest",
-                    ),
+                                                request=Request(
+                                                    chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+                                                ),
+                                            ),
 
                 )
         song = _parse(
@@ -1435,9 +1437,10 @@ class TestWalkingBass(GuitarProTestCase):
         with contextlib.redirect_stdout(buffer):
             steps, _, _ = arrange_xml_head(
                     BUT_NOT_FOR_ME, options=ArrangeOptions(
-                        texture="targets",
-                        bass="root,5th,approach,nearest",
-                    ),
+                                                request=Request(
+                                                    chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+                                                ),
+                                            ),
 
                 )
 

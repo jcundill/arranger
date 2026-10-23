@@ -487,7 +487,7 @@ class TestChordSlots(unittest.TestCase):
         for spelling in (
             ArrangeOptions(parts="melody,chord"),
             ArrangeOptions(request=Request(chord_notes="full")),
-            ArrangeOptions(bass="none"),
+            ArrangeOptions(request=Request(bass_on="none")),
         ):
             with self.subTest(spelling=spelling):
                 singing, _head, _notes = arranged(RAINY_DAY, options=spelling)
@@ -663,8 +663,10 @@ class TestChordSlots(unittest.TestCase):
         melody_bars = {n.bar for n in head.notes}
         union = walked(
             options=ArrangeOptions(
-                parts="bass,chord", bass="root,5th,approach,nearest"
-            )
+                        request=Request(
+                            melody=False, bass_on="every-beat", bass_notes="walk"
+                        ),
+                    )
         )
         named = walked(
             request=Request(

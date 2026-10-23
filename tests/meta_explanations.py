@@ -74,9 +74,9 @@ CONFIGS: List[Dict[str, Any]] = [
     {"options": ArrangeOptions(parts="chord")},
     {"options": ArrangeOptions(parts="bass,chord")},
     {
-        "options": ArrangeOptions(
-            bass="root,5th,approach,nearest"
-        )
+        "options":ArrangeOptions(
+                       request=Request(bass_on="every-beat", bass_notes="walk"),
+                   )
     },
     {"request": Request(chord_on="every-beat")},
     {"non_chord_tone": "sustain"},
@@ -650,9 +650,9 @@ class TestTheLoneNoteKeepsTheWindowHonest(unittest.TestCase):
         {},
         {"request": Request(chord_on="every-beat")},
         {
-            "options": ArrangeOptions(
-                bass="root,5th,approach,nearest"
-            )
+            "options":ArrangeOptions(
+                           request=Request(bass_on="every-beat", bass_notes="walk"),
+                       )
         },
         {"options": ArrangeOptions(parts="melody")},
     ]

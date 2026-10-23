@@ -936,9 +936,10 @@ class TestOddMetres(unittest.TestCase):
                 _head, path = self.load(beats, 4)
                 steps = arrange_xml_head(
                         path, options=ArrangeOptions(
-                            texture="targets",
-                            bass="root,5th,approach,nearest",
-                        ),
+                                          request=Request(
+                                              chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+                                          ),
+                                      ),
                     )[0]
                 self.assertEqual(sum(1 for s in steps if s.bass is not None), beats * 2)
                 self.assertEqual(
@@ -998,7 +999,11 @@ class TestCompoundMetres(unittest.TestCase):
     def test_a_walk_is_one_note_per_pulse(self):
         _head, path = self.load()
         steps = arrange_xml_head(
-            path, options=ArrangeOptions(texture="targets", bass="root,5th,approach,nearest")
+            path, options=ArrangeOptions(
+                              request=Request(
+                                  chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+                              ),
+                          )
         )[0]
         self.assertEqual(sum(1 for s in steps if s.bass is not None), 8)
         self.assertEqual(

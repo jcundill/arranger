@@ -721,9 +721,10 @@ class TestTheRightHandBudget(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()):
             steps = VoiceLeadingEngine.arrange_progression(
                     progression, timings=timings, options=ArrangeOptions(
-                        texture="targets",
-                        bass="root,5th,approach,nearest",
-                    ),
+                                                              request=Request(
+                                                                  chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+                                                              ),
+                                                          ),
                 )
         checked = 0
         for step in steps:

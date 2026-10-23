@@ -375,13 +375,17 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         }
         for parts, text in expected.items():
             steps, _head, _notes = arrange_xml_head(
-                head, section=(1, 2), options=ArrangeOptions(parts=parts, bass="none")
+                head,
+                section=(1, 2),
+                options=ArrangeOptions(parts=parts, request=Request(bass_on="none")),
             )
             self.assertEqual(step_annotation(steps[0]), text, parts)
             self.assertFalse(steps[0].melody_voiced)
         # A lone bass part is one note, and one note is what the line says.
         lone, _head, _notes = arrange_xml_head(
-            head, section=(1, 2), options=ArrangeOptions(parts="bass", bass="none")
+            head,
+            section=(1, 2),
+            options=ArrangeOptions(parts="bass", request=Request(bass_on="none")),
         )
         self.assertEqual(len(lone[0].voicing.upper_midi_notes()), 1)
 
@@ -396,9 +400,10 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         steps, _head, _notes = arrange_xml_head(
             "tests/data/synthetic_repeat_slash.musicxml", section=(1, 3),
             options=ArrangeOptions(
-                texture="targets",
-                bass="root,5th,approach,nearest",
-            ),
+                        request=Request(
+                            chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+                        ),
+                    ),
         )
         held = [step for step in steps if step.bass_only and step.palette]
         self.assertTrue(held, "no held step under the thumb in this section")

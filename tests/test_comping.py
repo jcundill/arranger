@@ -549,24 +549,26 @@ class TestTheCompingArrangement(unittest.TestCase):
         for step in silent:
             self.assertFalse(step.melody_voiced)
 
-    def test_the_bass_axis_reaches_the_engine_through_the_options(self):
-        """`ArrangeOptions.bass` reaches the engine, which it never did before.
+    def test_the_bass_notes_reach_the_engine_through_the_options(self):
+        """The request's bass content reaches the engine rather than being dropped.
 
-        The field diverged for its whole life: the engine never read `options.bass`
-        back out, so a walk handed over as options - which is how the slot layer hands
-        over every request, `arranger head` among them - was silently dropped while
-        the axis's own keyword test stayed green.
+        The walk is handed over as options - which is how the slot layer hands over
+        every request, `arranger head` among them - so a request whose bass content
+        never reached the engine would be dropped silently, with every tab unchanged.
         """
-        by_option = self.engine.arrange_progression(
+        by_request = self.engine.arrange_progression(
             PROGRESSION,
             options=ArrangeOptions(
-                parts=PARTS_WITH_BASS,
-                texture="targets",
-                bass="root,5th,approach,nearest",
+                request=Request(
+                    melody=False,
+                    chord_notes="targets",
+                    bass_on="every-beat",
+                    bass_notes="walk",
+                ),
                 timings=self.timings,
             ),
         )
-        self.assertTrue(any(step.bass is not None for step in by_option))
+        self.assertTrue(any(step.bass is not None for step in by_request))
 
     def test_the_bass_axis_is_not_a_keyword_on_the_entry_point(self):
         """The five axes are the implementation, so they have no keyword spelling.
@@ -579,13 +581,12 @@ class TestTheCompingArrangement(unittest.TestCase):
         self.assertNotIn("bass", signature.parameters)
 
     def test_the_bass_axis_survives_the_slot_layer(self):
-        """The head command's own path: `--bass-style` becomes an `ArrangeOptions` here.
+        """The head command's own path: the request becomes an `ArrangeOptions` here.
 
-        `arrange_slots` is the layer that builds the options and calls the engine,
-        so this is the route `arranger head` actually takes and the one the unread
-        field broke. Asserted on the thumb notes rather than on any warning, because
-        a fix that quieted a warning while still dropping the line would pass
-        otherwise.
+        `arrange_slots` is the layer that builds the options and calls the engine, so
+        this is the route `arranger head` actually takes. Asserted on the thumb notes,
+        because a walk that reached the layer and was dropped inside it would leave
+        every tab unchanged.
         """
         from arranger.slots import arrange_slots
 
@@ -593,8 +594,7 @@ class TestTheCompingArrangement(unittest.TestCase):
             PROGRESSION,
             self.timings,
             options=ArrangeOptions(
-                parts=PARTS_WITH_BASS,
-                bass="root,5th,approach,nearest",
+                request=Request(melody=False, bass_on="every-beat", bass_notes="walk"),
             ),
         )
         self.assertTrue(steps, "an arrangement with no steps at all is a defect")

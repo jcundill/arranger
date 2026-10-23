@@ -440,9 +440,10 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
         ]
         return VoiceLeadingEngine.arrange_progression(
                 progression, timings=timings, options=ArrangeOptions(
-                    texture="chord2",
-                    bass="root,5th,approach,nearest",
-                ),
+                                                          request=Request(
+                                                              chord_notes="2", bass_on="every-beat", bass_notes="walk"
+                                                          ),
+                                                      ),
                 time_signature=TimeSignature(2, 4)
             )
 
@@ -583,9 +584,8 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
             [("G4", "maj", "Ebmaj"), ("F4", "maj", "Ebmaj")],
             timings=[(2, 1.0, 0.5), (2, 2.0, 0.5)],
             options=ArrangeOptions(
-                texture="chord2",
-                bass="root,5th,approach,nearest",
-            ),
+                        request=Request(chord_notes="2", bass_on="every-beat", bass_notes="walk"),
+                    ),
             time_signature=TimeSignature(4, 4),
         )
         first_onset = beat_offset(2, 1.0, 4)
@@ -611,9 +611,8 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
             [("G4", "maj", "Ebmaj"), ("G4", "maj", "Ebmaj")],
             timings=[(1, 1.0, 0.25), (1, 2.0, None)],
             options=ArrangeOptions(
-                texture="chord2",
-                bass="root,5th,approach,nearest",
-            ),
+                        request=Request(chord_notes="2", bass_on="every-beat", bass_notes="walk"),
+                    ),
             time_signature=TimeSignature(4, 4),
         )
         held = [step for step in steps if step.melody == "G4" and step.bar == 1]
@@ -665,9 +664,10 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
         self.assertEqual(old_choice, "F4", "the fixture no longer reproduces the bug")
         steps = VoiceLeadingEngine.arrange_progression(
                 progression, timings=timings, options=ArrangeOptions(
-                    texture="chord2",
-                    bass="root,5th,approach,nearest",
-                ),
+                                                          request=Request(
+                                                              chord_notes="2", bass_on="every-beat", bass_notes="walk"
+                                                          ),
+                                                      ),
                 time_signature=TimeSignature(2, 4)
             )
         new_choice = [
