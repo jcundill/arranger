@@ -44,7 +44,6 @@ from arranger.bass_rules import (
     BASS_ALL_RULES,
     BASS_ROLE_APPROACH,
     BASS_RULES,
-    BASS_STYLE_ANCHORS,
     parse_bass_style,
 )
 from arranger.options import ArrangeOptions, Request
@@ -960,7 +959,7 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
             chord_notes="2", bass_on="every-beat", bass_notes="walk"
         )
         anchored = self.arrange(
-            chord_notes="2", bass_on="1", bass_notes=BASS_STYLE_ANCHORS
+            chord_notes="2", bass_on="1", bass_notes="root"
         )
         # The notes actually *struck*: a carried note rings into the steps after it,
         # so counting `s.bass` would measure the bar rather than the line.
