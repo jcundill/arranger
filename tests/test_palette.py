@@ -147,8 +147,10 @@ class TestTheRecordedPalette(unittest.TestCase):
         paths = sweep_head_paths()
         checked = 0
         for path in paths:
-            for texture in ("uniform", "targets"):
-                steps, _head, _notes = arranged(path, options=ArrangeOptions(texture=texture))
+            for chord_notes in ("full", "targets"):
+                steps, _head, _notes = arranged(
+                    path, options=ArrangeOptions(request=Request(chord_notes=chord_notes))
+                )
                 for step in steps:
                     palette = step.palette
                     if palette is None or palette.alternative is None:
@@ -436,12 +438,14 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         """
         head = "tests/data/synthetic_common_8.musicxml"
 
-        def steps_under(texture):
-            steps, _head, _notes = arranged(head, options=ArrangeOptions(texture=texture))
+        def steps_under(chord_notes):
+            steps, _head, _notes = arranged(
+                head, options=ArrangeOptions(request=Request(chord_notes=chord_notes))
+            )
             return steps
 
         stranded = [
-            step for step in steps_under("chord1")
+            step for step in steps_under("1")
             if step.palette is not None and not step.palette.inside_window
             and not step.repeated
         ]

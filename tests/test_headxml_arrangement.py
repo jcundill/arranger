@@ -834,10 +834,10 @@ class TestANarrowPaletteNeverLosesTheTune(unittest.TestCase):
         what is asserted is that no written position is missing - which is the property the
         count was a proxy for, stated directly.
         """
-        for texture in ("chord1", "uniform"):
-            with self.subTest(texture=texture):
+        for chord_notes in ("1", "full"):
+            with self.subTest(chord_notes=chord_notes):
                 steps, head, _notes = arrange_xml_head(
-                    BUT_NOT_FOR_ME, options=ArrangeOptions(texture=texture),
+                    BUT_NOT_FOR_ME, options=ArrangeOptions(request=Request(chord_notes=chord_notes)),
                 )
                 at = {(s.bar or 0, round(s.beat or 0.0, 6)) for s in steps}
                 for written in head.notes:
@@ -853,14 +853,14 @@ class TestANarrowPaletteNeverLosesTheTune(unittest.TestCase):
         otherwise. The positive case is `test_non_chord_tones`; what this pins is that
         thinning the part does not quietly start thinning the *harmony*.
         """
-        for texture in ("chord1", "uniform"):
-            with self.subTest(texture=texture):
+        for chord_notes in ("1", "full"):
+            with self.subTest(chord_notes=chord_notes):
                 steps, _head, _notes = arrange_xml_head(
-                    BUT_NOT_FOR_ME, options=ArrangeOptions(texture=texture),
+                    BUT_NOT_FOR_ME, options=ArrangeOptions(request=Request(chord_notes=chord_notes)),
                 )
                 self.assertEqual(
                     [s.bar for s in steps if s.chord_unvoiced], [],
-                    f"texture={texture} left a chord unstated",
+                    f"chord_notes={chord_notes} left a chord unstated",
                 )
 
 
