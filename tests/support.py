@@ -701,6 +701,57 @@ def a_shape_on(strings):
     return Voicing(frets=frets, top_fret=0, avg_fret=0.0)
 
 
+# The strings the right hand's **thumb** can reach: the four lowest, E A D G. A gap between
+# two sounding strings is normally the thumb's - the thumb is on the bottom note and the
+# index on the next string up - so the gap only stops being the thumb's where the note under
+# it is above this reach. Measured in `docs/history/fingering.md` §4.4, where narrowing §2.5's
+# exemption to this reach moved no count at all: it is the reach the tables already respect.
+THUMB_REACH_STRINGS = frozenset((0, 1, 2, 3))
+
+
+def finger_skip_count(voicing: Voicing) -> int:
+    """How many strings a finger has to cross to fret `voicing`: 0, 1, 2 or 3.
+
+    The right hand's second question, after how many strings are plucked. Four adjacent
+    strings are no trouble whatever the shape: the thumb takes the bottom note and each
+    finger the next string up. The trouble is a **gap** - a string sounding with a silent
+    one between it and the string below - because the digit that would take it has to
+    reach over a string it is not using, and that is the middle or the ring finger's cost
+    (`docs/history/fingering.md` §2.5).
+
+    The bottom gap is the exception, and it is checked on the **lowest sounding string**:
+    while that string is inside the thumb's reach the thumb is the digit on the bottom
+    note, so the gap above it is the index's and costs nothing - which is exactly the
+    bass-skipping rule the four-note sets in `grip_tables` were built on. Any *other* gap
+    is counted, so `(5,4,2,1)` answers 1 - the middle crosses the G - while `(5,4,3,1)`
+    answers 0, its gap being the bottom one.
+
+    Note the direction of the asymmetry: the exemption is for the **first** gap only, so a
+    set whose bottom note is inside the reach and whose *second* gap is not still counts
+    that second gap. Where the bottom note sits above the reach, every gap counts.
+
+    **This is the tests' rule, not the engine's**, which is why it lives here: no selector
+    reads it, because the engine enforces it by **not offering** the shapes that fail it -
+    so no inner-skip `drop24` set is in `GRIP_STRING_SETS`. Only the `(5,3,2)` shell can
+    answer nonzero, kept on purpose for the walking bass's three-layer split, and
+    `tests/test_grip_tables.py` is what holds the tables to it.
+
+    A **shape**-level rule, which is the limit of its reach: a `bass_only` step merges a
+    thumb note in *after* selection, so that gap is invisible here and §4.4 measures the
+    merged case at step level instead.
+    """
+    sounded = sorted(index for index, fret in enumerate(voicing.frets) if fret >= 0)
+    total = 0
+    for position in range(1, len(sounded)):
+        gap = sounded[position] - sounded[position - 1] - 1
+        if gap <= 0:
+            continue
+        if position == 1 and sounded[0] in THUMB_REACH_STRINGS:
+            continue           # the thumb has the bottom note: the index's gap, not a skip
+        total += gap
+    return total
+
+
 # The committed scores the importer's tests read, in `tests/data/`. They are generated
 # by `tests/fixture_scores.py`, except `Trouble_in_Mind_Blues.musicxml`, which is
 # retained as a real notation program's export. They are committed and are NOT guarded:

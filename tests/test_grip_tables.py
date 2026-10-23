@@ -23,8 +23,6 @@ from arranger.grip_tables import (
     GRIP_MAX_SPAN,
     GRIP_STRING_SETS,
     SHELL_DEGREES,
-    THUMB_REACH_STRINGS,
-    finger_skip_count,
 )
 from arranger.grips import (
     _LAYOUT_GRIPS,
@@ -34,8 +32,10 @@ from arranger.grips import (
 from arranger.tuning import MELODY_STRING_CHOICES_FULL, NECK_FRET_MAX, NECK_FRET_MIN
 from tests.support import (
     QUALITIES,
+    THUMB_REACH_STRINGS,
     a_shape_on,
     every_chord_tone,
+    finger_skip_count,
     note_name,
 )
 

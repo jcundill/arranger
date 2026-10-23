@@ -1517,7 +1517,8 @@ fit is refused before anything is generated, and `grips.thumb_safe_grips` and
 step plucks, sorted low to high, and hand them out in that order - thumb, index, middle,
 ring - **provided the lowest of them lies on the low four strings (E A D G)**: a shape whose
 bottom note sits on the B or the high E has **no thumb in it at all**, and the lowest pluck
-is the index (`grips.THUMB_REACH_STRINGS` is that reach). The consequence worth stating is
+is the index (the thumb reaches the four lowest strings, E A D G). The consequence worth
+stating is
 that the thumb takes the bottom string whether or not a bass *part* is sounding - the merged
 bass note is written into the fret vector only *after* selection, so no right-hand reading
 ever sees it - which is why **the bass part is not the thumb**, and a shape with no bass
@@ -1526,8 +1527,10 @@ line still has its bottom note taken by the thumb.
 Two gaps are not equal. A gap between the **thumb and the index** is free while the thumb is
 the bottom digit: it strokes across a muted string, which is what the bass-skipping string
 sets are built on. A gap crossed by the **middle or ring** finger is a real reach.
-`grips.finger_skip_count` is that metric, and the string tables are held to it by test
-rather than by the selector - the four `drop24` sets that carried a skip were removed.
+`tests/support.finger_skip_count` is that metric. It lives in the tests rather than the
+engine, because the tables enforce the rule by **not offering** the shapes that fail it -
+so no selector reads it, and `tests/test_grip_tables.py` holds them to it. The four `drop24`
+sets that carried a skip were removed.
 
 The left hand's budget is **four fingers and five frets**, and unlike the four-string rule it is
 stated over a *step* rather than a shape: `fingers.can_fret` is the check, and it refuses both a

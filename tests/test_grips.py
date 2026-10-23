@@ -32,7 +32,6 @@ from arranger.grip_tables import (
     GRIP_PREFERENCE,
     GRIP_STRING_SETS,
     SHELL_DEGREES,
-    finger_skip_count,
 )
 from arranger.grips import BASS_DEGREES_6432
 from arranger.tuning import MELODY_STRING_CHOICES_FULL
@@ -40,6 +39,7 @@ from tests.support import (
     QUALITIES,
     a_shape_on,
     every_chord_tone,
+    finger_skip_count,
     note_name,
     root_midi_of,
 )

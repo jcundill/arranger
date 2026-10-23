@@ -12,7 +12,6 @@ from __future__ import annotations
 from typing import Dict, List, Tuple
 
 from .chords import ChordParser
-from .step_types import Voicing
 from .tuning import MELODY_STRING_CHOICES_FULL
 
 # Grip families, in the order they are generated in - which is *also* the order an exact
@@ -127,9 +126,8 @@ GRIP_STRING_SETS: Dict[str, Tuple[Tuple[Tuple[int, ...], int], ...]] = {
     #
     # No set here skips an *inner* string: the digit that takes a string above an
     # unplucked one has to reach over it, and that is the right hand's cost rather than
-    # the left's. `finger_skip_count` states the rule, `docs/engine.md` records the price
-    # of the four sets removed for it, and `tests/test_grip_tables.py` holds every reachable set
-    # to it.
+    # the left's. `docs/engine.md` records the price of the four sets removed for it, and
+    # `tests/test_grip_tables.py` states the rule and holds every reachable set to it.
     #
     # Stored as **string indices**, high to low, like every other entry - so the
     # conventional numbers read 1-2-4-5 as (5, 4, 2, 1). Written the other way round these
@@ -417,55 +415,6 @@ def thumb_safe_grips(palette: Tuple[str, ...]) -> Tuple[str, ...]:
     safe = tuple(g for g in GRIP_PREFERENCE if grip_pluck_count(g) < RIGHT_HAND_STRINGS)
     widest = max(grip_pluck_count(g) for g in safe)
     return tuple(g for g in safe if grip_pluck_count(g) == widest)
-
-
-# The strings the right hand's **thumb** can reach: the four lowest, E A D G. A gap between
-# two sounding strings is normally the thumb's - the thumb is on the bottom note and the
-# index on the next string up - so the gap only stops being the thumb's where the note under
-# it is above this reach. Measured in `docs/history/fingering.md` §4.4, where narrowing §2.5's
-# exemption to this reach moved no count at all: it is the reach the tables already respect.
-THUMB_REACH_STRINGS = frozenset((0, 1, 2, 3))
-
-
-def finger_skip_count(voicing: Voicing) -> int:
-    """How many strings a finger has to cross to fret `voicing`: 0, 1, 2 or 3.
-
-    The right hand's second question, after how many strings are plucked. Four adjacent
-    strings are no trouble whatever the shape: the thumb takes the bottom note and each
-    finger the next string up. The trouble is a **gap** - a string sounding with a silent
-    one between it and the string below - because the digit that would take it has to
-    reach over a string it is not using, and that is the middle or the ring finger's cost
-    (`docs/history/fingering.md` §2.5).
-
-    The bottom gap is the exception, and it is checked on the **lowest sounding string**:
-    while that string is inside the thumb's reach the thumb is the digit on the bottom
-    note, so the gap above it is the index's and costs nothing - which is exactly the
-    bass-skipping rule this table's four-note sets were built on. Any *other* gap is
-    counted, so `(5,4,2,1)` answers 1 - the middle crosses the G - while `(5,4,3,1)`
-    answers 0, its gap being the bottom one.
-
-    Note the direction of the asymmetry: the exemption is for the **first** gap only, so a
-    set whose bottom note is inside the reach and whose *second* gap is not still counts
-    that second gap. Where the bottom note sits above the reach, every gap counts.
-
-    This is a **shape**-level rule, which is the limit of its reach: a `bass_only` step
-    merges a thumb note in *after* selection, so that gap is invisible here and §4.4
-    measures the merged case at step level instead. And no selector reads this at all -
-    the engine enforces the rule by **not offering** the shapes that fail it, so no
-    inner-skip `drop24` set is in the table above. Only the `(5,3,2)`
-    shell can answer nonzero, kept on purpose for the walking bass's three-layer
-    split; `tests/test_grip_tables.py` is what holds the tables to it.
-    """
-    sounded = sorted(index for index, fret in enumerate(voicing.frets) if fret >= 0)
-    total = 0
-    for position in range(1, len(sounded)):
-        gap = sounded[position] - sounded[position - 1] - 1
-        if gap <= 0:
-            continue
-        if position == 1 and sounded[0] in THUMB_REACH_STRINGS:
-            continue           # the thumb has the bottom note: the index's gap, not a skip
-        total += gap
-    return total
 
 
 def stated_tones(

@@ -15,8 +15,9 @@ Every engine submodule is bound by the `from . import (...)` below, so `arranger
 and `arranger.cost` resolve - the paths a change to the cost tuple or the grip tables
 belongs - but a submodule is a *path* rather than a name this facade defines, which is
 why none of them is in `__all__`. `fingers` is bound for the same reason although only
-`bass_place` reads it (`fingers.can_fret`, the four-fret budget), which
-`tests/test_fingers.py` holds. The layering that makes those paths safe to depend on is
+`bass_place` and `bass_merge` read it (`fingers.can_fret`, the four-fret budget and the
+hand's reach), which `tests/test_fingers.py` holds. The layering that makes those paths
+safe to depend on is
 `ORDER` in `tests/meta_package_dag.py`, drawn in
 [docs/dependency-dag.md](../docs/dependency-dag.md).
 
