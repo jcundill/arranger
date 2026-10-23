@@ -1058,9 +1058,10 @@ that `ArrangementStep.repeated` is set, and the renderers honour it.
   flag by striking the soprano alone and collapsing the chord to that note: on another
   string no finger is holding the note, so a marked step would mute the chord it had just
   voiced and sound a note the hand is not on. `decisions.holds_the_shape` is the half that the
-  narrowing and the flag share. Measured: **22 of 202** marked steps re-struck the melody
-  on another string before the fix — every one of them under `targets`, where a fill's
-  compact 6-4-3 shell beats a same-string alternative on `span` — and **0 of 199** now.
+  narrowing and the flag share. Measured: **22 of 202** marked steps would re-strike the
+  melody on another string without it — every one of them under `targets`, where a fill's
+  compact 6-4-3 shell beats a same-string alternative on `span` — and the rule takes that
+  to **0 of 199**.
   The report that found it was bar 3 of the committed "synthetic common time", four G4s
   over `Eb7`: the two targets held the note on the B string and the two fills moved it to
   the G string, four frets away, while the steps still claimed to be holds.

@@ -351,7 +351,7 @@ beat count as a quarter count is what each of the four bugs below was:
 | `headxml._slot_key` | clamped a slot to `beats_per_bar` | **13 of 80 notes lost.** A 2/2 bar's eighths run 1.0 … **2.5**; clamping to 2.0 folded the last eighth of every bar onto beat 2, where it collided and was dropped by `pick` |
 | `head_cli` → the file writers | passed no metre at all | both writers used their own `beats_per_bar=4`, so a 2/2 head was written as 4/4 on the wrong grid |
 | `tabscore.score_events`, `tabgp._measures` | `4.0 / beats_per_bar`, `bar_length = beats_per_bar` | a cut-time beat measured as half a quarter, so every bar came out half length — 32 measures written as 64 |
-| the same two, *after* the fix above | `beat_type / 4` instead of `4 / beat_type` | **every bar a quarter note long.** The measure *count* stayed right, because onsets are placed in beats and that part was correct — so 32 short bars under a 2/2 signature, each holding a quarter of the music it claimed |
+| the same two, with `beat_type / 4` instead of `4 / beat_type` | **every bar a quarter note long.** The measure *count* stayed right, because onsets are placed in beats and that part was correct — so 32 short bars under a 2/2 signature, each holding a quarter of the music it claimed |
 | `headxml._beat_from_onset` (both callers) and `chord_slots` | `beats_per_bar / 4` per onset, `/ beats_per_bar` for a length | **a 3/4 bar of music in 2.25 of its 3 beats.** The waltz's six written eighths read 1.0 … 2.875, so the staff drew a hole of music before every barline, 21 of its 35 interior measures exported short of a full 3/4 bar, and `--musicxml` scaled every onset by a further 0.75 on each round trip |
 | `arranger.bass._melody_timeline` | `duration * beats_per_bar` | a quarter short in 3/4 (`duration * beat_type` is the span). **Measured at 0 of 186 steps** on the waltz: the walk's chord timeline is onset-driven, so only a melody-in-force span reads a duration. Fixed with the rest rather than inherited by the next metre-sensitive rule |
 
@@ -718,20 +718,18 @@ convention, not chosen:
   the last beat of a bar are two eighths.
 - **Only the first measure carries the time signature.** MusicXML says a signature
   holds until it changes, so repeating it in every bar is legal but reads as a new one
-  at each: MuseScore 3 draws a 4/4 over every bar of the head. This replaced a
-  deliberate per-measure repetition, whose stated reason was that music21 needs a
-  signature in each measure to pad and tie the bar. **That reason was measured and is
-  false** - music21 resolves each measure against the signature already in force, and
-  the export does not touch `makeRests` without one. Eight corpus heads, plus pickups,
+  at each: MuseScore 3 draws a 4/4 over every bar of the head. music21 needs no
+  per-measure signature to pad and tie the bar: it resolves each measure against the
+  signature already in force, and the export does not touch `makeRests` without one.
+  Eight corpus heads, plus pickups,
   bar-line crossings and rests, all re-parse with every bar the right length.
   `tests/test_musicxml.py::test_the_time_signature_is_written_once` is the regression.
 - **GP5 states the key on *every* bar, where MusicXML states it once.** The two formats
   disagree structurally here, and the GP5 side was a defect until 2026-10-03: the
   exporter wrote one `MeasureHeader` per bar and set `keySignature` only on the first.
   A fresh `MeasureHeader` defaults that field to `KeySignature.CMajor` and **does not
-  inherit from the previous one**, so a 32-bar Eb head exported as "Eb major, then C
-  major" for 31 bars. Reported from a GP5 export of "the synthetic cut-time head" and reproduced on
-  the tree before the fix.
+  inherit from the previous one**, so a 32-bar Eb head is exported as "Eb major, then C
+  major" for 31 bars, which is what a GP5 export of "the synthetic cut-time head" shows.
 
   It survived because every key test read `measureHeaders[0]` — bar 1 was always
   right — and the shared fixture in `tests/test_guitarpro.py` is **one bar**, which is
@@ -833,7 +831,7 @@ and rewrites in two steps:
 The `<root>` is never touched, and on a document that only uses 3.1 kinds the pass is
 a no-op - `test_an_ordinary_progression_is_untouched` asserts the document is
 byte-identical afterwards, because a filter that degrades a working file is worse than
-the bug.
+the fault it repairs.
 
 **Open, and worth doing next: validate against the actual XSD.** `xmlschema` as a
 **dev-only** tool (like pyright, never a runtime dependency and not in the `xml` extra)
@@ -926,9 +924,9 @@ Two more consequences of a fixed-length measure:
 
 - **An event crossing a bar line is split**, written as two notes in consecutive
   measures. The second half is written with `NoteType.tie`, so the two are one held
-  note rather than the shape struck twice. This was wrong until it was measured:
-  the code believed a GP tie was "a slur the player has to interpret" and wrote both
-  halves as plain notes, which re-struck the shape at the head of every bar a step
+  note rather than the shape struck twice. A GP tie is not "a slur the player has to
+  interpret": writing both
+  halves as plain notes re-strikes the shape at the head of every bar a step
   crossed - **14 of the 32 bars** of "the synthetic cut-time head", whose score genuinely ties
   Eb4 across the bar line in bars 2-3. `NoteType.tie` is a real GP5 tie and
   round-trips through PyGuitarPro 0.11.
@@ -1023,8 +1021,7 @@ half the head.
 writes the remainder as an explicit rest — a `(None, False, length)` event, which is
 already what all three renderers read as "nothing here" (`tabxml` writes a
 `<rest>`, `tabstaff` blanks the cell and clears the ring, `tabgp` writes
-`BeatStatus.rest`). Three properties of the fix are load-bearing, and each was a
-real failure:
+`BeatStatus.rest`). Three properties of the cap are load-bearing:
 
 - **It is a cap, never a substitute.** A `duration` longer than the gap is ignored,
   so no step is ever *stretched*, and a step with no `duration` at all keeps the
