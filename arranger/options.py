@@ -26,7 +26,7 @@ Every field's default is the same value the entry point's keyword defaults to, s
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Container, Dict, Mapping, Optional, Sequence, Tuple
+from typing import Container, Dict, Mapping, Optional, Sequence, Tuple
 
 from .bass_rules import (
     BASS_RULE_5TH,
@@ -457,22 +457,17 @@ class ArrangeOptions:
     # This is the third time list invariance in a signature has cost this library
     # something, and the fourth would not have been a surprise.
     timings: Optional[Sequence[Timing]] = None
-    # Per-progression-index bass pitch class, for the slash-chord preference (rule C,
-    # inherited from the removed corpus path). This is the field that lets a caller
-    # delegate instead of running a second step loop: the corpus's only selection
-    # difference from the library was *which candidates are considered*, and that is
-    # data, not control flow. Absent or None for an index means no restriction, which
-    # is exactly the library's own behaviour.
-    bass_pcs: Optional[Mapping[int, Optional[int]]] = None
-    # The ranking that honours `bass_pcs` is passed in rather than imported:
-    # `slash_bass_cost` lives in `arranger.slots`, which reaches `decisions` through
-    # `steps`, so a module-level import either way would be a cycle. It is a field
-    # rather than a module global because a slash-bass preference is the only reason
-    # to supply one, and making that visible at the call site is the point.
+    # Per-progression-index bass pitch class: the note a written slash chord asks
+    # for (`A-/G` wants G). It narrows *which candidates are considered*, and the
+    # engine's own rule then decides within that narrowed set, so the two selection
+    # rules stay combined rather than sequential. Absent or None for an index means
+    # no restriction, which is exactly the library's own behaviour.
     #
-    # Both halves are needed: `bass_pcs` says which pitch the caller wants, and this
-    # says how near a candidate is to it. Neither alone narrows anything.
-    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]] = None
+    # The ranking that honours it is `chords.slash_bass_cost`, which `decisions`
+    # calls directly - it is pure integer arithmetic over a voicing and a pitch
+    # class, and `chords` sits below `decisions` in the order. There is nothing to
+    # inject, so this field is the whole of the request.
+    bass_pcs: Optional[Mapping[int, Optional[int]]] = None
     # The progression indexes whose melody note **articulates** (an onset), for the
     # §9.2 reharmonise rule on the comping route: a non-chord melody note is
     # substituted where it begins, not under a held note and not where the tune is

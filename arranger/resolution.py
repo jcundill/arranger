@@ -9,7 +9,7 @@ still needs.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable, Container, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Container, List, Mapping, Optional, Sequence, Tuple
 
 from .bass import (
     Slot,
@@ -88,7 +88,6 @@ class _Knobs:
     melody_onsets: Optional[Container[int]]
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]]
     bass_pcs: Optional[Mapping[int, Optional[int]]]
-    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]]
 
 
 @dataclass(frozen=True)
@@ -287,7 +286,6 @@ def resolve_knobs(
         if options.timings is not None:
             timings = list(options.timings)
     bass_pcs = options.bass_pcs if options is not None else None
-    slash_bass_cost = options.slash_bass_cost if options is not None else None
 
     if non_chord_tone not in NON_CHORD_TONE_STRATEGIES:
         raise ValueError(
@@ -332,7 +330,6 @@ def resolve_knobs(
         melody_onsets=melody_onsets,
         timings=timings,
         bass_pcs=bass_pcs,
-        slash_bass_cost=slash_bass_cost,
     )
 
 

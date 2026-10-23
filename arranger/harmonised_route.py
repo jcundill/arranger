@@ -12,13 +12,13 @@ Sits above `step_prepare`, `routes`, `melody_alone`, `decisions`, `bass_merge`,
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Callable, List, Optional, Sequence, Tuple
+from typing import List, Optional, Tuple
 
 from . import cost as _cost
 from . import grips as _grips
 from .bass import Slot
 from .bass_merge import attach_bass
-from .chords import ChordParser, normalised_harmony
+from .chords import ChordParser, normalised_harmony, slash_bass_cost
 from .context import SlotContext
 from .decisions import (
     dropped_for_the_bass,
@@ -208,13 +208,9 @@ def _promoted_fill(
     )
 
 
-def _bass_group(
-    voicing: Voicing,
-    bass_pc: Optional[int],
-    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]],
-) -> Optional[int]:
+def _bass_group(voicing: Voicing, bass_pc: Optional[int]) -> Optional[int]:
     """How well `voicing` honours a written slash bass, or `None` without one."""
-    if bass_pc is None or slash_bass_cost is None:
+    if bass_pc is None:
         return None
     return slash_bass_cost(voicing.midi_notes(), bass_pc)
 
@@ -250,14 +246,10 @@ class _Selection:
         """A tighter shape inside the budget that the tuple ranks at least as high."""
         turned_away = self.criteria.cost(demoted)
         span = _cost.SPAN_CRITERION
-        turned_away_bass = _bass_group(
-            demoted, self.criteria.bass_pc, self.criteria.slash_bass_cost
-        )
+        turned_away_bass = _bass_group(demoted, self.criteria.bass_pc)
 
         def would_the_tuple_have_chosen_it(candidate: Voicing) -> bool:
-            if _bass_group(
-                candidate, self.criteria.bass_pc, self.criteria.slash_bass_cost
-            ) != turned_away_bass:
+            if _bass_group(candidate, self.criteria.bass_pc) != turned_away_bass:
                 return False
             cost = self.criteria.cost(candidate)
             return cost[:span] + cost[span + 1:] <= turned_away[:span] + turned_away[span + 1:]
@@ -322,7 +314,6 @@ def _selection_for(
                 None if context.bass.bass_pcs is None
                 else context.bass.bass_pcs.get(context.identity.index)
             ),
-            slash_bass_cost=context.bass.slash_bass_cost_for,
         ),
     )
 

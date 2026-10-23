@@ -138,10 +138,12 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/grouping.py": Budget(6, 36, 3),
     "arranger/melody_alone.py": Budget(6, 74, 14),
     # The axis keywords left `resolve_knobs` (15 -> 9 parameters), so the module
-    # ceiling is `resolve_policies`'s twelve rather than the reconciler's: the grid
+    # ceiling is `resolve_policies`'s eleven rather than the reconciler's: the grid
     # parameter went with the axis. The axes are now one read of `options` and two
     # `settle_input_fact` calls where the defaults and the assignments used to be.
-    "arranger/resolution.py": Budget(8, 114, 12),
+    # The injected slash-bass ranking left with the cycle it was avoiding, so
+    # `resolve_knobs` lost its conditional and the ceiling is re-measured.
+    "arranger/resolution.py": Budget(7, 111, 11),
     # `slot_state`'s grid branches left with the axis, so the ceiling is what it
     # measures rather than what it measured.
     "arranger/slot_plan.py": Budget(6, 78, 5),

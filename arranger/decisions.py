@@ -30,7 +30,7 @@ from __future__ import annotations
 from typing import List, Optional, Tuple
 
 from .bass_place import BassNote, bass_placement
-from .chords import sounding_harmony
+from .chords import slash_bass_cost, sounding_harmony
 from .cost import (
     PARTITION_CRITERION,
     SelectionCriteria,
@@ -516,11 +516,6 @@ def select_step_voicing(
 ) -> Optional[Voicing]:
     """The candidate the engine's own rule prefers, honouring a slash bass first.
 
-    This is the rule the Weimar corpus brought (rule C), and it is what let the corpus
-    loader's own step loop - `arranger.slots` now - delegate to `arrange_progression`
-    instead of running a second one. The
-    library passes no `bass_pc` and gets exactly the behaviour it always had.
-
     The two rules that select a candidate - the slash bass and voice leading - are
     **combined, not applied in sequence**. The candidates are partitioned by how
     well they honour the bass, and the engine's own selection rule then decides
@@ -532,19 +527,15 @@ def select_step_voicing(
     unachievable slash chord behaves exactly as if it had not been written - which
     is the same "never guess" rule the rest of this module follows.
 
-    `slash_bass_cost` is passed in rather than imported because it lives in
-    `arranger.slots`, which reaches this module through `steps`; a module-level
-    import either way would be a cycle. Passing it also makes the dependency visible
-    at the call site, which is the point: wanting a slash-bass preference is the only
-    reason to supply one.
+    The ranking is `chords.slash_bass_cost`, called directly rather than passed in:
+    it is pure integer arithmetic over a voicing and a pitch class, and `chords` sits
+    below this module in the order, so there is nothing to inject. `bass_pc` alone
+    decides whether the partition runs, so a slot with no written bass is the
+    library's own behaviour and gets exactly the ranking it always had.
     """
-    if (
-        criteria.bass_pc is not None
-        and criteria.slash_bass_cost is not None
-        and candidates
-    ):
+    if criteria.bass_pc is not None and candidates:
         costs = [
-            criteria.slash_bass_cost(v.midi_notes(), criteria.bass_pc)
+            slash_bass_cost(v.midi_notes(), criteria.bass_pc)
             for v in candidates
         ]
         best = min(costs)
@@ -576,10 +567,10 @@ def palette_facts(
 
     def lost_to_the_bass_partition(alternative: Voicing) -> bool:
         """Whether the slash-bass partition would have dropped `alternative`."""
-        if criteria.bass_pc is None or criteria.slash_bass_cost is None:
+        if criteria.bass_pc is None:
             return False
-        here = criteria.slash_bass_cost(chosen.midi_notes(), criteria.bass_pc)
-        there = criteria.slash_bass_cost(alternative.midi_notes(), criteria.bass_pc)
+        here = slash_bass_cost(chosen.midi_notes(), criteria.bass_pc)
+        there = slash_bass_cost(alternative.midi_notes(), criteria.bass_pc)
         return here != there
 
     available = max(len(candidate.active_frets()) for candidate in candidates)

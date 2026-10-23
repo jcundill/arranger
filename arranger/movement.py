@@ -171,7 +171,7 @@ def arrange_progression(
         neck=SlotNeckFacts(
             fret_min=_k.fret_min, fret_max=_k.fret_max, top_strings=_k.top_strings
         ),
-        bass=SlotBassFacts(bass_pcs=_k.bass_pcs, slash_bass_cost_for=_k.slash_bass_cost),
+        bass=SlotBassFacts(bass_pcs=_k.bass_pcs),
     )
     for slot in loop:
         plan = slot_state(carried, slot, slot_inputs)

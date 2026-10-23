@@ -9,7 +9,7 @@ sentence is the whole point of recording anything.
 
 import unittest
 
-from arranger import VoiceLeadingEngine
+from arranger import Note, VoiceLeadingEngine
 from arranger.annotation import _criterion_phrase, step_annotation
 from arranger.cost import PARTITION_CRITERION, SPAN_CRITERION, VOICING_COST_CRITERIA
 from arranger.options import ArrangeOptions, Request
@@ -227,6 +227,33 @@ class TestTheShapeClause(unittest.TestCase):
             " - sounding: F# 7, B 3, D 5)",
         )
         palette = slash[-1].palette
+        assert palette is not None
+        self.assertEqual(palette.decided_by, PARTITION_CRITERION)
+
+    def test_a_requested_bass_narrows_the_palette_on_its_own(self):
+        """`ArrangeOptions.bass_pcs` is the whole request - nothing rides along with it.
+
+        The ranking that honours a written bass is `chords.slash_bass_cost`, a pure
+        function of the shape and the pitch class, and `decisions` calls it directly.
+        So a caller who asks for a bass **without** writing a slash into the chord
+        symbol gets the partition too: `Gmaj9` alone states four voices on its root,
+        and `Gmaj9` with F# asked for as data drops to the shell whose lowest voice is
+        the F#. The field used to need the library's own ranking supplied beside it, so
+        a caller who set the pitch class and nothing else got no narrowing at all - a
+        knob with an invisible effect, which is the defect this pins shut.
+        """
+        triple = (("D4", "maj9", "Gmaj9"),)
+        f_sharp = Note("F#3").midi_note() % 12
+
+        unasked = VoiceLeadingEngine.arrange_progression(triple)[0]
+        self.assertEqual(unasked.voicing.tab_string(), "3-x-4-4-3-x")
+
+        asked = VoiceLeadingEngine.arrange_progression(
+            triple, options=ArrangeOptions(bass_pcs={0: f_sharp})
+        )[0]
+        self.assertEqual(asked.voicing.tab_string(), "x-x-4-4-3-x")
+        self.assertEqual(min(asked.voicing.midi_notes()) % 12, f_sharp)
+        palette = asked.palette
         assert palette is not None
         self.assertEqual(palette.decided_by, PARTITION_CRITERION)
 

@@ -26,7 +26,7 @@ from typing import Container, Dict, List, Optional, Sequence, Tuple
 
 from musthe import Note
 
-from .chords import bass_pitch_class, slash_bass, slash_bass_cost
+from .chords import bass_pitch_class, slash_bass
 from .options import ArrangeOptions, resolve_request
 from .step_types import ArrangementStep
 from .steps import VoiceLeadingEngine
@@ -292,9 +292,9 @@ def _slot_options(
     slash, which is every triple of a score-imported head unless the score writes
     one. The bass note normally rides along in the chord name, so the triple carries
     it and the name does not have to; a caller that has already promoted the bass
-    into the quality writes the promoted name. `slash_bass_cost` is supplied alongside
-    because the pitch class says *what* is wanted and the cost says *how near* a
-    candidate is to it; neither alone narrows anything.
+    into the quality writes the promoted name. The pitch class says *what* is wanted,
+    and `chords.slash_bass_cost` - which `decisions` calls directly - says *how near*
+    a candidate is to it.
 
     **The slash is read with a general pattern, not a Weimar one.** The bass field of
     the symbol is the ordinary reading of `A-/G`, spelled out below rather than taken
@@ -331,6 +331,5 @@ def _slot_options(
         options,
         timings=typed_timings,
         bass_pcs=bass_pcs or None,
-        slash_bass_cost=slash_bass_cost,
         melody_onsets=onsets,
     )

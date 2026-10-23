@@ -14,7 +14,7 @@ the dependency order.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Container, List, NamedTuple, Optional, Sequence
+from typing import Container, List, NamedTuple, Optional
 
 from .grips import BASS_DEGREES_6432
 from .step_types import Voicing
@@ -62,8 +62,8 @@ class SelectionCriteria:
 
     `previous` is here rather than beside `candidates` because it is part of the
     ranking context, not a candidate: every shape in one palette is scored against
-    the same held shape. `bass_pc` and `slash_bass_cost` are the partition's half of
-    the rule and are read before `cost` is called.
+    the same held shape. `bass_pc` is the partition's half of the rule and is read
+    before `cost` is called.
     """
 
     previous: Optional[Voicing] = None
@@ -73,7 +73,6 @@ class SelectionCriteria:
     root_pc: Optional[int] = None
     melody_pc: Optional[int] = None
     bass_pc: Optional[int] = None
-    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]] = None
 
     def cost(self, voicing: Voicing) -> VoicingScore:
         """This shape's cost under exactly these criteria."""

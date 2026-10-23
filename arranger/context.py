@@ -15,7 +15,7 @@ travels on `slot_plan.SlotRhythmFacts` instead.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Mapping, Optional, Sequence, Tuple
+from typing import Mapping, Optional, Sequence, Tuple
 
 from musthe import Note
 
@@ -114,16 +114,15 @@ class SlotNeckFacts:
 
 @dataclass(frozen=True)
 class SlotBassFacts:
-    """The slash bass a comping step honours **before** selection.
+    """The written slash bass a slot must honour **before** selection.
 
-    A requested bass pitch class per slot (`bass_pcs`, keyed by slot index) and the
-    cost that ranks a shape for how well it reaches it (`slash_bass_cost_for`). Both
-    are None unless the caller asked for a slash bass; the comping route is the only
-    reader.
+    A requested bass pitch class per slot, keyed by slot index (`bass_pcs`). `None`
+    unless the progression's symbols ask for one, and absent or `None` for an index
+    means no restriction. Read by the comping and melody-bearing routes; the ranking
+    that honours it is `chords.slash_bass_cost`, which `decisions` calls directly.
     """
 
     bass_pcs: Optional[Mapping[int, Optional[int]]] = None
-    slash_bass_cost_for: Optional[Callable[[Sequence[int], Optional[int]], int]] = None
 
 
 @dataclass(frozen=True)
@@ -136,7 +135,7 @@ class SlotContext:
     - `timing`, `harmony`, `identity`, `state` — every route
     - `neck` — comping, harmonised, melody-alone
     - `arrangement` — harmonised, comping, and every plan decision
-    - `bass` — comping only
+    - `bass` — comping and harmonised, where a written slash bass is honoured
 
     The metre's own rhythm is the one group it cannot hold (`grid.Rhythm` sits above
     this module), so that travels on `slot_plan.SlotPlan.rhythm`.

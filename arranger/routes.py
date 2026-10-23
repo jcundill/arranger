@@ -379,14 +379,13 @@ def _comping_choice(
         # to excuse, which is what lets a comping shape be held to the chord's full
         # tone set.
         melody_pc=None,
-        # The corpus's slash bass, honoured before selection rather than after,
-        # exactly as on the ordinary route.
+        # The written slash bass, honoured before selection rather than after,
+        # exactly as on the melody-bearing route.
         bass_pc=(
             context.bass.bass_pcs.get(context.identity.index)
             if context.bass.bass_pcs
             else None
         ),
-        slash_bass_cost=context.bass.slash_bass_cost_for,
     )
     chosen = select_step_voicing(candidates, criteria) or candidates[0]
     offered = candidates
