@@ -360,8 +360,8 @@ def _comping_candidates(
     return _grips.get_comping_voicings_for(_grips.CompingRequest(
         chord_type=harmony.chord_type,
         chord_name=harmony.name,
-        fret_min=context.fret_min,
-        fret_max=context.fret_max,
+        fret_min=context.neck.fret_min,
+        fret_max=context.neck.fret_max,
         notes=notes,
         bass_voice=bass_voice,
     ))
@@ -394,8 +394,8 @@ def _comping_choice(
     prev_sounding = last_sounding_step(arrangements)
     criteria = SelectionCriteria(
         previous=prev_sounding.voicing if prev_sounding is not None else None,
-        fret_min=context.fret_min,
-        fret_max=context.fret_max,
+        fret_min=context.neck.fret_min,
+        fret_max=context.neck.fret_max,
         # The tones the written chord allows. Passed even though the generator
         # already filters on them: `voicing_cost` counts wrong notes itself, and a
         # generator that could be wrong should not be the only thing standing
@@ -412,9 +412,11 @@ def _comping_choice(
         # The corpus's slash bass, honoured before selection rather than after,
         # exactly as on the ordinary route.
         bass_pc=(
-            context.bass_pcs.get(context.identity.index) if context.bass_pcs else None
+            context.bass.bass_pcs.get(context.identity.index)
+            if context.bass.bass_pcs
+            else None
         ),
-        slash_bass_cost=context.slash_bass_cost_for,
+        slash_bass_cost=context.bass.slash_bass_cost_for,
     )
     chosen = select_step_voicing(candidates, criteria) or candidates[0]
     offered = candidates
@@ -586,7 +588,7 @@ def comping_step(
         context,
         chord_type=chord_type,
         melody_onsets=melody_onsets,
-        non_chord_tone=context.non_chord_tone,
+        non_chord_tone=context.arrangement.non_chord_tone,
     )
     # **A lone bass part states one note**, whatever the arity says: the bass part is
     # the [part the thumb realises](../docs/history/parts.md), and a triad with the root
@@ -596,7 +598,7 @@ def comping_step(
     # `bass_voice` carries, read once.
     standalone_bass = parts == (PART_BASS,)
     notes = 1 if standalone_bass else comping_arity(
-        context.texture, parts, context.has_thumb
+        context.arrangement.texture, parts, context.arrangement.has_thumb
     )
     candidates = _comping_candidates(
         context, harmony,

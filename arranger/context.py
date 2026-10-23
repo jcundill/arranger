@@ -7,7 +7,9 @@ composition.
 
 It sits at the bottom of the dependency order because it holds only stdlib and
 `musthe` types: the accumulator (`arrangements`) stays a parameter, because that
-is the route's output rather than its input.
+is the route's output rather than its input. The metre's own rhythm is the one
+fact group it cannot hold - `grid.Rhythm` sits above it - so a slot's rhythm
+travels on `slot_plan.SlotRhythmFacts` instead.
 """
 
 from __future__ import annotations
@@ -76,6 +78,55 @@ class SlotState:
 
 
 @dataclass(frozen=True)
+class SlotArrangementFacts:
+    """Who plays, and what the tune and the request are.
+
+    The parts selection (`parts`, `melody_only`, `melody_voiced`), the texture the
+    chord part states, whether a thumb line runs anywhere in the tune (`has_thumb`),
+    the non-chord-tone strategy, and the progression itself. Read by the plan, the
+    grip resolution and the melody-alone decision - everything that asks *who* is
+    playing rather than *where*.
+    """
+
+    progression: Sequence[Tuple[Optional[str], str, str]]
+    texture: str
+    parts: Tuple[str, ...]
+    melody_only: bool
+    melody_voiced: bool
+    non_chord_tone: str
+    has_thumb: bool
+
+
+@dataclass(frozen=True)
+class SlotNeckFacts:
+    """Where on the neck a shape may sit, and which strings are preferred.
+
+    The search window (`fret_min`, `fret_max`) and the string order a melody pins its
+    soprano from (`top_strings`). The window is a **preference and never a filter**:
+    a shape outside it is still played, and `voicing_cost` records that it was. Read
+    by the comping, harmonised and melody-alone routes.
+    """
+
+    fret_min: int
+    fret_max: int
+    top_strings: Tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class SlotBassFacts:
+    """The slash bass a comping step honours **before** selection.
+
+    A requested bass pitch class per slot (`bass_pcs`, keyed by slot index) and the
+    cost that ranks a shape for how well it reaches it (`slash_bass_cost_for`). Both
+    are None unless the caller asked for a slash bass; the comping route is the only
+    reader.
+    """
+
+    bass_pcs: Optional[Mapping[int, Optional[int]]] = None
+    slash_bass_cost_for: Optional[Callable[[Sequence[int], Optional[int]], int]] = None
+
+
+@dataclass(frozen=True)
 class SlotContext:
     """Everything one route needs to know about the slot it is deciding.
 
@@ -83,19 +134,18 @@ class SlotContext:
     groups it actually uses:
 
     - `timing`, `harmony`, `identity`, `state` — every route
-    - `fret_min`, `fret_max` — comping, harmonised, melody-alone
-    - `texture`, `has_thumb`, `non_chord_tone` — harmonised
-    - `bass_pcs`, `slash_bass_cost_for` — comping only
+    - `neck` — comping, harmonised, melody-alone
+    - `arrangement` — harmonised, comping, and every plan decision
+    - `bass` — comping only
+
+    The metre's own rhythm is the one group it cannot hold (`grid.Rhythm` sits above
+    this module), so that travels on `slot_plan.SlotPlan.rhythm`.
     """
 
     timing: SlotTiming
     harmony: SlotHarmony
     identity: SlotIdentity
     state: SlotState
-    fret_min: int
-    fret_max: int
-    texture: str
-    has_thumb: bool
-    non_chord_tone: str
-    bass_pcs: Optional[Mapping[int, Optional[int]]] = None
-    slash_bass_cost_for: Optional[Callable[[Sequence[int], Optional[int]], int]] = None
+    arrangement: SlotArrangementFacts
+    neck: SlotNeckFacts
+    bass: SlotBassFacts

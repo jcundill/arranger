@@ -353,8 +353,6 @@ class _Policies:
     has_thumb: bool
     #: The chord's rhythm, from the request's `chord_on`.
     chord_rhythm: Optional[Rhythm]
-    #: The bass's rhythm, and what the chord states in a notated melody rest.
-    bass_rhythm: Rhythm
     chord_fills: str
     grouping: Tuple[int, ...]
     slots: Optional[List[Slot]]
@@ -439,7 +437,6 @@ def resolve_policies(
         bass=bass,
         has_thumb=has_thumb,
         chord_rhythm=chord_rhythm,
-        bass_rhythm=bass_rhythm,
         chord_fills=chord_fills,
         grouping=grouping,
         slots=slots,

@@ -101,7 +101,7 @@ def _emit_texture_fill(
     """
     return texture_fill_step(
         arrangements, slot, plan.context,
-        top_strings=plan.inputs.top_strings,
+        top_strings=plan.context.neck.top_strings,
         previous=previous_shape(arrangements),
     )
 
@@ -117,7 +117,7 @@ def _emit_no_chord(
     """The tune alone on an `NC` bar, carrying no chord clause."""
     no_chord_step(
         arrangements, slot, plan.context,
-        top_strings=plan.inputs.top_strings,
+        top_strings=plan.context.neck.top_strings,
         previous=previous_shape(arrangements),
     )
     return True
@@ -130,7 +130,7 @@ def _claims_comping(plan: SlotPlan) -> bool:
     here, and only after the entries above, which are the cases with no harmony to
     state at all.
     """
-    return not plan.sings_here and not plan.inputs.melody_only
+    return not plan.sings_here and not plan.context.arrangement.melody_only
 
 
 def _emit_comping(
@@ -144,8 +144,8 @@ def _emit_comping(
     return comping_step(
         arrangements, slot, plan.context,
         chord_type=plan.context.harmony.chord_type,
-        melody_onsets=plan.inputs.melody_onsets,
-        parts=plan.inputs.parts,
+        melody_onsets=plan.rhythm.melody_onsets,
+        parts=plan.context.arrangement.parts,
     )
 
 
@@ -192,7 +192,7 @@ def dispatch_step(
     and declines it hands it on; the last entry claims unconditionally, so the loop
     below always returns and a slot always leaves here with exactly one step.
 
-    The routes read the plan's `context` and `inputs`, so the slot facts and the
+    The routes read the plan's `context` and `rhythm`, so the slot facts and the
     arrangement facts keep the values the plan decided.
     """
     for route in ROUTES:

@@ -21,12 +21,13 @@ from typing import Container, List, Optional, Sequence, Tuple
 
 from .bass import Slot
 from .bass_merge import carry_bass
+from .context import SlotArrangementFacts, SlotBassFacts, SlotNeckFacts
 from .grips import MELODY_STRING_CHOICES_FULL
 from .grouping import COMMON_TIME, TimeSignature
 from .options import DEFAULT_REQUEST, ArrangeOptions, Request
 from .resolution import felt_beat_timings, resolve_knobs, resolve_policies
 from .route_dispatch import dispatch_step
-from .slot_plan import Carried, SlotInputs, slot_state
+from .slot_plan import Carried, SlotInputs, SlotRhythmFacts, slot_state
 from .step_types import ArrangementStep
 from .tuning import (
     NECK_FRET_MAX,
@@ -157,24 +158,20 @@ def arrange_progression(
     carried = Carried()
     loop = _loop_slots(progression, timeline, _p.slots)
     slot_inputs = SlotInputs(
-        progression=progression,
-        top_strings=_k.top_strings,
-        texture=_k.texture,
-        parts=_p.parts,
-        has_thumb=_p.has_thumb,
-        melody_only=_p.melody_only,
-        melody_voiced=_p.melody_voiced,
-        melody_onsets=_k.melody_onsets,
-        chord_rhythm=_p.chord_rhythm,
-        bass_rhythm=_p.bass_rhythm,
-        chord_fills=_p.chord_fills,
-        beats_per_bar=_k.beats_per_bar,
-        grouping=_k.grouping,
-        fret_min=_k.fret_min,
-        fret_max=_k.fret_max,
-        non_chord_tone=_k.non_chord_tone,
-        bass_pcs=_k.bass_pcs,
-        slash_bass_cost_for=_k.slash_bass_cost,
+        arrangement=SlotArrangementFacts(
+            progression=progression, texture=_k.texture, parts=_p.parts,
+            melody_only=_p.melody_only, melody_voiced=_p.melody_voiced,
+            non_chord_tone=_k.non_chord_tone, has_thumb=_p.has_thumb,
+        ),
+        rhythm=SlotRhythmFacts(
+            beats_per_bar=_k.beats_per_bar, grouping=_k.grouping,
+            chord_rhythm=_p.chord_rhythm, chord_fills=_p.chord_fills,
+            melody_onsets=_k.melody_onsets,
+        ),
+        neck=SlotNeckFacts(
+            fret_min=_k.fret_min, fret_max=_k.fret_max, top_strings=_k.top_strings
+        ),
+        bass=SlotBassFacts(bass_pcs=_k.bass_pcs, slash_bass_cost_for=_k.slash_bass_cost),
     )
     for slot in loop:
         plan = slot_state(carried, slot, slot_inputs)

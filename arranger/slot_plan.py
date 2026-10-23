@@ -9,13 +9,22 @@ decisions rather than making them. It sits above `movement`, which calls it in t
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Container, Mapping, Optional, Sequence, Tuple
+from typing import Container, Optional, Tuple
 
 from musthe import Note
 
 from .bass import Slot
 from .chords import normalised_harmony
-from .context import SlotContext, SlotHarmony, SlotIdentity, SlotState, SlotTiming
+from .context import (
+    SlotArrangementFacts,
+    SlotBassFacts,
+    SlotContext,
+    SlotHarmony,
+    SlotIdentity,
+    SlotNeckFacts,
+    SlotState,
+    SlotTiming,
+)
 from .decisions import (
     MELODY_ALONE_BASS,
     MELODY_ALONE_REST,
@@ -59,13 +68,14 @@ class SlotPlan:
     routes read this rather than recomputing anything, so the metric weight, the
     role, the texture grips and the melody-alone kind are each decided once.
 
-    `context` is the slot's route-facing request and `inputs` the arrangement it
-    belongs to; both are kept whole rather than unpacked, so a route cannot read a
-    bar, a role or a search window the plan did not decide.
+    `context` is the slot's route-facing request and `rhythm` the one fact group it
+    cannot hold (the context sits below `grid`); both are kept whole rather than
+    unpacked, so a route cannot read a bar, a role or a search window the plan did
+    not decide.
     """
 
     context: SlotContext
-    inputs: SlotInputs
+    rhythm: SlotRhythmFacts
     sings_here: bool
     slot_grips: Tuple[str, ...]
     melody_alone: str
@@ -76,32 +86,40 @@ class SlotPlan:
 
 
 @dataclass(frozen=True)
+class SlotRhythmFacts:
+    """The metre and the layers' rhythms: *when* each part sounds.
+
+    The metre (`beats_per_bar`, `grouping`), the chord's own rhythm (`chord_rhythm`),
+    where the chord fills a notated rest (`chord_fills`), and the tune's onsets
+    (`melody_onsets`). Read by the plan's chord-attack decisions and the comping
+    route's reharmonise guard.
+
+    It lives here rather than in `context` because `chord_rhythm` is a `grid.Rhythm`
+    and `context` sits below `grid` in the dependency order.
+    """
+
+    beats_per_bar: int
+    grouping: Tuple[int, ...]
+    #: The chord's rhythm, read by `_chord_here`.
+    chord_rhythm: Optional[Rhythm]
+    chord_fills: str
+    melody_onsets: Optional[Container[int]]
+
+
+@dataclass(frozen=True)
 class SlotInputs:
     """The arrangement-level facts every slot's plan and context are built from.
 
-    Bound once by `arrange_progression` and passed to each stage of the plan, so a
-    stage takes the *slot* rather than ten words about the arrangement.
+    Bound once by `arrange_progression` and passed to `slot_state`, so a stage takes
+    the *slot* rather than a dozen words about the arrangement. The four groups are
+    focused rather than flat: `arrangement`, `neck` and `bass` pass straight through
+    to the `SlotContext` the routes read, and `rhythm` stays on the plan.
     """
 
-    progression: Sequence[Tuple[Optional[str], str, str]]
-    top_strings: Tuple[int, ...]
-    texture: str
-    parts: Tuple[str, ...]
-    has_thumb: bool
-    melody_only: bool
-    melody_voiced: bool
-    melody_onsets: Optional[Container[int]]
-    #: The chord's rhythm, read by `_chord_here`.
-    chord_rhythm: Optional[Rhythm]
-    bass_rhythm: Rhythm
-    chord_fills: str
-    beats_per_bar: int
-    grouping: Tuple[int, ...]
-    fret_min: int
-    fret_max: int
-    non_chord_tone: str
-    bass_pcs: Optional[Mapping[int, Optional[int]]]
-    slash_bass_cost_for: Optional[Callable[[Sequence[int], Optional[int]], int]]
+    arrangement: SlotArrangementFacts
+    rhythm: SlotRhythmFacts
+    neck: SlotNeckFacts
+    bass: SlotBassFacts
 
 
 def _slot_context(
@@ -134,26 +152,30 @@ def _slot_context(
             melody_note=melody_note,
         ),
         identity=SlotIdentity(
-            progression=inputs.progression,
+            progression=inputs.arrangement.progression,
             index=slot.index,
         ),
         state=SlotState(
             role=role,
-            weight=metric_weight(slot.bar, slot.beat, inputs.beats_per_bar, inputs.grouping),
-            chord_attack=_chord_attacks(inputs, slot, melody_note),
+            weight=metric_weight(
+                slot.bar, slot.beat,
+                inputs.rhythm.beats_per_bar, inputs.rhythm.grouping,
+            ),
+            chord_attack=_chord_attacks(
+                inputs.arrangement, inputs.rhythm, slot, melody_note
+            ),
         ),
-        fret_min=inputs.fret_min,
-        fret_max=inputs.fret_max,
-        texture=inputs.texture,
-        has_thumb=inputs.has_thumb,
-        non_chord_tone=inputs.non_chord_tone,
-        bass_pcs=inputs.bass_pcs,
-        slash_bass_cost_for=inputs.slash_bass_cost_for,
+        arrangement=inputs.arrangement,
+        neck=inputs.neck,
+        bass=inputs.bass,
     )
 
 
 def _sings_here(
-    inputs: SlotInputs, index: int, melody_note: Optional[Note]
+    arrangement: SlotArrangementFacts,
+    rhythm: SlotRhythmFacts,
+    index: int,
+    melody_note: Optional[Note],
 ) -> bool:
     """**Does the guitar sing *this* slot?** (§9.3 step D: the soprano is per slot.)
 
@@ -169,9 +191,9 @@ def _sings_here(
     caller who said nothing about onsets.
     """
     return (
-        inputs.melody_voiced
+        arrangement.melody_voiced
         and melody_note is not None
-        and (inputs.melody_onsets is None or index in inputs.melody_onsets)
+        and (rhythm.melody_onsets is None or index in rhythm.melody_onsets)
     )
 
 
@@ -195,24 +217,26 @@ def _tune_silent_plan(
     rather than being refused, which is why those fall through in `slot_state`.
     """
     bar, beat = slot.bar, slot.beat
-    weight = metric_weight(bar, beat, inputs.beats_per_bar, inputs.grouping)
+    weight = metric_weight(
+        bar, beat, inputs.rhythm.beats_per_bar, inputs.rhythm.grouping
+    )
     # The role the slot would have had, read without committing to `car`: a refused
     # slot must not move the target or the tracked pitch that a later slot is judged
     # against, so the two `car` writes stay in `_carried_role`.
     role = roles_for_slot(
         weight,
-        inputs.texture,
+        inputs.arrangement.texture,
         harmony_changed=(
             car.last_target_harmony is None
             or normalised_harmony(name) != car.last_target_harmony
         ),
         melody_moves=False,
-        has_thumb=inputs.has_thumb,
-        melody_only=inputs.melody_only,
+        has_thumb=inputs.arrangement.has_thumb,
+        melody_only=inputs.arrangement.melody_only,
     )[0]
     return SlotPlan(
         context=_slot_context(inputs, slot, (None, chord_type, name), role),
-        inputs=inputs,
+        rhythm=inputs.rhythm,
         sings_here=False,
         slot_grips=(),
         melody_alone=MELODY_ALONE_REST,
@@ -225,7 +249,7 @@ def _carried_role(
     weight: int,
     name: str,
     melody_note: Optional[Note],
-    inputs: SlotInputs,
+    arrangement: SlotArrangementFacts,
 ) -> str:
     """This slot's metric role, updating the state the next slot is judged against.
 
@@ -252,12 +276,12 @@ def _carried_role(
     )
     role = roles_for_slot(
         weight,
-        inputs.texture,
+        arrangement.texture,
         harmony_changed=(car.last_target_harmony is None
                          or harmony_key != car.last_target_harmony),
         melody_moves=melody_moves,
-        has_thumb=inputs.has_thumb,
-        melody_only=inputs.melody_only,
+        has_thumb=arrangement.has_thumb,
+        melody_only=arrangement.melody_only,
     )[0]
     if role == ROLE_TARGET:
         car.last_target_harmony = harmony_key
@@ -267,7 +291,9 @@ def _carried_role(
     return role
 
 
-def _texture_grips(role: str, slot: Slot, inputs: SlotInputs) -> Tuple[str, ...]:
+def _texture_grips(
+    role: str, slot: Slot, arrangement: SlotArrangementFacts
+) -> Tuple[str, ...]:
     """Which grips the texture makes *available* on this step.
 
     It is not a term in the cost, so a fill cannot be outbid for being in position -
@@ -280,22 +306,24 @@ def _texture_grips(role: str, slot: Slot, inputs: SlotInputs) -> Tuple[str, ...]
     through. Skipping the resolution is what makes `texture` silently inert here
     rather than noisily so.
     """
-    if inputs.melody_only:
+    if arrangement.melody_only:
         return ()
     return resolve_texture_grips(
         role,
-        texture_palette(role, inputs.texture, inputs.parts, inputs.has_thumb),
+        texture_palette(
+            role, arrangement.texture, arrangement.parts, arrangement.has_thumb
+        ),
         # The right hand's budget, and a fact about *this slot* rather than about
         # the arrangement: a target may sound three strings only where a bass note
         # is actually being placed under it, which is what `slot.bass` says.
         # `has_thumb` alone would thin chords the thumb never plays under -
         # `bass-on 1` leaves most slots bare.
-        has_thumb=inputs.has_thumb and slot.bass is not None,
+        has_thumb=arrangement.has_thumb and slot.bass is not None,
     )
 
 
 def _chord_here(
-    inputs: SlotInputs, beat: Optional[float], melody_absent: bool
+    rhythm: SlotRhythmFacts, beat: Optional[float], melody_absent: bool
 ) -> bool:
     """Whether the chord part attacks at this position.
 
@@ -309,17 +337,18 @@ def _chord_here(
     which the rhythm test could not say - the position is precisely one the rhythm
     does *not* name.
     """
-    if melody_absent and inputs.chord_fills != CHORD_FILLS_NONE:
+    if melody_absent and rhythm.chord_fills != CHORD_FILLS_NONE:
         return True
-    if inputs.chord_rhythm is None or inputs.chord_rhythm.wants_melody:
+    if rhythm.chord_rhythm is None or rhythm.chord_rhythm.wants_melody:
         return True
-    return inputs.chord_rhythm.includes(
-        beat, inputs.beats_per_bar, inputs.grouping
+    return rhythm.chord_rhythm.includes(
+        beat, rhythm.beats_per_bar, rhythm.grouping
     )
 
 
 def _tune_onset_attack(
-    inputs: SlotInputs,
+    arrangement: SlotArrangementFacts,
+    rhythm: SlotRhythmFacts,
     slot: Slot,
     melody_note: Note,
 ) -> bool:
@@ -331,13 +360,14 @@ def _tune_onset_attack(
     `ArrangementStep.repeated` or by carrying a different soprano, and setting it there
     would turn the collapse off for chord-melody.
     """
-    if _sings_here(inputs, slot.index, melody_note):
+    if _sings_here(arrangement, rhythm, slot.index, melody_note):
         return False
-    return inputs.melody_onsets is None or slot.index in inputs.melody_onsets
+    return rhythm.melody_onsets is None or slot.index in rhythm.melody_onsets
 
 
 def _chord_attacks(
-    inputs: SlotInputs,
+    arrangement: SlotArrangementFacts,
+    rhythm: SlotRhythmFacts,
     slot: Slot,
     melody_note: Optional[Note],
 ) -> bool:
@@ -369,14 +399,14 @@ def _chord_attacks(
     """
     if melody_note is None:
         return True
-    rhythm = inputs.chord_rhythm
-    if rhythm is None:
+    chord_rhythm = rhythm.chord_rhythm
+    if chord_rhythm is None:
         return False
-    if rhythm.includes(slot.beat, inputs.beats_per_bar, inputs.grouping):
+    if chord_rhythm.includes(slot.beat, rhythm.beats_per_bar, rhythm.grouping):
         return True
-    if not rhythm.wants_melody:
+    if not chord_rhythm.wants_melody:
         return False
-    return _tune_onset_attack(inputs, slot, melody_note)
+    return _tune_onset_attack(arrangement, rhythm, slot, melody_note)
 
 
 def slot_state(
@@ -393,18 +423,18 @@ def slot_state(
     updated in place.
     """
     index = slot.index
-    note_str, chord_type, name = inputs.progression[index]
+    note_str, chord_type, name = inputs.arrangement.progression[index]
     if note_str is None:
         # A melody-only selection's note-less slot is **tune silent** unless the thumb
         # has something there: `parts="melody,bass"` plays the bass part, and a position
         # the walk invented is the one place this selection sounds anything at all.
-        if inputs.melody_only and slot.bass is None:
+        if inputs.arrangement.melody_only and slot.bass is None:
             return _tune_silent_plan(car, slot, chord_type, name, inputs)
         melody_note = None
     else:
         melody_note = Note(note_str)
 
-    sings_here = _sings_here(inputs, index, melody_note)
+    sings_here = _sings_here(inputs.arrangement, inputs.rhythm, index, melody_note)
 
     # Where this slot falls in the bar, and therefore what it is for. Read
     # defensively, exactly as slots.arrange_slots guards its own timings: a
@@ -413,9 +443,11 @@ def slot_state(
     # onto the step, because a caller that supplied the rhythm wants to read it
     # back off the result rather than have to correlate two lists.
     bar, beat = slot.bar, slot.beat
-    weight = metric_weight(bar, beat, inputs.beats_per_bar, inputs.grouping)
-    role = _carried_role(car, weight, name, melody_note, inputs)
-    slot_grips = _texture_grips(role, slot, inputs)
+    weight = metric_weight(
+        bar, beat, inputs.rhythm.beats_per_bar, inputs.rhythm.grouping
+    )
+    role = _carried_role(car, weight, name, melody_note, inputs.arrangement)
+    slot_grips = _texture_grips(role, slot, inputs.arrangement)
 
     # A slot that is played as a single note rather than looked up. Which
     # slots those are, and why each is a branch rather than a missing case,
@@ -429,11 +461,10 @@ def slot_state(
     # takes the comping-route branches inside `melody_alone_case`, so an
     # off-grid note-less slot rests rather than asserting a melody it has not
     # got. §9.3 step D.
-    chord_here = _chord_here(inputs, beat, melody_note is None)
+    chord_here = _chord_here(inputs.rhythm, beat, melody_note is None)
     melody_alone = melody_alone_case(
-        inputs.texture, role, slot_grips, chord_type, name, inputs.has_thumb,
-        melody_voiced=sings_here,
-        on_grid=chord_here,
+        inputs.arrangement.texture, role, slot_grips, chord_type, name,
+        inputs.arrangement.has_thumb, melody_voiced=sings_here, on_grid=chord_here,
     )
     # **The bass part's own claim on the slot**, and it is asked *after* the four
     # melody-alone answers rather than inside them: it is the one combination that
@@ -445,15 +476,11 @@ def slot_state(
     if lone_bass_case(
         has_bass=slot.bass is not None,
         sings_here=sings_here,
-        chord_stated=chord_here and not inputs.melody_only,
+        chord_stated=chord_here and not inputs.arrangement.melody_only,
     ):
         melody_alone = MELODY_ALONE_BASS
     return SlotPlan(
-        context=_slot_context(
-            inputs, slot, (note_str, chord_type, name), role
-        ),
-        inputs=inputs,
-        sings_here=sings_here,
-        slot_grips=slot_grips,
+        context=_slot_context(inputs, slot, (note_str, chord_type, name), role),
+        rhythm=inputs.rhythm, sings_here=sings_here, slot_grips=slot_grips,
         melody_alone=melody_alone,
     )

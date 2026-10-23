@@ -146,15 +146,14 @@ def _prepare_or_rescue(
     """
 
     context: SlotContext = plan.context
-    inputs = plan.inputs
     prepared = prepare_step(
         context.identity.progression, context.identity.index,
         previous=prev_sounding.voicing if prev_sounding is not None else None,
         previous_chord=prev_sounding.chord if prev_sounding is not None else None,
-        top_strings=inputs.top_strings,
-        non_chord_tone=context.non_chord_tone,
-        fret_min=context.fret_min,
-        fret_max=context.fret_max,
+        top_strings=context.neck.top_strings,
+        non_chord_tone=context.arrangement.non_chord_tone,
+        fret_min=context.neck.fret_min,
+        fret_max=context.neck.fret_max,
         grips=plan.slot_grips,
     )
     if prepared is not None:
@@ -162,7 +161,8 @@ def _prepare_or_rescue(
     assert context.harmony.melody_note is not None
     if rescue_melody_alone(
         arrangements, slot, context,
-        top_strings=inputs.top_strings, previous=previous_shape(arrangements),
+        top_strings=context.neck.top_strings,
+        previous=previous_shape(arrangements),
     ):
         return None
     prepared = _promoted_fill(plan, arrangements)
@@ -174,7 +174,7 @@ def _prepare_or_rescue(
         silence=(
             SILENCE_OUT_OF_REACH
             if not _grips.get_melody_only_voicings(
-                context.harmony.melody_note, prefer=inputs.top_strings
+                context.harmony.melody_note, prefer=context.neck.top_strings
             )
             else SILENCE_NO_SHAPE
         ),
@@ -189,11 +189,10 @@ def _promoted_fill(
     """Re-prepare a fill that produced nothing as a principal note."""
 
     context: SlotContext = plan.context
-    inputs = plan.inputs
     if not should_promote_fill(
-        context.texture, context.state.role, True, plan.slot_grips,
-        has_thumb=context.has_thumb,
-        melody_only=inputs.melody_only,
+        context.arrangement.texture, context.state.role, True, plan.slot_grips,
+        has_thumb=context.arrangement.has_thumb,
+        melody_only=context.arrangement.melody_only,
     ):
         return None
     prev_sounding = last_sounding_step(arrangements)
@@ -201,10 +200,10 @@ def _promoted_fill(
         context.identity.progression, context.identity.index,
         previous=prev_sounding.voicing if prev_sounding is not None else None,
         previous_chord=prev_sounding.chord if prev_sounding is not None else None,
-        top_strings=inputs.top_strings,
-        non_chord_tone=context.non_chord_tone,
-        fret_min=context.fret_min,
-        fret_max=context.fret_max,
+        top_strings=context.neck.top_strings,
+        non_chord_tone=context.arrangement.non_chord_tone,
+        fret_min=context.neck.fret_min,
+        fret_max=context.neck.fret_max,
     )
 
 
@@ -313,16 +312,16 @@ def _selection_for(
         candidates=candidates,
         criteria=_cost.SelectionCriteria(
             previous=previous,
-            fret_min=context.fret_min,
-            fret_max=context.fret_max,
+            fret_min=context.neck.fret_min,
+            fret_max=context.neck.fret_max,
             allowed_tones=allowed_tones,
             root_pc=root_pc,
             melody_pc=context.harmony.melody_note.midi_note() % 12,
             bass_pc=(
-                None if context.bass_pcs is None
-                else context.bass_pcs.get(context.identity.index)
+                None if context.bass.bass_pcs is None
+                else context.bass.bass_pcs.get(context.identity.index)
             ),
-            slash_bass_cost=context.slash_bass_cost_for,
+            slash_bass_cost=context.bass.slash_bass_cost_for,
         ),
     )
 
@@ -399,7 +398,7 @@ def harmonised_step(
             palette = selection.palette(best_voicing, offered)
         elif demoted_to_melody_alone(
             arrangements, slot, replace(context, state=replace(context.state, role=role)),
-            top_strings=plan.inputs.top_strings,
+            top_strings=plan.context.neck.top_strings,
             previous=selection.criteria.previous,
             best_voicing=best_voicing,
             palette=palette,

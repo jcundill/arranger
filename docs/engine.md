@@ -389,7 +389,11 @@ has to be reported **once** rather than never.
 *sings* this slot, the metric weight, the role, the permitted grips, the melody-alone
 kind and, for a silent plan, *why* it is silent (`silence`, one of the `SILENCE_*`
 constants). That decision, and the `Carried` / `SlotInputs` values it reads, live in
-**`slot_plan.py`**; `movement.py` only walks the plans it returns. It no longer refuses a slot outright: a melody-only selection at a position
+**`slot_plan.py`**; `movement.py` only walks the plans it returns. `SlotInputs` is four
+focused groups - `SlotArrangementFacts` (who plays), `SlotRhythmFacts` (when each part
+sounds), `SlotNeckFacts` (the search window and the string order) and `SlotBassFacts`
+(the slash bass) - and the `SlotContext` a route reads is composed of the three that need
+no `grid.Rhythm`, so each route and each plan helper reads only the group it uses. It no longer refuses a slot outright: a melody-only selection at a position
 with no note gets a silent plan (`MELODY_ALONE_REST` + `tune_silent`) rather than `None`,
 so the tab keeps the bar. The plan then goes to **one** of five dispatch entries:
 
