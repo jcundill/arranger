@@ -109,7 +109,11 @@ BUDGETS: Dict[str, Budget] = {
     # the demonstration is one long function by design - a sequence of examples,
     # each with the comment that says what it demonstrates - so its ceiling is the
     # measurement, not a target. It imports `steps` and `render` and nothing else.
-    "arranger/demo.py": Budget(14, 151, 0),
+    # Re-measured three lines higher, deliberately: the texture example spells its
+    # request (`ArrangeOptions(request=Request(chord_notes="targets"))`) rather than
+    # the door's single kwarg (`ArrangeOptions(texture="targets")`), and the call
+    # that is three words longer does not fit the dict on one line any more.
+    "arranger/demo.py": Budget(14, 154, 0),
     "arranger/annotation.py": Budget(18, 124, 2),
     # The pure string layout an annotation is broken into: the clause units, the word
     # chunks and the line breaker. Split out of `annotation`, measured as it stood when

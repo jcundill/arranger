@@ -37,9 +37,8 @@ from musthe import Note
 
 import arranger
 from arranger import ArrangementStep, ChordParser, VoiceLeadingEngine, Voicing, get_comping_voicings
-from arranger.bass_rules import BASS_ALL_RULES
 from arranger.grip_tables import SHELL_DEGREES
-from arranger.options import ArrangeOptions
+from arranger.options import ArrangeOptions, Request
 from arranger.tuning import PITCH_CLASS_NAMES, STANDARD_TUNING
 
 #: The library's top-level modules: the shared score core, the renderers, the
@@ -597,7 +596,7 @@ def walk(
 ) -> List[arranger.ArrangementStep]:
     """A walking-bass arrangement of `progression`, with or without a beat grid.
 
-    `texture="targets"` rather than a `chordN` row, and that is the load-bearing part:
+    `chord_notes="targets"` rather than a `chordN` row, and that is the load-bearing part:
     the metre decides the roles, so a strong beat states the chord and the beats the
     bass grid invents between them hold the tune under the thumb. A fixed-arity row
     makes **every** slot a target, which would re-strike the chord on every walked
@@ -617,8 +616,9 @@ def walk(
         progression,
         timings=timings,
         options=ArrangeOptions(
-            texture="targets",
-            bass=BASS_ALL_RULES,
+            request=Request(
+                chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+            ),
         ),
     )
 
