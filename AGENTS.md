@@ -69,7 +69,7 @@ thing to read before quoting one.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1307 feature + 85 meta tests OK (skipped=2)**, pyright
+Current measured state: **1292 feature + 85 meta tests OK (skipped=2)**, pyright
 **0 errors 0 warnings**, ruff **0 errors**. If your change moves any of those numbers, that
 is the signal — not the absence of an error message. A quiet run is not evidence; a moved
 count is.
@@ -91,7 +91,7 @@ because that half runs first, so a mis-filed test is seen early rather than neve
 `tests/meta_structure.py::TestTheSplit` fails on a module matching neither pattern, which
 is the only way a pattern-based gate could go quiet, and `test` running both is what keeps
 the split a way *in* rather than a smaller gate. The split is a reading aid, not a speed
-fix: **85 of 1392 tests are meta**, and both halves run in seconds, so `make test-one` on
+fix: **85 of 1377 tests are meta**, and both halves run in seconds, so `make test-one` on
 the module you are touching is a convenience rather than the difference between a fast
 loop and a slow one.
 
@@ -131,9 +131,10 @@ Adding an axis means a new vocabulary (`*_STYLES` / `*_POLICIES`, or a note-rule
 `*_RULES` table like `bass`'s `BASS_RULE_ROLES`) and a `*_AUTO`
 sentinel that is deliberately **not** in the vocabulary, plus a `*_allowed` refusal function
 derived from a table rather than listed — never another branch at the call sites. **It is a
-field on `ArrangeOptions` and nothing else**: a keyword for it on an entry point is the
-second spelling this surface exists without, and the standing guard fails on the commit that
-adds one. The trap: a loop
+field on `Request` and nothing else**: the request is the one spelling of what to play, so an
+axis named a second time — as a keyword on an entry point, or as an `ArrangeOptions` field
+beside the request — is the second spelling this surface exists without, and the standing
+guard fails on the commit that adds one. The trap: a loop
 variable shadowing a policy parameter (`melody`, in the since-removed `wjazzd.arrange_slots`,
 did exactly this, and it only raised when a diminished retry had something to rescue).
 `grouping` is the one axis whose vocabulary is an **algebra rather than a list** - any
