@@ -38,14 +38,11 @@ from arranger.bass_place import (
     place_bass,
 )
 from arranger.bass_rules import (
-    BASS_ALL_RULES,
     BASS_ROLE_ANCHOR,
     BASS_STRING_INDICES,
-    BASS_STYLE_ANCHORS,
 )
 from arranger.fingers import MAX_HAND_SPAN, hand_span
 from arranger.grip_tables import GRIP_MAX_SPAN
-from arranger.options import ArrangeOptions
 from arranger.parts import PART_NAMES
 from arranger.texture import texture_palette
 from arranger.tuning import PITCH_CLASS_NAMES, ROLE_FILL, ROLE_TARGET, STANDARD_TUNING
@@ -91,9 +88,8 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
 
         steps, _, _ = arranged(
             BUT_NOT_FOR_ME,
-            options=ArrangeOptions(
-                texture="targets",
-                bass=BASS_ALL_RULES,
+            request=Request(
+                chord_notes="targets", bass_on="every-beat", bass_notes="walk"
             ),
         )
         return steps
@@ -336,9 +332,8 @@ class TestAHeldStepChangesNothing(unittest.TestCase):
 
         steps, _, _ = arranged(
             BUT_NOT_FOR_ME,
-            options=ArrangeOptions(
-                texture="targets",
-                bass=BASS_ALL_RULES,
+            request=Request(
+                chord_notes="targets", bass_on="every-beat", bass_notes="walk"
             ),
         )
         return steps
@@ -384,8 +379,12 @@ class TestAHeldStepChangesNothing(unittest.TestCase):
         """
         steps, _head, _notes = arranged(
             BUT_NOT_FOR_ME,
-            options=ArrangeOptions(texture="targets", bass=BASS_ALL_RULES),
-            request=Request(chord_on="every-beat", bass_on="every-beat"),
+            request=Request(
+                chord_on="every-beat",
+                chord_notes="targets",
+                bass_on="every-beat",
+                bass_notes="walk",
+            ),
         )
         self.assertEqual(
             [(step.bar, step.beat) for step in steps if step.bass_only], [],
@@ -895,22 +894,29 @@ class TestTheInvariant(unittest.TestCase):
         paths = sweep_head_paths()
         checked = 0
         for path in paths:
-            for texture, bass in (
-                ("targets", BASS_ALL_RULES),
-                ("targets", BASS_STYLE_ANCHORS),
-                ("chord2", BASS_ALL_RULES),
-                ("chord2", BASS_STYLE_ANCHORS),
+            for content, bass_on, bass_notes in (
+                ("targets", "every-beat", "walk"),
+                ("targets", "1", "root"),
+                ("2", "every-beat", "walk"),
+                ("2", "1", "root"),
             ):
-                with self.subTest(head=path, texture=texture, bass=bass):
+                with self.subTest(
+                    head=path, chord_notes=content, bass_notes=bass_notes
+                ):
                     steps, _head, _notes = arranged(
-                        path, options=ArrangeOptions(texture=texture, bass=bass)
+                        path,
+                        request=Request(
+                            chord_notes=content,
+                            bass_on=bass_on,
+                            bass_notes=bass_notes,
+                        ),
                     )
                     for step in steps:
                         plucks = len(_sounding_frets(step))
                         self.assertLessEqual(
                             plucks,
                             4,
-                            f"{texture}/{bass}: {step.tab_line()} plucks {plucks} strings",
+                            f"{content}/{bass_notes}: {step.tab_line()} plucks {plucks} strings",
                         )
                         if step.voicing.bass_string is not None:
                             checked += 1
@@ -950,15 +956,22 @@ class TestTheInvariant(unittest.TestCase):
         paths = sweep_head_paths()
         checked = 0
         for path in paths:
-            for texture, bass in (
-                ("targets", BASS_ALL_RULES),
-                ("targets", BASS_STYLE_ANCHORS),
-                ("chord2", BASS_ALL_RULES),
-                ("chord2", BASS_STYLE_ANCHORS),
+            for content, bass_on, bass_notes in (
+                ("targets", "every-beat", "walk"),
+                ("targets", "1", "root"),
+                ("2", "every-beat", "walk"),
+                ("2", "1", "root"),
             ):
-                with self.subTest(head=path, texture=texture, bass=bass):
+                with self.subTest(
+                    head=path, chord_notes=content, bass_notes=bass_notes
+                ):
                     steps, _head, _notes = arranged(
-                        path, options=ArrangeOptions(texture=texture, bass=bass)
+                        path,
+                        request=Request(
+                            chord_notes=content,
+                            bass_on=bass_on,
+                            bass_notes=bass_notes,
+                        ),
                     )
                     held = None
                     for step in steps:
@@ -979,7 +992,7 @@ class TestTheInvariant(unittest.TestCase):
                         self.assertLessEqual(
                             len(frets),
                             4,
-                            f"{texture}/{bass}: bar {step.bar} beat {step.beat} "
+                            f"{content}/{bass_notes}: bar {step.bar} beat {step.beat} "
                             f"{step.tab_line()} asks the left hand for {len(frets)} "
                             f"frets {sorted(frets)}",
                         )
@@ -1045,9 +1058,8 @@ class TestASingleNoteStepHasNothingToHold(unittest.TestCase):
                 ("F4", "7", "Bb7"),
             ],
             timings=[(2, 1.0, 0.5), (2, 2.0, 0.25), (2, 2.5, 0.375), (3, 1.0, 0.375), (3, 1.5, 0.25)],
-            options=ArrangeOptions(
-                texture="targets",
-                bass=BASS_ALL_RULES,
+            request=Request(
+                chord_notes="targets", bass_on="every-beat", bass_notes="walk"
             ),
             time_signature=TimeSignature(2, 4),
         )
@@ -1119,9 +1131,8 @@ class TestASingleNoteStepHasNothingToHold(unittest.TestCase):
 
         steps, _head, _notes = arranged(
             BUT_NOT_FOR_ME,
-            options=ArrangeOptions(
-                texture="targets",
-                bass=BASS_ALL_RULES,
+            request=Request(
+                chord_notes="targets", bass_on="every-beat", bass_notes="walk"
             ),
         )
         target = [s for s in steps if s.bar == 3 and s.beat == 1.0][0]

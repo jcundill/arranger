@@ -122,20 +122,12 @@ BASS_RULE_ROLES: Dict[str, FrozenSet[str]] = {
 # derived rather than listed so the table above stays the one source - and it is the same
 # string the request's `walk` maps to.
 #
-# `BASS_STYLE_ANCHORS` is the root rule alone, and it is a **style name with no request
-# spelling**: `bass_notes="root"` asks for one root at every position a *named* rhythm
-# names (`_simple_bass_line`), which is deliberately not the walk filtered to its root
-# role. Nothing but an axis override reaches this value.
 BASS_ALL_RULES = ",".join(BASS_RULES)
-BASS_STYLE_ANCHORS = BASS_RULE_ROOT
 
-# "no thumb line" and "whatever this texture means". Neither is a rule. `none` is the
-# absence of a style - the caller asked for no bass - and `auto` is the default resolved
-# from the texture and the selection before the arrangement runs. Keeping `auto` out of
-# the rule vocabulary is what lets the engine validate a style without special-casing a
-# sentinel, the same reason it was kept out of the old `BASS_STYLES`.
+# `none` is not a rule: it is the **absence** of a style, the value a request whose bass
+# layer never attacks resolves to. Keeping it out of the rule vocabulary is what lets the
+# engine validate a style without special-casing a sentinel.
 BASS_STYLE_NONE = "none"
-BASS_STYLE_AUTO = "auto"
 
 
 def parse_bass_style(argument: str) -> Tuple[str, ...]:
@@ -149,10 +141,9 @@ def parse_bass_style(argument: str) -> Tuple[str, ...]:
     is re-sorted, for the same reason `grips.parse_grips` keeps its order and
     `parts.parse_parts` does not (a sequence is ordered, a selection is a set).
 
-    `none` and `auto` are **not** rules and are refused here: `none` is the absence of a
-    style and `auto` is a default, both resolved before this runs. Refusing them keeps
-    the rule vocabulary to things that name a note, so a style can never be a rhythm
-    word in disguise.
+    `none` is **not** a rule and is refused here: it is the absence of a style,
+    resolved before this runs. Refusing it keeps the rule vocabulary to things that
+    name a note, so a style can never be a rhythm word in disguise.
 
     Raises `ValueError` on an empty request, or on a name outside `BASS_RULES`, naming
     the vocabulary. The rule is the library's: a spelling nobody recognises is a
@@ -160,7 +151,7 @@ def parse_bass_style(argument: str) -> Tuple[str, ...]:
     something nobody asked it to drop.
     """
     text = argument.strip().lower()
-    if text in (BASS_STYLE_NONE, BASS_STYLE_AUTO):
+    if text == BASS_STYLE_NONE:
         raise ValueError(
             f"{argument!r} is not a note rule; expected a comma-separated list of "
             f"{BASS_RULES}"
@@ -237,12 +228,12 @@ def comping_capacity(notes: int, bass_voice: bool = False) -> int:
     derives its answer from the melody-bearing route's own palette (`texture_palette`) read
     against the string tables (`GRIP_STRING_SETS`), which describe the shapes that route
     generates. On the comping route the shapes come from
-    `get_comping_voicings` instead, and the texture is *inert* there: all 80 comping
-    shapes on `tests/data/synthetic_cut_time.mxl` are byte-identical under
-    `texture="uniform"` and `texture="targets"`. Asking `thumb_capacity` therefore refuses a
-    combination that is perfectly playable, on the strength of a palette the comping
-    route never uses - `bass_allowed("uniform", "root,5th,approach,nearest")` refuses
-    `melody="alto,tenor", bass="root,5th,approach,nearest"` under the default texture.
+    `get_comping_voicings` instead, and the chord content is *inert* there: all 80
+    comping shapes on `tests/data/synthetic_cut_time.mxl` are byte-identical under
+    `chord_notes="full"` and `chord_notes="targets"`. Asking `thumb_capacity` therefore
+    refuses a combination that is perfectly playable, on the strength of a palette the
+    comping route never uses - `bass_allowed("uniform", "root,5th,approach,nearest")`
+    refuses a walk beside a comping selection under the default content.
 
     The warning was false on the facts too: the comping shapes on that head sound within
     strings `(1, 2, 3)`, `(2, 3, 4)` and `(1, 3, 4)` - never on the low E or the A, so
@@ -369,15 +360,13 @@ def resolve_bass(
     parts: Tuple[str, ...],
     texture: str,
 ) -> str:
-    """The bass style to actually run: `auto` resolved, then validated.
+    """The bass style to actually run, validated.
 
     Three outcomes, in the order they are decided:
 
-    - `auto` resolves to **no line**, which is the shipped answer: a caller who
-      wants one names the note rules. The one selection that writes a line is a
-      melody-only selection that also names the bass part - `parts="melody,bass"`
-      is the tune with a thumb under it. A `parts="bass"` selection alone is **not**
-      melody-only (it has no tune) and keeps no thumb: that part already is the bass
+    - `none` is **no line**: the request's bass layer never attacks, so there is
+      nothing to play. A melody-only selection that also names the bass part is the
+      tune with a thumb under it, whose line the part itself states.
       line, and a thumb under it would double it.
     - an unknown rule raises. A spelling nobody recognises is a question, and
       answering it by defaulting to a walk would put a line under an arrangement that
@@ -400,12 +389,6 @@ def resolve_bass(
     melody_voiced = parts_have_melody(parts)
     melody_only = parts_has_melody_only(parts)
 
-    if bass == BASS_STYLE_AUTO:
-        bass = (
-            BASS_ALL_RULES
-            if melody_only and parts_have_bass(parts)
-            else BASS_STYLE_NONE
-        )
     if bass == BASS_STYLE_NONE:
         return bass
     parse_bass_style(bass)  # raises on an unknown rule

@@ -46,8 +46,6 @@ from tests.support import (
     quality_of,
 )
 
-PART_NAMES_ARG = "auto"
-
 
 class TestCompingGenerator(unittest.TestCase):
     """`get_comping_voicings`: a chord stated without the tune on top."""
@@ -293,14 +291,6 @@ class TestTheAxisIsInertByDefault(unittest.TestCase):
     def setUp(self):
         self.engine = VoiceLeadingEngine()
 
-    def test_auto_and_guitar_agree_with_each_other(self):
-        """The sentinel resolves to the same arrangement as saying so."""
-        auto = self.engine.arrange_progression(PROGRESSION)
-        explicit = self.engine.arrange_progression(
-            PROGRESSION, options=ArrangeOptions(parts=PART_NAMES_ARG)
-        )
-        self.assertEqual(format_progression(auto), format_progression(explicit))
-
     def test_the_default_still_pins_the_melody_to_the_soprano(self):
         """And every step says the guitar is singing."""
         for step in self.engine.arrange_progression(PROGRESSION):
@@ -337,13 +327,6 @@ class TestTheAxisIsInertByDefault(unittest.TestCase):
         """
         signature = inspect.signature(self.engine.arrange_progression)
         self.assertNotIn("parts", signature.parameters)
-
-    def test_an_unknown_policy_raises(self):
-        """A spelling nobody recognises is a question, not something to default."""
-        with self.assertRaises(ValueError):
-            self.engine.arrange_progression(
-                PROGRESSION, options=ArrangeOptions(parts="banjo")
-            )
 
 
 class TestTheCompingArrangement(unittest.TestCase):

@@ -11,7 +11,6 @@ from __future__ import annotations
 import unittest
 
 from arranger import VoiceLeadingEngine
-from arranger.bass_rules import BASS_ALL_RULES
 from arranger.grouping import (
     COMMON_TIME,
     GROUPING_AUTO,
@@ -159,9 +158,8 @@ class TestTheHandBuiltMetre(unittest.TestCase):
         steps = VoiceLeadingEngine.arrange_progression(
             self.PROGRESSION,
             timings=[(0, 1.0, None)],
-            options=ArrangeOptions(
-                texture="targets",
-                bass=BASS_ALL_RULES,
+            request=Request(
+                chord_notes="targets", bass_on="every-beat", bass_notes="walk"
             ),
         )
         self.assertEqual([step.beat for step in steps], [1.0, 2.0, 3.0, 4.0])
@@ -171,10 +169,11 @@ class TestTheHandBuiltMetre(unittest.TestCase):
         steps = VoiceLeadingEngine.arrange_progression(
             self.PROGRESSION,
             timings=[(0, 1.0, None)],
-            options=ArrangeOptions(
-                texture="targets",
-                bass=BASS_ALL_RULES,
-                request=Request(chord_on="every-beat"),
+            request=Request(
+                chord_on="every-beat",
+                chord_notes="targets",
+                bass_on="every-beat",
+                bass_notes="walk",
             ),
             time_signature=TimeSignature(7, 4, "2+2+3"),
         )

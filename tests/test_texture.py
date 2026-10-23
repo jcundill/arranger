@@ -334,7 +334,9 @@ class TestRoles(unittest.TestCase):
         )
         steps = VoiceLeadingEngine.arrange_progression(
             MINOR_CADENCE,
-            options=ArrangeOptions(texture="targets", bass=BASS_ALL_RULES),
+            request=Request(
+                chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+            ),
             timings=[(0, 1.0 + 0.5 * i, None) for i in range(len(MINOR_CADENCE))],
         )
         self.assertTrue(steps)
@@ -1636,18 +1638,16 @@ class TestARepeatedMelodyHoldsItsString(unittest.TestCase):
 
         paths = sweep_head_paths()
         configs = (
-            ("uniform", "auto"),
-            ("targets", "auto"),
-            ("targets", BASS_ALL_RULES),
-            ("targets", "root"),
-            ("chord1", BASS_ALL_RULES),
+            Request(chord_notes="full"),
+            Request(chord_notes="targets"),
+            Request(chord_notes="targets", bass_on="every-beat", bass_notes="walk"),
+            Request(chord_notes="targets", bass_on="1", bass_notes="root"),
+            Request(chord_notes="1", bass_on="every-beat", bass_notes="walk"),
         )
         checked = held = 0
         for path in paths:
-            for texture, bass in configs:
-                steps, _head, _notes = arranged(
-                    path, options=ArrangeOptions(texture=texture, bass=bass),
-                )
+            for request in configs:
+                steps, _head, _notes = arranged(path, request=request)
                 for previous, step in zip(steps, steps[1:]):
                     if step.bass_only:
                         held += 1

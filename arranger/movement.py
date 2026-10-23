@@ -144,7 +144,7 @@ def arrange_progression(
 
     _p = resolve_policies(
         progression,
-        parts_arg=_k.parts,
+        parts=_k.parts,
         texture=_k.texture,
         bass=_k.bass,
         chord_rhythm=_k.request.chord_rhythm,

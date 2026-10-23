@@ -16,7 +16,7 @@ from typing import List
 
 from arranger import (
     ArrangementStep,
-    ArrangeOptions,
+    Request,
     VoiceLeadingEngine,
     format_progression,
     format_tab_html,
@@ -29,7 +29,7 @@ from arranger import (
 # surface for the benefit of one test file. `test_bass.py` covers them directly for
 # the same reason.
 from arranger.annotation import step_annotation
-from arranger.bass_rules import BASS_ALL_RULES, BASS_STRING_INDICES
+from arranger.bass_rules import BASS_STRING_INDICES
 from arranger.tuning import ROLE_TARGET
 from tabgp import _sounding_frets
 from tabstaff import _strikes_here
@@ -291,7 +291,9 @@ class TestWalkingBassRendering(unittest.TestCase):
         steps = VoiceLeadingEngine.arrange_progression(
             [("F5", "maj7", "Fmaj7"), ("G4", "maj7", "Gmaj7")],
             timings=[(None, None, None)] * 2,
-            options=ArrangeOptions(texture="targets", bass=BASS_ALL_RULES),
+            request=Request(
+                chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+            ),
         )
         self.assertEqual(len(steps), 2)
         self.assertEqual([step.bass_role for step in steps], ["anchor", "anchor"])

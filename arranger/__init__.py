@@ -132,12 +132,10 @@ from .options import (
     resolve_request,
 )
 from .parts import (
-    parse_parts,
     parts_has_melody_only,
     parts_have_bass,
     parts_have_chord,
     parts_have_melody,
-    resolve_parts,
 )
 from .render import format_progression
 from .slots import arrange_slots, parse_bar_range, unresolved_steps
@@ -294,14 +292,12 @@ __all__ = [
     "parse_bass_style",
     "parse_bar_range",
     "parse_grouping",
-    "parse_parts",
     "parse_rhythm",
     "parts_has_melody_only",
     "parts_have_bass",
     "parts_have_chord",
     "parts_have_melody",
     "resolve_grouping",
-    "resolve_parts",
     "resolve_request",
     "rhythm_beats",
     "sounding_harmony",

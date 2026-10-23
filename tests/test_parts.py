@@ -11,15 +11,13 @@ from typing import List
 from arranger import (
     VoiceLeadingEngine,
     get_comping_voicings,
-    parse_parts,
     parts_has_melody_only,
     parts_have_melody,
-    resolve_parts,
     supported_string_sets,
 )
 from arranger.grip_tables import GRIP_STRING_SETS
 from arranger.options import CHORD_NOTES, ArrangeOptions, Request
-from arranger.parts import PART_BASS, PART_CHORD, PART_MELODY, PART_NAMES, PARTS_AUTO
+from arranger.parts import PART_BASS, PART_CHORD, PART_MELODY, PART_NAMES
 from arranger.render import _step_cells
 from arranger.step_types import MUTED_CELL
 from arranger.texture import TEXTURE_STYLES
@@ -168,52 +166,8 @@ class TestMelodyOnlySelections(unittest.TestCase):
 
 
 
-class TestParseParts(unittest.TestCase):
-    """The `--parts` argument surface: what a caller can actually write."""
-
-    def test_the_order_a_caller_lists_them_in_does_not_matter(self):
-        """`bass,chord` and `chord,bass` are one request, not two that happen to agree."""
-        self.assertEqual(parse_parts("bass,chord"), parse_parts("chord,bass"))
-        self.assertEqual(parse_parts("bass,chord"), (PART_BASS, PART_CHORD))
-
-    def test_the_result_is_always_in_the_vocabularys_order(self):
-        """Canonical order, so a policy row and an argument can be compared directly."""
-        self.assertEqual(parse_parts("chord,melody"), (PART_MELODY, PART_CHORD))
-
-    def test_whitespace_and_case_are_not_the_callers_problem(self):
-        """A player types what they say."""
-        self.assertEqual(parse_parts(" Melody , CHORD "), (PART_MELODY, PART_CHORD))
-
-    def test_a_repeated_part_is_one_part(self):
-        """`chord,chord` is a slip, not a request for two chord parts."""
-        self.assertEqual(parse_parts("chord,chord"), (PART_CHORD,))
-
-    def test_every_single_part_parses(self):
-        """All three are nameable, which is what makes the axis an enumeration."""
-        for name in PART_NAMES:
-            self.assertEqual(parse_parts(name), (name,))
-
-    def test_an_unknown_part_raises(self):
-        """A spelling nobody recognises is a question, not a part to drop."""
-        with self.assertRaises(ValueError):
-            parse_parts("banjo")
-        with self.assertRaises(ValueError):
-            parse_parts("chord,banjo")
-
-    def test_an_empty_selection_raises(self):
-        """The guitar has to take something; silence is not an arrangement."""
-        with self.assertRaises(ValueError):
-            parse_parts("")
-
-    def test_auto_cannot_be_mixed_with_named_parts(self):
-        """`auto` means *all* of them, so it is a whole answer and not a part."""
-        self.assertEqual(parse_parts("auto"), (PARTS_AUTO,))
-        with self.assertRaises(ValueError):
-            parse_parts("auto,chord")
-
-    def test_resolve_parts_turns_auto_into_every_part(self):
-        """Which is what keeps the whole axis inert until a caller opts in."""
-        self.assertEqual(resolve_parts((PARTS_AUTO,)), PART_NAMES)
+class TestThePartsPredicates(unittest.TestCase):
+    """The one-line part questions the engine's route logic reads."""
 
     def test_parts_have_melody_answers_the_arrangement_level_half_of_the_route(self):
         """Whether the tune is *ours* is one input to the route, not the route (§9.3 D).
@@ -319,19 +273,14 @@ class TestABassPartIsABassNote(unittest.TestCase):
         )
 
     def test_an_inner_voice_is_not_addressable_as_a_part(self):
-        """The axis has no spelling for one inner voice, and that is the fix.
+        """The selection has no spelling for one inner voice, and that is the fix.
 
         **Inverted rather than deleted.** It used to assert that `bass`, `alto` and
         `tenor` produce three *different* arrangements, because they used to produce
-        one - the voice identity was discarded and only the count survived. With the
-        parts axis, the request itself cannot be made: `alto` is not a part, and the
-        inner voices are what the **chord** part is for, both of them at once. So the
-        assertion is on the vocabulary, which is where the collapse used to happen.
+        one - the voice identity was discarded and only the count survived. There is
+        no part for an inner voice to name: the inner voices are what the **chord**
+        part is for, both of them at once.
         """
-        with self.assertRaises(ValueError):
-            parse_parts("alto")
-        with self.assertRaises(ValueError):
-            parse_parts("tenor")
         # The part that does carry them states a complete comping shape, and the
         # guide-tone pair is *inside* it rather than being the whole of it.
         for step in self.arrange(CHORD_ONLY):

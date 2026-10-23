@@ -55,7 +55,6 @@ from arranger import (
     group_starts,
     grouping_allowed,
     parse_grouping,
-    parse_parts,
     parts_has_melody_only,
     parts_have_chord,
     parts_have_melody,
@@ -75,7 +74,7 @@ from arranger.options import (
     format_request,
     resolve_request,
 )
-from arranger.resolution import resolve_axes, settle_input_fact
+from arranger.resolution import settle_input_fact
 from arranger.slots import arrange_slots
 from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES
 
@@ -3056,26 +3055,18 @@ def _head_slots(
 ) -> List[Tuple[Tuple[Optional[str], str, str], int, float, float]]:
     """The head's melody slots, with the projected chord positions unioned in.
 
-    **The union is gated on whether the guitar comps at all - not on the route, and
-    not on the spelling.** A selection that *comps* states the chord where the tune is
-    silent - `docs/comping-styles.md` §9.3 step D - which is a chord part with no tune
-    to play: a melody-only selection plays the tune and nothing else, and a **lone bass
-    line** has no chord to state at a position the tune left. Both `parse_parts` and
-    `resolve_parts` are needed: the parsed `auto` sentinel names no melody, which would
-    classify the default arrangement as the comping route. `docs/history/open-issues.md` item 1
-    holds the measurement.
+    **The union is gated on whether the guitar comps at all - not on the route.**
+    A selection that *comps* states the chord where the tune is silent -
+    `docs/comping-styles.md` §9.3 step D - which is a chord part with no tune to
+    play: a melody-only selection plays the tune and nothing else, and a **lone bass
+    line** has no chord to state at a position the tune left.
+    `docs/history/open-issues.md` item 1 holds the measurement.
     """
     slots = head_skeleton(head, section)
-    # The parts gate reads the **derivation**, so a request spelling and an axis
-    # spelling cannot disagree about whether the guitar has a tune.
-    axes = resolve_axes(
-        options.request,
-        options.texture,
-        options.bass,
-        options.parts,
-        options.time_signature,
-    )
-    parts = parse_parts(axes.parts)
+    # The parts gate reads the **derivation**, which is the same value the step loop
+    # reads: the selection is what the request's own questions decide.
+    axes = resolve_request(options.request, head.beats_per_bar, grouping)
+    parts = axes.parts
     if parts_has_melody_only(parts):
         return slots
     # **A requested rhythm wins, and the engine's own union is the fallback.** The
@@ -3086,7 +3077,7 @@ def _head_slots(
     # tune to play: that part states the chord of the tune in a bar the tune never
     # enters, while a selection that sings the tune already articulates every bar it
     # enters.
-    request = resolve_request(options.request, head.beats_per_bar, grouping)
+    request = axes
     chord_on = request.chord_rhythm
     extra: List[Tuple[Optional[str], str, str, int, float, float]] = []
     if not chord_on.is_none and not (chord_on.wants_melody and not chord_on.positions):

@@ -1,9 +1,10 @@
 """What the caller asked for, resolved once: parts, bass and the knobs.
 
-Every `*_AUTO` sentinel on the axes is answered here, against the selection and the
-texture, so the step loop only ever reads a concrete value. Pure policy: no voicing is
-built and no step is emitted. It sits above `movement`, which calls the two resolvers it
-still needs.
+The request is the one door. Every axis the step loop reads - which parts the guitar
+takes, how many notes the chord part states, the note rules the thumb line is written
+on - is derived from it here, so the loop only ever reads a concrete value. Pure
+policy: no voicing is built and no step is emitted. It sits above `movement`, which
+calls the two resolvers it still needs.
 """
 
 from __future__ import annotations
@@ -16,7 +17,6 @@ from .bass import (
     walking_slots,
 )
 from .bass_rules import (
-    BASS_STYLE_AUTO,
     BASS_STYLE_NONE,
     resolve_bass,
 )
@@ -34,32 +34,9 @@ from .options import (
     resolve_request,
 )
 from .parts import (
-    PART_BASS,
-    PART_NAMES,
-    parse_parts,
     parts_has_melody_only,
     parts_have_melody,
-    resolve_parts,
 )
-from .texture import (
-    parse_texture,
-)
-
-
-def _resolve_parts(parts: str) -> Tuple[str, ...]:
-    """The parts to actually take: `auto` resolved, parsed, validated.
-
-    Two steps and they are not the same step. **Parsing** turns the caller's string into
-    a canonical tuple of part names, so `bass,melody` and `melody,bass` are one request -
-    `parts.parse_parts` owns the vocabulary and the canonical order. **Resolution** is
-    what `parts.resolve_parts` owns: `auto` becomes every part.
-
-    An unknown part name raises from `parse_parts`, before any voicing work, on the
-    library's standing rule: a spelling nobody recognises is a question, and answering it
-    by dropping the part would hand back an arrangement missing something nobody asked it
-    to drop.
-    """
-    return resolve_parts(parse_parts(parts))
 
 
 @dataclass(frozen=True)
@@ -80,7 +57,7 @@ class _Knobs:
     fret_max: int
     texture: str
     bass: str
-    parts: str
+    parts: Tuple[str, ...]
     request: ResolvedRequest
     beats_per_bar: int
     beat_type: int
@@ -88,63 +65,6 @@ class _Knobs:
     melody_onsets: Optional[Container[int]]
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]]
     bass_pcs: Optional[Mapping[int, Optional[int]]]
-
-
-@dataclass(frozen=True)
-class _ResolvedAxes:
-    """The request, and the three axes the step loop reads.
-
-    `parts`, `texture` and `bass` are the engine's implementation; this
-    value is what a caller gets when it asks for them without going through the
-    step loop - `headxml` needs `parts` before the loop, to gate the comping union.
-    """
-
-    request: ResolvedRequest
-    texture: str
-    bass: str
-    parts: str
-
-
-def _selection_with_bass(parts: Tuple[str, ...]) -> str:
-    """`parts` plus the bass part, canonicalised to `PART_NAMES` order.
-
-    A spelled bass policy takes the bass part with it, because a line with no part
-    to play it is not a line. The selection is a **set** of part names, so a request
-    that already named the bass part is not given it a second time: appending the
-    name would write one part twice and hand back two spellings of one part.
-    """
-    return ",".join(name for name in PART_NAMES if name in parts or name == PART_BASS)
-
-
-def resolve_axes(
-    request: Request,
-    texture: Optional[str],
-    bass: Optional[str],
-    parts: Optional[str],
-    time_signature: TimeSignature = COMMON_TIME,
-) -> _ResolvedAxes:
-    """The request's derivation, with a caller's axis override winning.
-
-    `bass` and `parts` are **coupled**, and this is where the two spellings meet.
-    The request derives both; a caller who spells `parts` is driving the
-    selection, so the bass stays on its sentinel and follows it; a caller who
-    spells only a bass policy is making a claim about the bass part, which takes
-    that part with it. One spelling owns the pair rather than merging two answers.
-    """
-    resolved = resolve_request(
-        request, time_signature.beats_per_bar, time_signature.resolved_grouping
-    )
-    texture = resolved.texture if texture is None else texture
-    if bass is None:
-        bass = resolved.bass if parts is None else BASS_STYLE_AUTO
-    elif parts is None and bass not in (BASS_STYLE_AUTO, BASS_STYLE_NONE):
-        parts = _selection_with_bass(resolved.parts)
-    return _ResolvedAxes(
-        request=resolved,
-        texture=texture,
-        bass=bass,
-        parts=",".join(resolved.parts) if parts is None else parts,
-    )
 
 
 def _conflicts(**values: object) -> List[str]:
@@ -242,9 +162,9 @@ def resolve_knobs(
     bug and would otherwise spend an afternoon finding out why their keyword had
     no effect.
 
-    The three axes - `texture`, `bass`, `parts` - are **not**
-    among those keywords: they are the engine's implementation rather than a question
-    a caller asks, so they are read off `options` or derived from the request.
+    The axes - the chord part's content, the bass policy and the parts selection -
+    are **not** among those keywords: they are the engine's implementation rather than
+    a question a caller asks, so they are derived from the request.
 
     The request and the metre are **input facts** the other way - they say *what* is
     being arranged - so `settle_input_fact` lets them sit *beside* `options=`: the
@@ -255,12 +175,6 @@ def resolve_knobs(
     validation sit in one place rather than at the top of a thousand-line loop: a
     typo costs a message rather than a full arrangement followed by a surprise.
     """
-    # `None` means "derive this from the request", which is what every axis means
-    # unless `options` spells it out - the only door left to one.
-    stated = options if options is not None else ArrangeOptions()
-    texture, bass, parts = (
-        stated.texture, stated.bass, stated.parts
-    )
     if options is not None:
         given = _conflicts(
             top_strings=top_strings, non_chord_tone=non_chord_tone,
@@ -301,28 +215,20 @@ def resolve_knobs(
     beat_type = time_signature.beat_type
     resolved_grouping = time_signature.resolved_grouping
 
-    # **The request is resolved before the axis overrides are read**, because it is
-    # the derivation those overrides replace: `chord_notes` becomes the texture, the
-    # two rhythms decide the parts, and `bass_notes` the note rules. An override is
-    # the engine's own spelling of one axis and wins, which is how the axis tests
-    # hold a texture or a bass policy to its behaviour without going through the
-    # public questions.
-    axes = resolve_axes(request, texture, bass, parts, time_signature)
-    resolved, texture, bass = axes.request, axes.texture, axes.bass
-    parts = axes.parts
-    # `texture` is the one axis with no sentinel to answer, so this is its whole
-    # resolution: a membership check owned by `texture`, so the vocabulary is
-    # spelled in one module rather than once per caller.
-    texture = parse_texture(texture)
+    # **The request is the one door to the axes.** `chord_notes` becomes the chord
+    # part's content, the two rhythms decide the parts, and `bass_notes` the note
+    # rules - so there is no second spelling of any axis for this function to
+    # reconcile, and the loop reads the derivation directly.
+    resolved = resolve_request(request, beats_per_bar, resolved_grouping)
 
     return _Knobs(
         top_strings=top_strings,
         non_chord_tone=non_chord_tone,
         fret_min=fret_min,
         fret_max=fret_max,
-        texture=texture,
-        bass=bass,
-        parts=parts,
+        texture=resolved.texture,
+        bass=resolved.bass,
+        parts=resolved.parts,
         request=resolved,
         beats_per_bar=beats_per_bar,
         beat_type=beat_type,
@@ -358,7 +264,7 @@ class _Policies:
 def resolve_policies(
     progression: Sequence[Tuple[Optional[str], str, str]],
     *,
-    parts_arg: str,
+    parts: Tuple[str, ...],
     texture: str,
     bass: str,
     chord_rhythm: Optional[Rhythm],
@@ -376,8 +282,8 @@ def resolve_policies(
     rather than never at all on an arrangement where the guitar happens to be
     singing.
 
-    **The parts axis comes before the bass policy because the bass policy needs
-    to know which route the engine is on**, and only this function knows.
+    **The selection comes before the bass policy because the bass policy needs to
+    know which route the engine is on**, and only this function knows.
     `resolve_bass` measures thumb capacity against `texture.texture_palette`, which
     describes the shapes the melody-bearing route generates and is *inert* on the
     comping one - so asking it about a texture on that route refused a
@@ -388,13 +294,11 @@ def resolve_policies(
     carries no other meaning; what matters is that both finish before `has_thumb`
     is read, because that flag gates whether the walked-beat union is built.
     """
-    parts = _resolve_parts(parts_arg)
     melody_voiced = parts_have_melody(parts)
     # The melody-only selection, decided once here and read by the bass policy,
-    # the grip resolution and the promotion rule below: `(soprano,)` is the
-    # tune alone and `(soprano, bass)` the tune with a thumb under it,
-    # whatever `texture` says - the texture is inert on that route, the same
-    # way it is on the comping one.
+    # the grip resolution and the promotion rule below: the tune alone and the tune
+    # with a thumb under it are one selection, and the chord content is inert on
+    # that route, the same way it is on the comping one.
     melody_only = parts_has_melody_only(parts)
 
     # The bass policy. `auto` means "whatever this selection means", and the shipped

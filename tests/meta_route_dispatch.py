@@ -40,9 +40,9 @@ CASES: Sequence[Tuple[str, Sequence[Tuple[str, str, str]], Dict[str, Any], Tuple
     # the shipped arrangement: the guitar sings under every written note
     ("shipped", PROGRESSION, {}, ("melody_bearing",)),
     # the guitar comps while somebody else sings
-    ("comped", PROGRESSION, {"parts": "chord"}, ("comping",)),
+    ("comped", PROGRESSION, {"request": Request(melody=False)}, ("comping",)),
     # the guitar plays the tune and nothing else
-    ("melody-only", PROGRESSION, {"parts": "melody"}, ("texture_fill",)),
+    ("melody-only", PROGRESSION, {"request": Request(chord_on="none")}, ("texture_fill",)),
     # an `NC` bar, after a chord: melody and no harmony to voice
     (
         "nc",

@@ -50,7 +50,6 @@ from arranger.bass_rules import (
     BASS_RULE_ROLES,
     BASS_RULE_ROOT,
     BASS_RULES,
-    BASS_STYLE_ANCHORS,
     BASS_STYLE_NONE,
     _comping_no_room_reason,
 )
@@ -62,7 +61,7 @@ from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES, ROLE_FILL, ROLE_TARGET
 # rule vocabulary; `anchors` is the root rule alone. `none` and `auto` are not styles a
 # caller asks `bass_allowed` about directly - `auto` is resolved first, and `none` is
 # answered without a capacity question - so they are not in this list.
-SHIPPED_STYLES = (BASS_ALL_RULES, BASS_STYLE_ANCHORS)
+SHIPPED_STYLES = (BASS_ALL_RULES, BASS_RULE_ROOT)
 
 
 def line(chords, onsets, beats_per_bar=4):
@@ -514,22 +513,20 @@ class TestTheBassStyleRegistry(unittest.TestCase):
             (BASS_RULE_ROOT, BASS_RULE_5TH, BASS_RULE_APPROACH, BASS_RULE_NEAREST),
         )
 
-    def test_the_shipped_anchors_is_the_root_rule_alone(self):
-        """`BASS_STYLE_ANCHORS` names one rule, which admits the root's two roles.
+    def test_the_root_rule_alone_admits_the_root_s_two_roles(self):
+        """`root` names one rule, which admits the root's two roles.
 
         The rule governs the root wherever it sounds: on the position that marks the
-        bar (`anchor`) and on one that does not (`pedal`). With no rhythm named - the
-        only way this style is reached - the filtered walk keeps the anchors, so the
-        line this spelling produces is what it always was.
+        bar (`anchor`) and on one that does not (`pedal`), which is what makes the
+        filtered line the one a request for the root rule gets.
         """
-        self.assertEqual(BASS_STYLE_ANCHORS, BASS_RULE_ROOT)
         self.assertEqual(
             BASS_RULE_ROLES[BASS_RULE_ROOT],
             frozenset({BASS_ROLE_ANCHOR, BASS_ROLE_PEDAL}),
         )
 
-    def test_the_walk_keeps_every_role_and_anchors_keeps_only_the_root(self):
-        """`anchors` is `walk` with the connective roles dropped, not a second opinion.
+    def test_the_walk_keeps_every_role_and_the_root_rule_only_the_root(self):
+        """The root rule is `walk` with the connective roles dropped, not a second opinion.
 
         Asserted against the same generator's output so the two cannot drift: if a role
         is added to the walk, `anchors` either keeps it or it does not - but it is
@@ -542,7 +539,7 @@ class TestTheBassStyleRegistry(unittest.TestCase):
         chords: List[Tuple[Optional[str], str, str]] = [("C", "maj7", "Cmaj7")] * 8
         onsets: List[Tuple[int, float]] = [(1, 1.0 + 0.5 * i) for i in range(8)]
         walked = bass_line_for(BASS_ALL_RULES, chords, onsets, 4)
-        anchored = bass_line_for(BASS_STYLE_ANCHORS, chords, onsets, 4)
+        anchored = bass_line_for(BASS_RULE_ROOT, chords, onsets, 4)
         self.assertGreater(len(walked), len(anchored))
         self.assertEqual({n.role for n in anchored}, {BASS_ROLE_ANCHOR})
         self.assertTrue(

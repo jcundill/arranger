@@ -27,7 +27,6 @@ its refusals.
 from __future__ import annotations
 
 import argparse
-import os
 import unittest
 
 from arranger import (
@@ -52,9 +51,7 @@ from arranger.options import (
     ArrangeOptions,
 )
 from arranger.parts import PART_BASS, PART_CHORD, PART_MELODY, PART_NAMES
-from arranger.resolution import resolve_axes
 from arranger.texture import TEXTURE_STYLES
-from tests.support import arranged, sweep_head_paths
 
 
 class TestTheShippedRequest(unittest.TestCase):
@@ -151,47 +148,12 @@ class TestTheRhythmsDecideTheParts(unittest.TestCase):
         self.assertIn("bass-notes=root,approach", str(caught.exception))
 
     def test_the_parts_are_canonicalised(self):
-        """A derived selection is written in `PART_NAMES` order, as `parse_parts` is."""
+        """A derived selection is written in `PART_NAMES` order."""
         resolved = resolve_request(Request(bass_on="1", chord_on="none"), 4)
         self.assertEqual(
             resolved.parts,
             tuple(name for name in PART_NAMES if name in resolved.parts),
         )
-
-
-class TestTheAxesMeetTheRequest(unittest.TestCase):
-    """`resolve_axes` is where a caller's axis override and the request meet.
-
-    The two are **coupled** there: a spelled bass policy takes the bass part with
-    it, because a line with no part to play it is not a line. The selection it
-    hands back is still a *set*, so a request that already named that part does not
-    get it a second time.
-    """
-
-    def test_a_spelled_bass_policy_takes_the_bass_part(self):
-        """The axis-only spelling: the request named no bass, the policy does."""
-        axes = resolve_axes(Request(), None, BASS_RULE_ROOT, None)
-        self.assertEqual(axes.parts, ",".join(PART_NAMES))
-
-    def test_a_bass_policy_beside_a_named_bass_part_adds_nothing(self):
-        """`bass_on=` already took the part, so the selection is rebuilt, not appended.
-
-        A name written twice is two spellings of one part, and `parts` is a set:
-        `melody,bass,chord,bass` is not a selection the engine can mean.
-        """
-        axes = resolve_axes(Request(bass_on="every-beat"), None, BASS_RULE_ROOT, None)
-        self.assertEqual(axes.parts, ",".join(PART_NAMES))
-
-    def test_a_narrower_selection_is_not_widened_by_the_policy(self):
-        """The duplicate is loudest where the request's own selection is a subset.
-
-        `chord_on=none` with a bass line is the tune and the thumb; spelling the
-        policy as well must not add a second `bass` to that pair.
-        """
-        axes = resolve_axes(
-            Request(chord_on="none", bass_on="every-beat"), None, BASS_RULE_ROOT, None
-        )
-        self.assertEqual(axes.parts, f"{PART_MELODY},{PART_BASS}")
 
 
 class TestTheContentQuestions(unittest.TestCase):
@@ -485,26 +447,16 @@ class TestTheLibrarySpelling(unittest.TestCase):
         self.assertTrue(all(_sounded(step) > 2 for step in derived))
         self.assertTrue(all(_sounded(step) == 2 for step in pair))
 
-    def test_chord_notes_targets_is_the_texture_the_request_names(self):
-        """The request's `targets` and the axis's are one arrangement, not two.
+    def test_chord_notes_targets_is_not_the_shipped_content(self):
+        """`targets` is a real narrowing, not another name for the default.
 
-        Asserted on the frets rather than on the axis, because the claim is that the
-        *spelling* reaches the behaviour: a value that resolved to the right texture
-        name and then arranged differently would pass an axis-level test. The second
-        assertion is what keeps the first from being two spellings of the default
-        agreeing with themselves.
+        Asserted on the frets, because a value that resolved to the right name and then
+        arranged as the default would otherwise pass.
         """
-        by_request = _arrange(request=Request(chord_notes="targets"))
-        by_axis = VoiceLeadingEngine.arrange_progression(
-            _PROGRESSION, timings=_TIMINGS, options=ArrangeOptions(texture="targets")
-        )
-        self.assertEqual(
-            [step.voicing.frets for step in by_request],
-            [step.voicing.frets for step in by_axis],
-        )
+        targets = _arrange(request=Request(chord_notes="targets"))
         self.assertNotEqual(
             [step.voicing.frets for step in _arrange(request=Request())],
-            [step.voicing.frets for step in by_request],
+            [step.voicing.frets for step in targets],
             "targets arranged exactly as full, so this proves nothing",
         )
 
@@ -544,99 +496,25 @@ class TestTheLibrarySpelling(unittest.TestCase):
         self.assertGreater(len(set(walk)), 1)
 
 
-    def test_the_request_and_an_axis_override_compose(self):
-        """The two doors are not alternatives: an axis rides beside the request.
+    def test_a_composed_request_keeps_every_answer(self):
+        """Three questions in one request, and each answer reaches the music.
 
-        `request=` is *what to play* and `options=ArrangeOptions(...)` carries the
-        implementation axes that answer *how*, so one call may name both. The axis
-        wins where it speaks - that is what "the implementation" means - and every
-        other answer still comes from the request.
+        A selection, a rhythm and a content spelled together, because the derivation is
+        one pass over all six questions rather than six independent defaults.
         """
         composed = VoiceLeadingEngine.arrange_progression(
             _PROGRESSION,
             timings=_TIMINGS,
-            request=Request(melody=False, chord_on="every-beat"),
-            options=ArrangeOptions(texture="targets"),
+            request=Request(
+                melody=False, chord_on="every-beat", chord_notes="targets"
+            ),
         )
         self.assertEqual([step.beat for step in composed], [1.0, 2.0, 3.0, 4.0])
-        # `melody=False` is the request's answer, and it survived the axis beside it.
+        # `melody=False` is the request's answer.
         self.assertTrue(all(not step.melody_voiced for step in composed))
         self.assertEqual(
             [step.role for step in composed], ["target", "fill", "target", "fill"]
         )
-
-
-#: The requests the two doors must agree about - one per question the engine asks, so
-#: a question whose derivation drifts is covered by its own row rather than by another
-#: row's.
-_REQUESTS = (
-    Request(),
-    Request(chord_notes="2"),
-    Request(chord_notes="targets"),
-    Request(chord_on="1and"),
-    Request(chord_on="none"),
-    Request(bass_on="every-beat"),
-    Request(bass_on="every-beat", bass_notes="walk"),
-    Request(bass_on="every-beat", bass_notes="root,approach"),
-    Request(melody=False),
-    Request(melody=False, chord_on="every-beat"),
-    Request(melody=False, chord_on="none", bass_on="every-beat"),
-    Request(melody=False, bass_on="every-beat", bass_notes="walk"),
-    Request(chord_on="none", chord_fills="hold"),
-)
-
-
-def _axes_spelling(request: Request, beats_per_bar: int) -> ArrangeOptions:
-    """The request's own derivation, spelled out as the three axes.
-
-    Derived rather than written by hand, because that is what the claim is: the axes
-    *are* what `resolve_request` derived, so a spelling that states each of them must
-    arrange the same music. Spelling `parts` alone is deliberately **not** the same
-    request - a spelled selection leaves the bass on its `auto` sentinel, which keeps no
-    line - so every axis the request decided is stated here, `bass` included.
-    """
-    resolved = resolve_request(request, beats_per_bar)
-    return ArrangeOptions(
-        parts=",".join(resolved.parts),
-        bass=resolved.bass,
-        texture=resolved.texture,
-        request=request,
-    )
-
-
-class TestTheAxisSpellingIsTheRequest(unittest.TestCase):
-    """A request spelled as axes arranges **the same music** - one question, one answer.
-
-    The request is the public vocabulary and the axes are the implementation, so a
-    caller who spells them must get the arrangement the request gets. Asserted on the
-    **tab**, over committed heads, because the disagreement this holds shut was not in
-    the resolution at all: the importer's comping union was gated on whether an axis had
-    been *spelled* rather than on what the selection meant, so a no-op axis spelling was
-    a different arrangement (22 against 25 steps on `synthetic_common_8`, and a bar the
-    tune never enters comped for one door only).
-
-    The heads are `tests.support.sweep_head_paths()`, whose cases are the ones that
-    differed: the melody-less bar, the note a comping position used to precede, and the
-    note the tune is still holding.
-    """
-
-    def test_the_two_doors_are_one_arrangement(self):
-        """Every request agrees with its own derivation, on every head, step for step."""
-        for path in sweep_head_paths():
-            for request in _REQUESTS:
-                with self.subTest(head=os.path.basename(path), request=request):
-                    by_request, head, _notes = arranged(
-                        path, section=(1, 4), request=request
-                    )
-                    by_axes, _head, _notes = arranged(
-                        path,
-                        section=(1, 4),
-                        options=_axes_spelling(request, head.beats_per_bar),
-                    )
-                    self.assertEqual(
-                        [step.voicing.frets for step in by_request],
-                        [step.voicing.frets for step in by_axes],
-                    )
 
 
 class TestTheTwoSpellingsAreOneVocabulary(unittest.TestCase):

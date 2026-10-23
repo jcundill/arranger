@@ -725,22 +725,17 @@ class TestTheSplit(unittest.TestCase):
 #: the dependency graph, so a resolver that quietly grows a `parts` argument is a
 #: change to this table rather than an extra keyword nobody reviewed.
 AXIS_RESOLVERS: Dict[str, Tuple[str, str]] = {
-    "parts": ("parts", "resolve_parts"),
-    "texture": ("texture", "parse_texture"),
     "bass": ("bass_rules", "resolve_bass"),
 }
 
 AXIS_DEPENDENCIES: Dict[str, Tuple[str, ...]] = {
-    "parts": ("parts",),
-    "texture": ("argument",),
     "bass": ("bass", "parts", "texture"),
 }
 
-#: The wiring `resolution.resolve_policies` calls, in the order the axes depend.
-#: `_resolve_parts` first because `bass` reads its answer: it measures
-#: the thumb against the route the selection names.
+#: The wiring `resolution.resolve_policies` calls: the one axis still answered
+#: there rather than derived from the request. `resolve_bass` measures the thumb
+#: against the route the selection names, so it reads `parts` and the content.
 POLICY_WIRING: Tuple[str, ...] = (
-    "_resolve_parts",
     "resolve_bass",
 )
 
@@ -796,13 +791,12 @@ class TestTheAxisResolvers(unittest.TestCase):
                     "dependency is real, or drop the parameter",
                 )
 
-    def test_the_composition_resolves_parts_before_the_axes_that_read_it(self):
-        """`resolution` wires the axes in dependency order, not in call-site order.
+    def test_the_composition_still_resolves_the_bass_policy(self):
+        """`resolution` is where the bass policy is answered, not the slot loop.
 
-        Read off the call sites rather than an arrangement's answer: a step whose
-        parts happen to be right says nothing about which resolution ran first,
-        while a call moved above `_resolve_parts` is visible here and silent in
-        every tab.
+        Read off the call sites rather than an arrangement's answer: a step whose bass
+        happens to be right says nothing about where the answer came from, while a
+        policy resolved per slot is a band that changes halfway through a tune.
         """
         lines = _call_lines(
             _top_level_function(ENGINE / "resolution.py", "resolve_policies")
@@ -814,13 +808,6 @@ class TestTheAxisResolvers(unittest.TestCase):
             "resolve_policies no longer wires an axis - an axis resolved per slot "
             "is a band that changes halfway through a tune",
         )
-        for axis in POLICY_WIRING[1:]:
-            with self.subTest(axis=axis):
-                self.assertLess(
-                    lines["_resolve_parts"],
-                    lines[axis],
-                    f"{axis} is resolved before parts, which it reads",
-                )
 
 
 def _top_level_bindings(path: Path) -> Iterator[Tuple[str, int]]:

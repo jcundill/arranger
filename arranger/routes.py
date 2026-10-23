@@ -88,7 +88,7 @@ def rest_step(
     ))
     # The thumb still walks on a rest. A comping grid thins the **chords**,
     # not the bass line - that is the whole difference between `grid` and
-    # `bass="none"`, and dropping the attach here would silently delete the
+    # `bass_on="none"`, and dropping the attach here would silently delete the
     # walk from every bar the grid thinned.
     attach_bass(
         arrangements[-1], slot.bass, arrangements

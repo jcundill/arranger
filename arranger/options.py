@@ -323,7 +323,7 @@ def _request_parts(melody: bool, has_chord: bool, has_bass: bool) -> Tuple[str, 
 
     Derived rather than spelled, which is the whole point: one fact decides each
     part, and the parts selection is a **set**, so its order is canonicalised here
-    for the same reason `parse_parts` canonicalises a caller's.
+    into `PART_NAMES` order.
     """
     chosen = {PART_MELODY if melody else "", PART_CHORD if has_chord else "",
               PART_BASS if has_bass else ""}
@@ -426,23 +426,12 @@ class ArrangeOptions:
     fret_max: int = NECK_FRET_MAX
     # --- the request ---
     # The six questions as one value: who plays the tune, when each accompaniment
-    # layer attacks, and what each states. Everything else in this dataclass is the
-    # engine's **implementation axis**; `None` means "derive it from the request",
-    # and a value is the axis spelled out - which is how the axis tests hold a
-    # texture or a bass policy directly to its own behaviour.
+    # layer attacks, and what each states. It is the **one** door to the axes below
+    # - how many notes the chord part states, the note rules the thumb line is
+    # written on, and which parts the guitar takes are all derived from it by
+    # `resolve_request`, so there is no second spelling of any of them to keep in
+    # step.
     request: Request = Request()
-    # --- implementation overrides ---
-    # How many notes the chord part states (`TEXTURE_ARITY`). Derived from
-    # `request.chord_notes`: `full` is `uniform`, which means the most the right
-    # hand can fit at that position.
-    texture: Optional[str] = None
-    # The note rules the thumb line is written on (`BASS_RULES`). Derived from
-    # `request.bass_notes`, or `none` when `request.bass_on` never attacks.
-    bass: Optional[str] = None
-    # Which of melody / bass / chord the guitar takes (`PART_NAMES`). Derived from
-    # the request, because the three questions already decide it: the tune, a chord
-    # position, a bass position.
-    parts: Optional[str] = None
     # The metre as one value: the count, the denominator and the grouping. The
     # denominator is not decoration - a beat is `4 / beat_type` quarters, so the
     # count alone says which beats exist but not how long one lasts. The grouping is
