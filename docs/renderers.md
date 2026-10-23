@@ -134,9 +134,10 @@ chord again or lets it ring. On the comping route that ambiguity is load-bearing
 `melody_voiced=False` removes the soprano a `repeated` step would re-articulate, so the
 engine deliberately holds the whole shape there (`render._step_cells`). The chord's own
 rhythm is the fact that separates the two, and `slot_plan._chord_attacks` is its one home:
-a position the request **named** - a `--chord-on` position, a stab under a held note - or a
-slot the chord layer invented where the tune is silent is a new attack; a slot the
-eighth-note skeleton invented under a sustaining note is a hold, and stays one.
+a position the request **named** - a `--chord-on` position, the tune's own onsets on a
+comping selection, a stab under a held note - or a slot the chord layer invented where the
+tune is silent is a new attack; a slot the eighth-note skeleton invented under a sustaining
+note is a hold, and stays one.
 
 **The last row is the one the score cannot express otherwise.** GP5 has no way to write a
 string that sounds without being plucked, so a held shape is written as `NoteType.tie`

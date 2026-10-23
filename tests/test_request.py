@@ -221,18 +221,23 @@ class TestTheContentQuestions(unittest.TestCase):
 class TestTheRefusals(unittest.TestCase):
     """A request the engine cannot honour is answered before any voicing work."""
 
-    def test_no_melody_reads_the_melody_s_rhythm_as_every_beat(self):
-        """The default cannot attach to a tune this guitar does not play.
+    def test_no_melody_keeps_the_tune_s_own_rhythm(self):
+        """`--no-melody` reads the written onsets, as every other request does.
 
-        It is a **derivation** rather than a refusal: `--no-melody` on its own is a
-        complete request, and the header prints the positions it resolved to. The
-        refusal this replaces told the caller to name positions such as `every-beat`,
-        which is the answer the metre has anyway.
+        **This assertion is inverted, not deleted** (AGENTS.md trap 5). The default
+        used to be *derived* to `every-beat` on the grounds that "this guitar has no
+        melody to attach it to"; the written onsets are a fact about the *score*, which
+        is how `bass_on="melody"` has always read them, so the comp states the chord
+        where the tune states a note. Every felt beat is the request that names it.
         """
         for spelling in ("melody", ""):
             request = Request(melody=False, **({"chord_on": spelling} if spelling else {}))
             resolved = resolve_request(request, 4)
-            self.assertEqual(resolved.chord_on, "1,2,3,4", spelling)
+            self.assertEqual(resolved.chord_on, "melody", spelling)
+        self.assertEqual(
+            resolve_request(Request(melody=False, chord_on="every-beat"), 4).chord_on,
+            "1,2,3,4",
+        )
 
     def test_no_melody_cannot_ask_for_rest_fills(self):
         with self.assertRaises(ValueError) as caught:

@@ -379,26 +379,31 @@ class TestHeadCli(unittest.TestCase):
         self.assertEqual(self.code, 0, again)
         self.assertIn(f"chord-on={fields['chord-on']}", again)
 
-    def test_no_melody_defaults_the_chord_to_every_beat(self):
-        """`--no-melody` hands the tune away, and the chord defaults to every beat.
+    def test_no_melody_keeps_the_chord_on_the_tune_s_rhythm(self):
+        """`--no-melody` hands the tune away and comps the tune's own onsets.
 
-        The default is a **derivation**, not a rule: `chord-on=melody` names the written
-        onsets, and this guitar has none - so the metre's own reading is used, and the
-        canonical header prints the positions it actually resolved to rather than the
-        word `every-beat`. Spellings are one request: omitting the flag and naming
-        `melody` produce the same arrangement.
+        **This assertion is inverted, not deleted** (AGENTS.md trap 5). The header used
+        to print the derived positions (`chord-on=1,2,3,4`) because the `melody` default
+        was rewritten to `every-beat` for a request with no tune; the written onsets are
+        a fact about the *score*, so the header prints `chord-on=melody` and the comp
+        falls where the tune does. Every felt beat is a request of its own.
         """
         output = self.run_cli(RAINY_DAY, "--bars", "1-3", "--no-melody")
         self.assertEqual(self.code, 0)
         self.assertIn("melody=off", output)
-        self.assertIn("chord-on=", output)
-        self.assertNotIn("chord-on=melody", output)
+        self.assertIn("chord-on=melody", output)
 
         named = self.run_cli(
             RAINY_DAY, "--bars", "1-3", "--no-melody", "--chord-on", "melody"
         )
         self.assertEqual(self.code, 0)
         self.assertEqual(named, output, "two spellings of one request differed")
+
+        every = self.run_cli(
+            RAINY_DAY, "--bars", "1-3", "--no-melody", "--chord-on", "every-beat"
+        )
+        self.assertEqual(self.code, 0)
+        self.assertNotEqual(every, output, "every-beat is a request of its own")
 
     def test_bass_on_is_what_writes_a_bass_line(self):
         """`--bass-on` is the only thing that adds a note below the tune.

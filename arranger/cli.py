@@ -159,9 +159,9 @@ HEAD_HELP = CommonHelp(
     mutes="with --tab staff, spell out the unsounded strings",
     tab="'staff' lays the head on one six-line staff, spaced on its real rhythm",
     no_melody=(
-        "hand the tune to another instrument and comp instead. The chord then "
-        "attacks on every felt beat - the default names the written melody's "
-        "onsets, and this guitar has none - unless --chord-on names positions"
+        "hand the tune to another instrument and comp instead. The chord keeps "
+        "the tune's own written onsets, so the comp falls where the tune does - "
+        "pass --chord-on every-beat for one on every felt beat, or name positions"
     ),
     chord_on=(
         "when the chord attacks, comma-separated, in felt beats: 'melody' (the "

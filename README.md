@@ -113,7 +113,7 @@ python -m arranger head tests/data/synthetic_triplets.mxl --bars 1-3 --html head
 | `--bars` | whole head | half-open `LO-HI`; **bounds may be negative** for pickups |
 | `--non-chord-tone` | `extension` | how to harmonise melody note outside chord |
 | `--fallback` | off | `diminished` — see [non-chord melody notes](#non-chord-melody-notes) |
-| `--no-melody` | off | the guitar does not sing: the tune belongs to somebody else, and the chord defaults to every felt beat |
+| `--no-melody` | off | the guitar does not sing: the tune belongs to somebody else, and the chord keeps the tune's own written onsets |
 | `--chord-on` | `melody` | when the chord attacks: the written onsets, `none`, or positions such as `1and` or `every-beat` |
 | `--chord-notes` | `full` | how many chord tones it states: `full`, `targets`, `3`, `2`, `1` |
 | `--chord-fills` | `none` | what it states in a notated melody rest: `hold` one chord, or `comp` a felt beat at a time |
@@ -437,7 +437,7 @@ Three separate questions, one flag each: **does the guitar sing the tune**, **wh
 | the chord alone, for a horn on the tune | `--no-melody --chord-on every-beat` |
 | a bass line alone | `--no-melody --chord-on none --bass-on every-beat` |
 
-**The tune is the guitar's unless `--no-melody` is passed**, and that flag is a complete request on its own: the chord's default names the written onsets, this guitar has none, so the metre's own reading is used — every felt beat. The run header prints the resolved positions (`chord-on=1,2,3,4`, or `1,2` in 2/2), so the derivation is visible rather than assumed.
+**The tune is the guitar's unless `--no-melody` is passed**, and that flag is a complete request on its own: the chord's default is the written onsets, and those are a fact about the *score* rather than about who plays it, so the comp falls where the tune does — the tune's own rhythm, not a substitute for it. Every felt beat is the one flag away it always was (`--chord-on every-beat`), and the run header prints the resolved rhythm (`chord-on=melody`, or `1,2,3,4` for the explicit ask), so what the comp is doing is on the line rather than assumed.
 
 `--bass-notes` names what each thumb note is: `root` is the chord's root, `root-5th` alternates root and fifth, and `walk` is the full `root,5th,approach,nearest` chain — a note on every requested position, moving toward the next chord rather than repeating a grid. The rhythm is `--bass-on`'s, so `--bass-on every-beat --bass-notes root` is a pedal on every felt beat, which is what it says.
 
@@ -483,13 +483,11 @@ python -m arranger head tests/data/synthetic_repeat_slash.musicxml --bars 1-2 \
 
 ```text
 Gmaj9    D4  5    x-x-x-x-7-7       (comping - B 3 & F# 7; the guitar does not play the tune)
-Gmaj9    D4  5    x-x-x-x-x-x       (the guitar rests here -
-                                    no part was asked to sound at this position)
 Gmaj9    D4  5    x-x-x-x-7-7       (comping - B 3 & F# 7; the guitar does not play the tune)
-Gmaj9/F# D4  5    x-x-x-x-x-x       (the guitar rests here - no part was asked to sound at this position)
+Gmaj9/F# D4  5    x-x-x-x-7-7       (comping - B 3 & F# 7; the guitar does not play the tune)
 ```
 
-Expect **the arity** per step — two here, three under `--chord-notes 3` and one under `1` — not a count of layers. A position the chord rhythm does not name is a **rest**, emitted rather than dropped so the part keeps its place against the tune; that is why a 2/2 bar shows two comped positions and two rests. `step.melody` still carries the horn's note and `step.melody_voiced` is False — the first is the written tune, the second is who sounds it.
+Expect **the arity** per step — two here, three under `--chord-notes 3` and one under `1` — not a count of layers. The comp falls on the **tune's own onsets**: this bar of the head states three notes (beat 1, the and of 1 and the and of 2), so there are three attacks and no rests. Ask for a rhythm of its own and the positions it does not name become **rests**, emitted rather than dropped so the part keeps its place against the tune — `--chord-on 1,2` on the same bar comps beats 1 and 2 and rests the two offbeats the tune states between them. `step.melody` still carries the horn's note and `step.melody_voiced` is False — the first is the written tune, the second is who sounds it.
 
 **Shape chosen from the chord alone.** `get_comping_voicings` takes no melody argument; `D5` and `G3` under the same chord return *identical* candidate sets. A chord tone in the shell may land on the same pitch class as the melody — unremarkable, and the guide-tone ear needs it anyway. Every voiceable quality has a comping shape in some playable position, checked over `CHORD_TONES_FROM_ROOT`. A quality with no readable root gets nothing: a shell is a claim about *this* chord's 3rd and 7th, and guessing without the root is how wrong notes get in.
 
@@ -549,7 +547,7 @@ Gmaj9/F# D4  5    x-x-x-x-3-x       (harmony under 5 - melody alone, the most th
 
 One stab, on the and of 1; the melody notes elsewhere are the tune alone. **A stab lasts its felt beat and no further** — the beats it does not fill are written as a rest — and a position the metre does not have is refused rather than clamped.
 
-**Every position you name is a new attack**, even where the chord is the same shape as the one before it. `--no-melody --chord-on 1,2` on a 2/2 head strikes the same chord twice a bar, and the staff, the HTML, the score and the GP5 file all draw both; a comp on `--chord-on every-beat` is four attacks a bar, not one long chord. Only a position the engine *invents* — a slot the tune merely sustains through — is a hold.
+**Every position you name is a new attack**, even where the chord is the same shape as the one before it. `--no-melody --chord-on 1,2` on a 2/2 head strikes the same chord twice a bar, and the staff, the HTML, the score and the GP5 file all draw both; a comp on `--chord-on every-beat` is four attacks a bar, not one long chord. **The tune's own rhythm counts as named positions too**: a comp whose chord rhythm is `melody` strikes at each written onset, which is why `--no-melody` writes one attack per note of the tune rather than one chord per bar. Only a position the engine *invents* — a slot the tune merely sustains through — is a hold.
 
 **What happens to a melody note with no chord on it depends who sings** — the one place the rhythm needs two answers:
 

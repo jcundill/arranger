@@ -318,6 +318,24 @@ def _chord_here(
     )
 
 
+def _tune_onset_attack(
+    inputs: SlotInputs,
+    slot: Slot,
+    melody_note: Note,
+) -> bool:
+    """Whether this slot is one the **tune's own rhythm** names and the guitar comps.
+
+    `melody` is the written tune rather than a figure, so it has no position list to
+    ask: the onsets `melody_onsets` carries are what answer for it. Only a slot the
+    guitar is **not** singing needs the flag - a sung onset re-strikes through
+    `ArrangementStep.repeated` or by carrying a different soprano, and setting it there
+    would turn the collapse off for chord-melody.
+    """
+    if _sings_here(inputs, slot.index, melody_note):
+        return False
+    return inputs.melody_onsets is None or slot.index in inputs.melody_onsets
+
+
 def _chord_attacks(
     inputs: SlotInputs,
     slot: Slot,
@@ -337,21 +355,28 @@ def _chord_attacks(
       in the tune is being re-articulated, so there is no hold to preserve;
     - the chord's **own rhythm names this beat**. `--chord-on every-beat` on a comp is
       four stabs a bar, and `--chord-on melody,1and` adds one under a note the tune is
-      holding.
+      holding - the named positions, and the tune's own onsets, which
+      `_tune_onset_attack` answers.
 
-    A written melody onset needs no clause of its own: a step there re-strikes through
-    `ArrangementStep.repeated` or by carrying a different soprano. A position the
-    eighth-note skeleton invented, where the tune merely sustains, is neither - that is
-    the hold `tabstaff._collapse_holds` and `tabscore._is_hold` exist for.
+    What the second clause keeps is the case the flag exists for: two identical comping
+    shapes under a tune that moves are one attack and one hold by pitch alone, so
+    without it a comp on the tune's rhythm was written as one chord per bar.
+
+    A position the eighth-note skeleton invented, where the tune merely sustains, is
+    neither - that is the hold `tabstaff._collapse_holds` and `tabscore._is_hold`
+    exist for.
 
     """
     if melody_note is None:
         return True
-    if inputs.chord_rhythm is None:
+    rhythm = inputs.chord_rhythm
+    if rhythm is None:
         return False
-    return inputs.chord_rhythm.includes(
-        slot.beat, inputs.beats_per_bar, inputs.grouping
-    )
+    if rhythm.includes(slot.beat, inputs.beats_per_bar, inputs.grouping):
+        return True
+    if not rhythm.wants_melody:
+        return False
+    return _tune_onset_attack(inputs, slot, melody_note)
 
 
 def slot_state(

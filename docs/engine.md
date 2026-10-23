@@ -814,10 +814,12 @@ The metre is read from the score (its grouping, below) rather than from a flag.
 **The resolution is a derivation with refusals, not a set of defaults**, and it happens
 before any voicing work (`options.resolve_request` → `resolution`). A content question
 about a layer the request leaves silent is refused with the reason; a position the metre
-does not have is refused by the parser; and `--no-melody` derives the chord's rhythm to
-the metre's felt beats rather than refusing, because its default names a melody this
-guitar does not have. A **spelled axis** still wins over the derivation in the Python
-API, which is what lets this document's measurements be taken on one axis at a time.
+does not have is refused by the parser; and `--no-melody` needs no derivation at all,
+because the written onsets are a fact about the **score** rather than about who plays it:
+a comping selection states the chord where the tune states a note, and
+`chord_on="every-beat"` is how a caller asks for the metre's own reading. A **spelled
+axis** still wins over the derivation in the Python API, which is what lets this
+document's measurements be taken on one axis at a time.
 
 ## Texture: chords on the beats, fills between
 

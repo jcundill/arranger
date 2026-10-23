@@ -35,7 +35,6 @@ from .bass_rules import (
     BASS_STYLE_NONE,
 )
 from .grid import (
-    RHYTHM_EVERY_BEAT,
     RHYTHM_MELODY,
     RHYTHM_NONE,
     Rhythm,
@@ -188,16 +187,15 @@ def resolve_request(
     refused rather than ignored - the library's standing rule that a request it
     cannot honour is answered with a reason, never with an arrangement that quietly
     answers a different one.
+
+    **`chord_on="melody"` reads the same whether or not this guitar sings the tune.**
+    The written onsets are a fact about the *score* - which is how `bass_on="melody"`
+    has always read them - so a comping selection states the chord on the tune's own
+    rhythm rather than being handed the metre's reading in its place. A caller who
+    wants every felt beat asks for it: `chord_on="every-beat"` is the same request
+    whichever part is the guitar's.
     """
     chord_rhythm = parse_rhythm(request.chord_on, beats_per_bar, grouping)
-    if not request.melody and chord_rhythm.wants_melody:
-        # **`--no-melody` on its own is a complete request.** The chord's default is
-        # "the written onsets", and a request that hands the tune to another instrument
-        # has none - so the answer is the metre's own reading of where a chord falls,
-        # which is every beat. It is a **derivation rather than a silent default**: the
-        # run header prints the resolved positions (`chord-on=1,2,3,4`), so a caller who
-        # wanted a sparser comp names it and can see what they were given otherwise.
-        chord_rhythm = parse_rhythm(RHYTHM_EVERY_BEAT, beats_per_bar, grouping)
     bass_rhythm = parse_rhythm(request.bass_on, beats_per_bar, grouping)
     return _resolved(request, chord_rhythm, bass_rhythm)
 
@@ -300,9 +298,9 @@ def _refuse_melody(resolved: ResolvedRequest) -> None:
 
     It is about a **span of the tune** - its notated rests - and the guitar has no
     tune on its part to attach it to, so it cannot be answered by guessing a different
-    policy. `chord-on=melody` used to be refused here too; it is now derived to
-    `every-beat` in `resolve_request`, which is the one answer that keeps
-    `--no-melody` a complete request.
+    policy. `chord-on=melody` is not refused and needs no derivation: the written
+    onsets are a fact about the score, so a comping selection reads them like any
+    other request does.
     """
     if not resolved.melody and resolved.chord_fills != CHORD_FILLS_NONE:
         raise ValueError(
