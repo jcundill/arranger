@@ -197,22 +197,6 @@ class TestFormatProgression(unittest.TestCase):
             self.assertIn(step_annotation(step).strip(), line)
             self.assertIn(step.chord, line)
 
-    def test_vertical_is_not_an_argument(self):
-        """`format_progression` does not take `vertical`, and says so by raising.
-
-        The inversion of the test this replaces, which asserted that `vertical=True`
-        gave seven lines per step. That branch is gone: the compact one-line form is
-        the whole renderer, and a whole-progression staff is `format_tab_staff`'s
-        job. Asserting the `TypeError` pins the removal, so a caller that still
-        passes it gets a clear failure rather than a silently different rendering.
-
-        A `TypeError` is the honest form of that failure: the parameter was removed
-        rather than deprecated, so there is nothing to warn about and nothing to
-        keep working.
-        """
-        with self.assertRaises(TypeError):
-            format_progression(self.major, vertical=True)  # type: ignore[call-arg]
-
     def test_non_chord_tone_step_is_annotated(self):
         """
         The D5 in 'All of Me' bar 2 is the 9th over Cmaj7, so the default

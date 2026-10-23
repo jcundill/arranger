@@ -984,16 +984,13 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
         self.assertEqual([s.bass for s in plain], [None] * len(plain))
         self.assertTrue(any(s.bass is not None for s in walked))
 
-    def test_uniform_no_longer_refuses_the_line_because_a_string_is_free(self):
+    def test_uniform_admits_the_line_because_a_string_is_free(self):
         """
-        This was the tree's one refusal, and the set behind it is gone.
-
-        `uniform`'s palette held `drop24`'s `(4,2,1,0)`, the one reachable shape spanning
-        all three thumb strings, so `bass_allowed` refused every policy and the caller was
-        told which texture would work instead. The four inner-skip `drop24` sets were
-        removed for a *finger* reason (`docs/history/fingering.md` §4.4) and that set was among
-        them, so the worst case `uniform` can reach now leaves one string free - the rule's
-        threshold - and the line is written.
+        No shape in `uniform`'s palette spans all three thumb strings, so `bass_allowed`
+        admits every policy. `drop24`'s `(4,2,1,0)` was the one reachable shape that did,
+        and the four inner-skip `drop24` sets are not in the tables for a *finger* reason
+        (`docs/history/fingering.md` §4.4): the worst case `uniform` can reach leaves one
+        string free - the rule's threshold - and the line is written.
 
         The line is written rather than refused, and the half that made the refusal safe
         still holds: the arrangement sounds one step per melody note, so a silently

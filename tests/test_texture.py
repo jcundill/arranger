@@ -427,13 +427,9 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
 
     def test_only_the_arity_and_the_thumb_change_the_palette(self):
         """
-        There is no other input, which is what `grips=` being deleted *means*.
-
-        The four arguments of `texture_palette` are the whole surface - role,
-        texture, parts, and whether a thumb is taking a string - so the assertion
-        that no third thing narrows a palette is a signature check plus a TypeError
-        on the old spelling. Both are cheap and both fail loudly if a request
-        channel is ever reintroduced without a decision.
+        The four arguments of `texture_palette` are the whole surface - role, texture,
+        parts, and whether a thumb is taking a string - so no third thing narrows a
+        palette. A request channel reintroduced without a decision fails here.
         """
         import inspect
 
@@ -441,13 +437,6 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
             list(inspect.signature(texture_palette).parameters),
             ["role", "texture", "parts", "has_thumb"],
         )
-        with self.assertRaises(TypeError):
-            VoiceLeadingEngine.arrange_progression(
-                self.PROGRESSION,
-                timings=[(0, 1.0, 1.0)],
-                grips=("shell",),  # type: ignore[call-arg]
-            )
-        self.assertFalse(hasattr(arranger.options.ArrangeOptions, "grips"))
 
     def test_an_empty_palette_still_arranges(self):
         """

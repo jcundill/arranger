@@ -1036,7 +1036,7 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
         self.assertTrue(steps, "an arrangement with no steps at all is a defect")
         return steps
 
-    def test_the_default_texture_no_longer_refuses_a_thumb_line(self):
+    def test_the_default_texture_admits_a_thumb_line(self):
         """The regression itself: a walk under the default texture.
 
         Asserted on the *thumb notes* rather than on the warning, because a fix that

@@ -184,7 +184,7 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
                 f"{nearest} frets away",
             )
 
-    def test_the_documented_bar_no_longer_asks_for_a_seven_fret_stretch(self):
+    def test_the_documented_bar_asks_for_a_playable_stretch(self):
         """
         The exact pair from the report: bar 4 holds frets 6-8 and bar 5 needs the D
         string at fret 1.

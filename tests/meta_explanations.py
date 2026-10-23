@@ -20,9 +20,8 @@ because a rule with unnamed exceptions is a rule the next editor deletes:
   question, and a witness that recomputed it would be the clause agreeing with itself.
   `TestEveryChoiceIsExplained.test_the_slash_bass_clause_is_not_a_tautology` pins it directly.
 
-A third exemption - a melody-alone shape getting no neck-window clause, on the grounds that
-its fret is where the melody has to be rather than a choice - is **gone**, because its premise
-is gone: a lone note is chosen from a palette of single-note shapes (one position per eligible
+A melody-alone shape gets a neck-window clause: a lone note is chosen from a palette of
+single-note shapes (one position per eligible
 string) by the same `cost.voicing_cost` a chord goes through, so its fret *is* a shape the
 engine picked from alternatives, and the window clause has a measured `Palette.inside_window`
 to state. `TestTheLoneNoteKeepsTheWindowHonest` holds that down from both ends: the clause
@@ -672,7 +671,7 @@ class TestTheLoneNoteKeepsTheWindowHonest(unittest.TestCase):
     ]
 
     def test_every_lone_shape_reports_the_palette_it_came_from(self):
-        """A lone step always has a palette - the exemption's premise is gone."""
+        """A lone step always has a palette."""
         checked = 0
         for head in HEADS:
             for config in self.CONFIGS:

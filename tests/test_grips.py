@@ -19,7 +19,6 @@ import unittest
 
 from musthe import Note
 
-import arranger as package
 from arranger import (
     ChordParser,
     GuitarFretboard,
@@ -174,9 +173,9 @@ class TestDuoSecondVoice(unittest.TestCase):
         )
 
     def test_a_duo_is_generated_under_any_chord_tone(self):
-        """The melody gate is gone: every chord tone admits a duo.
+        """Every chord tone admits a duo.
 
-        Including the 3rd and the 7th, which the old rule refused outright.
+        Including the 3rd and the 7th.
 
         The melody is placed at the chord's own octave (`root4`), not from
         `get_chord_tones`, which returns *absolute* pitch classes: adding those to the
@@ -594,7 +593,7 @@ class TestFiveThreeTwoHighEShell(unittest.TestCase):
         """
         self.assertEqual(self.shells("Db5", "maj7", "Fmaj7"), [])
 
-    def test_the_high_e_soprano_is_no_longer_the_only_poorly_served_one(self):
+    def test_the_high_e_soprano_is_not_the_only_poorly_served_one(self):
         """
         The asymmetry that motivated the set, asserted on the table so a later removal
         cannot pass unnoticed: before it, soprano 5 had one shell shape while the B and
@@ -1283,21 +1282,12 @@ class TestClosePosition(unittest.TestCase):
 
 
 class TestTheFamilyIsNotASpelling(unittest.TestCase):
-    """There is no `--grips` and no `parse_grips`: a family is not a choice.
+    """A family is the chord part's internal search space, not a caller's choice.
 
-    The families are the chord part's *internal search space* (`docs/history/parts.md` §4):
-    `parts` says which parts sound, `texture` says how many notes the chord part
-    states, and `TONE_PRIORITY` plus the neck window decide which family states
-    them. A comma-separated list of families, in the order the caller ranked them, is not
-    a spelling this library accepts, and what is asserted here is that it stays that way.
+    `parts` says which parts sound, `chord_notes` says how many notes the chord part
+    states, and `TONE_PRIORITY` plus the neck window decide which family states them
+    (`docs/history/parts.md` §4).
     """
-
-    def test_the_flag_and_the_parser_are_both_gone(self):
-        """A surviving alias would keep the collision addressable (`§8`)."""
-        self.assertFalse(hasattr(package, "parse_grips"))
-        for module in (package, package.cli):
-            with self.subTest(module=module.__name__):
-                self.assertNotIn("parse_grips", getattr(module, "__all__", []))
 
     def test_the_palette_is_still_the_generation_order(self):
         """`GRIP_PREFERENCE` survives as the order candidates are generated in.

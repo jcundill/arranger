@@ -204,10 +204,9 @@ class TestTheTwoLoopsAgree(unittest.TestCase):
     def test_a_narrowed_palette_agrees(self):
         """A narrowed palette is the texture's now, and the thumb line is where it bites.
 
-        **Rewritten from `test_a_grip_the_role_does_use_agrees`.** What a caller narrowed
-        was a `grips=` list, and the family axis is deleted; the chord content owns the
-        arity, so `test_every_chord_content_over_the_shared_fixtures` above sweeps every
-        narrowing there is. What is left here is the path a walk needs - a rule that merges
+        The chord content owns the arity, so
+        `test_every_chord_content_over_the_shared_fixtures` above sweeps every narrowing
+        there is. What is asserted here is the path a walk needs - a rule that merges
         a thumb note into a shape the hand is holding, which no other test in this file
         asks for.
         """

@@ -11,7 +11,6 @@ import tempfile
 import unittest
 from xml.etree import ElementTree
 
-import arranger
 from arranger import format_progression
 from headxml import (
     arrange_xml_head,
@@ -304,28 +303,13 @@ class TestHeadCli(unittest.TestCase):
         self.assertIn("Dm7", output)
         self.assertIn("jazz-arranger[xml]", output)
 
-    def test_the_grips_flag_is_gone_and_a_list_flag_is_one_argument(self):
-        """The deleted spelling is a usage error, and the surviving list is one string.
+    def test_a_list_flag_is_one_argument(self):
+        """`--chord-on` is one comma-separated string, never `nargs="+"`.
 
-        `--grips` named a family list, and the family axis is deleted, so the flag is gone
-        rather than deprecated: a spelling quietly ignored would arrange something other
-        than what the run header reported. What survives of its lesson is `--chord-on`,
-        the same shape of option - a list, spelled the way the flags beside it spell one -
-        and it is one argument, never `nargs="+"`.
+        An option that takes a list with spaces consumes the positional written after it,
+        so it could only ever come last - and the run header prints the spelling back, so
+        the line a reader copies has to be the line the parser accepts.
         """
-        import io
-        from contextlib import redirect_stderr
-
-        from arranger.options import ArrangeOptions
-
-        errors = io.StringIO()
-        with redirect_stderr(errors), self.assertRaises(SystemExit):
-            self.run_cli(RAINY_DAY, "--grips", "shell,duo")
-        self.assertIn("--grips", errors.getvalue())
-        # And the library's spelling went with the flag, both halves of it.
-        self.assertFalse(hasattr(arranger, "parse_grips"))
-        self.assertFalse(hasattr(ArrangeOptions(), "grips"))
-
         output = self.run_cli(RAINY_DAY, "--bars", "1-3", "--chord-on", "1,2and")
         self.assertEqual(self.code, 0)
         self.assertIn("chord-on=1,2and", output)

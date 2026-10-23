@@ -72,14 +72,14 @@ class TestReductionAndArranging(unittest.TestCase):
         self.assertEqual([s[2] for s in head_skeleton(head)], [1.0, 2.0, 3.0, 4.0])
         self.assertEqual([s[2] for s in head_skeleton(head)], [1.0, 2.0, 3.0, 4.0])
 
-    def test_the_strategy_no_longer_changes_which_notes_are_played(self):
+    def test_the_strategy_does_not_change_which_notes_are_played(self):
         """Four eighths a bar sound once under **every** setting, not just `eighths`.
 
         **This inverts the density test that stood here**, which asserted that a coarser
         grid kept strictly fewer slots - `beats` dropping the notes between the beats.
-        That was the grid doing a melody reduction, which is what cost 24 notes on the
-        committed triplet head, and it is gone: `--skeleton` is a melody-*selection* flag
-        and no setting of it removes a note of the tune.
+        A grid that dropped the notes between the beats would be reducing the melody, which
+        is what cost 24 notes on the committed triplet head: `--skeleton` is a
+        melody-*selection* flag and no setting of it removes a note of the tune.
 
         Where chords fall is the rhythm axis's question rather than this flag's: every
         setting plays the tune and differs only in

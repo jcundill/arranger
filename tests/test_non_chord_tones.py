@@ -283,20 +283,6 @@ class TestNonChordToneResolution(unittest.TestCase):
             ("dim7", "Bdim7"),
         )
 
-    def test_legacy_strategy_is_gone_from_the_vocabulary(self):
-        """`legacy` named an era, not a behaviour, and is removed rather than aliased.
-
-        Its one real instruction - substitute nothing - survives where it has a
-        comping meaning (`sustain`) and as the quality-only fallback the extension
-        table's own gaps leave in place. A deprecated alias kept working would be
-        the same fact stated twice; see AGENTS.md trap 5.
-        """
-        self.assertNotIn("legacy", VoiceLeadingEngine.NON_CHORD_TONE_STRATEGIES)
-        with self.assertRaises(ValueError):
-            self.engine.arrange_progression(
-                [("D5", "maj7", "Cmaj7")], non_chord_tone="legacy"
-            )
-
 
 class TestThePaletteRescue(unittest.TestCase):
     """A chord no shape in the palette can carry leaves the tune alone, and says so.

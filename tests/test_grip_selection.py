@@ -91,7 +91,7 @@ class TestSelectionDeterminism(unittest.TestCase):
         second = VoiceLeadingEngine.arrange_progression(progression)
         self.assertEqual([s.tab_line() for s in first], [s.tab_line() for s in second])
 
-    def test_pinning_a_family_is_no_longer_possible(self):
+    def test_the_family_is_the_engines_search_space(self):
         """The family is the engine's search space, so there is nothing to pin.
 
         A caller chooses the *arity* (`chord_notes`) and the parts, and `TONE_PRIORITY` plus

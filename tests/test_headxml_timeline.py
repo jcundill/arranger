@@ -986,8 +986,7 @@ class TestSilentSlotsCarryNoMelody(unittest.TestCase):
         on a singing selection is a real case: the guitar has no tune here, so it states
         the chord instead of inventing one (the rule the deleted placeholder broke) or
         dropping the bar. The chord still sounds; only the melody is absent, which the
-        renderers print blank. This is the inversion AGENTS.md trap 5 asks for - the
-        premise the old assertion rested on is gone.
+        renderers print blank.
         """
         steps, _rescued, _notes = arrange_slots(
             [(None, "m7", "Dm7"), ("C5", "maj7", "Cmaj7")],

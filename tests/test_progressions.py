@@ -43,8 +43,9 @@ class TestProgressions(unittest.TestCase):
         # The Cm7 is a **drop-3** where it was a drop-2 & 4 at `x-10-10-x-11-11`. The four
         # notes are the same four chord tones - Bb3 G4 C5 Eb5 is b7, 5, root and b3, the
         # same notes the drop-2 & 4 carried - but the drop-2 & 4 that fitted here was one of
-        # the four inner-skip `drop24` sets, and those are gone because a finger had to
-        # reach over an unplucked string to fret them (`docs/history/fingering.md` §4.4; the table's
+        # the four inner-skip `drop24` sets, which the tables do not hold because a finger
+        # would have to reach over an unplucked string to fret them
+        # (`docs/history/fingering.md` §4.4; the table's
         # own comment holds the measured price). The replacement spans 2 where the old
         # shape spanned 1: that is the cost this end of the ban pays.
         self.assertEqual(result[2].voicing.grip, "drop3")

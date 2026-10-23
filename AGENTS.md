@@ -58,7 +58,7 @@ quoting one.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1292 feature + 85 meta tests OK (skipped=2)**, pyright
+Current measured state: **1287 feature + 85 meta tests OK (skipped=2)**, pyright
 **0 errors 0 warnings**, ruff **0 errors**. If your change moves any of those numbers, that
 is the signal — not the absence of an error message. A quiet run is not evidence; a moved
 count is.
@@ -646,6 +646,17 @@ Each of these cost real time, or nearly shipped a defect.
    a test fails because the structure it describes is gone, **invert the assertion —
    do not delete the test.** The rule it was written for usually outlives the structure it
    was written against, so a deleted test takes a live rule with it.
+
+   **The one exception is a test whose subject *is* the deletion.** "The flag and the parser
+   are both gone" asserts nothing a caller can rely on — it asserts that yesterday's edit
+   still holds, which is history rather than a rule, and it goes. The distinction is the
+   speech act: a test pinning behaviour is inverted and renamed
+   (`test_the_axis_is_not_a_keyword_on_the_entry_point`), while a test only asking "is the
+   retired name still absent?" is deleted, because a standing mechanism is what keeps it
+   absent — `meta_structure.RETIRED_AXIS_KEYWORDS`, `meta_dead_code`, and the vocabulary's
+   own refusal (`test_request.py`), which is where a name outside a vocabulary is answered
+   for. Check that the live rule has one of those homes **before** deleting, or the
+   deletion takes the rule with it, which is this trap's original cost.
 
 6. **When consolidating two branches, check whether their *outputs* differ before
    unifying their predicates.** `melody_alone_case` nearly shipped as a `bool`, and

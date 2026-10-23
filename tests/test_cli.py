@@ -120,7 +120,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         parser there is nothing to disagree with, so what the count is for changes:
         it is now a tripwire for a flag appearing or vanishing unnoticed.
 
-        **20, and the grouping flag that briefly made it 21 is gone.** The metre's
+        **20 flags.** The metre's
         third fact - which denominator units are felt as one beat - is the score's
         own: the importer reads an `N+N` direction, the beaming or a metronome pulse,
         and a hand-built progression declares the whole metre as a `TimeSignature`. A
@@ -159,9 +159,9 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         'tests/data/...'`), so a list option written *before* the file could not work at
         all. `AGENTS.md` trap 14 is the rule - a list-valued option is one comma-separated
         string the module that owns the vocabulary parses, never `nargs` and never
-        `choices` - and the two rhythm flags are what carry it now that `--parts` and
-        `--grid` are gone. Asserted on the parse rather than on a whole run, because a
-        positional is the parser's business and no score is needed to see it eaten.
+        `choices` - and the two rhythm flags are what carry it. Asserted on the parse
+        rather than on a whole run, because a positional is the parser's business and no
+        score is needed to see it eaten.
 
         **Neither rhythm flag takes `choices`**, because the grammar is open-ended: a
         position list is only legal against a metre, and `--grips`' old refusal showed
@@ -235,28 +235,6 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
             sorted(declared | {"fallback", "file", "non_chord_tone", "part"}),
         )
 
-    def test_the_reduction_flags_are_gone(self):
-        """`--skeleton` and `--pick` went with the database, and that is asserted.
-
-        Both were a *reduction* - they decided which melody notes were dropped -
-        and the MusicXML path does not reduce: every written note of a score sounds,
-        because a note of the tune going missing silently is worse than a busy tab.
-        The corpus command kept both while it existed, which is why they were
-        *parameters* of `add_common_arguments` rather than flags: their vocabularies
-        belonged to `wjazzd`, and `head` never passed them.
-
-        So these two flags were unreachable before this change - gated on a
-        vocabulary the one caller had no way to supply. Removing the gate is what
-        makes them removable, and the assertion is that they are not offered: a flag
-        reaching a parameter that had gone would be a `TypeError` at first run rather
-        than a parser error, which is the worse of the two.
-        """
-        flags = self.parser()
-        for name in ("--skeleton", "--pick", "--vertical", "--melid", "--list",
-                     "--lift", "--section"):
-            with self.subTest(flag=name):
-                self.assertNotIn(name, flags)
-
     def test_head_states_the_fret_window(self):
         """The one omission, filled deliberately rather than quietly preserved.
 
@@ -297,11 +275,9 @@ class TestTheSharedDispatch(unittest.TestCase):
     replaces it; this only states the dispatch itself, which is reachable without
     a file on disk.
 
-    **These were the "shared" half of a pair of commands**, and every test here
-    existed to hold the two callers to one definition: a metre passed by one and
-    defaulted by the other had to land in the same place. That comparison is gone,
-    and what remains is the weaker and still real claim that the defaults are the
-    writers' own - which is what the tests assert.
+    **These are the writers' own defaults**, and every test here holds one of them to the
+    place it has to land: a metre the caller passes and one the writer defaults resolve to
+    the same thing, which is what the tests assert.
     """
 
     def steps(self, count: int = 2):

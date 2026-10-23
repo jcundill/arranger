@@ -20,7 +20,6 @@ from arranger.options import CHORD_NOTES, ArrangeOptions, Request
 from arranger.parts import PART_BASS, PART_CHORD, PART_MELODY, PART_NAMES
 from arranger.render import _step_cells
 from arranger.step_types import MUTED_CELL
-from arranger.texture import TEXTURE_STYLES
 from tests.support import (
     PROGRESSION,
     bass_comping,
@@ -97,20 +96,6 @@ class TestMelodyOnlySelections(unittest.TestCase):
             self.assertEqual(len(step.voicing.active_frets()), 1)
             self.assertFalse(step.melody_only)
             self.assertFalse(step.bass_only)
-
-    def test_the_old_spellings_are_gone_from_the_vocabulary(self):
-        """An unknown texture is a usage error, not a silent alias.
-
-        The precedent the corpus removal set for removed flags: a deprecated
-        spelling kept working would be the same fact stated twice, which is
-        what this stage exists to collapse.
-        """
-        self.assertNotIn("melody", TEXTURE_STYLES)
-        self.assertNotIn("melody_bass", TEXTURE_STYLES)
-        with self.assertRaises(ValueError):
-            VoiceLeadingEngine().arrange_progression(
-                PROGRESSION, options=ArrangeOptions(request=Request(chord_notes="melody"))
-            )
 
     def test_an_nc_bar_under_soprano_takes_the_no_chord_route(self):
         """
