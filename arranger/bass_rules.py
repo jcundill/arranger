@@ -426,7 +426,7 @@ def _comping_no_room_reason(notes: int, bass_voice: bool) -> str:
 def _no_room_reason(texture: str, role: str) -> str:
     """The sentence a refused combination reports.
 
-    It names an alternative texture **only if that texture would have fitted**, and it
+    It names an alternative content **only if that content would have fitted**, and it
     reads `thumb_capacity` directly rather than calling `bass_allowed`. Every non-`none`
     policy shares the same one-string threshold, so there is never a different *policy*
     to suggest - and re-entering the refusal to look would recurse. A refusal that
@@ -448,6 +448,6 @@ def _no_room_reason(texture: str, role: str) -> str:
     if fits:
         return (
             head + "Every bass policy needs the same string, so no policy fits here. "
-            f"Try texture={fits[0]!r}, or drop the bass."
+            f"Try the {fits[0]!r} content, or drop the bass."
         )
-    return head + "No texture in this set leaves the thumb a string."
+    return head + "No chord content in this set leaves the thumb a string."

@@ -22,7 +22,7 @@ gate and the conventions — not the explanation.
 | where a **lone note** is fretted — a fill, an `NC` bar, a rescued melody, a span demotion (`get_melody_only_voicings`, `_melody_alone_shape`) | [docs/engine.md](docs/engine.md) | `arranger/grips.py`, `arranger/melody_alone.py`, `arranger/routes.py`, `tests/test_non_chord_tones.py` |
 | which chord tones a shape states — `TONE_PRIORITY`, the tone a four-voice shape gives up, the palette a melody with no degree to match is offered, or the order that was not taken | [docs/history/generated-grips.md](docs/history/generated-grips.md) | `arranger/grip_tables.py` (`TONE_PRIORITY`, `stated_tones`), `arranger/grips.py` (`drop2_template_for`, `_drop2_palette`), `tests/test_generated_grips.py`, `tests/support.py` (`WITNESS`) |
 | the trailing annotation a step carries, why a shape is thin, or what **must** be explained when a choice is added (`ArrangementStep.palette`, `cost.VOICING_COST_CRITERIA`, `tests/meta_explanations.py`) | [docs/engine.md](docs/engine.md) | `arranger/annotation.py`, `arranger/text_layout.py`, `arranger/render.py`, `arranger/movement.py` |
-| `ArrangeOptions(texture=…)`, target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/texture.py`, `arranger/routes.py`, `arranger/bass_rules.py`, `arranger/bass_place.py`, `arranger/bass.py`, `arranger/decisions.py` |
+| the chord part's content (`--chord-notes`), target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/texture.py`, `arranger/routes.py`, `arranger/bass_rules.py`, `arranger/bass_place.py`, `arranger/bass.py`, `arranger/decisions.py` |
 | non-chord melody notes, a new chord quality | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` |
 | the step loop, `arrange_progression`, or **which route takes a slot** | [docs/engine.md](docs/engine.md) | `arranger/movement.py`, `arranger/route_dispatch.py`, `arranger/harmonised_route.py`, `arranger/routes.py`, `arranger/step_history.py`, `arranger/step_prepare.py`, `arranger/resolution.py`, `arranger/slot_plan.py`, `tests/meta_route_dispatch.py` |
 | a step route's arguments - `SlotContext`, one slot's request as a value rather than twenty parameters, and the `SlotInputs` groups under it (`SlotArrangementFacts`, `SlotRhythmFacts`, `SlotNeckFacts`, `SlotBassFacts`) | [docs/engine.md](docs/engine.md) | `arranger/context.py`, `arranger/slot_plan.py`, `arranger/movement.py`, `arranger/harmonised_route.py`, `arranger/routes.py` |
@@ -34,8 +34,8 @@ gate and the conventions — not the explanation.
 | an issue — where a new one is filed, and where the closed ones are recorded | [docs/open-issues.md](docs/open-issues.md) (the live ledger; none is open) and [docs/history/open-issues.md](docs/history/open-issues.md) (the record of the six it filed) | — each item is stated as **issue / problem / why it exists** with its measurement, and the figures and the behaviour are that document's own business: no test compares them with the prose or is keyed to these items |
 | a **note held over a bar line**, when the melody's end is reached, or a pickup bar (`Head.first_bar_implicit`) | [docs/engine.md](docs/engine.md) | `headxml.py` (`melody_at`, `melody_state`, `_merge_chord_slots`), `arranger/grid.py` (`beat_offset`), `tests/test_headxml_timeline.py` |
 | the left hand's budget — four fingers and the hand's five-fret reach; which strings the right hand's `p-i-m-a` pluck, the gaps between them, and how far the thumb reaches | [docs/history/fingering.md](docs/history/fingering.md) | `arranger/fingers.py` (not inert, and now **only** the budget: `bass_place` and `bass_merge` read `can_fret` for the four-finger budget **and the hand's five-fret reach** — `tests/test_fingers.py` holds the caller set to exactly `{bass_place, bass_merge}`). §5's first two steps — the assignment, the barres it implies and the movement between them — were built and then **removed**: no engine code read them, and the §4.2 measurement that was to earn a per-finger cost criterion was never taken, so the engine carries no per-finger cost. Its §4.3 measurement landed a *right-hand* rule first (`grip_tables.thumb_safe_grips`, read by `decisions.resolve_texture_grips`) and then a *left-hand* one (`fingers.can_fret`, read by `bass_place.place_bass`); its **§4.4 finger-skip half is now built**, not recorded: the four `drop24` sets that carried the skip were removed from `GRIP_STRING_SETS` (the rule is `tests/support.finger_skip_count` — the tests' now, because the tables enforce it by **not offering** the shapes that fail it — and `tests/test_grip_tables.py` holds them to it), at a price counted in chords, and the three rejected forms of the same lever are in §4.4 rather than here. Its thumb's-reach half still changes no count (`tests/test_texture.py::TestTheThumbReach` pins the reach), and **§4.3's follow-on — should the *selector* leave room for the thumb? — is now built**, as a palette narrow rather than a criterion (`decisions.leaving_room_for_the_bass`), so a requested bass note moves the shape instead of being dropped; its numbers are in [docs/history/open-issues.md](docs/history/open-issues.md) item 2 rather than here, because that item is where they are re-measured by hand and a figure repeated in this table would be a second source for one fact. **Item 5** of that document, the same §4.3 question asked from the lone-note end, closed on the same change together with `MAX_HAND_SPAN` |
-| `ArrangeOptions(parts=…)`, which of melody / bass / chord the guitar plays | [docs/engine.md](docs/engine.md) | `arranger/parts.py` (`PART_NAMES`, `parse_parts`, `parts_have_melody`, `parts_has_melody_only`) |
-| the harmonisation axes — `ArrangeOptions(parts=…)`, `texture`, `bass`, and the metre — the four-string arithmetic, and what replaced `voices=` and the grip-family axis | [docs/engine.md](docs/engine.md) | `arranger/parts.py`, `arranger/grid.py`, `arranger/grouping.py`, `arranger/texture.py`, `arranger/bass.py`, `arranger/resolution.py`, `arranger/grips.py` |
+| which of melody / bass / chord the guitar plays (derived from the request) | [docs/engine.md](docs/engine.md) | `arranger/parts.py` (`PART_NAMES`, `parts_have_melody`, `parts_has_melody_only`) |
+| the harmonisation axes — the parts selection, the chord part's content, the bass policy, and the metre — the four-string arithmetic, and what replaced `voices=` and the grip-family axis | [docs/engine.md](docs/engine.md) | `arranger/parts.py`, `arranger/grid.py`, `arranger/grouping.py`, `arranger/texture.py`, `arranger/bass.py`, `arranger/resolution.py`, `arranger/grips.py` |
 | a **held thumb**, a **restruck chord**, a **held shape the walk invented** (`bass_only`, `is_bass_only`, `melody_is_ringing`) or a stab's length — `bass_held`, `chord_attack`, `carry_bass`, `_stab_length`, and what each renderer draws for a note that sounds and is not plucked | [docs/renderers.md](docs/renderers.md) §"What the four renderers must agree about", and [docs/engine.md](docs/engine.md) §"The other hold: a beat the thumb invented" | `arranger/decisions.py` (`is_bass_only`, `melody_is_ringing`), `arranger/bass_merge.py` (`carry_bass`), `arranger/slot_plan.py` (`_chord_attacks`), `headxml.py` (`_stab_length`), `tabscore.py` (`_is_hold`, `_capped_span`), `tabstaff.py` (`_strikes_here`, `_moved_thumb`, `_draws`), `tabxml.py` (`_sounding`, `_build_note`), `tabgp.py` (`_sounding_frets`, `_strike_notes`), `tests/test_bass_hold.py`, `tests/test_chord_attack.py`, `tests/test_staff_thumb.py`, `tests/test_bass_placement.py`, `tests/test_guitarpro.py` |
 | a **lone bass line**, or a slot with nothing above the thumb (`bass_alone_step`, `lone_bass_case`, `is_shape_held`) | [docs/engine.md](docs/engine.md) | `arranger/decisions.py`, `arranger/routes.py`, `arranger/bass_place.py`, `arranger/annotation.py`, `tests/test_lone_bass.py` |
 
@@ -101,16 +101,16 @@ melody rest - and `options.resolve_request` derives the axes from them. The six 
 value spelled twice**: by those flags and by `Request(...)` on
 `arrange_progression(progression, request=Request(...))`, with `cli._REQUEST_DESTS` the one
 list holding the two spellings to the same six. Both are the **user-facing vocabulary**; the
-axes below are the engine's implementation, and **`options=ArrangeOptions(...)` is the one
-door to them** - no entry point takes an axis as a keyword, which
+axes below are the engine's implementation, **derived from the request and reachable no
+other way** - no entry point takes an axis as a keyword, which
 `tests/meta_structure.py::TestTheAxesAreNotEntryPointKeywords` holds. `texture` (how many
 chord tones the part states, `TEXTURE_STYLES`), `bass` (the note rules the thumb states,
 `BASS_RULES` in `bass_rules`), `parts` (which of melody / bass /
 chord the guitar takes, `PART_NAMES`) and the metre (`TimeSignature`: its count, denominator and
 felt grouping, `GROUPING_AUTO` plus the `N+N+…` algebra in `grouping.py`) are
 **orthogonal**, and a band setting is a combination
-rather than a mode: `ArrangeOptions(bass="none", parts="melody")` is a bassist on the root,
-a horn on the melody and the guitar holding the tune alone between them.
+rather than a mode: `Request(melody=False, chord_on="1")` with `bass_on="none"` is a horn on
+the tune, a bassist on the root, and the guitar stating the chord between them.
 The request and the metre are the exception the other way: they are **input facts** - what is
 being arranged rather than how to play it - so `request=` and `time_signature=` sit *beside*
 `options=` and are reconciled by `resolution.settle_input_fact`, which is what keeps
@@ -819,7 +819,8 @@ Each of these cost real time, or nearly shipped a defect.
     positional written after it, so `head --grips shell FILE` fed the **filename** to
     `--grips` and reported `invalid choice: 'tests/data/...'` — the flag worked only
     after the file. Every list-valued option is one comma-separated string now, parsed by
-    the module that owns the vocabulary - `parts.parse_parts` for `--parts` - so
+    the module that owns the vocabulary - `grid.parse_rhythm`, `grouping.parse_grouping` -
+    so
     `head --chord-on 1,2and FILE` and `head FILE --chord-on 1,2and` are one run — and that
     spelling is the one **the run header prints back** (`chord-on=1,2and`), so the line a
     reader copies is the line the parser accepts.
@@ -831,8 +832,8 @@ Each of these cost real time, or nearly shipped a defect.
     unquoted `&` is a shell's background operator and the token would never reach the
     parser — so the line the header prints is also a line a shell will deliver. Note a
     *selection* is canonicalised and a
-    *sequence* is not: `parse_parts` re-sorts into `PART_NAMES` order because a parts
-    selection is a set, while `--chord-on`'s positions are sorted because they are also
+    *sequence* is not: a parts selection was re-sorted into `PART_NAMES` order because it is
+    a set, while `--chord-on`'s positions are sorted because they are also
     a set — and the grip order that must not have been canonicalised was a spelling of
     the deleted family axis.
 
@@ -893,7 +894,7 @@ Each of these cost real time, or nearly shipped a defect.
 | document | what it holds |
 |---|---|
 | [README.md](README.md) | user-facing overview, worked examples, limitations |
-| [docs/engine.md](docs/engine.md) | the engine: grips, the selector, the cost tuple, the axes (`ArrangeOptions(parts=…)`, `texture`, `bass`, and `TimeSignature`), the chord's rhythm, non-chord tones, and the recipe for adding a chord quality |
+| [docs/engine.md](docs/engine.md) | the engine: grips, the selector, the cost tuple, the axes (the parts selection, the chord content, the bass policy, and `TimeSignature`), the chord's rhythm, non-chord tones, and the recipe for adding a chord quality |
 | [docs/renderers.md](docs/renderers.md) | tab staff, MusicXML import/export, GP5, and their traps |
 | [docs/dependency-dag.md](docs/dependency-dag.md) | the enforced import graphs, drawn: the engine package's layers and their main dependencies, and the front ends' recorded edges |
 | [docs/open-issues.md](docs/open-issues.md) | the issue ledger: **none is open**, and the six it filed are indexed here by number; a new issue is filed here as **issue / problem / why it exists** with its measurement and the recipe that re-measures it |

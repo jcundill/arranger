@@ -202,12 +202,10 @@ def add_common_arguments(
 ) -> None:
     """Add the flags the front end takes, to `parser`.
 
-    **One caller now.** This was written for two commands that shared a block of
-    flags, and its prose spoke throughout of "both" and "the other" - which is how
-    `--skeleton` and `--pick` are **not** offered, and the reason is a policy
-    rather than an omission: the MusicXML path does not reduce - every written note of a
-    score gets its own slot. Where chords fall is the `grid` axis, and which notes the
-    guitar plays is the `parts` axis.
+    **One caller.** Two flags are deliberately absent rather than forgotten:
+    `--skeleton` and `--pick` are **not** offered, because this path does not reduce -
+    every written note of a score gets its own slot. Where chords fall is the request's
+    `chord_on`, and which notes the guitar plays is derived from the whole request.
 
     The order the flags are added in is the order they appear in `--help`.
     """
