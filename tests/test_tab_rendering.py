@@ -549,7 +549,7 @@ class TestTheExplanationWraps(unittest.TestCase):
         for head in sweep_head_paths():
             for config in (
                 {},
-                {"options": ArrangeOptions(parts="bass,chord")},
+                {"options": ArrangeOptions(request=Request(melody=False))},
                 {"request": Request(chord_on="every-beat")},
                 {"options": ArrangeOptions(request=Request(chord_notes="targets"))},
             ):

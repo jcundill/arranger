@@ -131,16 +131,18 @@ class TestTheSingingRouteIsUntouched(unittest.TestCase):
         self.assertEqual(_lone_bass(steps), [])
 
     def test_a_melody_only_selection_sounds_its_bass_positions(self):
-        """`parts="melody,bass"` plays the tune and the thumb - a walk position included.
+        """The tune and the thumb at a walk position: `bass_on="1and"`.
 
         Its note-less slots were *tune silent* before: the selection's early answer
-        fired before the bass part's claim on the position was asked.
+        fired before the bass part's claim on the position was asked. A melody-only
+        selection names no chord position, so the thumb is the only layer that attacks.
         """
         steps, _head, _notes = arranged(
             COMMON_8,
             section=(1, 2),
-            options=ArrangeOptions(parts="melody,bass"),
-            request=Request(bass_on="1and"),
+            options=ArrangeOptions(
+                request=Request(chord_on="none", bass_on="1and", bass_notes="walk")
+            ),
         )
         sounding = [
             step for step in steps if step.bass is not None and not step.bass_held
