@@ -714,7 +714,7 @@ class TestHeadTexture(unittest.TestCase):
         is the thing under test and a hand-built fixture would supply its own.
         """
         steps, head, _notes = arrange_xml_head(
-            BUT_NOT_FOR_ME, options=ArrangeOptions(texture="targets"),
+            BUT_NOT_FOR_ME, options=ArrangeOptions(request=Request(chord_notes="targets")),
         )
         self.assertTrue(steps)
         self.assertEqual(head.beats_per_bar, 2, "this fixture must be in cut time")
@@ -749,10 +749,10 @@ class TestHeadTexture(unittest.TestCase):
         the tune rather than the rule.
         """
         uniform, _head, _n = arrange_xml_head(
-            BUT_NOT_FOR_ME, options=ArrangeOptions(texture="uniform"),
+            BUT_NOT_FOR_ME, options=ArrangeOptions(request=Request(chord_notes="full")),
         )
         targets, _head, _n = arrange_xml_head(
-            BUT_NOT_FOR_ME, options=ArrangeOptions(texture="targets"),
+            BUT_NOT_FOR_ME, options=ArrangeOptions(request=Request(chord_notes="targets")),
         )
         self.assertEqual(len(uniform), len(targets))
 
@@ -811,7 +811,7 @@ class TestANarrowPaletteNeverLosesTheTune(unittest.TestCase):
         which family happened to win.
         """
         steps, _head, _notes = arrange_xml_head(
-            BUT_NOT_FOR_ME, options=ArrangeOptions(texture="chord1"),
+            BUT_NOT_FOR_ME, options=ArrangeOptions(request=Request(chord_notes="1")),
         )
         bar2 = [s for s in steps if s.bar == 2 and abs((s.beat or 0) - 2.0) < 1e-6]
         self.assertEqual(len(bar2), 1, "bar 2 beat 2 is missing")
@@ -916,7 +916,9 @@ class TestOddMetres(unittest.TestCase):
         for beats in (5, 7):
             with self.subTest(beats=beats):
                 _head, path = self.load(beats, 4)
-                steps = arrange_xml_head(path, options=ArrangeOptions(texture="targets"))[0]
+                steps = arrange_xml_head(
+                    path, options=ArrangeOptions(request=Request(chord_notes="targets"))
+                )[0]
                 weights = {
                     (step.bar, step.beat): step.metric_weight
                     for step in steps
@@ -985,7 +987,9 @@ class TestCompoundMetres(unittest.TestCase):
 
     def test_targets_are_the_first_and_third_pulses(self):
         _head, path = self.load()
-        steps = arrange_xml_head(path, options=ArrangeOptions(texture="targets"))[0]
+        steps = arrange_xml_head(
+            path, options=ArrangeOptions(request=Request(chord_notes="targets"))
+        )[0]
         bar_one = [s for s in steps if s.bar == 1]
         self.assertEqual([s.beat for s in bar_one], [1.0, 4.0, 7.0, 10.0])
         self.assertEqual([s.role for s in bar_one], ["target", "fill", "target", "fill"])
@@ -1008,7 +1012,7 @@ class TestCompoundMetres(unittest.TestCase):
         steps = arrange_xml_head(
             path,
             time_signature=TimeSignature(12, 8, "4+4+4"),
-            options=ArrangeOptions(texture="targets", request=Request(chord_on="every-beat")),
+            options=ArrangeOptions(request=Request(chord_notes="targets", chord_on="every-beat")),
         )[0]
         self.assertEqual(
             [s.beat for s in steps if s.bar == 1 and s.role == "target"],
@@ -1020,11 +1024,13 @@ class TestCompoundMetres(unittest.TestCase):
 
     def test_auto_and_the_explicit_compound_grouping_agree(self):
         _head, path = self.load()
-        auto = arrange_xml_head(path, options=ArrangeOptions(texture="targets"))[0]
+        auto = arrange_xml_head(
+            path, options=ArrangeOptions(request=Request(chord_notes="targets"))
+        )[0]
         explicit = arrange_xml_head(
             path,
             time_signature=TimeSignature(12, 8, "3+3+3+3"),
-            options=ArrangeOptions(texture="targets"),
+            options=ArrangeOptions(request=Request(chord_notes="targets")),
         )[0]
         self.assertEqual(
             [step.tab_line() for step in auto], [step.tab_line() for step in explicit]
@@ -1075,7 +1081,9 @@ class TestGroupingFromTheScore(unittest.TestCase):
 
     def test_the_score_grouping_reaches_the_arrangement(self):
         """5/4 as 3+2 has two felt beats, so only the downbeat is a full target."""
-        steps = arrange_xml_head(FIVE_FOUR, options=ArrangeOptions(texture="targets"))[0]
+        steps = arrange_xml_head(
+            FIVE_FOUR, options=ArrangeOptions(request=Request(chord_notes="targets"))
+        )[0]
         bar = [s for s in steps if s.bar == 1]
         self.assertEqual(
             [s.role for s in bar], ["target", "fill", "fill", "fill", "fill"]
@@ -1083,7 +1091,9 @@ class TestGroupingFromTheScore(unittest.TestCase):
         self.assertEqual([s.metric_weight for s in bar], [2, 0, 0, 0, 0])
 
     def test_a_compound_score_sets_targets_on_its_own_pulses(self):
-        steps = arrange_xml_head(TWELVE_EIGHT, options=ArrangeOptions(texture="targets"))[0]
+        steps = arrange_xml_head(
+            TWELVE_EIGHT, options=ArrangeOptions(request=Request(chord_notes="targets"))
+        )[0]
         self.assertEqual(
             [s.beat for s in steps if s.bar == 1 and s.role == "target"],
             [1.0, 9.0],
@@ -1094,7 +1104,7 @@ class TestGroupingFromTheScore(unittest.TestCase):
         steps = arrange_xml_head(
             TWELVE_EIGHT,
             time_signature=TimeSignature(12, 8, "3+3+3+3"),
-            options=ArrangeOptions(texture="targets"),
+            options=ArrangeOptions(request=Request(chord_notes="targets")),
         )[0]
         self.assertEqual(
             [s.beat for s in steps if s.bar == 1 and s.role == "target"],

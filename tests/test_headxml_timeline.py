@@ -486,7 +486,7 @@ class TestChordSlots(unittest.TestCase):
 
         for spelling in (
             ArrangeOptions(parts="melody,chord"),
-            ArrangeOptions(texture="uniform"),
+            ArrangeOptions(request=Request(chord_notes="full")),
             ArrangeOptions(bass="none"),
         ):
             with self.subTest(spelling=spelling):

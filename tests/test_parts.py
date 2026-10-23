@@ -110,7 +110,7 @@ class TestMelodyOnlySelections(unittest.TestCase):
         self.assertNotIn("melody_bass", TEXTURE_STYLES)
         with self.assertRaises(ValueError):
             VoiceLeadingEngine().arrange_progression(
-                PROGRESSION, options=ArrangeOptions(texture="melody")
+                PROGRESSION, options=ArrangeOptions(request=Request(chord_notes="melody"))
             )
 
     def test_an_nc_bar_under_soprano_takes_the_no_chord_route(self):

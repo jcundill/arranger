@@ -278,7 +278,7 @@ class TestTextureAnnotation(unittest.TestCase):
                 ("F4", "maj7", "Fmaj7"),
             ],
             timings=[(0, 1.0, None), (0, 1.5, None), (0, 2.0, None), (0, 3.0, None)],
-            options=ArrangeOptions(texture="targets"),
+            options=ArrangeOptions(request=Request(chord_notes="targets")),
         )
         self.rendered = format_progression(self.steps)
 
@@ -301,7 +301,7 @@ class TestTextureAnnotation(unittest.TestCase):
         """
         steps = VoiceLeadingEngine.arrange_progression(
                 [("D5", "maj7", "Fmaj7")], timings=[(0, 2.0, None)], options=ArrangeOptions(
-                    texture="targets",
+                    request=Request(chord_notes="targets"),
                 ),
             )
         step = steps[0]
@@ -551,7 +551,7 @@ class TestTheExplanationWraps(unittest.TestCase):
                 {},
                 {"options": ArrangeOptions(parts="bass,chord")},
                 {"request": Request(chord_on="every-beat")},
-                {"options": ArrangeOptions(texture="targets")},
+                {"options": ArrangeOptions(request=Request(chord_notes="targets"))},
             ):
                 steps, _head, _notes = arranged(head, section=(1, 4), **config)
                 for step in steps:

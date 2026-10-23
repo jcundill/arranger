@@ -47,7 +47,7 @@ from arranger.bass_rules import (
     BASS_STYLE_ANCHORS,
     parse_bass_style,
 )
-from arranger.options import ArrangeOptions
+from arranger.options import ArrangeOptions, Request
 from arranger.tuning import NO_CHORD, ROLE_FILL, ROLE_TARGET
 from tests.support import (
     MAJOR_CADENCE,
@@ -83,7 +83,7 @@ class TestValidation(unittest.TestCase):
         """
         with self.assertRaises(ValueError) as caught:
             VoiceLeadingEngine.arrange_progression(
-                [("F5", "maj7", "Fmaj7")], options=ArrangeOptions(texture="sorcery")
+                [("F5", "maj7", "Fmaj7")], options=ArrangeOptions(request=Request(chord_notes="sorcery"))
             )
         self.assertIn("sorcery", str(caught.exception))
 
@@ -791,7 +791,7 @@ class TestNoRegression(unittest.TestCase):
         arrangements = [
             VoiceLeadingEngine.arrange_progression(progression),
             VoiceLeadingEngine.arrange_progression(
-                progression, timings=timings, options=ArrangeOptions(texture="targets")),
+                progression, timings=timings, options=ArrangeOptions(request=Request(chord_notes="targets"))),
         ]
         for steps in arrangements:
             self.assertEqual(len(steps), 3)

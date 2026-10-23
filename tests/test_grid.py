@@ -26,7 +26,7 @@ from typing import Dict, List, Tuple
 import headxml
 from arranger import grid_resolutions
 from arranger.grid import TICKS_PER_BEAT
-from arranger.options import ArrangeOptions
+from arranger.options import ArrangeOptions, Request
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -107,7 +107,7 @@ class TestAProgressionWithNoTiming(unittest.TestCase):
         from arranger.tuning import ROLE_FILL, ROLE_TARGET
 
         steps = VoiceLeadingEngine.arrange_progression(
-            list(PROGRESSION), options=ArrangeOptions(texture="targets")
+            list(PROGRESSION), options=ArrangeOptions(request=Request(chord_notes="targets"))
         )
         self.assertEqual([(step.bar, step.beat) for step in steps], [
             (bar, beat) for bar, beat, _duration in FELT_BEATS
@@ -120,7 +120,8 @@ class TestAProgressionWithNoTiming(unittest.TestCase):
             [ROLE_TARGET, ROLE_FILL, ROLE_TARGET, ROLE_FILL],
         )
         timed = VoiceLeadingEngine.arrange_progression(
-            list(PROGRESSION), timings=FELT_BEATS, options=ArrangeOptions(texture="targets")
+            list(PROGRESSION), timings=FELT_BEATS,
+            options=ArrangeOptions(request=Request(chord_notes="targets")),
         )
         self.assertEqual(
             [step.tab_line() for step in timed], [step.tab_line() for step in steps]

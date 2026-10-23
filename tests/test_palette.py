@@ -409,7 +409,7 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
 
         steps, _head, _notes = arrange_xml_head(
             "tests/data/synthetic_common_8.musicxml", section=(1, 8),
-            options=ArrangeOptions(texture="targets"),
+            options=ArrangeOptions(request=Request(chord_notes="targets")),
         )
         fills = [
             step for step in steps

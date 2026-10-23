@@ -67,8 +67,8 @@ HEADS: List[str] = sorted(
 #: sweep of every committed head, so each config costs seconds.
 CONFIGS: List[Dict[str, Any]] = [
     {},
-    {"options": ArrangeOptions(texture="chord1")},
-    {"options": ArrangeOptions(texture="targets")},
+    {"options": ArrangeOptions(request=Request(chord_notes="1"))},
+    {"options": ArrangeOptions(request=Request(chord_notes="targets"))},
     {"options": ArrangeOptions(parts="melody")},
     {"options": ArrangeOptions(parts="bass")},
     {"options": ArrangeOptions(parts="chord")},
