@@ -225,11 +225,11 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
         change cost a note rather than moved one.
 
         The anchors are selected by `bass_role` alone, and deliberately **not** by
-        `bass_only` as well. They used to be filtered by both, and that was wrong: a
-        walk-invented downbeat the melody moves onto is a **target**, so it stopped
-        being `bass_only` while remaining an anchor - and the filter quietly dropped it
-        from this assertion, turning the test into one that could not fail. An anchor is
-        an anchor whether or not the left hand holds across it.
+        `bass_only` as well: a walk-invented downbeat the melody moves onto is a
+        **target**, so it is not `bass_only` while remaining an anchor, and filtering by
+        both would quietly drop it from this assertion and turn the test into one that
+        could not fail. An anchor is an anchor whether or not the left hand holds across
+        it.
         """
         steps = self._arrangement()
         anchors = [

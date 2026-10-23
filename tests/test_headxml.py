@@ -659,13 +659,12 @@ class TestChordsOnlyHead(unittest.TestCase):
         """A melody-only selection routes to the melody-bearing branch, where there is
         no tune.
 
-        **This is the one refusal left, and it is not the same claim as the grid's
-        deference.** `every_note` used to be silent here too, and that was the defect; a
-        melody-only selection is silent because it *plays the tune and nothing else*, so a
-        bar with no tune has nothing for it to play. A grid can place a chord there and a
+        **This refusal is not the same claim as the grid's deference.** A melody-only
+        selection is silent because it *plays the tune and nothing else*, so a bar with no
+        tune has nothing for it to play - where a grid can place a chord there, and a
         soprano cannot voice one without a top note. `parts_has_melody_only` gates the
-        union in `arrange_xml_head`, which is why this still returns nothing while
-        `alto,tenor` above now returns all four bars.
+        union in `arrange_xml_head`, which is why this returns nothing while `alto,tenor`
+        above returns all four bars.
         """
         steps, _head, _notes = arrange_xml_head(
             CHORDS_ONLY, options=ArrangeOptions(request=Request(chord_on="none"))

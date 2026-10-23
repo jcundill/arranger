@@ -111,9 +111,9 @@ class TestProgressions(unittest.TestCase):
 
     def test_low_register_cadence_voices_low_with_a_complete_chord_or_a_shell(self):
         """
-        D4 and C4 sit below the high E string's open pitch, so these steps used to be
-        skipped with a warning. They are now voiced on the G string, one string lower
-        again, which puts the whole cadence in low position on the bottom four strings.
+        D4 and C4 sit below the high E string's open pitch, so they are voiced on the G
+        string, one string lower again, which puts the whole cadence in low position on the
+        bottom four strings.
         """
         progression = [
             ("D4", "m7", "Dm7"),
@@ -158,8 +158,8 @@ class TestProgressions(unittest.TestCase):
         # Recovering it would mean ranking the bass above span, which was measured and
         # brings back the five-fret `8-x-8-8-13-x` this change exists to remove.
         self.assertEqual(sorted(result[0].voicing.pitch_classes()), [0, 2, 5, 9])
-        # G7 gained its root and a fourth voice: it used to be the bare shell F3 B3 D4,
-        # and is now a complete G7 with G2 underneath.
+        # G7 states its root and a fourth voice - a complete G7 with G2 underneath,
+        # rather than the bare shell F3 B3 D4.
         self.assertEqual(sorted(result[1].voicing.pitch_classes()), [2, 5, 7, 11])  # G B D F
         self.assertEqual(sorted(result[2].voicing.pitch_classes()), [0, 4, 11])  # C E B
 

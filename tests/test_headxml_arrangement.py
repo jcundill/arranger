@@ -292,14 +292,9 @@ class TestReductionAndArranging(unittest.TestCase):
     def test_a_note_past_the_bar_line_is_still_pulled_back_inside(self):
         """The clamp still does its job, which is now a narrower one.
 
-        **The job changed with the model, and the assertion had to change with it.**
-        This used to be about a note that *rounded onto* the bar line: `eighths` put the
-        grid at 0.5, a note at 2.75 rounded to 3.0, and 3.0 is the bar line of a 2/2 bar,
-        so it was pulled back to the last eighth inside - 2.5.
-
-        There is no grid now, so nothing rounds: every note keeps the beat it was
-        written on, and a note written past the bar line is simply **over the line**
-        rather than rounding onto it. The clamp is still what stops that, and it is still
+        Nothing rounds: every note keeps the beat it was written on, so a note written
+        past the bar line is simply **over the line**. The clamp is what pulls it back to
+        the last position inside - 2.5 for a note at 3.0 in a 2/2 bar - and it is still
         load-bearing - but what it pulls back to is the bar line approached from inside,
         not the last grid step.
         """
@@ -458,12 +453,10 @@ class TestTheHeadRequestAsOneValue(unittest.TestCase):
     def test_the_axis_has_no_keyword_spelling(self):
         """The five axes are the implementation, so no signature takes one as a keyword.
 
-        This used to assert that a `texture=` keyword beside `options=` raised. With
-        the axis gone from the signature the two spellings are unspellable rather than
-        conflicting, so the assertion inverts to the *signature* - which is also the
-        form a type checker can agree with, where a call spelling the keyword is a
-        `reportCallIssue`. The conflict rule itself still has its witness, on the
-        metre's `test_the_two_metre_spellings_cannot_be_combined`.
+        The assertion is on the *signature*, which is also the form a type checker can
+        agree with: a call spelling the keyword is a `reportCallIssue`. The conflict rule
+        itself has its witness on the metre's
+        `test_the_two_metre_spellings_cannot_be_combined`.
         """
         self.assertNotIn("texture", inspect.signature(arrange_xml_head).parameters)
 
@@ -598,13 +591,10 @@ class TestTheMetreHasADenominator(unittest.TestCase):
         dropped rather than written. That is wrong under either spelling of the
         conversion, so it is recorded rather than encoded here.
 
-        **The count is re-scoped, not kept** (AGENTS.md trap 5). It used to assert
-        `len(again.notes) == len(head.notes)`, which was true only because the default grid
-        produced no steps in a bar the melody never entered - the silence
-        `docs/history/open-issues.md` item 1 measures. Those bars are arranged now, and the
-        exporter has always written a comping step as a note: `freddie` and `joe_pass`
-        already round-tripped **22 and 27** extra beats on this head before this change.
-        The claim that actually matters is the one the assertion was a proxy for - every
+        **The count is re-scoped, not kept** (AGENTS.md trap 5). A note count would be the
+        wrong claim: every bar is arranged now, and the exporter writes a comping step as a
+        note, so `freddie` and `joe_pass` round-trip extra beats on this head. The claim
+        that actually matters is the one a note count was a proxy for - every
         written beat comes back at the same beat - and that still holds exactly. What is
         asserted instead is that **every extra is a position the tune is silent at**.
 

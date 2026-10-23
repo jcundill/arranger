@@ -156,7 +156,7 @@ class TestExtendedQualities(unittest.TestCase):
 
     def test_quality_alias_selects_the_same_inversion_as_the_canonical_spelling(self):
         """
-        M7 must behave like maj7 - it used to be read as m7.
+        M7 must behave like maj7 rather than m7.
 
         The *first* candidate is compared rather than the whole list, because the bass
         may also be offered on a lower string than the block uses; the alias has to

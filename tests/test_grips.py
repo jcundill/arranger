@@ -867,10 +867,9 @@ class TestGuideTones(unittest.TestCase):
         """
         The rule keeps both, for every chord tone, and so does every placement of it.
 
-        This is the property the retired fallback existed to preserve. It used to be checked
-        against the hand-authored tables, which no longer exist; checked here on what the
-        engine actually offers, which is the stronger claim - a shape the rule builds still
-        has to be fretted on a string set, and a placement is where a note could go missing.
+        Checked on what the engine actually offers rather than on a table of shapes, which
+        is the stronger claim: a shape the rule builds still has to be fretted on a string
+        set, and a placement is where a note could go missing.
         """
         from arranger.grips import _guide_tones
 
@@ -1104,8 +1103,7 @@ class TestDerivedGripShapes(unittest.TestCase):
         # The bound is "not nothing" rather than "many": this family kept four of its eight
         # sets, so a melody counts here only if the quality has a template for it *and* the
         # shape fits one of the four that remain under a high-E soprano - measured, two
-        # voicings. It used to be more than twenty, which is why the guard is stated as a
-        # property rather than a remembered number.
+        # voicings. The guard is a property rather than a remembered number.
         self.assertGreater(checked, 0, "the check covered nothing at all")
 
     def test_a_drop3_is_wider_than_the_close_stack_it_comes_from(self):
@@ -1403,11 +1401,10 @@ class TestPartialHarmonisation(unittest.TestCase):
         """
         `step.grip` is a derived view of `voicing.grip`, not a second field.
 
-        It used to be a stored mirror, and on a no-chord step the two disagreed
-        - the step said "drop2" while the voicing said "melody" - which is the
-        defect `docs/history/one-fact.md` commit 1 exists to make impossible. The
-        proof is the assignment: a view that cannot be written cannot disagree
-        with the fact it reads, and assigning to it raises.
+        A stored mirror can disagree with the fact it copies - on a no-chord step the step
+        would say "drop2" while the voicing said "melody". The proof is the assignment: a
+        view that cannot be written cannot disagree with the fact it reads, and assigning
+        to it raises. `docs/history/one-fact.md` commit 1 holds the reasoning.
         """
         step = VoiceLeadingEngine.arrange_progression(
             [("D4", "m7", "Dm7")]

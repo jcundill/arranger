@@ -275,16 +275,13 @@ class TestTheDecisionsAreActuallyShared(unittest.TestCase):
                     )
 
     def test_the_engine_is_the_only_step_loop(self):
-        """Since Phase 4 there is one loop, and it is the engine's.
+        """There is one step loop, and it is the engine's.
 
-        This class used to assert that *both* loops called each decision. That
-        premise is now false by design - `slots` delegates rather than looping -
-        so the assertion is inverted: the decisions are called from the engine, and
-        `slots` must not have grown a loop of its own. A test that keeps asserting
-        the old shape would be a test resisting the refactor it exists to protect.
+        The decisions are called from the engine, and `slots` must not have a loop of
+        its own: it delegates rather than looping.
 
-        The loop is `arranger.movement` rather than `arranger`: Phase 5 made
-        `__init__.py` a facade, so reading *its* source would pass on a package
+        The loop is `arranger.movement` rather than `arranger`, because
+        `__init__.py` is a facade, so reading *its* source would pass on a package
         whose step loop had been deleted outright. `arranger.steps` was the loop's
         home until the loop moved to `movement`; `steps` is a facade now too, so
         this is re-pointed a second time rather than dropped.

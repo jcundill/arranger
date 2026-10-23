@@ -320,10 +320,8 @@ class TestTheAxisIsInertByDefault(unittest.TestCase):
     def test_the_axis_is_not_a_keyword_on_the_entry_point(self):
         """The five axes are the implementation, so they have no keyword spelling.
 
-        This used to assert that passing `parts=` beside `options=` raised. With the
-        axis gone from the signature the two spellings are unspellable rather than
-        conflicting, so the assertion inverts; `tests/meta_structure.py` holds the
-        whole entry-point surface to it.
+        A call naming one is unspellable rather than conflicting;
+        `tests/meta_structure.py` holds the whole entry-point surface to it.
         """
         signature = inspect.signature(self.engine.arrange_progression)
         self.assertNotIn("parts", signature.parameters)
@@ -553,9 +551,7 @@ class TestTheCompingArrangement(unittest.TestCase):
     def test_the_bass_axis_is_not_a_keyword_on_the_entry_point(self):
         """The five axes are the implementation, so they have no keyword spelling.
 
-        This used to assert that passing `bass=` beside `options=` raised. With the
-        axis gone from the signature the two spellings are unspellable rather than
-        conflicting, so the assertion inverts.
+        A call naming one is unspellable rather than conflicting.
         """
         signature = inspect.signature(self.engine.arrange_progression)
         self.assertNotIn("bass", signature.parameters)
@@ -599,12 +595,10 @@ class TestTheCompingArrangement(unittest.TestCase):
     def test_the_corpus_nc_bar_keeps_its_place_in_the_tab(self):
         """The measured case: `Trouble_in_Mind_Blues` bar 1 is `NC`.
 
-        It used to be absent from the comping part's tab - **12** positions over
-        the three selections that reach the comping route, all of them this
-        bar - while the horn played in it, so a reader lining the two parts up was
-        one bar short with nothing to say which bar went. The bar is now present
-        under every one of those selections, and every position in it is silent
-        with the same reason.
+        The bar is present under every selection that reaches the comping route, and
+        every position in it is silent with the same reason - so a reader lining the two
+        parts up is not one bar short with nothing to say which bar went, while the horn
+        plays in it.
         """
         from tests.support import arranged
 

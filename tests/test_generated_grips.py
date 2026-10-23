@@ -300,10 +300,9 @@ class TestTheGeneratedShapesAreLegal(unittest.TestCase):
         generated shape that dropped either would be a different chord rather than a
         thinner one.
 
-        This is a **gate rather than a branch**: the rule used to be held to it at runtime,
-        by a fallback that rebuilt a shape from the guide tones when the derived one lost
-        them, and that fallback was measured never to fire over all 125 degrees - so the
-        rule is now asserted to hold, and a quality added later that breaks it fails here.
+        This is a **gate rather than a branch**: the rule is asserted to hold rather than
+        repaired at runtime, so a quality added later that breaks it fails here rather than
+        being silently rebuilt.
         """
         from arranger.grips import _guide_tones
 

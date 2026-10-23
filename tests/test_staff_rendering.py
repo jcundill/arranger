@@ -76,10 +76,9 @@ class TestStaffTab(unittest.TestCase):
         """
         The row of chord names, found by content rather than by position.
 
-        It used to be `split("\\n")[0]`, which was true while the chord row was
-        the first thing drawn. `show_timing` puts the metre and the note values
-        above it, so an index would find the metre - and a test that silently
-        changed subject would still pass, which is worse than failing. Naming the
+        An index would not do: `show_timing` puts the metre and the note values above the
+        chord row, so taking the first line would find the metre - and a test that
+        silently changed subject would still pass, which is worse than failing. Naming the
         row by what is in it keeps the assertion about the chord names.
 
         `show_chords` is forced on, since the chord row is off by default with the
@@ -295,11 +294,10 @@ class TestStaffTab(unittest.TestCase):
         """
         Duration is drawn as horizontal space, which is how ASCII tab says it.
 
-        **A column used to be one beat wide whatever the note was worth**, so a
-        quarter and a half note came out identical and the tab said nothing about how
-        long anything sounded - the reason the `q`/`w` rhythm row existed. A note now
-        occupies as many *slots* as it is worth, one slot being one fret cell, so a
-        half note is drawn twice as wide as a quarter.
+        **A column is as wide as the note is worth**, so a quarter and a half note do not
+        come out identical: a note occupies as many *slots* as it is worth, one slot being
+        one fret cell, so a half note is drawn twice as wide as a quarter. That is what
+        makes the tab say how long anything sounds.
 
         `duration` is in **whole notes**, and reading it as beats is what made every
         note in the piece come out one slot wide. At the floor of eight slots to the

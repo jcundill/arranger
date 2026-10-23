@@ -65,11 +65,10 @@ class TestValidation(unittest.TestCase):
     def test_the_walk_is_an_accepted_bass_style(self):
         """The style is a list of `BASS_RULES`, and the pair it is spelled with arranges.
 
-        It used to be a texture of its own (`texture="walking_bass"`), which made one
-        name cover two claims - what the thumb states, and how many notes the chord
-        part states. `docs/history/parts.md` §6 splits them, so what "accepted" means here is that
-        `bass_notes="root,5th,approach,nearest"` parses and the arrangement it makes is one bar of four
-        beats.
+        One name must not cover two claims - what the thumb states, and how many notes the
+        chord part states - so `docs/history/parts.md` §6 splits them. What "accepted"
+        means here is that `bass_notes="root,5th,approach,nearest"` parses and the
+        arrangement it makes is one bar of four beats.
         """
         self.assertEqual(set(parse_bass_style(BASS_ALL_RULES)), set(BASS_RULES))
         self.assertEqual(len(walk([("F5", "maj7", "Fmaj7")], [(0, 1.0)])), 4)

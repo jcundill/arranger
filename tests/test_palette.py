@@ -543,9 +543,9 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
     def test_a_strategy_that_found_nothing_says_which_one_it_was(self):
         """`non-chord tone` alone cannot tell a failed substitution from an untried one.
 
-        Measured over the corpus: 2,713 steps keep the written chord under a melody that is
-        not in it, and every one of them used to read just `(non-chord tone - 4 voices)` -
-        the words a route that never attempted a substitution would also print.
+        A step that keeps the written chord under a melody that is not in it reads
+        `(non-chord tone - 4 voices)`, which is the same words a route that never attempted
+        a substitution would print - so the strategy names itself instead.
         """
         steps = VoiceLeadingEngine.arrange_progression(STRUGGLING)
         third = step_annotation(steps[3])

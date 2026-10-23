@@ -706,12 +706,9 @@ class TestNoChordSteps(unittest.TestCase):
     def test_annotation_is_shared_by_both_renderings(self):
         """format_progression and print_step report the same text.
 
-        The second assertion used to be the `vertical=True` block, which printed the
-        same annotation over a six-line header. That renderer is gone, and the two
-        consumers of `step_annotation` that remain are `format_progression` and
-        `print_step` - the compact line and the demo's one-line summary. They share
-        the function precisely so a melody-only step cannot read one way in the
-        library and another in `make demo`.
+        They are the two consumers of `step_annotation` - the compact line and the demo's
+        one-line summary - and they share the function precisely so a melody-only step
+        cannot read one way in the library and another in `make demo`.
 
         Note it is *not* `tab_line()`: that is the voicing's own cells with no room
         for an annotation, which is why the pairing is the two renderers rather than

@@ -314,12 +314,10 @@ class TestRoles(unittest.TestCase):
         """
         A walk is the bass axis' own row, over a texture that names an arity.
 
-        It used to be a texture of its own (`texture="walking_bass"`), which made
-        one name cover two claims: which note the thumb states (a *bass* fact) and
-        how many notes the chord part states (a *texture* fact). `docs/history/parts.md` §6
-        splits them - the full bass vocabulary with `chord_notes="targets"` - and the
-        arrangement is the same, so what is asserted here is the pair rather than
-        the one spelling.
+        One name must not cover two claims - which note the thumb states (a *bass* fact)
+        and how many notes the chord part states (a *texture* fact) - so the pair is the
+        full bass vocabulary with `chord_notes="targets"`, and what is asserted here is
+        that pair rather than one spelling. `docs/history/parts.md` §6 splits them.
         """
         self.assertEqual(set(parse_bass_style(BASS_ALL_RULES)), set(BASS_RULES))
         # A walk's targets are the arity a thumb leaves room for, so the chord part
@@ -1506,11 +1504,10 @@ class TestARepeatedMelodyHoldsItsString(unittest.TestCase):
 
     A `repeated` step is a **hold**: the renderers strike its soprano alone and let the
     inner voices ring. That is only true if the melody is where the previous step's
-    finger already is - and the selector used to be free to move it. Span outranks neck
-    position in `voicing_cost`, and a fill's thin palette has a compact shape whose top
-    note sits on a different string, so a bar of four identical notes read as a
-    four-fret jump and the chord the step had just voiced was muted by a rule that meant
-    "hold what is already ringing".
+    finger already is. Span outranks neck position in `voicing_cost`, and a fill's thin
+    palette has a compact shape whose top note sits on a different string, so a bar of
+    four identical notes can read as a four-fret jump - and then the chord the step had
+    just voiced is muted by a rule that means "hold what is already ringing".
 
     Two halves of one claim, which is why the last test here is a sweep rather than the
     bar the report came from: `decisions.hold_the_melody_string` narrows the candidates

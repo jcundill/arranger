@@ -581,10 +581,9 @@ class TestRhythm(GuitarProTestCase):
         measures = self.measures(steps=[crossing, after])
         # The head starts on beat 3, so the first bar opens with a **rest** for the
         # two beats before it and the Dm7 fills the rest of it exactly. Nothing
-        # crosses a bar line any more, because the rest is time rather than a hole:
-        # the G7 gets the whole of bar 2 in one note. (It used to be split in two,
-        # which was a symptom of the pickup being dropped and the music sliding up
-        # into it - the split was the format working around the loader's error.)
+        # crosses a bar line, because the rest is time rather than a hole: the G7 gets
+        # the whole of bar 2 in one note, which is what a dropped pickup would split in
+        # two.
         self.assertEqual(
             [b.text for m in measures for b in m.voices[0].beats],
             [None, "Dm7", "G7"],
@@ -726,11 +725,10 @@ class TestRhythm(GuitarProTestCase):
 
         The bug this pins. A step that runs across a bar line is written as two
         notes, one in each bar - that much is forced by the format, since a GP5
-        measure is a fixed-length container. The halves used to be written as two
-        ordinary notes, so a shape held over the bar line was **re-struck** at the
-        head of the next bar. In "the synthetic cut-time head" that happened in 14 of the 32
-        bars, and the source score genuinely ties Eb4 across the bar line in bars
-        2-3, so the file contradicted the notation it was exported from.
+        measure is a fixed-length container. Written as two ordinary notes, a shape held
+        over the bar line is **re-struck** at the head of the next bar, and the file
+        contradicts the notation it was exported from: the synthetic cut-time head's
+        source score ties Eb4 across the bar line in bars 2-3.
 
         The claim that caused it - that a GP tie is "a slur the player has to
         interpret rather than a hold" - is simply false: `NoteType.tie` is a real
@@ -810,11 +808,11 @@ class TestRhythm(GuitarProTestCase):
 
         The intra-bar twin of
         `test_a_held_shape_is_tied_across_a_bar_line_not_re_struck`. GP5 has no
-        dotted values, so a dotted half goes out as a half plus a quarter; the
-        note type used to be decided by `tie` alone, which `_measures` sets only
-        for a note continuing an earlier bar - so every part after the first was
-        an ordinary note and the shape was struck again in the middle of its own
-        hold. Read back from the bytes, because the note type exists nowhere else.
+        dotted values, so a dotted half goes out as a half plus a quarter. Deciding the
+        note type by `tie` alone would make every part after the first an ordinary note -
+        `_measures` sets `tie` only for a note continuing an earlier bar - and the shape
+        would be struck again in the middle of its own hold. Read back from the bytes,
+        because the note type exists nowhere else.
         """
         import guitarpro
 

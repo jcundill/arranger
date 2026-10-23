@@ -147,12 +147,8 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/grips.py": Budget(22, 128, 9),
     "arranger/grouping.py": Budget(6, 36, 3),
     "arranger/melody_alone.py": Budget(6, 74, 14),
-    # The axis keywords left `resolve_knobs` (15 -> 9 parameters), so the module
-    # ceiling is `resolve_policies`'s eleven rather than the reconciler's: the grid
-    # parameter went with the axis. The axes are now one read of the request and two
-    # `settle_input_fact` calls where the defaults and the assignments used to be.
-    # The injected slash-bass ranking left with the cycle it was avoiding, so
-    # `resolve_knobs` lost its conditional and the ceiling is re-measured.
+    # The axes are one read of the request and two `settle_input_fact` calls, so the
+    # module ceiling is `resolve_policies`'s eleven rather than the reconciler's.
     "arranger/resolution.py": Budget(7, 111, 11),
     # `slot_state`'s grid branches left with the axis, so the ceiling is what it
     # measures rather than what it measured.
@@ -510,10 +506,10 @@ ENTRY_POINTS: Tuple[Tuple[str, str], ...] = (
     ("headxml.py", "_head_request"),
 )
 
-#: The axis names, live or retired, as the keyword each used to be spelled with, plus
-#: `grouping` - the metre's third fact, which is a field of `TimeSignature` and so has
-#: no keyword of its own either. `harmony` and `grid` are retired names kept here so a
-#: future keyword cannot re-introduce one.
+#: The names no entry point may take as a keyword: the axes, and the metre's third fact,
+#: `grouping`, which is a field of `TimeSignature` and so has no keyword of its own
+#: either. `harmony` and `grid` are retired names kept here so a future keyword cannot
+#: re-introduce one.
 RETIRED_AXIS_KEYWORDS = frozenset({"texture", "bass", "parts", "harmony", "grid", "grouping"})
 
 
