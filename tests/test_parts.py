@@ -242,33 +242,36 @@ class TestTheArityFollowsTheTexture(unittest.TestCase):
     def setUp(self):
         self.engine = VoiceLeadingEngine()
 
-    def counts_for(self, texture: str) -> List[int]:
+    def counts_for(self, chord_notes: str) -> List[int]:
         steps = self.engine.arrange_progression(
-            PROGRESSION, options=ArrangeOptions(parts=PART_CHORD, texture=texture)
+            PROGRESSION,
+            options=ArrangeOptions(request=Request(melody=False, chord_notes=chord_notes)),
         )
-        self.assertTrue(steps, texture)
+        self.assertTrue(steps, chord_notes)
         return [len(step.voicing.active_frets()) for step in steps]
 
     def test_every_arity_produces_at_most_that_many_notes(self):
-        """One note per chord-part voice the texture names, and never more."""
-        for texture, ceiling in (
-            ("chord1", 1),
-            ("chord2", 2),
-            ("chord3", 3),
+        """One note per chord-part voice the request names, and never more."""
+        for chord_notes, ceiling in (
+            ("1", 1),
+            ("2", 2),
+            ("3", 3),
         ):
-            for count in self.counts_for(texture):
-                self.assertLessEqual(count, ceiling, f"{texture} sounded {count} notes")
+            for count in self.counts_for(chord_notes):
+                self.assertLessEqual(
+                    count, ceiling, f"{chord_notes} sounded {count} notes"
+                )
 
     def test_the_whole_chord_is_the_default(self):
-        """`uniform` is the arrangement that always was: the fullest shape available."""
-        self.assertEqual(set(self.counts_for("uniform")), {3})
+        """`full` is the arrangement that always was: the fullest shape available."""
+        self.assertEqual(set(self.counts_for("full")), {3})
 
     def test_a_selection_is_never_sounded_thicker_than_asked(self):
-        """The direction that matters: no texture plays more voices than it named."""
-        for texture in TEXTURE_STYLES:
-            for count in self.counts_for(texture):
+        """The direction that matters: no content plays more voices than it named."""
+        for chord_notes in CHORD_NOTES:
+            for count in self.counts_for(chord_notes):
                 self.assertLessEqual(
-                    count, 3, f"{texture} sounded {count} notes"
+                    count, 3, f"{chord_notes} sounded {count} notes"
                 )
 
 
