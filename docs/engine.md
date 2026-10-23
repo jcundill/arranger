@@ -1342,7 +1342,7 @@ Three decisions are load-bearing:
   melody part present and the chord part absent, the bass part deliberately not — and
   never a texture named as a literal. A literal is how a spelling joins the melody-alone
   route in one place and misses it in another.
-- **No texture carries an empty palette any more, and that is asserted.**
+- **No texture carries an empty palette, and that is asserted.**
   `tests/test_texture.py` sweeps every texture, selection and thumb line and requires a
   non-empty palette from each, because an empty one means "the left hand plays nothing"
   and that claim belongs to the selection rather than to a row.
@@ -1379,8 +1379,8 @@ already, and `bass_notes` is what states it.
 The equivalences are asserted byte-for-byte against the rendered tab
 (`tests/test_request.py`, `tests/test_walking_bass.py`).
 
-The **vocabulary** lives in `arranger/bass_rules.py`: `BASS_RULES`, the `BASS_ROLE_*` and
-`BASS_STYLE_*` names, `parse_bass_style`, and the questions asked of the hands
+The **vocabulary** lives in `arranger/bass_rules.py`: `BASS_RULES`, the `BASS_ROLE_*`
+names, `BASS_STYLE_NONE`, `parse_bass_style`, and the questions asked of the hands
 (`thumb_capacity`, `comping_capacity`, `bass_allowed`). `arranger/bass.py` owns the line
 itself - its slots and its walk - while `arranger/bass_place.py` owns the thumb's
 placement and `bass_cost`.
@@ -1393,8 +1393,8 @@ already assigns*. So:
 
 - `root,5th,approach,nearest` (the whole vocabulary) keeps every role — a note on every
   beat. This is the walk.
-- `root` keeps only `BASS_ROLE_ANCHOR` — a root where the harmony anchors. This is what
-  `anchors` became.
+- `root` keeps only `BASS_ROLE_ANCHOR` — a root where the harmony anchors. This is the rule a request
+  names as `bass_notes="root"`.
 
 The four rules are `root` (the chord's root, on anchor beats), `5th` (root then 5th, the
 `BASS_DEGREES_6432` order — the walking anchor is always the root, so it shares `root`'s
