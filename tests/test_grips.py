@@ -21,12 +21,6 @@ from musthe import Note
 
 import arranger as package
 from arranger import (
-    BASS_DEGREES_6432,
-    GRIP_MAX_SPAN,
-    GRIP_PREFERENCE,
-    GRIP_STRING_SETS,
-    MELODY_STRING_CHOICES_FULL,
-    SHELL_DEGREES,
     ChordParser,
     GuitarFretboard,
     VoiceLeadingEngine,
@@ -34,8 +28,14 @@ from arranger import (
     supported_string_sets,
 )
 from arranger.grip_tables import (
+    GRIP_MAX_SPAN,
+    GRIP_PREFERENCE,
+    GRIP_STRING_SETS,
+    SHELL_DEGREES,
     finger_skip_count,
 )
+from arranger.grips import BASS_DEGREES_6432
+from arranger.tuning import MELODY_STRING_CHOICES_FULL
 from tests.support import (
     QUALITIES,
     a_shape_on,

@@ -32,14 +32,7 @@ from typing import Dict, FrozenSet, List, Optional, Tuple
 from musthe import Note
 
 import headxml
-from arranger import (
-    GRIP_MAX_SPAN,
-    GRIP_PREFERENCE,
-    MELODY_STRING_CHOICES_FULL,
-    SHELL_DEGREES,
-    ChordParser,
-    GuitarFretboard,
-)
+from arranger import ChordParser, GuitarFretboard
 from arranger.grip_place import (
     Placement,
     _searched_shape,
@@ -49,6 +42,7 @@ from arranger.grip_place import (
     place_template,
     search_shape,
 )
+from arranger.grip_tables import GRIP_MAX_SPAN, GRIP_PREFERENCE, SHELL_DEGREES
 from arranger.grips import (
     _drop2_6432_request,
     _shell_request,
@@ -56,6 +50,7 @@ from arranger.grips import (
     get_grip_voicings,
     string_sets_for,
 )
+from arranger.tuning import MELODY_STRING_CHOICES_FULL
 
 HEADS = sorted(glob.glob("tests/data/*.musicxml") + glob.glob("tests/data/*.mxl"))
 

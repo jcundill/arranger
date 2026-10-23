@@ -24,7 +24,8 @@ from pathlib import Path
 from typing import Dict, List, Tuple
 
 import headxml
-from arranger import TICKS_PER_BEAT, grid_resolutions
+from arranger import grid_resolutions
+from arranger.grid import TICKS_PER_BEAT
 from arranger.options import ArrangeOptions
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -102,7 +103,8 @@ class TestAProgressionWithNoTiming(unittest.TestCase):
         the full harmonisation on all four. Both are laid out by the metre now, so the
         difference is the texture's reading of the weight and not where the positions are.
         """
-        from arranger import ROLE_FILL, ROLE_TARGET, VoiceLeadingEngine
+        from arranger import VoiceLeadingEngine
+        from arranger.tuning import ROLE_FILL, ROLE_TARGET
 
         steps = VoiceLeadingEngine.arrange_progression(
             list(PROGRESSION), options=ArrangeOptions(texture="targets")

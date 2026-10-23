@@ -36,18 +36,11 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from musthe import Note
 
 import arranger
-from arranger import (
-    BASS_STYLE_WALK,
-    PITCH_CLASS_NAMES,
-    SHELL_DEGREES,
-    STANDARD_TUNING,
-    ArrangementStep,
-    ChordParser,
-    VoiceLeadingEngine,
-    Voicing,
-    get_comping_voicings,
-)
+from arranger import ArrangementStep, ChordParser, VoiceLeadingEngine, Voicing, get_comping_voicings
+from arranger.bass_rules import BASS_STYLE_WALK
+from arranger.grip_tables import SHELL_DEGREES
 from arranger.options import ArrangeOptions
+from arranger.tuning import PITCH_CLASS_NAMES, STANDARD_TUNING
 
 #: The library's top-level modules: the shared score core, the renderers, the
 #: importer and the grip-chart generator. Shared by `meta_structure` (which budgets

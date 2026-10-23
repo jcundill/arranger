@@ -42,14 +42,9 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from musthe import Note
 
-from arranger import (
-    STANDARD_TUNING,
-    ChordParser,
-    GuitarFretboard,
-    VoiceLeadingEngine,
-    Voicing,
-)
+from arranger import ChordParser, GuitarFretboard, VoiceLeadingEngine, Voicing
 from arranger.grips import drop2_template_for
+from arranger.tuning import STANDARD_TUNING
 
 # The two four-string blocks a drop-2 chord melody actually uses, as
 # (conventional string numbers high-to-low, soprano string index). Drop-2 is

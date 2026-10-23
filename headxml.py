@@ -45,14 +45,6 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 from xml.etree import ElementTree
 
 from arranger import (
-    CHORD_FILLS_COMP,
-    CHORD_FILLS_NONE,
-    GROUPING_AUTO,
-    NO_CHORD,
-    PITCH_CLASS_NAMES,
-    RHYTHM_EVERY_BEAT,
-    RHYTHM_MELODY,
-    TICKS_PER_BEAT,
     ArrangementStep,
     ChordParser,
     Rhythm,
@@ -71,8 +63,11 @@ from arranger import (
     rhythm_beats,
 )
 from arranger.chords import midi_to_note_name, promote_slash_chord
-from arranger.grouping import COMMON_TIME, TimeSignature
+from arranger.grid import RHYTHM_EVERY_BEAT, RHYTHM_MELODY, TICKS_PER_BEAT
+from arranger.grouping import COMMON_TIME, GROUPING_AUTO, TimeSignature
 from arranger.options import (
+    CHORD_FILLS_COMP,
+    CHORD_FILLS_NONE,
     DEFAULT_REQUEST,
     ArrangeOptions,
     Request,
@@ -82,6 +77,7 @@ from arranger.options import (
 )
 from arranger.resolution import resolve_axes, settle_input_fact
 from arranger.slots import arrange_slots
+from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES
 
 __all__ = [
     "MUSICXML_KIND_QUALITIES",

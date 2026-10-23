@@ -31,15 +31,6 @@ import os
 import unittest
 
 from arranger import (
-    BASS_NOTES_ROOT_FIFTH,
-    BASS_NOTES_WALK,
-    CHORD_FILLS_HOLD,
-    CHORD_NOTES,
-    PART_BASS,
-    PART_CHORD,
-    PART_MELODY,
-    PART_NAMES,
-    TEXTURE_STYLES,
     Note,
     Request,
     VoiceLeadingEngine,
@@ -53,8 +44,16 @@ from arranger.bass_rules import (
     BASS_STYLE_NONE,
 )
 from arranger.cli import HEAD_HELP, REQUEST_DESTS, add_common_arguments
-from arranger.options import ArrangeOptions
+from arranger.options import (
+    BASS_NOTES_ROOT_FIFTH,
+    BASS_NOTES_WALK,
+    CHORD_FILLS_HOLD,
+    CHORD_NOTES,
+    ArrangeOptions,
+)
+from arranger.parts import PART_BASS, PART_CHORD, PART_MELODY, PART_NAMES
 from arranger.resolution import resolve_axes
+from arranger.texture import TEXTURE_STYLES
 from tests.support import arranged, sweep_head_paths
 
 

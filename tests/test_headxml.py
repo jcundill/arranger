@@ -24,8 +24,9 @@ import unittest
 import zipfile
 from xml.etree import ElementTree
 
-from arranger import NO_CHORD, ChordParser
+from arranger import ChordParser
 from arranger.options import ArrangeOptions, Request
+from arranger.tuning import NO_CHORD
 from headxml import (
     Head,
     _key_label,

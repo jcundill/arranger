@@ -2,7 +2,8 @@ import unittest
 
 from musthe import Note
 
-from arranger import STANDARD_TUNING, GuitarFretboard
+from arranger import GuitarFretboard
+from arranger.tuning import STANDARD_TUNING
 
 
 class TestGuitarFretboard(unittest.TestCase):

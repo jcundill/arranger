@@ -3,9 +3,6 @@ import unittest
 from musthe import Note
 
 from arranger import (
-    GRIP_MAX_SPAN,
-    HIGH_FRET_LIMIT,
-    PITCH_CLASS_NAMES,
     ChordParser,
     GuitarFretboard,
     VoiceLeadingEngine,
@@ -14,11 +11,13 @@ from arranger import (
     supported_string_sets,
 )
 from arranger.grip_tables import (
+    GRIP_MAX_SPAN,
     TONE_PRIORITY,
 )
 from arranger.grips import (
     drop2_template_for,
 )
+from arranger.tuning import HIGH_FRET_LIMIT, PITCH_CLASS_NAMES
 from tests.support import WITNESS
 
 

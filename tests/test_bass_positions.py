@@ -14,13 +14,9 @@ request's derivation apart.
 
 import unittest
 
-from arranger import (
-    BASS_ROLE_ANCHOR,
-    BASS_ROLE_FIFTH,
-    BASS_ROLE_PEDAL,
-    Request,
-)
+from arranger import Request
 from arranger.bass import bass_line_for
+from arranger.bass_rules import BASS_ROLE_ANCHOR, BASS_ROLE_FIFTH, BASS_ROLE_PEDAL
 from arranger.options import resolve_request
 from tests.support import arranged
 

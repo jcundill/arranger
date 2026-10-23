@@ -9,13 +9,6 @@ import unittest
 from typing import List
 
 from arranger import (
-    GRIP_STRING_SETS,
-    PART_BASS,
-    PART_CHORD,
-    PART_MELODY,
-    PART_NAMES,
-    PARTS_AUTO,
-    TEXTURE_STYLES,
     VoiceLeadingEngine,
     get_comping_voicings,
     parse_parts,
@@ -24,9 +17,12 @@ from arranger import (
     resolve_parts,
     supported_string_sets,
 )
+from arranger.grip_tables import GRIP_STRING_SETS
 from arranger.options import ArrangeOptions, Request
+from arranger.parts import PART_BASS, PART_CHORD, PART_MELODY, PART_NAMES, PARTS_AUTO
 from arranger.render import _step_cells
 from arranger.step_types import MUTED_CELL
+from arranger.texture import TEXTURE_STYLES
 from tests.support import (
     PROGRESSION,
     VOICES_ARG,

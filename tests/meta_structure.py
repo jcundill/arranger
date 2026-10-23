@@ -100,7 +100,10 @@ class Budget:
 # function yet gets a small policy ceiling rather than a measurement, so the
 # first method it grows is still a deliberate size.
 BUDGETS: Dict[str, Budget] = {
-    "arranger/__init__.py": Budget(2, 5, 1),
+    # `__dir__` grew from `sorted(__all__)` to `__all__` plus the submodules the facade
+    # binds: they are no longer in `__all__`, so returning that list alone would hide a
+    # path (`arranger.grips`) that resolves. The ceiling is re-measured, deliberately.
+    "arranger/__init__.py": Budget(3, 12, 1),
     "arranger/__main__.py": Budget(5, 10, 2),
     # The printing front end, measured as it stood when it moved out of the facade:
     # the demonstration is one long function by design - a sequence of examples,

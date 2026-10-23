@@ -1108,35 +1108,30 @@ class TestTabstaffModuleBoundary(unittest.TestCase):
 
     def test_dunder_all_matches_the_public_surface(self):
         """
-        `from arranger import *` used to export every public name, before the lazy
-        __getattr__ began hiding the re-exported ones. __all__ restores that, and
-        this keeps it honest: every listed name must resolve, and every public name
-        defined in the module must be listed.
+        `from arranger import *` exports the facade's API, and this keeps it honest:
+        every listed name must resolve, and every public name the facade *defines* must
+        be listed.
+
+        A bound **submodule** is not a name the facade defines - it is the module's own
+        path, which `arranger.grips` reaches whether or not `__all__` names it - so
+        module objects are excluded. Everything else is not, which is what stops the
+        list from going quietly short.
         """
+        import types
+
         import arranger
 
         for name in arranger.__all__:
             self.assertTrue(hasattr(arranger, name), f"{name} in __all__ but missing")
-        defined = {n for n in vars(arranger) if not n.startswith("_")}
-        # Names bound by imports rather than defined by this module - the typing
-        # aliases, musthe's classes, and the stdlib modules - are not API.
-        ignored = {
-            "Any",
-            "Chord",
-            "Container",
-            "Dict",
-            "Interval",
-            "List",
-            "Note",
-            "Optional",
-            "Sequence",
-            "Tuple",
-            "TYPE_CHECKING",
-            "annotations",
-            "dataclass",
-            "importlib",
-            "re",
+        defined = {
+            name
+            for name, value in vars(arranger).items()
+            if not name.startswith("_") and not isinstance(value, types.ModuleType)
         }
+        # Names bound by imports rather than defined by this module: the typing and
+        # stdlib aliases the facade itself uses, and `__future__`'s `annotations`, which
+        # is a `_Feature` rather than a module and so is not excluded by the rule above.
+        ignored = {"Any", "List", "ModuleType", "TYPE_CHECKING", "annotations"}
         self.assertEqual(
             defined - set(arranger.__all__) - ignored,
             set(),

@@ -17,15 +17,6 @@ from musthe import Note
 
 import arranger
 from arranger import (
-    BASS_ROLE_ANCHOR,
-    BASS_STRING_INDICES,
-    BASS_STYLE_ANCHORS,
-    BASS_STYLE_WALK,
-    GRIP_MAX_SPAN,
-    PITCH_CLASS_NAMES,
-    ROLE_FILL,
-    ROLE_TARGET,
-    STANDARD_TUNING,
     ArrangementStep,
     BassNote,
     ChordParser,
@@ -46,10 +37,18 @@ from arranger.annotation import step_annotation
 from arranger.bass_place import (
     place_bass,
 )
+from arranger.bass_rules import (
+    BASS_ROLE_ANCHOR,
+    BASS_STRING_INDICES,
+    BASS_STYLE_ANCHORS,
+    BASS_STYLE_WALK,
+)
 from arranger.fingers import MAX_HAND_SPAN, hand_span
+from arranger.grip_tables import GRIP_MAX_SPAN
 from arranger.options import ArrangeOptions
 from arranger.parts import PART_NAMES
 from arranger.texture import texture_palette
+from arranger.tuning import PITCH_CLASS_NAMES, ROLE_FILL, ROLE_TARGET, STANDARD_TUNING
 from tabgp import _sounding_frets
 from tests.support import (
     BUT_NOT_FOR_ME,
@@ -240,7 +239,7 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
         anchors = [
             step
             for step in steps
-            if step.bass_role == arranger.BASS_ROLE_ANCHOR
+            if step.bass_role == arranger.bass_rules.BASS_ROLE_ANCHOR
         ]
         self.assertGreater(len(anchors), 0)
         missing = [(step.bar, step.beat) for step in anchors if step.bass is None]
@@ -266,7 +265,7 @@ class TestTheThumbReachesTheHandHoldingTheShape(unittest.TestCase):
         than the test slicing characters out of it.
         """
         steps = self._arrangement()
-        anchors = [step for step in steps if step.bass_role == arranger.BASS_ROLE_ANCHOR]
+        anchors = [step for step in steps if step.bass_role == arranger.bass_rules.BASS_ROLE_ANCHOR]
         self.assertGreater(len(anchors), 0, "no anchors were checked")
         for step in anchors:
             bass = step.bass

@@ -25,8 +25,9 @@ import unittest
 
 from musthe import Note
 
-from arranger import SHELL_DEGREES, ChordParser, VoiceLeadingEngine
+from arranger import ChordParser, VoiceLeadingEngine
 from arranger.grip_tables import (
+    SHELL_DEGREES,
     TONE_PRIORITY,
     stated_tones,
 )

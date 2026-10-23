@@ -9,8 +9,8 @@ placement ask.
 
 import unittest
 
-from arranger import SILENCE_GRID
 from arranger.step_history import last_sounding_step, previous_shape
+from arranger.tuning import SILENCE_GRID
 from tests.support import make_step
 
 #: An ordinary four-string shape, and the all-muted vector a declined position carries.

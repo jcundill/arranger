@@ -22,21 +22,6 @@ from musthe import Note
 
 import arranger
 from arranger import (
-    BASS_STRING_INDICES,
-    BASS_STYLE_WALK,
-    COMMON_TIME,
-    GRIP_MAX_SPAN,
-    GRIP_PREFERENCE,
-    GRIP_STRING_SETS,
-    PART_BASS,
-    PART_CHORD,
-    PART_MELODY,
-    PART_NAMES,
-    ROLE_FILL,
-    ROLE_TARGET,
-    SHELL_DEGREES,
-    TEXTURE_ARITY,
-    TEXTURE_STYLES,
     ChordParser,
     VoiceLeadingEngine,
     derived_arity,
@@ -45,6 +30,8 @@ from arranger import (
 )
 from arranger.bass_rules import (
     BASS_RULES,
+    BASS_STRING_INDICES,
+    BASS_STYLE_WALK,
     parse_bass_style,
 )
 
@@ -59,22 +46,31 @@ from arranger.decisions import (
     resolve_texture_grips,
 )
 from arranger.grip_tables import (
+    GRIP_MAX_SPAN,
+    GRIP_PREFERENCE,
+    GRIP_STRING_SETS,
     RIGHT_HAND_STRINGS,
+    SHELL_DEGREES,
     grip_pluck_count,
     thumb_safe_grips,
 )
 from arranger.grips import (
     _interval_offsets,
 )
+from arranger.grouping import COMMON_TIME
 from arranger.options import ArrangeOptions
+from arranger.parts import PART_BASS, PART_CHORD, PART_MELODY, PART_NAMES
 from arranger.texture import (
     FILL_THINNING,
+    TEXTURE_ARITY,
+    TEXTURE_STYLES,
     THIN_ENTRIES,
     families_up_to_arity,
     families_up_to_with_thin,
     metric_weight,
     roles_for_slot,
 )
+from arranger.tuning import ROLE_FILL, ROLE_TARGET
 from tests.support import (
     MAJOR_CADENCE,
     MINOR_CADENCE,
@@ -960,7 +956,7 @@ class TestBackwardCompatibility(unittest.TestCase):
         reading `grip` or `partial` sees the same values.
         """
         for step in VoiceLeadingEngine.arrange_progression(MINOR_CADENCE):
-            self.assertIn(step.grip, arranger.GRIP_PREFERENCE)
+            self.assertIn(step.grip, arranger.grip_tables.GRIP_PREFERENCE)
             self.assertEqual(step.partial, len(step.voicing.active_frets()) < 4)
             self.assertFalse(step.repeated)
             self.assertIsNone(step.original_melody)

@@ -12,9 +12,10 @@ import unittest
 from typing import List, Tuple
 
 import arranger
-from arranger import NO_CHORD, TimeSignature
+from arranger import TimeSignature
 from arranger.options import ArrangeOptions, Request
 from arranger.slots import arrange_slots
+from arranger.tuning import NO_CHORD
 from headxml import (
     Head,
     arrange_xml_head,
@@ -778,7 +779,7 @@ class TestHeadTexture(unittest.TestCase):
             # stays inside the reach.
             self.assertLess(
                 step.voicing.fret_span(),
-                arranger.GRIP_MAX_SPAN["drop2"],
+                arranger.grip_tables.GRIP_MAX_SPAN["drop2"],
                 "a target is still holding a full-span stretch: " + step.tab_line(),
             )
 

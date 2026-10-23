@@ -26,17 +26,7 @@ from typing import List, Optional, Tuple
 from musthe import Note
 
 import arranger
-from arranger import (
-    BASS_ROLE_APPROACH,
-    BASS_STYLE_ANCHORS,
-    BASS_STYLE_WALK,
-    NO_CHORD,
-    ROLE_FILL,
-    ROLE_TARGET,
-    TimeSignature,
-    VoiceLeadingEngine,
-    beat_offset,
-)
+from arranger import TimeSignature, VoiceLeadingEngine, beat_offset
 from arranger.annotation import step_annotation
 
 # The precedence rule `bass._melody_in_force` implements. The two private helpers are
@@ -51,10 +41,14 @@ from arranger.bass import (
     walking_slots,
 )
 from arranger.bass_rules import (
+    BASS_ROLE_APPROACH,
     BASS_RULES,
+    BASS_STYLE_ANCHORS,
+    BASS_STYLE_WALK,
     parse_bass_style,
 )
 from arranger.options import ArrangeOptions
+from arranger.tuning import NO_CHORD, ROLE_FILL, ROLE_TARGET
 from tests.support import (
     MAJOR_CADENCE,
     MINOR_CADENCE,

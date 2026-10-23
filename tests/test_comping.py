@@ -15,13 +15,6 @@ from typing import List, Optional, Tuple
 from musthe import Note
 
 from arranger import (
-    GRIP_MAX_SPAN,
-    GRIP_STRING_SETS,
-    NECK_FRET_MAX,
-    NECK_FRET_MIN,
-    PART_BASS,
-    PART_CHORD,
-    PART_MELODY,
     ChordParser,
     TimeSignature,
     VoiceLeadingEngine,
@@ -34,6 +27,8 @@ from arranger import (
 )
 from arranger.grip_place import snapshot
 from arranger.grip_tables import (
+    GRIP_MAX_SPAN,
+    GRIP_STRING_SETS,
     comping_string_sets,
 )
 from arranger.grips import (
@@ -43,6 +38,8 @@ from arranger.grips import (
     get_comping_voicings_for,
 )
 from arranger.options import ArrangeOptions, Request
+from arranger.parts import PART_BASS, PART_CHORD, PART_MELODY
+from arranger.tuning import NECK_FRET_MAX, NECK_FRET_MIN
 from tests.support import (
     PROGRESSION,
     VOICES_ARG,

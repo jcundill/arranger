@@ -12,7 +12,6 @@ from typing import List
 
 import arranger
 from arranger import (
-    NO_CHORD,
     ArrangementStep,
     VoiceLeadingEngine,
     format_progression,
@@ -21,6 +20,7 @@ from arranger import (
 )
 from arranger.annotation import step_annotation
 from arranger.options import ArrangeOptions, Request
+from arranger.tuning import NO_CHORD
 from tests.support import arranged, make_voicing, sweep_head_paths
 
 # The compact line's fixed layout, in columns: chord(8) + space + melody(3) + space =
@@ -284,7 +284,7 @@ class TestTextureAnnotation(unittest.TestCase):
 
     def test_a_thin_step_is_annotated_as_partial(self):
         """Every fill says so, in the shared annotation the staff renderer uses too."""
-        fills = [s for s in self.steps if s.role == arranger.ROLE_FILL]
+        fills = [s for s in self.steps if s.role == arranger.tuning.ROLE_FILL]
         self.assertTrue(fills, "the fixture must contain fills")
         for step in fills:
             self.assertTrue(step.partial, f"{step.melody} is a fill but not partial")
@@ -305,7 +305,7 @@ class TestTextureAnnotation(unittest.TestCase):
                 ),
             )
         step = steps[0]
-        self.assertEqual(step.role, arranger.ROLE_FILL)
+        self.assertEqual(step.role, arranger.tuning.ROLE_FILL)
         self.assertTrue(step.non_chord_tone)
         self.assertIn("non-chord tone", step_annotation(step))
 

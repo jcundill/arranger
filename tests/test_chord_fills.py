@@ -13,13 +13,8 @@ import unittest
 from typing import Any
 
 import headxml
-from arranger import (
-    CHORD_FILLS_COMP,
-    CHORD_FILLS_HOLD,
-    CHORD_FILLS_NONE,
-    Request,
-)
-from arranger.options import resolve_request
+from arranger import Request
+from arranger.options import CHORD_FILLS_COMP, CHORD_FILLS_HOLD, CHORD_FILLS_NONE, resolve_request
 from headxml import Head, HeadChange, HeadNote, melody_rests
 from tests.support import arranged
 

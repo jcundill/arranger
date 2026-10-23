@@ -187,7 +187,7 @@ make demo        # the built-in demonstration arrangements
 ```
 arranger/
 ├── arranger/            # the engine - a package, not a module
-│   ├── __init__.py      #   facade: re-exports, __version__, main()
+│   ├── __init__.py      #   facade: the public API, __version__, main()
 │   ├── __main__.py      #   `python -m arranger`
 │   ├── tuning.py        #   STANDARD_TUNING, GuitarFretboard, the neck window
 │   ├── step_types.py    #   Voicing, ArrangementStep, Palette, the tab-cell primitives
@@ -296,13 +296,13 @@ the one list the budget table and that DAG test both read.
 Three consequences worth knowing:
 
 - **Adding a module inside `arranger/` needs no `pyproject.toml` change** — the
-  package is already listed — but **four lists still name it**: `ORDER` in
+  package is already listed — but **three lists still name it**: `ORDER` in
   `tests/meta_package_dag.py`, `BUDGETS` in `tests/meta_structure.py`, and the
-  facade's `from . import (...)` and `__all__`. The last two are not bookkeeping:
-  a submodule the facade never imports is reported by pyright as "specified in
-  `__all__` but not present in module", and one that is imported but unlisted fails
-  `test_dunder_all_matches_the_public_surface`. A new *top-level* module
-  additionally needs a `py-modules` entry, or a clean install ships without it.
+  facade's `from . import (...)`, which is what makes `arranger.<module>` resolve and
+  is one of the two importers `test_every_module_is_imported_by_something` counts. A
+  module is **not** added to `__all__`: that list is the API a caller *names*, and a
+  submodule is a *path* rather than a name the facade defines. A new *top-level*
+  module additionally needs a `py-modules` entry, or a clean install ships without it.
 - **The Makefile names the package as a directory**, so a new engine module cannot be
   forgotten by lint or typecheck. A new *top-level* module must be added to `MODULES`
   and to the `typecheck` target in the same commit that creates it.

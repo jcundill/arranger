@@ -40,20 +40,15 @@ from typing import Any, Callable, Dict, List, Tuple
 
 from musthe import Note
 
-from arranger import (
-    CHORD_FILLS_COMP,
-    CHORD_FILLS_HOLD,
-    PITCH_CLASS_NAMES,
-    ChordParser,
-    Request,
-)
+from arranger import ChordParser, Request
 from arranger.annotation import _omission_clause, step_annotation
 from arranger.chords import melody_degree_name
-from arranger.options import ArrangeOptions
+from arranger.options import CHORD_FILLS_COMP, CHORD_FILLS_HOLD, ArrangeOptions
 from arranger.step_types import ArrangementStep, Palette
 from arranger.tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
+    PITCH_CLASS_NAMES,
     SILENCE_GRID,
     SILENCE_NC_COMPING,
     SILENCE_NO_SHAPE,

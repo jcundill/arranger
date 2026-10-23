@@ -13,9 +13,10 @@ import os
 import tempfile
 import unittest
 
-from arranger import SILENCE_TUNE_SILENT, format_progression, parse_rhythm
+from arranger import format_progression, parse_rhythm
 from arranger.options import ArrangeOptions, Request
 from arranger.slots import arrange_slots
+from arranger.tuning import SILENCE_TUNE_SILENT
 from headxml import (
     Head,
     HeadChange,

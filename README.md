@@ -129,7 +129,7 @@ python -m arranger head tests/data/synthetic_triplets.mxl --bars 1-3 --html head
 
 **Every written note sounds.** No reduction: `arranger head` plays tune as written, one step per note, each on written beat. Where *chords* fall is a separate question — `--chord-on` — and a note is never quantised onto a position and dropped for sharing a slot.
 
-**Grip order is the engine's.** No flag names a family: the order families are tried in is `GRIP_PREFERENCE`, and an exact tie between equal-cost shapes breaks in that same order — see [grips](#grips). `--chord-notes` is what narrows the palette, by saying how many chord tones a step may state.
+**Grip order is the engine's.** No flag names a family: the order families are tried in is `grip_tables.GRIP_PREFERENCE`, and an exact tie between equal-cost shapes breaks in that same order — see [grips](#grips). `--chord-notes` is what narrows the palette, by saying how many chord tones a step may state.
 
 ### Five things reading a score requires
 
@@ -603,7 +603,7 @@ A rest is **split** where the harmony changes and where a `--chord-on` target fa
 | `duo` | 2 | chord's guide tone — 3rd, or 4th on sus — under any chord tone |
 | `interval` | 2 | 3rd, 6th or 10th below melody — a *fill*, not a harmony |
 
-Seven of them are `GRIP_PREFERENCE`: the order the families are tried in **and** the order an exact tie between equal-cost shapes breaks in — there is no separate grip term in the cost function and no caller order to give. A complete chord that reaches a step still outranks a partial one at equal cost, because note count is its own criterion; what `--chord-notes` does is decide whether the complete chord is on the table at all. `interval` is excluded — an interval is texture, not harmony — and `targets` offers it for fills only.
+Seven of them are `grip_tables.GRIP_PREFERENCE`: the order the families are tried in **and** the order an exact tie between equal-cost shapes breaks in — there is no separate grip term in the cost function and no caller order to give. A complete chord that reaches a step still outranks a partial one at equal cost, because note count is its own criterion; what `--chord-notes` does is decide whether the complete chord is on the table at all. `interval` is excluded — an interval is texture, not harmony — and `targets` offers it for fills only.
 
 `closed` sits **second**, right after `drop2`: tightest shape there is, so where melody can fret it at all it beats other four-note families on a tie. Most melodies cannot — close-position chord under melody is seventh or more of pitch on four strings only 4–5 semitones apart in tuning — usually never generated rather than generated and rejected.
 
@@ -683,11 +683,11 @@ The `Cmaj7` is where the restriction shows: four notes on the low E, D, G and B 
 
 ## High melodies, and the neck window
 
-Every voicing confined frets 0–18, span ≤5 (4 for duo and interval), on real string set. `NECK_FRET_MIN`/`NECK_FRET_MAX` — frets 2–13 — range selector *aims* for, not hard filter: step with no voicing inside window still played, just outside it, because losing chord of tune beats fret out of position. Run header echoes window whether or not met.
+Every voicing confined frets 0–18, span ≤5 (4 for duo and interval), on real string set. `tuning.NECK_FRET_MIN`/`tuning.NECK_FRET_MAX` — frets 2–13 — range selector *aims* for, not hard filter: step with no voicing inside window still played, just outside it, because losing chord of tune beats fret out of position. Run header echoes window whether or not met.
 
 Cost function ranks shape's **correctness first**: out-of-chord notes, then frets outside window, then missing voices, then span, then neck position, then inner voices' movement, finally bass function. Tight shape beats shape nearer middle of neck; complete chord beats partial at any position. Spans of 0 and 1 frets equal — one fret stretch not worth moving hand — why order puts span above position but not last fret of reach. That order is library's central invariant; measurement in [docs/engine.md](docs/engine.md).
 
-Melody whose only position sits above `HIGH_FRET_LIMIT` (13) voiced an octave down.
+Melody whose only position sits above `tuning.HIGH_FRET_LIMIT` (13) voiced an octave down.
 
 ```python
 high = [("A5", "m7", "Dm7")]

@@ -5,19 +5,13 @@ from typing import Optional, Tuple
 
 from musthe import Note
 
-from arranger import (
-    NO_CHORD,
-    ArrangementStep,
-    ChordParser,
-    VoiceLeadingEngine,
-    Voicing,
-    format_progression,
-)
+from arranger import ArrangementStep, ChordParser, VoiceLeadingEngine, Voicing, format_progression
 from arranger.annotation import step_annotation
 from arranger.grips import drop2_template_for
 from arranger.melody_alone import melody_alone_shape
 from arranger.options import ArrangeOptions
 from arranger.render import print_step
+from arranger.tuning import NO_CHORD
 
 
 class TestMelodyOnlyVoicing(unittest.TestCase):

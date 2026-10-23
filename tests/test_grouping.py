@@ -10,7 +10,8 @@ from __future__ import annotations
 
 import unittest
 
-from arranger import BASS_STYLE_WALK, VoiceLeadingEngine
+from arranger import VoiceLeadingEngine
+from arranger.bass_rules import BASS_STYLE_WALK
 from arranger.grouping import (
     COMMON_TIME,
     GROUPING_AUTO,

@@ -15,9 +15,6 @@ import unittest
 from typing import List
 
 from arranger import (
-    BASS_STRING_INDICES,
-    BASS_STYLE_WALK,
-    ROLE_TARGET,
     ArrangementStep,
     ArrangeOptions,
     VoiceLeadingEngine,
@@ -32,6 +29,8 @@ from arranger import (
 # surface for the benefit of one test file. `test_bass.py` covers them directly for
 # the same reason.
 from arranger.annotation import step_annotation
+from arranger.bass_rules import BASS_STRING_INDICES, BASS_STYLE_WALK
+from arranger.tuning import ROLE_TARGET
 from tabgp import _sounding_frets
 from tabstaff import _strikes_here
 from tests.support import (

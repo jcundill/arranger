@@ -12,20 +12,14 @@ from dataclasses import replace
 
 from musthe import Note
 
-from arranger import (
-    BASS_DEGREES_6432,
-    GRIP_PREFERENCE,
-    ChordParser,
-    SelectionCriteria,
-    VoiceLeadingEngine,
-    Voicing,
-    VoicingScore,
-)
+from arranger import ChordParser, SelectionCriteria, VoiceLeadingEngine, Voicing, VoicingScore
 from arranger.cost import (
     PARTITION_CRITERION,
     SPAN_CRITERION,
     VOICING_COST_CRITERIA,
 )
+from arranger.grip_tables import GRIP_PREFERENCE
+from arranger.grips import BASS_DEGREES_6432
 from tests.support import (
     QUALITIES,
     every_chord_tone,

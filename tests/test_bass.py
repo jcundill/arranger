@@ -20,27 +20,6 @@ import unittest
 from typing import List, Optional, Tuple
 
 from arranger import (
-    BASS_ROLE_ANCHOR,
-    BASS_ROLE_APPROACH,
-    BASS_ROLE_CONNECT,
-    BASS_ROLE_ENCLOSURE,
-    BASS_ROLE_HOLD,
-    BASS_ROLE_PEDAL,
-    BASS_RULE_5TH,
-    BASS_RULE_APPROACH,
-    BASS_RULE_NEAREST,
-    BASS_RULE_ROLES,
-    BASS_RULE_ROOT,
-    BASS_RULES,
-    BASS_STYLE_ANCHORS,
-    BASS_STYLE_NONE,
-    BASS_STYLE_WALK,
-    NO_CHORD,
-    PART_NAMES,
-    PITCH_CLASS_NAMES,
-    ROLE_FILL,
-    ROLE_TARGET,
-    TEXTURE_STYLES,
     bass_allowed,
     bass_cost,
     bass_line_for,
@@ -58,8 +37,26 @@ from arranger.bass import (
     _walking_bass_line,
 )
 from arranger.bass_rules import (
+    BASS_ROLE_ANCHOR,
+    BASS_ROLE_APPROACH,
+    BASS_ROLE_CONNECT,
+    BASS_ROLE_ENCLOSURE,
+    BASS_ROLE_HOLD,
+    BASS_ROLE_PEDAL,
+    BASS_RULE_5TH,
+    BASS_RULE_APPROACH,
+    BASS_RULE_NEAREST,
+    BASS_RULE_ROLES,
+    BASS_RULE_ROOT,
+    BASS_RULES,
+    BASS_STYLE_ANCHORS,
+    BASS_STYLE_NONE,
+    BASS_STYLE_WALK,
     _comping_no_room_reason,
 )
+from arranger.parts import PART_NAMES
+from arranger.texture import TEXTURE_STYLES
+from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES, ROLE_FILL, ROLE_TARGET
 
 # The two shipped non-`none` styles, as the loops below iterate them. `walk` is the whole
 # rule vocabulary; `anchors` is the root rule alone. `none` and `auto` are not styles a

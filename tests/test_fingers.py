@@ -26,13 +26,7 @@ from typing import List, Tuple
 from musthe import Note
 
 import arranger
-from arranger import (
-    GRIP_PREFERENCE,
-    MELODY_STRING_CHOICES_FULL,
-    ChordParser,
-    VoiceLeadingEngine,
-    Voicing,
-)
+from arranger import ChordParser, VoiceLeadingEngine, Voicing
 from arranger.fingers import (
     FINGERS,
     INDEX,
@@ -48,6 +42,8 @@ from arranger.fingers import (
     fingers_needed,
     hand_span,
 )
+from arranger.grip_tables import GRIP_PREFERENCE
+from arranger.tuning import MELODY_STRING_CHOICES_FULL
 from tests.support import make_voicing, note_name
 
 # The register the library voices, as docs/engine.md states it.
@@ -586,15 +582,15 @@ class TestTheEngineUsesItForOneQuestion(unittest.TestCase):
         """`arranger.fingers` is reachable, which is what the DAG check needs.
 
         `tests/meta_package_dag.py::test_every_module_is_imported_by_something` counts
-        `__init__` as an importer, which is one of the two reasons `"fingers"` is in
-        `arranger.__all__`; the other is that the module is its own public path and the two
-        public names the engine reads - `can_fret` and `assign_fingers` - are reachable
-        through it. The star-import surface is checked against the module's own namespace, so
-        a bound public name missing from that list is a failure.
+        `__init__` as an importer, and the facade binds every engine submodule for that
+        reason and so that `arranger.fingers` resolves without the caller importing it
+        first. It is a **path** rather than a name the facade defines, so it is
+        deliberately *absent* from `arranger.__all__` - and the two public names the
+        engine reads, `can_fret` and `assign_fingers`, are reached through it.
         """
         self.assertIs(arranger.fingers.assign_fingers, assign_fingers)
         self.assertIs(arranger.fingers.can_fret, can_fret)
-        self.assertIn("fingers", arranger.__all__)
+        self.assertNotIn("fingers", arranger.__all__)
 
 
 if __name__ == "__main__":

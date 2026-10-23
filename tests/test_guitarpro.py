@@ -26,8 +26,9 @@ import os
 import tempfile
 import unittest
 
-from arranger import ROLE_TARGET, ArrangementStep, VoiceLeadingEngine
+from arranger import ArrangementStep, VoiceLeadingEngine
 from arranger.options import ArrangeOptions
+from arranger.tuning import ROLE_TARGET
 
 # The shared placement core, reached directly: these tests are about where events
 # land, which is decided in `tabscore` and only turned into beats by `tabgp`.
