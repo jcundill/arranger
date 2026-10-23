@@ -101,7 +101,7 @@ class TestTheRecordedPalette(unittest.TestCase):
         `_shape_clause` is silent here even though the palette is not.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            COMPLETE, options=ArrangeOptions(parts="chord"),
+            COMPLETE, options=ArrangeOptions(request=Request(melody=False)),
         )
         self.assertEqual(len(steps), 3)
         for step in steps:
@@ -122,7 +122,7 @@ class TestTheRecordedPalette(unittest.TestCase):
         shapes.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            COMPLETE, options=ArrangeOptions(parts="melody"),
+            COMPLETE, options=ArrangeOptions(request=Request(chord_on="none")),
         )
         self.assertEqual(len(steps), 3)
         for step in steps:
@@ -287,7 +287,7 @@ class TestTheShapeClause(unittest.TestCase):
         else" and "this selection asked for one voice".
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            COMPLETE, options=ArrangeOptions(parts="melody"),
+            COMPLETE, options=ArrangeOptions(request=Request(chord_on="none")),
         )
         self.assertEqual(
             [step_annotation(step) for step in steps],
@@ -353,10 +353,10 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         pitch off, so a degree alone would leave the reader to work out which note of the
         chord the shape put where.
 
-        **Naming the bass part beside the chord part adds a note below rather than widening
-        the chord**, because the chord part's arity is the texture's and not the number of
-        parts named - so the two three-note rows state the same voices and differ only in
-        the thumb.
+        **A bass line under the same chord part adds a note below rather than widening the
+        chord**, because the chord part's arity is the chord content's and not the number of
+        layers that attack - so the pair states the same three voices and adds only the
+        thumb.
 
         The voices named here are the ones the palette settles on, and the palette no
         longer offers the high E (`grip_tables.COMPING_EXCLUDED_STRINGS`), so this chord's
@@ -368,26 +368,43 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
 
         head = "tests/data/synthetic_repeat_slash.musicxml"
         comping = "; the guitar does not play the tune)"
-        expected = {
-            "bass": f" (comping - D 5{comping}",
-            "chord": f" (comping - A 9, B 3 & F# 7{comping}",
-            "bass,chord": f" (comping - A 9, B 3 & F# 7{comping}",
-        }
-        for parts, text in expected.items():
-            steps, _head, _notes = arrange_xml_head(
-                head,
-                section=(1, 2),
-                options=ArrangeOptions(parts=parts, request=Request(bass_on="none")),
-            )
-            self.assertEqual(step_annotation(steps[0]), text, parts)
-            self.assertFalse(steps[0].melody_voiced)
-        # A lone bass part is one note, and one note is what the line says.
+        chord, _head, _notes = arrange_xml_head(
+            head,
+            section=(1, 2),
+            options=ArrangeOptions(request=Request(melody=False)),
+        )
+        self.assertEqual(step_annotation(chord[0]), f" (comping - A 9, B 3 & F# 7{comping}")
+        self.assertFalse(chord[0].melody_voiced)
+        # A bass line under that same chord part states the *same* three voices and
+        # puts the thumb below them rather than widening the chord - which is what
+        # "adds a note below" means, and what the door could not express: it named a
+        # bass part and then sounded no bass layer at all.
+        pair, _head, _notes = arrange_xml_head(
+            head,
+            section=(1, 2),
+            options=ArrangeOptions(
+                request=Request(melody=False, bass_on="melody", bass_notes="root")
+            ),
+        )
+        self.assertIn("comping - A 9, B 3 & F# 7", step_annotation(pair[0]))
+        self.assertIn("(bass: ", step_annotation(pair[0]))
+        self.assertEqual(len(pair[0].voicing.upper_midi_notes()), 3)
+        self.assertEqual(len(pair[0].voicing.active_frets()), 4)
+        # The thumb alone is one note, and the line says which part is missing. The
+        # request has no spelling for a bass part with **no bass layer** - `melody=False`
+        # with no chord position and no bass position is refused - so the lone bass the
+        # library builds is the thumb's own line.
         lone, _head, _notes = arrange_xml_head(
             head,
             section=(1, 2),
-            options=ArrangeOptions(parts="bass", request=Request(bass_on="none")),
+            options=ArrangeOptions(
+                request=Request(
+                    melody=False, chord_on="none", bass_on="melody", bass_notes="root"
+                )
+            ),
         )
-        self.assertEqual(len(lone[0].voicing.upper_midi_notes()), 1)
+        self.assertEqual(len(lone[0].voicing.active_frets()), 1)
+        self.assertIn("the thumb alone", step_annotation(lone[0]))
 
     def test_a_held_step_says_the_shape_above_it_is_held(self):
         """`bass_only` is a claim about the left hand, and the tab cannot show it.
