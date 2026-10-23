@@ -736,15 +736,9 @@ class TestChordSlots(unittest.TestCase):
     def test_the_singing_route_is_not_touched(self):
         """The default request invents no melody: a note-less position carries `None`.
 
-        The regression that makes this necessary, and it was measured rather than
-        predicted: `parse_parts("auto")` **returned** the sentinel `("auto",)`, which had
-        no soprano, so testing the route on the parsed value alone classified the *default*
-        arrangement as the comping route. Fourteen steps of a singing every-beat
-        arrangement carried the placeholder melody before the derivation replaced them.
-
         **What is asserted is the absence of an invented pitch, not the step count.** The
-        default grid now generates note-less positions of its own, and the honest report
-        for one is `melody is None` — never the sentinel's `C4`.
+        default grid generates note-less positions of its own, and the honest report for
+        one is `melody is None` — never a stand-in pitch.
         """
         body = harmony("C", "major") + note("C", 5)
         path = write_score(score(body, divisions=4, beats=4))
@@ -756,11 +750,8 @@ class TestChordSlots(unittest.TestCase):
         """Where no note is sounding, the slot carries `None` rather than an invention.
 
         Bar 6 of `synthetic_repeat_slash` follows the last melody note, so there is no tune
-        under the chord. The deleted `_PLACEHOLDER_MELODY` stood in with a pitch that
-        parsed but was not playing; `None` is the honest value, and the assertion is
-        `assertIsNone` rather than an equality a placeholder could have satisfied — all
-        30 real `C4` slots across the fixtures sat on genuinely written C4s, which is why
-        equality against a sentinel could pass for the wrong reason (§9.3 step B).
+        under the chord. **The assertion is `assertIsNone` rather than an equality**, because
+        a stand-in pitch would satisfy an equality for the wrong reason (§9.3 step B).
         """
         slots = [
             s
