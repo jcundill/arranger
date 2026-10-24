@@ -350,6 +350,14 @@ python -m arranger head tests/data/synthetic_common_8.musicxml --bars 1-2 --chor
 
 `--chord-notes targets` does the same thing **and** thins the fills between the targets automatically — a shell, a third or sixth, or the melody alone. That automatic half is the same request value: `--chord-notes targets` says *how much of the chord sounds at a target and between them*, while `--chord-on` says *when* a chord attacks. The two are separate questions, which is why they are two flags: `--chord-on 1,3 --chord-notes targets` is a chord on 1 and 3 only, thinned inside each one.
 
+**Under a note the tune is holding, the chord stays below it - and the stab ends the tie.** A
+comp is an accompaniment, so its top voice sits strictly under the tune's note: the shape can
+neither restrike that pitch nor take the string the held note is fingered on. Reaching for the
+chord therefore **releases** the tie rather than claiming a hold the engine cannot prove the
+hand makes — a player who can keep the note down is free to, but the tab does not assert it,
+and the line says which note the stab took. The melody column and the melody rows are blank
+there, because the note is no longer sounding.
+
 ```python
 progression = [
     ("C5", "Fmaj7"),   # beat 1 - the target

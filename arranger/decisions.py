@@ -339,6 +339,42 @@ def melody_is_ringing(
     return sounding_harmony(previous_step) == harmony
 
 
+def tie_ended_by_a_stab(
+    arrangements: List[ArrangementStep],
+    melody: Optional[str],
+    *,
+    attacked: bool,
+) -> bool:
+    """Whether the tune's note here is not sounding because a chord attack ended its tie.
+
+    The tune's note is a **tie** at this slot when the guitar is not singing it and the
+    arrangement already struck it: a step back with the same `melody` and `melody_voiced`
+    True is that note's onset. A chord attack between the two takes the left hand, and
+    **the engine cannot prove the finger stays** - `fingers` holds a budget (four fingers,
+    a five-fret reach) and no per-finger assignment - so the tie is recorded as released
+    rather than as a hold the tab cannot back. A player who can keep it is free to; the
+    tab does not claim it.
+
+    The scan is bounded by the tie: a different melody (or a rest) between here and the
+    onset means this note is a fresh one, and nothing has been released. A stab earlier in
+    the same tie answers for every position after it too, so a chord held over a released
+    note does not read as still sounding. The onset must also have **sounded** - a note the
+    guitar declined to play was never held, and a stab over it ends nothing.
+    """
+    if melody is None:
+        return False
+    released = False
+    for step in reversed(arrangements):
+        if melody not in (step.melody, step.original_melody):
+            return False
+        if step.melody_voiced:
+            # The note's own onset, either spelling of it: a tie exists only if the
+            # guitar actually struck the note there.
+            return bool(step.voicing.midi_notes()) and (attacked or released)
+        released = released or step.chord_attack
+    return False
+
+
 def should_promote_fill(
     texture: str,
     role: str,

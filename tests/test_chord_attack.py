@@ -16,10 +16,19 @@ that, and the unflagged pair in `TestTheRenderersAgree` pins the renderers'.
 import re
 import unittest
 
-from arranger import Request
+from musthe import Note
+
+from arranger import Request, format_progression
 from headxml import arrange_xml_head
 from tabxml import format_musicxml
-from tests.support import BUT_NOT_FOR_ME, COMMON_8, make_step
+from tests.support import (
+    BUT_NOT_FOR_ME,
+    COMMON_8,
+    TROUBLE_IN_MIND,
+    arranged,
+    make_step,
+    sweep_head_paths,
+)
 
 
 class TestTheEngineRule(unittest.TestCase):
@@ -163,6 +172,118 @@ class TestTheRenderersAgree(unittest.TestCase):
         staff = format_tab_staff(steps, show_chords=False)
         b_row = [line for line in staff.splitlines() if line.startswith("B ")][0]
         self.assertEqual(b_row.count("8"), 2, staff)
+
+
+class TestATieEndsAtAStab(unittest.TestCase):
+    """A chord attack under the tune's tie **releases** the note, and nothing restrikes it.
+
+    The engine holds a left-hand *budget* - four fingers and a five-fret reach, `fingers`
+    - and no per-finger assignment, so it cannot prove the finger holding the tune stays
+    down while the chord is formed. The recorded answer is therefore the conservative one:
+    the tie is ended. A player who can keep the note is free to, because the tab does not
+    claim a hold it cannot back; what it must never do is claim the note sounds when the
+    arrangement has taken it.
+
+    The chord is kept out of the tune's register by `TestTheCompStaysUnderTheTune`, which is
+    the other half: the stab does not restrike the pitch it released.
+    """
+
+    def _steps(self, **kwargs):
+        steps, _head, _notes = arranged(
+            TROUBLE_IN_MIND, section=(1, 8), request=Request(**kwargs)
+        )
+        return steps
+
+    def _slot(self, steps, bar, beat):
+        found = [step for step in steps if step.bar == bar and step.beat == beat]
+        self.assertEqual(len(found), 1)
+        return found[0]
+
+    def test_the_held_note_is_released_at_the_stab(self):
+        """Bar 5 of `Trouble_in_Mind_Blues`: the tied `C4` is taken by the `Cmaj` stab.
+
+        Both the field and the line: `melody_released` is what every renderer reads, and
+        the melody column is blank because the note is not sounding. The note's name
+        survives only in the clause that says who took it, which is the fact a blank
+        column would otherwise hide.
+        """
+        step = self._slot(
+            self._steps(chord_on="1", chord_notes="2"), bar=5, beat=1.0
+        )
+        self.assertEqual(step.melody, "C4")
+        self.assertEqual(step.tab_line(), "x-x-2-0-x-x")
+        self.assertTrue(step.melody_released)
+        lines = format_progression([step]).splitlines()
+        self.assertTrue(lines[0].startswith("Cmaj"), lines[0])
+        self.assertNotIn("C4", lines[0].split("x-x-2-0-x-x")[0])
+        self.assertIn("the stab ends the tied C4", format_progression([step]))
+
+    def test_a_free_string_does_not_save_the_tie(self):
+        """Bar 3: the stab leaves the `A4`'s own string free, and the release is recorded.
+
+        The deliberate over-claim, pinned so a later "optimisation" cannot quietly turn
+        it into the conditional rule. The `A4` is on the high E string and `x-x-x-5-7-x`
+        does not touch it, so a hand *could* hold it - but "could" is not a fact this
+        engine can establish, and the tab does not assert one it cannot.
+        """
+        step = self._slot(
+            self._steps(chord_on="1", chord_notes="2"), bar=3, beat=1.0
+        )
+        self.assertEqual(step.melody, "A4")
+        self.assertEqual(step.tab_line(), "x-x-x-5-7-x")
+        self.assertTrue(step.melody_released)
+        self.assertIn("the stab ends the tied A4", format_progression([step]))
+
+    def test_a_horn_line_is_never_released(self):
+        """With the tune in the horn, a stab ends nothing and the line stays untouched.
+
+        `melody_released` is gated on the *selection* carrying the tune, so the guitar's
+        comp behind a singer is exactly the melody-blind part it always was - the
+        independence `TestCompingMelodyIndependence` asserts, read at this new field.
+        """
+        steps = self._steps(melody=False, chord_on="every-beat")
+        self.assertFalse([step for step in steps if step.melody_released])
+        self.assertTrue(
+            [step for step in steps if step.chord_attack and step.voicing.active_frets()],
+            "the sweep stopped arranging a comp",
+        )
+
+    def test_every_release_is_a_tie_and_never_a_restrike(self):
+        """Sweep: a released step follows the note's own sounding onset, and loses its pitch.
+
+        Two facts a single pinned slot cannot hold. The **tie**: walking back from the
+        stab, the first step that sang the note is the one that struck it, so a release is
+        never recorded where the tune was simply not played. The **restrike**: the note's
+        pitch is not in the shape, which is the ceiling's work - a stab that stated the
+        pitch it released would be the note re-articulated, which is the sound the user
+        reported.
+        """
+        released = 0
+        for head in sweep_head_paths():
+            for request in (
+                Request(chord_on="1", chord_notes="2"),
+                Request(chord_on="every-beat"),
+            ):
+                steps, _head, _notes = arranged(head, request=request)
+                for index, step in enumerate(steps):
+                    if not step.melody_released:
+                        continue
+                    released += 1
+                    origin = None
+                    for earlier in reversed(steps[:index]):
+                        if step.melody not in (earlier.melody, earlier.original_melody):
+                            break
+                        if earlier.melody_voiced:
+                            origin = earlier
+                            break
+                    self.assertIsNotNone(origin, f"{head} {step.bar} {step.beat}")
+                    assert origin is not None
+                    self.assertTrue(origin.voicing.midi_notes(), f"{head} {step.bar}")
+                    self.assertNotIn(
+                        Note(step.melody).midi_note(), step.voicing.midi_notes(),
+                        f"{head} {step.chord} {step.melody} {step.tab_line()}",
+                    )
+        self.assertGreater(released, 5, "the sweep stopped arranging a stab under a tie")
 
 
 if __name__ == "__main__":

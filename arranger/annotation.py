@@ -414,15 +414,21 @@ def _comping_clause(step: ArrangementStep) -> str:
 
 
 def _comping_tail(step: ArrangementStep) -> str:
-    """Whether the guitar is declining the tune or the tune is not there to decline.
+    """Whether the guitar is declining the tune, released it, or the tune is not there.
 
-    `melody_voiced` False alone cannot tell the two apart, and the line said "the guitar
-    does not play the tune" for both: measured over the corpus, 2,107 steps are positions
-    the *tune* is silent at - a grid stab with no note under it - where that reads as a
-    claim about a note that is not sounding at all.
+    `melody_voiced` False alone cannot tell the first two apart, and the line said "the
+    guitar does not play the tune" for both: measured over the corpus, 2,107 steps are
+    positions the *tune* is silent at - a grid stab with no note under it - where that
+    reads as a claim about a note that is not sounding at all.
+
+    A third case is a note the tune **was** holding here and the stab ended
+    (`melody_released`): the note is not sounding, so the line names it rather than
+    leaving the reader to wonder why the melody column is blank.
     """
     if step.melody is None:
         return "the tune is silent here"
+    if step.melody_released:
+        return f"the guitar does not play the tune - the stab ends the tied {step.melody}"
     return "the guitar does not play the tune"
 
 
@@ -817,11 +823,12 @@ def melody_degree_label(step: ArrangementStep) -> str:
     """The melody's degree above its chord: its chord tone, or the tension it names.
 
     Blank when there is nothing to measure - no melody (a comping slot at a position
-    the tune is silent at), or a chord no table can read (`NC`, or a quality with no
-    tone set). A `chord_unvoiced` step keeps its degree, because the chord is still in
-    force even though nothing here states it, and a transposed melody is unaffected:
-    the degree is a pitch class, and dropping an octave does not change it.
+    the tune is silent at), a melody a chord attack **released**, or a chord no table can
+    read (`NC`, or a quality with no tone set). A `chord_unvoiced` step keeps its degree,
+    because the chord is still in force even though nothing here states it, and a
+    transposed melody is unaffected: the degree is a pitch class, and dropping an octave
+    does not change it.
     """
-    if step.melody is None:
+    if step.melody is None or step.melody_released:
         return ""
     return melody_degree_name(Note(step.melody), step.chord)

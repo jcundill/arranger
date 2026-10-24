@@ -1677,12 +1677,17 @@ they had been designed for the job. A two-note shape is a `duo`, the family this
 has always offered for exactly that, so two voices take the `duo` sets and three take the
 `shell` sets unchanged.
 
-**On a position the guitar does not sing, the soprano's string is free.**
-`texture.comping_arity` drops the melody part from the arithmetic for that one slot,
-because nothing is sounding on the string the tune would use — on a walked beat the note is
-held rather than re-struck, and on a comping slot it belongs to the horn. It is a fact about
-the *position*, not a rewrite of the selection: `parts_have_melody` still says whether the
-guitar sings at all.
+**On a position the guitar does not sing, the soprano's string is free** - free of the
+*arity*, which is a different question from the tune's register. `texture.comping_arity` drops
+the melody part from the arithmetic for that one slot, because nothing is sounding on the
+string the tune would use — on a walked beat the note is held rather than re-struck, and on a
+comping slot it belongs to the horn. It is a fact about the *position*, not a rewrite of the
+selection: `parts_have_melody` still says whether the guitar sings at all. **Free to be
+fretted is not free of the tune**: on a singing selection the shape's top stays strictly below
+the note in force (`comp_line_route.leaving_room_for_the_tune`, §"The comp line"), because a
+shape that sounds that pitch restates the tune and, under a tie, takes the string it is held
+on. The two rules do not conflict - the arity says the chord may *use* the string, the ceiling
+says what may sound on it.
 
 **One voice is a weaker claim, and the rule says so rather than refusing.** Two notes can
 sound both guide tones, which is what states the chord; one note cannot, so a single note
@@ -1813,7 +1818,8 @@ the tightest shape for a tone is often the highest one. Absent the band the coll
 today's, so a caller that never asks for a comp sees the palette it always saw.
 
 **It is a narrowing, before the ranking** - the same form as the requested bass note's, and
-in that order: `leaving_room_for_the_bass` first, then the line. The band is applied *by the
+in that order: the tune's register first (`leaving_room_for_the_tune`), then
+`leaving_room_for_the_bass`, then the line. The band is applied *by the
 line* when it chooses the tone, so the line wins inside its register instead of losing to a
 shape that merely costs less; a tone reachable only outside the band stays as the fallback,
 and a tone no shape states leaves the palette exactly as the ranking left it. `voicing_cost`
@@ -1833,6 +1839,26 @@ The four rules, each of which the measurement forced (see
 so it keeps the unbanded palette and the ranking's register. A lone bass note does the same,
 because its register is the walk's rather than the comp's.
 
+**The tune is a ceiling on the comp, and a stab under a tie ends it.** A comping shape is an
+accompaniment, so a **singing** selection's palette is narrowed to the shapes whose **soprano
+is strictly below** the tune note in force (`comp_line_route.leaving_room_for_the_tune`): a
+shape that tops out on the tune's own pitch restates the note on the chord's string, and where
+the tune *holds* that note the shape takes the very string the tie is fingered on. Strictly
+below is what makes the same rule double as the no-restrike rule. Nothing below the note
+returns the palette unchanged, so a chord is never lost to a tune above it, and a
+`--no-melody` comp is untouched - the horn's line is not the guitar's ceiling.
+
+A **chord attack inside the tune's tie then ends the tie**: `ArrangementStep.melody_released`,
+from `decisions.tie_ended_by_a_stab`. The engine has a left-hand *budget* - four fingers, a
+five-fret reach - and no per-finger assignment (`fingers`), so it cannot prove that the finger
+holding the note stays down while the chord is formed. The recorded answer is the conservative
+one: the note is released. A player who can keep it is free to, because the tab never claims
+the hold; what it must not do is claim the note sounds when the arrangement took it. So the
+melody column and both melody rows are blank at that step, and `annotation._comping_tail`
+names the note the stab took. Measured over the committed heads: `--chord-on 1
+--chord-notes 2` releases **12** tied attacks and `--chord-on every-beat` **72**, and no comp
+under a tune note sounds at or above it in either.
+
 **What it says on the tab.** `ArrangementStep.top_role` records the role, and
 `annotation._comp_line_clause` prints the tone and what it is doing - `top D4 - walks up`,
 `- the opening, in the band's middle`, `- approaches from below`, `- fills down toward the
@@ -1840,9 +1866,10 @@ tune`. `Palette.dropped_for_line` records the shape the ranking preferred before
 narrowed; it is **recorded and not printed**, because the line narrows on almost every
 position and the sentence would repeat everywhere while saying nothing a reader needs.
 
-**The invariants it does not move.** The comp stays **melody-blind**:
-`tests/test_comping.py::TestCompingMelodyIndependence` passes untouched, because a line
-that reads the chord cannot see the tune. `bass_place` / `fingers.can_fret` remain the final
+**The invariants it does not move.** The comp stays **melody-blind where the tune is not the
+guitar's** (`--no-melody`): `tests/test_comping.py::TestCompingMelodyIndependence` passes
+untouched, because the ceiling is gated on the selection carrying the tune and the line reads
+only the chord. `bass_place` / `fingers.can_fret` remain the final
 gate, so a top-voice move that would need a fifth finger is refused and the step keeps its
 upper voicing. And no step loses its chord: the narrowing returns the full palette when the
 chosen tone states nothing.

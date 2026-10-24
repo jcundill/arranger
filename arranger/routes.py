@@ -29,6 +29,7 @@ from .decisions import (
     melody_is_ringing,
     palette_facts,
     select_step_voicing,
+    tie_ended_by_a_stab,
 )
 from .melody_alone import melody_alone_shape, sounding_melody
 from .parts import PART_BASS
@@ -317,21 +318,27 @@ def _comping_candidates(
     the melody part has no note to sing there, and the arity already excludes it -
     `derived_arity` counts the melody only when the selection takes it. `comping_arity`,
     not `derived_arity`: this position has no note of the tune for the soprano string
-    to carry - the tune belongs to the horn or is held across this beat - so the string
-    is free for the chord part. Reserving it anyway costs the chord its 5th, which is
-    what this arity avoids.
+    to carry - the tune belongs to the horn or is held across this beat - so the chord
+    part is not the melody's voice. Reserving the string anyway costs the chord its 5th,
+    which is what this arity avoids.
+
+    **A different fact is the tune's register, and the chord does not go above it.** A
+    note the tune is holding is not on this shape's strings, so the string really is
+    free - but a shape whose top *is* that pitch restrikes it, and a stab that takes the
+    string under a tie cuts the note. `comp_line_route.leaving_room_for_the_tune` narrows
+    the palette on the way out: a narrowing, and the ranking sees the result unchanged.
+
+    `band` is the comp's register, decided once by `comp_line_route.line_target` and
+    shared by the generator and the line so the palette and the narrowing can never
+    disagree about whether the line runs at all.
 
     **`bass_voice`** is whether this selection is the bass voice and nothing else,
     which arity cannot say: an inner voice and the bass both ask for one note, and only
     the bass voice has a register that is part of what it *is*. Derived from the
     resolved parts rather than an extra flag, so the two spellings of one request
     cannot disagree.
-
-    `band` is the comp's register, decided once by `comp_line_route.line_target` and
-    shared by the generator and the line so the palette and the narrowing can never
-    disagree about whether the line runs at all.
     """
-    return _grips.get_comping_voicings_for(_grips.CompingRequest(
+    candidates = _grips.get_comping_voicings_for(_grips.CompingRequest(
         chord_name=harmony.name,
         fret_min=context.neck.fret_min,
         fret_max=context.neck.fret_max,
@@ -339,6 +346,11 @@ def _comping_candidates(
         bass_voice=bass_voice,
         band=band,
     ))
+    return _comp_line_route.leaving_room_for_the_tune(
+        candidates,
+        context.harmony.melody_note,
+        melody_voiced=context.arrangement.melody_voiced,
+    )
 
 
 def _comping_choice(
@@ -480,6 +492,16 @@ def _emit_comping_step(
         # one already ringing: a comp on `--chord-on every-beat` is four attacks a bar,
         # and the renderers would otherwise fold beats 2..n into one long chord.
         chord_attack=context.state.chord_attack,
+        # A chord attack inside the tune's tie takes the left hand, so the tune's note
+        # is **released** here rather than held: the engine has a finger budget and no
+        # per-finger assignment, so it cannot claim the finger stays down. Nothing
+        # restrikes the note either - `leaving_room_for_the_tune` kept this shape below
+        # it. See `decisions.tie_ended_by_a_stab`.
+        melody_released=tie_ended_by_a_stab(
+            arrangements,
+            context.harmony.note_str,
+            attacked=context.state.chord_attack,
+        ),
         # What the substitution changed about the *harmony*, reported the
         # way the melody route reports it: `chord` stays the written
         # symbol, and these three say what was actually stated under the

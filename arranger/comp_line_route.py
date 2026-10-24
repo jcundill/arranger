@@ -151,6 +151,36 @@ def line_inputs(
     return fill, next_tones
 
 
+def leaving_room_for_the_tune(
+    candidates: List[Voicing],
+    melody_note: Optional[Note],
+    *,
+    melody_voiced: bool,
+) -> List[Voicing]:
+    """The shapes whose top voice stays below the tune note in force.
+
+    A stab must not restate the tune's own pitch. Where the tune is **held** across
+    the attack, a shape whose top *is* that pitch takes the fingered string and cuts
+    the tie; everywhere it reads as the tune struck on the chord's string rather than
+    as an accompaniment under it. So the ceiling is **strict**, and it is a
+    **narrowing**: the cost tuple ranks what comes back unchanged, and no criterion is
+    added or re-weighted.
+
+    The full palette comes back when nothing sits below the note, so a chord at the
+    top of the neck is never lost to a tune above it. Returned unchanged when the
+    guitar does not sing here (`melody_voiced` False - the tune is the horn's, and a
+    comp behind it stays melody-blind) or when there is no note at all.
+    """
+    if not melody_voiced or melody_note is None:
+        return candidates
+    ceiling = melody_note.midi_note()
+    below = [
+        voicing for voicing in candidates
+        if max(voicing.midi_notes()) < ceiling
+    ]
+    return below or candidates
+
+
 def line_narrowed(
     arrangements: List[ArrangementStep],
     candidates: List[Voicing],

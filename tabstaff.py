@@ -718,6 +718,19 @@ def _carries_melody(steps: List[ArrangementStep], string_index: int) -> bool:
     )
 
 
+def _melody_label(step: Optional[ArrangementStep]) -> str:
+    """The melody row's cell for one step: the note's name, or blank once it is released.
+
+    The row labels every step, because the tune moves on while the shape underneath is
+    held - which is exactly why the one cell it must not label is a note a **chord attack
+    ended**. That note is not sounding, and its name on the row would claim the tune is
+    still in. `annotation._comping_tail` says which note the stab took.
+    """
+    if step is None or step.melody_released:
+        return ""
+    return step.melody or ""
+
+
 def _staff_bars(
     columns: List[Tuple[float, Optional[ArrangementStep], bool]],
     beats_per_bar: int,
@@ -1318,7 +1331,7 @@ def format_tab_staff(
             lines.append(row)
         if show_melody:
             lines.append(grid.line(
-                width, system, lambda step: (step.melody or "") if step else "",
+                width, system, _melody_label,
                 when_struck=False,
             )[0])
         lines.extend(grid.string_line(width, system, index) for index in range(5, -1, -1))
@@ -1590,14 +1603,12 @@ def _html_melody_row(
 
     Labelled on every step, not only on a strike: the melody moves on even while
     the shape underneath it is being held, so the held columns are exactly where a
-    note name is most useful.
+    note name is most useful - and a note a chord attack ended is the one blank cell,
+    because there the tune is no longer sounding (`_melody_label`).
     """
     cells = [_html_cell(tag="th")]
     for index in measure:
-        # An empty cell is one with no step on it; pyright cannot see that the
-        # conditional already guards it, so the binding is named explicitly.
-        step = columns[index][1]
-        cells.append(_html_cell(_escape(step.melody or "") if step else ""))
+        cells.append(_html_cell(_escape(_melody_label(columns[index][1]))))
     return _html_row(_CLASS_MELODY, cells)
 
 

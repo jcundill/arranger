@@ -20,7 +20,7 @@ from arranger import (
     format_tab_staff,
     write_tab_html,
 )
-from tests.support import make_voicing
+from tests.support import make_step, make_voicing
 
 
 class _TagBalance(HTMLParser):
@@ -199,6 +199,28 @@ class TestHtmlTab(unittest.TestCase):
         """Note names are on by default in the page, unlike the ASCII staff."""
         self.assertIn("D5", self.html)
         self.assertNotIn("D5", format_tab_html(self.steps, show_melody=False))
+
+    def test_a_released_note_is_blank_on_the_melody_row(self):
+        """A note a stab ended does not appear: the row says what the tune is doing.
+
+        The page labels every step, so a released note would read as still sounding. The
+        ASCII staff's row is the same rule (`tabstaff._melody_label`), and this pins the
+        page's half of it.
+        """
+        sounding = make_step(
+            [-1, -1, -1, 7, -1, -1], chord="Dm7", melody="C4", bar=1, beat=1.0
+        )
+        released = make_step(
+            [-1, -1, -1, 9, -1, -1],
+            chord="Dm7",
+            melody="C4",
+            melody_voiced=False,
+            melody_released=True,
+            bar=1,
+            beat=2.0,
+        )
+        page = format_tab_html([sounding, released])
+        self.assertEqual(page.count("C4"), 1, page)
 
     def test_mutes_are_blank_unless_asked_for(self):
         """

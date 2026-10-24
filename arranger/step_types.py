@@ -263,6 +263,14 @@ class ArrangementStep:
     # The pitch class of a bass note the left hand could not place, or None when
     # every thumb note the arrangement asked for sounded. Set by `bass_merge`.
     bass_refused: Optional[str] = None
+    # True when a chord attack here ends the tune's tie, so the note is not
+    # sounding rather than held. Nothing restrikes it - `comp_line_route`
+    # keeps the chord below the tune's register. Set by the comping route.
+    #
+    # Last in the dataclass rather than beside `melody_voiced`: a field added in the
+    # middle shifts every positional construction of a step, which is a silent
+    # mis-bind rather than a type error.
+    melody_released: bool = False
 
     @property
     def grip(self) -> str:

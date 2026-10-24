@@ -148,8 +148,12 @@ def _format_step(
     tab = "-".join(cells)
     # Two characters per cell - a fret reaches 18 - plus one hyphen between each pair.
     field = len(cells) * STAFF_CELL_WIDTH + len(cells) - 1
+    # A note a stab released is not sounding, so neither the melody column nor its
+    # degree names it. `_comping_tail` says which note the stab ended, which is the fact
+    # the blank column would otherwise hide.
+    melody = "" if step.melody_released else (step.melody or "")
     line = (
-        f"{step.chord:<8} {(step.melody or ''):<3} "
+        f"{step.chord:<8} {melody:<3} "
         f"{melody_degree_label(step):<4} {tab:<{field}}"
     )
     annotation = step_annotation(step).strip()
@@ -231,7 +235,8 @@ def format_progression(
 def print_step(step: ArrangementStep) -> None:
     """Prints one arranged step, including which string carries the melody."""
     melody_string = 6 - step.voicing.soprano_string()  # guitar string number, 1 = high E
+    melody = "" if step.melody_released else (step.melody or "")
     print(
-        f"Chord: {step.chord:<8} | Melody: {(step.melody or ''):<3}{step_annotation(step)} | "
+        f"Chord: {step.chord:<8} | Melody: {melody:<3}{step_annotation(step)} | "
         f"Tab [E-A-D-G-B-E]: {'-'.join(_step_cells(step))} | Melody string: {melody_string}"
     )

@@ -6,6 +6,10 @@ inert: every published arrangement must come out byte-identical, which is assert
 against the same progression arranged both ways. Note what is *not* claimed: that the
 melody's pitch never appears, because a guide tone can share its pitch class. The
 invariant is the identical candidate set whatever melody is asked about.
+
+**The route narrows that set, the generator does not** - `TestTheCompStaysUnderTheTune` is
+the other half: on a singing selection the shape's top stays strictly below the tune note in
+force, so a stab neither restates it nor takes the string a tie is held on.
 """
 
 import inspect
@@ -26,6 +30,7 @@ from arranger import (
     supported_string_sets,
 )
 from arranger.comp_line import LineShape
+from arranger.comp_line_route import leaving_room_for_the_tune
 from arranger.grip_place import snapshot
 from arranger.grip_tables import (
     COMPING_MAX_SPAN,
@@ -43,10 +48,12 @@ from arranger.options import ArrangeOptions, Request
 from arranger.tuning import NECK_FRET_MAX, NECK_FRET_MIN, SILENCE_GRID
 from tests.support import (
     PROGRESSION,
+    TROUBLE_IN_MIND,
     arranged,
     chord_pcs,
     comping,
     guide_pcs,
+    make_voicing,
     sweep_head_paths,
 )
 
@@ -1430,3 +1437,110 @@ class TestTheRhythmAttacksPositionsTheProgressionAlreadyHas(unittest.TestCase):
             if not step.voicing.active_frets():
                 continue
             self.assertEqual(step.beat % 1, 0.5, step.tab_line())
+
+
+class TestTheCompStaysUnderTheTune(unittest.TestCase):
+    """A stab never sounds at or above the tune note in force.
+
+    The comp part is an accompaniment, so its top voice sits below the tune: a shape whose
+    soprano *is* the tune's pitch restrikes the note, and where the tune is holding it the
+    shape takes the fingered string and cuts the tie (`TestATieEndsAtAStab`). The narrowing
+    is `comp_line_route.leaving_room_for_the_tune`, applied before the ranking so the cost
+    tuple is unchanged and no criterion learns about the tune.
+    """
+
+    def test_the_ceiling_is_strict(self):
+        """A shape whose top *is* the tune's pitch is refused; one below it is kept.
+
+        Strict rather than "not above": a shape that tops out on the tune's own pitch is
+        the note restruck on the chord's string, which is the sound the rule exists to
+        avoid. Measured on B3-string shapes over a held `Eb4`: the `Eb4` shape and the
+        `E4` one both go, the `D4` one stays.
+        """
+        below = make_voicing([-1, -1, -1, 7, -1, -1])   # G string 7 = D4
+        at = make_voicing([-1, -1, -1, -1, 4, -1])      # B string 4 = Eb4
+        above = make_voicing([-1, -1, -1, 9, -1, -1])   # G string 9 = E4
+        kept = leaving_room_for_the_tune(
+            [above, at, below], Note("Eb4"), melody_voiced=True
+        )
+        self.assertEqual([voicing.midi_notes() for voicing in kept], [[62]])
+
+    def test_nothing_below_the_tune_leaves_the_palette_alone(self):
+        """A tune above every shape loses the narrowing, not the chord.
+
+        The ceiling is a *preference* over shapes - the same trade the neck window makes -
+        so a chord that cannot sit under the note is still stated. Losing the chord of the
+        tune is worse than playing it high.
+        """
+        above = make_voicing([-1, -1, -1, 9, -1, -1])
+        self.assertEqual(
+            leaving_room_for_the_tune([above], Note("C4"), melody_voiced=True), [above]
+        )
+
+    def test_a_horn_line_is_not_the_guitars_ceiling(self):
+        """`melody_voiced=False` is the other part's tune, so the comp stays melody-blind.
+
+        This is the half that keeps the default inert: a comping selection's shapes are
+        chosen from the chord alone, which is `TestCompingMelodyIndependence`'s claim
+        about the generator holding at this layer too.
+        """
+        shapes = [
+            make_voicing([-1, -1, -1, 7, -1, -1]),
+            make_voicing([-1, -1, -1, 9, -1, -1]),
+        ]
+        self.assertEqual(
+            leaving_room_for_the_tune(shapes, Note("Eb4"), melody_voiced=False), shapes
+        )
+        self.assertEqual(
+            leaving_room_for_the_tune(shapes, None, melody_voiced=True), shapes
+        )
+
+    def test_the_tune_is_the_ceiling_on_a_real_slot(self):
+        """`Trouble_in_Mind_Blues` bar 5 beat 1: `x-x-2-0-x-x`, top `G3`, under a held `C4`.
+
+        The pinned tab is the acceptance gate. The ranking's answer before the ceiling was
+        `x-x-5-9-x-x` - the same `G` string the tied `C4` was holding, fretted at 9, with
+        its top a third *above* the tune. Under the ceiling the shape is stated an octave
+        down instead, so the accompaniment is under the line rather than through it.
+        """
+        steps, _head, _notes = arranged(
+            TROUBLE_IN_MIND,
+            section=(1, 8),
+            request=Request(chord_on="1", chord_notes="2"),
+        )
+        slot = [step for step in steps if step.bar == 5 and step.beat == 1.0]
+        self.assertEqual(len(slot), 1)
+        step = slot[0]
+        self.assertEqual(step.melody, "C4")
+        self.assertFalse(step.melody_voiced)
+        self.assertEqual(step.tab_line(), "x-x-2-0-x-x")
+        self.assertLess(max(step.voicing.midi_notes()), Note("C4").midi_note())
+
+    def test_every_comp_under_a_tune_note_stays_below_it(self):
+        """The corpus sweep: no comping attack reaches the tune note's pitch.
+
+        A sweep rather than one slot, because the shape comes from a ranking: a cost
+        criterion that preferred a higher top voice would satisfy the pinned slot above
+        and fail here. Both a positional rhythm and the tune's own onsets are swept, so
+        the held-note case and the silent-position case are both covered.
+        """
+        checked = 0
+        for head in sweep_head_paths():
+            for request in (
+                Request(chord_on="1", chord_notes="2"),
+                Request(chord_on="every-beat"),
+            ):
+                steps, _head, _notes = arranged(head, request=request)
+                for step in steps:
+                    if step.melody_voiced or step.melody is None:
+                        continue
+                    if not step.voicing.active_frets():
+                        continue
+                    tune = Note(step.melody).midi_note()
+                    self.assertLess(
+                        max(step.voicing.midi_notes()), tune,
+                        f"{head} {step.chord} {step.melody} {step.tab_line()}",
+                    )
+                    checked += 1
+        self.assertGreater(checked, 20, "the sweep stopped arranging a comp under a tune")
+

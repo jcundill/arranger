@@ -354,6 +354,11 @@ WITNESSES: List[Witness] = [
         lambda step: "the tune is silent here" in _line(step),
     ),
     (
+        "a chord attack ended the tune's tie, so the note is not sounding",
+        lambda step: step.melody_released,
+        lambda step: "ends the tied" in _line(step),
+    ),
+    (
         "the guitar comps, so the voices it states are the only harmony a reader can see",
         lambda step: bool(_comping_names(step) or _comping_names_on_the_line(step)),
         lambda step: (
@@ -564,15 +569,19 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
             omitted, 135, "the number of steps owing an omitted-tone clause moved"
         )
         # The same reasoning for the voice list, which is the clause most steps carry:
-        # measured over this sweep, **1347** of the steps it arranges sound two or more
+        # measured over this sweep, **1348** of the steps it arranges sound two or more
         # upper voices on a route that sings the tune - so a change that thinned the
         # default palette, or that stopped the clause firing, moves this number. The
         # grouped fixtures add 320, all of them from notes the old corpus did not have.
-        # Two of the 1347 come from the union's gate reading the *selection* rather than
+        # Two of them come from the union's gate reading the *selection* rather than
         # the spelling: the waltz's first note is harmonised rather than read as a repeat
         # of a comping position, and the walk re-plans one line around a position the
-        # union adds.
-        self.assertEqual(named, 1347, "the number of steps naming their voices moved")
+        # union adds. The last one is the tune's register as a ceiling on the comp
+        # (`comp_line_route.leaving_room_for_the_tune`): on the pickup head's bar 3 beat 2
+        # the comping shape moved below the held `F4`, so the melody step after it is no
+        # longer the *same* shape re-struck - it states its voices in full rather than
+        # reading as `repeated`.
+        self.assertEqual(named, 1348, "the number of steps naming their voices moved")
         # And for the comping part, whose voices are the only harmony the line can show:
         # measured over this sweep, **1475** of the steps it arranges state a comping shape
         # and name each of its voices, so the reading of a thin line cannot quietly become
