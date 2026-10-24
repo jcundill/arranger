@@ -37,7 +37,7 @@ from arranger.grips import (
     get_comping_voicings_for,
 )
 from arranger.options import ArrangeOptions, Request
-from arranger.tuning import NECK_FRET_MAX, NECK_FRET_MIN
+from arranger.tuning import NECK_FRET_MAX, NECK_FRET_MIN, SILENCE_GRID
 from tests.support import (
     PROGRESSION,
     chord_pcs,
@@ -1108,3 +1108,100 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
             len(walked), len(silent),
             "a walking line adds no beats, so the walk is not being heard",
         )
+
+
+class TestTheRhythmAttacksPositionsTheProgressionAlreadyHas(unittest.TestCase):
+    """`chord_on` selects among the arrangement's own positions; it never adds one.
+
+    The producer that *invents* positions is the importer's - one per subdivision of each
+    bar's own rhythm (`headxml.chord_slots`) - which is what lets a comping part state the
+    chord of the tune in a bar the tune never enters. A progression written in code has no
+    such generator: its positions are its entries and their `timings`, so a rhythm naming a
+    position none of them occupies leaves the guitar **resting** rather than inventing the
+    beat - and the rest is emitted, so the part still lines up against the tune. Spelling
+    the rhythm in the progression is how a caller comps one.
+    """
+
+    NAMES = ("Dm7", "G7", "Cmaj7", "A7")
+
+    def _steps(self, chord_on, progression=None, timings=None):
+        return VoiceLeadingEngine().arrange_progression(
+            [(None, name) for name in self.NAMES]
+            if progression is None
+            else progression,
+            timings=timings,
+            request=Request(melody=False, chord_on=chord_on),
+        )
+
+    @staticmethod
+    def _sounding(steps):
+        """The beats a chord is actually struck on, read off the tab rather than a flag."""
+        return [step.beat for step in steps if step.voicing.active_frets()]
+
+    def test_a_named_position_the_progression_occupies_attacks(self):
+        """Beats 1 and 3 are entries, so `1,3` comps them and rests the two between.
+
+        The rests are asserted to be **steps of their own** carrying the chord's name and
+        a reason, which is what keeps the comp lined up against the tune rather than being
+        one bar short.
+        """
+        steps = self._steps("1,3")
+        self.assertEqual([step.beat for step in steps], [1.0, 2.0, 3.0, 4.0])
+        self.assertEqual(self._sounding(steps), [1.0, 3.0])
+        for step in steps:
+            if step.voicing.active_frets():
+                self.assertIsNone(step.silence, step.tab_line())
+                continue
+            self.assertEqual(step.silence, SILENCE_GRID, step.tab_line())
+            self.assertIn(step.chord, self.NAMES, step.tab_line())
+
+    def test_a_named_position_the_progression_does_not_occupy_is_a_rest(self):
+        """`1and` is a position four entries at 1-4 do not have, so nothing sounds.
+
+        A count as well as the assertion: a request that emitted no step at all would
+        satisfy "nothing sounds" silently, and the point is that the *rests* are emitted.
+        """
+        steps = self._steps("1and")
+        self.assertEqual(len(steps), 4)
+        self.assertEqual(self._sounding(steps), [])
+        for step in steps:
+            self.assertEqual(step.silence, SILENCE_GRID, step.tab_line())
+
+    def test_the_rhythm_is_compped_when_the_progression_spells_it(self):
+        """The positive half: the offbeats are reachable, as entries of their own.
+
+        A bar whose entries include 1.5 and 2.5 answers `every-beat` with the two beats -
+        the same request that left a four-entry bar silent above.
+        """
+        progression = [(None, name) for name in ("Dm7", "Dm7", "G7", "G7")]
+        timings = [(1, beat, 0.5) for beat in (1.0, 1.5, 2.0, 2.5)]
+        steps = self._steps("every-beat", progression=progression, timings=timings)
+        self.assertEqual([step.beat for step in steps], [1.0, 1.5, 2.0, 2.5])
+        self.assertEqual(self._sounding(steps), [1.0, 2.0])
+
+    def test_the_importer_is_the_other_producer_of_positions(self):
+        """The same request that leaves a bare progression silent comps a written head.
+
+        The difference between the two entry points, asserted rather than assumed: the
+        importer's union generates the position, so `1and` is a place on the metre's grid
+        there and no place at all here.
+        """
+        import os
+
+        from tests.support import arranged
+
+        path = os.path.join(
+            os.path.dirname(os.path.abspath(__file__)), "data", "synthetic_cut_time.mxl"
+        )
+        steps, _head, _notes = arranged(
+            path, request=Request(melody=False, chord_on="1and")
+        )
+        self.assertTrue(steps, "an arrangement with no steps at all is a defect")
+        self.assertTrue(
+            self._sounding(steps),
+            "the importer's union did not produce the requested position",
+        )
+        for step in steps:
+            if not step.voicing.active_frets():
+                continue
+            self.assertEqual(step.beat % 1, 0.5, step.tab_line())

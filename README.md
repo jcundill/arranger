@@ -554,6 +554,70 @@ One stab, on the and of 1; the melody notes elsewhere are the tune alone. **A st
 
 The old `--grid` figures were **presets of positions, and only of positions**: `freddie` was `--chord-on every-beat`, `charleston` `1,2and`, `joe_pass` `1and,2and,3and,4and` and `final_and` `lastand`. They were removed because they were a second spelling of the same question — and a slightly different one, since a preset also decided which union its positions were merged into, so `grid="chord:freddie"` and `--chord-on every-beat` could differ in shape while agreeing on every position. The request is the only spelling now.
 
+### A comping pattern for a progression written in code
+
+`Request(melody=False, chord_on=...)` is the whole of it — the same request `--no-melody --chord-on` spells:
+
+```python
+from arranger import VoiceLeadingEngine, Request
+
+engine = VoiceLeadingEngine()
+
+# (melody note, chord name). `None` is a position the tune does not state - which is
+# every position when the guitar is comping rather than singing.
+progression = [(None, "Dm7"), (None, "G7"), (None, "Cmaj7"), (None, "A7")]
+
+steps = engine.arrange_progression(
+    progression, request=Request(melody=False, chord_on="1,3")
+)
+```
+
+```text
+Dm7               10-x-10-10-x-x    (comping - D Root, F b3 & C b7; the tune is silent here)
+G7                x-x-x-x-x-x       (the guitar rests here -
+                                    no part was asked to sound at this position)
+Cmaj7             x-10-9-9-x-x      (comping - E 3, G 5 & B 7; the tune is silent here)
+A7                x-x-x-x-x-x       (the guitar rests here -
+                                    no part was asked to sound at this position)
+```
+
+**The rhythm names positions the progression has to have already.** `chord_on` decides which of the arrangement's own positions attack; it does not add one. The producer that *invents* positions is the **importer's** — one per subdivision of each bar's own rhythm (`headxml.chord_slots`) — which is what lets a comp state the chord in a bar the tune never enters. A progression written in code has exactly the positions its entries and their `timings` give it, so a bar of entries at beats 1, 2, 3 and 4 answers a rhythm like this:
+
+| `chord_on` | over a bar of entries at beats 1, 2, 3 and 4 |
+|---|---|
+| `"melody"` *(default)* | four attacks — every entry is an onset |
+| `"every-beat"` | four attacks, and no rest |
+| `"1,3"` | two attacks, and a rest on beats 2 and 4 |
+| `"1and"` | **nothing at all** — 1.5 is not a position this bar has |
+
+So a rhythm of its own is spelled **in the progression** — one entry per position, with `timings` placing each one:
+
+```python
+# two chords a bar: entries at 1, 1.5, 2, 2.5, ... — `chord_on="every-beat"` then comps the beats
+progression = [(None, chord) for chord in ("Dm7", "Dm7", "G7", "G7", "Cmaj7", "Cmaj7", "A7", "A7")]
+timings = [(1, beat, 0.5) for beat in (1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5)]
+```
+
+Without `timings` the entries are laid out one per felt beat — four entries is bar 1 beats 1–4, eight is bars 1–2 — so a multi-bar comp wants its bars spelled out:
+
+```python
+progression = [(None, "Dm7"), (None, "G7"), (None, "Cmaj7"), (None, "A7")]
+timings = [(1, 1.0, 4.0), (2, 1.0, 4.0), (3, 1.0, 4.0), (4, 1.0, 4.0)]   # bar, beat, duration
+
+steps = engine.arrange_progression(
+    progression, timings=timings, request=Request(melody=False)
+)
+```
+
+```text
+Dm7               10-x-10-10-x-x    (comping - D Root, F b3 & C b7; the tune is silent here)
+G7                x-10-9-10-x-x     (comping - G Root, B 3 & F b7; the tune is silent here)
+Cmaj7             x-10-9-9-x-x      (comping - E 3, G 5 & B 7; the tune is silent here)
+A7                x-12-11-12-x-x    (comping - A Root, Db 3 & G b7; the tune is silent here)
+```
+
+One attack per bar, on the felt beat its entry sits at: every entry is an onset, so the default `chord_on="melody"` already comps each one. Positions the rhythm does not name come back as **rest steps**, `step.silence` naming the reason, so the part keeps its place against the tune — and `Request(melody=False, chord_on="none")` with no bass position is refused outright (`ValueError`), because there is nothing left for the guitar to play.
+
 ### What the chord does in a rest: `--chord-fills`
 
 A **notated silence** in the melody line is the one span the chord rhythm says nothing about, and this is its policy. It is not a rhythm of its own and it never invents a melody.
