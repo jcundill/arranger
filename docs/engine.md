@@ -758,12 +758,12 @@ Five decisions in here were each forced by something measurable:
   the low E, and the low E's note is frequently *not* the lowest sounding pitch.
   `_drop2_6432_request` therefore states that claim as a request to the shared search rather
   than inventing a second way to
-  place notes, and the search ranks the survivors by `(fret_span, avg_fret)`. Two
-  measurements forced the rest. Ranking is not cosmetic: an unranked
-  search returns the first shape it meets, which puts the low E at fret 0–1, below
-  `NECK_FRET_MIN`, and an earlier "0 of 22, never selected" reading was that bug. And
-  ranked correctly it still lost — `voicing_cost` reached the neck-position term first
-  and declined the better bass, so it wins only where the two shapes tie outright. Hence
+  place notes, and the search ranks the survivors by `(fret_span, avg_fret)`. Ranking is
+  not cosmetic: an unranked search returns the first shape it meets, which puts the low E
+  at fret 0-1, below `NECK_FRET_MIN` — which is what a "0 of 22, never selected" reading
+  is reporting. And
+  ranked correctly it still loses — `voicing_cost` reaches the neck-position term first
+  and declines the better bass, so it wins only where the two shapes tie outright. Hence
   the root-or-5th bass term at index 6, a *tie-break* below every correctness criterion,
   which is what finally lets `5-x-5-5-5-x` (A2 G3 C4 E4) beat `x-3-5-2-5-x` (A2 E3 C4 E4).
 - **A partial harmonisation is a fallback, not a style.** `missing` voices outranks neck
@@ -855,7 +855,7 @@ Five decisions are load-bearing:
   against each other" property of `voicing_cost` untrue. `TEXTURE_ARITY` maps
   texture → the chord part's arity, `texture_palette` turns that into the families a
   role may use at this position, and `arrange_progression` passes the role's tuple to
-  the generator. Generation and selection stay separate exactly as they already were.
+  the generator. Generation and selection stay separate.
 - **A stated absence is not "a weak note".**
   `metric_weight` returns **-1** when `bar` or `beat` is `None`, and `roles_for_slot`
   treats anything below zero as a target. That `-1` is what a caller **states** - a
@@ -874,8 +874,8 @@ Five decisions are load-bearing:
   felt beats, and `beats_per_bar` and `grouping` decide which exist: a 3/4 head targets
   1 and 3, a 2/2 head has only the downbeat, and a 12/8 bar's grouping `(3,3,3,3)` puts
   its targets on beats 1 and 7. The comparison uses `BEAT_EPSILON` because a notated
-  beat is a float — a 3/4 bar's second beat is 1.666… — and the earlier draft of
-  `metric_weight` compared the *tuple index* against `beats_per_bar`, which let a
+  beat is a float — a 3/4 bar's second beat is 1.666… — and comparing the *tuple index*
+  against `beats_per_bar` lets a
   2/2 bar inherit 4/4's second target. `headxml.arrange_xml_head` passes
   `head.beats_per_bar` through for this reason, and the committed corpus spans cut,
   common and waltz time — `synthetic_waltz.musicxml` is the 3/4 one, and it is the reason
@@ -1097,9 +1097,9 @@ walk is `bass_only` and the previous shape is what is still ringing.
 Every string the step does not play is marked muted (**`x`**), so the line states
 exactly which strings are plucked and nothing else - including a `bass_only` slot,
 whose upper voices are held rather than restruck: a string the player must not attack
-reads the same as a mute here. Leaving them blank made the line look truncated, and a
-blank is indistinguishable from a voice that went missing. (`~`, "let ring", was an
-earlier draft and is still wrong: it says the opposite of what a collapse does.)
+reads the same as a mute here. Leaving them blank makes the line look truncated, and a
+blank is indistinguishable from a voice that went missing. (`~`, "let ring", would say the opposite of
+what a collapse does.)
 
 The HTML marks the whole column with `_CLASS_REPEAT` (`td.repeat`) and tints it. The
 cells are otherwise empty, so without the tint a repeated note reads as a gap in the
@@ -1711,9 +1711,8 @@ unreadable chord        0        (none of the committed heads writes a symbol th
 melody's own pitch: **37 of those 93 steps do.** That is coincidence, not the guitar
 singing — the melody's pitch class is often a chord tone the shell needs anyway. What the
 axis guarantees is that the shape was *chosen from the chord alone*, and that
-`step.melody_voiced` is `False`. An earlier version of this document and of the test suite
-claimed the stronger, falsifiable version ("no step sounds the melody"), and the
-measurement is what corrected it.
+`step.melody_voiced` is `False`. The stronger, falsifiable claim ("no step sounds the
+melody") is false, and the measurement above is what shows it.
 
 ### The renderer rule: a repeated melody holds the whole shape
 
@@ -1757,11 +1756,11 @@ every texture, and nothing is self-contradictory anywhere. The equivalent fact o
 selection axis is `parts_has_melody_only`, which is derived from the parts rather than
 listed, so a spelling that cannot be voiced cannot miss it either.
 
-**`melody_alone_case` gains a guard, because its routes all end at the melody alone.** Every
+**`melody_alone_case` needs a guard, because its routes all end at the melody alone.** Every
 answer it gives reaches `get_melody_only_voicing`, so under a comping selection it must not
 answer `MELODY_ALONE_TEXTURE` — or a texture *fill* would put the tune straight back on the
-guitar, and the axis would be honoured only on targets. Measured: before the guard, every
-fill under `Request(chord_notes="targets", bass_on="every-beat", bass_notes="walk")` came back
+guitar, and the axis would be honoured only on targets. Measured: without the guard, every
+fill under `Request(chord_notes="targets", bass_on="every-beat", bass_notes="walk")` comes back
 `x-7-x-x-x-8`, a bare melody note.
 
 **An `NC` bar is emitted silent, with the reason on the step.** There is no chord, so
