@@ -330,7 +330,7 @@ def chosen_top(
     *,
     next_tones: Optional[Sequence[int]] = None,
     fill: Optional[FillTarget] = None,
-) -> Tuple[Optional[int], str]:
+) -> Tuple[Optional[int], Optional[str]]:
     """Which tone goes on top, and the role the tab line reports for it.
 
     `shapes` is every shape the palette still offers after the requested bass note has
@@ -351,15 +351,45 @@ def chosen_top(
     tones = [shape.tone for shape in pool]
     if state.previous_top is None:
         return (opening_no_melody(pool, band), TOP_OPENING)
-    if next_tones:
-        tone = approach_tone(state.previous_top, tones, next_tones)
-        return (tone, _approach_role(tone, state, next_tones))
-    tone, direction = walk_step(
-        state.previous_top, state.direction, tones, state.history
-    )
-    if tone is None:
-        return (None, TOP_OPENING)
-    return (tone, TOP_WALK_UP if direction > 0 else TOP_WALK_DOWN)
+    previous_top = state.previous_top
+    if next_tones is not None:
+        return _approach_top(previous_top, state, tones, next_tones)
+    return _walk_top(previous_top, state.direction, state.history, tones)
+
+
+def _approach_top(
+    previous_top: int,
+    state: LineState,
+    tones: Sequence[int],
+    next_tones: Sequence[int],
+) -> Tuple[Optional[int], Optional[str]]:
+    """The approach: the shared tone the line pivots onto, and how it gets there.
+
+    When the only tone the line could pick is the one already on top there is no move,
+    so no role is reported: claiming a walk or an approach over a static top would be
+    false, and the narrowing (the tone stays) is explained elsewhere.
+    """
+    tone = approach_tone(previous_top, tones, next_tones)
+    if tone is None or tone == previous_top:
+        return (tone, None)
+    return (tone, _approach_role(tone, state, next_tones))
+
+
+def _walk_top(
+    previous_top: int,
+    direction: int,
+    history: Tuple[int, ...],
+    tones: Sequence[int],
+) -> Tuple[Optional[int], Optional[str]]:
+    """One step of the walk, and the direction it leaves behind.
+
+    When the walk is exhausted or can only restate the previous top there is no move,
+    so no role is reported for the same reason as `_approach_top`.
+    """
+    tone, new_direction = walk_step(previous_top, direction, tones, history)
+    if tone is None or tone == previous_top:
+        return (tone, None)
+    return (tone, TOP_WALK_UP if new_direction > 0 else TOP_WALK_DOWN)
 
 
 def _approach_role(
