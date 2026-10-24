@@ -449,20 +449,34 @@ def _resolution_pitch_class(
 
 _TRIAD_QUALITIES = ("maj", "m")
 
-# Which seventh a triad becomes when its bass note is the seventh, keyed by the
-# triad's own quality. A minor triad over a minor seventh is m7, a major triad
-# over a major seventh is maj7.
-_TRIAD_PROMOTION = {"m": "m7", "maj": "maj7"}
+# Which seventh chord a triad becomes when its bass note is that seventh, keyed by
+# the triad's own quality and by the interval from the root to the bass. The triad's
+# quality and the bass's seventh decide the target together, which is what keeps the
+# promoted quality containing the bass it promoted for: a major triad over its minor
+# seventh is a dominant seventh, over its major seventh a major seventh, and a minor
+# triad likewise becomes m7 or mMaj7.
+_TRIAD_PROMOTION = {
+    ("maj", 10): "7",      # major triad, minor seventh in the bass
+    ("maj", 11): "maj7",   # major triad, major seventh in the bass
+    ("m", 10): "m7",       # minor triad, minor seventh in the bass
+    ("m", 11): "mMaj7",    # minor triad, major seventh in the bass
+}
 
 
 def promote_slash_chord(root: str, quality: str, bass: Optional[str]) -> str:
-    """Promotes a triad to a seventh chord when the bass implies one.
+    """Promotes a triad to the seventh chord its bass note implies.
 
     The Weimar database writes `A-/G`, `C-/Bb` and `D/C` for what a musician
-    reads as Am7/G, Cm7/Bb and Dm7/C: a triad whose bass is its own seventh.
+    reads as Am7/G, Cm7/Bb and D7/C: a triad whose bass is its own seventh.
     Naming the seventh makes the melody note a chord tone instead of an
     unresolved tension, and it recovers the largest group of otherwise
     inexplicable basses.
+
+    **Which seventh the bass is decides the target**, so the promoted quality
+    always contains the bass it promoted for: `D/C` is a major triad over its
+    minor seventh and becomes D7, while `Dmaj/C#` is a major triad over its major
+    seventh and becomes Dmaj7. A quality that would not contain the written bass
+    is never returned.
 
     Triads with any other bass, and every non-triad quality, pass through
     unchanged. A pedal or an inverted bass is honoured by `bass_pitch_class`
@@ -472,9 +486,7 @@ def promote_slash_chord(root: str, quality: str, bass: Optional[str]) -> str:
         return quality
     root_pc = Note(root + "4").midi_note() % 12
     bass_pc = Note(bass + "4").midi_note() % 12
-    if (bass_pc - root_pc) % 12 == 10:  # the seventh
-        return _TRIAD_PROMOTION[quality]
-    return quality
+    return _TRIAD_PROMOTION.get((quality, (bass_pc - root_pc) % 12), quality)
 
 
 def midi_to_note_name(pitch: int) -> str:

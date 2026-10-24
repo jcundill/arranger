@@ -3,6 +3,8 @@ import unittest
 from musthe import Note
 
 from arranger import ChordParser, melody_degree_name
+from arranger.chords import promote_slash_chord
+from arranger.tuning import PITCH_CLASS_NAMES
 
 
 class TestChordParser(unittest.TestCase):
@@ -210,6 +212,73 @@ class TestMelodyDegreeName(unittest.TestCase):
         """No root or no tone set means no claim, rather than a guessed degree."""
         for chord in ("NC", "", None, "X7"):
             self.assertEqual(melody_degree_name(Note("C5"), chord), "", chord)
+
+
+class TestSlashChordPromotion(unittest.TestCase):
+    """A triad whose bass is its own seventh is named as that seventh chord.
+
+    The rule exists for the Weimar corpus, which writes `D/C` for what is played
+    as D7/C. **Which seventh the bass is decides the target**, because a promotion
+    that did not contain the bass it promoted for would leave that bass a tension no
+    shape can state - the opposite of what the promotion is for.
+    """
+
+    def test_the_bass_seventh_decides_the_target(self):
+        """The same triad over each of the two sevenths becomes a different chord."""
+        self.assertEqual(promote_slash_chord("D", "maj", "C"), "7")
+        self.assertEqual(promote_slash_chord("D", "maj", "C#"), "maj7")
+        self.assertEqual(promote_slash_chord("D", "m", "C"), "m7")
+        self.assertEqual(promote_slash_chord("D", "m", "C#"), "mMaj7")
+
+    def test_no_bass_promotes_nothing(self):
+        """Without a slash bass there is no seventh to name."""
+        self.assertEqual(promote_slash_chord("D", "maj", None), "maj")
+        self.assertEqual(promote_slash_chord("D", "m", None), "m")
+
+    def test_a_non_triad_quality_passes_through(self):
+        """Only a triad is promoted: a seventh chord already names its own seventh."""
+        for quality in ("7", "maj7", "m7", "mMaj7", "dim7", "m7b5", "6", "6/9"):
+            self.assertEqual(promote_slash_chord("D", quality, "C"), quality)
+
+    def test_a_bass_that_is_a_seventh_lies_inside_the_settled_chord(self):
+        """The invariant, swept over every root, triad and bass pitch class.
+
+        The rule fires exactly when the bass is one of the two sevenths, so that is
+        where it can be wrong - and it was: `Dmaj/C#` used to come back a plain D
+        major, leaving the written C# outside the chord. Only the bass note's own
+        pitch class is asserted here, because which *voice* states it is the shape's
+        business rather than this rule's.
+        """
+        tones = ChordParser.CHORD_TONES_FROM_ROOT
+        for root in PITCH_CLASS_NAMES:
+            root_pc = Note(root + "4").midi_note() % 12
+            for quality in ("maj", "m"):
+                for bass_pc in range(12):
+                    interval = (bass_pc - root_pc) % 12
+                    if interval not in (10, 11):
+                        continue
+                    bass = PITCH_CLASS_NAMES[bass_pc]
+                    promoted = promote_slash_chord(root, quality, bass)
+                    self.assertIn(
+                        interval, tones[promoted], f"{root}{quality}/{bass} -> {promoted}"
+                    )
+
+    def test_a_bass_that_is_not_a_seventh_leaves_the_triad_alone(self):
+        """The rule's scope: an inversion or a pedal is not a seventh chord.
+
+        Such a bass is honoured as a *preference*, by `bass_pitch_class` rather than
+        by changing the chord, so the quality must come back untouched.
+        """
+        for root in PITCH_CLASS_NAMES:
+            root_pc = Note(root + "4").midi_note() % 12
+            for quality in ("maj", "m"):
+                for bass_pc in range(12):
+                    if (bass_pc - root_pc) % 12 in (10, 11):
+                        continue
+                    bass = PITCH_CLASS_NAMES[bass_pc]
+                    self.assertEqual(
+                        promote_slash_chord(root, quality, bass), quality, f"{root}{quality}/{bass}"
+                    )
 
 
 if __name__ == "__main__":
