@@ -26,7 +26,17 @@ from .chords import (
 )
 from .cost import SPAN_CRITERION, VOICING_COST_CRITERIA
 from .grip_tables import INTERVAL_NAMES
-from .step_types import ArrangementStep, Voicing
+from .step_types import (
+    TOP_APPROACH_FROM_ABOVE,
+    TOP_APPROACH_FROM_BELOW,
+    TOP_FILL_DOWN,
+    TOP_FILL_UP,
+    TOP_OPENING,
+    TOP_WALK_DOWN,
+    TOP_WALK_UP,
+    ArrangementStep,
+    Voicing,
+)
 from .tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
@@ -248,16 +258,19 @@ def _annotate(step: ArrangementStep, *clauses: str) -> str:
     `step_annotation` that can have one carries it. Two correct a **column** and so are
     restated on every line that suffers them - the **octave** the sounding melody is at
     (`_transposition_clause`) and the chord the part actually **states**
-    (`_substitution_clause`). Five explain the shape itself, and a hold is the one step that
+    (`_substitution_clause`). Six explain the shape itself, and a hold is the one step that
     suppresses them: the shape **count** (`_shape_clause`, which stays silent on a hold
     because it was explained where the shape was chosen), the **voices** it sounds and the
     degree each states (`_sounding_clause`), the chord **tone** it leaves out
     (`_omission_clause`), the **window** it had to leave
-    (`_window_clause`) and the **written bass** it does not sound (`_slash_bass_clause`).
+    (`_window_clause`), the **written bass** it does not sound (`_slash_bass_clause`) and
+    the **top voice** the comp line moved, with the tone and the role it moved to
+    (`_comp_line_clause`).
     The **held shape above a moving thumb** (`_held_clause`) is not among them: it is what
-    such a step *is*, so it is the step's own statement, as `repeated`'s is. The eighth is
-    the shape given up so a **requested bass note** could sound (`_bass_room_clause`), and
-    the ninth is the thumb that could not be placed at all (`_bass_refusal_clause`). The
+    such a step *is*, so it is the step's own statement, as `repeated`'s is. The last three
+    are the bass part's own: a **lone thumb** (`_bass_alone_clause`), the shape given up so a
+    **requested bass note** could sound (`_bass_room_clause`), and the thumb that could not
+    be placed at all (`_bass_refusal_clause`). The
     alternative is a dozen return sites each remembering to append them, which is how a
     fact comes to be printed on one route and silently dropped on another - and
     `_bass_annotation` is threaded the same way, through this list, for the same reason.
@@ -274,6 +287,7 @@ def _annotate(step: ArrangementStep, *clauses: str) -> str:
         _omission_clause(step),
         _window_clause(step),
         _slash_bass_clause(step),
+        _comp_line_clause(step),
         _bass_alone_clause(step),
         _bass_room_clause(step),
         _bass_refusal_clause(step),
@@ -598,6 +612,44 @@ def _bass_room_clause(step: ArrangementStep) -> str:
         "first choice "
         f"{palette.dropped_for_bass.tab_string()} could not sound it"
     )
+
+
+#: What a comp-line role reads as on the tab line, keyed by the constant
+#: `step_types` owns. A phrase per role rather than a generic "moves": the line's
+#: whole claim is *which* move it made, and "walks up" and "approaches from below"
+#: are the two a reader can hear.
+_TOP_ROLE_PHRASES: Dict[str, str] = {
+    TOP_OPENING: "the opening, in the band's middle",
+    TOP_WALK_UP: "walks up",
+    TOP_WALK_DOWN: "walks down",
+    TOP_APPROACH_FROM_ABOVE: "approaches from above",
+    TOP_APPROACH_FROM_BELOW: "approaches from below",
+    TOP_FILL_UP: "fills up toward the tune",
+    TOP_FILL_DOWN: "fills down toward the tune",
+}
+
+
+def _comp_line_clause(step: ArrangementStep) -> str:
+    """Names the tone the comp line put on top, and what it is doing there.
+
+    The comp's top voice moves between positions, and the tab cannot say why: `x-7-9-4-x-x`
+    followed by `x-7-9-5-x-x` is two shapes, and only the second step's role says whether
+    the line walked, pivoted on a tone the next chord shares, or bridged a fill. Without
+    it the movement is either invisible or reads as the ranking being inconsistent.
+
+    Read from `step.top_role`, which the comping route records where it *chose* the tone -
+    never re-derived, because a clause that recomputed the walk would be the rule agreeing
+    with itself. Silent on a hold, like every other clause that accounts for the shape
+    rather than a column: it was explained where the shape was chosen.
+    """
+    role = step.top_role
+    phrase = _TOP_ROLE_PHRASES.get(role) if role is not None else None
+    if phrase is None or step.repeated or step.bass_only:
+        return ""
+    if not step.voicing.active_frets():
+        return ""
+    top = max(step.voicing.upper_midi_notes() or step.voicing.midi_notes())
+    return f"top {note_name(top)} - {phrase}"
 
 
 def _omission_clause(step: ArrangementStep) -> str:

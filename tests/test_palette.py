@@ -367,13 +367,17 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         from headxml import arrange_xml_head
 
         head = "tests/data/synthetic_repeat_slash.musicxml"
-        comping = "; the guitar does not play the tune)"
+        comping = "; the guitar does not play the tune"
         chord, _head, _notes = arrange_xml_head(
             head,
             section=(1, 2),
             options=ArrangeOptions(request=Request(melody=False)),
         )
-        self.assertEqual(step_annotation(chord[0]), f" (comping - A 9, B 3 & F# 7{comping}")
+        self.assertEqual(
+            step_annotation(chord[0]),
+            f" (comping - A 9, B 3 & F# 7{comping}"
+            " - top B3 - the opening, in the band's middle)",
+        )
         self.assertFalse(chord[0].melody_voiced)
         # A bass line under that same chord part states the *same* three voices and
         # puts the thumb below them rather than widening the chord - which is what
@@ -513,12 +517,14 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
     def test_a_written_bass_that_is_not_sounded_says_so(self):
         """A slash chord nobody can voice still prints, and the loss is reported.
 
-        `Trouble_in_Mind_Blues` has `Am7/D` steps whose shapes state the b3, the 5 and the
-        b7 and no D at all: the partition prefers the written bass and cannot reach it, so
-        the reader is handed a symbol asking for a note the tab does not contain. The
-        witness is a **named** grid, because the default now withholds a position the
-        tune is still holding (§9.2) and those `Am7/D` bars are a hold; `freddie` states
-        its figure regardless, which is what keeps the loss visible.
+        `Trouble_in_Mind_Blues` has `Am7/D` steps whose shapes state the root, the b3
+        and the b7 and no D at all: the partition prefers the written bass and cannot
+        reach it, so the reader is handed a symbol asking for a note the tab does not
+        contain - `x-x-7-5-8-x`, whose lowest voice is `A3`, five semitones from the D
+        the symbol names. The witness is a **named** grid, because the default now
+        withholds a position the tune is still holding (§9.2) and those `Am7/D` bars
+        are a hold; `freddie` states its figure regardless, which is what keeps the
+        loss visible.
         """
         from headxml import arrange_xml_head
 
@@ -533,7 +539,7 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         ]
         self.assertTrue(lost, "the head stopped losing its slash basses")
         self.assertIn(
-            "the written bass D is not sounded - the lowest voice (G3) is 5 semitones",
+            "the written bass D is not sounded - the lowest voice (A3) is 5 semitones",
             step_annotation(lost[0]),
         )
         kept = [

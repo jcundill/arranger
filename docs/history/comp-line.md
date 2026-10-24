@@ -1,16 +1,27 @@
 # The comp line: a voice-led top voice for the chord part
 
-**The active plan.** It records the decisions and the measurements behind them, so the work can be
-picked up without re-deriving any of it. When the phases land this file is **retired into
-`docs/history/`** with the header the other retired plans carry, and the live rules it produces go
-where they belong: the comping section of [engine.md](engine.md), the comping examples in
-[README.md](../README.md), and the routing row in [AGENTS.md](../AGENTS.md).
+**Retired.** This was the active plan for the chord part's top voice, and it is the record of
+*why* each rule is what it is: the measurements that motivated it, the six rules, the fill, the
+four-bar example every rule was tuned against, and — at the end — the measurement taken when it
+landed, including the three rules the four-bar figure corrected and the two things the
+measurement removed. **The live rules are in
+[engine.md](../engine.md) §"The comp line: the top voice moves"**; the code is
+`arranger/comp_line.py` (the rules) and `arranger/routes.py` (the narrow); the rendered examples
+are in [README.md](../../README.md); and the routing row is in [AGENTS.md](../../AGENTS.md).
+Read that section for what the engine does now, and this file for the numbers behind it.
 
-Related: [engine.md](engine.md) §"`get_comping_voicings`: a chord with no melody on top" (the
-generator this changes), [history/comping-styles.md](history/comping-styles.md) §9.4 (the four-note
-comping chord, deliberately unbuilt), [history/walking-bass.md](history/walking-bass.md) (the
+**The status of the plan itself: landed.** P0–P4 are done (the collapse, the line, the fill, the
+default change with its measurement) and P5's renderer audit is a test
+(`test_comp_line.TestTheRenderersAgree`); P6 was the documentation this header is part of. The one
+thing the plan named as separable and did **not** build is the companion defect below — the
+`--chord-notes targets` comp that never thins — and it is still open, as is `cost.py:218`'s
+hardcoded 9 in [open-issues.md](../open-issues.md) item 7.
+
+Related: [engine.md](../engine.md) §"`get_comping_voicings`: a chord with no melody on top" (the
+generator this changes), [comping-styles.md](comping-styles.md) §9.4 (the four-note
+comping chord, deliberately unbuilt), [walking-bass.md](walking-bass.md) (the
 precedent for a line with roles and a lookahead),
-[history/reharmonisation-proposals.md](history/reharmonisation-proposals.md) (functional
+[reharmonisation-proposals.md](reharmonisation-proposals.md) (functional
 substitution, deliberately unbuilt).
 
 ## Goal
@@ -406,8 +417,8 @@ rather than a name the facade defines.
 ### P0 — measure, change nothing
 
 Re-take every figure in this document against the tree as it stands, and file the findings in
-[docs/open-issues.md](open-issues.md) as **item 7** (numbering continues from the record in
-[history/open-issues.md](history/open-issues.md), so a bare "item 7" citation stays unambiguous).
+[docs/open-issues.md](../open-issues.md) as **item 7** (numbering continues from the record in
+[open-issues.md](open-issues.md), so a bare "item 7" citation stays unambiguous).
 The item is the two defects that exist today and are *not* this feature's business to fix silently:
 `cost.py:218`'s hardcoded 9, and the collapse's `(span, avg_fret)` key that hides a low shape behind
 a high one. Each figure is stated **once**, with the recipe that re-measures it.
@@ -542,7 +553,97 @@ built:
 Recorded here so the design is checked against it, not built into it. The real work — slot insertion,
 label semantics, and the first-criterion exemption — is a separate plan.
 
-## Reproducing the measurements
+## The measurement
+
+Every figure below was taken over the **thirteen committed heads**, on
+`Request(melody=False)` and `Request(melody=False, chord_on="every-beat")` — the two
+selections that comp — with the recipe at the end of this document.
+
+| | before | after |
+|---|---|---|
+| sounding comp steps | 496 | 496 |
+| moves between them | 474 | 474 |
+| **zero moves** | **322** | **0** |
+| distinct top pitches | 2–8 per head | 5–11 per head |
+
+The plateau is gone: **not one of the 474 moves repeats the top voice**, where more than two
+thirds of them did. The moves after the change, by interval:
+
+| semitones | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |
+|---|---|---|---|---|---|---|---|---|---|
+| moves | 45 | 120 | 103 | 97 | 64 | 10 | 22 | 6 | 7 |
+
+Moves of a **3rd or smaller are 365 of 474 (77%)**; a 4th or a tritone accounts for 74; and a
+**5th or more for 35 (7%)**. Those 35 are not scattered - of the 109 moves of a 4th or more,
+87 carry a `walk up` / `walk down` role and are the walk **reversing at the band's edge**,
+where the two tones nearer the edge are inside the no-retrace window, and the other 22 are
+approaches, whose whole job is to arrive on a tone both chords state. Acceptance
+criterion 1's "no leaps of a 6th or more inside a chord" is therefore **too strong as
+written** — the no-retrace rule and the band edge between them force a jump, and this
+document's own bar 3 (`67,60,59`) contains one. What the line does remove is the *plateau*,
+and that is the defect the plan was filed for.
+
+The rest of the acceptance criteria:
+
+2. **No step loses its chord.** `test_every_position_states_its_chord` asserts every one of
+   the example's sixteen steps sounds and that no shape spans more than five frets; the
+   suite's own playability invariants pass unchanged.
+3. **The band holds.** Measured over the corpus: of the **496** comp steps carrying a top
+   role, **0** has a fret outside the home band. A *fill* may leave the band toward the tune
+   (that is its rule) and never leaves the window.
+4. **A fill bridges.** `synthetic_repeat_slash` bar 6 reproduces §"The fill" exactly
+   (`C4` at avg 6.33 → `A3` at avg 3.0, both `fill down`); `fill up` steps occur in
+   `Trouble_in_Mind_Blues` bars 9 and 17, and `TestTheFill.test_the_rule_is_symmetric`
+   pins the three directions on the rule itself.
+5. **Melody-blind.** `tests/test_comping.py::TestCompingMelodyIndependence` passes
+   **without edit**.
+6. **The four renderers agree** — `test_comp_line.TestTheRenderersAgree` for `tabscore`,
+   `tabstaff` and `tabxml`, and `test_guitarpro.TestAMovingTopVoiceIsFourStrikes` for the
+   GP5 file. A top voice that moves inside a bar is four strikes, not one held chord.
+7. **The pinned tabs moved deliberately**, and each move is in the commit that made it:
+   `test_palette` (a comping step's voices and role), `test_chord_fills` (a fill's frets),
+   `test_staff_thumb` (a moved thumb on the A string), `test_palette`'s slash-bass witness
+   (`A3`, not `G3`), and `test_tab_rendering`'s wrap count (**82 → 107**), which is the
+   clause the line added plus the longer degree names of the shapes it chooses.
+8. **The gate moved**: 1315 → 1331 feature tests, 91 meta.
+
+### Three rules the figure corrected, and one sentence it removed
+
+The prose in §"The rules" was written before the measurement, and the engine is the record
+where the two disagree:
+
+- **The no-retrace window is one chord, not the last two pitches of the line.** Bar 3
+  (`67,60,59,60`) needs the approach's own top (`64`) still forbidden at position 2 and
+  *not* forbidden at position 1; a window that spans the change makes bar 3 climb out of
+  `59` and bar 4 open by reversing into `57`. `comp_line.read_state` reads the tops of the
+  current chord only, and a harmony change restarts both the window and the direction.
+- **The band is tested on every fret, not on the average.** `Cmaj7`'s `x-7-x-9-12-x` has
+  avg 9.3 and a fret at 12; an average test hands it to the walk in bar 3, and the hand jumps
+  to fret 12 for one beat of a bar otherwise at 4–9. `comp_line.LineShape.in_band` is
+  `all(...)` over the frets.
+- **The approach pivots on a tone both chords state.** §5's "the next chord's tone nearest
+  the previous top" gives `65` where the figure has `64` in bar 2; the three approaches in
+  the example are all **common tones** (`D4` under `Dm7|G13`, `E4` under `G13|Cmaj7`, `C4`
+  under `Cmaj7|C6`), which is also why no special rule is needed to make the approach move:
+  the shared tone nearest the previous top *is* the previous top, so the next one is taken.
+
+Two things the measurement **removed** rather than added:
+
+- **A sentence for the palette's line-narrow was cut.** `Palette.dropped_for_line` records
+  what the ranking would have played, and a clause for it fired on **fourteen of the
+  example's sixteen steps** - with one shape per top tone the ranking and the line agree
+  only by accident, so the sentence said the same thing almost everywhere. The field stays
+  as the recorded fact (it is how the table above was taken); the *explanation* a reader
+  needs is which tone is on top and what it is doing, which `annotation._comp_line_clause`
+  prints: `top D4 - walks up`.
+- **The fill's target is the tune's fret, not a harmonised average.** §"The fill" states its
+  high-return case against `Eb5` harmonised at avg 12.5 and lands `D5` at avg 12.0; that
+  number came from a prototype that re-voiced the next step by hand. The engine aims at the
+  **fret the returning note sits at** (`comp_line.tune_register`), so the same case climbs
+  to `C5` at avg 10.3 instead — still a climb, still under the tune, one step further below
+  it. The direction is the rule; the exact shape is the prototype's, and this is the
+  deviation, stated rather than hidden.
+
 
 Every figure in this document came from the library's own front door, so it re-measures by hand:
 
@@ -571,6 +672,21 @@ steps, head, _ = headxml.arrange_xml_head(
     request=Request(chord_fills="comp"))
 print([(s.bar, s.beat, s.chord, s.voicing.tab_string(), s.melody, s.melody_voiced)
        for s in steps if s.bar == 6])
+
+# §"The measurement": the plateau, the intervals, and the band
+import glob
+for path in sorted(glob.glob("tests/data/*.music*")):
+    for request in (Request(melody=False), Request(melody=False, chord_on="every-beat")):
+        steps, _head, _ = headxml.arrange_xml_head(path, request=request)
+        sounding = [s for s in steps if s.voicing.active_frets()]
+        tops = [max(s.voicing.midi_notes()) for s in sounding]
+        moves = [b - a for a, b in zip(tops, tops[1:])]
+        outside = [
+            s for s in sounding
+            if s.top_role and any(not (3 <= f <= 10) for f in s.voicing.active_frets())
+        ]
+        print(path.split("/")[-1], len(moves), sum(1 for m in moves if m == 0),
+              len(moves) - sum(1 for m in moves if m == 0), len(outside))
 ```
 
 The band comparisons and the fill's three directions came from a scratch script that re-voices each

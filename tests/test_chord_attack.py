@@ -51,12 +51,20 @@ class TestTheEngineRule(unittest.TestCase):
     def test_a_repeated_shape_is_flagged_while_the_pitches_are_equal(self):
         """The one case the pitches cannot decide: same shape, asked for twice.
 
-        A bar of `synthetic_cut_time` under `--chord-on 1,2` states one shape on both of
-        its felt beats, so the two steps are indistinguishable by pitch - and before the
-        flag existed the second was folded into the first and never sounded.
+        A bar of `synthetic_cut_time` under `--chord-on 1,2` with **a one-note comp**
+        (`--chord-notes 1`) states one shape on both of its felt beats, so the two
+        steps are indistinguishable by pitch - and before the flag existed the second
+        was folded into the first and never sounded.
+
+        A one-note comp is the arity that can still repeat a shape: the comp line has
+        no top voice to walk there, so the palette has one note per string set and the
+        ranking answers with the same one twice. At three voices the line moves by
+        construction, which is why this witness is stated at arity one.
         """
         steps, _head, _notes = arrange_xml_head(
-            BUT_NOT_FOR_ME, section=(2, 4), request=Request(melody=False, chord_on="1,2")
+            BUT_NOT_FOR_ME,
+            section=(2, 4),
+            request=Request(melody=False, chord_on="1,2", chord_notes="1"),
         )
         bar_two = [step for step in steps if step.bar == 2 and step.voicing.active_frets()]
         self.assertEqual([step.beat for step in bar_two], [1.0, 2.0])
@@ -139,11 +147,18 @@ class TestTheRenderersAgree(unittest.TestCase):
         self.assertEqual([note for note in pitched if "<tie" in note], [])
 
     def test_the_pinned_staff_shows_both_stabs(self):
-        """The user-facing half: bar 2 of the cut-time head, drawn twice."""
+        """The user-facing half: bar 2 of the cut-time head, drawn twice.
+
+        The one-note comp of `test_a_repeated_shape_is_flagged_while_the_pitches_are_equal`
+        is the fixture, because a three-voice comp no longer repeats a shape - the comp
+        line moves its top voice on every position.
+        """
         from tabstaff import format_tab_staff
 
         steps, _head, _notes = arrange_xml_head(
-            BUT_NOT_FOR_ME, section=(2, 3), request=Request(melody=False, chord_on="1,2")
+            BUT_NOT_FOR_ME,
+            section=(2, 3),
+            request=Request(melody=False, chord_on="1,2", chord_notes="1"),
         )
         staff = format_tab_staff(steps, show_chords=False)
         b_row = [line for line in staff.splitlines() if line.startswith("B ")][0]

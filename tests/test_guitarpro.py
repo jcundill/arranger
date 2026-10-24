@@ -1719,6 +1719,38 @@ class TestGuitarProAnacrusis(unittest.TestCase):
 
 
 @requires_guitarpro
+class TestAMovingTopVoiceIsFourStrikes(GuitarProTestCase):
+    """A comp whose top voice moves inside a bar writes four attacks, not one chord.
+
+    The GP5 half of `tests/test_comp_line.py::TestTheRenderersAgree`. The four
+    positions of a bar state four *different* shapes there, so a writer that folded a
+    shape into the one before it would lose three attacks - and the frets of the notes
+    it kept would not say so.
+    """
+
+    def test_bar_one_is_four_three_voice_beats(self):
+        from arranger import Request
+        from arranger.steps import arrange_progression
+
+        progression = []
+        timings = []
+        for bar, name in enumerate(["Dm7", "G13", "Cmaj7", "C6"], start=1):
+            for beat in (1.0, 2.0, 3.0, 4.0):
+                progression.append((None, name))
+                timings.append((bar, beat, 1.0))
+        steps = arrange_progression(
+            progression, timings=timings, request=Request(melody=False)
+        )
+        song = _parse(io.BytesIO(format_gp5(steps)))
+        beats = [
+            beat
+            for measure in song.tracks[0].measures[:1]
+            for beat in measure.voices[0].beats
+        ]
+        self.assertEqual([len(beat.notes) for beat in beats], [3, 3, 3, 3])
+
+
+@requires_guitarpro
 class TestARestruckCompIsNotOneLongChord(GuitarProTestCase):
     """A comp that repeats the same shape is two beats, not one long chord.
 

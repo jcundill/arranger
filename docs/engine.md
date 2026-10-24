@@ -1741,6 +1741,62 @@ axis guarantees is that the shape was *chosen from the chord alone*, and that
 `step.melody_voiced` is `False`. The stronger, falsifiable claim ("no step sounds the
 melody") is false, and the measurement above is what shows it.
 
+### The comp line: the top voice moves
+
+**The chord part's top note is a line, not a plateau.** A comp states its chord in a
+register it owns and voice-leads the top voice through the chord's own tones from one
+position to the next - the thing a pianist's left hand does and the shipped comp did not.
+`arranger/comp_line.py` owns the rules; `routes.comping_step` asks them.
+
+**Two registers, and only the second is the comp's.**
+
+- the **window** (`--fret-min` / `--fret-max`, default 2–13) is the register the *tune* is
+  harmonised in. It stays wide and stays a **preference**;
+- the **home band** is `fret_min + 1`, **eight frets**, clamped to the window - 3–10 by
+  default. Eight is a value rather than a hand-span: inside five frets a seventh chord
+  reaches two or three tones and the line bounces between them.
+
+**The palette keeps one shape per top tone** when the band is present
+(`grips._comping_collapse_key`): a shape per string set cannot express the choice, because
+the tightest shape for a tone is often the highest one. Absent the band the collapse is
+today's, so a caller that never asks for a comp sees the palette it always saw.
+
+**It is a narrowing, before the ranking** - the same form as the requested bass note's, and
+in that order: `leaving_room_for_the_bass` first, then the line. The band is applied *by the
+line* when it chooses the tone, so the line wins inside its register instead of losing to a
+shape that merely costs less; a tone reachable only outside the band stays as the fallback,
+and a tone no shape states leaves the palette exactly as the ranking left it. `voicing_cost`
+keeps its seven fields and their order.
+
+The four rules, each of which the measurement forced (see
+[history/comp-line.md](history/comp-line.md)):
+
+| rule | what it does |
+|---|---|
+| **the opening** | the shape placed nearest the home band's middle - a register, not a pitch. It replaces `cost`'s hardcoded `fret 9`, which is still there for a caller with no previous shape |
+| **the walk** | the nearest tone in the carried direction, **never retracing the last two tones of the same chord**. The direction is derived from the last two tops and restarts upward at a harmony change, which is also where the no-retrace window restarts |
+| **the approach** | the last position before a barline change takes a tone **both chords state**, nearest the previous top - a pivot, and the reason it moves without a rule of its own (the nearest shared tone *is* the previous top, so the next one is taken) |
+| **the fill** | a chord in a notated melody rest bridges: it opens at the register the hand is in, closes at **the fret the returning tune sits at**, and interpolates between them over the run of melody-less positions. It is the one reader that may leave the home band, toward the tune, and it never leaves the window |
+
+**One-voice comping is a no-op for the line** (`notes == 1`): there is no top voice to walk,
+so it keeps the unbanded palette and the ranking's register. A lone bass note does the same,
+because its register is the walk's rather than the comp's.
+
+**What it says on the tab.** `ArrangementStep.top_role` records the role, and
+`annotation._comp_line_clause` prints the tone and what it is doing - `top D4 - walks up`,
+`- the opening, in the band's middle`, `- approaches from below`, `- fills down toward the
+tune`. `Palette.dropped_for_line` records the shape the ranking preferred before the line
+narrowed; it is **recorded and not printed**, because the line narrows on almost every
+position and the sentence would repeat everywhere while saying nothing a reader needs.
+
+**The invariants it does not move.** The comp stays **melody-blind**:
+`tests/test_comping.py::TestCompingMelodyIndependence` passes untouched, because a line
+that reads the chord cannot see the tune. `bass_place` / `fingers.can_fret` remain the final
+gate, so a top-voice move that would need a fifth finger is refused and the step keeps its
+upper voicing. And no step loses its chord: the narrowing returns the full palette when the
+chosen tone states nothing.
+
+
 ### The renderer rule: a repeated melody holds the whole shape
 
 Normally `repeated` is a **soprano-only re-strike** — the melody re-articulates under an

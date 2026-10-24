@@ -23,6 +23,7 @@ gate and the conventions — not the explanation.
 | which chord tones a shape states — `TONE_PRIORITY`, the tone a four-voice shape gives up, the palette a melody with no degree to match is offered, or the order that was not taken | [docs/history/generated-grips.md](docs/history/generated-grips.md) | `arranger/grip_tables.py` (`TONE_PRIORITY`, `stated_tones`), `arranger/grips.py` (`drop2_template_for`, `_drop2_palette`), `tests/test_generated_grips.py`, `tests/support.py` (`WITNESS`) |
 | the trailing annotation a step carries, why a shape is thin, or what **must** be explained when a choice is added (`ArrangementStep.palette`, `cost.VOICING_COST_CRITERIA`, `tests/meta_explanations.py`) | [docs/engine.md](docs/engine.md) | `arranger/annotation.py`, `arranger/text_layout.py`, `arranger/render.py`, `arranger/movement.py` |
 | the chord part's content (`--chord-notes`), target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/texture.py`, `arranger/routes.py`, `arranger/bass_rules.py`, `arranger/bass_place.py`, `arranger/bass.py`, `arranger/decisions.py` |
+| the comp's **top voice** - the home band, the walk's direction and no-retrace window, the approach's pivot, the opening, the fill's interpolation, or `top_role` / `Palette.dropped_for_line` | [docs/engine.md](docs/engine.md) §"The comp line: the top voice moves" | `arranger/comp_line.py`, `arranger/routes.py` (`_line_narrowed`), `arranger/grips.py` (`CompingRequest.band`, `_comping_collapse_key`), `arranger/step_history.py` (`sounding_tops`), `tests/test_comp_line.py` |
 | non-chord melody notes, a new chord quality, or a chord **spelling** that has to read | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` (`QUALITY_ALIASES`, `parse_symbol`), `tests/meta_chord_names.py` |
 | the step loop, `arrange_progression`, or **which route takes a slot** | [docs/engine.md](docs/engine.md) | `arranger/movement.py`, `arranger/route_dispatch.py`, `arranger/harmonised_route.py`, `arranger/routes.py`, `arranger/step_history.py`, `arranger/step_prepare.py`, `arranger/resolution.py`, `arranger/slot_plan.py`, `tests/meta_route_dispatch.py` |
 | a step route's arguments - `SlotContext`, one slot's request as a value rather than twenty parameters, and the `SlotInputs` groups under it (`SlotArrangementFacts`, `SlotRhythmFacts`, `SlotNeckFacts`, `SlotBassFacts`) | [docs/engine.md](docs/engine.md) | `arranger/context.py`, `arranger/slot_plan.py`, `arranger/movement.py`, `arranger/harmonised_route.py`, `arranger/routes.py` |
@@ -58,7 +59,7 @@ quoting one.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1308 feature + 91 meta tests OK (skipped=2)**, pyright
+Current measured state: **1335 feature + 91 meta tests OK (skipped=2)**, pyright
 **0 errors 0 warnings**, ruff **0 errors**. If your change moves any of those numbers, that
 is the signal — not the absence of an error message. A quiet run is not evidence; a moved
 count is.
@@ -189,6 +190,7 @@ arranger/
 │   ├── grouping.py      #   TimeSignature and the metre's grouping algebra
 │   ├── grid.py          #   the request's rhythm: `Rhythm`, felt beats, the lattice
 │   ├── texture.py       #   how many notes the chord part states; metric roles
+│   ├── comp_line.py     #   the comp's home band and its walk / approach / opening / fill
 │   ├── bass_rules.py    #   the bass vocabulary, capacities and refusals
 │   ├── bass_place.py    #   the thumb's octave and string: the cost and `place_bass`
 │   ├── bass.py          #   the walking-bass thumb line
@@ -237,7 +239,7 @@ The engine is a package of focused modules in a strict dependency order:
 
 ```
 tuning -> step_types -> fingers -> chords -> grip_tables -> grip_place -> grips -> cost -> annotation -> text_layout -> parts
-                             -> grouping -> grid -> texture -> bass_rules -> bass_place -> bass -> bass_merge
+                             -> grouping -> grid -> texture -> comp_line -> bass_rules -> bass_place -> bass -> bass_merge
                              -> options -> resolution
                                                                     |
                        step_history -> melody_alone -> routes -> slot_plan -> step_prepare -> harmonised_route
@@ -486,6 +488,13 @@ renderer**, never re-derived at a call site:
   the whole fact — the
   routed chord's tones against the pitches sounding — is already on the step, and a field
   beside it would be a second source for one fact;
+- the **comp line's move** is recorded (`ArrangementStep.top_role`, from `comp_line`'s role
+  constants, which live in `step_types` so this module can read them) and phrased by
+  `_comp_line_clause`: `top D4 - walks up`. `Palette.dropped_for_line` - the shape the ranking
+  preferred before the line narrowed the palette - is **recorded and not printed**, and that is
+  a measurement rather than an omission: the line narrows on almost every comping step, so a
+  sentence for it said the same thing on fourteen of the four-bar example's sixteen steps
+  ([history/comp-line.md](docs/history/comp-line.md) §"The measurement");
 - a **route that chose no shape** states its own (`_comping_clause` names the voices it
   states, each by note and degree; "the tune is silent here"; "the guitar rests here"; "the
   shape above is held"; "the most a fill's palette offers" — the last is the difference

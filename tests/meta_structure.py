@@ -179,14 +179,18 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/parts.py": Budget(9, 45, 1),
     "arranger/render.py": Budget(11, 64, 2),
     # The step-history readers left for `step_history`, so the ceiling is what this
-    # module measures rather than what it measured. The parameter ceiling moves with
-    # it: the widest signature here takes six, and a ceiling of twelve was permission
-    # for a function twice the size of anything in the file.
-    "arranger/routes.py": Budget(18, 110, 18),
+    # module measures rather than what it measured. The parameter ceiling is
+    # `comping_step`'s seven: the six facts of a slot plus the metre's count, which the
+    # comp line needs and the context cannot hold. The branch ceiling is
+    # `_comping_choice`'s seven, which is one per narrowing and per value it threads.
+    "arranger/routes.py": Budget(7, 101, 7),
     "arranger/slots.py": Budget(9, 136, 12),
     # The facade's `arrange_progression` loses the same five (16 -> 10).
     "arranger/steps.py": Budget(1, 54, 10),
-    "arranger/comp_line.py": Budget(50, 100, 15),
+    # The comp line: the band, the walk, the approach, the opening and the fill, each a
+    # small pure function over pitch lists. Measured rather than a policy ceiling now
+    # that the route calls it: `chosen_top` branches once per rule it dispatches to.
+    "arranger/comp_line.py": Budget(10, 37, 5),
     "arranger/texture.py": Budget(11, 57, 6),
     # The instrument: tuning, the fretboard, the neck limits and the sentinels. The
     # value types (`Voicing`, `ArrangementStep`, `Palette`) and the tab-cell

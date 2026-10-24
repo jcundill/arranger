@@ -589,24 +589,25 @@ class TestTheExplanationWraps(unittest.TestCase):
     def test_the_number_of_steps_that_wrap(self):
         """A count, because a step that stops wrapping is silent.
 
-        Measured over this sweep: **82** of the steps it renders carry an explanation too
+        Measured over this sweep: **107** of the steps it renders carry an explanation too
         long for the width, so each of them continues below the step. A clause that stopped
         being printed, or a width that stopped being honoured, would move this number.
 
         The count is a function of the width and the clauses, and two things set it: the
-        union's gate reading the **selection** (`targets` does not comp a position before
-        the waltz's first note, so that note is harmonised rather than read as a repeat of
-        the comping shape) and the comping palette's string set - the waltz's comping shape
-        left the G-B-E set for `x-6-5-5-x-x` on the A, D and G strings, which states
-        `G 3, Bb 5 & C 6` where the G-B-E set stated `Eb Root, G 3 & C 6`, three
-        characters shorter. Three characters is the whole of the difference at this width.
+        **string set each comping shape occupies** - a shape on the lower strings states
+        long degree names (`G Root`, `Bb b7`) where a shape on the G-B-E set stated three
+        characters fewer, and the comp line chooses the shape by its top tone rather than
+        taking the tightest one per string set - and the **role sentence** the line now
+        prints on every comping step (`top D4 - walks up`). `--chord-notes 1` comps are the
+        exception to both: the line has no top voice there, so their palettes and their
+        lines are unchanged.
         """
         from arranger.render import _format_step
 
         wrapped = sum(
             len(_format_step(step, self.WIDTH)) > 1 for _head, step in self.rendered_steps()
         )
-        self.assertEqual(wrapped, 82, "the number of steps that wrap moved")
+        self.assertEqual(wrapped, 107, "the number of steps that wrap moved")
 
 
 class TestOneLineColumns(unittest.TestCase):

@@ -318,7 +318,10 @@ class TestAFillInARealHead(unittest.TestCase):
             beats_per_bar=head.beats_per_bar,
             beat_type=head.beat_type,
         )
-        self.assertIn("4", "".join(staff), "the fill's fret is missing from the staff")
+        # Two fill columns, `x-10-5-5-x-x` and `x-9-7-5-x-x`: the frets that tell them
+        # apart are the A string's 10 and the D string's 7.
+        self.assertIn("10", "".join(staff), "the fill's fret is missing from the staff")
+        self.assertIn("7", "".join(staff), "the fill's second column is missing")
 
 
 if __name__ == "__main__":

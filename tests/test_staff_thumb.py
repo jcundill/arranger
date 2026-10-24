@@ -33,9 +33,14 @@ def _cut_time_case():
     """The committed case: bar 7 of `synthetic_common_8`, held shape, moving thumb.
 
     Measured over every committed head and three requests; two steps in the corpus are
-    this shape, and this is the one whose thumb fret (`12`, low E) is unambiguous on the
-    row it is drawn on. The plan guessed the cut-time head's bar 3 beat 1; the real
-    cases are bars 2, 4 and 8 beat 1.5 there, with `--chord-on 1,1and --bass-on 1and`.
+    this shape, and this is the one whose thumb is unambiguous on the row it is drawn
+    on. The plan guessed the cut-time head's bar 3 beat 1; the real cases are bars 2, 4
+    and 8 beat 1.5 there, with `--chord-on 1,1and --bass-on 1and`.
+
+    **The thumb lands on the A string at fret 7, under a melody held on the high E.**
+    The comp line moves the upper shape between positions, so a column that is a *hold*
+    is now one where the tune itself is held and only the thumb moved - which is
+    exactly the asymmetry the renderers have to agree about.
     """
     steps, head, _notes = arrange_xml_head(
         COMMON_8, section=(7, 8), request=Request(chord_on="1,1and", bass_on="every-beat")
@@ -62,20 +67,24 @@ class TestAHeldColumnDrawsAMovedThumb(unittest.TestCase):
         moved = [(step, previous) for step, previous in holds if _moved_thumb(step, previous)]
         self.assertTrue(moved, "no held column in this fixture moves its thumb")
         step, previous = moved[0]
-        self.assertEqual(step.voicing.bass_string, 0)
-        self.assertEqual(step.voicing.frets[0], 12)
+        self.assertEqual(step.voicing.bass_string, 1)
+        self.assertEqual(step.voicing.frets[1], 7)
 
     def test_the_ascii_staff_draws_it(self):
         steps, _head = _cut_time_case()
         staff = format_tab_staff(steps, show_chords=False, show_melody=False)
-        low_e = [line for line in staff.splitlines() if line.startswith("E ")]
-        self.assertEqual(len(low_e), 1, staff)
-        self.assertIn("12", low_e[0], staff)
+        a_row = [line for line in staff.splitlines() if line.startswith("A ")][0]
+        self.assertEqual(a_row.count("7"), 1, staff)
 
     def test_the_html_draws_it(self):
         steps, _head = _cut_time_case()
         page = format_tab_html(steps, show_melody=False)
-        self.assertIn(">12<", page)
+        # The A string's row, with the moved thumb in the column the melody is held in.
+        self.assertIn(
+            '<td></td><td></td><td class="bass"></td>'
+            '<td class="bass">7</td><td class="bass"></td>',
+            page,
+        )
 
     def test_the_other_two_renderers_already_had_it(self):
         """The asymmetry: these two never lost the note, which is what made it a bug.
@@ -90,7 +99,7 @@ class TestAHeldColumnDrawsAMovedThumb(unittest.TestCase):
         steps, _head = _cut_time_case()
         step = [s for s in steps if s.bar == 7 and s.beat == 3.0][0]
         # The one-line tab prints every cell of a strike column, so the note is there.
-        self.assertIn("12-x-x-x-10-x", format_progression(steps).replace(" ", ""))
+        self.assertIn("x-7-x-x-x-5", format_progression(steps).replace(" ", ""))
         # The score never read a column flag at all: it reads the step's **pitches**,
         # and the thumb's is one of them.
         self.assertIn(step.voicing.bass_midi, _sounding(step))

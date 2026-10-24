@@ -147,7 +147,11 @@ class ScoreMeta:
 HEAD_HELP = _CommonHelp(
     bars="narrow to a half-open LO-HI bar range; bounds may be negative",
     bars_per_line="bars per system on the staff",
-    fret_min=f"lowest fret to aim for (default {NECK_FRET_MIN}; an aim, not a filter)",
+    fret_min=(
+        f"lowest fret to aim for (default {NECK_FRET_MIN}; an aim, not a filter). "
+        f"The comp's own register starts one fret above it, so this flag moves the "
+        f"comp as well as the tune"
+    ),
     fret_max=(
         f"highest fret to aim for (default {NECK_FRET_MAX}; a chord with no "
         f"voicing inside the window is still played, outside it)"

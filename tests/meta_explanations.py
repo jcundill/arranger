@@ -53,6 +53,7 @@ from arranger.tuning import (
     SILENCE_NO_SHAPE,
     SILENCE_OUT_OF_REACH,
     SILENCE_TUNE_SILENT,
+    note_name,
 )
 from tests.support import arranged, make_step
 
@@ -110,6 +111,23 @@ def _thin(step: ArrangementStep) -> bool:
 
 def _line(step: ArrangementStep) -> str:
     return step_annotation(step)
+
+
+def _names_the_top(step: ArrangementStep) -> bool:
+    """Whether the line names the tone the comp line put on top, and what it is doing.
+
+    Read from the step's own fields: the **top voice** it sounds, and one of the role
+    words `annotation._TOP_ROLE_PHRASES` spells. The role is the part the tab cannot show -
+    two shapes tell a reader nothing about whether the line walked or pivoted into the next
+    chord - so a witness that only checked for a note name would let the role go unsaid.
+    """
+    if not step.voicing.upper_midi_notes():
+        return True
+    line = _line(step)
+    top = note_name(max(step.voicing.upper_midi_notes()))
+    return f"top {top}" in line and any(
+        word in line for word in ("walks", "approach", "fill", "opening")
+    )
 
 
 def _missing_degree_names(step: ArrangementStep) -> List[str]:
@@ -383,6 +401,26 @@ WITNESSES: List[Witness] = [
         "could not sound under it",
         lambda step: step.palette is not None and step.palette.dropped_for_bass is not None,
         lambda step: "leave room for the requested bass note" in _line(step),
+    ),
+    (
+        "the comp line chose the tone on top, which the frets cannot say",
+        # `upper_midi_notes`: the line has a top voice only where a shape sounds above
+        # the thumb, and a lone thumb has no role to report.
+        lambda step: bool(step.top_role)
+        and bool(step.voicing.upper_midi_notes())
+        and not step.repeated
+        and not step.bass_only,
+        _names_the_top,
+    ),
+    (
+        "the comp line narrowed the palette, so the tone that won is the fact to print",
+        # The narrowing is explained by *which tone* it chose and what that tone is doing:
+        # `Palette.dropped_for_line` records what the ranking would have taken, and the
+        # line's own sentence says why it did not. A second sentence for the shape given
+        # up would repeat on almost every comping step (`docs/history/comp-line.md` §"The
+        # measurement").
+        lambda step: step.palette is not None and step.palette.dropped_for_line is not None,
+        _names_the_top,
     ),
     (
         "a four-voice shape leaves a chord tone out, which the frets cannot show",
@@ -768,6 +806,7 @@ class TestNewClausesMustBeRegistered(unittest.TestCase):
             "_bass_alone_clause",
             "_bass_refusal_clause",
             "_bass_room_clause",
+            "_comp_line_clause",
             "_comping_clause",
             # The step's own statement when it states a degree: it is read where no other
             # branch has claimed the line, so it is witnessed by the degree column rather

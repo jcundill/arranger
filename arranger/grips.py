@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from musthe import Note
 
@@ -820,11 +820,18 @@ def _shell_voicing(
 class CompingRequest:
     """One melody-free comping shape request, as a value.
 
-    The five fields are exactly what the enumeration reads - the chord, the neck
-    window, the arity and the two degree flags - so the memo key and the request
-    cannot drift apart. `frozen` also makes it hashable, which is what lets
-    `_comping_palette` cache on the request itself rather than a reconstructed
+    The six fields are exactly what the enumeration reads - the chord, the neck
+    window, the arity, the bass-voice flag and the home band - so the memo key and
+    the request cannot drift apart. `frozen` also makes it hashable, which is what
+    lets `_comping_palette` cache on the request itself rather than a reconstructed
     tuple.
+
+    **`band` is the comp's register, and it changes what a palette *is*.** Absent
+    (`None`) the palette keeps one shape per string set, which is the palette every
+    caller got before the comp line existed. Present, it keeps one shape per **top
+    tone**, because the comp line chooses which tone is on top and a palette that
+    states only one of them cannot express the choice. See
+    `_search_comping_voicings`.
     """
 
     chord_name: Optional[str] = None
@@ -833,6 +840,38 @@ class CompingRequest:
     notes: int = 3
     bass_voice: bool = False
     band: Optional[Tuple[int, int]] = None
+
+
+def _comping_collapse_key(
+    frets: Tuple[int, ...],
+    band: Tuple[int, int],
+    fret_min: int,
+    fret_max: int,
+) -> Tuple[int, int, float, int]:
+    """Which of several shapes stating one top tone a banded palette keeps.
+
+    The key is `(outside the window, outside the band, |avg_fret - band middle|,
+    span)`, most significant first:
+
+    - **the window comes first**, so the band cannot override the caller's stated
+      neck: a top tone with an in-window shape keeps that one, and the band only
+      ranks the shapes the window already allows;
+    - **then the band**, because the comp lives in it and a shape outside it is the
+      last resort rather than the point;
+    - **then the middle**, which is what makes the register the line reads back;
+    - **then the span**, so two shapes equally placed keep the tighter one - the
+      rule the bandless key applies alone.
+
+    The band is a *preference* in exactly the way the window is: a tone reachable
+    only outside it still enters the palette, which is what keeps the fill able to
+    climb toward a melody and keeps a chord from losing a tone.
+    """
+    avg = sum(frets) / len(frets)
+    outside_window = 0 if all(fret_min <= fret <= fret_max for fret in frets) else 1
+    outside_band = 0 if band[0] <= avg <= band[1] else 1
+    middle = (band[0] + band[1]) / 2
+    return (outside_window, outside_band, abs(avg - middle), max(frets) - min(frets))
+
 
 
 def _search_comping_voicings(request: CompingRequest) -> List[Voicing]:
@@ -867,6 +906,12 @@ def _search_comping_voicings(request: CompingRequest) -> List[Voicing]:
     small for the request is **skipped rather than padded**, because a part sounding more
     notes than the caller named is worse than a thinner one - the extra note is a voice
     somebody else was supposed to have.
+
+    **The collapse decides what the palette can express.** With `band` absent it keeps
+    one shape per string set - the tightest and lowest of each, which *usually* leaves
+    one shape per tone but never the low shape for a high one. With `band` present it
+    keeps one shape per **top tone**, ranked by `_comping_collapse_key`, so the palette
+    can state every tone the comp line may choose.
 
     **`bass_voice` is what stops the arity from being the whole question.** It is True
     only for a selection naming the bass and nothing else, and it does two things: it
@@ -903,6 +948,14 @@ def _search_comping_voicings(request: CompingRequest) -> List[Voicing]:
     lo = max(0, request.fret_min - limit)
 
     valid: List[Voicing] = []
+    # **A banded palette keeps one shape per top tone; an unbanded one keeps one per
+    # string set.** The bandless collapse ranks a set's shapes against each other, so
+    # only the shape that set is best at survives - and since a set states one top, that
+    # is *usually* one shape per tone. The banded collapse ranks the shapes stating the
+    # *same* tone, whatever set they use, so every tone enters the palette and each
+    # sits as near the comp's register as the window allows.
+    band = request.band
+    by_top: Dict[int, Tuple[Tuple[Any, ...], Voicing]] = {}
     for used in comping_string_sets(request.notes, request.bass_voice):
         best: Optional[Tuple[Any, Voicing]] = None
         for frets in frets_in_span(used, lo, hi, limit):
@@ -924,20 +977,30 @@ def _search_comping_voicings(request: CompingRequest) -> List[Voicing]:
                 continue
             # Ranked here rather than by `voicing_cost`, because this is a *generator*
             # and choosing is the selector's job - the split every other family keeps.
-            # One per string set: a tighter shape lower on the neck is the one a player
-            # would pick, and offering the rest would only give the selector a worse
-            # shape to lose.
-            if request.band is None:
-                key = (max(frets) - min(frets), sum(frets) / len(frets))
-            else:
-                _avg = sum(frets) / len(frets)
-                _mid = (request.band[0] + request.band[1]) / 2
-                _outside = 0 if request.band[0] <= _avg <= request.band[1] else 1
-                key = (_outside, abs(_avg - _mid), max(frets) - min(frets))
-            if best is None or key < best[0]:
-                best = (key, found)
+            # A tighter shape lower on the neck is the one a player would pick, and
+            # offering the rest would only give the selector a worse shape to lose.
+            if band is None:
+                key: Tuple[Any, ...] = (max(frets) - min(frets), sum(frets) / len(frets))
+                if best is None or key < best[0]:
+                    best = (key, found)
+                continue
+            key = _comping_collapse_key(
+                frets, band, request.fret_min, request.fret_max
+            )
+            # `midis[-1]` is the top voice, which is the tone the comp line chooses.
+            held = by_top.get(midis[-1])
+            if held is None or key < held[0]:
+                by_top[midis[-1]] = (key, found)
         if best is not None:
             valid.append(best[1])
+    if band is not None:
+        # Ordered by the same key that chose each one, so the palette reads as a
+        # register: nearest the band's middle first, and the tones the band cannot
+        # reach last. Ties fall to the top tone, so the order is not generation order.
+        valid = [
+            entry[1]
+            for _top, entry in sorted(by_top.items(), key=lambda item: (item[1][0], item[0]))
+        ]
     return valid
 
 
@@ -947,13 +1010,14 @@ def _comping_palette(request: CompingRequest) -> Tuple[ShapeSnapshot, ...]:
     `_search_comping_voicings` remembered: one request enumerated once, read back after.
 
     The enumeration is a **pure function of the request**, and the request is exactly
-    what it reads: the chord, the neck window, the arity and the two degree flags. The
-    rest - `GRIP_STRING_SETS`, `BASS_VOICE_STRING_SETS`, `COMPING_EXCLUDED_STRINGS`,
-    `GRIP_MAX_SPAN`, `NECK_FRET_MIN`, `NECK_FRET_MAX`, `STANDARD_TUNING` and
-    `ChordParser.CHORD_TONES_FROM_ROOT` - is fixed when this module is imported. That is
-    what makes the key sufficient and the memo need no invalidation, and it is why those
-    tables must not be reassigned at runtime. Same argument, and the same snapshot, as
-    `_searched_shape`.
+    what it reads: the chord, the neck window, the arity, the bass-voice flag and the
+    home band. The rest - `GRIP_STRING_SETS`, `BASS_VOICE_STRING_SETS`,
+    `COMPING_EXCLUDED_STRINGS`, `GRIP_MAX_SPAN`, `NECK_FRET_MIN`, `NECK_FRET_MAX`,
+    `STANDARD_TUNING` and `ChordParser.CHORD_TONES_FROM_ROOT` - is fixed when this
+    module is imported. That is what makes the key sufficient and the memo need no
+    invalidation, and it is why those tables must not be reassigned at runtime. Same
+    argument, and the same snapshot, as `_searched_shape`. A different band is a
+    different request, so two comps in two registers do not read each other's palette.
 
     The same request is asked repeatedly: every slot of a comping bar, every head of a
     sweep, and every caller that arranges a head another caller has already arranged.
