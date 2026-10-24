@@ -299,10 +299,10 @@ def _collapse_holds(
     rather than a constant index, because the thumb moves between strings.
 
     What that exclusion costs is a **held column whose thumb moves**: it is a hold for
-    the shape and a new attack for the bass, and a hold draws nothing at all - so the
-    new note used to vanish from this renderer and from the HTML while the one-line tab
-    and the score both had it. `_moved_thumb` is that fact, and `_draws` is the one
-    place both renderers act on it.
+    the shape and a new attack for the bass, and a hold draws nothing at all - so
+    without `_moved_thumb` the new note vanishes from this renderer and from the HTML
+    while the one-line tab and the score both have it. `_moved_thumb` is that fact, and
+    `_draws` is the one place both renderers act on it.
     """
     collapsed: List[Tuple[float, Optional[ArrangementStep], bool]] = []
     held: Optional[Tuple[int, ...]] = None
@@ -856,10 +856,9 @@ def _marker_columns(
 class _StaffGrid:
     """The rules a row of the staff is drawn by, as one value.
 
-    The row builders are methods here, so each takes the system it draws rather than
-    the twelve locals they used to close over. What they read is what the value
-    carries: the laid-out columns, the grid's own width rules, the barlines, and the
-    flags that decide which rows exist.
+    The row builders are methods here, so each takes the system it draws. What they
+    read is what the value carries: the laid-out columns, the grid's own width rules,
+    the barlines, and the flags that decide which rows exist.
     """
 
     steps: List[ArrangementStep]
@@ -1627,7 +1626,7 @@ def _html_string_row(
     for index in measure:
         _, step, strikes = columns[index]
         # The step before this column, which is what says whether a **held** column's
-        # thumb has moved (`_moved_thumb`) - the case that used to vanish here.
+        # thumb has moved (`_moved_thumb`)
         previous = columns[index - 1][1] if index else None
         cells.append(_html_fret_cell(step, previous, string_index, strikes, show_mutes))
     return _html_row(_CLASS_STRING, cells)

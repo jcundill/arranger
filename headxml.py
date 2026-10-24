@@ -715,7 +715,7 @@ def _part_is_tab(part: ElementTree.Element) -> bool:
 
 
 def _part_note_count(part: ElementTree.Element) -> int:
-    """How many pitched notes a part has, used to choose between valid parts.
+    """How many pitched notes a part has.
 
     The notes are reached through their measures, which is where MusicXML puts
     them: a `<note>` is a child of a `<measure>`, never of the `<part>` itself.
