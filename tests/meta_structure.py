@@ -186,6 +186,7 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/slots.py": Budget(9, 136, 12),
     # The facade's `arrange_progression` loses the same five (16 -> 10).
     "arranger/steps.py": Budget(1, 54, 10),
+    "arranger/comp_line.py": Budget(11, 80, 6),
     "arranger/texture.py": Budget(11, 57, 6),
     # The instrument: tuning, the fretboard, the neck limits and the sentinels. The
     # value types (`Voicing`, `ArrangementStep`, `Palette`) and the tab-cell

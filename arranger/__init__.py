@@ -61,6 +61,7 @@ from . import (
     bass_rules,
     chords,
     cli,
+    comp_line,
     context,
     cost,
     decisions,

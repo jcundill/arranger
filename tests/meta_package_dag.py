@@ -53,6 +53,7 @@ ORDER = [
     "grouping",     # the metre's third fact: which denominator units are felt as a beat
     "grid",         # the request's rhythm: when each part sounds
     "texture",      # the texture axis: how many notes the chord part states
+    "comp_line",    # the comp line: home band and the walk/approach/opening/fill rules
     "bass_rules",   # the bass vocabulary, capacities and refusals
     "bass_place",   # the thumb's octave and string: the cost and `place_bass`
     "bass",         # the walking-bass thumb line
