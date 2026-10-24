@@ -1,7 +1,7 @@
 # Open issues
 
-**None is open.** Every issue this project filed is closed, and the ledger is therefore retired:
-the record of the six — each with its measurement and the recipe that re-measures it — is
+**One is open.** Every other issue this project filed is closed, and the ledger holds the one open item
+below; the record of the first six — each with its measurement and the recipe that re-measures it — is
 [docs/history/open-issues.md](history/open-issues.md), which holds the full text of every item.
 
 This path still exists because the tree cites it: the frozen documents in `docs/history/` link to
@@ -24,6 +24,15 @@ Each line is the item's own title; the measurement behind it is in the record.
    hand's reach being bounded and the palette making room for the note.
 6. **A position falling on a note's release is read as held** — closed by reading the note as
    sounding over `[onset, end)`, so the union states the chord where the tune has just stopped.
+
+## 7. Open — two defects in the comping selector that the comp-line plan does not fix silently
+
+- **`cost.py:218`'s hardcoded 9.** `position = abs(voicing.avg_fret - 9)` when there is no
+  previous voicing pins the comp's rest position to fret 9 instead of reading the neck window.
+  Recipe: `grep -n "avg_fret - 9" arranger/cost.py`.
+- **The collapse's `(span, avg_fret)` key** in `_search_comping_voicings` keeps, per top tone, the
+  shape with the smallest span and then the lowest avg fret, which hides a low shape behind a high
+  one. Recipe: inspect the key in `arranger/grips.py`.
 
 ## Filing a new one
 

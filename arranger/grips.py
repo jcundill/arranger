@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 
 from musthe import Note
 
@@ -832,6 +832,7 @@ class CompingRequest:
     fret_max: int = NECK_FRET_MAX
     notes: int = 3
     bass_voice: bool = False
+    band: Optional[Tuple[int, int]] = None
 
 
 def _search_comping_voicings(request: CompingRequest) -> List[Voicing]:
@@ -903,7 +904,7 @@ def _search_comping_voicings(request: CompingRequest) -> List[Voicing]:
 
     valid: List[Voicing] = []
     for used in comping_string_sets(request.notes, request.bass_voice):
-        best: Optional[Tuple[Tuple[int, float], Voicing]] = None
+        best: Optional[Tuple[Any, Voicing]] = None
         for frets in frets_in_span(used, lo, hi, limit):
             midis = sorted(
                 GuitarFretboard.fret_to_midi(string, fret)
@@ -926,7 +927,13 @@ def _search_comping_voicings(request: CompingRequest) -> List[Voicing]:
             # One per string set: a tighter shape lower on the neck is the one a player
             # would pick, and offering the rest would only give the selector a worse
             # shape to lose.
-            key = (max(frets) - min(frets), sum(frets) / len(frets))
+            if request.band is None:
+                key = (max(frets) - min(frets), sum(frets) / len(frets))
+            else:
+                _avg = sum(frets) / len(frets)
+                _mid = (request.band[0] + request.band[1]) / 2
+                _outside = 0 if request.band[0] <= _avg <= request.band[1] else 1
+                key = (_outside, abs(_avg - _mid), max(frets) - min(frets))
             if best is None or key < best[0]:
                 best = (key, found)
         if best is not None:
