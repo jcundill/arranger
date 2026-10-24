@@ -62,6 +62,7 @@ from . import (
     chords,
     cli,
     comp_line,
+    comp_line_route,
     context,
     cost,
     decisions,

@@ -1796,7 +1796,8 @@ melody") is false, and the measurement above is what shows it.
 **The chord part's top note is a line, not a plateau.** A comp states its chord in a
 register it owns and voice-leads the top voice through the chord's own tones from one
 position to the next - the thing a pianist's left hand does and the shipped comp did not.
-`arranger/comp_line.py` owns the rules; `routes.comping_step` asks them.
+`arranger/comp_line.py` owns the rules; `routes.comping_step` asks them through
+`comp_line_route`, the adapter that reads the arrangement into the line's request.
 
 **Two registers, and only the second is the comp's.**
 

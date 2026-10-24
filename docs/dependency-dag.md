@@ -50,6 +50,7 @@ flowchart TB
         slot_plan["slot_plan"]
         melody_alone["melody_alone"]
         step_history["step_history"]
+        comp_line_route["comp_line_route"]
         decisions["decisions"]
         movement --> route_dispatch
         movement --> slot_plan
@@ -62,8 +63,10 @@ flowchart TB
         harmonised_route --> slot_plan
         harmonised_route --> melody_alone
         harmonised_route --> step_history
+        routes --> comp_line_route
         routes --> melody_alone
         routes --> step_history
+        comp_line_route --> step_history
         melody_alone --> decisions
         slot_plan --> decisions
     end
@@ -160,8 +163,8 @@ What the drawing makes visible:
   surfaces' one way into the loop is still `movement`. A new axis is normally
   wired through `options` and `resolution` first, which is why both sit between
   it and the axes. `step_history` is the loop's memory of itself - what the hand was
-  still holding when a slot arrived - and all three of `routes`, `harmonised_route`
-  and `route_dispatch` read it.
+  still holding when a slot arrived - and all four of `comp_line_route`, `routes`,
+  `harmonised_route` and `route_dispatch` read it.
 - **The surfaces do not feed back.** `steps`, `slots`, `render`, `cli` and `demo` sit
   at the top and import downwards; no layer below imports them. `demo` is the
   printing front end: it imports `steps` and `render`, and nothing imports it but

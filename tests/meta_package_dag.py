@@ -62,6 +62,7 @@ ORDER = [
     "resolution",   # what the caller asked for, resolved once: the six resolvers
     "decisions",    # the decisions both step loops share
     "step_history", # reading the arrangement's own history: the last sounding step, its shape
+    "comp_line_route", # what the comp line is told about a slot: band, state, fill target
     "melody_alone", # where a lone note is fretted: the tune alone, with or without harmony
     "routes",       # the route handlers: rest, fill, NC and the comping route
     "slot_plan",    # one slot's plan: `slot_state` and the value it returns

@@ -162,6 +162,9 @@ BUDGETS: Dict[str, Budget] = {
     # hand held - split out of `routes`: two readers of the value types above it.
     # Measured as it stood when it moved.
     "arranger/step_history.py": Budget(3, 17, 1),
+    # The comp line's route adapter: what the line is told about a slot. Split out of
+    # `routes`, measured as it stood when it moved.
+    "arranger/comp_line_route.py": Budget(6, 35, 6),
     "arranger/harmonised_route.py": Budget(8, 54, 8),
     # The dispatch table: eleven small functions, each an entry's claim or emit, so
     # the ceiling is `dispatch_step`'s four branches rather than any one route. The

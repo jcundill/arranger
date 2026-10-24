@@ -23,7 +23,7 @@ gate and the conventions — not the explanation.
 | which chord tones a shape states — `TONE_PRIORITY`, the tone a four-voice shape gives up, the palette a melody with no degree to match is offered, or the order that was not taken | [docs/history/generated-grips.md](docs/history/generated-grips.md) | `arranger/grip_tables.py` (`TONE_PRIORITY`, `stated_tones`), `arranger/grips.py` (`drop2_template_for`, `_drop2_palette`), `tests/test_generated_grips.py`, `tests/support.py` (`WITNESS`) |
 | the trailing annotation a step carries, why a shape is thin, or what **must** be explained when a choice is added (`ArrangementStep.palette`, `cost.VOICING_COST_CRITERIA`, `tests/meta_explanations.py`) | [docs/engine.md](docs/engine.md) | `arranger/annotation.py`, `arranger/text_layout.py`, `arranger/render.py`, `arranger/movement.py` |
 | the chord part's content (`--chord-notes`), target/fill roles, the walking bass, a hold that moved the melody's string | [docs/engine.md](docs/engine.md) | `arranger/texture.py`, `arranger/routes.py`, `arranger/bass_rules.py`, `arranger/bass_place.py`, `arranger/bass.py`, `arranger/decisions.py` |
-| the comp's **top voice** - the home band, the walk's direction and no-retrace window, the approach's pivot, the opening, the fill's interpolation, or `top_role` / `Palette.dropped_for_line` | [docs/engine.md](docs/engine.md) §"The comp line: the top voice moves" | `arranger/comp_line.py`, `arranger/routes.py` (`_line_narrowed`), `arranger/grips.py` (`CompingRequest.band`, `_comping_collapse_key`), `arranger/step_history.py` (`sounding_tops`), `tests/test_comp_line.py` |
+| the comp's **top voice** - the home band, the walk's direction and no-retrace window, the approach's pivot, the opening, the fill's interpolation, or `top_role` / `Palette.dropped_for_line` | [docs/engine.md](docs/engine.md) §"The comp line: the top voice moves" | `arranger/comp_line.py`, `arranger/comp_line_route.py` (`line_target`, `line_narrowed`), `arranger/routes.py` (`_comping_choice`), `arranger/grips.py` (`CompingRequest.band`, `_comping_collapse_key`), `arranger/step_history.py` (`sounding_tops`), `tests/test_comp_line.py` |
 | non-chord melody notes, a new chord quality, or a chord **spelling** that has to read | [docs/engine.md](docs/engine.md#adding-a-new-chord-quality) | `arranger/chords.py` (`QUALITY_ALIASES`, `parse_symbol`), `tests/meta_chord_names.py` |
 | the step loop, `arrange_progression`, or **which route takes a slot** | [docs/engine.md](docs/engine.md) | `arranger/movement.py`, `arranger/route_dispatch.py`, `arranger/harmonised_route.py`, `arranger/routes.py`, `arranger/step_history.py`, `arranger/step_prepare.py`, `arranger/resolution.py`, `arranger/slot_plan.py`, `tests/meta_route_dispatch.py` |
 | a step route's arguments - `SlotContext`, one slot's request as a value rather than twenty parameters, and the `SlotInputs` groups under it (`SlotArrangementFacts`, `SlotRhythmFacts`, `SlotNeckFacts`, `SlotBassFacts`) | [docs/engine.md](docs/engine.md) | `arranger/context.py`, `arranger/slot_plan.py`, `arranger/movement.py`, `arranger/harmonised_route.py`, `arranger/routes.py` |
@@ -199,6 +199,7 @@ arranger/
 │   ├── resolution.py    #   what the caller asked for, resolved once
 │   ├── decisions.py     #   decisions both step loops share
 │   ├── step_history.py  #   reading the arrangement's own history: the last sounding step
+│   ├── comp_line_route.py #  what the comp line is told about a slot: band, state, fill
 │   ├── melody_alone.py  #   where a lone note is fretted: the tune alone, chord or not
 │   ├── routes.py        #   the route handlers: rest, fill, NC and the comping route
 │   ├── slot_plan.py     #   one slot's plan: `slot_state` and the value it returns
@@ -242,7 +243,7 @@ tuning -> step_types -> fingers -> chords -> grip_tables -> grip_place -> grips 
                              -> grouping -> grid -> texture -> comp_line -> bass_rules -> bass_place -> bass -> bass_merge
                              -> options -> resolution
                                                                     |
-                       step_history -> melody_alone -> routes -> slot_plan -> step_prepare -> harmonised_route
+                       step_history -> comp_line_route -> melody_alone -> routes -> slot_plan -> step_prepare -> harmonised_route
                                                                                     |
                                                     route_dispatch -> movement -> steps -> slots -> render -> cli
 ```
