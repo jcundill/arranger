@@ -16,7 +16,7 @@ you whether a change is an improvement or a different library.
   through index `5` = high E (string 1). `STRING_NAMES` mirrors these.
 - `MELODY_STRING_CHOICES` — `(5, 4)`: the soprano string indices the *drop-2* path may
   be pinned to (`5` → D-G-B-E, `4` → A-D-G-B). Kept as the default of
-  `get_drop2_voicings` so its published output is unchanged. Index `0` = low E ...
+  `get_drop2_voicings`. Index `0` = low E ...
   `5` = high E, so the conventional guitar string number is `6 - index` (index
   `5` = string 1).
 - `MELODY_STRING_CHOICES_FULL = (5, 4, 3)` — the default soprano set: the high E, the
@@ -194,8 +194,7 @@ you whether a change is an improvement or a different library.
   **choice** (why fewer voices, why that fret, why the thumb moves), and it belongs on the line
   where the choice was made: a hold does not repeat its shape's count. Both are *derived
   clauses* in `annotation._annotate`, never branches at a return site, because a fact written as a
-  branch is a fact some route will not print — which is precisely how 22 transposed steps lost
-  their substitute chord and 2 holds lost their octave. `tests/meta_explanations.py` holds the
+  branch is a fact some route will not print. `tests/meta_explanations.py` holds the
   whole invariant as a table of (decision, when this step is one of those, what the line must
   say), swept over every committed head from the step's **fields** rather than from the
   wording; `AGENTS.md` states the rule an editor must follow when adding a choice.
@@ -560,8 +559,8 @@ how the engine came to select `8-x-8-8-13-x` (index at 8, pinky at 13) for a Cm7
 Keeping the hand still is worth less than being able to play the shape it is holding.
 
 **Promoting span is free where tightening the cap is not.** The obvious alternative is
-to lower `GRIP_MAX_SPAN` from 5, and it was implemented and measured first. It is a
-*filter*, so it deletes a voicing wherever no tighter one exists, and that cost real
+to lower `GRIP_MAX_SPAN` from 5. It is a
+  *filter*, so it deletes a voicing wherever no tighter one exists, and that costs real
 music:
 
 | cap | voicings kept (of 1008) | what went missing |
@@ -587,7 +586,7 @@ than only through a result.
 **Span 0 and span 1 are bucketed together.** The span index reports `0.0` for both,
 so a zero-span barre and a one-fret reach tie and the decision falls through to neck
 position. One fret of stretch is not a stretch worth moving the hand for, and the
-case that showed it was a player reading the tab rather than a corpus measurement:
+case that came from a player reading the tab rather than from a corpus measurement:
 `Bb7` under `F4 → G4 → F4` with a three-note palette (`Request(chord_notes="2")`)
 was voiced `x-x-6-7-6-x`,
 `x-x-x-3-3-3`, `x-x-6-7-6-x` — down to a fret-3 barre for one note and straight back,
@@ -611,8 +610,8 @@ both are complete, so span decides and the narrower one wins — and the cost is
 bass, since C is the 3rd where A was the 5th, and 6-4-3-2 is the only default set that
 reaches the low E at all.
 
-The obvious repair is to rank the bass-function term above span. That was implemented
-and measured, and it **brings `8-x-8-8-13-x` straight back**: the same ordering that
+Ranking the bass-function term above span **brings `8-x-8-8-13-x` straight back**:
+the same ordering that
 rescues the low bass also lets a five-fret shape with a root bass beat a one-fret shape
 without one. The two criteria cannot both come first, so the choice is which to
 favour. Span is favoured because a five-fret stretch is a shape the hand may not be
@@ -1062,9 +1061,9 @@ that `ArrangementStep.repeated` is set, and the renderers honour it.
   melody on another string without it — every one of them under `targets`, where a fill's
   compact 6-4-3 shell beats a same-string alternative on `span` — and the rule takes that
   to **0 of 199**.
-  The report that found it was bar 3 of the committed "synthetic common time", four G4s
-  over `Eb7`: the two targets held the note on the B string and the two fills moved it to
-  the G string, four frets away, while the steps still claimed to be holds.
+  Bar 3 of the committed "synthetic common time" is the case: four G4s
+  over `Eb7`, where the two targets hold the note on the B string and the two fills move
+  it to the G string, four frets away, while the steps claim to be holds.
 - **The harmony must also be unchanged.** A note repeating across a *chord change* is
   not a hold: the ringing inner voices belong to the chord the hold began on, so
   printing the new chord's name over a single struck note claims a harmony that is not
@@ -1138,7 +1137,7 @@ struck" in its own notation: the one-line tab and the staff draw the thumb and m
 rest, `tabgp` writes the thumb as a new note and the ringing shape as ties, and `tabxml`
 re-states those pitches and ties them — a score has no other way to say *still sounding*.
 
-**One measured caveat, stated rather than left to be discovered.** The shape a held step
+**One measured caveat.** The shape a held step
 records (`step.voicing`) is the one the selector preferred; the shape that *sounds* is the
 one already down. They are the same shape in all but a handful of cases — over the
 committed heads under `--bass-on 1,2,1and,2and`, **3 of its 293** held shapes differ in
@@ -1483,8 +1482,7 @@ with none is narrowed to the widest statement that leaves a finger free
 (`("drop2", "drop3")` → `("shell",)`). It narrows *this slot's* palette rather than the
 arrangement's, because a target with nothing underneath it may use all four strings.
 
-`AGENTS.md` trap 13 holds the measurement — the step counts, and why a shape-level
-invariant could not see the defect — and
+`AGENTS.md` trap 13 holds the measurement and the step counts, and
 `tests/test_walking_bass.py::TestTheInvariant` is the standing count. What the rule costs:
 a target whose quality has no shell — `Bmaj` under a `D5` melody, say — is a melody alone
 over the thumb rather than a four-note shape nobody can play.
@@ -1621,7 +1619,7 @@ whether the slot is **reharmonised**, and that needs three states rather than tw
 `headxml.melody_state` returns **onset** (the tune articulates here — reharmonise: the
 anticipation a comping player makes), **held** (a note already sounding — no: it was decided
 at its onset) and **silent** (nothing sounding — the chord symbol stands). In the measurement
-that produced the rule, **274 of 1,146** generated positions carry a held note rather than an
+behind the rule, **274 of 1,146** generated positions carry a held note rather than an
 articulation — a quarter, so the middle state is not an edge case; `melody_at` keeps its
 two-way answer for callers that only need "is a note sounding".
 

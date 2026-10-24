@@ -7,7 +7,7 @@ They are top-level modules rather than part of the `arranger` package because
 
 Read this before touching any of them. Nearly every decision below was forced by a
 real file, so the reasoning is the point: a "simplification" that drops one of them
-reintroduces a bug that was found the hard way.
+reintroduces a bug the measurement below records.
 ## The staff renderers live in `tabstaff.py`
 
 `format_tab_staff`, `format_tab_html` and `write_tab_html` are the renderers that
@@ -333,8 +333,8 @@ repeated or jumped head still shows every bar a player plays there.
 
 ### A beat is not a quarter note
 
-Cut time is where every metre assumption in this library comes apart, and it did so
-three separate times in one review of `synthetic_cut_time.mxl` — the synthetic
+Cut time is where every metre assumption in this library comes apart, in three separate
+places at once in `synthetic_cut_time.mxl` — the synthetic
 **2/2** head whose `<time>` is the only signature in the file. The
 tune *sounds* like common time and is written with a quarter-note pulse, which is
 exactly why it is easy to assume 4/4 and wrong to: the file says 2/2, and the
@@ -366,13 +366,14 @@ measure's durations back to a bar length, which is what
 that test's fixture list for exactly this reason, because it is the one committed
 head whose numerator and denominator differ.
 
-**The rule of thumb has a corollary the importer learned the hard way: a
+**The rule of thumb has a corollary: a
 `<time>` read is not a metre until the *denominator* reaches the arithmetic that
-uses it.** `headxml` read `beats_per_bar` and `beat_type` and then converted
-onsets with the first of the two - right in 4/4 and 2/2, and 25% early in the 3/4 one. Every assertion in
-`tests/test_headxml_arrangement.py::TestTheMetreHasADenominator` was run against the
-factor before it was kept: a test for a metre bug that cannot fail on the old
-arithmetic is not a test, and all five of them do.
+uses it.** `headxml` reads `beats_per_bar` and `beat_type`, and onsets convert with
+both: converting with `beats_per_bar` alone is
+right in 4/4 and 2/2, and 25% early in the 3/4 one. Every assertion in
+`tests/test_headxml_arrangement.py::TestTheMetreHasADenominator` fails on that
+denominator-free arithmetic: a test for a metre bug that cannot fail on it is not a
+test, and all five of them fail on it.
 
 So `beat_type` is a parameter of `format_musicxml` and `format_gp5` (and of
 `tabscore.score_events`, `_measures`, `_build_part`, `_build_song`), it is what makes a 2/2 head
@@ -460,15 +461,15 @@ half note are not identical and the ASCII staff says how long anything
 sounds. A note occupies as many *slots* as it is worth, one slot
 being one fret cell.
 
-Three things the grid has to get right, each of which was wrong at once and each measured
+Three things the grid has to get right, each measured
 against `jon6.tab`:
 
 - **The units are whole notes.** `ArrangementStep.duration` is in whole notes
-  (`tuning.py`), and the first version of this multiplied it by a slot count as though it
-  were in beats. A quarter note — `duration=0.25` — came out **one** slot wide instead of
-  two, and *every bar in the piece drew at the same width*: no two notes were
-  distinguishable by length at all. `_staff_rhythm` had this right all along
-  (`duration * 4.0` → quarters); the slot grid did not.
+  (`tuning.py`), so a slot count is not `duration` read as beats: a quarter note —
+  `duration=0.25` — is **two** slots wide, not one, and reading it as a beat draws
+  *every bar in the piece at the same width*, so no two notes are
+  distinguishable by length at all. `_staff_rhythm` does this right
+  (`duration * 4.0` → quarters).
 - **`beat_type` is a conversion, not a scale factor.** The grid is per *whole note*, so a
   4/4 bar and a 2/2 bar are the same sixteen slots, and `beat_type` only converts beats to
   whole notes on the way in.
@@ -549,14 +550,14 @@ documented lossiness rather than a third convention;
 
 ### A rest is not a note, but it is time
 
-The same review turned up a bug that has nothing to do with the metre, and it is
+This fault has nothing to do with the metre, and it is
 worth stating separately because it is the one a musician hears first.
 
 Bar 1 of `synthetic_cut_time.mxl` is **a quarter rest followed by three quarter
-notes**. `_read_notes` skipped the rest — correctly, it is not melody — but
-skipped it with a bare `continue`, so **the cursor never moved past it**. Every
-note in the file after that rest was read a beat early: the F4 landed on beat 1.0
-instead of 1.5, the head appeared to begin on a downbeat, and the GP5 bar was
+notes**. `_read_notes` skips the rest — correctly, it is not melody — and it must
+advance the cursor past it. A bare `continue` leaves the cursor where it was, so every
+note in the file after that rest is read a beat early: the F4 lands on beat 1.0
+instead of 1.5, the head begins on a downbeat, and the GP5 bar is
 written as three chords filling a bar the score says is a rest and three.
 
 The general rule is that *every* element the loader steps over has to be asked
@@ -570,7 +571,7 @@ whether it occupies time, and a rest does:
 | a lower voice of a `<chord>` group | no — the group's unmarked member carries the length |
 
 This is a different failure from the metre one and a nastier one to spot, because
-every bar is still exactly full afterwards: the music is simply a beat out, and
+every bar is still exactly full: the music is simply a beat out, and
 the error survives any test that only checks bar lengths. The test that catches it
 is reading the *first note's own beat* off the committed file, which is
 `test_a_cut_time_head_opens_on_the_beat_its_first_note_is_written_on`.
@@ -675,8 +676,8 @@ selection** is still empty, which is a different claim: it plays the tune, and t
 simplification. music21 cannot write a TAB staff a notation program renders
 correctly: it emits neither the `<staff-lines>6</staff-lines>` a tab staff needs nor a
 fret and string for each note *inside* a chord - it puts them all on the chord's first
-note (cuthbertLab/music21#1534). Both were patched back in afterwards, and the patched
-document **still did not display correctly in MuseScore 3**. A workaround that does not
+note (cuthbertLab/music21#1534). Patching both back in leaves a document that
+**still does not display correctly in MuseScore 3**, and a workaround that does not
 work costs more than not shipping it, so `tabxml` writes a **notation staff only** and
 `tabgp` writes the fretting, as a Guitar Pro 5 file. The two are divided by what each
 format can do: GP5 stores a fret and a string per note natively, MusicXML reaches
@@ -725,53 +726,47 @@ convention, not chosen:
   bar-line crossings and rests, all re-parse with every bar the right length.
   `tests/test_musicxml.py::test_the_time_signature_is_written_once` is the regression.
 - **GP5 states the key on *every* bar, where MusicXML states it once.** The two formats
-  disagree structurally here, and the GP5 side was a defect until 2026-10-03: the
-  exporter wrote one `MeasureHeader` per bar and set `keySignature` only on the first.
-  A fresh `MeasureHeader` defaults that field to `KeySignature.CMajor` and **does not
-  inherit from the previous one**, so a 32-bar Eb head is exported as "Eb major, then C
-  major" for 31 bars, which is what a GP5 export of "the synthetic cut-time head" shows.
+  disagree structurally here. The exporter writes one `MeasureHeader` per bar, so
+  `keySignature` has to be set on each: a fresh `MeasureHeader` defaults that field to
+  `KeySignature.CMajor` and **does not inherit from the previous one**, so setting it on
+  the first bar alone exports a 32-bar Eb head as "Eb major, then C major" for 31 bars.
 
-  It survived because every key test read `measureHeaders[0]` — bar 1 was always
-  right — and the shared fixture in `tests/test_guitarpro.py` is **one bar**, which is
-  the one shape that cannot catch it. `test_every_bar_carries_the_key_not_only_the_first`
-  therefore builds its own three-bar arrangement rather than borrowing `setUp`'s, and
-  asserts over every header.
+  A test reading `measureHeaders[0]` cannot see that — bar 1 is always right — and the
+  **one-bar** fixture in `tests/test_guitarpro.py` is the one shape that cannot catch it
+  either, which is why `test_every_bar_carries_the_key_not_only_the_first` builds its own
+  three-bar arrangement and asserts over every header.
 
-  A second trap sits behind it and cost a crash to find: `PyGuitarPro`'s writer
-  dereferences `keySignature` unconditionally, so the `None` that `_key_signature`
-  returns for a key GP5 cannot name (`fifths` outside ±7) is fine on bar 1 — which
-  assigns it through a guarded branch — and raises `AttributeError` on **bar 2**, so
-  the file is never written. The omission had been hiding that for as long as it was
-  there. Both bars now use one rule, `key_signature or KeySignature.CMajor`, which is
-  also what an absent signature means to every reader.
-- **The key signature is written, in the first measure, on the same terms.** This one
-  was a *defect* rather than a style, and the measurement is worth keeping. `fifths`
+  `PyGuitarPro`'s writer dereferences `keySignature` unconditionally, so a `None` there
+  raises `AttributeError` on **bar 2** and the file is never written. `_key_signature`
+  returns `None` for a key GP5 cannot name (`fifths` outside ±7), so both bars use one
+  rule, `key_signature or KeySignature.CMajor`, which is also what an absent signature
+  means to every reader.
+- **The key signature is written, in the first measure, on the same terms.** `fifths`
   counts sharps (positive) or flats (negative) and `mode` says which of the
   signature's two keys it is; both reach `_build_part` from `Head.key_fifths` /
   `Head.key_mode`, and a `fifths` outside -7..7 is rejected rather than clamped.
 
   It matters because music21 writes an explicit `<accidental>` for any note the
-  signature does not already account for. A 32-bar Eb-major head exported with no
-  `<key>` therefore wrote **201 accidentals** - 137 of them flats the key had already
-  said. With the signature written it is **27**, every one of them a note genuinely
-  outside Eb or a cautionary repeat within a bar.
-  A second, separate cause turned up while measuring that, and would have left most of
-  the noise behind: **a chord symbol's pitches mark notes the signature accounts for.**
-  music21 writes a `ChordSymbol` as `<harmony>` alone - `writeAsChord` is False - so
-  its pitches never reach the document, but they stay in the stream and are still
-  counted when music21 decides which notes need an accidental. Left in place they put
-  the count at 139 with symbols against 27 without, for the same music. `_chord_symbol`
-  clears them on both the parsed and the fallback path, because a pitch the document
-  does not contain has no business deciding what the document contains.
+  signature does not already account for. A 32-bar Eb-major head needs **27** — every one
+  of them a note genuinely outside Eb or a cautionary repeat within a bar — and without
+  the signature it needs **201**, 137 of them flats the key had already said.
 
-**The signature also fixed a real error, and the count went *up* to show it.** "I Was
-  Doing All Right" is in G, and its export carries F naturals - the F of a `G#dim7`
+  **A chord symbol's pitches mark notes the signature accounts for**, which is a second
+  cause of the same noise. music21 writes a `ChordSymbol` as `<harmony>` alone —
+  `writeAsChord` is False — so its pitches never reach the document, but they stay in the
+  stream and are still counted when music21 decides which notes need an accidental: 139
+  with symbols against 27 without, for the same music. `_chord_symbol` clears them on both
+  the parsed and the fallback path, because a pitch the document does not contain has no
+  business deciding what the document contains.
+
+**An accidental count is read against the key, not compared with a target.** "I Was
+  Doing All Right" is in G, and its export carries F naturals — the F of a `G#dim7`
   resolving to `G7b9`. In a file with no `<key>`, a reader assumes F♯, and **12 of
-  those Fs were written with no accidental at all** - silently F♯ to a reader. Stating
-  the key raised that file's accidental count from 48 to 66, and the 18 more are
+  those Fs go out with no accidental at all** — silently F♯ to a reader. Stating
+  the key raises that file's accidental count from 48 to 66, and the 18 more are
   almost exactly those notes finally marked. So a falling count is the *expected*
-  signature of this fix and a rising one is not automatically a regression: both have
-  to be read against the key, which is why the check here is not "fewer accidentals"
+  consequence of stating the key and a rising one is not automatically a regression: both
+  have to be read against the key, which is why the check here is not "fewer accidentals"
   but "every accidental is either required or a cautionary repeat within its bar".
 
 Two more are worth stating because they look like bugs otherwise:
@@ -1013,8 +1008,8 @@ bar 5 opens with a quarter rest, so the gap from the note to the next onset is f
 quarters while the note is written for four. The span a step is given is the gap to
 the *next sound*, which is not the same as how long it *sounds* — so the note was
 held over the silence into the next bar, and since a step crossing a bar line is
-tied, the bar opened with a tied chord where the score says a rest. The eighth-note
-skeleton puts a rest at the head of every second bar, so this was not one bar but
+tied, the bar opens with a tied chord where the score says a rest. The eighth-note
+skeleton puts a rest at the head of every second bar, so that is not one bar but
 half the head.
 
 `tabscore.score_events` therefore **caps** the span at the melody note's own `duration` and
