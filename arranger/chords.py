@@ -23,12 +23,13 @@ itself under `TYPE_CHECKING`, which is what keeps this module below `steps`.
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Dict, Optional, Sequence, Tuple
 
 from musthe import Note
 
 from .step_types import ArrangementStep
-from .tuning import PITCH_CLASS_NAMES
+from .tuning import NO_CHORD, PITCH_CLASS_NAMES
 
 if TYPE_CHECKING:  # pragma: no cover - type only, never imported at runtime
     pass
@@ -547,6 +548,49 @@ def slash_bass(symbol: str) -> Optional[str]:
     why there is none.
     """
     return split_slash(symbol)[1]
+
+
+@dataclass(frozen=True)
+class ChordSymbol:
+    """A chord symbol resolved into the facts the engine reads.
+
+    `root` and `quality` are the two the tables are keyed by, the quality canonical and so a
+    key of `CHORD_TONES_FROM_ROOT`; `bass` is the written slash bass, `None` when the symbol
+    asks for none.
+
+    A symbol that asks for **no chord** is not a `ChordSymbol` at all - `parse_symbol`
+    returns `None` for it - so `NC` cannot arrive as a chord whose quality happens to be
+    unknown.
+    """
+
+    root: str
+    quality: str
+    bass: Optional[str] = None
+
+
+def parse_symbol(name: Optional[str]) -> Optional[ChordSymbol]:
+    """Resolves a chord symbol, or returns `None` when it asks for no chord.
+
+    **The name is the single spelling of the harmony.** The quality is read out of it rather
+    than carried beside it, so `Dm7`, `D-7` and `Dmin7` are one chord and a slash bass rides
+    in the same string.
+
+    A bare root is a **major triad**, which is a fact about the notation rather than a guess:
+    a letter on its own in a lead sheet is a major triad. Anything else unreadable - no root
+    at all, or a suffix that is no quality - raises `ValueError` rather than being guessed
+    at, because a wrong chord is worse than a refused one.
+    """
+    text = (name or "").strip()
+    if text == NO_CHORD:
+        return None
+    body, bass = split_slash(text)
+    root, suffix = ChordParser.parse_chord_name(body)
+    if root is None:
+        raise ValueError(f"no chord root in {name!r}")
+    quality = "maj" if suffix == "" else ChordParser.canonical_quality(suffix)
+    if quality not in ChordParser.CHORD_TONES_FROM_ROOT:
+        raise ValueError(f"unknown chord quality {suffix!r} in {name!r}")
+    return ChordSymbol(root, promote_slash_chord(root, quality, bass), bass)
 
 
 def slash_bass_cost(voicing_midis: Sequence[int], bass_pc: Optional[int]) -> int:

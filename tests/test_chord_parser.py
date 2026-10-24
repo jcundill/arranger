@@ -3,7 +3,13 @@ import unittest
 from musthe import Note
 
 from arranger import ChordParser, melody_degree_name
-from arranger.chords import promote_slash_chord, slash_bass, split_slash
+from arranger.chords import (
+    ChordSymbol,
+    parse_symbol,
+    promote_slash_chord,
+    slash_bass,
+    split_slash,
+)
 from arranger.tuning import PITCH_CLASS_NAMES
 
 
@@ -321,6 +327,48 @@ class TestSlashChordPromotion(unittest.TestCase):
                     self.assertEqual(
                         promote_slash_chord(root, quality, bass), quality, f"{root}{quality}/{bass}"
                     )
+
+
+class TestParseSymbol(unittest.TestCase):
+    """Resolving a chord symbol: the root, the quality and the slash bass, from one name.
+
+    The name is the single spelling of the harmony, so this is where a quality stops being
+    carried beside a chord and starts being read out of it. The two refusals are as much the
+    contract as the readings are: a bare root is a major triad, and anything else unreadable
+    raises rather than being guessed at.
+    """
+
+    def test_a_written_quality_is_canonicalised(self):
+        """One chord, however the corpus spells it."""
+        for name in ("Dm7", "D-7", "Dmin7"):
+            self.assertEqual(parse_symbol(name), ChordSymbol("D", "m7"), name)
+
+    def test_a_bare_root_is_a_major_triad(self):
+        """A letter on its own is a major triad - a fact about the notation, not a guess."""
+        self.assertEqual(parse_symbol("D"), ChordSymbol("D", "maj"))
+        self.assertEqual(parse_symbol("Bb"), ChordSymbol("Bb", "maj"))
+
+    def test_the_slash_bass_is_carried_and_promotes_the_triad(self):
+        """`D/C` is a D7 over C: the bass names the seventh the triad was missing."""
+        self.assertEqual(parse_symbol("D/C"), ChordSymbol("D", "7", "C"))
+        self.assertEqual(parse_symbol("Am/G"), ChordSymbol("A", "m7", "G"))
+        self.assertEqual(parse_symbol("Gmaj9/F#"), ChordSymbol("G", "maj9", "F#"))
+
+    def test_a_six_nine_chord_is_one_quality(self):
+        """The `9` belongs to the quality and the letter after the last slash is the bass."""
+        self.assertEqual(parse_symbol("C6/9"), ChordSymbol("C", "6/9"))
+        self.assertEqual(parse_symbol("C6/9/E"), ChordSymbol("C", "6/9", "E"))
+
+    def test_no_chord_resolves_to_nothing(self):
+        """`NC` is the absence of a chord, not a chord with an unreadable quality."""
+        self.assertIsNone(parse_symbol("NC"))
+        self.assertIsNone(parse_symbol("  NC  "))
+
+    def test_an_unreadable_symbol_is_refused(self):
+        """A wrong chord is worse than a refused one, so junk raises rather than guessing."""
+        for name in ("Hmax15#", "weird label", "D minor seven", "", None):
+            with self.assertRaises(ValueError, msg=name):
+                parse_symbol(name)
 
 
 if __name__ == "__main__":
