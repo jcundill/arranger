@@ -5,7 +5,7 @@ into something a musician reads, and the one that reads a written head back in.
 They are top-level modules rather than part of the `arranger` package because
 `tabxml` and `tabgp` need optional dependencies the engine must not have.
 
-Read this before touching any of them. Nearly every decision below was forced by a
+Read this before touching any of them. Nearly every decision below is forced by a
 real file, so the reasoning is the point: a "simplification" that drops one of them
 reintroduces a bug the measurement below records.
 ## The staff renderers live in `tabstaff.py`
@@ -165,8 +165,8 @@ sounding, so each renderer has to say "not plucked" in its own way:
 
 - `render._step_cells` draws a mute on that string — the one-line tab answers *what is
   plucked*;
-- `tabstaff._strikes_here` returns False, so the cell is empty — the note was drawn where it
-  was struck;
+- `tabstaff._strikes_here` returns False, so the cell is empty — the note is drawn where it
+  is struck;
 - `tabxml._build_note` writes a **per-note `<tie>`**: the earlier `Note` is patched to
   `start`/`continue` and this one is written with `stop`. It has to be at the note inside the
   chord, not on the chord, because the other voices are new. An event cut at a bar line
@@ -213,7 +213,7 @@ TAB-staff part-selection test possible.
 | `arrange_xml_head(path, …)` | the whole pipeline → steps, the `Head`, and the loader's notes |
 | `head_cli(argv)` | the `head` command |
 
-Six decisions are load-bearing, and each was forced by a real file:
+Six decisions are load-bearing, and each is forced by a real file:
 
 - **The harmony is a timeline, not a per-note attribute.** A `<harmony>` precedes
   the note it governs, several can share a bar, and a bar can carry none at all —

@@ -226,11 +226,12 @@ you whether a change is an improvement or a different library.
     one step per eighth, so without it a held chord is restruck eight times a bar and
     the staff is a chord list rather than a held shape. A rest clears the held
     pitches, because a rest genuinely stops the ringing.
-  - **Every bar is ruled, and `measures_per_line` is bars per *line*.** These were one
-    setting once: barlines were drawn every `measures_per_line` bars, on the reasoning
-    that a barline every bar cluttered a grid already dense with columns. Splitting them
-    was forced by TuxGuitar's ASCII export, which closes every measure and wraps at a
-    fixed number of bars. A barline is not clutter — it is the one mark saying where the
+  - **Every bar is ruled, and `measures_per_line` is bars per *line*.** Barlines every
+    `measures_per_line` bars, on the reasoning that a barline every bar clutters a grid
+    already dense with columns, would rule one bar in four and never wrap. TuxGuitar's
+    ASCII export closes every measure and wraps at a
+    fixed number of bars, which is the shape the split follows. A barline is not
+    clutter — it is the one mark saying where the
     metre falls, and without one on every bar a reader cannot tell a two-bar phrase from
     a four-bar one. So `_staff_barlines` marks every bar and `_staff_breaks` marks where a
     line ends, both derived from one `_staff_bars` list so the two cannot disagree. The
@@ -554,14 +555,13 @@ criterion is promoted across another, and the trade was measured rather than gue
 **The two criteria disagree about the same thing.** Position measures how far the
 *hand* moves; span measures how far the hand has to *stretch* once it is there. A
 five-fret shape sitting one fret from where the hand already was wins on position and
-loses on span — and with span ranked below position that shape was chosen, which is
-how the engine came to select `8-x-8-8-13-x` (index at 8, pinky at 13) for a Cm7b5.
+loses on span — and with span ranked below position that shape wins, selecting
+`8-x-8-8-13-x` (index at 8, pinky at 13) for a Cm7b5.
 Keeping the hand still is worth less than being able to play the shape it is holding.
 
 **Promoting span is free where tightening the cap is not.** The obvious alternative is
-to lower `GRIP_MAX_SPAN` from 5. It is a
-  *filter*, so it deletes a voicing wherever no tighter one exists, and that costs real
-music:
+to lower `GRIP_MAX_SPAN` from 5. It is a *filter*, so it deletes a voicing wherever no
+tighter one exists, and that costs real music:
 
 | cap | voicings kept (of 1008) | what went missing |
 |---|---|---|
@@ -594,7 +594,7 @@ because the barre spans zero and the natural shape at frets 7–8 spans one. The
 bucket keeps the hand at 6–8 (`x-x-8-7-8-x`). The bucket is applied to the *value*
 at the span index, not by reordering the tuple, so **every span of two or more still
 outranks position exactly as before**: the `8-x-8-8-13-x` case below is untouched,
-and so is the low-Dm7 trade measured below it. Measured over the suite, the change
+and so is the low-Dm7 trade measured below it. Over the suite it
 moves exactly one pinned tab — the last fill of the `targets` texture, `x-x-x-5-5-5`
 → `x-x-10-9-10-x`, which is the same stay-in-place behaviour on a different chord.
 A bucket of `0/1/2` was measured too and **rejected**: it costs 13 tests, including
@@ -752,7 +752,7 @@ Five decisions in here were each forced by something measurable:
   string out for the B, so its lowest note is the low E while its soprano is the B, not
   the G. It is the answer to a different question — a *bass* — and it is the only default
   set that can reach one.
-- **6-4-3-2 is searched for, and it needed a cost term to be chosen at all.** The same
+- **6-4-3-2 is searched for, and it needs a cost term to be chosen at all.** The same
   reason as 6-4-3: the set skips a string, so it is not in descending pitch order down
   the strings, so an interval-laid table cannot express it — the D string is a fifth above
   the low E, and the low E's note is frequently *not* the lowest sounding pitch.
@@ -905,8 +905,8 @@ Five decisions are load-bearing:
   where it does not — a `targets` target — there is nothing to demote *to*.
   `melody_only` stays **False**: the step does have a harmony, it is simply not spelled
   out, so the flag would make the annotation claim "no chord". `chord_unvoiced` stays
-  false for the same reason from the other side: a complete shape **did** exist here and
-  was refused for its reach, so "no voicing for this chord" would be claiming something
+  false for the same reason from the other side: a complete shape **does** exist here and
+  is refused for its reach, so "no voicing for this chord" would be claiming something
   that is not true.
 - **The role's palette is the texture's business: there is no grip axis.** A caller
   cannot name a grip family. `texture` states the chord part's arity and
@@ -1727,9 +1727,9 @@ the horn repeats the note.
 **`chord_attack` is the other half of that rule, and the two are told apart by the request
 rather than by the pitches.** A comp on `--chord-on every-beat` repeats one shape four
 times a bar, and a slot the tune merely sustains through has the same pitches — so the
-renderers, which compare shapes, could not tell a re-strike from a hold, and folded the
-named position into the one before it: the arrangement said four attacks and the score,
-the staff, the HTML and GP5 all wrote **one long chord**. `slot_plan._chord_attacks` sets
+renderers, which compare shapes, cannot tell a re-strike from a hold, and fold the
+named position into the one before it: the arrangement says four attacks and the score,
+the staff, the HTML and GP5 all write **one long chord**. `slot_plan._chord_attacks` sets
 `ArrangementStep.chord_attack` where the chord part was *asked* for the attack — a position
 `--chord-on` named (including the stab `--chord-on melody,1and` puts under a held note), or a
 slot the chord layer invented because the tune is silent there — and a slot the
@@ -1787,7 +1787,7 @@ beat — four in 12/8, not twelve — and `1and` is the midpoint of a **group**,
 of three eighths has its `and` halfway through the pulse rather than half a denominator
 unit in. That is what makes one rhythm the same request in 2/2, 4/4 and 6/8, and it is
 why the grammar has no decimal: `1.5` would name a time rather than a place on the
-metre's grid, and could not express `lastand`. `last` resolves against the bar, so
+metre's grid, and cannot express `lastand`. `last` resolves against the bar, so
 `lastand` is the last felt beat's midpoint in any metre.
 
 The grammar is `melody` (the written onsets), `none`, `every-beat`, or comma-separated
