@@ -358,11 +358,12 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         layers that attack - so the pair states the same three voices and adds only the
         thumb.
 
-        The voices named here are the ones the palette settles on, and the palette no
-        longer offers the high E (`grip_tables.COMPING_EXCLUDED_STRINGS`), so this chord's
-        shell is `x-12-x-11-12-x` - a 9th, a 3rd and a 7th rather than a 3rd, a 5th and a
-        7th. A pinned expectation is the point: the clause is read off the shape, and the
-        shape is what the palette decides.
+        The voices named here are the ones the palette settles on, and the palette offers
+        only shapes that **fill their strings** inside a four-fret reach
+        (`grip_tables.COMPING_MAX_SPAN`, `grip_tables._fills_its_strings`), so this chord's
+        shell is `x-x-7-4-7-x` - a 9th, a 3rd and a 7th rather than a 3rd, a 5th and a
+        7th, and its top is the 7th. A pinned expectation is the point: the clause is read
+        off the shape, and the shape is what the palette decides.
         """
         from headxml import arrange_xml_head
 
@@ -373,10 +374,11 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
             section=(1, 2),
             options=ArrangeOptions(request=Request(melody=False)),
         )
+        self.assertEqual(chord[0].voicing.tab_string(), "x-x-7-4-7-x")
         self.assertEqual(
             step_annotation(chord[0]),
             f" (comping - A 9, B 3 & F# 7{comping}"
-            " - top B3 - the opening, in the band's middle)",
+            " - top F#4 - the opening, in the band's middle)",
         )
         self.assertFalse(chord[0].melody_voiced)
         # A bass line under that same chord part states the *same* three voices and

@@ -511,8 +511,9 @@ what stops the grip families and the octave-down rescue from having to know abou
 other, and it is asserted in `tests/test_grips.py`.
 
 **Two ways to propose a shape, one way to accept one.** `candidate` is the only place a set
-of frets becomes a `Voicing`: the melody sounds and is the highest note, every fret is on the
-board and inside `GRIP_MAX_SPAN`, the family's tone claim (`required`) and bass claim
+of frets becomes a `Voicing`: the melody sounds and is the highest note, no two sounding
+strings carry the same pitch (`sounds_distinct_pitches`), every fret is on the board and
+inside `GRIP_MAX_SPAN`, the family's tone claim (`required`) and bass claim
 (`lowest_pc_allowed`) hold, nothing outside the chord sounds where the family makes that claim,
 and the sounding strings are one `supported_string_sets()` entry. The proposers are the
 **search** (`search_shape`, for the families whose frets have to be found) and the **layouts**
@@ -1632,7 +1633,7 @@ the tune, so the search needed no new rule: `frets_in_span` already tries every 
 combination on the remaining strings and the candidate keeps the ones where both guide
 tones sound and nothing outside
 the chord does. The only difference is that the top fret is searched too rather than fixed
-by a melody. Because the window is exactly `GRIP_MAX_SPAN["shell"]`, the search stays
+by a melody. Because the window is exactly `COMPING_MAX_SPAN`, the search stays
 *exhaustive within the playability invariant*.
 
 The shared half is factored into `_shell_voicing` so the melody-bearing shell and the
@@ -1695,6 +1696,52 @@ note meant.
 that carry no information about the chord's quality. That is why only the `shell` family is
 offered at all.
 
+**The reach is four frets, and no shape leaves a hole in its strings.** Two palette narrows
+rather than cost criteria (`grip_tables.COMPING_MAX_SPAN`, `grip_tables._fills_its_strings`),
+and they answer one question from two sides: a comp has no note reaching out for it, so what
+a *pinned* shape needs — the shell's fifth fret, a skipped string — buys a stretch here
+instead of a reach.
+
+- **Four, not the shell's five.** A fifth fret is what a melody pinned five frets above the
+  guide tones costs; with the top free, every tone a comp states on adjacent strings is
+  statable inside four. Measured over every quality at arities 1–3 in the default band, the
+  in-band top tones fall from **18 to 15** at three voices and **12 to 11** at two, and no
+  tone leaves the palette outright: the registers that go (midi 55, 56 and 72 at three
+  voices, 57 at two) were each a fifth-fret spelling — two of them on a skipped string as
+  well — and each is still statable an octave away. One tone does leave every palette:
+  `F5`, whose only spellings sat on frets 15–18, far above the band.
+- **No hole.** A set that mutes a string *between* two sounding ones makes the hand reach
+  over it and leaves the chord thin in the middle. `x-6-x-5-9-x` is the shape that named the
+  rule: the A string's 6, the G string's 5 and the B string's 9 — a span of four, so the
+  reach cap let it through, and `_comping_collapse_key` ranks a shape's register **before**
+  its span, so the wide spelling of that top tone still beat the tight one. Three of the
+  comping family's sets have a skip, and they are dropped whole; the skip stays where it has
+  work to do (a melody pinned to the G string, a drop-2's deep bass), and a thumb merged
+  *under* a shape is a different layer's decision (`bass_place`), so `3-x-4-4-8-x` — the
+  C-shape G, with the A string muted — is still played.
+
+What the two rules cost on the acceptance example: ten of its sixteen tabs are spelled
+differently, **and none of its sixteen tops moves** (`tests/test_comp_line.py` pins both).
+Over the 93 comping steps of the three committed sweep heads the spans run 0–4 (7 of them
+at four), no step leaves the band, and no step has a hole in it.
+
+**A unison is not a voice, and the tuning makes it reachable here.** `grip_place.sounds_distinct_pitches`
+refuses a fret set that stops two strings for the same pitch; `candidate` asks it for every
+family, and `_shell_voicing` asks it for the melody-free shell, which is the one builder that
+does not go through `candidate`. The G and B strings are a **third** apart rather than a
+fourth, so a top tone on the B is repeatable four frets up the G: `x-x-8-8-4-x`, a Cm7 shell
+that sounds `Bb3` once and `Eb4` twice and claims three voices — the pair beating against
+itself. Over the committed heads, `--no-melody` chose such a shape on **11 of 265** steps
+(`--chord-on 1,2and` on 5 of 141); both are 0 now. Nothing is lost by it: the
+melody-bearing route's candidate sets are **unchanged** (2,820 over every quality and eleven
+melody notes) because a pinned shape reaches no unison — `_duo_offsets` skips a guide tone
+that would double the melody — and **no top tone leaves any palette**: over 29 qualities ×
+4 roots × arities 1–3, banded and unbanded, the top pitches a palette offers are identical.
+So it is a respelling, like the two above: on the acceptance example it is bar 4's two `E4`
+columns, `x-x-7-9-5-x` — which sounds `A3` and the 3rd twice, with no root at all —
+becoming `x-x-7-5-5-x`. The counts are two passes over `tests/data/*.musicxml` under
+`--no-melody`, the first with the predicate stubbed to `True` and the second with it live.
+
 **The high E is off the palette, at every arity.** `grip_tables.COMPING_EXCLUDED_STRINGS`
 carries the reason: that string is where the tune itself is pinned first
 (`MELODY_STRING_CHOICES_FULL` tries it before the B and the G), and a comping part has no
@@ -1704,7 +1751,7 @@ criterion**: the sets that carry the string are dropped rather than ranked lower
 in `cost.voicing_cost` knows about the rule, and no other arity can reach it because every
 family is filtered by the same constant. Measured over the three committed sweep heads under
 the default comping request, the steps whose top voice lands above the melody's fall from
-**37 to 12 of 85** (and from 20 to 8 of 51 at `--chord-on 1,2`); no comping step sounds the
+**37 to 15 of 85** (and from 20 to 8 of 51 at `--chord-on 1,2`); no comping step sounds the
 string at any arity.
 
 **A quality with no readable root gets nothing**, on the same rule as every other
@@ -1712,10 +1759,11 @@ guide-tone generator here: a shell is a claim about *this* chord's 3rd and 7th, 
 them without a root is how a wrong note gets into the tab.
 
 **The playability invariant, minus the melody clause.** Every candidate sounds only chord
-tones, sounds exactly the number of notes asked for, occupies one string set from the
-matching family, and holds a span within that family's `GRIP_MAX_SPAN`. The dropped clause
-is "the melody is on the topmost string", and it is dropped for the only reason there is:
-there is no melody.
+tones, sounds exactly the number of notes asked for, states **one pitch per string**,
+occupies one string set from the matching family, and holds a span within
+`COMPING_MAX_SPAN` on a set that leaves no hole.
+The dropped clause is "the melody is on the topmost string", and it is dropped for the only
+reason there is: there is no melody.
 
 Measured over the 93 comping steps of the three committed sweep heads, under
 `--no-melody --chord-notes 2`:
@@ -1725,7 +1773,9 @@ notes per step          2        (93 of 93)
 melody_voiced           False    (93 of 93)
 supported string set    yes      (93 of 93)
 high E sounding         0
-over GRIP_MAX_SPAN      0
+over COMPING_MAX_SPAN   0
+hole in the strings     0
+pitch stated twice      0
 wrong notes             0
 guide tone missing      0
 unreadable chord        0        (none of the committed heads writes a symbol the library

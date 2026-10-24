@@ -26,7 +26,7 @@ from arranger import (
 )
 from arranger.grip_place import snapshot
 from arranger.grip_tables import (
-    GRIP_MAX_SPAN,
+    COMPING_MAX_SPAN,
     GRIP_STRING_SETS,
     comping_string_sets,
 )
@@ -40,9 +40,11 @@ from arranger.options import ArrangeOptions, Request
 from arranger.tuning import NECK_FRET_MAX, NECK_FRET_MIN, SILENCE_GRID
 from tests.support import (
     PROGRESSION,
+    arranged,
     chord_pcs,
     comping,
     guide_pcs,
+    sweep_head_paths,
 )
 
 
@@ -81,8 +83,8 @@ class TestCompingGenerator(unittest.TestCase):
 
         The clause that is dropped is "the melody is on the topmost string", and it is
         dropped for the only reason there is: there is no melody. Everything else -
-        three voices, one of the `shell` sets, span within `GRIP_MAX_SPAN["shell"]` -
-        is asserted exactly as it is for every other grip.
+        three voices, one of the `shell` sets, span within `COMPING_MAX_SPAN` - is
+        asserted exactly as it is for every other grip.
         """
         supported = {frozenset(s) for s in supported_string_sets()}
         shell_sets = {frozenset(strings) for strings, _ in GRIP_STRING_SETS["shell"]}
@@ -95,7 +97,7 @@ class TestCompingGenerator(unittest.TestCase):
                 self.assertIn(active, supported, voicing.tab_string())
                 self.assertIn(active, shell_sets, voicing.tab_string())
                 self.assertLessEqual(
-                    voicing.fret_span(), GRIP_MAX_SPAN["shell"], voicing.tab_string()
+                    voicing.fret_span(), COMPING_MAX_SPAN, voicing.tab_string()
                 )
 
     def test_the_high_e_is_not_on_the_palette_at_any_arity(self):
@@ -152,6 +154,182 @@ class TestCompingGenerator(unittest.TestCase):
         narrow = get_comping_voicings("Cmaj7", fret_min=0, fret_max=0)
         self.assertTrue(wide)
         self.assertTrue(narrow, "a zero-width window must still voice the chord")
+
+
+class TestTheCompingReach(unittest.TestCase):
+    """A comping shape fills its strings and stays inside `COMPING_MAX_SPAN` frets.
+
+    Two rules, and neither implies the other. The **reach** (`COMPING_MAX_SPAN`) is four,
+    because a comping shape has no melody pinned to it and every tone it can state on
+    adjacent strings is statable inside four; the fifth fret is what a **pinned** melody
+    costs (`GRIP_MAX_SPAN["shell"]`). The **hole** (`grip_tables._fills_its_strings`) is
+    that the strings between the shape's bottom and its top all sound. The cap alone was
+    not enough and `x-6-x-5-9-x` is the shape that proved it: the A string's 6, the G
+    string's 5 and the B string's 9, with the D string muted under the fingers - a span of
+    four, so it survived the cap, and `grips._comping_collapse_key` ranks a shape's
+    register **before** its span, so the wide spelling of that top tone still beat the
+    tight one. A skip is the right answer when a melody is pinned to a string or a drop-2
+    needs a deep bass; a comp has neither.
+
+    `docs/engine.md` §"`get_comping_voicings`: a chord with no melody on top" carries the
+    measurement of what the two rules cost, and the acceptance example's tops are unchanged
+    by them (`tests/test_comp_line.py`).
+    """
+
+    #: The default band: the palette collapses one shape per top tone only when a band is
+    #: present, so a witness built without one would not be the palette a comp reads.
+    BAND = (3, 10)
+
+    def _palette(self, name: str, notes: int = 3):
+        return get_comping_voicings_for(
+            CompingRequest(name, NECK_FRET_MIN, NECK_FRET_MAX, notes, False, self.BAND)
+        )
+
+    def test_no_shape_the_palette_offers_crosses_four_frets(self):
+        """The limit is the search's own, so it holds at every arity and every quality.
+
+        Swept over `CHORD_TONES_FROM_ROOT` because a quality added later must not be the
+        one that reintroduces a stretch, and over the arities because the family changes
+        with them (`duo` pairs, `shell` sets, `duo` tops).
+        """
+        widest = 0
+        for quality in sorted(ChordParser.CHORD_TONES_FROM_ROOT):
+            for notes in (1, 2, 3):
+                for voicing in self._palette(f"C{quality}", notes):
+                    widest = max(widest, voicing.fret_span())
+        self.assertLessEqual(widest, COMPING_MAX_SPAN)
+
+    def test_no_shape_the_palette_offers_leaves_a_hole_in_its_strings(self):
+        """Every string between a shape's bottom and its top sounds, at every arity.
+
+        Read as the sounding strings being a *run* of neighbours: `len(active) ==
+        max - min + 1`. A one-note shape is trivially a run, which is why the arities are
+        swept rather than asserted one by one - and why the rule is stated as an equality
+        on the shape rather than as a list of refused sets.
+        """
+        for quality in sorted(ChordParser.CHORD_TONES_FROM_ROOT):
+            for notes in (1, 2, 3):
+                for voicing in self._palette(f"C{quality}", notes):
+                    strings = [
+                        index for index, fret in enumerate(voicing.frets) if fret >= 0
+                    ]
+                    self.assertEqual(
+                        len(strings),
+                        max(strings) - min(strings) + 1,
+                        f"C{quality} {notes} voices: {voicing.tab_string()}",
+                    )
+
+    def test_a_step_the_thumb_joins_keeps_the_hole_rule_scoped_to_the_shape(self):
+        """The skipped string the *bass layer* leaves is not the palette's business.
+
+        `3-x-4-4-8-x` is the C-shape G every player knows - a root on the low E with the
+        chord above on the D, G and B - and the A string is muted in it. The rule the
+        palette holds is about the **chord part's own shape**; a thumb merged underneath
+        is placed by its own cost (`bass_place`), and a comp that refused that shape would
+        be refusing an idiom rather than a compromise.
+        """
+        steps, _head, _notes = arranged(
+            "tests/data/synthetic_repeat_slash.musicxml",
+            section=(1, 2),
+            request=Request(melody=False, bass_on="melody", bass_notes="root"),
+        )
+        self.assertIn("3-x-4-4-8-x", [step.tab_line() for step in steps])
+
+    def test_the_stretch_a_fifth_fret_bought_is_off_the_palette(self):
+        """`Dm7` in the default band: the same top tone, spelled inside the hand's four.
+
+        `8-x-3-7-x-x` states Dm7 with its top on D4 and spans the fifth the **shell's**
+        limit allows - the shape the four-bar example's walk used to be played with - and
+        it leaves the B string muted between two sounding neighbours. `x-8-10-7-x-x`
+        states the same chord with the same top tone on adjacent strings, a span of three.
+        What the rules change is the register the lowest voice sits in (C3 becomes F3),
+        which is the cost the document states; the harmony and the line are the same,
+        which is why the example's tops do not move.
+        """
+        tabs = [voicing.tab_string() for voicing in self._palette("Dm7")]
+        self.assertIn("x-8-10-7-x-x", tabs)
+        self.assertNotIn("8-x-3-7-x-x", tabs)
+
+    def test_the_shape_that_named_the_hole_rule_is_off_the_palette(self):
+        """`x-6-x-5-9-x`: an A string 6, a G string 5 and a B string 9, and no D string.
+
+        A span of four, so the cap let it through - and its top tone is statable on the
+        D, G and B strings, which is what makes it a compromise rather than the only
+        spelling. Swept over the roots as well as the qualities, because the pitch classes
+        have to be chord tones of *some* chord for the shape ever to be generated, and the
+        rule is that it is generated for none of them.
+        """
+        for root in ("C", "Eb", "E", "G", "Ab", "A"):
+            for quality in sorted(ChordParser.CHORD_TONES_FROM_ROOT):
+                for notes in (2, 3):
+                    tabs = {
+                        voicing.tab_string()
+                        for voicing in self._palette(f"{root}{quality}", notes)
+                    }
+                    self.assertNotIn("x-6-x-5-9-x", tabs)
+                    self.assertNotIn("5-x-5-9-x-x", tabs)
+
+    def test_no_shape_the_palette_offers_states_a_pitch_twice(self):
+        """A unison is not a voice, at every arity and every quality.
+
+        Read as an equality on the shape rather than as a list of refused tabs, because the
+        reason is the tuning: the G and B strings are a third apart, so a top tone on the B
+        can be repeated four frets up the G. `x-x-8-8-4-x` is the shape that named the rule
+        - a Cm7 shell sounding `Eb4` on two strings, which states two pitches where the
+        arity claims three.
+        """
+        for quality in sorted(ChordParser.CHORD_TONES_FROM_ROOT):
+            for notes in (1, 2, 3):
+                for voicing in self._palette(f"C{quality}", notes):
+                    midis = voicing.midi_notes()
+                    self.assertEqual(
+                        len(set(midis)), len(midis),
+                        f"C{quality} {notes} voices: {voicing.tab_string()}",
+                    )
+
+    def test_the_shape_that_named_the_unison_rule_is_off_the_palette(self):
+        """`x-x-8-8-4-x`: a G string 8 and a B string 4, and both of them `Eb4`.
+
+        A Cm7 shell whose third note is the same pitch as its second, so it states `Bb3`
+        and `Eb4` and calls it three voices. Its top tone is statable on other sets, which
+        is what makes it a compromise rather than the only spelling: the step it was
+        reported on (`synthetic_pickup_cut`, bar 3, under `--no-melody`) now plays
+        `x-6-8-8-x-x`, a four-voice Cm7 with the same top.
+        """
+        for name in ("Cm7", "Cm", "Cm9"):
+            tabs = {
+                voicing.tab_string()
+                for voicing in self._palette(name)
+            }
+            self.assertNotIn("x-x-8-8-4-x", tabs, name)
+        for name in ("Cm7", "Cm", "Cm9"):
+            tabs = {
+                voicing.tab_string()
+                for voicing in self._palette(name)
+            }
+            self.assertNotIn("x-x-8-8-4-x", tabs, name)
+
+    def test_no_comping_step_of_a_committed_head_crosses_four_frets(self):
+        """The rule read on the **step**, not only on the shape the palette offered.
+
+        A step's frets are the chosen shape's plus whatever a later merge writes into
+        them, and that is the level at which the four-finger invariant is stated for the
+        same reason: a rule asserted over a voicing says nothing about a step assembled
+        after the choice.
+        """
+        steps = 0
+        for path in sweep_head_paths():
+            head_steps, _head, _notes = arranged(path, request=Request(melody=False))
+            for step in head_steps:
+                if step.silence is not None or not step.voicing.active_frets():
+                    continue
+                steps += 1
+                self.assertLessEqual(
+                    step.voicing.fret_span(),
+                    COMPING_MAX_SPAN,
+                    f"{path} bar {step.bar} beat {step.beat}: {step.tab_line()}",
+                )
+        self.assertGreater(steps, 30, "the sweep measured almost no comping steps")
 
 
 class TestTheCompingPaletteIsRemembered(unittest.TestCase):

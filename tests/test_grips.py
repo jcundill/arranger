@@ -51,7 +51,11 @@ class TestGripGeneration(unittest.TestCase):
         self.engine = VoiceLeadingEngine()
 
     def test_every_grip_obeys_the_playability_invariants(self):
-        """Chord tones only, a known string set, the melody on top, a hand's span."""
+        """Chord tones only, a known string set, the melody on top, a hand's span.
+
+        And **one voice per string**: no two sounding strings carry the same pitch, which
+        the tuning can otherwise produce across the G/B third (`grip_place.sounds_distinct_pitches`).
+        """
         seen = set()
         for chord_name, quality in QUALITIES:
             for melody in every_chord_tone(chord_name, quality):
@@ -66,6 +70,7 @@ class TestGripGeneration(unittest.TestCase):
                     self.assertLessEqual(v.fret_span(), GRIP_MAX_SPAN[v.grip], where)
                     self.assertTrue(all(0 <= f <= 18 for f in v.active_frets()), where)
                     self.assertEqual(max(v.midi_notes()), Note(melody).midi_note(), where)
+                    self.assertEqual(len(set(v.midi_notes())), len(v.midi_notes()), where)
                     self.assertEqual(v.soprano_string(), max(v.active_strings), where)
                     self.assertIn(frozenset(v.active_strings), supported_string_sets(), where)
                     seen.add(v.grip)

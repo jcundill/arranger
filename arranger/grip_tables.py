@@ -466,6 +466,20 @@ INTERVAL_NAMES: Dict[int, str] = {3: "3rd", 8: "b6", 9: "6th"}
 COMPING_EXCLUDED_STRINGS: Tuple[int, ...] = (5,)
 
 
+# The widest a **comping shape** may reach, in frets: one under `GRIP_MAX_SPAN["shell"]`,
+# because the fifth fret is the melody's.
+#
+# A `shell` with a tune pinned to its top needs five: the melody can sit five frets from
+# the guide tones, and giving that up loses the chord under the note. A comping shape has
+# nothing pinned - the whole set is free to be searched - so every tone it can state on
+# adjacent strings is stated inside four, which is also the reach `GRIP_MAX_SPAN["duo"]`
+# has always allowed a pair. The fifth fret buys either a stretch across a muted string
+# (which `_fills_its_strings` refuses outright) or, for one top tone of a three-voice
+# shape, a spelling four frets cannot reach - see the measurement in `docs/engine.md`
+# §"`get_comping_voicings`: a chord with no melody on top".
+COMPING_MAX_SPAN: int = 4
+
+
 def _comping_family(notes: int, bass_voice: bool) -> List[Tuple[int, ...]]:
     """The sets the arity's own family offers, before the high E is taken off them.
 
@@ -489,6 +503,38 @@ def _comping_family(notes: int, bass_voice: bool) -> List[Tuple[int, ...]]:
     return [strings for strings, _ in GRIP_STRING_SETS["shell"]]
 
 
+def _fills_its_strings(strings: Tuple[int, ...]) -> bool:
+    """Whether every string between this set's bottom and its top sounds.
+
+    A set that skips one has a **hole** in it, and the hand pays for the hole twice: the
+    fingers must reach over a string they do not touch, so the shape stretches across
+    pitches it does not state, and the chord sounds thin in the middle because a voice
+    the ear expects is simply absent. ``x-6-x-5-9-x`` is the case that named the rule: a
+    `(1, 3, 4)` shell with the D string muted and four frets from the G string's 5 to the
+    B string's 9 - which is why `COMPING_MAX_SPAN` alone did not remove it.
+
+    The skip is a real answer elsewhere and stays one there: a four-note drop-2 lowers
+    its bass onto the string *below* the block when the D string runs out of frets
+    (`GRIP_STRING_SETS["drop2"]`), and a three-note shell under a melody pinned to the G
+    string needs the low E for the same reason. Both have a voice to place and no choice
+    about the string. A comping shape has neither: all its voices are free, so a hole in
+    it is a compromise nobody asked it to make.
+    """
+    return len(strings) == max(strings) - min(strings) + 1
+
+
+def _offerable(strings: Tuple[int, ...]) -> bool:
+    """Whether the comping family may offer this set: no high E, and no hole in it.
+
+    Two rules that both belong to the **palette** rather than to a criterion, which is why
+    they are one predicate here instead of two branches in the search:
+    `COMPING_EXCLUDED_STRINGS` and `_fills_its_strings` carry the reasons.
+    """
+    if not _fills_its_strings(strings):
+        return False
+    return not set(strings) & set(COMPING_EXCLUDED_STRINGS)
+
+
 def comping_string_sets(
     notes: int, bass_voice: bool = False
 ) -> List[Tuple[int, ...]]:
@@ -499,6 +545,8 @@ def comping_string_sets(
     property of the palette the generator is handed and no criterion has to know about it -
     and no arity reaches the string, because every family is filtered by the same constant.
     Which family an arity takes, and why it is not a truncated one, is `_comping_family`.
+    **Neither is a set with a hole in it** (`_fills_its_strings`): a comping shape states
+    its voices on neighbouring strings.
 
     **A set is offered once.** Two `duo` pairs share the G string as their top, so the
     one-note arity would otherwise name the same shape twice - harmless to the ranking, and
@@ -518,11 +566,9 @@ def comping_string_sets(
     voices the lowest note is placed by the shape's own string set, and moving that would
     re-decide a shape that is already correct.
     """
-    # One pass, because both rules are about a set that must not be *offered* rather than
-    # about a shape that must not be chosen.
+    # One pass: every rule here is a set not *offered*, not a shape not *chosen*.
     offered: List[Tuple[int, ...]] = []
     for strings in _comping_family(notes, bass_voice):
-        if set(strings) & set(COMPING_EXCLUDED_STRINGS) or strings in offered:
-            continue
-        offered.append(strings)
+        if strings not in offered and _offerable(strings):
+            offered.append(strings)
     return offered

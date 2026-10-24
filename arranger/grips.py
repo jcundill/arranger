@@ -34,11 +34,12 @@ from .grip_place import (
     place_shape,
     place_template,
     snapshot,
+    sounds_distinct_pitches,
     voicing_from_snapshot,
 )
 from .grip_tables import (
     BOTTOM_FOUR,
-    GRIP_MAX_SPAN,
+    COMPING_MAX_SPAN,
     GRIP_PREFERENCE,
     GRIP_STRING_SETS,
     SHELL_DEGREES,
@@ -741,8 +742,10 @@ def _shell_voicing(
 
     Both guide tones must sound and nothing outside the chord may, which is the rule
     `candidate` enforces for the melody-bearing shell and the reason this one shares its
-    vocabulary. Shared by the melody-bearing shell and the melody-free one so the
-    two cannot drift apart on what counts as a shell.
+    vocabulary. The **unison rule** is the other one it shares: no two sounding strings may
+    carry the same pitch, because a unison states the chord with one voice fewer than the
+    arity claims (`grip_place.sounds_distinct_pitches`). Shared by the melody-bearing shell
+    and the melody-free one so the two cannot drift apart on what counts as a shell.
 
     `notes` is **how many voices the guitar was asked to play**, which is the arity of the
     shape: `alto,tenor` is two notes and `alto,tenor,tenor`-style requests are still two
@@ -771,6 +774,10 @@ def _shell_voicing(
     if guide is None:
         return None
     if len(frets_by_string) < notes:
+        return None
+    # A unison is not a voice. This builder is the one shape that does not pass through
+    # `candidate`, so the rule is asked for here rather than only in the placement layer.
+    if not sounds_distinct_pitches(midis):
         return None
     pcs = {midi % 12 for midi in midis}
     if bass_voice:
@@ -883,14 +890,12 @@ def _search_comping_voicings(request: CompingRequest) -> List[Voicing]:
     in this module is built around pinning the melody to the soprano string; this is
     the one that has none to pin.
 
-    **It is the same exhaustive search with nothing held at the top.** A shell is
-    already a claim about the chord's 3rd and 7th rather than about the tune, so the
-    search needed no new rule: `frets_in_span` already tries every fret combination on
-    the remaining strings and the candidate keeps the ones where both guide tones sound
-    and nothing outside the chord does. The only difference is that the top fret is searched too
-    rather than fixed by a melody, and the shape is ranked on spread and position
-    instead of against a pinned note. Because the window is exactly `GRIP_MAX_SPAN`,
-    the search stays exhaustive within the playability invariant.
+    **It is the same exhaustive search with nothing held at the top.** A shell is already
+    a claim about the chord's 3rd and 7th rather than about the tune, so the search needed
+    no new rule: `frets_in_span` tries every fret combination on the remaining strings and
+    the candidate keeps the ones where both guide tones sound and nothing outside the chord
+    does. Only the top fret is searched too rather than fixed by a melody, and because the
+    window is exactly `COMPING_MAX_SPAN` the search stays exhaustive within the invariant.
 
     The family is the arity's own, read from `comping_string_sets`: a pair is a `duo`, a
     three-voice shape is a `shell`, and a one-note inner voice takes the `duo` tops. The
@@ -921,12 +926,13 @@ def _search_comping_voicings(request: CompingRequest) -> List[Voicing]:
     a 3rd). Both are needed and neither is enough: a low 3rd is still not a bass note.
 
     Every candidate sounds only chord tones, holds a fret span of at most
-    `GRIP_MAX_SPAN["shell"]`, and occupies one string set from `comping_string_sets` -
-    the arity's family (`duo` pairs, `shell` sets, `duo` tops, or
-    `BASS_VOICE_STRING_SETS` for a bass voice) **minus the high E**, for the reason that
-    function gives. **Unlike every other candidate in the library, none of these carries
-    a melody**, so the invariant that a voicing sounds the melody on its topmost string
-    does not apply to them and is not asserted - see `tests/test_comping.py`.
+    `COMPING_MAX_SPAN` (four: a comp has no melody reaching for the shell's fifth), and
+    occupies one string set from `comping_string_sets` - the arity's family (`duo` pairs,
+    `shell` sets, `duo` tops, or `BASS_VOICE_STRING_SETS` for a bass voice) **minus the
+    ones carrying the high E or a hole between two sounding strings**, for the reasons
+    those two rules give. **Unlike every other candidate in the library, none of these
+    carries a melody**, so the invariant that a voicing sounds the melody on its topmost
+    string does not apply to them and is not asserted - see `tests/test_comping.py`.
 
     `fret_min`/`fret_max` bound the search the way they bound the selector everywhere
     else: as a **preference**, never a filter. A chord whose comping shape sits
@@ -940,7 +946,7 @@ def _search_comping_voicings(request: CompingRequest) -> List[Voicing]:
     if root_pc is None:
         return []
 
-    limit = GRIP_MAX_SPAN["shell"]
+    limit = COMPING_MAX_SPAN
     # The board, not the window: `fret_max` is a preference `voicing_cost` applies, so
     # searching past it and letting the selector rank is what keeps a chord of the tune
     # from vanishing. Clamped at 18, which is the end of the neck.
@@ -1012,7 +1018,7 @@ def _comping_palette(request: CompingRequest) -> Tuple[ShapeSnapshot, ...]:
     The enumeration is a **pure function of the request**, and the request is exactly
     what it reads: the chord, the neck window, the arity, the bass-voice flag and the
     home band. The rest - `GRIP_STRING_SETS`, `BASS_VOICE_STRING_SETS`,
-    `COMPING_EXCLUDED_STRINGS`, `GRIP_MAX_SPAN`, `NECK_FRET_MIN`, `NECK_FRET_MAX`,
+    `COMPING_EXCLUDED_STRINGS`, `COMPING_MAX_SPAN`, `NECK_FRET_MIN`, `NECK_FRET_MAX`,
     `STANDARD_TUNING` and `ChordParser.CHORD_TONES_FROM_ROOT` - is fixed when this
     module is imported. That is what makes the key sufficient and the memo need no
     invalidation, and it is why those tables must not be reassigned at runtime. Same

@@ -59,7 +59,7 @@ quoting one.
 make check      # lint + typecheck + test, in that order — what CI runs
 ```
 
-Current measured state: **1335 feature + 91 meta tests OK (skipped=2)**, pyright
+Current measured state: **1344 feature + 91 meta tests OK (skipped=2)**, pyright
 **0 errors 0 warnings**, ruff **0 errors**. If your change moves any of those numbers, that
 is the signal — not the absence of an error message. A quiet run is not evidence; a moved
 count is.
@@ -426,6 +426,16 @@ correct:
   than onto it, and why a target under a thumb may sound at most three strings
   (`grips.thumb_safe_grips`);
 - the melody is on that entry's soprano string, and is the highest sounding note;
+- **one pitch per string** — no two sounding strings carry the same note, because a unison
+  is not a voice: two strings stopped for one pitch state the chord with a voice fewer than
+  the shape claims, and they beat against each other. It is reachable only across the G/B
+  **third** — a top tone on the B is repeatable four frets up the G — so `x-x-8-8-4-x` (a
+  Cm7 shell sounding `Eb4` twice) is the shape that named it. `grip_place.sounds_distinct_pitches`
+  is the rule, asked by `candidate` for every family and by `grips._shell_voicing` for the
+  melody-free shell, which is the one builder that does not go through `candidate`; it is
+  swept per shape in `tests/test_grips.py`, per palette in `tests/test_comping.py` and
+  directly in `tests/test_placement.py`. It is stated over the **pitch** and not the pitch
+  class: a root doubled an octave down is a voice as usual;
 - `0 <= fret <= 18` and `fret_span() <= GRIP_MAX_SPAN[grip]` (5, or 4 for a duo).
   The span is checked on the frets actually placed, **not** as "within N of the
   soprano": those differ, and the second admits a span of ten;

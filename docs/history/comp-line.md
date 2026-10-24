@@ -296,6 +296,19 @@ moves [2,3,-3, 2,1,2,-3, 3,-7,-1,1,4, 3,2,-5]
 distinct 7 of 16, zero-moves 0 of 15, hand 5.7 – 8.0
 ```
 
+**The tops and the moves above are still the rule; ten of the sixteen spellings have since
+moved.** The palette this table was measured with reached the shell's five frets and could
+skip a string, and both are refused now (`grip_tables.COMPING_MAX_SPAN`, the skip rule in
+`grip_tables._fills_its_strings`): bar 1's two walks and its approach, bar 2's `F4` and `G4`
+walks, bar 3's `G4` and `B3` walks and bar 4's three `E4`/`A4` columns are spelled on
+neighbouring strings inside four. **Not one top and not one move changed**, which is what
+makes it the same line; the live tabs are `FOUR_BAR_TABS` in `tests/test_comp_line.py`, and
+the two rules and what they cost are [engine.md](../engine.md) §"`get_comping_voicings`: a
+chord with no melody on top". Bar 4's two `E4` columns have been respelled once more since —
+the palette now also refuses a shape that states one pitch on two strings
+(`grip_place.sounds_distinct_pitches`), so `x-x-7-9-5-x` became `x-x-7-5-5-x` — and that
+leaves the count at ten either way with no top moved.
+
 Every move is a 2nd, a 3rd or a 4th (one 5th). Bar 1 walks the Dm7, bar 2 rises through the G13,
 bar 3 falls through the Cmaj7, bar 4 rises through the C6 — and the **inversion changes with the
 top**, because choosing the top tone is choosing the inversion (the bass follows from the search,

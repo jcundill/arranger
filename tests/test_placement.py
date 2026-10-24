@@ -405,6 +405,29 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
         # `{3, 5}` - a set no table entry offers.
         self.assertIsNone(candidate(replace(placement, voices=2), frets, None))
 
+    def test_two_strings_stopped_for_one_pitch_are_not_two_voices(self):
+        """A unison is refused wherever a fret set becomes a candidate.
+
+        `x-x-8-8-4-x` is a Cm7 shell: the G string's 8 and the B string's 4 are both
+        `Eb4`, so the shape states two pitches rather than the three it claims, and the
+        pair beats against itself. The G and B strings are a third apart rather than a
+        fourth, which is the only reason the neck can do this at all - and it is why the
+        rule has to be stated, since no other interval reaches a unison inside a span.
+
+        The rule is over the **pitch**, not the pitch class: the second shape sounds
+        `Bb3`, `D4` and `Eb4`, and a root doubled an octave down is a voice like any other.
+        """
+        placement = Placement(
+            grip="shell",
+            strings=(4, 3, 2),
+            melody_midi=Note("Eb4").midi_note(),
+            top_fret=GuitarFretboard.note_to_fret(4, Note("Eb4")),
+            required=frozenset(),
+        )
+        # D 8 (`Bb3`), G 8 (`Eb4`), B 4 (`Eb4`) - the melody's own pitch, twice.
+        self.assertIsNone(candidate(placement, [-1, -1, 8, 8, 4, -1], None))
+        self.assertIsNotNone(candidate(placement, [-1, -1, 8, 7, 4, -1], None))
+
     def test_a_voice_below_a_strings_open_pitch_refuses_the_shape(self):
         """A fret of -1 is a refusal here, not a mute - and it is reachable.
 

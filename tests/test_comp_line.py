@@ -20,11 +20,23 @@ FOUR_BARS = [60, 62, 65, 62, 64, 65, 67, 64, 67, 60, 59, 60, 64, 67, 69, 64]
 
 #: The same example's tabs, in order. Pinned rather than snapshotted: they are the
 #: acceptance gate, and a snapshot would let a regression regenerate itself.
+#:
+#: Every one of them states its voices on **neighbouring strings, inside four frets, with
+#: no pitch twice**: `grip_tables.COMPING_MAX_SPAN` for the reach,
+#: `grip_tables._fills_its_strings` for the skip a comping shape is never allowed to make,
+#: and `grip_place.sounds_distinct_pitches` for the unison - which is why bar 4's two `E4`
+#: columns are `x-x-7-5-5-x` rather than `x-x-7-9-5-x`, a shape that sounded `E4` on two
+#: strings and left the root out. Ten of the sixteen are spelled differently from the
+#: first measurement of this example (which `docs/history/comp-line.md` keeps): nine muted
+#: a string between two sounding ones - `8-x-3-7-x-x`, the `x-6-x-5-9-x` family - and one
+#: reached a fifth fret on adjacent strings. **The tops are unchanged**, which is what makes
+#: it the same line; the rules and what they cost are `docs/engine.md` §"`get_comping_voicings`:
+#: a chord with no melody on top".
 FOUR_BAR_TABS = [
-    "x-8-7-5-x-x", "8-x-3-7-x-x", "x-8-x-5-6-x", "8-x-3-7-x-x",
-    "x-x-9-7-5-x", "x-7-x-4-6-x", "x-7-x-4-8-x", "x-x-9-7-5-x",
-    "x-7-x-4-8-x", "x-7-9-5-x-x", "x-7-9-4-x-x", "x-7-9-5-x-x",
-    "5-x-5-9-x-x", "x-x-7-9-8-x", "x-7-x-5-10-x", "5-x-5-9-x-x",
+    "x-8-7-5-x-x", "x-8-10-7-x-x", "x-x-7-5-6-x", "x-8-10-7-x-x",
+    "x-x-9-7-5-x", "x-x-9-9-6-x", "x-x-9-9-8-x", "x-x-9-7-5-x",
+    "x-x-9-9-8-x", "x-7-9-5-x-x", "x-7-5-4-x-x", "x-7-9-5-x-x",
+    "x-x-7-5-5-x", "x-x-7-9-8-x", "x-x-7-9-10-x", "x-x-7-5-5-x",
 ]
 
 
@@ -193,10 +205,11 @@ class TestTheFill(unittest.TestCase):
         fills = [step for step in steps if step.top_role in ("fill up", "fill down")]
         self.assertEqual(
             [(step.bar, step.beat, step.voicing.tab_string()) for step in fills],
-            [(6, 1.5, "x-10-5-5-x-x"), (6, 2.0, "x-3-4-2-x-x")],
+            [(6, 1.5, "x-x-7-5-8-x"), (6, 2.0, "x-3-4-2-x-x")],
         )
-        # It opens where the hand already was (`G4` at avg 8.0) and closes at the
-        # fret the tune returns on (`D4`, fret 3).
+        # It opens where the hand already was - the previous top, `G4`, is the shape the
+        # fill is nearest to at register 8.0 - and closes at the fret the tune returns on
+        # (`D4`, fret 3).
         self.assertEqual(
             [round(step.voicing.avg_fret, 2) for step in fills], [6.67, 3.0]
         )
