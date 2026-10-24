@@ -36,17 +36,11 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 from musthe import Note
 
 import arranger
-from arranger import (
-    BASS_STYLE_WALK,
-    PITCH_CLASS_NAMES,
-    SHELL_DEGREES,
-    STANDARD_TUNING,
-    ArrangementStep,
-    ChordParser,
-    VoiceLeadingEngine,
-    Voicing,
-    get_comping_voicings,
-)
+from arranger import ArrangementStep, ChordParser, VoiceLeadingEngine, Voicing, get_comping_voicings
+from arranger.chords import quality_of as _quality_of
+from arranger.grip_tables import SHELL_DEGREES
+from arranger.options import ArrangeOptions, Request
+from arranger.tuning import PITCH_CLASS_NAMES, STANDARD_TUNING
 
 #: The library's top-level modules: the shared score core, the renderers, the
 #: importer and the grip-chart generator. Shared by `meta_structure` (which budgets
@@ -75,17 +69,17 @@ BUT_NOT_FOR_ME = os.path.join(DATA, "synthetic_cut_time.mxl")
 # already asserted elsewhere in the suite, so they double as the fixture here: if the
 # metric layer ever leaked into the default path, these strings would move.
 MINOR_CADENCE = [
-    ("D5", "m7", "Dm7"),
-    ("C5", "maj7", "Cmaj7"),
-    ("B4", "7", "G7"),
-    ("C5", "maj7", "Cmaj7"),
+    ("D5", "Dm7"),
+    ("C5", "Cmaj7"),
+    ("B4", "G7"),
+    ("C5", "Cmaj7"),
 ]
 
 MAJOR_CADENCE = [
-    ("D5", "m7", "Dm7"),
-    ("C#5", "7", "A7"),
-    ("C#5", "m7", "A-7"),
-    ("D5", "mMaj7", "Dm(maj7)"),
+    ("D5", "Dm7"),
+    ("C#5", "A7"),
+    ("C#5", "A-7"),
+    ("D5", "Dm(maj7)"),
 ]
 
 def minor_cadence_tabs():
@@ -120,6 +114,13 @@ def major_cadence_tabs():
     cause. It is the ban's one audible cost in the demos, and it is pinned rather than
     re-pinned away - if that chord is judged worth more than the ban, the alternative is
     to keep the sets and let the *selector* rank them last (measured in §4.4).
+
+    The last bar is `x-x-11-10-10-10`, the `mMaj7` drop-2 under D5. Its symbol is
+    `Dm(maj7)`, which is how the notation writes a minor-major seventh with the
+    major seventh in parentheses; `ChordParser.QUALITY_ALIASES` carries that spelling,
+    so the bar reaches the shape `DmMaj7` does. The spelling has to be a key there
+    rather than left unreadable, because an unreadable suffix does not refuse the bar -
+    it drops the chord and leaves the tune alone.
     """
     return [
         "x-x-10-10-10-10", "x-10-x-9-10-9", "x-x-x-x-x-9", "x-x-11-10-10-10",
@@ -317,11 +318,11 @@ WITNESS: Dict[str, Dict[int, List[int]]] = {
 
 # The four bars the comping, parts and harmony tests all arrange. Shared because the
 # three files assert different things about the same progression.
-PROGRESSION: List[Tuple[str, str, str]] = [
-    ("D5", "m7", "Dm7"),
-    ("C5", "maj7", "Cmaj7"),
-    ("A4", "7", "A7"),
-    ("G4", "maj7", "Gmaj7"),
+PROGRESSION: List[Tuple[str, str]] = [
+    ("D5", "Dm7"),
+    ("C5", "Cmaj7"),
+    ("A4", "A7"),
+    ("G4", "Gmaj7"),
 ]
 
 # The two selections these tests are about, spelled **the way a caller passes them**,
@@ -332,8 +333,13 @@ VOICES_ARG = "chord"
 
 
 def quality_of(name: str) -> str:
-    """The quality half of a chord name, which is what the generators want."""
-    return ChordParser.parse_chord_name(name)[1] or ""
+    """The canonical quality a symbol spells - the engine's own reading of it.
+
+    Delegated rather than re-derived: a second reading of a chord name is the split
+    this whole change closes, and the tolerant splitter would call a bare `C` quality-less
+    where the engine calls it a major triad.
+    """
+    return _quality_of(name)
 
 def guide_pcs(name: str) -> set:
     """The two guide tones of a chord as absolute pitch classes.
@@ -352,17 +358,15 @@ def guide_pcs(name: str) -> set:
 
 def chord_pcs(name: str) -> set:
     """Every tone a chord allows, as absolute pitch classes."""
-    root, quality = ChordParser.parse_chord_name(name)
-    root_pc = Note(f"{root}4").midi_note() % 12 if root else 0
-    return {(root_pc + tone) % 12 for tone in ChordParser.get_chord_tones(quality or "")}
+    return set(ChordParser.get_chord_tones(name))
 
 def comping(name: str):
     """Every comping candidate for a chord name."""
-    return get_comping_voicings(quality_of(name), name)
+    return get_comping_voicings(name)
 
 def bass_comping(name: str):
     """Every candidate for a chord name as a **lone bass voice**."""
-    return get_comping_voicings(quality_of(name), name, notes=1, bass_voice=True)
+    return get_comping_voicings(name, notes=1, bass_voice=True)
 
 def root_of(name: str) -> int:
     """A chord name's root as an absolute pitch class, or raise.
@@ -404,13 +408,15 @@ def make_voicing(
 def make_step(
     frets: List[int],
     chord: str = "Cmaj7",
-    melody: str = "B4",
+    melody: Optional[str] = "B4",
     **kwargs: Any,
 ) -> ArrangementStep:
     """An `ArrangementStep` over a raw fret list, with the derived voicing fields.
 
     Extra keyword arguments go straight to `ArrangementStep`, which is how a
-    renderer test asks for `melody_only=True` or a `bass_only` slot.
+    renderer test asks for `melody_only=True` or a `bass_only` slot. `melody` is
+    Optional because a position the guitar *declined* is emitted with nothing sung
+    and nothing plucked.
     """
     return ArrangementStep(
         chord=chord,
@@ -469,7 +475,7 @@ def nearest_reach_for_note(
     The **note**, not the pitch class: this asks where the engine could have put the note it
     decided to play, not whether another octave would have been nearer. Which octave the
     walk wants is its register decision - documented in `bass`, measured in
-    `docs/open-issues.md` item 5 - and re-deciding it here would be the replica choosing
+    `docs/history/open-issues.md` item 5 - and re-deciding it here would be the replica choosing
     for the engine.
 
     Returns the smallest `abs(fret - hand_fret)` over those candidates, where `hand_fret` is
@@ -596,12 +602,12 @@ def clear_arrangements() -> None:
 
 
 def walk(
-    progression: List[Tuple[str, str, str]],
+    progression: List[Tuple[str, str]],
     onsets: Optional[List[Tuple[int, float]]] = None,
 ) -> List[arranger.ArrangementStep]:
     """A walking-bass arrangement of `progression`, with or without a beat grid.
 
-    `texture="targets"` rather than a `chordN` row, and that is the load-bearing part:
+    `chord_notes="targets"` rather than a `chordN` row, and that is the load-bearing part:
     the metre decides the roles, so a strong beat states the chord and the beats the
     bass grid invents between them hold the tune under the thumb. A fixed-arity row
     makes **every** slot a target, which would re-strike the chord on every walked
@@ -618,8 +624,13 @@ def walk(
     if onsets is not None:
         timings = [(bar, beat, None) for bar, beat in onsets]
     return VoiceLeadingEngine.arrange_progression(
-        progression, timings=timings, texture="targets", bass=BASS_STYLE_WALK,
-        grid="melody:every_note,bass:walk",
+        progression,
+        timings=timings,
+        options=ArrangeOptions(
+            request=Request(
+                chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+            ),
+        ),
     )
 
 
@@ -679,7 +690,7 @@ def every_chord_tone(chord_name, quality):
     is not C a tritone or more out, and a ninth would arrive as a non-chord tone.
     """
     root_pc = root_midi_of(chord_name) % 12
-    degrees = {(pc - root_pc) % 12 for pc in ChordParser.get_chord_tones(quality, chord_name)}
+    degrees = {(pc - root_pc) % 12 for pc in ChordParser.get_chord_tones(chord_name)}
     return [
         note_name(root_midi_of(chord_name) + degree)
         for degree in sorted(degrees)
@@ -691,7 +702,7 @@ def a_shape_on(strings):
 
     Frets are all zero - nothing here is about where the hand is - so the shape's *strings*
     are the only thing under test. Built rather than taken from a generator because these
-    questions are asked of sets the tables may no longer offer: `finger_skip_count` is what
+    questions are asked of sets the tables may not offer: `finger_skip_count` is what
     flagged the four removed `drop24` sets, and a test that could only ask about offered
     sets could not show what the rule costs.
     """
@@ -699,6 +710,57 @@ def a_shape_on(strings):
     for index in strings:
         frets[index] = 0
     return Voicing(frets=frets, top_fret=0, avg_fret=0.0)
+
+
+# The strings the right hand's **thumb** can reach: the four lowest, E A D G. A gap between
+# two sounding strings is normally the thumb's - the thumb is on the bottom note and the
+# index on the next string up - so the gap only stops being the thumb's where the note under
+# it is above this reach. Measured in `docs/history/fingering.md` §4.4, where narrowing §2.5's
+# exemption to this reach moved no count at all: it is the reach the tables already respect.
+THUMB_REACH_STRINGS = frozenset((0, 1, 2, 3))
+
+
+def finger_skip_count(voicing: Voicing) -> int:
+    """How many strings a finger has to cross to fret `voicing`: 0, 1, 2 or 3.
+
+    The right hand's second question, after how many strings are plucked. Four adjacent
+    strings are no trouble whatever the shape: the thumb takes the bottom note and each
+    finger the next string up. The trouble is a **gap** - a string sounding with a silent
+    one between it and the string below - because the digit that would take it has to
+    reach over a string it is not using, and that is the middle or the ring finger's cost
+    (`docs/history/fingering.md` §2.5).
+
+    The bottom gap is the exception, and it is checked on the **lowest sounding string**:
+    while that string is inside the thumb's reach the thumb is the digit on the bottom
+    note, so the gap above it is the index's and costs nothing - which is exactly the
+    bass-skipping rule the four-note sets in `grip_tables` were built on. Any *other* gap
+    is counted, so `(5,4,2,1)` answers 1 - the middle crosses the G - while `(5,4,3,1)`
+    answers 0, its gap being the bottom one.
+
+    Note the direction of the asymmetry: the exemption is for the **first** gap only, so a
+    set whose bottom note is inside the reach and whose *second* gap is not still counts
+    that second gap. Where the bottom note sits above the reach, every gap counts.
+
+    **This is the tests' rule, not the engine's**, which is why it lives here: no selector
+    reads it, because the engine enforces it by **not offering** the shapes that fail it -
+    so no inner-skip `drop24` set is in `GRIP_STRING_SETS`. Only the `(5,3,2)` shell can
+    answer nonzero, kept on purpose for the walking bass's three-layer split, and
+    `tests/test_grip_tables.py` is what holds the tables to it.
+
+    A **shape**-level rule, which is the limit of its reach: a `bass_only` step merges a
+    thumb note in *after* selection, so that gap is invisible here and §4.4 measures the
+    merged case at step level instead.
+    """
+    sounded = sorted(index for index, fret in enumerate(voicing.frets) if fret >= 0)
+    total = 0
+    for position in range(1, len(sounded)):
+        gap = sounded[position] - sounded[position - 1] - 1
+        if gap <= 0:
+            continue
+        if position == 1 and sounded[0] in THUMB_REACH_STRINGS:
+            continue           # the thumb has the bottom note: the index's gap, not a skip
+        total += gap
+    return total
 
 
 # The committed scores the importer's tests read, in `tests/data/`. They are generated
@@ -747,7 +809,7 @@ MISTY = os.path.join(DATA, "synthetic_pickup_common.musicxml")
 
 
 # A lead sheet with **no melody at all**: four bars, six `<harmony>` symbols and not
-# one pitched note (§9.3 step A'). It is the fixture the loader used to refuse.
+# one pitched note (§9.3 step A'). It is the fixture a melody-only loader would refuse.
 CHORDS_ONLY = os.path.join(DATA, "synthetic_chords_only.musicxml")
 
 

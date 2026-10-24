@@ -22,40 +22,40 @@ from unittest.mock import patch
 import arranger.movement as movement
 from arranger.decisions import MELODY_ALONE_BASS, MELODY_ALONE_REST
 from arranger.grouping import COMMON_TIME
-from arranger.options import Request
+from arranger.options import ArrangeOptions, Request
 from arranger.route_dispatch import ROUTES, dispatch_step
 from arranger.slot_plan import SlotPlan
 
-PROGRESSION: Sequence[Tuple[str, str, str]] = (
-    ("E4", "maj7", "Cmaj7"),
-    ("F4", "maj7", "Dm7"),
-    ("G4", "7", "G7"),
+PROGRESSION: Sequence[Tuple[str, str]] = (
+    ("E4", "Cmaj7"),
+    ("F4", "Dm7"),
+    ("G4", "G7"),
 )
 
 #: One request per entry of the table, with the progression it needs and the entry
 #: that must take it. `NC` has its own progression because its answer comes from the
 #: chord's own name; the last two share the comping route's request and differ only
 #: in where the chord attacks, which is why they are two rows and one entry.
-CASES: Sequence[Tuple[str, Sequence[Tuple[str, str, str]], Dict[str, Any], Tuple[str, ...]]] = (
+CASES: Sequence[Tuple[str, Sequence[Tuple[str, str]], Dict[str, Any], Tuple[str, ...]]] = (
     # the shipped arrangement: the guitar sings under every written note
     ("shipped", PROGRESSION, {}, ("melody_bearing",)),
     # the guitar comps while somebody else sings
-    ("comped", PROGRESSION, {"parts": "chord"}, ("comping",)),
+    ("comped", PROGRESSION, {"request": Request(melody=False)}, ("comping",)),
     # the guitar plays the tune and nothing else
-    ("melody-only", PROGRESSION, {"parts": "melody"}, ("texture_fill",)),
+    ("melody-only", PROGRESSION, {"request": Request(chord_on="none")}, ("texture_fill",)),
     # an `NC` bar, after a chord: melody and no harmony to voice
     (
         "nc",
-        (("E4", "maj7", "Cmaj7"), ("E4", "NC", "NC")),
+        (("E4", "Cmaj7"), ("E4", "NC")),
         {},
         ("melody_bearing", "no_chord"),
     ),
-    # one chord position in the bar: every other slot is a rest that says so
+    # one chord position in the bar, comped; every other slot is a rest that says so
     (
         "rested",
         PROGRESSION,
         {"request": Request(melody=False, chord_on="1")},
-        ("no_upper_voices",),
+        ("comping", "no_upper_voices"),
     ),
     # the thumb alone: the chord part was asked for nothing, the bass for every beat
     (
@@ -73,7 +73,7 @@ class TestTheDispatchTable(unittest.TestCase):
 
     def _dispatch(
         self,
-        progression: Sequence[Tuple[str, str, str]] = PROGRESSION,
+        progression: Sequence[Tuple[str, str]] = PROGRESSION,
         **kwargs: Any,
     ) -> List[Tuple[str, SlotPlan]]:
         """Every slot's `(route name, plan)`, as the loop dispatched it.
@@ -97,7 +97,9 @@ class TestTheDispatchTable(unittest.TestCase):
 
         with patch.object(movement, "dispatch_step", recording):
             movement.arrange_progression(
-                progression, time_signature=COMMON_TIME, **kwargs
+                progression,
+                time_signature=COMMON_TIME,
+                options=ArrangeOptions(**kwargs),
             )
         return seen
 
@@ -161,10 +163,18 @@ class TestTheDispatchTable(unittest.TestCase):
         """Two answers, one entry: the thumb's own note, or a rest that says why.
 
         They are one entry because nothing above the thumb sounds in either case -
-        the note is the bass line's claim on the slot, and the rest is the grid's -
+        the note is the bass line's claim on the slot, and the rest is the rhythm's -
         so a test that only saw one of them would leave half the entry unmeasured.
+
+        The rest set is read off the plans *this entry* took, because the same
+        progression also comps the one position the request names: the entry answers
+        the positions the chord is not stated at, not every position of the bar.
         """
         thumb = self._dispatch(**CASES[5][2])
         rested = self._dispatch(**CASES[4][2])
         self.assertEqual({plan.melody_alone for _, plan in thumb}, {MELODY_ALONE_BASS})
-        self.assertEqual({plan.melody_alone for _, plan in rested}, {MELODY_ALONE_REST})
+        rests = [
+            plan.melody_alone for name, plan in rested if name == "no_upper_voices"
+        ]
+        self.assertEqual(set(rests), {MELODY_ALONE_REST})
+        self.assertEqual([name for name, _ in rested].count("comping"), 1)

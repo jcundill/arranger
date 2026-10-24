@@ -2,7 +2,7 @@
 
 `GRIP_STRING_SETS`, the soprano-string choices, the neck window and the known gaps are
 properties of the tables and not of any one shape, so they are asked here rather than
-through a generated voicing: a set the engine no longer offers still has to answer
+through a generated voicing: every set the tables hold has to answer
 `finger_skip_count`, and a window has to admit a position no family in
 `GRIP_PREFERENCE` reaches. What the families build is `test_grips.py`.
 """
@@ -12,12 +12,6 @@ import unittest
 from musthe import Note
 
 from arranger import (
-    GRIP_MAX_SPAN,
-    GRIP_STRING_SETS,
-    MELODY_STRING_CHOICES_FULL,
-    NECK_FRET_MAX,
-    NECK_FRET_MIN,
-    SHELL_DEGREES,
     ChordParser,
     SelectionCriteria,
     VoiceLeadingEngine,
@@ -26,18 +20,22 @@ from arranger import (
 )
 from arranger.fingers import MAX_HAND_SPAN
 from arranger.grip_tables import (
-    THUMB_REACH_STRINGS,
-    finger_skip_count,
+    GRIP_MAX_SPAN,
+    GRIP_STRING_SETS,
+    SHELL_DEGREES,
 )
 from arranger.grips import (
     _LAYOUT_GRIPS,
     _SEARCHED_GRIPS,
     string_sets_for,
 )
+from arranger.tuning import MELODY_STRING_CHOICES_FULL, NECK_FRET_MAX, NECK_FRET_MIN
 from tests.support import (
     QUALITIES,
+    THUMB_REACH_STRINGS,
     a_shape_on,
     every_chord_tone,
+    finger_skip_count,
     note_name,
 )
 
@@ -52,10 +50,9 @@ class TestStringSetTable(unittest.TestCase):
         `docs/history/fingering.md` §4.4's rule, held against the tables rather than restated: a
         gap between two sounding strings is the **thumb's** while the note below it is
         inside `THUMB_REACH_STRINGS`, and any other gap costs the middle or ring finger
-        (`finger_skip_count`). Four `drop24` sets used to fail this and were **removed for
-        it** - 260 of 1,204 selections change shape, and 41 of the default row's four-note
-        steps lose their chord with it (§4.4 holds the price) - so this asserts the rule
-        holds of what remains, and that the one exception is the `(5,3,2)` shell, which is
+        (`finger_skip_count`). No `drop24` set in the tables fails it - the four that did are
+        **removed for it** (§4.4 holds the price) - so this asserts the rule holds of what
+        remains, and that the one exception is the `(5,3,2)` shell, which is
         kept on purpose for the walking bass's three-layer split rather than tolerated by
         accident.
 
@@ -85,7 +82,7 @@ class TestStringSetTable(unittest.TestCase):
         the asymmetry the rule is stated with.
 
         The four sets the ban removed are asked directly, since the point of the rule is
-        that it flags them and not merely that the table no longer lists them.
+        that it flags them rather than merely that the table does not list them.
         """
         self.assertEqual(THUMB_REACH_STRINGS, frozenset((0, 1, 2, 3)))
         self.assertEqual(
@@ -156,10 +153,7 @@ class TestStringSetTable(unittest.TestCase):
         The `interval` grip sits on the three **adjacent** pairs, which the duo declares
         too - but not on the duo's two skipped-string pairs.
 
-        This assertion was inverted rather than deleted. It previously demanded the two
-        families' sets be *equal*, which was true while both were three adjacent pairs
-        and stopped being true when the duo gained `(5,2)` and `(3,1)`. The invariant
-        worth keeping is the one that explains the difference in both directions:
+        The difference is deliberate in both directions:
 
           - an interval keeps to the adjacent pairs, because a 3rd or a 6th has tuning
             to spare and the extra reach of a skipped string buys it nothing;
@@ -221,14 +215,14 @@ class TestStringSetTable(unittest.TestCase):
         ninths = set()
         for quality in SHELL_DEGREES:
             chord_name = "C" + quality
-            for pc in ChordParser.get_chord_tones(quality, chord_name):
+            for pc in ChordParser.get_chord_tones(chord_name):
                 for octave in range(2, 6):
                     midi = 12 * octave + pc
                     if not Note("G3").midi_note() <= midi <= Note("Bb5").midi_note():
                         continue
                     melody = note_name(midi)
                     for v in engine.get_all_grip_voicings(
-                        Note(melody), quality, chord_name=chord_name, grips=("duo",)
+                        Note(melody), chord_name=chord_name, grips=("duo",)
                     ):
                         upper = sorted(v.midi_notes())
                         if upper[-1] - upper[0] < 12:
@@ -291,7 +285,7 @@ class TestStringSetTable(unittest.TestCase):
             for chord_name, quality in (("Cmaj7", "maj7"), ("Gm7", "m7"), ("G7", "7"))
             for melody in every_chord_tone(chord_name, quality)
             for v in VoiceLeadingEngine.get_grip_voicings(
-                Note(melody), quality, chord_name=chord_name,
+                Note(melody), chord_name=chord_name,
                 top_string=3, grips=("shell",),
             )
             if v.active_strings == [0, 2, 3]
@@ -333,7 +327,7 @@ class TestStringSetTable(unittest.TestCase):
         for chord_name, quality in (("Cmaj7", "maj7"), ("Dm7", "m7"), ("G7", "7")):
             for melody in every_chord_tone(chord_name, quality):
                 steps = VoiceLeadingEngine.arrange_progression(
-                    [(melody, quality, chord_name)]
+                    [(melody, chord_name)]
                 )
                 for step in steps:
                     if step.voicing.soprano_string() != 3:
@@ -362,7 +356,7 @@ class TestSopranoStringChoices(unittest.TestCase):
         though that costs a string.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D4", "m7", "Dm7"), ("C4", "maj7", "Cmaj7")]
+            [("D4", "Dm7"), ("C4", "Cmaj7")]
         )
         self.assertEqual(len(steps), 2)
         for step in steps:
@@ -385,7 +379,7 @@ class TestSopranoStringChoices(unittest.TestCase):
         `no_shape` rather than a pitch no string reaches.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D4", "m7", "Dm7")], top_strings=(5,)
+            [("D4", "Dm7")], top_strings=(5,)
         )
         self.assertEqual(len(steps), 1)
         self.assertEqual(steps[0].silence, "no_shape")
@@ -397,7 +391,7 @@ class TestFretWindow(unittest.TestCase):
 
     def test_the_arrangement_sits_inside_the_window(self):
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7")]
+            [("D5", "Dm7"), ("B4", "G7"), ("C5", "Cmaj7")]
         )
         for step in steps:
             for fret in step.voicing.active_frets():
@@ -412,7 +406,7 @@ class TestFretWindow(unittest.TestCase):
         selector looks back *past* the silent step to the last sounding shape.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("C6", "m7", "Dm7"), ("D5", "m7", "Dm7")]
+            [("C6", "Dm7"), ("D5", "Dm7")]
         )
         self.assertEqual(len(steps), 2)
         self.assertEqual(steps[0].silence, "out_of_reach")
@@ -422,7 +416,7 @@ class TestFretWindow(unittest.TestCase):
     def test_the_window_bounds_are_honoured_when_narrowed(self):
         """A caller can ask for a different window and the selector obeys it."""
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("B4", "7", "G7")], fret_min=1, fret_max=4
+            [("D5", "Dm7"), ("B4", "G7")], fret_min=1, fret_max=4
         )
         self.assertTrue(steps)
         for step in steps:
@@ -431,13 +425,11 @@ class TestFretWindow(unittest.TestCase):
 
 
 class TestKnownTableGaps(unittest.TestCase):
-    """The gap this class was written for, and what closed it.
+    """The 13-chord 9th: the tone-priority rule answers for every chord tone.
 
-    It pinned the 13-chord 9th. A melody that is a chord tone with no template of its own
-    used to fall through to the quality-only fallback, which was free to sound a note the
-    chord does not contain. The tone-priority rule now answers for **every** chord tone, so
-    there is no such melody left to pin - and the assertion is inverted rather than
-    deleted, so a regression re-opens the gap and fails here.
+    A melody that is a chord tone with no template of its own is built a shape rather than
+    falling through to the quality-only fallback, which is free to sound a note the chord
+    does not contain. A regression re-opens that gap and fails here.
     """
 
     def setUp(self):
@@ -452,27 +444,26 @@ class TestKnownTableGaps(unittest.TestCase):
         voicing_cost's first criterion is tone purity, so the arrangement never picks
         one while a correct shape exists.
         """
-        tones = set(ChordParser.get_chord_tones("13", "C13"))
+        tones = set(ChordParser.get_chord_tones("C13"))
         impure = [
             v
             for v in self.engine.get_all_drop2_voicings(
-                Note("D5"), "13", chord_name="C13"
+                Note("D5"), chord_name="C13"
             )
             if not set(v.pitch_classes()) <= tones
         ]
         # The gap this class existed to pin has closed - and closed for every chord tone,
         # not just this one melody: the tone-priority rule builds the shape for a 9th in
-        # the melody of a 13 (`1 3 b7 9`, both guide tones), where the table had no
-        # inversion for it and the quality-only fallback offered `x-x-10-8-10-10`, 1 b3 6 9
-        # against a chord whose identity is 3 and b7. The assertion is inverted rather than
-        # deleted, so a regression re-opens the gap and fails here instead of passing
-        # silently.
+        # the melody of a 13 (`1 3 b7 9`, both guide tones), where the table has no
+        # inversion for it and the quality-only fallback would offer `x-x-10-8-10-10`,
+        # 1 b3 6 9 against a chord whose identity is 3 and b7. A regression re-opens the
+        # gap and fails here instead of passing silently.
         self.assertFalse(
             impure,
             f"the 13-chord 9th gap reopened: {[v.tab_string() for v in impure]}",
         )
         for v in self.engine.get_all_drop2_voicings(
-            Note("D5"), "13", chord_name="C13"
+            Note("D5"), chord_name="C13"
         ):
             self.assertEqual(
                 self.engine.voicing_cost(
@@ -490,12 +481,12 @@ class TestKnownTableGaps(unittest.TestCase):
         The two pools are built from qualities that still differ in reach: a C13 with the
         9th in the melody is now voiced correctly, while a C13 whose melody has no
         playable four-note shape at all still yields the impure quality-only fallback
-        further down the neck. If either pool ever empties the ordering is no longer being
+        further down the neck. If either pool ever empties the ordering stops being
         tested, so both are asserted present.
         """
-        tones = set(ChordParser.get_chord_tones("13", "C13"))
+        tones = set(ChordParser.get_chord_tones("C13"))
         candidates = self.engine.get_all_drop2_voicings(
-            Note("D5"), "13", chord_name="C13"
+            Note("D5"), chord_name="C13"
         )
         # Every one is a correct voicing of C13 - that is the point of the fix - and they
         # differ in where they sit, so this still has both pools to rank.
@@ -527,9 +518,9 @@ class TestKnownTableGaps(unittest.TestCase):
         """
         for chord_name, quality in QUALITIES:
             for melody in every_chord_tone(chord_name, quality):
-                tones = set(ChordParser.get_chord_tones(quality, chord_name))
+                tones = set(ChordParser.get_chord_tones(chord_name))
                 for step in VoiceLeadingEngine.arrange_progression(
-                    [(melody, quality, chord_name)]
+                    [(melody, chord_name)]
                 ):
                     self.assertTrue(
                         set(step.voicing.pitch_classes()) <= tones,

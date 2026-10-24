@@ -32,13 +32,13 @@ The other tests here are structural rather than numerical. A name another module
 imports is public, whatever its spelling says - and the rule covers the two ways
 to import it: the name itself, and a module alias followed by a private
 attribute. Both allowlists fail in both directions, so a new reach is caught and
-an entry that is no longer used cannot rot there.
+an entry that is not used cannot rot there.
 
 The axis graph is the third kind. Each axis is answered by exactly one function,
 in the module that owns its vocabulary, and this file reads those signatures to
-hold them to the dependencies they declare - `parts` reads nothing, `harmony` and
-`bass` read `parts`, and `bass` also reads the texture, while `grid` reads the
-metre's count and grouping rather than another axis. A signature is the one place
+hold them to the dependencies they declare - `parts` reads nothing, `bass` reads
+`parts` and the texture, while the metre is read by
+its own module rather than by an axis. A signature is the one place
 an implicit dependency cannot hide, which is why the table below is asserted
 against the AST rather than promised in a docstring.
 
@@ -100,14 +100,24 @@ class Budget:
 # function yet gets a small policy ceiling rather than a measurement, so the
 # first method it grows is still a deliberate size.
 BUDGETS: Dict[str, Budget] = {
-    "arranger/__init__.py": Budget(2, 5, 1),
+    # `__dir__` returns `__all__` plus the submodules the facade binds: they are not in
+    # `__all__`, so returning that list alone would hide a path (`arranger.grips`) that
+    # resolves.
+    "arranger/__init__.py": Budget(3, 12, 1),
     "arranger/__main__.py": Budget(5, 10, 2),
     # The printing front end, measured as it stood when it moved out of the facade:
     # the demonstration is one long function by design - a sequence of examples,
     # each with the comment that says what it demonstrates - so its ceiling is the
     # measurement, not a target. It imports `steps` and `render` and nothing else.
-    "arranger/demo.py": Budget(14, 151, 0),
-    "arranger/annotation.py": Budget(18, 130, 2),
+    # Re-measured three lines higher, deliberately: the texture example spells its
+    # request (`ArrangeOptions(request=Request(chord_notes="targets"))`), and the call
+    # that is three words longer does not fit the dict on one line any more.
+    "arranger/demo.py": Budget(14, 154, 0),
+    "arranger/annotation.py": Budget(18, 124, 2),
+    # The pure string layout an annotation is broken into: the clause units, the word
+    # chunks and the line breaker. Split out of `annotation`, measured as it stood when
+    # it moved, so the ceiling is the measurement.
+    "arranger/text_layout.py": Budget(8, 40, 2),
     "arranger/bass_place.py": Budget(16, 79, 6),
     "arranger/bass_rules.py": Budget(10, 82, 6),
     # `walking_slots` takes a seventh parameter at Stage 3 of
@@ -124,60 +134,69 @@ BUDGETS: Dict[str, Budget] = {
     "arranger/context.py": Budget(5, 30, 3),
     "arranger/cost.py": Budget(12, 140, 7),
     "arranger/decisions.py": Budget(11, 137, 9),
-    "arranger/fingers.py": Budget(10, 41, 2),
-    # The grouping axis added one word to each entry point that names the metre:
-    # `arrange_progression` and its facade (15 -> 16 parameters), `resolve_knobs`
-    # (14 -> 15), `on_grid` (3 -> 4) and `arrange_xml_head` (11 -> 12). The three
-    # length rises are the comments and the `grouping` line those parameters carry;
-    # no function gained a second job.
-    "arranger/grid.py": Budget(9, 25, 4),
-    "arranger/grip_tables.py": Budget(7, 39, 3),
+    # Re-measured when the per-finger assignment layer went: the ceiling is the hand
+    # budget's own size now (`can_fret`, 22 lines), not `assign_fingers`'s 41.
+    "arranger/fingers.py": Budget(2, 22, 1),
+    # The named figures and their parser went, so what is left is the request's
+    # `Rhythm` and the lattice under it: re-measured, not lowered by eye.
+    "arranger/grid.py": Budget(8, 23, 3),
+    # Re-measured when `finger_skip_count` moved to the tests: the ceiling is
+    # `comping_string_sets`'s 37 lines.
+    "arranger/grip_tables.py": Budget(7, 37, 3),
     "arranger/grip_place.py": Budget(19, 66, 5),
     "arranger/grips.py": Budget(22, 128, 9),
-    "arranger/grouping.py": Budget(6, 45, 3),
-    "arranger/harmony.py": Budget(4, 21, 2),
+    "arranger/grouping.py": Budget(6, 36, 3),
     "arranger/melody_alone.py": Budget(6, 74, 14),
-    "arranger/resolution.py": Budget(9, 116, 15),
-    "arranger/slot_plan.py": Budget(6, 89, 5),
+    # The axes are one read of the request and two `settle_input_fact` calls, so the
+    # module ceiling is `resolve_policies`'s eleven rather than the reconciler's.
+    "arranger/resolution.py": Budget(7, 111, 11),
+    # `slot_state`'s grid branches left with the axis, so the ceiling is what it
+    # measures rather than what it measured.
+    "arranger/slot_plan.py": Budget(6, 78, 5),
     "arranger/step_prepare.py": Budget(6, 74, 9),
+    # The value types and tab-cell primitives, split out of `tuning`: `Voicing`,
+    # `ArrangementStep`, `Palette` and the six-line block renderer. Measured as it
+    # stood when it moved, so the ceiling is the measurement.
+    "arranger/step_types.py": Budget(5, 23, 1),
+    # Reading the arrangement's own history - the last sounding step and the shape the
+    # hand held - split out of `routes`: two readers of the value types above it.
+    # Measured as it stood when it moved.
+    "arranger/step_history.py": Budget(3, 17, 1),
     "arranger/harmonised_route.py": Budget(8, 54, 8),
     # The dispatch table: eleven small functions, each an entry's claim or emit, so
     # the ceiling is `dispatch_step`'s four branches rather than any one route. The
     # longest entry is 19 lines because the two answers with nothing above the thumb
     # share one function and its reason.
     "arranger/route_dispatch.py": Budget(4, 19, 3),
-    # The public `request=` joined the five implementation axis keywords, so the
-    # facade takes one more parameter until Stage 8 of
-    # `docs/history/rhythm-request.md` retires the axis spellings. The body did
-    # not grow: it reads the resolved knobs and policies as values.
-    #
-    # The dispatch moved to `route_dispatch`, so this module is now the loop, the
-    # knobs and the merge: three functions, and the longest is `arrange_progression`
-    # reading the resolved values in order.
-    "arranger/movement.py": Budget(4, 89, 15),
+    # The five axis keywords left `arrange_progression` (15 -> 10 parameters): they are
+    # the engine's implementation, derived from the request rather than spelled. The body
+    # did not grow - it reads the resolved knobs and policies as values -
+    # and the dispatch lives in `route_dispatch`, so this module is the loop, the knobs
+    # and the merge.
+    "arranger/movement.py": Budget(4, 89, 10),
     # `ArrangeOptions` is a flat dataclass of knobs with no methods today.
     "arranger/options.py": Budget(5, 30, 3),
     "arranger/parts.py": Budget(9, 45, 1),
     "arranger/render.py": Budget(11, 64, 2),
-    "arranger/routes.py": Budget(6, 97, 12),
+    # The step-history readers left for `step_history`, so the ceiling is what this
+    # module measures rather than what it measured. The parameter ceiling moves with
+    # it: the widest signature here takes six, and a ceiling of twelve was permission
+    # for a function twice the size of anything in the file.
+    "arranger/routes.py": Budget(6, 93, 6),
     "arranger/slots.py": Budget(9, 136, 12),
-    "arranger/steps.py": Budget(1, 54, 16),
+    # The facade's `arrange_progression` loses the same five (16 -> 10).
+    "arranger/steps.py": Budget(1, 54, 10),
     "arranger/texture.py": Budget(11, 57, 6),
-    "arranger/tuning.py": Budget(5, 28, 2),
-    # `arrange_xml_head` keeps the keyword spellings as an adapter beside
-    # `options=`; the object path is what the CLI and the tests use. The extra
-    # parameter is the compatibility spelling, not a new decision.
-    #
-    # The metre axis added a word to three entry points and a line to the facade:
-    # `movement` and `steps` take `time_signature=` in place of the count and
-    # denominator pair, and `headxml` takes `grouping=` beside `grid`. Those
-    # increases are the axis's own spelling, not a function that grew a second job;
-    # `head_cli`'s branches moved into `_print_metre_notes` rather than raising its
-    # budget.
-    # One more parameter for the same reason as `movement`: `request=` is the
-    # public spelling and the axis keywords are the implementation, which Stage 8
-    # removes. The merge block moved to `_head_slots`, so the length did not grow.
-    "headxml.py": Budget(17, 125, 13),
+    # The instrument: tuning, the fretboard, the neck limits and the sentinels. The
+    # value types (`Voicing`, `ArrangementStep`, `Palette`) and the tab-cell
+    # primitives moved to `step_types`, so this ceiling is what is left after that
+    # split rather than what the module measured before it.
+    "arranger/tuning.py": Budget(4, 11, 2),
+    # `arrange_xml_head` lost the five axis keywords and `grouping=` with them
+    # (13 -> 8): the metre is one value, `time_signature=`, whose grouping is the one
+    # fact of it a caller may set. `head_cli`'s branches live in `_print_metre_notes`,
+    # and the merge block in `_head_slots`, so neither raises this budget.
+    "headxml.py": Budget(17, 113, 8),
     "grip_chart.py": Budget(14, 84, 5),
     "tabgp.py": Budget(19, 151, 13),
     "tabscore.py": Budget(10, 98, 5),
@@ -192,9 +211,8 @@ BUDGETS: Dict[str, Budget] = {
 ALLOWED_PRIVATE_IMPORTS: Set[str] = set()
 
 # Reaching a sibling's `_`-prefixed name through a module alias is the same coupling
-# as importing it by name, and it was invisible while only `ImportFrom` was read.
-# The list is empty now: every name another module reaches is public, and the six
-# dead delegates that used to spell the rest are gone. The test fails in both
+# as importing it by name, and reading only `ImportFrom` would not see it.
+# The list is empty: every name another module reaches is public. The test fails in both
 # directions, so a new reach is caught and a deleted one cannot leave a stale entry.
 ALLOWED_PRIVATE_ATTRIBUTES: Set[str] = set()
 
@@ -202,7 +220,7 @@ ALLOWED_PRIVATE_ATTRIBUTES: Set[str] = set()
 # is named. TEST_SEAMS records every private name a test file imports from an
 # arranger module, so a refactor that renames or removes one fails here rather
 # than silently breaking a test. The test below fails in both directions: a new
-# reach is caught, and a seam that no longer exists cannot rot.
+# reach is caught, and a seam that does not exist cannot rot.
 #
 # Each entry is `test_module -> arranger.module._private_name`, the same shape
 # the encapsulation meter uses for library modules.
@@ -245,7 +263,18 @@ TEST_SEAMS: Set[str] = {
     # Tab rendering reads the step formatter directly.
     "test_tab_rendering -> arranger.render._format_step",
     # Repeat/volta rendering reads the as-written formatting.
-    "test_headxml_repeats -> arranger.cli._as_written",
+    "test_headxml_repeats -> arranger.cli._as_written",    # The texture axis's own tables, read directly by its tests.
+    "test_texture -> arranger.texture._FILL_THINNING",
+    "test_texture -> arranger.texture._THIN_ENTRIES",
+    # The request's spellings, and the one list holding the two of them.
+    "test_request -> arranger.options._BASS_NOTES_ROOT_FIFTH",
+    "meta_explanations -> arranger.options._CHORD_FILLS_HOLD",
+    "test_chord_fills -> arranger.options._CHORD_FILLS_HOLD",
+    "test_request -> arranger.options._CHORD_FILLS_HOLD",
+    "test_request -> arranger.cli._REQUEST_DESTS",
+    # The CLI's help formatter, exercised on its own.
+    "test_cli -> arranger.cli._CommonHelp",
+
 }
 
 
@@ -380,9 +409,9 @@ def _module_aliases(tree: ast.Module) -> Dict[str, str]:
 def _private_attributes(path: Path) -> Iterator[str]:
     """`importer -> home.private_name` for every private attribute reached by alias.
 
-    A module alias is how the engine spelled the imports the import meter could not
-    see: `alias._helper` is the same coupling as `from .module import _helper`, and
-    only the second used to fail the gate.
+    A module alias is how the engine spells an import the import meter cannot see:
+    `alias._helper` is the same coupling as `from .module import _helper`, and both fail
+    the gate.
     """
     tree = ast.parse(path.read_text(encoding="utf-8"))
     aliases = _module_aliases(tree)
@@ -466,6 +495,65 @@ class TestTheBudgets(unittest.TestCase):
         )
 
 
+#: The entry points a caller arranges through, and the seams the two of them share.
+#: A retired axis keyword must not reappear on any of them.
+ENTRY_POINTS: Tuple[Tuple[str, str], ...] = (
+    ("arranger/movement.py", "arrange_progression"),
+    ("arranger/steps.py", "arrange_progression"),
+    ("arranger/resolution.py", "resolve_knobs"),
+    ("headxml.py", "arrange_xml_head"),
+    ("headxml.py", "_head_request"),
+)
+
+#: The names no entry point may take as a keyword: the axes, and the metre's third fact,
+#: `grouping`, which is a field of `TimeSignature` and so has no keyword of its own
+#: either. `harmony` and `grid` are retired names kept here so a future keyword cannot
+#: re-introduce one.
+RETIRED_AXIS_KEYWORDS = frozenset({"texture", "bass", "parts", "harmony", "grid", "grouping"})
+
+
+
+class TestTheAxesAreNotEntryPointKeywords(unittest.TestCase):
+    """An axis is the implementation, so no entry point takes one as a keyword.
+
+    The axes answer *how* to play what the request asks for, and they are derived from it
+    rather than spelled; a keyword beside `options=` for the same thing is the second
+    spelling this surface exists without. Nothing
+    about a signature says so, so this is the standing check - it fails on the commit
+    that adds one back, rather than on the first caller surprised by it.
+    """
+
+    def test_no_entry_point_takes_an_axis_keyword(self):
+        found: List[str] = []
+        for relative, function in ENTRY_POINTS:
+            matches = [
+                node
+                for node, _length, _complexity, _count in _functions(ROOT / relative)
+                if node.name == function
+            ]
+            self.assertTrue(matches, f"{relative} no longer defines {function}")
+            for node in matches:
+                # A catch-all would swallow the keyword rather than refuse it, which
+                # is the one way this check could go quiet.
+                self.assertIsNone(
+                    node.args.kwarg,
+                    f"{relative}: {function} takes **kwargs, so an axis keyword "
+                    f"would be swallowed rather than refused",
+                )
+                found.extend(
+                    f"{relative}: {function} takes {name}="
+                    for name in sorted(
+                        set(_parameter_names(node)) & RETIRED_AXIS_KEYWORDS
+                    )
+                )
+        self.assertEqual(
+            found,
+            [],
+            "an axis is the engine's implementation, so it has no keyword spelling: "
+            "reach it through options=ArrangeOptions(...)",
+        )
+
+
 class TestTheEncapsulationRule(unittest.TestCase):
     """A name another module imports is public, whatever it is called."""
 
@@ -473,7 +561,7 @@ class TestTheEncapsulationRule(unittest.TestCase):
         """No private name crosses a module boundary outside the recorded debt.
 
         The allowlist is the debt from before the rule, and it shrinks. An entry
-        that is no longer needed fails here too, so the list cannot quietly keep
+        that is not needed fails here too, so the list cannot quietly keep
         a name that has since been made public.
         """
         found: Set[str] = set()
@@ -628,33 +716,21 @@ class TestTheSplit(unittest.TestCase):
 #: `module.function` is the one place the axis is resolved, and it lives beside
 #: the vocabulary rather than beside the composition: `resolution` wires the
 #: answers together, but it does not own the words. The parameter names **are**
-#: the dependency graph, so a resolver that quietly grows a `grid` argument is a
+#: the dependency graph, so a resolver that quietly grows a `parts` argument is a
 #: change to this table rather than an extra keyword nobody reviewed.
 AXIS_RESOLVERS: Dict[str, Tuple[str, str]] = {
-    "parts": ("parts", "resolve_parts"),
-    "texture": ("texture", "parse_texture"),
-    "harmony": ("harmony", "resolve_harmony"),
     "bass": ("bass_rules", "resolve_bass"),
-    "grid": ("grid", "resolve_grid"),
 }
 
 AXIS_DEPENDENCIES: Dict[str, Tuple[str, ...]] = {
-    "parts": ("parts",),
-    "texture": ("argument",),
-    "harmony": ("harmony", "parts"),
     "bass": ("bass", "parts", "texture"),
-    "grid": ("grid", "beats_per_bar", "grouping"),
 }
 
-#: The wiring `resolution.resolve_policies` calls, in the order the axes depend.
-#: `_resolve_parts` first because the other three read its answer: `bass` measures
-#: the thumb against the route the selection names, and `harmony` picks its degree
-#: order from whether the guitar sings.
+#: The wiring `resolution.resolve_policies` calls: the one axis still answered
+#: there rather than derived from the request. `resolve_bass` measures the thumb
+#: against the route the selection names, so it reads `parts` and the content.
 POLICY_WIRING: Tuple[str, ...] = (
-    "_resolve_parts",
     "resolve_bass",
-    "_resolve_harmony",
-    "_resolve_grid",
 )
 
 
@@ -688,8 +764,8 @@ def _call_lines(node: FunctionNode) -> Dict[str, int]:
 class TestTheAxisResolvers(unittest.TestCase):
     """Each axis is answered where its vocabulary lives, from named dependencies.
 
-    The axes were once resolved by one function, so `harmony=` could not be
-    reasoned about - or tested - without `parts`, `grid` and the metre in view,
+    The axes were once resolved by one function, so `bass` could not be
+    reasoned about - or tested - without `parts` and the texture in view,
     and the dependency between two of them was prose rather than a signature.
     These two tests are the shape of the repair, and they fail in both
     directions: a resolver that moves away from its module, and one that grows a
@@ -709,13 +785,12 @@ class TestTheAxisResolvers(unittest.TestCase):
                     "dependency is real, or drop the parameter",
                 )
 
-    def test_the_composition_resolves_parts_before_the_axes_that_read_it(self):
-        """`resolution` wires the axes in dependency order, not in call-site order.
+    def test_the_composition_still_resolves_the_bass_policy(self):
+        """`resolution` is where the bass policy is answered, not the slot loop.
 
-        Read off the call sites rather than an arrangement's answer: a step whose
-        parts happen to be right says nothing about which resolution ran first,
-        while a call moved above `_resolve_parts` is visible here and silent in
-        every tab.
+        Read off the call sites rather than an arrangement's answer: a step whose bass
+        happens to be right says nothing about where the answer came from, while a
+        policy resolved per slot is a band that changes halfway through a tune.
         """
         lines = _call_lines(
             _top_level_function(ENGINE / "resolution.py", "resolve_policies")
@@ -727,13 +802,6 @@ class TestTheAxisResolvers(unittest.TestCase):
             "resolve_policies no longer wires an axis - an axis resolved per slot "
             "is a band that changes halfway through a tune",
         )
-        for axis in POLICY_WIRING[1:]:
-            with self.subTest(axis=axis):
-                self.assertLess(
-                    lines["_resolve_parts"],
-                    lines[axis],
-                    f"{axis} is resolved before parts, which it reads",
-                )
 
 
 def _top_level_bindings(path: Path) -> Iterator[Tuple[str, int]]:

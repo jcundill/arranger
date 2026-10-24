@@ -64,7 +64,7 @@ class TestStaffTab(unittest.TestCase):
         # Dm7 -> G7 -> Cmaj7 on the high E block, for the reason `TestFormatProgression`
         # gives: this fixture is a *renderer* subject, so only the string set is fixed.
         self.steps = self.engine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7")],
+            [("D5", "Dm7"), ("B4", "G7"), ("C5", "Cmaj7")],
             top_strings=(5,),
         )
 
@@ -76,10 +76,9 @@ class TestStaffTab(unittest.TestCase):
         """
         The row of chord names, found by content rather than by position.
 
-        It used to be `split("\\n")[0]`, which was true while the chord row was
-        the first thing drawn. `show_timing` puts the metre and the note values
-        above it, so an index would find the metre - and a test that silently
-        changed subject would still pass, which is worse than failing. Naming the
+        An index would not do: `show_timing` puts the metre and the note values above the
+        chord row, so taking the first line would find the metre - and a test that
+        silently changed subject would still pass, which is worse than failing. Naming the
         row by what is in it keeps the assertion about the chord names.
 
         `show_chords` is forced on, since the chord row is off by default with the
@@ -166,16 +165,14 @@ class TestStaffTab(unittest.TestCase):
         With timing, a barline is drawn where the bar changes: a step in bar 1 is
         followed by one in bar 2, and the barline sits between them.
 
-        **Every bar is ruled**, not every `measures_per_line`th one. This asserted
-        the opposite once - that a barline was rare - and that was the decision
-        TuxGuitar's export contradicted. The assertion is inverted rather than
-        dropped: the barline is now the mark that says where the metre falls, and a
-        staff that drew one only every fourth bar could not show a two-bar phrase
-        apart from a four-bar one. What is still load-bearing here is *where* it
-        falls relative to the shape, so that is what the test states.
+        **Every bar is ruled**, not every `measures_per_line`th one: the barline is the
+        mark that says where the metre falls, and a staff that drew one only every fourth
+        bar could not show a two-bar phrase apart from a four-bar one. What is
+        load-bearing here is *where* it falls relative to the shape, so that is what the
+        test states.
         """
         timed = self.engine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("C5", "maj7", "Cmaj7")]
+            [("D5", "Dm7"), ("C5", "Cmaj7")]
         )
         timed[0].bar, timed[0].beat = 0, 1.0
         timed[1].bar, timed[1].beat = 1, 1.0
@@ -263,9 +260,10 @@ class TestStaffTab(unittest.TestCase):
         """
         A head that enters part-way through its first bar shows the rest before it.
 
-        The grid used to start at the first *onset*, which silently dropped a leading
-        rest inside that bar: a pickup came out with its first fret hard against the
-        opening barline and read as a downbeat. the synthetic cut-time head bar 1 is written that
+        The grid starts at the bar, not at the first *onset*, so a leading rest inside that
+        bar is not silently dropped: a pickup otherwise comes out with its first fret hard
+        against the opening barline and reads as a downbeat. The synthetic cut-time head bar
+        1 is written that
         way - a quarter rest and then three notes - and TuxGuitar's export draws the
         rest as dashes and puts the fret where it falls. The start is now rounded down
         to the bar containing the first onset, which keeps the rest without inventing
@@ -297,11 +295,10 @@ class TestStaffTab(unittest.TestCase):
         """
         Duration is drawn as horizontal space, which is how ASCII tab says it.
 
-        **A column used to be one beat wide whatever the note was worth**, so a
-        quarter and a half note came out identical and the tab said nothing about how
-        long anything sounded - the reason the `q`/`w` rhythm row existed. A note now
-        occupies as many *slots* as it is worth, one slot being one fret cell, so a
-        half note is drawn twice as wide as a quarter.
+        **A column is as wide as the note is worth**, so a quarter and a half note do not
+        come out identical: a note occupies as many *slots* as it is worth, one slot being
+        one fret cell, so a half note is drawn twice as wide as a quarter. That is what
+        makes the tab say how long anything sounds.
 
         `duration` is in **whole notes**, and reading it as beats is what made every
         note in the piece come out one slot wide. At the floor of eight slots to the
@@ -501,7 +498,7 @@ class TestStaffTab(unittest.TestCase):
         beats is not drawn jammed up against the next one.
         """
         timed = self.engine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("C5", "maj7", "Cmaj7")]
+            [("D5", "Dm7"), ("C5", "Cmaj7")]
         )
         timed[0].bar, timed[0].beat = 0, 1.0
         timed[1].bar, timed[1].beat = 0, 3.0  # two beats later, same bar
@@ -786,13 +783,11 @@ class TestStaffNoteValues(unittest.TestCase):
 
     def test_show_timing_off_is_the_default(self):
         """
-        `show_timing=False` is now what you get without asking - the staff is the tab.
+        `show_timing=False` is what you get without asking - the staff is the tab.
 
-        It used to be the opposite: `show_timing` was on by default and this was the
-        escape hatch back to a plainer staff. The assertion is inverted rather than
-        dropped, because the property it protects is unchanged - the metre and the
-        note-value rows are still the two that `show_timing` governs, and still the
-        only way to get them - only which value is the default has moved.
+        The metre and the note-value rows are the two that `show_timing` governs, and the
+        only way to get them, so this asserts the default and the two rows it
+        withholds.
         """
         steps = _timed(["Dm7", "G7"], beats=[(0, 1.0), (0, 2.0)])
         without = format_tab_staff(steps, show_melody=True)
@@ -858,8 +853,8 @@ class TestStaffNoteValues(unittest.TestCase):
         """
         A long silence must not print a longer-than-a-bar note.
 
-        Measured on melid 451, whose head has a four-beat hole in it: measuring to
-        the next sound put a six-quarter "note" in one cell.
+        Measuring to the next sound rather than to the bar's end puts a six-quarter
+        "note" in one cell, which is the defect this pins.
         """
         steps = _timed(["Dm7", "G7"], beats=[(0, 1.0), (3, 1.0)])
         for cell in self.cells(steps):
@@ -1108,35 +1103,30 @@ class TestTabstaffModuleBoundary(unittest.TestCase):
 
     def test_dunder_all_matches_the_public_surface(self):
         """
-        `from arranger import *` used to export every public name, before the lazy
-        __getattr__ began hiding the re-exported ones. __all__ restores that, and
-        this keeps it honest: every listed name must resolve, and every public name
-        defined in the module must be listed.
+        `from arranger import *` exports the facade's API, and this keeps it honest:
+        every listed name must resolve, and every public name the facade *defines* must
+        be listed.
+
+        A bound **submodule** is not a name the facade defines - it is the module's own
+        path, which `arranger.grips` reaches whether or not `__all__` names it - so
+        module objects are excluded. Everything else is not, which is what stops the
+        list from going quietly short.
         """
+        import types
+
         import arranger
 
         for name in arranger.__all__:
             self.assertTrue(hasattr(arranger, name), f"{name} in __all__ but missing")
-        defined = {n for n in vars(arranger) if not n.startswith("_")}
-        # Names bound by imports rather than defined by this module - the typing
-        # aliases, musthe's classes, and the stdlib modules - are not API.
-        ignored = {
-            "Any",
-            "Chord",
-            "Container",
-            "Dict",
-            "Interval",
-            "List",
-            "Note",
-            "Optional",
-            "Sequence",
-            "Tuple",
-            "TYPE_CHECKING",
-            "annotations",
-            "dataclass",
-            "importlib",
-            "re",
+        defined = {
+            name
+            for name, value in vars(arranger).items()
+            if not name.startswith("_") and not isinstance(value, types.ModuleType)
         }
+        # Names bound by imports rather than defined by this module: the typing and
+        # stdlib aliases the facade itself uses, and `__future__`'s `annotations`, which
+        # is a `_Feature` rather than a module and so is not excluded by the rule above.
+        ignored = {"Any", "List", "ModuleType", "TYPE_CHECKING", "annotations"}
         self.assertEqual(
             defined - set(arranger.__all__) - ignored,
             set(),
@@ -1164,9 +1154,9 @@ class TestTabstaffModuleBoundary(unittest.TestCase):
 def _systems(staff: str) -> List[List[str]]:
     """A rendered staff split into systems, each a list of its own lines.
 
-    The staff now wraps, so the invariant that used to hold of the whole output -
-    every row the same width, every barline in the same column - holds of one
-    *system* at a time. Two systems are separated by a blank line and are free to be
+    The staff wraps, so the invariant holds of one *system* at a time rather than of the
+    whole output: every row the same width, every barline in the same column. Two systems
+    are separated by a blank line and are free to be
     different widths, because the last one is short by definition. Asserting across
     the whole output would therefore assert something false, and would stop being
     the alignment check it was written to be.
@@ -1198,8 +1188,8 @@ class TestStaffBarlineAlignment(unittest.TestCase):
     def build(self, measures_per_line=1, bars=4):
         """A timed progression of `bars` one-bar chords, to force real barlines."""
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D", "m7", "Dm7"), ("G", "7", "G7"),
-             ("C", "maj7", "Cmaj7"), ("F", "m7", "Fm7")][:bars]
+            [("D", "Dm7"), ("G", "G7"),
+             ("C", "Cmaj7"), ("F", "Fm7")][:bars]
         )
         for index, step in enumerate(steps):
             step.bar, step.beat, step.duration = index + 1, 1.0, 4.0

@@ -13,7 +13,7 @@ from __future__ import annotations
 
 from typing import List, Optional, Sequence, Tuple
 
-from arranger.tuning import ArrangementStep
+from arranger.step_types import ArrangementStep
 
 # The shortest event MusicXML can write, in quarter lengths: a sixteenth. See the
 # duration floor in `score_events`.

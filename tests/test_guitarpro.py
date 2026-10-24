@@ -26,7 +26,9 @@ import os
 import tempfile
 import unittest
 
-from arranger import ROLE_TARGET, ArrangementStep, VoiceLeadingEngine
+from arranger import ArrangementStep, VoiceLeadingEngine
+from arranger.options import ArrangeOptions, Request
+from arranger.tuning import ROLE_TARGET
 
 # The shared placement core, reached directly: these tests are about where events
 # land, which is decided in `tabscore` and only turned into beats by `tabgp`.
@@ -67,7 +69,7 @@ class GuitarProTestCase(unittest.TestCase):
         # A ii-V-I, which every chord of it voices without a non-chord tone, so the
         # tests are about the rendering rather than about the arranger.
         self.steps = engine.arrange_progression(
-            [("A4", "m7", "Dm7"), ("C5", "7", "G7"), ("B4", "maj7", "Cmaj7")]
+            [("A4", "Dm7"), ("C5", "G7"), ("B4", "Cmaj7")]
         )
 
     def data(self, **kwargs):
@@ -217,7 +219,7 @@ class TestRoundTrip(GuitarProTestCase):
         # three bars, rather than borrowed. Asserting on a single bar would have
         # passed against the broken exporter.
         steps = VoiceLeadingEngine().arrange_progression(
-            [("A4", "m7", "Dm7"), ("C5", "7", "G7"), ("B4", "maj7", "Cmaj7")],
+            [("A4", "Dm7"), ("C5", "G7"), ("B4", "Cmaj7")],
             timings=[(1, 1.0, 1.0), (2, 1.0, 1.0), (3, 1.0, 1.0)],
         )
         song = self.song(steps=steps, fifths=-3, mode="major")
@@ -399,7 +401,7 @@ class TestRhythm(GuitarProTestCase):
         steps = []
         for _ in range(4):
             steps.extend(engine.arrange_progression(
-                [("A4", "m7", "Dm7"), ("C5", "7", "G7")]
+                [("A4", "Dm7"), ("C5", "G7")]
             ))
         # Two steps share each beat, so each is an eighth. The beats are 1,1,2,2
         # within a bar, which is what makes two steps land on the same onset.
@@ -579,10 +581,9 @@ class TestRhythm(GuitarProTestCase):
         measures = self.measures(steps=[crossing, after])
         # The head starts on beat 3, so the first bar opens with a **rest** for the
         # two beats before it and the Dm7 fills the rest of it exactly. Nothing
-        # crosses a bar line any more, because the rest is time rather than a hole:
-        # the G7 gets the whole of bar 2 in one note. (It used to be split in two,
-        # which was a symptom of the pickup being dropped and the music sliding up
-        # into it - the split was the format working around the loader's error.)
+        # crosses a bar line, because the rest is time rather than a hole: the G7 gets
+        # the whole of bar 2 in one note, which is what a dropped pickup would split in
+        # two.
         self.assertEqual(
             [b.text for m in measures for b in m.voices[0].beats],
             [None, "Dm7", "G7"],
@@ -724,11 +725,10 @@ class TestRhythm(GuitarProTestCase):
 
         The bug this pins. A step that runs across a bar line is written as two
         notes, one in each bar - that much is forced by the format, since a GP5
-        measure is a fixed-length container. The halves used to be written as two
-        ordinary notes, so a shape held over the bar line was **re-struck** at the
-        head of the next bar. In "the synthetic cut-time head" that happened in 14 of the 32
-        bars, and the source score genuinely ties Eb4 across the bar line in bars
-        2-3, so the file contradicted the notation it was exported from.
+        measure is a fixed-length container. Written as two ordinary notes, a shape held
+        over the bar line is **re-struck** at the head of the next bar, and the file
+        contradicts the notation it was exported from: the synthetic cut-time head's
+        source score ties Eb4 across the bar line in bars 2-3.
 
         The claim that caused it - that a GP tie is "a slur the player has to
         interpret rather than a hold" - is simply false: `NoteType.tie` is a real
@@ -808,11 +808,11 @@ class TestRhythm(GuitarProTestCase):
 
         The intra-bar twin of
         `test_a_held_shape_is_tied_across_a_bar_line_not_re_struck`. GP5 has no
-        dotted values, so a dotted half goes out as a half plus a quarter; the
-        note type used to be decided by `tie` alone, which `_measures` sets only
-        for a note continuing an earlier bar - so every part after the first was
-        an ordinary note and the shape was struck again in the middle of its own
-        hold. Read back from the bytes, because the note type exists nowhere else.
+        dotted values, so a dotted half goes out as a half plus a quarter. Deciding the
+        note type by `tie` alone would make every part after the first an ordinary note -
+        `_measures` sets `tie` only for a note continuing an earlier bar - and the shape
+        would be struck again in the middle of its own hold. Read back from the bytes,
+        because the note type exists nowhere else.
         """
         import guitarpro
 
@@ -845,12 +845,12 @@ class TestRhythm(GuitarProTestCase):
         """No beat of "All the Things You Are" re-strikes a note it still holds.
 
         The intra-bar twin of `test_every_split_step_in_a_written_head_is_tied`,
-        measured over a real export rather than a fixture: six beats of this head
+        over a real export rather than a fixture: six beats of this head
         are the continuation parts of a length split - bar 2's dotted half among
-        them - and every one of them used to go out as an ordinary note, so a
-        dotted half played as a half and then a re-struck quarter. The writer's
-        own model, `_measures` and `_duration_split`, says which parts continue
-        an earlier one; the assertion is on the parsed bytes, which is the only
+        them - and written as ordinary notes a dotted half would play as a half and then a
+        re-struck quarter. The writer's own model, `_measures` and `_duration_split`, says
+        which parts continue an earlier one; the assertion is on the parsed bytes, which is
+        the only
         place the note type survives.
         """
         import guitarpro
@@ -911,7 +911,7 @@ class TestRhythm(GuitarProTestCase):
         name chords in the same places, and a continuation part (the rest of a
         split, a hold crossing a bar line) never carries a label of its own. The
         reported case is bar 2 of this head: a dotted half over a quarter, written
-        as three beats, which used to show `Bbm7` three times where the score has
+        as three beats, which must not show `Bbm7` three times where the score has
         two notes.
         """
         from arranger.tuning import NO_CHORD
@@ -1205,7 +1205,7 @@ class TestOptions(GuitarProTestCase):
         """
         engine = VoiceLeadingEngine()
         held = engine.arrange_progression(
-            [("A4", "m7", "Dm7"), ("A4", "m7", "Dm7")]
+            [("A4", "Dm7"), ("A4", "Dm7")]
         )
         self.assertTrue(held[1].repeated)
         beat = self.beats(steps=held)[1]
@@ -1259,10 +1259,13 @@ class TestWalkingBass(GuitarProTestCase):
 
         self.gp = guitarpro
         self.walk_steps = VoiceLeadingEngine.arrange_progression(
-            [("F5", "maj7", "Fmaj7")],
+            [("F5", "Fmaj7")],
             timings=[(0, 1.0, None)],
-            texture="targets", bass="root,5th,approach,nearest",
-            grid="melody:every_note,bass:walk",
+            options=ArrangeOptions(
+                        request=Request(
+                            chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+                        ),
+                    ),
         )
         self.walk_song = _parse(io.BytesIO(format_gp5(self.walk_steps)))
         self.walk_beats = [
@@ -1367,9 +1370,13 @@ class TestWalkingBass(GuitarProTestCase):
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
             steps, _, _ = arrange_xml_head(
-                BUT_NOT_FOR_ME, texture="targets",
-                bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk",
-            )
+                    BUT_NOT_FOR_ME, options=ArrangeOptions(
+                                                request=Request(
+                                                    chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+                                                ),
+                                            ),
+
+                )
         song = _parse(
             io.BytesIO(format_gp5(steps, beats_per_bar=2, beat_type=2))
         )
@@ -1427,9 +1434,13 @@ class TestWalkingBass(GuitarProTestCase):
         buffer = io.StringIO()
         with contextlib.redirect_stdout(buffer):
             steps, _, _ = arrange_xml_head(
-                BUT_NOT_FOR_ME, texture="targets",
-                bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk",
-            )
+                    BUT_NOT_FOR_ME, options=ArrangeOptions(
+                                                request=Request(
+                                                    chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+                                                ),
+                                            ),
+
+                )
 
         ringing = None
         collisions = 0
@@ -1514,10 +1525,10 @@ class TestARingingThumbIsNotRestruck(GuitarProTestCase):
         self.gp = guitarpro
         self.request_steps = VoiceLeadingEngine.arrange_progression(
             [
-                ("C5", "maj7", "Cmaj7"),
-                ("D5", "maj7", "Cmaj7"),
-                ("E5", "maj7", "Cmaj7"),
-                ("F5", "maj7", "Cmaj7"),
+                ("C5", "Cmaj7"),
+                ("D5", "Cmaj7"),
+                ("E5", "Cmaj7"),
+                ("F5", "Cmaj7"),
             ],
             timings=[(1, 1.0, 0.25), (1, 2.0, 0.25), (1, 3.0, 0.25), (1, 4.0, 0.25)],
             request=Request(bass_on="1"),
@@ -1602,9 +1613,9 @@ class TestRepeatMarkers(GuitarProTestCase):
         from tabgp import format_gp5
 
         progression = ([
-            ("A4", "m7", "Dm7"), ("C5", "7", "G7"), ("B4", "maj7", "Cmaj7"),
-            ("A4", "m7", "Am7"), ("C5", "7", "D7"), ("B4", "maj7", "Fmaj7"),
-            ("A4", "m7", "Bm7"), ("C5", "7", "E7"),
+            ("A4", "Dm7"), ("C5", "G7"), ("B4", "Cmaj7"),
+            ("A4", "Am7"), ("C5", "D7"), ("B4", "Fmaj7"),
+            ("A4", "Bm7"), ("C5", "E7"),
         ] * (count // 8 + 1))[:count]
         steps = VoiceLeadingEngine().arrange_progression(progression)
         return _parse(io.BytesIO(format_gp5(steps, markers=markers)))

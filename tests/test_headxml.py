@@ -24,7 +24,9 @@ import unittest
 import zipfile
 from xml.etree import ElementTree
 
-from arranger import NO_CHORD, ChordParser
+from arranger import ChordParser
+from arranger.options import ArrangeOptions, Request
+from arranger.tuning import NO_CHORD
 from headxml import (
     Head,
     _key_label,
@@ -567,15 +569,12 @@ class TestAHeldNoteIsOneNoteAcrossABarline(unittest.TestCase):
         self.assertAlmostEqual(end - 8.0, 1.0, places=6)
 
     def test_the_held_note_outlasts_the_last_note_and_bars_reports_the_file(self):
-        """`Head.bars` is now a fact about the *file*, so it does not stop at the note.
+        """`Head.bars` is a fact about the *file*, so it does not stop at the note.
 
-        **Inverted rather than deleted** (§9.3 step A', and AGENTS.md trap 5). The old
-        assertion was `(1, 16)` and its premise was *"`Head.bars` stops at the last
-        note"*. Step A' made `bars` the file's measure extent, because a chords-only
-        head has no notes to measure and still knows how long it is - so the premise
-        is gone and the assertion would be wrong to keep. The file runs to measure 17,
-        so the range is `(1, 18)`: the last note begins in bar 15 and is held to bar 17
-        beat 2.0, and the range now reaches that bar rather than stopping short of it.
+        A chords-only head has no notes to measure and still knows how long it is, so the
+        measure extent is the file's. This file runs to measure 17, so the range is
+        `(1, 18)`: the last note begins in bar 15 and is held to bar 17 beat 2.0, and the
+        range reaches that bar rather than stopping short of it.
 
         The note's own sound past bar 15 is still carried by its duration, and the
         arithmetic that proves it is kept - that part was never about `bars`.
@@ -606,12 +605,11 @@ class TestAHeldNoteIsOneNoteAcrossABarline(unittest.TestCase):
 class TestChordsOnlyHead(unittest.TestCase):
     """§9.3 step A': a chords-only lead sheet is a valid input.
 
-    Four bars, six `<harmony>` elements, **zero pitched notes** — measured, the loader
-    used to refuse it outright (`has no readable melody part`) because `_choose_part`
-    selected on the note count alone. It now reads, reports its metre and bar count, and
-    arranges **the whole head**.
+    Four bars, six `<harmony>` elements, **zero pitched notes**. It reads, reports its
+    metre and bar count, and arranges **the whole head**: a part is chosen by what it
+    holds, not by its note count alone.
 
-    The default grid's silence here was `docs/open-issues.md` item 1's extreme case, and
+    The default grid's silence here was `docs/history/open-issues.md` item 1's extreme case, and
     it is now fixed: a bar the melody never enters is added beat for beat, so a head with
     *no* melody at all gets all of its bars. A **melody-only** selection still gets
     nothing — it plays the tune and nothing else, and there is no tune — and that is the
@@ -636,21 +634,19 @@ class TestChordsOnlyHead(unittest.TestCase):
     def test_the_default_grid_arranges_every_bar(self):
         """A bar the melody never enters is added, so a head with no melody gets all of it.
 
-        **This assertion is inverted, not deleted** (AGENTS.md trap 5). It used to assert
-        `steps == []`, and the premise it rested on was step A' decision 2: "an empty
-        arrangement is the default grid's own instruction rather than a hole to report."
-        That premise is exactly what `docs/open-issues.md` item 1 measures as the defect —
-        a chord in force that produces **no part at all**, not quiet, absent, on every
-        export path. The rule now unions at the level of the **bar**, so a melody-less
-        head is fully arranged and a note-bearing bar is untouched; `every_note`'s
-        deference to the melody survives where it was load-bearing, which is inside a bar
-        the tune already articulates.
+        The union is at the level of the **bar**, so a melody-less head is fully arranged
+        and a note-bearing bar is untouched; `every_note`'s deference to the melody
+        survives where it is load-bearing, which is inside a bar the tune already
+        articulates. A chord in force must produce a part rather than nothing at all —
+        `docs/history/open-issues.md` item 1 is that defect.
 
         The soprano refusal below is the one case that did not move, and it is a different
         claim: a melody-only selection has nothing to *play* here, which is not the same
         as a grid having nowhere to *place* a chord.
         """
-        steps, _head, _notes = arrange_xml_head(CHORDS_ONLY, parts="chord")
+        steps, _head, _notes = arrange_xml_head(
+            CHORDS_ONLY, options=ArrangeOptions(request=Request(melody=False))
+        )
         self.assertEqual(len(steps), 16, "four bars, four beats each")
         self.assertEqual((steps[0].bar, steps[0].beat), (1, 1.0))
         self.assertTrue(
@@ -659,43 +655,50 @@ class TestChordsOnlyHead(unittest.TestCase):
         )
 
     def test_a_soprano_only_selection_arranges_nothing(self):
-        """Naming soprano routes to the melody-bearing branch, where there is no tune.
+        """A melody-only selection routes to the melody-bearing branch, where there is
+        no tune.
 
-        **This is the one refusal left, and it is not the same claim as the grid's
-        deference.** `every_note` used to be silent here too, and that was the defect; a
-        melody-only selection is silent because it *plays the tune and nothing else*, so a
-        bar with no tune has nothing for it to play. A grid can place a chord there and a
+        **This refusal is not the same claim as the grid's deference.** A melody-only
+        selection is silent because it *plays the tune and nothing else*, so a bar with no
+        tune has nothing for it to play - where a grid can place a chord there, and a
         soprano cannot voice one without a top note. `parts_has_melody_only` gates the
-        union in `arrange_xml_head`, which is why this still returns nothing while
-        `alto,tenor` above now returns all four bars.
+        union in `arrange_xml_head`, which is why this returns nothing while `alto,tenor`
+        above returns all four bars.
         """
-        steps, _head, _notes = arrange_xml_head(CHORDS_ONLY, parts="melody")
+        steps, _head, _notes = arrange_xml_head(
+            CHORDS_ONLY, options=ArrangeOptions(request=Request(chord_on="none"))
+        )
         self.assertEqual(steps, [])
 
-    def test_a_named_grid_places_the_chords(self):
-        """`chord:freddie`, `chord:joe_pass` and `chord:final_and` each produce a part — the payoff.
+    def test_a_named_rhythm_places_the_chords(self):
+        """Three rhythms, three parts: the payoff, and the shape `--chord-on` asks with.
 
-        Exactly the rhythm each pattern names on a 4/4 bar: `freddie` a chord on every
-        beat (16 = 4 bars x 4), `joe_pass` on the *ands* (first at bar 1 beat 1.5), and
-        `final_and` on the final beat's upbeat (first at bar 1 beat 4.5). Every slot
-        carries `parts=None`, because the file has no tune — the honest absence step B
+        Exactly the rhythm each names on a 4/4 bar: `every-beat` a chord on every beat
+        (16 = 4 bars x 4), the *ands* on the ands (first at bar 1 beat 1.5), and
+        `lastand` on the final beat's upbeat (first at bar 1 beat 4.5). Every slot
+        carries `parts="None"`, because the file has no tune — the honest absence step B
         made expressible, not the deleted placeholder.
+
+        `lastand` is the metre-relative spelling of the old `final_and` preset: the
+        grammar's `last` resolves per bar, so one request is the last upbeat of every
+        bar of any metre.
         """
         expected = {
-            "chord:freddie": ((1.0, "Dm7"), 16),
-            "chord:joe_pass": ((1.5, "Dm7"), 16),
-            "chord:final_and": ((4.5, "Dm7"), 4),
+            "every-beat": ((1.0, "Dm7"), 16),
+            "1and,2and,3and,4and": ((1.5, "Dm7"), 16),
+            "lastand": ((4.5, "Dm7"), 4),
         }
-        for grid, (first, count) in expected.items():
-            with self.subTest(grid=grid):
+        for rhythm, (first, count) in expected.items():
+            with self.subTest(rhythm=rhythm):
                 steps, _head, _notes = arrange_xml_head(
-                    CHORDS_ONLY, parts="chord", grid=grid
+                    CHORDS_ONLY,
+                    request=Request(melody=False, chord_on=rhythm),
                 )
-                self.assertEqual(len(steps), count, f"grid={grid}")
+                self.assertEqual(len(steps), count, f"chord_on={rhythm}")
                 self.assertEqual((steps[0].beat, steps[0].chord), first)
                 self.assertTrue(
                     all(step.melody is None for step in steps),
-                    f"grid={grid} invented a melody for a chords-only head",
+                    f"chord_on={rhythm} invented a melody for a chords-only head",
                 )
 
 
@@ -900,26 +903,3 @@ class TestTheInstrumentTranspositionIsRead(unittest.TestCase):
         self.assertEqual([n.note_name for n in head.notes], ["C5"])
 
 
-class TestAnUnknownGridIsRefused(unittest.TestCase):
-    """§9.3 step A: the library refuses an unknown grid instead of coercing it.
-
-    `headxml._merge_chord_slots` used to coerce anything unrecognised to the
-    melody-anchored grid, so `arrange_xml_head(..., grid="half-time")` silently
-    returned `every_note`'s arrangement on the comping route - the exact guess
-    `parse_grid` refuses. The coercion is gone: `auto` was the only thing that ever
-    made it reachable, and once the sentinel was withdrawn the guess went with it.
-    The CLI is unaffected (argparse rejects an unknown choice first), so this is
-    observable only from library code - which is why it needs its own test rather
-    than being left to the gate.
-    """
-
-    def test_an_unknown_grid_raises_on_the_comping_route(self):
-        """The path that used to coerce now refuses, naming the real vocabulary."""
-        with self.assertRaises(ValueError) as caught:
-            arrange_xml_head(RAINY_DAY, parts="chord", grid="half-time")
-        self.assertIn("joe_pass", str(caught.exception))
-
-    def test_auto_is_no_longer_a_grid_a_library_caller_can_pass(self):
-        """`auto` was withdrawn, so the library refuses it too - not just the CLI."""
-        with self.assertRaises(ValueError):
-            arrange_xml_head(RAINY_DAY, parts="chord", grid="auto")

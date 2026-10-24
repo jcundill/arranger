@@ -47,11 +47,10 @@ from .step_prepare import (
     StepPreparation,
     prepare_step,
 )
+from .step_types import ArrangementStep, Voicing
 from .tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
-    ArrangementStep,
-    Voicing,
 )
 
 __all__ = [
@@ -86,102 +85,103 @@ class VoiceLeadingEngine:
 
     @staticmethod
     def get_comping_voicings(
-        chord_type: str,
         chord_name: Optional[str] = None,
         fret_min: int = NECK_FRET_MIN,
         fret_max: int = NECK_FRET_MAX,
         notes: int = 3,
         bass_voice: bool = False,
-        shell_root: bool = False,
     ) -> List[Voicing]:
         """See `grips.get_comping_voicings`."""
         return _grips.get_comping_voicings(
-            chord_type,
-            chord_name,
-            fret_min,
-            fret_max,
-            notes,
-            bass_voice,
-            shell_root,
+            chord_name=chord_name,
+            fret_min=fret_min,
+            fret_max=fret_max,
+            notes=notes,
+            bass_voice=bass_voice,
         )
 
     @classmethod
     def get_grip_voicings(
         cls,
         melody_note: Note,
-        chord_type: str,
-        chord_name: Optional[str] = None,
+        chord_name: str,
         top_string: int = 5,
         grips: Tuple[str, ...] = GRIP_PREFERENCE,
     ) -> List[Voicing]:
         """See `grips.get_grip_voicings` - the full docstring is there."""
         return _grips.get_grip_voicings(
-            melody_note, chord_type, chord_name, top_string, grips
+            melody_note,
+            chord_name=chord_name,
+            top_string=top_string,
+            grips=grips,
         )
 
     @classmethod
     def get_drop2_voicings(
         cls,
         melody_note: Note,
-        chord_type: str,
-        chord_name: Optional[str] = None,
+        chord_name: str,
         top_string: int = 5,
     ) -> List[Voicing]:
         """See `grips.get_drop2_voicings`."""
-        return _grips.get_drop2_voicings(melody_note, chord_type, chord_name, top_string)
+        return _grips.get_drop2_voicings(
+            melody_note, chord_name=chord_name, top_string=top_string
+        )
 
     @classmethod
     def get_interval_voicings(
         cls,
         melody_note: Note,
-        chord_type: str,
-        chord_name: Optional[str] = None,
+        chord_name: str,
         top_string: int = 5,
     ) -> List[Voicing]:
         """See `grips.get_interval_voicings`."""
         return _grips.get_interval_voicings(
-            melody_note, chord_type, chord_name, top_string
+            melody_note, chord_name=chord_name, top_string=top_string
         )
 
     @classmethod
     def get_octave_down_candidates(
         cls,
         melody_note: Note,
-        chord_type: str,
-        chord_name: Optional[str] = None,
+        chord_name: str,
         top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
         grips: Tuple[str, ...] = GRIP_PREFERENCE,
     ) -> List[Voicing]:
         """See `grips.get_octave_down_candidates`."""
         return _grips.get_octave_down_candidates(
-            melody_note, chord_type, chord_name, top_strings, grips
+            melody_note,
+            chord_name=chord_name,
+            top_strings=top_strings,
+            grips=grips,
         )
 
     @classmethod
     def get_all_grip_voicings(
         cls,
         melody_note: Note,
-        chord_type: str,
-        chord_name: Optional[str] = None,
+        chord_name: str,
         top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
         grips: Tuple[str, ...] = GRIP_PREFERENCE,
     ) -> List[Voicing]:
         """See `grips.get_all_grip_voicings`."""
         return _grips.get_all_grip_voicings(
-            melody_note, chord_type, chord_name, top_strings, grips
+            melody_note,
+            chord_name=chord_name,
+            top_strings=top_strings,
+            grips=grips,
         )
 
     @classmethod
     def get_all_drop2_voicings(
         cls,
         melody_note: Note,
-        chord_type: str,
-        chord_name: Optional[str] = None,
+        chord_name: str,
         top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES,
     ) -> List[Voicing]:
         """See `grips.get_all_drop2_voicings`."""
         return _grips.get_all_drop2_voicings(
-            melody_note, chord_type, chord_name, top_strings
+            melody_note, chord_name=chord_name, top_strings=top_strings
         )
 
     @classmethod
@@ -211,23 +211,25 @@ class VoiceLeadingEngine:
 
     @classmethod
     def is_chord_tone(
-        cls, melody_note: Note, chord_type: str, chord_name: Optional[str] = None
+        cls, melody_note: Note, chord_name: str
     ) -> bool:
         """See `chords.is_chord_tone`."""
-        return _chords.is_chord_tone(melody_note, chord_type, chord_name)
+        return _chords.is_chord_tone(melody_note, chord_name=chord_name)
 
     @classmethod
     def resolve_non_chord_tone(
         cls,
         melody_note: Note,
-        chord_type: str,
         chord_name: str,
         strategy: str = "extension",
         next_melody: Optional[str] = None,
-    ) -> Optional[Tuple[str, str]]:
+    ) -> Optional[str]:
         """See `chords.resolve_non_chord_tone`."""
         return _chords.resolve_non_chord_tone(
-            melody_note, chord_type, chord_name, strategy, next_melody
+            melody_note,
+            chord_name=chord_name,
+            strategy=strategy,
+            next_melody=next_melody,
         )
 
     @classmethod
@@ -290,7 +292,7 @@ class VoiceLeadingEngine:
     @classmethod
     def prepare_step(
         cls,
-        progression: Sequence[Tuple[Optional[str], str, str]],
+        progression: Sequence[Tuple[Optional[str], str]],
         index: int,
         previous: Optional[Voicing] = None,
         previous_chord: Optional[str] = None,
@@ -316,7 +318,7 @@ class VoiceLeadingEngine:
     @classmethod
     def arrange_progression(
         cls,
-        progression: Sequence[Tuple[Optional[str], str, str]],
+        progression: Sequence[Tuple[Optional[str], str]],
         top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
         non_chord_tone: str = "extension",
         fret_min: int = NECK_FRET_MIN,
@@ -325,11 +327,6 @@ class VoiceLeadingEngine:
         # a slot a caller could not place is `(None, None, None)`, so an entry point may
         # hold either shape. See `movement.arrange_progression` for the same note.
         timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]] = None,
-        texture: Optional[str] = None,
-        bass: Optional[str] = None,
-        parts: Optional[str] = None,
-        harmony: Optional[str] = None,
-        grid: Optional[str] = None,
         request: Request = DEFAULT_REQUEST,
         # The metre as one value: count, denominator and felt grouping, validated
         # together. Omitting it means `COMMON_TIME` (4/4). See
@@ -338,9 +335,11 @@ class VoiceLeadingEngine:
         # The progression indexes whose melody note articulates, for the §9.2
         # reharmonise rule on the comping route (§9.3 step C). `None` means every slot
         # is an onset - the correct answer for a hand-built progression with no
-        # timeline, and what keeps a bare `arrange_progression(..., parts="chord")`
+        # timeline, and what keeps a bare `arrange_progression(..., options=...)`
         # honouring `--non-chord-tone`. See `ArrangeOptions.melody_onsets`.
         melody_onsets: Optional[Container[int]] = None,
+        # The knobs that are not a question about the music; the axes themselves are
+        # derived from the request. See `resolution.resolve_knobs`.
         options: Optional[ArrangeOptions] = None,
     ) -> List[ArrangementStep]:
         """See `movement.arrange_progression` - the full docstring is there."""
@@ -351,11 +350,6 @@ class VoiceLeadingEngine:
             fret_min=fret_min,
             fret_max=fret_max,
             timings=timings,
-            texture=texture,
-            bass=bass,
-            parts=parts,
-            harmony=harmony,
-            grid=grid,
             request=request,
             time_signature=time_signature,
             melody_onsets=melody_onsets,

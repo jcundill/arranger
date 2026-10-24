@@ -10,20 +10,19 @@ from __future__ import annotations
 
 import unittest
 
-from arranger import BASS_STYLE_WALK, VoiceLeadingEngine
+from arranger import VoiceLeadingEngine
 from arranger.grouping import (
     COMMON_TIME,
     GROUPING_AUTO,
     TimeSignature,
     default_grouping,
     format_grouping,
-    group_offbeat,
     group_starts,
     grouping_allowed,
     parse_grouping,
     resolve_grouping,
 )
-from arranger.options import ArrangeOptions
+from arranger.options import ArrangeOptions, Request
 
 
 class TestTheVocabulary(unittest.TestCase):
@@ -120,19 +119,6 @@ class TestTheFeltBeats(unittest.TestCase):
         with self.assertRaises(ValueError):
             group_starts(7, (3, 3))
 
-    def test_a_simple_beat_answers_on_half_a_beat(self):
-        self.assertEqual(group_offbeat(1), 0.5)
-
-    def test_a_longer_group_answers_on_its_last_unit(self):
-        """A group of three eighths answers on the third eighth, not halfway."""
-        self.assertEqual(group_offbeat(3), 2.0)
-        self.assertEqual(group_offbeat(2), 1.0)
-        self.assertEqual(group_offbeat(4), 3.0)
-
-    def test_a_zero_length_group_is_refused(self):
-        with self.assertRaises(ValueError):
-            group_offbeat(0)
-
 
 class TestTimeSignature(unittest.TestCase):
     """The one value a hand-built arrangement declares, and its validation."""
@@ -164,7 +150,7 @@ class TestTimeSignature(unittest.TestCase):
 class TestTheHandBuiltMetre(unittest.TestCase):
     """A hand-built progression declares one metre, and omitting it is 4/4."""
 
-    PROGRESSION = [("F5", "maj7", "Fmaj7")]
+    PROGRESSION = [("F5", "Fmaj7")]
 
     def test_omitting_the_signature_is_common_time(self):
         """The default is a real declaration, not half of one."""
@@ -172,9 +158,9 @@ class TestTheHandBuiltMetre(unittest.TestCase):
         steps = VoiceLeadingEngine.arrange_progression(
             self.PROGRESSION,
             timings=[(0, 1.0, None)],
-            texture="targets",
-            bass=BASS_STYLE_WALK,
-            grid="melody:every_note,bass:walk",
+            request=Request(
+                chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+            ),
         )
         self.assertEqual([step.beat for step in steps], [1.0, 2.0, 3.0, 4.0])
 
@@ -183,9 +169,12 @@ class TestTheHandBuiltMetre(unittest.TestCase):
         steps = VoiceLeadingEngine.arrange_progression(
             self.PROGRESSION,
             timings=[(0, 1.0, None)],
-            texture="targets",
-            bass=BASS_STYLE_WALK,
-            grid="chord:freddie,bass:walk",
+            request=Request(
+                chord_on="every-beat",
+                chord_notes="targets",
+                bass_on="every-beat",
+                bass_notes="walk",
+            ),
             time_signature=TimeSignature(7, 4, "2+2+3"),
         )
         self.assertEqual([step.beat for step in steps], [1.0, 3.0, 5.0])

@@ -12,13 +12,13 @@ Sits above `step_prepare`, `routes`, `melody_alone`, `decisions`, `bass_merge`,
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from typing import Callable, List, Optional, Sequence, Tuple
+from typing import List, Optional, Tuple
 
 from . import cost as _cost
 from . import grips as _grips
 from .bass import Slot
 from .bass_merge import attach_bass
-from .chords import ChordParser, normalised_harmony
+from .chords import ChordParser, normalised_harmony, slash_bass_cost
 from .context import SlotContext
 from .decisions import (
     dropped_for_the_bass,
@@ -35,17 +35,16 @@ from .decisions import (
 )
 from .grip_tables import GRIP_MAX_SPAN
 from .melody_alone import demoted_to_melody_alone, rescue_melody_alone
-from .routes import last_sounding_step, previous_shape, rest_step
+from .routes import rest_step
 from .slot_plan import SlotPlan
+from .step_history import last_sounding_step, previous_shape
 from .step_prepare import StepPreparation, prepare_step
+from .step_types import ArrangementStep, Palette, Voicing
 from .tuning import (
     ROLE_TARGET,
     SILENCE_NO_SHAPE,
     SILENCE_OUT_OF_REACH,
-    ArrangementStep,
     Note,
-    Palette,
-    Voicing,
 )
 
 
@@ -148,15 +147,14 @@ def _prepare_or_rescue(
     """
 
     context: SlotContext = plan.context
-    inputs = plan.inputs
     prepared = prepare_step(
         context.identity.progression, context.identity.index,
         previous=prev_sounding.voicing if prev_sounding is not None else None,
         previous_chord=prev_sounding.chord if prev_sounding is not None else None,
-        top_strings=inputs.top_strings,
-        non_chord_tone=context.non_chord_tone,
-        fret_min=context.fret_min,
-        fret_max=context.fret_max,
+        top_strings=context.neck.top_strings,
+        non_chord_tone=context.arrangement.non_chord_tone,
+        fret_min=context.neck.fret_min,
+        fret_max=context.neck.fret_max,
         grips=plan.slot_grips,
     )
     if prepared is not None:
@@ -164,7 +162,8 @@ def _prepare_or_rescue(
     assert context.harmony.melody_note is not None
     if rescue_melody_alone(
         arrangements, slot, context,
-        top_strings=inputs.top_strings, previous=previous_shape(arrangements),
+        top_strings=context.neck.top_strings,
+        previous=previous_shape(arrangements),
     ):
         return None
     prepared = _promoted_fill(plan, arrangements)
@@ -176,7 +175,7 @@ def _prepare_or_rescue(
         silence=(
             SILENCE_OUT_OF_REACH
             if not _grips.get_melody_only_voicings(
-                context.harmony.melody_note, prefer=inputs.top_strings
+                context.harmony.melody_note, prefer=context.neck.top_strings
             )
             else SILENCE_NO_SHAPE
         ),
@@ -191,11 +190,10 @@ def _promoted_fill(
     """Re-prepare a fill that produced nothing as a principal note."""
 
     context: SlotContext = plan.context
-    inputs = plan.inputs
     if not should_promote_fill(
-        context.texture, context.state.role, True, plan.slot_grips,
-        has_thumb=context.has_thumb,
-        melody_only=inputs.melody_only,
+        context.arrangement.texture, context.state.role, True, plan.slot_grips,
+        has_thumb=context.arrangement.has_thumb,
+        melody_only=context.arrangement.melody_only,
     ):
         return None
     prev_sounding = last_sounding_step(arrangements)
@@ -203,20 +201,16 @@ def _promoted_fill(
         context.identity.progression, context.identity.index,
         previous=prev_sounding.voicing if prev_sounding is not None else None,
         previous_chord=prev_sounding.chord if prev_sounding is not None else None,
-        top_strings=inputs.top_strings,
-        non_chord_tone=context.non_chord_tone,
-        fret_min=context.fret_min,
-        fret_max=context.fret_max,
+        top_strings=context.neck.top_strings,
+        non_chord_tone=context.arrangement.non_chord_tone,
+        fret_min=context.neck.fret_min,
+        fret_max=context.neck.fret_max,
     )
 
 
-def _bass_group(
-    voicing: Voicing,
-    bass_pc: Optional[int],
-    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]],
-) -> Optional[int]:
+def _bass_group(voicing: Voicing, bass_pc: Optional[int]) -> Optional[int]:
     """How well `voicing` honours a written slash bass, or `None` without one."""
-    if bass_pc is None or slash_bass_cost is None:
+    if bass_pc is None:
         return None
     return slash_bass_cost(voicing.midi_notes(), bass_pc)
 
@@ -252,14 +246,10 @@ class _Selection:
         """A tighter shape inside the budget that the tuple ranks at least as high."""
         turned_away = self.criteria.cost(demoted)
         span = _cost.SPAN_CRITERION
-        turned_away_bass = _bass_group(
-            demoted, self.criteria.bass_pc, self.criteria.slash_bass_cost
-        )
+        turned_away_bass = _bass_group(demoted, self.criteria.bass_pc)
 
         def would_the_tuple_have_chosen_it(candidate: Voicing) -> bool:
-            if _bass_group(
-                candidate, self.criteria.bass_pc, self.criteria.slash_bass_cost
-            ) != turned_away_bass:
+            if _bass_group(candidate, self.criteria.bass_pc) != turned_away_bass:
                 return False
             cost = self.criteria.cost(candidate)
             return cost[:span] + cost[span + 1:] <= turned_away[:span] + turned_away[span + 1:]
@@ -304,27 +294,22 @@ def _selection_for(
         if prepared.harmonized_as is not None
         else prepared.chord_name
     )
-    _sub_root, sub_quality = ChordParser.parse_chord_name(substitute)
-    if sub_quality is None:
-        sub_quality = ChordParser.canonical_quality(prepared.chord_type)
-        substitute = prepared.chord_name
-    allowed_tones = ChordParser.get_chord_tones(sub_quality, substitute)
-    root_pc = _grips.chord_context(prepared.chord_type, prepared.chord_name)[1]
+    allowed_tones = ChordParser.get_chord_tones(substitute)
+    root_pc = _grips.chord_context(prepared.chord_name)[1]
     assert context.harmony.melody_note is not None
     return _Selection(
         candidates=candidates,
         criteria=_cost.SelectionCriteria(
             previous=previous,
-            fret_min=context.fret_min,
-            fret_max=context.fret_max,
+            fret_min=context.neck.fret_min,
+            fret_max=context.neck.fret_max,
             allowed_tones=allowed_tones,
             root_pc=root_pc,
             melody_pc=context.harmony.melody_note.midi_note() % 12,
             bass_pc=(
-                None if context.bass_pcs is None
-                else context.bass_pcs.get(context.identity.index)
+                None if context.bass.bass_pcs is None
+                else context.bass.bass_pcs.get(context.identity.index)
             ),
-            slash_bass_cost=context.slash_bass_cost_for,
         ),
     )
 
@@ -401,7 +386,7 @@ def harmonised_step(
             palette = selection.palette(best_voicing, offered)
         elif demoted_to_melody_alone(
             arrangements, slot, replace(context, state=replace(context.state, role=role)),
-            top_strings=plan.inputs.top_strings,
+            top_strings=plan.context.neck.top_strings,
             previous=selection.criteria.previous,
             best_voicing=best_voicing,
             palette=palette,

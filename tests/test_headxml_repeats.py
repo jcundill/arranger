@@ -540,9 +540,9 @@ class TestRepeatSignsInTheAsciiStaff(unittest.TestCase):
     def _arrangement(self, count: int = 8):
         engine = arranger.VoiceLeadingEngine()
         progression = [
-            ("A4", "m7", "Dm7"), ("C5", "7", "G7"), ("B4", "maj7", "Cmaj7"),
-            ("A4", "m7", "Am7"), ("C5", "7", "D7"), ("B4", "maj7", "Fmaj7"),
-            ("A4", "m7", "Bm7"), ("C5", "7", "E7"),
+            ("A4", "Dm7"), ("C5", "G7"), ("B4", "Cmaj7"),
+            ("A4", "Am7"), ("C5", "D7"), ("B4", "Fmaj7"),
+            ("A4", "Bm7"), ("C5", "E7"),
         ][:count]
         steps = engine.arrange_progression(progression)
         for index, step in enumerate(steps):

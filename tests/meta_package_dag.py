@@ -1,7 +1,7 @@
 """The package is a DAG, and this is what holds it to that.
 
-`arranger.py` was one 4290-line module. It is now a package of focused modules, and
-the *structure* carries an invariant the comments used to carry in prose: a module may
+`arranger` is a package of focused modules, and
+the *structure* carries the invariant rather than a comment in prose: a module may
 import only the ones below it. That is worth enforcing mechanically precisely
 because the maintainers here are LLM agents, which edit what they can find and
 cannot infer that a decision documented in one place is duplicated in another - so
@@ -20,7 +20,7 @@ Three things are asserted:
 `ALLOWED_EDGES` is the honest escape hatch: a list of named edges rather than a
 blanket exemption, because the split could not be done without them and naming
 each one is what makes a seventh visible. It is empty now - every import points
-up the order - and a stale entry fails, so an edge that is no longer needed
+up the order - and a stale entry fails, so an edge that is not needed
 cannot sit there as permission for the next one.
 """
 
@@ -38,7 +38,8 @@ PACKAGE = Path(arranger.__file__).parent
 # The declared dependency order. A module may import itself and anything above it
 # in this list, and nothing else. This is the whole rule, in one place.
 ORDER = [
-    "tuning",       # the instrument, and the Voicing / ArrangementStep value types
+    "tuning",       # the instrument: tuning, fretboard, neck limits, sentinels
+    "step_types",   # the Voicing / ArrangementStep / Palette value types and tab-cell primitives
     "context",      # one slot's request, shared by the two step routes
     "fingers",      # which finger holds which fret; `bass` reads it for the four-fret budget
     "chords",       # chord symbols and the non-chord-tone routing
@@ -47,10 +48,10 @@ ORDER = [
     "grips",        # the grip builders and candidate generators
     "cost",         # voicing_cost: which candidate is played
     "annotation",   # the trailing explanation a step carries, as composed clauses
+    "text_layout",  # the pure string layout: clause units, word chunks, line breaking
     "parts",        # the parts axis: which of melody / bass / chord the guitar takes
-    "harmony",      # the harmony axis: which degrees the chord part states
     "grouping",     # the metre's third fact: which denominator units are felt as a beat
-    "grid",         # the grid axis: when each part sounds
+    "grid",         # the request's rhythm: when each part sounds
     "texture",      # the texture axis: how many notes the chord part states
     "bass_rules",   # the bass vocabulary, capacities and refusals
     "bass_place",   # the thumb's octave and string: the cost and `place_bass`
@@ -59,6 +60,7 @@ ORDER = [
     "options",      # the knobs, as one value
     "resolution",   # what the caller asked for, resolved once: the six resolvers
     "decisions",    # the decisions both step loops share
+    "step_history", # reading the arrangement's own history: the last sounding step, its shape
     "melody_alone", # where a lone note is fretted: the tune alone, with or without harmony
     "routes",       # the route handlers: rest, fill, NC and the comping route
     "slot_plan",    # one slot's plan: `slot_state` and the value it returns
@@ -231,8 +233,8 @@ class TestPackageDag(unittest.TestCase):
             ("VoiceLeadingEngine", "steps", "VoiceLeadingEngine"),
             ("StepPreparation", "steps", "StepPreparation"),
             ("ChordParser", "chords", "ChordParser"),
-            ("Voicing", "tuning", "Voicing"),
-            ("ArrangementStep", "tuning", "ArrangementStep"),
+            ("Voicing", "step_types", "Voicing"),
+            ("ArrangementStep", "step_types", "ArrangementStep"),
             ("GuitarFretboard", "tuning", "GuitarFretboard"),
             ("bass_cost", "bass_place", "bass_cost"),
             ("format_progression", "render", "format_progression"),

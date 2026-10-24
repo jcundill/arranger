@@ -16,7 +16,7 @@ you whether a change is an improvement or a different library.
   through index `5` = high E (string 1). `STRING_NAMES` mirrors these.
 - `MELODY_STRING_CHOICES` — `(5, 4)`: the soprano string indices the *drop-2* path may
   be pinned to (`5` → D-G-B-E, `4` → A-D-G-B). Kept as the default of
-  `get_drop2_voicings` so its published output is unchanged. Index `0` = low E ...
+  `get_drop2_voicings`. Index `0` = low E ...
   `5` = high E, so the conventional guitar string number is `6 - index` (index
   `5` = string 1).
 - `MELODY_STRING_CHOICES_FULL = (5, 4, 3)` — the default soprano set: the high E, the
@@ -56,10 +56,10 @@ you whether a change is an improvement or a different library.
   better melodic position: F7 with a `Db4` soprano moves from `x-6-7-6-x-x` to `x-6-x-2-2-x`,
   the same three pitches with the melody at B-string fret 2 instead of G-string fret 6. That
   is the whole point of letting the melody hold its place by changing strings.
-  **No set skips an *inner* string any more except the `(5,3,2)` shell**: the four
-  `drop24` sets that did - four of that family's eight, two of them its measured winners -
-  were removed because the right hand had to reach over an unplucked string to fret them.
-  [fingering.md](history/fingering.md) §4.4 holds the measurement and what the removal cost.
+  **No set skips an *inner* string except the `(5,3,2)` shell**: the four `drop24` sets that
+  would - four of that family's eight, two of them its measured winners - are not in the
+  tables, because the right hand would have to reach over an unplucked string to fret them.
+  [fingering.md](history/fingering.md) §4.4 holds the measurement and what keeping them out costs.
   `supported_string_sets()` is the playability invariant stated in
   one place, and adds the drop-2 blocks for all three sopranos (drop-2 is defined
   generically, so a caller passing their own `top_string` still works).
@@ -145,15 +145,16 @@ you whether a change is an improvement or a different library.
   slash-bass partition removed before the tuple ran, which is what a slash chord reading
   `does not sound the written bass` means.
 
-  Four more clauses answer the routes that choose no shape from a palette, each of which
-  used to read as something it was not: a **silent** step (`the guitar rests here - the grid
-  places no chord`, where the line previously claimed a harmony under a degree - and the
-  reason after the dash is now `step.silence`'s own, of five: the grid, an `NC` bar with
+  Four more clauses answer the routes that choose no shape from a palette, so that no
+  route reads as something it is not: a **silent** step (`the guitar rests here - no part
+  was asked to sound at this position` - the reason after the dash is `step.silence`'s
+  own, of five: the
+  rhythm, an `NC` bar with
   nothing to comp, no shape for the chord or the tune, no string reaching the melody, or a
   melody-only selection with no tune here), a **comping**
   step (`comping - B 3, D 5 & F# 7; the guitar does not play the tune` — each voice read off
-  the shape as its note and its degree, because the old grip label called a single bass note
-  "shell - 3rd & 7th"), a step that exists
+  the shape as its note and its degree, because a grip label cannot tell a single bass note
+  from "shell - 3rd & 7th"), a step that exists
   for the thumb (`the shape above is held`), and a shape that had to leave the preferred frets
   (`reaches outside the preferred frets 2-13`, with what was inside them from
   `Palette.inside_window`). A palette that is thin because the *texture* asked reads
@@ -177,12 +178,12 @@ you whether a change is an improvement or a different library.
   by the count or by `partial`'s `shell - 3rd & 7th`, and a hold was answered where the shape
   was chosen.
 
-  Two outcomes that used to print the same words are told apart. A non-chord tone whose
-  strategy found nothing reads `non-chord tone - the extension strategy found no voicing; the
-  written chord stands`, where before it read only `non-chord tone` — the words a route that
-  never attempted a substitution would also print (`step.harmonized_as` is what separates the
-  two, and `step.strategy` now carries the strategy *in force* rather than only the one that
-  succeeded). And a comping step reads `the tune is silent here` where the grid stabs at a
+  Two outcomes that would otherwise print the same words are told apart. A non-chord tone
+  whose strategy found nothing reads `non-chord tone - the extension strategy found no
+  voicing; the written chord stands`, where a route that never attempted a substitution
+  prints only `non-chord tone` (`step.harmonized_as` is what separates the two, and
+  `step.strategy` carries the strategy *in force* rather than only the one that
+  succeeded). And a comping step reads `the tune is silent here` where the chord's rhythm stabs at a
   position the tune has no note under, rather than claiming the guitar is declining a note
   that is not sounding.
 
@@ -193,15 +194,12 @@ you whether a change is an improvement or a different library.
   **choice** (why fewer voices, why that fret, why the thumb moves), and it belongs on the line
   where the choice was made: a hold does not repeat its shape's count. Both are *derived
   clauses* in `annotation._annotate`, never branches at a return site, because a fact written as a
-  branch is a fact some route will not print — which is precisely how 22 transposed steps lost
-  their substitute chord and 2 holds lost their octave. `tests/meta_explanations.py` holds the
+  branch is a fact some route will not print. `tests/meta_explanations.py` holds the
   whole invariant as a table of (decision, when this step is one of those, what the line must
   say), swept over every committed head from the step's **fields** rather than from the
   wording; `AGENTS.md` states the rule an editor must follow when adding a choice.
-  It used to take `vertical=True` for a six-line block per
-  chord, and the `--vertical` flag existed only to reach it; both are removed, so
-  this is the compact one-line form alone and `format_tab_staff` is the six-line
-  rendering. `Voicing.tab_block()` still renders a single voicing vertically.
+  It is the compact one-line form alone, and `format_tab_staff` is the six-line
+  rendering. `Voicing.tab_block()` renders a single voicing vertically.
 - `format_tab_staff`, `format_tab_html` and `write_tab_html` **live in
   `tabstaff.py`**, not here, and are re-exported below. See
   [The staff renderers live in `tabstaff.py`](renderers.md#the-staff-renderers-live-in-tabstaffpy).
@@ -221,18 +219,19 @@ you whether a change is an improvement or a different library.
   Three decisions are load-bearing and were each forced by looking at the output:
   - **Fret cells are left-aligned in a fixed-width column.** A right-aligned cell
     looks tidy on its own but puts the fret at the far end of the column, so the
-    chord name and its frets no longer share a column. The column width widens to
+    chord name and the frets under it sit in different columns. The column width widens to
     the longest chord name rather than letting the chord line drift out of step
     with the frets under it.
   - **`collapse` compares sounding pitches, not fret numbers.** The skeleton voices
     one step per eighth, so without it a held chord is restruck eight times a bar and
     the staff is a chord list rather than a held shape. A rest clears the held
     pitches, because a rest genuinely stops the ringing.
-  - **Every bar is ruled, and `measures_per_line` is bars per *line*.** These were one
-    setting once: barlines were drawn every `measures_per_line` bars, on the reasoning
-    that a barline every bar cluttered a grid already dense with columns. Splitting them
-    was forced by TuxGuitar's ASCII export, which closes every measure and wraps at a
-    fixed number of bars. A barline is not clutter — it is the one mark saying where the
+  - **Every bar is ruled, and `measures_per_line` is bars per *line*.** Barlines every
+    `measures_per_line` bars, on the reasoning that a barline every bar clutters a grid
+    already dense with columns, would rule one bar in four and never wrap. TuxGuitar's
+    ASCII export closes every measure and wraps at a
+    fixed number of bars, which is the shape the split follows. A barline is not
+    clutter — it is the one mark saying where the
     metre falls, and without one on every bar a reader cannot tell a two-bar phrase from
     a four-bar one. So `_staff_barlines` marks every bar and `_staff_breaks` marks where a
     line ends, both derived from one `_staff_bars` list so the two cannot disagree. The
@@ -248,25 +247,51 @@ you whether a change is an improvement or a different library.
   grid rather than failing.
 - `GuitarFretboard` — static helpers `note_to_fret(string_index, note)` and
   `fret_to_midi(string_index, fret)`. Out-of-range inputs return `-1`.
-- `ChordParser` — `parse_chord_name(name) -> (root, quality)`,
-  `get_melody_degree(root, melody_note) -> 0..11`, `canonical_quality(quality)`
-  (case-sensitive alias resolution: `M7` -> `maj7`, `M` -> `maj`, `m7` stays `m7`)
-  and
-  `get_chord_tones(quality, chord_name=None)` -> every pitch class in the chord.
+- `ChordParser` — `parse_chord_name(name) -> (root, quality)`, the **tolerant**
+  splitter the renderers and the annotation keep; `parse_symbol(name) -> ChordSymbol |
+  None`, the **strict** resolver the voicing path uses; `quality_of(name)` -> the
+  canonical quality, or `NC`; `get_melody_degree(root, melody_note) -> 0..11`;
+  `canonical_quality(quality)` (case-sensitive alias resolution: `M7` -> `maj7`,
+  `M` -> `maj`, `m7` stays `m7`); and `get_chord_tones(chord_name)` -> every pitch class
+  in the chord, read from the symbol's own root.
   `CHORD_TONES_FROM_ROOT` is the full tone set per quality, and is what
   `grips.drop2_template_for` reads, so the root of a rootless `7b9` still counts
   as a chord tone and every tone of the chord can carry the melody.
+
+  **The chord *name* is the single spelling of the harmony.** A progression element is
+  `(melody note, name)` — there is no quality field beside it — so `Dm7`, `D-7` and
+  `Dmin7` are one chord, a slash bass rides in the same string, and a bare root is a
+  major triad. `parse_symbol` returns `None` for `NC` and raises `ValueError` for a
+  symbol with no readable **root**; a root whose suffix is no table knows comes back
+  carrying that suffix, which is what lets the callers report "the chord symbol could
+  not be read" rather than aborting an arrangement over one unreadable bar. The two
+  readers are deliberate: a renderer wants the spelling the file wrote, and the voicing
+  path wants the chord the tables can answer for.
+
+  **A spelling the tables do not carry is a chord lost, not a bar refused.** An unknown
+  suffix does not raise: the symbol keeps that suffix as its quality, no shape is
+  offered, and the step is the tune alone carrying the "could not be read" clause. That
+  is the right answer for a genuine unknown and the wrong one for a spelling the
+  notation uses — so `QUALITY_ALIASES` carries the standard forms, the parenthesis
+  spellings (`m(maj7)`, `min(maj7)`, `m7(b5)`) and the triangle (`∆7`, `Δ7`) among them,
+  and `tests/meta_chord_names.py` holds every spelling the committed fixtures and the
+  suite's shared progressions use to the tables. **What is missing from the tables is a
+  quality rather than an alias**: `7#9`, `11`/`m11`, `maj13`/`m13`, `mMaj9`,
+  `add11`/`add13`, `m6/9`, `9sus4`/`13sus4`, `7sus2`, `9#11`, `maj9#11` and the power
+  chord `5` each need the recipe in "Adding a new chord quality" rather than a row in
+  the alias table. Whether a given spelling reads is one call, so the list above is
+  re-taken rather than trusted: `parse_symbol("D7#9").quality in TONE_PRIORITY`.
 - `VoiceLeadingEngine` — the core engine:
-  - `get_drop2_voicings(melody_note, chord_type, chord_name=None, top_string=5)`
+  - `get_drop2_voicings(melody_note, chord_name, top_string=5)`
     — one string block; `top_string=4` pins the melody to the B string.
-  - `get_grip_voicings(melody_note, chord_type, chord_name=None, top_string=5,
+  - `get_grip_voicings(melody_note, chord_name, top_string=5,
     grips=GRIP_PREFERENCE)` — candidates for one soprano string across every grip
     family, the general form of `get_drop2_voicings`.
-  - `get_all_grip_voicings(melody_note, chord_type, chord_name=None,
+  - `get_all_grip_voicings(melody_note, chord_name,
     top_strings=MELODY_STRING_CHOICES_FULL, grips=GRIP_PREFERENCE)` — candidates
-    across every allowed soprano string, high-E first, applying the chord-tone match
-    then the quality-only fallback. **Pure**: it neither filters by fret nor
-    transposes. `get_all_drop2_voicings` is this pinned to `grips=("drop2",)`.
+    across every allowed soprano string, high-E first, applying the chord-tone match.
+    **Pure**: it neither filters by fret nor transposes. `get_all_drop2_voicings` is
+    this pinned to `grips=("drop2",)`.
   - `voicing_cost(voicing, criteria)` — the whole selection rule as one comparable
     **7-field** `VoicingScore`: notes outside the chord, then
     frets outside the window, then missing voices, then **span** (with spans 0 and 1
@@ -277,7 +302,7 @@ you whether a change is an improvement or a different library.
     so a tie that runs off the end of the score is broken by generation order:
     `top_strings` first, then `GRIP_PREFERENCE` within one string. The generators still
     take a `grips=` preference list - that is how the order is written down - but no
-    arrangement route reaches it: the axis that let a caller give one is deleted, so the
+    arrangement route reaches it, so the
     family a step is voiced with is `GRIP_PREFERENCE`'s order and nothing else.
     `best_voicing` is its argmin and is stable, so the engine is deterministic.
     **Every input arrives as one `SelectionCriteria` value** (`previous`, the window,
@@ -300,12 +325,12 @@ you whether a change is an improvement or a different library.
   - **No element names a finger, and that is measured rather than omitted.** The right
     hand's own criterion was a candidate and it is settled: measured at every placement it
     changed **0** picks below `position` and **17** just after `span`, across 94 of 1,204
-    pools — and it was answered by *tables* instead, since the four `drop24` sets that
-    carried a finger skip were removed. The only finger questions the engine asks are
+    pools — and it is answered by *tables* instead: the four `drop24` sets that
+    would carry a finger skip are not in them. The only finger questions the engine asks are
     **filters** (`RIGHT_HAND_STRINGS` / `thumb_safe_grips`, `fingers.can_fret`), never
     scores. `docs/history/fingering.md` §4.2 and §4.4 hold the measurements, and §5 step 3
     is the one still open.
-  - `get_octave_down_candidates(melody_note, chord_type, chord_name=None,
+  - `get_octave_down_candidates(melody_note, chord_name,
     top_strings=MELODY_STRING_CHOICES)` — the same for the melody an octave lower,
     on the strings below the high E. Empty when the transposed melody is unvoiceable,
     so the caller keeps its original candidates.
@@ -317,11 +342,13 @@ you whether a change is an improvement or a different library.
   - `NON_CHORD_TONE_EXTENSIONS` — canonical quality → `{melody degree: extension
     quality}`, the routing used by the `extension` strategy.
   - `NON_CHORD_TONE_STRATEGIES` — the accepted `non_chord_tone` values.
-  - `is_chord_tone(melody_note, chord_type, chord_name)` — chord-tone detection
-    using `ChordParser.CHORD_TONES_FROM_ROOT`; `False` for unknown qualities.
-  - `resolve_non_chord_tone(melody_note, chord_type, chord_name, strategy,
-    next_melody=None)` -> `(quality, name)` for a substitute chord, or `None` when
-    the strategy cannot help (the caller then keeps its fallback).
+  - `is_chord_tone(melody_note, chord_name)` — chord-tone detection
+    using `ChordParser.CHORD_TONES_FROM_ROOT`; `False` for a chord whose suffix is no
+    quality this library knows.
+  - `resolve_non_chord_tone(melody_note, chord_name, strategy,
+    next_melody=None)` -> the substitute chord's **name**, or `None` when
+    the strategy cannot help (the caller then keeps its fallback). The quality is read
+    off that name like every other, so it is not returned beside it.
   - `sustain_inner_voices(previous_voicing, melody_note)` — holds the previous
     voicing's inner voices and moves only the soprano; `None` when unplayable.
   - `arrange_progression(progression, **knobs)` — the step loop, and the point every
@@ -329,17 +356,15 @@ you whether a change is an improvement or a different library.
     non-chord-tone strategy where needed, and chooses each shape with
     `select_step_voicing`. The knobs are **not** transcribed here - they are the
     signature, every one of them defaulted, and `ArrangeOptions` carries the same set
-    as one value. (A copy used to live here and had already drifted: it still showed
-    the nine knobs `arrange_progression` had before the axis layer existed, and
-    named `_best_voicing`, which the loop no longer calls.) Two promises it does make:
+    as one value. Two promises it does make:
     an unknown strategy or axis spelling raises `ValueError` before any voicing work,
     and `grips=("drop2",)` with `top_strings=MELODY_STRING_CHOICES` reproduces the
     library's original output exactly, which is what the renderer tests pin their
     fixture to. `timings` and `texture` are the metric layer; see
     [Texture: chords on the beats, fills between](#texture-chords-on-the-beats-fills-between).
     The loop's own shape is [below](#the-step-loop-and-the-five-routes).
-  - `VoiceLeadingEngine.get_interval_voicings(melody_note, chord_type,
-    chord_name=None, top_string=5)` — the two-note `interval` grip, a public entry
+  - `VoiceLeadingEngine.get_interval_voicings(melody_note, chord_name,
+    top_string=5)` — the two-note `interval` grip, a public entry
     point like `get_drop2_voicings` so every family is reachable on its own.
   - `__version__` — the library version string, the single source of truth that
     `pyproject.toml` reads as the dynamic project version. No document may state a
@@ -377,7 +402,7 @@ published facade and delegates to it. The loop has two halves, and the seam betw
 is where most of this document's rules are decided.
 
 **Once per arrangement**, `resolve_knobs` reconciles `options=` with the keywords and
-validates the spellings, and `resolve_policies` resolves the six axes and builds the
+validates the spellings, and `resolve_policies` resolves the axes and builds the
 walked-beat union when a thumb line is running. Both live in **`resolution.py`**, which
 `movement.py` calls: the sentinels and spellings are answered there so the loop reads a
 concrete value on every axis. Both run before any slot is looked at,
@@ -388,7 +413,11 @@ has to be reported **once** rather than never.
 *sings* this slot, the metric weight, the role, the permitted grips, the melody-alone
 kind and, for a silent plan, *why* it is silent (`silence`, one of the `SILENCE_*`
 constants). That decision, and the `Carried` / `SlotInputs` values it reads, live in
-**`slot_plan.py`**; `movement.py` only walks the plans it returns. It no longer refuses a slot outright: a melody-only selection at a position
+**`slot_plan.py`**; `movement.py` only walks the plans it returns. `SlotInputs` is four
+focused groups - `SlotArrangementFacts` (who plays), `SlotRhythmFacts` (when each part
+sounds), `SlotNeckFacts` (the search window and the string order) and `SlotBassFacts`
+(the slash bass) - and the `SlotContext` a route reads is composed of the three that need
+no `grid.Rhythm`, so each route and each plan helper reads only the group it uses. It never refuses a slot outright: a melody-only selection at a position
 with no note gets a silent plan (`MELODY_ALONE_REST` + `tune_silent`) rather than `None`,
 so the tab keeps the bar. The plan then goes to **one** of five dispatch entries:
 
@@ -412,9 +441,12 @@ caller can ask for.
 The four handlers other than `harmonised_step` live in **`routes.py`**. That one -
 prepare, select, demote, or rest - lives in **`harmonised_route.py`**, and the
 candidates it selects among are built by `prepare_step` in **`step_prepare.py`**,
-which is also what the facade reaches for a single step. That split is why the loop
-reads as sequencing rather than as a 250-line handler: `movement.py` is the
-sequencing - the knobs, the slot list, the loop, the bass merge.
+which is also what the facade reaches for a single step. What the hand was still
+holding when a slot arrived - "the last step" and "the last step whose shape the hand
+held" are different questions, because a declined position is emitted silent - is
+**`step_history.py`**'s, since the melody-bearing route and the dispatch table ask it
+too. That split is why the loop reads as sequencing rather than as a 250-line handler:
+`movement.py` is the sequencing - the knobs, the slot list, the loop, the bass merge.
 
 **The order is load-bearing**, and `AGENTS.md`'s trap 12 is what reordering it costs: the
 same slot can reach three of the five depending on its plan, and every ordering is right
@@ -551,14 +583,13 @@ criterion is promoted across another, and the trade was measured rather than gue
 **The two criteria disagree about the same thing.** Position measures how far the
 *hand* moves; span measures how far the hand has to *stretch* once it is there. A
 five-fret shape sitting one fret from where the hand already was wins on position and
-loses on span — and with span ranked below position that shape was chosen, which is
-how the engine came to select `8-x-8-8-13-x` (index at 8, pinky at 13) for a Cm7b5.
+loses on span — and with span ranked below position that shape wins, selecting
+`8-x-8-8-13-x` (index at 8, pinky at 13) for a Cm7b5.
 Keeping the hand still is worth less than being able to play the shape it is holding.
 
 **Promoting span is free where tightening the cap is not.** The obvious alternative is
-to lower `GRIP_MAX_SPAN` from 5, and it was implemented and measured first. It is a
-*filter*, so it deletes a voicing wherever no tighter one exists, and that cost real
-music:
+to lower `GRIP_MAX_SPAN` from 5. It is a *filter*, so it deletes a voicing wherever no
+tighter one exists, and that costs real music:
 
 | cap | voicings kept (of 1008) | what went missing |
 |---|---|---|
@@ -583,15 +614,15 @@ than only through a result.
 **Span 0 and span 1 are bucketed together.** The span index reports `0.0` for both,
 so a zero-span barre and a one-fret reach tie and the decision falls through to neck
 position. One fret of stretch is not a stretch worth moving the hand for, and the
-case that showed it was a player reading the tab rather than a corpus measurement:
-`Bb7` under `F4 → G4 → F4` with a three-note palette (`texture="chord2"`)
+case that came from a player reading the tab rather than from a corpus measurement:
+`Bb7` under `F4 → G4 → F4` with a three-note palette (`Request(chord_notes="2")`)
 was voiced `x-x-6-7-6-x`,
 `x-x-x-3-3-3`, `x-x-6-7-6-x` — down to a fret-3 barre for one note and straight back,
 because the barre spans zero and the natural shape at frets 7–8 spans one. The
 bucket keeps the hand at 6–8 (`x-x-8-7-8-x`). The bucket is applied to the *value*
 at the span index, not by reordering the tuple, so **every span of two or more still
 outranks position exactly as before**: the `8-x-8-8-13-x` case below is untouched,
-and so is the low-Dm7 trade measured below it. Measured over the suite, the change
+and so is the low-Dm7 trade measured below it. Over the suite it
 moves exactly one pinned tab — the last fill of the `targets` texture, `x-x-x-5-5-5`
 → `x-x-10-9-10-x`, which is the same stay-in-place behaviour on a different chord.
 A bucket of `0/1/2` was measured too and **rejected**: it costs 13 tests, including
@@ -599,15 +630,16 @@ the low-Dm7 trade reverting to `5-x-3-5-3-x` and two walking-bass anchor
 refusals, because a four-fret reach competing with barres on position is a
 different decision than a one-fret reach doing so.
 
-**The one case it costs, and why it is not tuned away.** A low Dm7 under D4 is now
-`x-3-3-2-3-x` (span 1, lowest voice C3) where it was `5-x-3-5-3-x` on 6-4-3-2 (span 2,
-lowest voice A2). Both sound the same four pitch classes, both are inside the window,
+**The one case it costs, and why it is not tuned away.** A low Dm7 under D4 is
+`x-3-3-2-3-x` (span 1, lowest voice C3) rather than `5-x-3-5-3-x` on 6-4-3-2 (span 2,
+lowest voice A2), which is what a tie would fall to. Both sound the same four pitch
+classes, both are inside the window,
 both are complete, so span decides and the narrower one wins — and the cost is the
 bass, since C is the 3rd where A was the 5th, and 6-4-3-2 is the only default set that
 reaches the low E at all.
 
-The obvious repair is to rank the bass-function term above span. That was implemented
-and measured, and it **brings `8-x-8-8-13-x` straight back**: the same ordering that
+Ranking the bass-function term above span **brings `8-x-8-8-13-x` straight back**:
+the same ordering that
 rescues the low bass also lets a five-fret shape with a root bass beat a one-fret shape
 without one. The two criteria cannot both come first, so the choice is which to
 favour. Span is favoured because a five-fret stretch is a shape the hand may not be
@@ -633,11 +665,11 @@ inclusively would describe a reach the hand does not make, and would make the li
 | `duo` | 2 | the chord's guide tone — the 3rd, or the 4th on a sus chord — under any chord tone |
 
 **`drop3` and `drop24` exist for a second reason, which is the one that matters.** A
-melody that is *not* a chord tone leaves drop-2 with no template and no shell, so its
-quality-only fallback states notes the chord does not contain. Both derive from the close
-stack under the melody, which keeps every *other* voice a chord tone: measured over every
-quality and every melody in the register they carry **no** wrong notes where drop-2's
-fallback carries hundreds, and with the bass permitted to skip a string both are as tight
+melody that is *not* a chord tone leaves drop-2 with no template and no shell, so it
+offers no drop-2 shape at all for that melody. Both derive from the close stack under the
+melody, which keeps every *other* voice a chord tone: measured over every quality and every
+melody in the register they carry **no** wrong notes - and the quality-only fallback that
+used to carry hundreds is gone with the quality field, and with the bass permitted to skip a string both are as tight
 as drop-2 — frequently span 0 to 2.
 
 **Every four-note voicing sounds the chord's 3rd and 7th**, and so does every three-note
@@ -657,10 +689,10 @@ widest four-note shape there is, twenty semitones from melody to bass for a Cmaj
 is unplayable on four neighbouring strings and becomes frettable only through the
 skipping rule below: the bass voice takes a lower string. Four of its eight sets instead
 made it frettable by skipping an **inner** string — 1-2-4-5 (the G), 2-3-5-6 (the B),
-1-3-4-6 and 2-4-5-6 — and **those four are now removed**, because the digit that takes a
+1-3-4-6 and 2-4-5-6 — and **those four are not in the tables**, because the digit that takes a
 string above an unplucked one has to reach over it. That is not a tidy-up: 1-2-4-5 and
 2-3-5-6 were this family's measured winners over sevenths, ninths and sixths, and over
-the committed heads the removal moves 260 of 1,204 selections and takes 57 of the 1,087
+the committed heads keeping them out moves 260 of 1,204 selections and takes 57 of the 1,087
 four-note steps down to fewer voices — **41 of them to the melody alone**, 16 to a duo —
 because the best shape left at that melody position then sits at the top of the span
 budget and `should_demote_to_melody_alone` drops it, and two positions in the pinned
@@ -692,7 +724,7 @@ Five decisions in here were each forced by something measurable:
   asserted against (`tests/support.py::WITNESS`, read by `tests/test_generated_grips.py`)
   rather than trusted. The extended qualities
   are voiced *rootless* on purpose, so a 9 or a 13 that fits in four voices without the
-  root is a musical decision; it is now a rule rather than 119 numbers, which is what makes
+  root is a musical decision; it is a rule rather than 119 numbers, which is what makes
   it auditable and worth one line to change. Deriving drop-3 and close position from the
   same chord tones instead gives a *fuller* chord — every tone the rule left out comes back
   — a legitimate but different voicing, which is why those families keep their own rule.
@@ -702,22 +734,20 @@ Five decisions in here were each forced by something measurable:
   from `SHELL_DEGREES` — the 3rd, or the **4th** on a suspended chord, with the 7th as the
   fallback — rather than from a list written out separately. That table already encodes
   the arranging guide's rule, and sharing it means a quality cannot gain a shell and lose
-  its duo. It replaced a hand-written `(4, 3, 0)` scan that had two faults: it listed no
-  sus degree, so `sus4`, `sus2` and `7sus4` admitted **no duo anywhere**, and its root
-  fallback was unreachable besides, filtered out by its own `d not in DUO_DEGREES` guard.
+  its duo: a hand-written `(4, 3, 0)` scan has two faults - it lists no
+  sus degree, so `sus4`, `sus2` and `7sus4` admit **no duo anywhere**, and its root
+  fallback is unreachable besides, filtered out by its own `d not in DUO_DEGREES` guard.
   The fallback to the 7th is load-bearing: when the melody *is* the 3rd, `[0]` would place
   a unison under it, and a measured 252 of these cases are exactly that.
 
-  This used to be a **hard rule on the melody** — `DUO_DEGREES = (0, 7)`, generated only
-  under a root or a 5th, on the reasoning that a 3rd or a 7th there *is* the chord's
-  function and a bare duo under it sounds wrong. That reasoning does not survive the
-  guide-tone rule the family is built from: a guide tone *beneath* a 3rd or a 7th is what
-  states that function, and it is the clearest possible statement that the two notes are
-  this chord. The gate is gone. A melody that is not a chord tone never reaches the duo
+  There is **no rule on the melody degree**, and none was needed: a guide tone
+  *beneath* a 3rd or a 7th is what states that function, and it is the clearest possible
+  statement that the two notes are this chord. A melody that is not a chord tone never
+  reaches the duo
   at all, because the non-chord-tone strategies rewrite the chord before generation — so
   a b6 arrives as the 9th or 13th of a resolved chord rather than as a passing note with
-  a duo under it. `TestDuoHardRule` asserted the old rule and is **inverted rather than
-  deleted**, because a 3/7 duo consists of genuine chord tones and the "only chord tones"
+  a duo under it. `TestDuoHardRule` asserts that a 3/7 duo is admitted, because a 3/7 duo
+  consists of genuine chord tones and the "only chord tones"
   check would not catch it either way.
 
   - **A 2nd under the melody is dropped an octave.** When the guide tone lands within two
@@ -750,18 +780,18 @@ Five decisions in here were each forced by something measurable:
   string out for the B, so its lowest note is the low E while its soprano is the B, not
   the G. It is the answer to a different question — a *bass* — and it is the only default
   set that can reach one.
-- **6-4-3-2 is searched for, and it needed a cost term to be chosen at all.** The same
+- **6-4-3-2 is searched for, and it needs a cost term to be chosen at all.** The same
   reason as 6-4-3: the set skips a string, so it is not in descending pitch order down
   the strings, so an interval-laid table cannot express it — the D string is a fifth above
   the low E, and the low E's note is frequently *not* the lowest sounding pitch.
   `_drop2_6432_request` therefore states that claim as a request to the shared search rather
   than inventing a second way to
-  place notes, and the search ranks the survivors by `(fret_span, avg_fret)`. Two
-  measurements forced the rest. Ranking is not cosmetic: an unranked
-  search returns the first shape it meets, which puts the low E at fret 0–1, below
-  `NECK_FRET_MIN`, and an earlier "0 of 22, never selected" reading was that bug. And
-  ranked correctly it still lost — `voicing_cost` reached the neck-position term first
-  and declined the better bass, so it wins only where the two shapes tie outright. Hence
+  place notes, and the search ranks the survivors by `(fret_span, avg_fret)`. Ranking is
+  not cosmetic: an unranked search returns the first shape it meets, which puts the low E
+  at fret 0-1, below `NECK_FRET_MIN` — which is what a "0 of 22, never selected" reading
+  is reporting. And
+  ranked correctly it still loses — `voicing_cost` reaches the neck-position term first
+  and declines the better bass, so it wins only where the two shapes tie outright. Hence
   the root-or-5th bass term at index 6, a *tie-break* below every correctness criterion,
   which is what finally lets `5-x-5-5-5-x` (A2 G3 C4 E4) beat `x-3-5-2-5-x` (A2 E3 C4 E4).
 - **A partial harmonisation is a fallback, not a style.** `missing` voices outranks neck
@@ -771,45 +801,55 @@ Five decisions in here were each forced by something measurable:
   arranging guide's — a shell sounds the 3rd *and* the 7th and a duo only one of them, so
   the shell is the fuller statement and the duo is the fallback beneath it.
 
-  This paragraph used to claim a permitted root-or-5th duo "scores zero there and
-  competes on equal terms". It never did: `missing` is `4 - len(active)` and nothing
-  exempts a duo. Measured, adopting that claim would move 33 of 463 corpus steps (7.1%)
-  and take **7 of them from shells** — inverting the very ranking the guide-tone argument
-  requires. The code was right and the sentence was wrong, so the sentence is corrected
-  and the cost tuple is untouched.
+  A permitted root-or-5th duo does **not** "score zero there and compete on equal terms":
+  `missing` is `4 - len(active)` and nothing exempts a duo. Measured, adopting that claim
+  would move 33 of 463 corpus steps (7.1%) and take **7 of them from shells** - inverting
+  the very ranking the guide-tone argument requires, which is why the cost tuple ranks a
+  duo exactly as it ranks a shell.
 
 The window is a **penalty, not a filter**: a step with no voicing inside frets 2–13 is
 still played, just outside it. A filter would silently drop every step whose melody
 has no in-window shape, and losing a chord of the tune is worse than being a fret out
 of position. `tests/test_grip_tables.py::TestFretWindow` pins that.
 
-## The request, and the six axes under it
+## The request, and the axes under it
 
-`head`'s CLI asks six questions and derives the axes from them. This document describes
-the axes, because they are the implementation: **a request is resolved into them once,
-and nothing below this section reads the request again.**
+A caller asks six questions, and the six are one value (`options.Request`) spelled twice:
+by `head`'s flags and by `Request(...)` on the library's own front door,
+`arrange_progression(progression, request=Request(...))`. This document describes the
+axes, because they are the implementation: **a request is resolved into them once, and
+nothing below this section reads the request again.** `cli._REQUEST_DESTS` is the one list
+holding the two spellings together, and `tests/test_request.py` asserts it.
 
-| the question (CLI) | the axis it resolves to |
-|---|---|
-| `--no-melody` | `parts=` — the melody part is dropped from the selection |
-| `--chord-on POSITIONS` | the chord layer's rhythm (`grid`, rewritten around `Rhythm`) |
-| `--chord-notes full\|3\|2\|1` | `texture=uniform\|chord3\|chord2\|chord1` |
-| `--chord-fills none\|hold\|comp` | chord slots in the tune's rests, plus `parts=` including the chord |
-| `--bass-on POSITIONS` | the bass layer's rhythm, and `bass=` when it is not `none` |
-| `--bass-notes root\|root-5th\|walk` | `bass=root`, `bass=root,5th`, or the full four rules |
+| the question | the flag | `Request(...)` | the axis it resolves to |
+|---|---|---|---|
+| who plays the tune? | `--no-melody` | `melody=False` | `parts` — the melody part is dropped from the selection |
+| when does the chord attack? | `--chord-on POSITIONS` | `chord_on="1and"` | the chord layer's `Rhythm` — where a chord falls |
+| what does the chord state? | `--chord-notes full\|targets\|3\|2\|1` | `chord_notes="2"` | the texture axis — `uniform`, `targets`, `chord3`, `chord2`, `chord1` |
+| what does it do in a melody rest? | `--chord-fills none\|hold\|comp` | `chord_fills="hold"` | chord slots in the tune's rests, plus `parts` including the chord |
+| when does the thumb attack? | `--bass-on POSITIONS` | `bass_on="every-beat"` | the bass layer's rhythm, and `bass` when it is not `none` |
+| what does each thumb note state? | `--bass-notes root\|root-5th\|walk\|rules` | `bass_notes="walk"` | the bass axis — the three names, or the rules themselves as a list (`root,approach`), which is what the names are sugar over |
 
-`harmony=` is not on that list: it is the one axis with no request spelling, because it
-is read only on the comping route and the request that route answers is `--no-melody`,
-whose chord content is `--chord-notes`'s. The metre is read from the score (`grouping`,
-below) rather than from a flag.
+The values are the flags' own strings, so a request read off a run header is one a caller
+can paste into Python. The axes those questions resolve to are the engine's implementation
+and are **derived from the request, never spelled**: `options=ArrangeOptions(...)` carries the
+knobs that are not a question about the music (`top_strings`, `fret_min`, `fret_max`, the
+non-chord-tone strategy), and the request and the metre are **input facts** beside it —
+`request=` and `time_signature=` say what is being arranged rather than how to play it, so
+one call may name both.
+
+The metre is read from the score (its grouping, below) rather than from a flag.
 
 **The resolution is a derivation with refusals, not a set of defaults**, and it happens
 before any voicing work (`options.resolve_request` → `resolution`). A content question
 about a layer the request leaves silent is refused with the reason; a position the metre
-does not have is refused by the parser; and `--no-melody` derives the chord's rhythm to
-the metre's felt beats rather than refusing, because its default names a melody this
-guitar does not have. A **spelled axis** still wins over the derivation in the Python
-API, which is what lets this document's measurements be taken on one axis at a time.
+does not have is refused by the parser; and `--no-melody` needs no derivation at all,
+because the written onsets are a fact about the **score** rather than about who plays it:
+a comping selection states the chord where the tune states a note, and
+`chord_on="every-beat"` is how a caller asks for the metre's own reading. Every measurement
+below is taken by spelling the **request** that derives the axis —
+`Request(chord_notes="targets")`, `Request(bass_notes="walk")` — because the request is the
+only door to them.
 
 ## Texture: chords on the beats, fills between
 
@@ -818,9 +858,15 @@ the bar a note falls, so the `eighths` skeleton — one slot per eighth — prod
 re-struck four-note chords per bar. That is a chord list. `tabstaff`'s `collapse`
 hides it in the *drawing*; the selection never made the decision.
 
-`texture="targets"` is that decision. It is the arranging guide's method — full chords
-on the principal melody notes, something lighter in the gaps — expressed as **a change
-to what may be played**, never as a change to what is preferred.
+`Request(chord_notes="targets")` is that decision. It is the arranging guide's method —
+full chords on the principal melody notes, something lighter in the gaps — expressed as
+**a change to what may be played**, never as a change to what is preferred.
+
+**The request names it too**, as `--chord-notes targets` / `Request(chord_notes="targets")`,
+so every `TEXTURE_STYLES` value has a request spelling and the two vocabularies are a
+bijection (`tests/test_request.py` holds the two sets to each other). What the request names
+is the **policy** rather than the positions: where the strong beats fall is the metre's and
+the grouping's business (`TARGET_BEATS`, below), and `--chord-on` names the attacks.
 
 `uniform` is **derived, not listed**: it is the most notes the arithmetic allows at that
 position — with the tune on top and no thumb that is three, the four-note shape this library
@@ -837,20 +883,27 @@ Five decisions are load-bearing:
   against each other" property of `voicing_cost` untrue. `TEXTURE_ARITY` maps
   texture → the chord part's arity, `texture_palette` turns that into the families a
   role may use at this position, and `arrange_progression` passes the role's tuple to
-  the generator. Generation and selection stay separate exactly as they already were.
-- **"No timing" is not "a weak note".** `metric_weight` returns **-1** when `bar` or
-  `beat` is `None`, and `roles_for_slot` treats anything below zero as a target. This
-  is the single line that makes the feature opt-in: with `timings=None` every slot is a
-  target and the output is byte-identical to what it always was.
-  `tests/test_texture.py::TestBackwardCompatibility` pins that against the exact tab
-  of the library's own demo cadences, and it was written *before* any behaviour
-  changed so every later step is checked against pre-existing output.
+  the generator. Generation and selection stay separate.
+- **A stated absence is not "a weak note".**
+  `metric_weight` returns **-1** when `bar` or `beat` is `None`, and `roles_for_slot`
+  treats anything below zero as a target. That `-1` is what a caller **states** - a
+  `(None, None, None)` entry in `timings=`, which is how the importer says "the tune is
+  silent here" - rather than what a bare call gets. `arrange_progression` lays a
+  progression that supplied no timeline out on the metre's own felt beats
+  (`resolution.felt_beat_timings`: entry `i` on beat `i` of the bar), so `bar` and `beat`
+  come back on every step and a requested chord rhythm has somewhere to land. Two limits
+  are deliberate: the duration stays `None`, because a bar and a beat are positions the
+  metre states and a notated length is not, and the bar is **not completed**, because
+  inventing the fourth beat would state a chord the caller never wrote.
+  `tests/test_grid.py::TestAProgressionWithNoTiming` pins the layout, that the shipped
+  request's output is unchanged by it, and that `chord_notes="targets"` states the strong
+  beats on a hand-built progression.
 - **A beat is a counting position, not a quarter note.** `TARGET_BEATS = (1, 3)` names
   felt beats, and `beats_per_bar` and `grouping` decide which exist: a 3/4 head targets
   1 and 3, a 2/2 head has only the downbeat, and a 12/8 bar's grouping `(3,3,3,3)` puts
   its targets on beats 1 and 7. The comparison uses `BEAT_EPSILON` because a notated
-  beat is a float — a 3/4 bar's second beat is 1.666… — and the earlier draft of
-  `metric_weight` compared the *tuple index* against `beats_per_bar`, which let a
+  beat is a float — a 3/4 bar's second beat is 1.666… — and comparing the *tuple index*
+  against `beats_per_bar` lets a
   2/2 bar inherit 4/4's second target. `headxml.arrange_xml_head` passes
   `head.beats_per_bar` through for this reason, and the committed corpus spans cut,
   common and waltz time — `synthetic_waltz.musicxml` is the 3/4 one, and it is the reason
@@ -880,22 +933,22 @@ Five decisions are load-bearing:
   where it does not — a `targets` target — there is nothing to demote *to*.
   `melody_only` stays **False**: the step does have a harmony, it is simply not spelled
   out, so the flag would make the annotation claim "no chord". `chord_unvoiced` stays
-  false for the same reason from the other side: a complete shape **did** exist here and
-  was refused for its reach, so "no voicing for this chord" would be claiming something
+  false for the same reason from the other side: a complete shape **does** exist here and
+  is refused for its reach, so "no voicing for this chord" would be claiming something
   that is not true.
 - **The role's palette is the texture's business: there is no grip axis.** A caller
-  cannot name a grip family. `texture=` states the chord part's arity and
+  cannot name a grip family. `texture` states the chord part's arity and
   `texture_palette` builds the families that arity admits from `GRIP_PREFERENCE`, so a
   family the texture never uses cannot be asked for, and a tie that runs off the end of
   the cost tuple falls to the engine's own order rather than a caller's.
 
   Both entry points need this — `arrange_progression` and
   `arranger.slots.arrange_slots` — because a head read from a file takes the second
-  and a hand-built progression the first. They are no longer two loops, so this is
+  and a hand-built progression the first. One loop serves both, so this is
   a request built in two places rather than a policy applied twice: fixing only one
   would leave the same request behaving two different ways depending on the entry point.
 - **An `interval` is a texture; a duo is a harmony.** Both are two notes under the melody,
-  and they are now offered under any melody degree, so the degree no longer distinguishes
+  offered under any melody degree, so the degree does not distinguish
   them. What does is the rule that builds them. An interval is not claiming the chord, so
   its second voice is whichever of a 3rd, 6th or 10th it can reach — falling back to the
   **major scale's** pitch classes when the melody is not in the chord, because a diatonic
@@ -958,11 +1011,10 @@ The three metre-driven rules read the grouping and nothing else:
   downbeat target.
 - the walking bass invents one note per **felt beat** and takes its approach on the last
   one — four notes in 12/8, not twelve.
-- the named grid figures are group-relative. `freddie` is one stab per felt beat;
-  `joe_pass` and `final_and` answer on a group's **last unit** (the third eighth of a
-  dotted quarter, the `and` of a simple beat), so the simple-metre table is unchanged
-  and the compound one is musically placed. A group index the bar does not have is
-  dropped, never clamped.
+- a requested chord rhythm's **positions are felt beats**, so `every-beat` is one stab
+  per felt beat and `lastand` is the last felt beat's midpoint in any metre. A position
+  the bar does not have is refused by `parse_rhythm`, never clamped to the nearest one
+  it does have.
 
 **The score states the grouping, in three channels, and the importer reads them in this
 order:**
@@ -1014,8 +1066,8 @@ a jump cannot stop the jump, because both are legal shapes, and `span` deliberat
 outranks neck position in the tuple. Measured when this landed, over the heads
 then in the tree and the three textures then shipped: **21** of 2,399 steps change, every
 one of them under `targets` — 18 a different shape and 3 only the flag — while
-`uniform` and a walking thumb line (`bass="root,5th,approach,nearest"`) are untouched. The
-narrowing **cannot starve a step**: a thin palette with nothing on the
+`uniform` and a walking thumb line (`Request(bass_on="every-beat", bass_notes="walk")`) are
+untouched. The narrowing **cannot starve a step**: a thin palette with nothing on the
 held string keeps its candidates unchanged, and such a step is then simply not marked
 `repeated`.
 
@@ -1033,17 +1085,18 @@ that `ArrangementStep.repeated` is set, and the renderers honour it.
   flag by striking the soprano alone and collapsing the chord to that note: on another
   string no finger is holding the note, so a marked step would mute the chord it had just
   voiced and sound a note the hand is not on. `decisions.holds_the_shape` is the half that the
-  narrowing and the flag share. Measured: **22 of 202** marked steps re-struck the melody
-  on another string before the fix — every one of them under `targets`, where a fill's
-  compact 6-4-3 shell beats a same-string alternative on `span` — and **0 of 199** now.
-  The report that found it was bar 3 of the committed "synthetic common time", four G4s
-  over `Eb7`: the two targets held the note on the B string and the two fills moved it to
-  the G string, four frets away, while the steps still claimed to be holds.
+  narrowing and the flag share. Measured: **22 of 202** marked steps would re-strike the
+  melody on another string without it — every one of them under `targets`, where a fill's
+  compact 6-4-3 shell beats a same-string alternative on `span` — and the rule takes that
+  to **0 of 199**.
+  Bar 3 of the committed "synthetic common time" is the case: four G4s
+  over `Eb7`, where the two targets hold the note on the B string and the two fills move
+  it to the G string, four frets away, while the steps claim to be holds.
 - **The harmony must also be unchanged.** A note repeating across a *chord change* is
   not a hold: the ringing inner voices belong to the chord the hold began on, so
   printing the new chord's name over a single struck note claims a harmony that is not
   sounding. Those steps are harmonised against the new chord and struck in full, which
-  is what the engine already does — only the rendering used to discard it.
+  is what the engine decides — and the rendering keeps it.
   `normalised_harmony()` supplies the comparison: `harmonized_as` when a strategy
   substituted a chord, otherwise the written name, canonicalised to `(root, quality)`
   so `D-7` and `Dm7` are one chord rather than two. The `-7` suffix is an alias of
@@ -1072,9 +1125,9 @@ walk is `bass_only` and the previous shape is what is still ringing.
 Every string the step does not play is marked muted (**`x`**), so the line states
 exactly which strings are plucked and nothing else - including a `bass_only` slot,
 whose upper voices are held rather than restruck: a string the player must not attack
-reads the same as a mute here. Leaving them blank made the line look truncated, and a
-blank is indistinguishable from a voice that went missing. (`~`, "let ring", was an
-earlier draft and is still wrong: it says the opposite of what a collapse does.)
+reads the same as a mute here. Leaving them blank makes the line look truncated, and a
+blank is indistinguishable from a voice that went missing. (`~`, "let ring", would say the opposite of
+what a collapse does.)
 
 The HTML marks the whole column with `_CLASS_REPEAT` (`td.repeat`) and tints it. The
 cells are otherwise empty, so without the tint a repeated note reads as a gap in the
@@ -1096,8 +1149,9 @@ the step's role:
   whatever the shape is, so a comp of four attacks a bar stays four attacks;
 - **nothing above the thumb has changed** (`decisions.melody_is_ringing`): the harmony is
   the one already ringing and the melody is the note still sounding. A note repeating
-  across a *chord change* is not a hold — printing the new name over the old voices would
-  claim a harmony that is not sounding — so such a step is voiced afresh and struck.
+  across a *chord change* is not a hold — printing the new name over voices from the
+  previous chord would claim a harmony that is not sounding — so such a step is voiced
+  afresh and struck.
 
 The role is deliberately not consulted. A slot the walk invented on a strong beat is a
 `target`, and reading that as "a target states its harmony, so it cannot be a hold"
@@ -1111,7 +1165,7 @@ struck" in its own notation: the one-line tab and the staff draw the thumb and m
 rest, `tabgp` writes the thumb as a new note and the ringing shape as ties, and `tabxml`
 re-states those pitches and ties them — a score has no other way to say *still sounding*.
 
-**One measured caveat, stated rather than left to be discovered.** The shape a held step
+**One measured caveat.** The shape a held step
 records (`step.voicing`) is the one the selector preferred; the shape that *sounds* is the
 one already down. They are the same shape in all but a handful of cases — over the
 committed heads under `--bass-on 1,2,1and,2and`, **3 of its 293** held shapes differ in
@@ -1196,9 +1250,9 @@ melodic interval.
   what decides: `x-3-2-0-1-x` and `x-10-10-9-8-x` against the drop-2 & 4 readings
   `3-x-2-0-1-x` and `8-x-10-9-8-x`. Raising the span to admit the rest is a real change to
   the library's playability contract, not a tuning knob.
-- **A chord tone with no matching inversion used to fall through to the quality-only
-  fallback**, which can sound a note the chord does not contain — a 9th in the melody of a
-  13 chord, for example. That gap is **closed**, and closed for every chord tone: the rule
+- **A chord tone with no matching inversion has no fallback to fall through to** - the one
+  that used to answer it sounded a note the chord does not contain, a 9th in the melody of a
+  13 chord for example, and it is gone with the quality field. That gap is **closed**, and closed for every chord tone: the rule
   answers for all 125 degrees of the 29 qualities, each pure and stating both guide tones,
   so `get_drop2_voicings` has a shape of its own for every chord tone a melody can be.
   `tests/test_grip_tables.py::TestKnownTableGaps` pins the closure, so a regression re-opens it
@@ -1212,7 +1266,7 @@ melodic interval.
   Measured over 25 transcriptions after the head-path fix, **26.0%** of head steps still
   carry an inner voice outside the sounding chord, against **23.0%** for the same
   progressions through the library. The two are close, which is the point: the head
-  path is no longer a second, weaker implementation of the same rule.
+  path is one implementation of the rule rather than a second, weaker one.
 - A melody that can only be voiced above `HIGH_FRET_LIMIT` is moved down an octave,
   so `step.melody` can be an octave below the written note. The decision is per step
   and applies to the melody alone, so a leap across the limit can leave one melodic
@@ -1222,11 +1276,10 @@ melodic interval.
 - Non-chord melody notes are only covered for the mappings in
   `NON_CHORD_TONE_EXTENSIONS` (9ths, 6/9s, 11ths, #11s, b13s, 13ths, the
   half-diminished 9th and the 9th over a plain triad) plus the dim7 substitution. An
-  unmapped non-chord tone keeps the quality-only fallback, which can sound the melody
-  over a different chord's shape — and the step's non-chord-tone clause says that is
-  what happened.
+  unmapped non-chord tone has nothing to state, so the melody sounds alone under its
+  chord and the step's non-chord-tone clause says that is what happened.
 - **A palette that cannot voice a chord leaves the tune alone** rather than dropping it.
-  `shell`, `duo` and `interval` are built from the chord's own degrees, so they have no
+  `shell`, `duo` and `interval` are built from the chord's own degrees, so there is no
   quality-only fallback to thin to — where the four-note families always have something.
   Under a shell-only palette a note with no mapping and no shell therefore had **no**
   candidate
@@ -1238,10 +1291,10 @@ melodic interval.
   `tests/test_progressions.py` pins, the position emitted silent — and a melody no string
   reaches at all is likewise emitted silent rather than voiced, with `silence="out_of_reach"`
   on the step and `_silence_clause` naming the palette.
-- A handful of low melodies (around `G3`–`C4`) reach no chord-tone-matched inversion
-  and therefore use the quality-only fallback. Triad shapes double the root, so their
-  second voice can sit up to 10 semitones below the melody — the same span limit, not a
-  new failure mode.
+- A handful of low melodies (around `G3`–`C4`) reach no chord-tone-matched inversion, and
+  there is no quality-only fallback to cover them any more. Another family that builds from
+  the chord's own tones answers, or the step keeps the tune and loses the chord with a
+  clause naming why.
 - **A partial harmonisation means the printed chord name is not every note sounding.**
   Where a shell or a duo is used, the chord describes the harmony rather than the full
   voicing, and `step_annotation` says so and says why (`(shell - 3rd & 7th, partial -
@@ -1252,7 +1305,7 @@ melodic interval.
   consequence of the user's own brief — "just harmonising with the 3rd and 7th is fine" —
   not a defect, but it is a real thing to know before reading a tab.
 - The `sustain` strategy is structural, not rhythmic: `arrange_progression` takes
-  only `(note, quality, name)` triples, so it cannot tell a brief passing note from
+  only `(note, name)` pairs, so it cannot tell a brief passing note from
   an accented tension. Holding the inner voices is applied whenever the shape can
   physically stay put.
 - `7b9`/`7alt` are voiced rootless apart from their new root-in-top inversion;
@@ -1260,7 +1313,7 @@ melodic interval.
 - If no voicing matches a melody/chord, `arrange_progression` **emits a rest step** with
   `silence="no_shape"` — the bar stays on the tab and `_silence_clause` says why — rather
   than raising or dropping the position.
-- **Texture (`texture="targets"`):**
+- **Texture (`Request(chord_notes="targets")`):**
   - **The target-note rule is a fixed `(1, 3)`.** There is no way to say "chords on
     beat 1 only", or "fills on beat 2 as well", or to mark a bar that is all target
     notes — a cadenza or a shout chorus, say. The rule lives in one function
@@ -1272,7 +1325,7 @@ melodic interval.
     full chords between. That is deliberate — see the section above — but it means
     the texture is a *tendency*, not a guarantee.
   - **Strong-beat fingerings differ from a `uniform` arrangement.** A target is
-    voice-led from the shape before it, which is now thinner, so it does not keep the
+    voice-led from the shape before it, which is thinner, so it does not keep the
     same position. Correct, but it means the two textures are not comparable
     fret-for-fret.
   - **The `interval` grip's diatonic fallback assumes a major key.** `_interval_offsets`
@@ -1282,19 +1335,19 @@ melodic interval.
     not added: nothing in the pipeline supplies a key, and inferring one from the
     chord progression would be a guess.
 
-### Melody alone: `parts="melody"` and `parts="melody,bass"`
+### Melody alone: `Request(chord_on="none")` and a thumb under it
 
-Two selections that answer "lead sheet in, the tune out". `parts="melody"` plays the
-melody and nothing else, and `parts="melody,bass"` plays the same line with a walking
-thumb under it and still nothing harmonising it. Neither is a *grip*, for the reason
-above: what they change is which parts sound at all, and a grip would have to win a cost
-comparison it should not be in. `parts="melody,bass"` is one selection plus a `bass=`
-answer rather than a second mode: the thumb line is the bass part's own axis.
+Two selections that answer "lead sheet in, the tune out". `Request(chord_on="none")` plays
+the melody and nothing else, and the same request with `bass_on="every-beat"` plays the same
+line with a walking thumb under it and still nothing harmonising it. Neither is a *grip*,
+for the reason above: what they change is which parts sound at all, and a grip would have to
+win a cost comparison it should not be in. The second is one selection plus a thumb line
+rather than a second mode: what that line states is the request's own `bass_notes` answer.
 
 A melody-only selection reaches `melody_alone_case` through the selection itself
 (`parts.parts_has_melody_only`), which is the fact that says the chord part is not the
-guitar's - not through a palette, because the empty palette that used to declare this is
-gone with the grip axis: no texture, selection or thumb line yields one now
+guitar's - not through a palette, because no texture, selection or thumb line yields an
+empty one
 (`tests/test_texture.py` sweeps them all and requires a non-empty palette). The route is
 `get_melody_only_voicings`, whose palette is one position per
 eligible string, and the selection among them is `cost.voicing_cost`'s - so the note a
@@ -1311,7 +1364,7 @@ Three decisions are load-bearing:
   melody part present and the chord part absent, the bass part deliberately not — and
   never a texture named as a literal. A literal is how a spelling joins the melody-alone
   route in one place and misses it in another.
-- **No texture carries an empty palette any more, and that is asserted.**
+- **No texture carries an empty palette, and that is asserted.**
   `tests/test_texture.py` sweeps every texture, selection and thumb line and requires a
   non-empty palette from each, because an empty one means "the left hand plays nothing"
   and that claim belongs to the selection rather than to a row.
@@ -1322,35 +1375,35 @@ Three decisions are load-bearing:
   and pinned in `TestMelodyOnlySelections` rather than left implied by a test that
   happens not to look at it.
 
-The two selections differ in exactly one thing — the thumb line — which is what makes
-them one selection plus a `bass=` answer rather than two spellings: `parts="melody,bass"`
-is `parts="melody"` with a thumb line under it, and `bass=auto` reads the selection (the
-table below).
+The two selections differ in exactly one thing — the thumb line — which is what makes them
+one selection plus a bass answer rather than two spellings:
+`Request(chord_on="none", bass_on="every-beat")` is `Request(chord_on="none")` with a thumb
+line under it, and `bass_notes` decides what that line states (the table below).
 
-### The bass style: `bass=` as its own axis
+### The bass: which note rules the thumb states
 
-The thumb line used to be part of a texture's *name*, so one word meant both "a shell on
-the strong beats" and "a note on every beat below". Two separable decisions
-wearing one identifier. It is now `texture=` (the left hand) crossed with `bass=` (the
-thumb), and `bass=auto` — the default — means **no line at all**: a caller who wants one
-names the note rules or a `bass:walk` grid row. The sentinel still writes a line in one
-case, and it is a selection rather than a texture:
+The thumb line is not part of a texture's *name*: "a shell on
+the strong beats" and "a note on every beat below" are two separable decisions, and one
+identifier for both would wear them as one.
+identifier. The request asks both, and they are different questions — `chord_notes` says how
+much of the chord sounds, `bass_on` says **when** the thumb attacks, and `bass_notes` says
+what each of its notes states. `bass_on="none"` is the default and is **no line at all**:
 
-| selection | default bass | equivalent to |
-|---|---|---|
-| `parts="melody,bass"` | `root,5th,approach,nearest` | `parts="melody,bass", bass="root,5th,approach,nearest"` |
-| everything else | `none` | `bass="none"` |
+| the request | what the thumb states |
+|---|---|
+| `Request(bass_on="every-beat", bass_notes="walk")` | `root,5th,approach,nearest` — the whole vocabulary |
+| `Request(bass_on="1", bass_notes="root")` | the root rule alone, on the positions the rhythm names |
+| `Request(bass_on="none")` | nothing, whatever `bass_notes` says |
 
-`parts="melody"` alone keeps no thumb, and the two spellings are one arrangement:
-`parts="melody", bass="root,5th,approach,nearest"` is the tune with a thumb line under it.
-A lone `parts="bass"` selection keeps none either: that part already is the bass line, and a
-thumb under it would double it.
+`Request(chord_on="none")` alone keeps no thumb, and adding `bass_on` to it is the tune with
+a thumb line under it. A request that takes the bass part and nothing above it is a bass line
+already, and `bass_notes` is what states it.
 
-All the equivalences are asserted byte-for-byte against the rendered tab, so nothing moved
-when the axis was separated out.
+The equivalences are asserted byte-for-byte against the rendered tab
+(`tests/test_request.py`, `tests/test_walking_bass.py`).
 
-The **vocabulary** lives in `arranger/bass_rules.py`: `BASS_RULES`, the `BASS_ROLE_*` and
-`BASS_STYLE_*` names, `parse_bass_style`, and the questions asked of the hands
+The **vocabulary** lives in `arranger/bass_rules.py`: `BASS_RULES`, the `BASS_ROLE_*`
+names, `BASS_STYLE_NONE`, `parse_bass_style`, and the questions asked of the hands
 (`thumb_capacity`, `comping_capacity`, `bass_allowed`). `arranger/bass.py` owns the line
 itself - its slots and its walk - while `arranger/bass_place.py` owns the thumb's
 placement and `bass_cost`.
@@ -1363,8 +1416,8 @@ already assigns*. So:
 
 - `root,5th,approach,nearest` (the whole vocabulary) keeps every role — a note on every
   beat. This is the walk.
-- `root` keeps only `BASS_ROLE_ANCHOR` — a root where the harmony anchors. This is what
-  `anchors` became.
+- `root` keeps only `BASS_ROLE_ANCHOR` — a root where the harmony anchors. This is the rule a request
+  names as `bass_notes="root"`.
 
 The four rules are `root` (the chord's root, on anchor beats), `5th` (root then 5th, the
 `BASS_DEGREES_6432` order — the walking anchor is always the root, so it shares `root`'s
@@ -1375,7 +1428,7 @@ it is the fallback of "first reachable wins", ranked last whatever the style say
 
 The shipped resolution order is `root, 5th, approach, nearest`. `approach` sits before
 `nearest` because on the last beat the approach outranks the connective note — that
-ordering is what makes the full list byte-identical to the old `walk`
+ordering is what the shipped list spells out
 ([parts.md](history/parts.md) §9 records why it is not §4's literal order).
 
 **A style is a set of note rules, so it cannot state anything where there is no chord.**
@@ -1384,21 +1437,21 @@ than continuing the previous chord across it — a part whose notes are chosen f
 has no event where there is no chord ([parts.md](history/parts.md) §4). The emission already
 skipped a beat with no harmony in force, so this is the whole of the rule. Two
 consequences a caller meets: a chordless bar between two chords contributes **no** thumb
-notes at all, and the walk's approach into it now targets the next chord that *sounds*
-rather than the phantom root the gap used to carry. Note that "no chord here" is not "a
+notes at all, and the walk's approach into it targets the next chord that *sounds*
+rather than a phantom root in the gap. Note that "no chord here" is not "a
 chord this library cannot voice" — an untranslatable symbol leaves the harmony in force,
 because the chord is still the music's and only its spelling is past this library.
 
-`anchors`-style sparseness is deliberately **not a second generator**. The harmonic
+A sparser rule list is deliberately **not a second generator**. The harmonic
 reasoning about what a bass note is *for* is written once, and every style inherits it;
 they cannot drift apart because one is a subset of another by construction. A rule that
 needs new reasoning gets its own generator beside `_walking_bass_line` and a row in the
 table; a rule that is a different reading of an existing note is a row.
 
-`BASS_STYLE_AUTO` is deliberately **not** a rule. It is a default for an argument, not a
-note a caller can ask for, so keeping it out means `arrange_progression` validates a
-style against the rules and never has to special-case a sentinel. `parse_bass_style`
-refuses `auto` and `none` as rule names, and an unknown rule raises rather than
+`none` is deliberately **not** a rule. It is the absence of a line rather than a note a
+caller can ask for, so keeping it out of the vocabulary means `arrange_progression`
+validates a style against the rules and never has to special-case a sentinel.
+`parse_bass_style` refuses `none` as a rule name, and an unknown rule raises rather than
 defaulting to a walk.
 
 **One refusal rule, derived rather than listed: a thumb line needs one free bass
@@ -1410,35 +1463,32 @@ here:
 ```
 targets, a fill                            all three free
 targets, a target under a thumb line       one
-uniform                                     one, and **zero** until the four
-                                           inner-skip `drop24` sets were removed
+uniform                                     one
 ```
 
 A melody-only **selection** is not in the table at all: its upper shapes are single
 frets, so all three thumb strings are free whatever the texture's palette says, and
 `bass_allowed` answers its capacity unbounded when the route is known.
 
-**Nothing in the tree is refused any more, and that is a consequence of the grip tables
-rather than of this rule.** `uniform` used to be the one that failed: its palette held
-`drop24`'s `(4,2,1,0)`, the one reachable set that spanned all three thumb strings, so
-`bass="root,5th,approach,nearest"` under the default texture was refused, naming a texture that
-would work. Removing the four inner-skip `drop24` sets for the right-hand reason in
-[fingering.md](history/fingering.md) §4.4 removed that set with them, so the worst case anywhere
-is now one free string — the rule's threshold — and `uniform` carries every policy. The
-refusal and its reason string stay, because the question is still the right one: the
-comping route is answered by `comping_capacity`, and a palette added later that reaches
-the whole thumb range is caught here without this function being taught about it.
+**Nothing in the tree is refused, and that is a consequence of the grip tables rather than
+of this rule.** The worst case anywhere is one free string — the rule's threshold — so
+`uniform` carries every policy. The one set that could fail it is `drop24`'s `(4,2,1,0)`,
+which spans all three thumb strings and is not in the tables for
+the right-hand reason in [fingering.md](history/fingering.md) §4.4. The refusal and its
+reason string stay, because the question is still the right one: the comping route is
+answered by `comping_capacity`, and a palette added later that reaches the whole thumb range
+is caught here without this function being taught about it.
 
 Two honest caveats, both measured rather than assumed:
 
 - This is the **worst case across the sets a grip may use**, and in practice the
-  selector rarely picks the worst one. On "the synthetic cut-time head" every `uniform` step still
-  left a string, even under the old tables that made the refusal fire. The rule is
+  selector rarely picks the worst one. On "the synthetic cut-time head" every `uniform` step
+  leaves a string. The rule is
   deliberately conservative: it refuses a combination that would usually work rather than
   shipping a line that is occasionally holed.
-- **A thumb line is lossy under a chord-stating texture, and always was.** Measured on
-  "the synthetic cut-time head" bars 1-2: `targets` loses 11 of 151 thumb notes (7.3%) under a
-  `bass:walk` row and 7 of 88 (8.0%) under `bass:anchors`, while a melody-only selection
+- **A thumb line is lossy under a chord-stating content.** Measured on "the synthetic
+  cut-time head" bars 1-2: `targets` loses 11 of 151 thumb notes (7.3%) under the walk and
+  7 of 88 (8.0%) under the root rule, while a melody-only selection
   loses **none**, because a single left-hand note leaves every thumb string free. So the
   rule was aimed at the one combination that can *never* work and let the
   others through, each dropped note reported on its own step by `bass_refused`, rather than
@@ -1459,23 +1509,22 @@ with none is narrowed to the widest statement that leaves a finger free
 (`("drop2", "drop3")` → `("shell",)`). It narrows *this slot's* palette rather than the
 arrangement's, because a target with nothing underneath it may use all four strings.
 
-`AGENTS.md` trap 13 holds the measurement — the step counts, and why a shape-level
-invariant could not see the defect — and
+`AGENTS.md` trap 13 holds the measurement and the step counts, and
 `tests/test_walking_bass.py::TestTheInvariant` is the standing count. What the rule costs:
 a target whose quality has no shell — `Bmaj` under a `D5` melody, say — is a melody alone
 over the thumb rather than a four-note shape nobody can play.
 
-### `parts=` as the third axis: which of melody, bass and chord the guitar takes
+### The selection: which of melody, bass and chord the guitar takes
 
-`texture=` answers *how thick the chord part is*. `parts=` answers *which parts this
-instrument plays at all*, and it is an axis of the same kind rather than a mode — a band
-setting is a **combination**, not one name.
+`chord_notes` answers *how thick the chord part is*. Which parts this instrument plays at
+all is **derived** from the request's other questions, and it is a combination rather than a
+mode — a band setting is a set of parts, not one name.
 
 Three parts, because four strings sound at once and four strings is not four parts:
 
 - **melody** — 0 or 1 note. The tune, on the top string. Its rhythm is data, not choice.
 - **bass** — 0 or 1 note. The bottom of the band. The note that names the chord.
-- **chord** — 0 or more, the arity `texture=` states.
+- **chord** — 0 or more, the arity `texture` states.
 
 The fourth string is **capacity, not a part**. `melody + bass + chord <= 4`
 (`grips.RIGHT_HAND_STRINGS`) is arithmetic rather than a rule: a selection that does not
@@ -1486,7 +1535,8 @@ fit is refused before anything is generated, and `grips.thumb_safe_grips` and
 step plucks, sorted low to high, and hand them out in that order - thumb, index, middle,
 ring - **provided the lowest of them lies on the low four strings (E A D G)**: a shape whose
 bottom note sits on the B or the high E has **no thumb in it at all**, and the lowest pluck
-is the index (`grips.THUMB_REACH_STRINGS` is that reach). The consequence worth stating is
+is the index (the thumb reaches the four lowest strings, E A D G). The consequence worth
+stating is
 that the thumb takes the bottom string whether or not a bass *part* is sounding - the merged
 bass note is written into the fret vector only *after* selection, so no right-hand reading
 ever sees it - which is why **the bass part is not the thumb**, and a shape with no bass
@@ -1495,8 +1545,10 @@ line still has its bottom note taken by the thumb.
 Two gaps are not equal. A gap between the **thumb and the index** is free while the thumb is
 the bottom digit: it strokes across a muted string, which is what the bass-skipping string
 sets are built on. A gap crossed by the **middle or ring** finger is a real reach.
-`grips.finger_skip_count` is that metric, and the string tables are held to it by test
-rather than by the selector - the four `drop24` sets that carried a skip were removed.
+`tests/support.finger_skip_count` is that metric. It lives in the tests rather than the
+engine, because the tables enforce the rule by **not offering** the shapes that fail it -
+so no selector reads it, and `tests/test_grip_tables.py` holds them to it. The four `drop24`
+sets that would carry a skip are not in the tables.
 
 The left hand's budget is **four fingers and five frets**, and unlike the four-string rule it is
 stated over a *step* rather than a shape: `fingers.can_fret` is the check, and it refuses both a
@@ -1507,7 +1559,7 @@ shape. So a bass note that would need a fifth fret, or that would leave the hand
 than five, is refused there rather than inside a shape - and `AGENTS.md`'s playability invariants
 hold both.
 
-**The note is not only refused; the shape is asked to make room.** A requested grid bass note is
+**The note is not only refused; the shape is asked to make room.** A requested bass note is
 part of the request, so `decisions.leaving_room_for_the_bass` narrows the palette to the
 candidates `bass_placement` can put the note under, and the same cost tuple ranks what is left.
 That is a **narrowing and never a criterion**: no candidate carries a thumb, `cost` still sits
@@ -1517,42 +1569,42 @@ the ranking preferred before the narrow is recorded on `Palette.dropped_for_bass
 reader counting strings otherwise cannot tell a shape that moved for the bass from one that was
 simply ranked lower.
 
-| axis | owns | values |
+| the question | what it decides | values |
 |---|---|---|
-| `parts=` | which of melody / bass / chord the guitar takes | any subset of `melody`, `bass`, `chord`; `auto` *(default)* is all three |
-| `texture=` | the **chord part's arity**, by metric weight | `uniform`, `targets`, `chord1`, `chord2`, `chord3` |
-| `harmony=` | the chord part's **degree order** | `auto` *(default)*, `full`, `guide`, `shell_root` |
-| `bass=` | the bass part's **note rules**, in the order they are tried | `auto` *(default)*, `none`, or an ordered list of `root`, `5th`, `approach`, `nearest` |
-| `grid=` | **when each part sounds** | `PART:PATTERN` rows — see `` `grid=` `` below |
+| `melody=` | whether the tune is the guitar's at all | `True` *(default)*, `False` |
+| `chord_on=`, `chord_fills=` | whether there is a chord part, and where it attacks | a rhythm; `none` is no chord part |
+| `bass_on=` | whether there is a bass part, and where the thumb attacks | a rhythm; `none` *(default)* is no bass part |
+| `chord_notes=` | the **chord part's arity**, by metric weight | `full`, `targets`, `3`, `2`, `1` |
+| `bass_notes=` | the bass part's **note rules**, in the order they are tried | `root`, `root-5th`, `walk` *(default)*, or an ordered list of `root`, `5th`, `approach`, `nearest` |
 
-**Order carries no meaning, so the selection is canonicalised.** `parse_parts` returns
-`PART_NAMES` order, so `parts="chord,bass"` and `parts="bass,chord"` are one request and
-not two that happen to agree. `auto` names every part; `none` is refused rather than
-expanded, because a selection that names no part has no line to state. An unknown name
-raises: a spelling nobody recognises is a question, and answering it by dropping a part
-would hand back an arrangement missing something nobody asked it to drop.
+**The selection is derived, so there is nothing to parse and nothing to canonicalise.**
+`options._request_parts` writes it in `PART_NAMES` order — the selection is a *set* — and the
+three facts that decide it are the tune, a chord position and a bass position. A request that
+leaves nothing sounding is refused, because silence is not an arrangement.
 
-`parts="chord"` is the ensemble comping answer: the tune belongs to the horn, the root to
-the bassist, and the guitar takes the harmony in between. That is not silence — silence is
-not an arrangement — and `parts="melody"` is its opposite, the tune and nothing else.
+`Request(melody=False)` is the ensemble comping answer: the tune belongs to the horn, the
+root to the bassist, and the guitar takes the harmony in between. That is not silence —
+silence is not an arrangement — and `Request(chord_on="none")` is its opposite, the tune and
+nothing else.
 
-**Naming a part is a request for it to sound, and a policy for a part the selection leaves
-out is refused**, naming the part that would work. Two axes are inert rather than refused:
-`harmony=` is read only by the comping route, and `texture=` says nothing on a melody-only
-selection, whose shapes are single frets.
+**Naming a layer is a request for it to sound, and a content for a layer the request leaves
+silent is refused**, naming the layer that would work — `bass_notes="walk"` beside the
+default `bass_on="none"` is the case a caller meets first. One question is inert rather than
+refused: `chord_notes` says nothing on a melody-only selection, whose shapes are single
+frets.
 
 **An `NC` bar has no chord part and no bass part**, on every route, and the melody is
 unaffected: a part whose notes are chosen from a chord cannot state anything where there is
 no chord. That is a derivation rather than a rule about chordless bars, and it is deliberately
-*not* what an off-grid rest says — there the thumb still walks, because a grid thins the
-chords and not the bass line. "No chord here" and "silent here" are different facts, and only
+*not* what a slot the chord's rhythm does not name says — there the thumb still walks,
+because that rhythm thins the chords and not the bass line. "No chord here" and "silent here" are different facts, and only
 the second is a rest.
 
-### `harmony=`: which degrees the chord part states
+### Which degrees the chord part states
 
-`texture=` says **how many** notes the chord part states; `harmony=` says **which**. The
-order is `TONE_PRIORITY`'s row for the quality, read at the chord part's own degrees, so the
-arity `texture=` takes is a **prefix** of that row and a reduced shape gives up its **tail**.
+`texture` says **how many** notes the chord part states; the chord's own priority row says
+**which**. The order is `TONE_PRIORITY`'s row for the quality, read at the chord part's own
+degrees, so the arity is a **prefix** of that row and a reduced shape gives up its **tail**.
 For `Cmaj7` (`3rd, 7th, root, 5th`): at three voices the 5th goes, at two the shape is the
 guide pair, and at one it is the 3rd alone.
 
@@ -1564,30 +1616,18 @@ Two facts sit beside the row, and both are already in the tables rather than new
 - an **altered 5th** — `Bbm7b5`'s `b5`, a `#11`, a `b13` — is kept over the root, so a
   reduced shape gives the **root** up before it.
 
-`HARMONY_STYLES` is `auto`, `full`, `guide` and `shell_root`, and `HARMONY_AUTO` is the one
-sentinel on any axis that **decides** rather than naming its own default: it resolves to the
-**full order** when the melody is the guitar's and to the **guide pair** when it is not,
-because the two shipped defaults are different shapes and one value cannot be both.
-`shell_root` is the guide pair **plus a register note**, so it is one degree order rather
-than a conjunction of two tables welded together inside `_shell_voicing`.
-
-The refusals are derived from the rows rather than listed: `HARMONY_LENGTH` names the two
-families with a fixed arity — `guide` (2) and `shell_root` (3) — so a selection without room
-for that many notes is refused from the row's own length, naming the part that would work.
-`full` is absent from that table because its length is the chord's own tone set, and its
-consequence is [open-issues.md](open-issues.md) item 3: on the comping route `full` is
-accepted and answered with a different family.
-
-**The axis is read only by the comping route.** A grip is a claim about a chord's 3rd and
-7th and takes its arity from `texture=`, so `harmony=` cannot reach an arrangement the
-guitar sings; a policy named for a part the selection leaves out is refused before anything
-is generated.
+**The comping part states the guide pair.** A chord stated to somebody else's ear with no
+tune on top is a claim about the chord's 3rd and 7th — `SHELL_DEGREES`' pair — because those
+are the two notes that say whether the ear hears a major or a minor chord, and a shape
+sounding a root and a 5th instead would be a different part with the same arity. The
+generator that builds it is [`get_comping_voicings`](#get_comping_voicings-a-chord-with-no-melody-on-top),
+and the degree rule it ships with is asserted in `tests/test_comping.py`.
 
 ### `get_comping_voicings`: a chord with no melody on top
 
-The generator behind a `parts="chord"` selection. **It is the same exhaustive search with
-nothing held at the top.** A shell is already a claim about the chord's 3rd and 7th rather
-than about
+The generator behind a comping selection (`Request(melody=False)`). **It is the same
+exhaustive search with nothing held at the top.** A shell is already a claim about the
+chord's 3rd and 7th rather than about
 the tune, so the search needed no new rule: `frets_in_span` already tries every fret
 combination on the remaining strings and the candidate keeps the ones where both guide
 tones sound and nothing outside
@@ -1606,7 +1646,7 @@ whether the slot is **reharmonised**, and that needs three states rather than tw
 `headxml.melody_state` returns **onset** (the tune articulates here — reharmonise: the
 anticipation a comping player makes), **held** (a note already sounding — no: it was decided
 at its onset) and **silent** (nothing sounding — the chord symbol stands). In the measurement
-that produced the rule, **274 of 1,146** grid positions carry a held note rather than an
+behind the rule, **274 of 1,146** generated positions carry a held note rather than an
 articulation — a quarter, so the middle state is not an edge case; `melody_at` keeps its
 two-way answer for callers that only need "is a note sounding".
 
@@ -1614,16 +1654,20 @@ two-way answer for callers that only need "is a note sounding".
 whole-note duration to beats with `beat_type` and compares it to the probe on one absolute
 beat line (`grid.beat_offset`): `duration * 4` is right only in 4/4, and a `(bar, beat)` pair
 cannot express a note that ends in a later bar. A 2/2 note written to the barline is therefore
-still sounding at the next bar's downbeat, and the default grid does not re-strike it there.
-The end instant is inclusive — the release is still held — and that boundary is the open
-decision [docs/open-issues.md](open-issues.md) item 6 records, pinned by
-`tests/test_headxml_timeline.py::TestMelodyState::test_the_release_instant_counts_as_held_until_the_next_position`.
+still sounding at the next bar's downbeat, and the engine's own union does not re-strike it there.
+The note sounds over `[onset, end)`, so its **release instant is already silence** — the union
+admits the position where the tune has just stopped, and a comp placed there carries no melody
+rather than the pitch that just stopped. That is the boundary `melody_rests` reads too, where the
+rest after a note begins where the note ended; the reading and what it moved are
+[docs/history/open-issues.md](history/open-issues.md) item 6, pinned by
+`tests/test_headxml_timeline.py::TestMelodyState::test_the_release_instant_is_already_silence`.
 
 **The arity is the length of the selection, and it is honoured.** `notes` says how many
 voices the guitar was asked for, and a two-voice request is **two notes**. The first
-version of this generator always built a three-note shell, so `texture="chord1"` and
-`texture="chord2"` both came back with three — a part sounding a note nobody named,
-which in a band setting is a voice another player was supposed to have.
+version of this generator always built a three-note shell, so
+`Request(chord_notes="1")` and `Request(chord_notes="2")` both came back
+with three — a part sounding a note nobody named, which in a band setting is a voice
+another player was supposed to have.
 
 **The arity picks the grip family rather than truncating one.** Truncating a `shell` set to
 two strings looks free and is not: it yields pairs the library has never measured —
@@ -1642,13 +1686,26 @@ guitar sings at all.
 **One voice is a weaker claim, and the rule says so rather than refusing.** Two notes can
 sound both guide tones, which is what states the chord; one note cannot, so a single note
 keeps the **first** guide tone (the 3rd, or the 4th on a sus chord) — the same preference
-order `_duo_offsets` already applies. Refusing instead would have made `texture="chord1"`
-fall through to the melody-bearing route: measured, it put the horn's line back on the
-guitar on every step, the opposite of what asking for one note meant.
+order `_duo_offsets` already applies. Refusing instead would have made
+`Request(chord_notes="1")` fall through to the melody-bearing route: measured, it
+put the horn's line back on the guitar on every step, the opposite of what asking for one
+note meant.
 
 **With no melody to support, a fourth voice would be the root or the 5th** — the two notes
 that carry no information about the chord's quality. That is why only the `shell` family is
 offered at all.
+
+**The high E is off the palette, at every arity.** `grip_tables.COMPING_EXCLUDED_STRINGS`
+carries the reason: that string is where the tune itself is pinned first
+(`MELODY_STRING_CHOICES_FULL` tries it before the B and the G), and a comping part has no
+tune to put there — so a shape whose top voice sits on it is heard as a melody, and heard
+*above* the horn that is playing the real one. It is a **palette narrow rather than a cost
+criterion**: the sets that carry the string are dropped rather than ranked lower, so nothing
+in `cost.voicing_cost` knows about the rule, and no other arity can reach it because every
+family is filtered by the same constant. Measured over the three committed sweep heads under
+the default comping request, the steps whose top voice lands above the melody's fall from
+**37 to 12 of 85** (and from 20 to 8 of 51 at `--chord-on 1,2`); no comping step sounds the
+string at any arity.
 
 **A quality with no readable root gets nothing**, on the same rule as every other
 guide-tone generator here: a shell is a claim about *this* chord's 3rd and 7th, and guessing
@@ -1660,32 +1717,35 @@ matching family, and holds a span within that family's `GRIP_MAX_SPAN`. The drop
 is "the melody is on the topmost string", and it is dropped for the only reason there is:
 there is no melody.
 
-Measured over 2,069 comping steps:
+Measured over the 93 comping steps of the three committed sweep heads, under
+`--no-melody --chord-notes 2`:
 
 ```
-notes per step          2        (2069 of 2069)
-melody_voiced           False    (2069 of 2069)
-supported string set    yes      (2069 of 2069)
+notes per step          2        (93 of 93)
+melody_voiced           False    (93 of 93)
+supported string set    yes      (93 of 93)
+high E sounding         0
 over GRIP_MAX_SPAN      0
 wrong notes             0
 guide tone missing      0
-unreadable chord        610      (no tone set at all; the library's own rule is not to
-                                  judge a chord it could not read - see cost.voicing_cost)
+unreadable chord        0        (none of the committed heads writes a symbol the library
+                                  cannot read; the row is here because the library's own
+                                  rule is not to judge a chord it could not read - see
+                                  cost.voicing_cost)
 ```
 
 **What is *not* claimed, measured rather than assumed.** A comping step may well contain the
-melody's own pitch: **409 of 2,069 steps do.** That is coincidence, not the guitar
+melody's own pitch: **37 of those 93 steps do.** That is coincidence, not the guitar
 singing — the melody's pitch class is often a chord tone the shell needs anyway. What the
 axis guarantees is that the shape was *chosen from the chord alone*, and that
-`step.melody_voiced` is `False`. An earlier version of this document and of the test suite
-claimed the stronger, falsifiable version ("no step sounds the melody"), and the
-measurement is what corrected it.
+`step.melody_voiced` is `False`. The stronger, falsifiable claim ("no step sounds the
+melody") is false, and the measurement above is what shows it.
 
 ### The renderer rule: a repeated melody holds the whole shape
 
 Normally `repeated` is a **soprano-only re-strike** — the melody re-articulates under an
 unchanged harmony, so the inner voices are held. That presumes there *is* a soprano
-carrying the tune. Under `parts="chord"` there is none, so "re-strike the soprano" would
+carrying the tune. Under a comping selection there is none, so "re-strike the soprano" would
 re-strike a guide tone and the shape would change on a beat where nothing has. The rule
 becomes **hold the whole shape**, which is what a guitarist comping behind a horn does while
 the horn repeats the note.
@@ -1693,9 +1753,9 @@ the horn repeats the note.
 **`chord_attack` is the other half of that rule, and the two are told apart by the request
 rather than by the pitches.** A comp on `--chord-on every-beat` repeats one shape four
 times a bar, and a slot the tune merely sustains through has the same pitches — so the
-renderers, which compare shapes, could not tell a re-strike from a hold, and folded the
-named position into the one before it: the arrangement said four attacks and the score,
-the staff, the HTML and GP5 all wrote **one long chord**. `slot_plan._chord_attacks` sets
+renderers, which compare shapes, cannot tell a re-strike from a hold, and fold the
+named position into the one before it: the arrangement says four attacks and the score,
+the staff, the HTML and GP5 all write **one long chord**. `slot_plan._chord_attacks` sets
 `ArrangementStep.chord_attack` where the chord part was *asked* for the attack — a position
 `--chord-on` named (including the stab `--chord-on melody,1and` puts under a held note), or a
 slot the chord layer invented because the tune is silent there — and a slot the
@@ -1706,7 +1766,7 @@ step, because a written onset there already strikes through `repeated` or by car
 different soprano.
 
 This is not a corner case. Measured over 2,243 corpus steps, **152 carry `repeated`**, and
-keeping the old rule rendered every one as a single moving note — a melody line on the
+a rendering rule that read them as a single moving note would draw a melody line on the
 guitar part, on exactly the beats where the arrangement had handed the tune away.
 
 The rule is stated in **two** places, `render._step_cells` and `tabstaff._strikes_here`,
@@ -1718,17 +1778,17 @@ the rule, and the four renderers reading it.
 ### Two consequences, both derived rather than listed
 
 **A texture that harmonises nothing cannot also give the melody away — and no texture
-harmonises nothing any more.** The refusal `melody_allowed` used to make dissolved when
-the melody-only claim moved onto the selection: a chord-only selection simply comps, on
+harmonises nothing.** A chord-only selection simply comps, on
 every texture, and nothing is self-contradictory anywhere. The equivalent fact on the
 selection axis is `parts_has_melody_only`, which is derived from the parts rather than
 listed, so a spelling that cannot be voiced cannot miss it either.
 
-**`melody_alone_case` gains a guard, because its routes all end at the melody alone.** Every
-answer it gives reaches `get_melody_only_voicing`, so under `parts="chord"` it must not
+**`melody_alone_case` needs a guard, because its routes all end at the melody alone.** Every
+answer it gives reaches `get_melody_only_voicing`, so under a comping selection it must not
 answer `MELODY_ALONE_TEXTURE` — or a texture *fill* would put the tune straight back on the
-guitar, and the axis would be honoured only on targets. Measured: before the guard, every
-fill under `texture="targets", bass="root,5th,approach,nearest"` came back `x-7-x-x-x-8`, a bare melody note.
+guitar, and the axis would be honoured only on targets. Measured: without the guard, every
+fill under `Request(chord_notes="targets", bass_on="every-beat", bass_notes="walk")` comes back
+`x-7-x-x-x-8`, a bare melody note.
 
 **An `NC` bar is emitted silent, with the reason on the step.** There is no chord, so
 there are no guide tones, and the guitar is genuinely silent while the horn is not. The
@@ -1741,70 +1801,54 @@ it twice or hand the horn's line back to the guitarist.
 
 
 
-## `grid=` — where a chord falls
+## The chord's rhythm — where a chord falls
 
-`harmony=` answers *which degrees* a stab states; this answers *where one lands*. A
-comping style needs both, and `bass=` supplies a third orthogonal question (what plays the
-bottom). The vocabulary is `GRID_PART_PATTERNS` + `GRID_STYLES` + `GRID_PATTERNS` in
-`grid.py`, with `parse_grid` / `resolve_grid` / `grid_allowed` /
-`grid_defers_to_melody` beside the other axes' functions. A row is written **`part:pattern`**
-— `chord:freddie`, `bass:walk` — so the axis is positions crossed with parts, and each part
-may have a row of its own. There is **no `auto` grid value**: `GRID_DEFAULT` is
-`melody:every_note`, so the tune's own slots govern every part, and `grid=auto` is refused
-like any other unknown name (see [comping-styles.md](history/comping-styles.md) §9.3).
+`texture` answers *how many notes* the chord part states; this answers *where one lands*.
+It is the **request's**, not an axis: `--chord-on
+POSITIONS` and `Request(chord_on=...)` are its two spellings, and `grid.py`'s `Rhythm`
+is the value they resolve to (`parse_rhythm`, `felt_beat`, `rhythm_beats`, `beat_offset`).
 
-**Positions are `(beat, eighths)` pairs, and `beat` may be a sentinel.** `LAST` resolves
-to the metre's final beat and `ALL` to every beat of the bar, so a pattern names *a
-position* rather than a beat number — `final_and` is 2.5 in 2/2, 3.5 in 3/4 and 4.5 in
-4/4 from one row. `eighths` is an **integer count of eighths**, not a float, because a
-notated position is a float in practice (a 3/4 bar's second beat is 1.666...) and
-comparing floats for equality is a comparison that will eventually be false for the wrong
-reason — the same argument as `BEAT_EPSILON`. The subdivision is
-`grid.TICKS_PER_BEAT = 24` — a beat in whole twenty-fourths, integer on purpose — so a
-position is a tick number and never a rounding of one.
+**A position is a felt beat, not a beat number.** `every-beat` is one attack per felt
+beat — four in 12/8, not twelve — and `1and` is the midpoint of a **group**, so a group
+of three eighths has its `and` halfway through the pulse rather than half a denominator
+unit in. That is what makes one rhythm the same request in 2/2, 4/4 and 6/8, and it is
+why the grammar has no decimal: `1.5` would name a time rather than a place on the
+metre's grid, and cannot express `lastand`. `last` resolves against the bar, so
+`lastand` is the last felt beat's midpoint in any metre.
 
-| pattern | positions | kind |
-|---|---|---|
-| `every_note` | **none** — the absence of a restriction | bar-relative |
-| `freddie` | `(ALL, 0)` | bar-relative |
-| `final_and` | `(LAST, SUB)` | bar-relative |
-| `charleston` | `(1, 0), (2, SUB)` | metre-relative |
-| `joe_pass` | `(ALL, SUB)` | metre-relative |
-| `walk` | `(ALL, 0)` | bar-relative |
-| `anchors` | the harmony **timeline**, not the metre | `GRID_TIMELINE_PATTERNS` |
+The grammar is `melody` (the written onsets), `none`, `every-beat`, or comma-separated
+positions (`1`, `1and`, `2e`, `lastand`). A list **replaces** the default, so `1and` is
+only the stab while `melody,1and` is the harmonisation plus the stab; `none` cannot be
+combined with either. A position the bar does not have is **refused** — `rhythm position
+'3' asks for felt beat 3, but this bar has 2` — and the midpoint is spelled `and`, never
+`&`, because an unquoted `&` is a shell's background operator. The run header prints the
+one spelling the parser accepts, in the player's own mirror order (`1`, `1e`, `1and`,
+`1a`).
 
-Not every part may use every row: `melody` has `every_note` alone, `chord` has
-`every_note`, `freddie`, `joe_pass`, `final_and` and `charleston`, and `bass` has
-`every_note`, `walk` and `anchors`. `GRID_PART_PATTERNS` is that table, and the parser
-refuses a row it does not hold.
+**A requested attack rings its felt beat and no further** (`headxml._stab_length`). The
+chord part states a harmony to somebody else's ear, so an attack that rang until the next
+one would still be sounding over a beat nobody asked for: `--chord-on 1` in 4/4 is one
+stab per bar rather than one chord held for four beats. Two attacks inside one beat are
+two stabs, not one.
 
-**`bar_relative` is a property of the pattern, not a comment.** It says whether a *silence*
-is the arranger's mistake: a bar-relative pattern resolves in any metre, while a
-metre-relative one is a named figure of a particular metre and is either right or is a 4/4
-figure asked of a 2/2 bar. That is the arranger's calling, not an engine defect, and
-recording it as data is what stops "the pattern silently did nothing" reading as a bug.
+**Two producers of positions, and the request decides between them.** A *requested*
+rhythm names its own positions (`headxml.rhythm_slots`). The engine's own union
+(`headxml.chord_slots`) generates one per subdivision of each bar's own rhythm, which is
+what lets a comping part state the chord of the tune in a bar the tune never enters — the
+measurement is [open-issues.md](history/open-issues.md) item 1. A requested rhythm **wins**
+whatever else is spelled, because spelling `texture` must not answer a different question
+about the chord's rhythm; the generated union is the fallback for a request that names
+nothing added **and a selection that comps** — a chord part with no tune to play, which is
+`melody=False`, with or without a thumb line. The shipped `chord_on="melody"` with the tune
+ours is the skeleton alone: a chord under each written note and nothing invented. The gate
+reads that selection rather than the spelling that asked for it, so one request is one
+arrangement.
 
-**`every_note` is not a pattern with positions; it is the absence of one.** `grid_positions`
-returns nothing for it, so `grid_allowed` must test it explicitly — deriving the check from
-`grid_positions` made the *default* a mismatch in every metre, which is the false reading the
-check exists to avoid. "Places nothing" and "has no positions to place" are different
-claims and only the first is a mismatch.
+### What a slot the rhythm does not name does, and why it is a fourth kind
 
-**The refusal is unreachable through the shipped rows**, measured: every metre-relative
-pattern fits every metre, because `charleston` keeps its beat 1 and `joe_pass` is built on
-`ALL`. `grid_allowed` is therefore defensive, and the refusal and its reason are tested
-against a temporary row. `tests/test_grid.py::test_no_shipped_row_is_a_mismatch_in_any_metre`
-exists to keep that fact from being forgotten — a check no input can fail proves nothing.
-
-**`beat=None` is on the grid.** A slot nobody located has no position to be off, the same
-rule `metric_weight` follows with its `-1`. Without it a hand-written progression — which
-carries no timings — would lose every chord the moment a grid was passed, which is the
-opposite of an opt-in.
-
-### What an off-grid slot does, and why it is a fourth kind
-
-`decisions.melody_alone_case` returns a *kind*, and the grid added `MELODY_ALONE_REST`
-alongside `MELODY_ALONE_NONE`, `MELODY_ALONE_TEXTURE` and `MELODY_ALONE_NO_CHORD`:
+`decisions.melody_alone_case` returns a *kind*, and the chord's rhythm is what made
+`MELODY_ALONE_REST` a fourth one beside `_MELODY_ALONE_NONE` (the default answer, which
+only `decisions` returns or compares), `MELODY_ALONE_TEXTURE` and `MELODY_ALONE_NO_CHORD`:
 
 - **guitar singing** → `MELODY_ALONE_TEXTURE`: the note of the tune sounds alone. No note
   is dropped, ever.
@@ -1812,34 +1856,31 @@ alongside `MELODY_ALONE_NONE`, `MELODY_ALONE_TEXTURE` and `MELODY_ALONE_NO_CHORD
   this guitar to play alone, and the tune is the horn's. The step is still emitted, so the
   part keeps its bar and beat and lines up against the tune; all six strings are muted, so
   every renderer draws silence rather than a held shape.
-- **`NC`** → unchanged per route. It has *no chord to place*, so "off the grid" is not a
-  claim about it: the comping route emits a rest step carrying `silence="nc_comping"`, the
-  singing route plays the note alone.
+- **`NC`** → unchanged per route. It has *no chord to place*, so "a slot the rhythm does
+  not name" is not a claim about it: the comping route emits a rest step carrying
+  `silence="nc_comping"`, the singing route plays the note alone.
 
 The **ordering of those guards is load-bearing and was got wrong twice** — see
 [../AGENTS.md](../AGENTS.md) trap 12 for the three orderings and what each one breaks.
 
-**The grid does not touch the bass line**, and that is orthogonality tested rather than
-asserted: measured on `synthetic_cut_time` with `parts="chord", texture="targets",
-grid="melody:every_note,bass:walk"`, the walked notes are `[51, None, 52, None]` at both the
-`melody:every_note` and the `chord:freddie` chord row. A grid removes chords, never the thumb.
+**It is not the thumb's rhythm.** `bass_on` asks that question, and the two are
+independent requests: measured on `synthetic_cut_time` at
+`Request(melody=False, chord_notes="targets", bass_on="every-beat", bass_notes="walk")`,
+the walked line begins `[None, 46, 46, 51, …]` under the default chord rhythm and
+`[None, 46, None, 51, …]` under `chord_on="every-beat"` — both 23 steps. The *rule* the
+thumb states is untouched; the *line* differs because a walk is written per slot and the
+chord's rhythm is what gives the slots their positions. A thumb note is placed only where
+`place_bass` can reach it, so a denser chord part is a thinner line.
 
 ### What is not built
 
-The **free-form** spelling (naming positions directly rather than choosing a row) and a
-**held baseline** (`hold=`). **Both were withdrawn on 2026-10-04, on measurement** — a stab
-already lasts as long as the melody note under it, because `step.duration` *is* that
-note's duration and every renderer already honours it, so "a held baseline" as a flag
-would add a second answer to a question the step model already answers. The real gap is
-the inverse one: a stab *outlasting* its note.
+A **held baseline** (`hold=`) is not a knob: a stab lasts the felt beat it lands in, and
+the melody under it already has its own duration, so a flag would add a second answer to
+a question the step model answers. The real gap is the inverse one — a stab *outlasting*
+its felt beat — and [comping-styles.md](history/comping-styles.md) §8 Stage D is where it
+was weighed.
 
-A **four-note comping chord** is the third, and it is a decision about string sets rather than
-about a longer degree order: `derived_arity` caps the chord part at `chord3`, and
+A **four-note comping chord** is the other, and it is a decision about string sets rather
+than about a longer degree order: `derived_arity` caps the chord part at `chord3`, and
 `get_comping_voicings` offers the `shell` family alone, because with no melody to support a
 fourth voice would be the root or the 5th — the two notes that say least about the quality.
-Its consequence for `harmony=` is [open-issues.md](open-issues.md) item 3.
-
-Both withdrawals are [comping-styles.md](history/comping-styles.md) §8 Stage D, and
-[open-issues.md](open-issues.md) item 1 is the larger thing underneath them — a grid names
-positions the tune does not occupy, and sounding them took a union of the grid's positions
-with the melody's own slots.

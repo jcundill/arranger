@@ -65,7 +65,7 @@ BASS_ROLE_HOLD = "hold"
 # --- The bass style: which note rules the thumb line is written on -----------------
 #
 # A **style**, not a flag, and it names *note rules* rather than a rhythm: how many beats
-# carry a note is `grid=`'s business ([docs/history/parts.md](docs/history/parts.md) §4), and the rule list
+# carry a note is `grid`'s business ([docs/history/parts.md](docs/history/parts.md) §4), and the rule list
 # says only what a note that does sound is *for*.
 #
 # The four rules, and the `BASS_ROLE_*` values each admits:
@@ -118,19 +118,16 @@ BASS_RULE_ROLES: Dict[str, FrozenSet[str]] = {
     BASS_RULE_NEAREST: frozenset({BASS_ROLE_CONNECT}),
 }
 
-# The two shipped styles, as rule lists, derived from `BASS_RULES` rather than listed so
-# the table above stays the one source. `walk` is the whole vocabulary; `anchors` is the
-# root rule alone. These are the spellings a style takes.
-BASS_STYLE_WALK = ",".join(BASS_RULES)
-BASS_STYLE_ANCHORS = BASS_RULE_ROOT
+# `BASS_ALL_RULES` is the bass axis's own default - every rule, in the table's order,
+# derived rather than listed so the table above stays the one source - and it is the same
+# string the request's `walk` maps to.
+#
+BASS_ALL_RULES = ",".join(BASS_RULES)
 
-# "no thumb line" and "whatever this texture means". Neither is a rule. `none` is the
-# absence of a style - the caller asked for no bass - and `auto` is the default resolved
-# from the texture and the selection before the arrangement runs. Keeping `auto` out of
-# the rule vocabulary is what lets the engine validate a style without special-casing a
-# sentinel, the same reason it was kept out of the old `BASS_STYLES`.
+# `none` is not a rule: it is the **absence** of a style, the value a request whose bass
+# layer never attacks resolves to. Keeping it out of the rule vocabulary is what lets the
+# engine validate a style without special-casing a sentinel.
 BASS_STYLE_NONE = "none"
-BASS_STYLE_AUTO = "auto"
 
 
 def parse_bass_style(argument: str) -> Tuple[str, ...]:
@@ -141,13 +138,12 @@ def parse_bass_style(argument: str) -> Tuple[str, ...]:
     request. **The order is part of the request**, not formatting - it is the resolution
     order, so `"approach,root"` and `"root,approach"` are two styles even though they
     admit the same roles. A repeat is dropped keeping its first occurrence, and nothing
-    is re-sorted, for the same reason `grips.parse_grips` keeps its order and
-    `parts.parse_parts` does not (a sequence is ordered, a selection is a set).
+    is re-sorted, for the same reason `grips.parse_grips` keeps its order: a sequence
+    is ordered and a set is not.
 
-    `none` and `auto` are **not** rules and are refused here: `none` is the absence of a
-    style and `auto` is a default, both resolved before this runs. Refusing them keeps
-    the rule vocabulary to things that name a note, so a style can never be a rhythm
-    word in disguise.
+    `none` is **not** a rule and is refused here: it is the absence of a style,
+    resolved before this runs. Refusing it keeps the rule vocabulary to things that
+    name a note, so a style can never be a rhythm word in disguise.
 
     Raises `ValueError` on an empty request, or on a name outside `BASS_RULES`, naming
     the vocabulary. The rule is the library's: a spelling nobody recognises is a
@@ -155,7 +151,7 @@ def parse_bass_style(argument: str) -> Tuple[str, ...]:
     something nobody asked it to drop.
     """
     text = argument.strip().lower()
-    if text in (BASS_STYLE_NONE, BASS_STYLE_AUTO):
+    if text == BASS_STYLE_NONE:
         raise ValueError(
             f"{argument!r} is not a note rule; expected a comma-separated list of "
             f"{BASS_RULES}"
@@ -232,20 +228,21 @@ def comping_capacity(notes: int, bass_voice: bool = False) -> int:
     derives its answer from the melody-bearing route's own palette (`texture_palette`) read
     against the string tables (`GRIP_STRING_SETS`), which describe the shapes that route
     generates. On the comping route the shapes come from
-    `get_comping_voicings` instead, and the texture is *inert* there: all 80 comping
-    shapes on `tests/data/synthetic_cut_time.mxl` are byte-identical under
-    `texture=uniform` and `texture=targets`. Asking `thumb_capacity` therefore refuses a
-    combination that is perfectly playable, on the strength of a palette the comping
-    route never uses - `bass_allowed("uniform", "root,5th,approach,nearest")` refuses
-    `melody="alto,tenor", bass="root,5th,approach,nearest"` under the default texture.
+    `get_comping_voicings` instead, and the chord content is *inert* there: all 80
+    comping shapes on `tests/data/synthetic_cut_time.mxl` are byte-identical under
+    `chord_notes="full"` and `chord_notes="targets"`. Asking `thumb_capacity` therefore
+    refuses a combination that is perfectly playable, on the strength of a palette the
+    comping route never uses - `bass_allowed("uniform", "root,5th,approach,nearest")`
+    refuses a walk beside a comping selection under the default content.
 
-    Every comping shape on that head sounds on strings `(2, 3, 4, 5)` and never once on
-    the low E or the A, so the refusal was false on the facts too.
+    The warning was false on the facts too: the comping shapes on that head sound within
+    strings `(1, 2, 3)`, `(2, 3, 4)` and `(1, 3, 4)` - never on the low E or the A, so
+    the thumb had the whole bottom of the neck, and never on the high E, which
+    `comping_string_sets` excludes at every arity.
 
-    **Derived from the generator rather than listed**, on the rule `harmony_allowed`
-    follows and for the same reason: a family that can be voiced is not a list of
-    combinations somebody has to remember to extend. The worst case over the
-    sets `comping_string_sets` may pick at each arity:
+    **Derived from the generator rather than listed**: a family that can be voiced is
+    not a list of combinations somebody has to remember to extend. The worst case over
+    the sets `comping_string_sets` may pick at each arity:
 
         1 note (an inner voice)   3 free
         1 note (`bass_voice`)     2 free
@@ -256,7 +253,8 @@ def comping_capacity(notes: int, bass_voice: bool = False) -> int:
     **Never zero, at any arity** - which is the finding rather than a coincidence, and
     the reason `bass_allowed` cannot refuse this route at all: the comping shapes are
     built from the `duo` and `shell` families, which live on the top half of the neck
-    precisely because the bottom of it belongs to the thumb.
+    precisely because the bottom of it belongs to the thumb - and the very top string is
+    off the palette too (`grip_tables.COMPING_EXCLUDED_STRINGS`).
 
     A one-note `bass_voice` shape is the one case that reaches the bottom of the neck
     (`BASS_VOICE_STRING_SETS` is `(0, 1, 2)`), and it still leaves two strings free -
@@ -319,7 +317,7 @@ def bass_allowed(
     the other, and only the engine's own route decision knows which.
 
     **`melody_only` is the melody-only route's half, and it is unbounded rather than
-    measured.** A selection that plays the tune and no chord part (`parts="melody"`,
+    measured.** A selection that plays the tune and no chord part (`chord_on="none"`,
     with or without the bass part named) puts a single fret above the thumb on every
     slot, so all three thumb strings are free whatever the texture's palette says -
     asking the palette would refuse a line with the whole neck to walk under, on the
@@ -335,7 +333,7 @@ def bass_allowed(
         # state, and writing one anyway would put a note in the part a bassist owns.
         return False, (
             f"a bass line is a claim about the bass part, and "
-            f"parts={','.join(parts)} does not take it - add 'bass' to parts, or "
+            f"parts=\"{','.join(parts)}\" does not take it - add 'bass' to parts, or "
             f"drop the bass style"
         )
     if melody_only and notes is None:
@@ -362,15 +360,13 @@ def resolve_bass(
     parts: Tuple[str, ...],
     texture: str,
 ) -> str:
-    """The bass style to actually run: `auto` resolved, then validated.
+    """The bass style to actually run, validated.
 
     Three outcomes, in the order they are decided:
 
-    - `auto` resolves to **no line**, which is the shipped answer: a caller who
-      wants one names the note rules. The one selection that writes a line is a
-      melody-only selection that also names the bass part - `parts="melody,bass"`
-      is the tune with a thumb under it. A `parts="bass"` selection alone is **not**
-      melody-only (it has no tune) and keeps no thumb: that part already is the bass
+    - `none` is **no line**: the request's bass layer never attacks, so there is
+      nothing to play. A melody-only selection that also names the bass part is the
+      tune with a thumb under it, whose line the part itself states.
       line, and a thumb under it would double it.
     - an unknown rule raises. A spelling nobody recognises is a question, and
       answering it by defaulting to a walk would put a line under an arrangement that
@@ -393,12 +389,6 @@ def resolve_bass(
     melody_voiced = parts_have_melody(parts)
     melody_only = parts_has_melody_only(parts)
 
-    if bass == BASS_STYLE_AUTO:
-        bass = (
-            BASS_STYLE_WALK
-            if melody_only and parts_have_bass(parts)
-            else BASS_STYLE_NONE
-        )
     if bass == BASS_STYLE_NONE:
         return bass
     parse_bass_style(bass)  # raises on an unknown rule
@@ -436,7 +426,7 @@ def _comping_no_room_reason(notes: int, bass_voice: bool) -> str:
 def _no_room_reason(texture: str, role: str) -> str:
     """The sentence a refused combination reports.
 
-    It names an alternative texture **only if that texture would have fitted**, and it
+    It names an alternative content **only if that content would have fitted**, and it
     reads `thumb_capacity` directly rather than calling `bass_allowed`. Every non-`none`
     policy shares the same one-string threshold, so there is never a different *policy*
     to suggest - and re-entering the refusal to look would recurse. A refusal that
@@ -458,6 +448,6 @@ def _no_room_reason(texture: str, role: str) -> str:
     if fits:
         return (
             head + "Every bass policy needs the same string, so no policy fits here. "
-            f"Try texture={fits[0]!r}, or drop the bass."
+            f"Try the {fits[0]!r} content, or drop the bass."
         )
-    return head + "No texture in this set leaves the thumb a string."
+    return head + "No chord content in this set leaves the thumb a string."

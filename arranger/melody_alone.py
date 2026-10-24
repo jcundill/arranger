@@ -24,7 +24,8 @@ from .bass_merge import attach_bass
 from .chords import normalised_harmony
 from .context import SlotContext
 from .decisions import is_bass_only, melody_is_ringing
-from .tuning import ArrangementStep, Palette, Voicing, note_name
+from .step_types import ArrangementStep, Palette, Voicing
+from .tuning import note_name
 
 
 def _held_bass(

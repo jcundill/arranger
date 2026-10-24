@@ -14,6 +14,7 @@ import unittest
 
 from arranger import Request
 from arranger.annotation import step_annotation
+from arranger.options import ArrangeOptions
 from arranger.render import format_progression
 from tests.support import (
     COMMON_8,
@@ -130,16 +131,18 @@ class TestTheSingingRouteIsUntouched(unittest.TestCase):
         self.assertEqual(_lone_bass(steps), [])
 
     def test_a_melody_only_selection_sounds_its_bass_positions(self):
-        """`parts=melody,bass` plays the tune and the thumb - a walk position included.
+        """The tune and the thumb at a walk position: `bass_on="1and"`.
 
         Its note-less slots were *tune silent* before: the selection's early answer
-        fired before the bass part's claim on the position was asked.
+        fired before the bass part's claim on the position was asked. A melody-only
+        selection names no chord position, so the thumb is the only layer that attacks.
         """
         steps, _head, _notes = arranged(
             COMMON_8,
             section=(1, 2),
-            parts="melody,bass",
-            request=Request(bass_on="1and"),
+            options=ArrangeOptions(
+                request=Request(chord_on="none", bass_on="1and", bass_notes="walk")
+            ),
         )
         sounding = [
             step for step in steps if step.bass is not None and not step.bass_held
@@ -151,27 +154,30 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class TestTheDefaultForAMelodylessRequest(unittest.TestCase):
-    """`melody=off` on its own is a complete request, and says where the chord falls.
+class TestAMelodylessRequest(unittest.TestCase):
+    """`melody=off` is a complete request, and the chord's rhythm is the tune's.
 
-    The chord's default is "the written onsets", and a request that hands the tune to
-    somebody else has none - so the answer is the metre's own reading of where a chord
-    falls: every **felt beat**, which is the grouping's pulse rather than the
-    denominator's count. It is a derivation rather than a silent default, and the run
-    header prints the resolved positions, which is what makes it visible.
+    The chord's default is "the written onsets", and those are a fact about the
+    **score** rather than about who plays it: a request that hands the tune to somebody
+    else still comps the tune's own rhythm, which is how `bass_on="melody"` has always
+    read them. Every felt beat is the metre's reading, and it is the one a caller asks
+    for by naming it - `chord_on="every-beat"` - rather than the answer the engine
+    substitutes for a request it thinks is incomplete.
     """
 
-    def test_the_resolved_request_names_the_positions(self):
+    def test_the_resolved_request_keeps_the_tune_s_rhythm(self):
         from arranger.options import resolve_request
 
         resolved = resolve_request(Request(melody=False), 4, (1, 1, 1, 1))
-        self.assertEqual(resolved.chord_on, "1,2,3,4")
+        self.assertEqual(resolved.chord_on, "melody")
 
-    def test_a_compound_metre_gets_its_pulses(self):
+    def test_the_metre_s_pulses_are_a_request_of_their_own(self):
         """`1,2,3` here are **felt** beats: in 12/8 they land on the 1st, 5th and 9th."""
         from arranger.options import resolve_request
 
-        resolved = resolve_request(Request(melody=False), 12, (4, 4, 4))
+        resolved = resolve_request(
+            Request(melody=False, chord_on="every-beat"), 12, (4, 4, 4)
+        )
         self.assertEqual(resolved.chord_on, "1,2,3")
 
     def test_a_sparser_request_still_wins(self):

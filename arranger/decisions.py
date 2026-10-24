@@ -30,7 +30,7 @@ from __future__ import annotations
 from typing import List, Optional, Tuple
 
 from .bass_place import BassNote, bass_placement
-from .chords import sounding_harmony
+from .chords import slash_bass_cost, sounding_harmony
 from .cost import (
     PARTITION_CRITERION,
     SelectionCriteria,
@@ -43,11 +43,12 @@ from .grip_tables import (
     GRIP_PREFERENCE,
     thumb_safe_grips,
 )
-from .tuning import NO_CHORD, ROLE_FILL, ROLE_TARGET, ArrangementStep, Palette, Voicing
+from .step_types import ArrangementStep, Palette, Voicing
+from .tuning import NO_CHORD, ROLE_FILL, ROLE_TARGET
 
 # The three answers to "how is this slot played". Named rather than a bool because
 # the two non-default routes build different steps - see `melody_alone_case`.
-MELODY_ALONE_NONE = "none"        # look it up through the grips, as usual
+_MELODY_ALONE_NONE = "none"        # look it up through the grips, as usual
 MELODY_ALONE_TEXTURE = "texture"  # a texture case: has a harmony, not spelled out
 MELODY_ALONE_NO_CHORD = "nc"      # an NC bar: no harmony to voice at all
 MELODY_ALONE_BASS = "bass"        # the thumb alone: there is no chord here to state
@@ -110,7 +111,7 @@ def melody_alone_case(
 ) -> str:
     """Which of the three "play this as a single note" routes this slot takes.
 
-    Returns one of `MELODY_ALONE_NONE`, `MELODY_ALONE_TEXTURE` or
+    Returns one of `_MELODY_ALONE_NONE`, `MELODY_ALONE_TEXTURE` or
     `MELODY_ALONE_NO_CHORD`. The two non-default answers reach the same *route* -
     `get_melody_only_voicing` rather than grip lookup - but they build different
     steps, which is why this returns a kind rather than a bool: an `NC` bar sets
@@ -152,22 +153,22 @@ def melody_alone_case(
     `get_melody_only_voicing`, which is the melody on its own - so this function cannot
     be allowed to answer `MELODY_ALONE_TEXTURE` for a slot the guitar is not singing, or
     a fill would put the tune straight back on the guitar and the axis would be honoured
-    only on targets: under `--texture targets --bass-style root,5th,approach,nearest` a fill that answers the
-    texture case comes back a bare melody note, which is exactly the part that belongs
-    to somebody else - see the `--texture targets --bass-style root,5th,approach,nearest` example in
-    `docs/engine.md`. The per-slot reading is what keeps that true for a note-less
-    grid position a *singing* selection receives: the guitar has no note there, so it
+    only on targets: under `chord_notes="targets"` with a walk under it, a fill that answers
+    the texture case comes back a bare melody note, which is exactly the part that belongs
+    to somebody else - see the `Request(chord_notes="targets", bass_on="every-beat",
+    bass_notes="walk")` example in `docs/engine.md`. The per-slot reading is what keeps that true for a note-less
+    position a *singing* selection receives: the guitar has no note there, so it
     must not answer the texture case.
 
     So for a slot the guitar is not singing, only an `NC` bar may take this route - and
     that one is *also* wrong, for a different reason: an NC bar has no chord, so there is
     no guide tone to state and nothing for the guitar to play. It is answered as
-    `MELODY_ALONE_NONE` and the caller emits a rest step carrying its own reason
+    `_MELODY_ALONE_NONE` and the caller emits a rest step carrying its own reason
     instead, which keeps the tune's silence visible rather than quietly handing the
     horn's line to the guitarist.
 
-    **`on_grid=False` is the grid axis, and it is the one case where the guitar plays
-    nothing rather than one note.** Every other answer ends at
+    **`on_grid=False` is a position the chord's rhythm does not name, and it is the
+    one case where the guitar plays nothing rather than one note.** Every other answer ends at
     `get_melody_only_voicing`, which is the tune on its own; there is no such thing
     when the tune is somebody else's, so an off-grid slot on the comping route is a
     **rest** - `MELODY_ALONE_REST`, a fourth kind. This is `docs/history/comping-styles.md`
@@ -179,11 +180,11 @@ def melody_alone_case(
     # **The ordering of the three guards below is load-bearing, and each one has been
     # got wrong in a way its test caught.**
     #
-    # The grid is asked *inside* the voice guard rather than after it. Answering the
-    # voice guard first makes `grid=` silently inert on the comping route - all
-    # four patterns come back byte-identical to the default, which
-    # `docs/history/comping-styles.md` records. Asking it inside is safe because a grid
-    # only ever *removes* chords, so it cannot reintroduce a soprano the voice
+    # The rhythm is asked *inside* the voice guard rather than after it. Answering the
+    # voice guard first makes the rhythm silently inert on the comping route - measured,
+    # all four patterns came back byte-identical to the default, which
+    # `docs/history/comping-styles.md` records. Asking it inside is safe because a
+    # rhythm only ever *removes* chords, so it cannot reintroduce a soprano the voice
     # selection removed.
     if not melody_voiced:
         # An `NC` bar is **not** a rest of this kind. It has no chord, so there is no guide
@@ -194,12 +195,12 @@ def melody_alone_case(
         # `test_an_nc_bar_is_reported_rather_than_silently_dropped` caught it
         # returning `['Dm7', 'NC', 'A7']` where it had returned `['Dm7', 'A7']`.
         #
-        # So the grid only decides whether the guitar is silent *about a chord it
+        # So the rhythm only decides whether the guitar is silent *about a chord it
         # could otherwise state*. "Nothing here to play" and "nothing to say here" are
         # different claims, and only the first is a rest.
         if quality == NO_CHORD or name == NO_CHORD:
-            return MELODY_ALONE_NONE
-        return MELODY_ALONE_REST if not on_grid else MELODY_ALONE_NONE
+            return _MELODY_ALONE_NONE
+        return MELODY_ALONE_REST if not on_grid else _MELODY_ALONE_NONE
     # The singing route answers `NC` the way it always has, and it must keep doing so
     # even though the comping route above returns `NONE` for the same slot: the two
     # routes build different steps there (the caller emits a rest step that says why, versus
@@ -218,23 +219,22 @@ def melody_alone_case(
         #   it sounds alone", and it is the *texture* case - the step has a harmony,
         #   it is simply not being spelled out here, so `melody_only` must stay False.
         # - not singing: there is no melody on this guitar to play alone, and the
-        #   tune belongs to the horn. The guitar is **silent**, which is what a comping
-        #   grid means - a stab on the ands and nothing on the beats - and it is a
+        #   tune belongs to the horn. The guitar is **silent**, which is what a rhythm
+        #   of the ands means - a stab there and nothing on the beats - and it is a
         #   fourth kind because no existing answer is that.
         #
         # Without the second case an off-grid slot fell through to the comping route
-        # and comped anyway, the exact opposite of what `grid=joe_pass` asks for.
+        # and comped anyway, the exact opposite of what a rhythm of the ands asks for.
         # Without the first case it rested, and the guitar lost notes of the tune it
-        # was supposed to be singing - measured at 39 of 80 steps on
-        # `synthetic_cut_time` under `grid=freddie`, where every note off the beat went
-        # silent instead of sounding alone.
+        # was supposed to be singing: every note off the beat went silent instead of
+        # sounding alone. `docs/history/comping-styles.md` holds the figures.
         # Reached only when the guitar **is** singing, since the guard above answers
         # the comping route - so this is unconditionally the texture case: the note of
         # the tune still sounds, alone.
         return MELODY_ALONE_TEXTURE
     if (has_thumb and role == ROLE_FILL) or slot_grips == ():
         return MELODY_ALONE_TEXTURE
-    return MELODY_ALONE_NONE
+    return _MELODY_ALONE_NONE
 
 
 def lone_bass_case(
@@ -269,8 +269,8 @@ def is_bass_only(
     """
     Whether this step's upper voices really are held across it.
 
-    `slot_bass_only` is what the **bass grid** said: the walk invented this beat, because
-    the bass moves on a finer grid than the melody does (decision B). That is a statement
+    `slot_bass_only` is what the **walk** said: it invented this beat, because the
+    bass moves on a finer grid than the melody does (decision B). That is a statement
     about where the beat came from, not about what the left hand plays, and the two come
     apart. What the flag means, and what all four renderers do with it, is the stronger
     claim: **nothing above the thumb is struck**. It is the only thing that keeps a tied
@@ -355,7 +355,7 @@ def should_promote_fill(
     a penalty rather than a filter.
 
     Disabled wherever a fill is *meant* to be empty - under a thumb line on a fill, and
-    on a melody-only selection (`parts=melody`) - because the melody-alone branch has
+    on a melody-only selection (`chord_on="none"`) - because the melody-alone branch has
     already handled it, so promoting here would undo the selection one step at a
     time. The caller passes the selection fact, so it is derived in one place rather
     than re-decided here.
@@ -425,12 +425,10 @@ def holds_the_shape(
     one note, there are no inner voices ringing to hold, and marking the *next* step
     `repeated` then instructs every renderer to suppress that step's inner voices.
 
-    That is not a cosmetic flag error. Measured on "But Not For Me" bar 3 under a
-    walking line: the engine voiced `C3 Bb3 Eb4` for a `Cm7` target, and
-    `_step_cells` returned a single `8` on the G string - `C3` and `Bb3`, the two notes
-    that make it a `Cm7` rather than a bare melody note, reached **none** of the four
-    renderers. The chord of the tune was voiced and then thrown away by a rule that
-    meant "hold what is already ringing", applied when nothing was.
+    That is not a cosmetic flag error: `_step_cells` returns a single `8` on the G
+    string, so the two notes that make the chord a `Cm7` rather than a bare melody note
+    reach **none** of the four renderers. The chord is voiced and then thrown away by a
+    rule that means "hold what is already ringing", applied when nothing is.
 
     So the test is on what the previous step **sounds**, not on its flag: one active
     fret means there is nothing to hold. `melody_only` is then a special case of it
@@ -516,35 +514,26 @@ def select_step_voicing(
 ) -> Optional[Voicing]:
     """The candidate the engine's own rule prefers, honouring a slash bass first.
 
-    This is the rule the Weimar corpus brought (rule C), and it is what let the corpus
-    loader's own step loop - `arranger.slots` now - delegate to `arrange_progression`
-    instead of running a second one. The
-    library passes no `bass_pc` and gets exactly the behaviour it always had.
-
     The two rules that select a candidate - the slash bass and voice leading - are
     **combined, not applied in sequence**. The candidates are partitioned by how
     well they honour the bass, and the engine's own selection rule then decides
     *within the best group*. Applying them one after the other would let whichever
-    ran last always override the other, which is precisely the bug that was fixed
-    by writing them this way in the first place.
+    ran last always override the other, so the two are one decision rather than two
+    in sequence.
 
     The partition is skipped when the bass is unsatisfiable (`best > 2`), so an
     unachievable slash chord behaves exactly as if it had not been written - which
     is the same "never guess" rule the rest of this module follows.
 
-    `slash_bass_cost` is passed in rather than imported because it lives in
-    `arranger.slots`, which reaches this module through `steps`; a module-level
-    import either way would be a cycle. Passing it also makes the dependency visible
-    at the call site, which is the point: wanting a slash-bass preference is the only
-    reason to supply one.
+    The ranking is `chords.slash_bass_cost`, called directly rather than passed in:
+    it is pure integer arithmetic over a voicing and a pitch class, and `chords` sits
+    below this module in the order, so there is nothing to inject. `bass_pc` alone
+    decides whether the partition runs, so a slot with no written bass is the
+    library's own behaviour and gets exactly the ranking it always had.
     """
-    if (
-        criteria.bass_pc is not None
-        and criteria.slash_bass_cost is not None
-        and candidates
-    ):
+    if criteria.bass_pc is not None and candidates:
         costs = [
-            criteria.slash_bass_cost(v.midi_notes(), criteria.bass_pc)
+            slash_bass_cost(v.midi_notes(), criteria.bass_pc)
             for v in candidates
         ]
         best = min(costs)
@@ -576,10 +565,10 @@ def palette_facts(
 
     def lost_to_the_bass_partition(alternative: Voicing) -> bool:
         """Whether the slash-bass partition would have dropped `alternative`."""
-        if criteria.bass_pc is None or criteria.slash_bass_cost is None:
+        if criteria.bass_pc is None:
             return False
-        here = criteria.slash_bass_cost(chosen.midi_notes(), criteria.bass_pc)
-        there = criteria.slash_bass_cost(alternative.midi_notes(), criteria.bass_pc)
+        here = slash_bass_cost(chosen.midi_notes(), criteria.bass_pc)
+        there = slash_bass_cost(alternative.midi_notes(), criteria.bass_pc)
         return here != there
 
     available = max(len(candidate.active_frets()) for candidate in candidates)
@@ -615,7 +604,7 @@ def leaving_room_for_the_bass(
 ) -> List[Voicing]:
     """The candidates a requested bass note can actually sound under.
 
-    A requested grid bass note is part of the **request**, so the harmony has to make room
+    A requested bass note is part of the **request**, so the harmony has to make room
     for it: a shape whose player cannot reach the line's note is not a shape that honours
     that request, however well it ranks. The question is asked before selection and with
     `bass_placement` - the very call `attach_bass` will make afterwards - so the filter

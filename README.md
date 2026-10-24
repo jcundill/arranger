@@ -2,19 +2,19 @@
 
 Generate playable **jazz guitar chord-melody arrangements** from a chord progression.
 
-Takes `(melody note, chord quality, chord name)` triples, builds voicings in several grip families, pins the melody to the soprano string, picks with one position-aware cost function. Also reads a written head from MusicXML and arranges that.
+Takes `(melody note, chord name)` pairs, builds voicings in several grip families, pins the melody to the soprano string, picks with one position-aware cost function. Also reads a written head from MusicXML and arranges that.
 
 - **Seven grip families**, drop-2 first: `drop2`, `closed`, `drop3`, `drop24`, `drop2_6432`, `shell` and `duo` — four-note down to two-note guide-tone pairs. Every one sounds the chord's **3rd and 7th** (major vs minor); a `duo` sounds one of them under any chord tone — two notes is the floor ([grips](#grips)).
 - **Melody pinned to soprano**, on high E, B or G string — low melody still harmonised in position.
 - **Playable or absent.** Frets 0–18, span ≤5 (4 for duos), real string set, ≤4 fingers, no fifth fret from a held shape. Neck window is *preference, not filter* — losing a chord of the tune beats a fret out of position.
 - **Non-chord melody notes**: extension, Barry Harris 6/dim7 substitution, or chord held under a passing tone ([non-chord melody notes](#non-chord-melody-notes)).
-- **Six orthogonal axes**: how thick the chord part is, who plays the bottom, which parts the guitar takes, which degrees a non-singing part states, when each part sounds, and how a compound metre is felt ([the request and the axes under it](#the-request-and-the-six-axes-under-it)).
+- **Six orthogonal axes**: how thick the chord part is, who plays the bottom, which parts the guitar takes, which degrees a non-singing part states, when each part sounds, and how a compound metre is felt ([the request and the axes under it](#the-request-and-the-axes-under-it)).
 - **Heads from real sources** — MusicXML score, read as harmony *timeline*.
 - **Dependency-light**: Python 3.11+ and [musthe](https://pypi.org/project/musthe/) only. MusicXML head *reading* needs no extra; MusicXML export and Guitar Pro export each behind own optional extra.
 
 > The **distribution** is `jazz-arranger` (PyPI name `arranger` taken by unrelated project). **Import** name is `arranger`.
 
-Why lives in [`docs/`](docs/): [engine.md](docs/engine.md) (the selector, the six axes, the cost tuple), [renderers.md](docs/renderers.md) (tab, MusicXML, GP5), and [open-issues.md](docs/open-issues.md) (the open bugs, each with its measurement). The plan documents that built this — parts, comping styles, generated grips, fingering, `voices=` — are in [`docs/history/`](docs/history/).
+Why lives in [`docs/`](docs/): [engine.md](docs/engine.md) (the selector, the axes, the cost tuple), [renderers.md](docs/renderers.md) (tab, MusicXML, GP5), and [open-issues.md](docs/open-issues.md) (the issue ledger — none open; the six it filed, each with its measurement, are the record in [docs/history/open-issues.md](docs/history/open-issues.md)). The plan documents that built this — parts, comping styles, generated grips, fingering, `voices=` — are in [`docs/history/`](docs/history/).
 
 ## Installation
 
@@ -42,11 +42,11 @@ from arranger import VoiceLeadingEngine
 
 engine = VoiceLeadingEngine()
 
-# (melody note, chord quality, chord name)
+# (melody note, chord name)
 progression = [
-    ("D5", "m7",  "Dm7"),
-    ("B4", "7",   "G7"),
-    ("C5", "maj7", "Cmaj7"),
+    ("D5", "Dm7"),
+    ("B4", "G7"),
+    ("C5", "Cmaj7"),
 ]
 
 for step in engine.arrange_progression(progression):
@@ -58,6 +58,8 @@ Dm7      D5  x-x-10-10-10-10
 G7       B4  13-x-12-12-12-x
 Cmaj7    C5  x-x-9-9-8-8
 ```
+
+**The six questions have a second spelling.** `Request` carries them as one value (`from arranger import Request`), so the same call asks for a walking line under the tune — `engine.arrange_progression(progression, request=Request(bass_on="every-beat", bass_notes="walk"))`. Both spellings and what each question means are in [the request and the axes under it](#the-request-and-the-axes-under-it).
 
 Each step is an `ArrangementStep` (`chord`, `melody`, `voicing`, plus `non_chord_tone`, `strategy`, `harmonized_as`); `voicing` is a `Voicing` with `frets` (six entries, `-1` = muted), `top_fret`, `avg_fret` and helpers `tab_string()`, `fret_span()`, `midi_notes()`, `pitch_classes()`, `soprano_string()`.
 
@@ -74,8 +76,9 @@ python -m arranger head tests/data/synthetic_cut_time.mxl --bars 1-3
 ```text
 Synthetic Cut Time - Fixture Generator
   part: Voice
-  2/2, Eb major, 20 melody note(s), bars 1-8; neck window: frets 2-13; parts: auto
+  2/2, Eb major, 20 melody note(s), bars 1-8; neck window: frets 2-13
   note: 3 rests and unpitched notes
+  request: melody=on chord-on=melody chord-notes=full bass-on=none bass-notes=root chord-fills=none
 
 Bb7      F4  5    6-x-6-7-6-x       (harmony under 5 - 4 voices -
                                     sounding: Bb Root, Ab b7, D 3, F 5)
@@ -110,23 +113,23 @@ python -m arranger head tests/data/synthetic_triplets.mxl --bars 1-3 --html head
 | `--bars` | whole head | half-open `LO-HI`; **bounds may be negative** for pickups |
 | `--non-chord-tone` | `extension` | how to harmonise melody note outside chord |
 | `--fallback` | off | `diminished` — see [non-chord melody notes](#non-chord-melody-notes) |
-| `--no-melody` | off | the guitar does not sing: the tune belongs to somebody else, and the chord defaults to every felt beat |
+| `--no-melody` | off | the guitar does not sing: the tune belongs to somebody else, and the chord keeps the tune's own written onsets |
 | `--chord-on` | `melody` | when the chord attacks: the written onsets, `none`, or positions such as `1and` or `every-beat` |
-| `--chord-notes` | `full` | how many chord tones it states: `full`, `3`, `2`, `1` |
+| `--chord-notes` | `full` | how many chord tones it states: `full`, `targets`, `3`, `2`, `1` |
 | `--chord-fills` | `none` | what it states in a notated melody rest: `hold` one chord, or `comp` a felt beat at a time |
 | `--bass-on` | `none` | when the thumb attacks: positions, or `every-beat` |
-| `--bass-notes` | `root` | what each thumb note is: the root, root-then-5th, or a walk |
+| `--bass-notes` | `root` | what each thumb note is: the root, root-then-5th, a walk, or the note rules themselves (`root,approach`) |
 | `--fret-min` / `--fret-max` | `2` / `13` | neck window to aim for |
 | `--tab` | `line` | `staff` lays head on one six-line staff, spaced on real rhythm |
 | `--note-names` / `--mutes` | off | with `--tab staff`: name each step's melody note / spell muted strings as `x` |
 | `--bars-per-line` | `4` | with `--tab staff`: bars per staff line |
 | `--html` / `--musicxml` / `--gp5` | off | also write head to file — see [rendering](#rendering) |
 
-**The request is six questions, and the axes are how they are answered.** The flags above are the whole request a caller makes; the engine's own axes — `texture=`, `bass=`, `parts=`, `harmony=` and `grid=` — are the **Python API** underneath them, described in [the request and the axes under it](#the-request-and-the-six-axes-under-it), and a band setting is a combination of them rather than a mode. The sixth, `grouping`, is read from the score: a lead sheet already states it in a `3+2` direction, in its beaming, or in a dotted metronome mark.
+**The request is six questions, and each has two spellings.** The flags above are one; `Request(...)` is the other, so a library caller asks the same six — `engine.arrange_progression(progression, request=Request(melody=False, chord_on="every-beat"))` is the comp for a horn. Underneath both are the engine's own axes — the chord part's content, the bass policy and the parts selection — which are **derived from the request**, described in [the request and the axes under it](#the-request-and-the-axes-under-it); a band setting is a combination of them rather than a mode, and **no axis has a keyword of its own**. The metre is not an axis but an input fact like `timings=`: a score states it, and a progression built without a file declares it as one `TimeSignature`.
 
 **Every written note sounds.** No reduction: `arranger head` plays tune as written, one step per note, each on written beat. Where *chords* fall is a separate question — `--chord-on` — and a note is never quantised onto a position and dropped for sharing a slot.
 
-**Grip order is the engine's.** No flag names a family: the order families are tried in is `GRIP_PREFERENCE`, and an exact tie between equal-cost shapes breaks in that same order — see [grips](#grips). `--chord-notes` is what narrows the palette, by saying how many chord tones a step may state.
+**Grip order is the engine's.** No flag names a family: the order families are tried in is `grip_tables.GRIP_PREFERENCE`, and an exact tie between equal-cost shapes breaks in that same order — see [grips](#grips). `--chord-notes` is what narrows the palette, by saying how many chord tones a step may state.
 
 ### Five things reading a score requires
 
@@ -166,7 +169,7 @@ from arranger import VoiceLeadingEngine, format_progression
 
 engine = VoiceLeadingEngine()
 steps = engine.arrange_progression(
-    [("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7")]
+    [("D5", "Dm7"), ("B4", "G7"), ("C5", "Cmaj7")]
 )
 
 print(format_progression(steps))
@@ -281,63 +284,57 @@ GP5 is a *tab* format, so every note carries own fret and string. Each step writ
 
 Every run on a committed score in `tests/data/`, each one request changed. Output shown in the linked section:
 
-| ask | flag | output shown in |
-|---|---|---|
-| every note in full — the default | *(nothing to pass)* | [quick start](#quick-start) |
-| a chord stab on the and of 1 | `--chord-on 1and` | [when the chord attacks](#when-the-chord-attacks---chord-on) |
-| the harmonisation **and** the stab | `--chord-on melody,1and` | [when the chord attacks](#when-the-chord-attacks---chord-on) |
-| chords on the strong beats | `--chord-on 1,3` | [how thick the chord part is](#how-thick-the-chord-part-is---chord-notes) |
-| shells only | `--chord-notes 2` | [grips](#grips) |
-| guide-tone duos | `--chord-notes 1` | [grips](#grips) |
-| tune on its own | `--chord-on none` | [the tune on its own](#the-tune-on-its-own) |
-| a chord in the tune's rests | `--chord-on none --chord-fills hold` | [what the chord does in a rest](#what-the-chord-does-in-a-rest---chord-fills) |
-| walking bass under the melody | `--bass-on every-beat --bass-notes walk` | [a thumb line under the melody](#a-thumb-line-under-the-melody) |
-| comp for a horn | `--no-melody --chord-on every-beat` | [the chord alone](#the-chord-alone---no-melody) |
-| a lone bass line | `--no-melody --chord-on none --bass-on every-beat` | [the thumb alone](#the-thumb-alone) |
-| reduced chord where nothing else fits | `--fallback diminished` | [non-chord melody notes](#non-chord-melody-notes) |
+| ask | flag | `Request(...)` | output shown in |
+|---|---|---|---|
+| every note in full — the default | *(nothing to pass)* | `Request()` | [quick start](#quick-start) |
+| a chord stab on the and of 1 | `--chord-on 1and` | `Request(chord_on="1and")` | [when the chord attacks](#when-the-chord-attacks---chord-on) |
+| the harmonisation **and** the stab | `--chord-on melody,1and` | `Request(chord_on="melody,1and")` | [when the chord attacks](#when-the-chord-attacks---chord-on) |
+| chords on the strong beats | `--chord-on 1,3` | `Request(chord_on="1,3")` | [how thick the chord part is](#how-thick-the-chord-part-is---chord-notes) |
+| shells only | `--chord-notes 2` | `Request(chord_notes="2")` | [grips](#grips) |
+| guide-tone duos | `--chord-notes 1` | `Request(chord_notes="1")` | [grips](#grips) |
+| tune on its own | `--chord-on none` | `Request(chord_on="none")` | [the tune on its own](#the-tune-on-its-own) |
+| a chord in the tune's rests | `--chord-on none --chord-fills hold` | `Request(chord_on="none", chord_fills="hold")` | [what the chord does in a rest](#what-the-chord-does-in-a-rest---chord-fills) |
+| walking bass under the melody | `--bass-on every-beat --bass-notes walk` | `Request(bass_on="every-beat", bass_notes="walk")` | [a thumb line under the melody](#a-thumb-line-under-the-melody) |
+| comp for a horn | `--no-melody --chord-on every-beat` | `Request(melody=False, chord_on="every-beat")` | [the chord alone](#the-chord-alone---no-melody) |
+| a lone bass line | `--no-melody --chord-on none --bass-on every-beat` | `Request(melody=False, chord_on="none", bass_on="every-beat")` | [the thumb alone](#the-thumb-alone) |
+| reduced chord where nothing else fits | `--fallback diminished` | *(not a request field — `fallback=`)* | [non-chord melody notes](#non-chord-melody-notes) |
 
-## The request, and the six axes under it
+## The request, and the axes under it
 
-`head` asks **six questions**, and each has one flag: who plays the tune, when each accompaniment layer attacks, what each layer states, and what the chord does in a notated melody rest.
+`head` asks **six questions**, and each has one flag: who plays the tune, when each accompaniment layer attacks, what each layer states, and what the chord does in a notated melody rest. A library caller asks the same six through `Request`, whose field names are the flags' own:
 
-| question | flag | values |
-|---|---|---|
-| who plays the tune? | `--no-melody` | the guitar does, unless this is passed |
-| when does the chord attack? | `--chord-on` | positions in felt beats, or `melody`, `none`, `every-beat` |
-| what does the chord state? | `--chord-notes` | `full`, `3`, `2`, `1` |
-| what does it do in a melody rest? | `--chord-fills` | `none`, `hold`, `comp` |
-| when does the thumb attack? | `--bass-on` | positions, `every-beat`, or `none` |
-| what does each thumb note state? | `--bass-notes` | `root`, `root-5th`, `walk` |
+| question | flag | `Request(...)` | values |
+|---|---|---|---|
+| who plays the tune? | `--no-melody` | `melody=False` | the guitar does, unless this is passed |
+| when does the chord attack? | `--chord-on` | `chord_on="1and"` | positions in felt beats, or `melody`, `none`, `every-beat` |
+| what does the chord state? | `--chord-notes` | `chord_notes="2"` | `full`, `targets`, `3`, `2`, `1` |
+| what does it do in a melody rest? | `--chord-fills` | `chord_fills="hold"` | `none`, `hold`, `comp` |
+| when does the thumb attack? | `--bass-on` | `bass_on="every-beat"` | positions, `every-beat`, or `none` |
+| what does each thumb note state? | `--bass-notes` | `bass_notes="walk"` | `root`, `root-5th`, `walk` |
 
-**The default adds nothing.** `head FILE` is one chord under each written melody note, held for that note — no bass, no extra attacks, no chord invented in a rest. Everything else is asked for.
+**The default adds nothing.** `head FILE` is one chord under each written melody note, held for that note — no bass, no extra attacks, no chord invented in a rest. Everything else is asked for. `Request()` is that same default, so `arrange_progression(progression)` and `arrange_progression(progression, request=Request())` are one arrangement.
 
-Those six are the whole request. Underneath them are the engine's own axes — `texture=`, `bass=`, `parts=`, `harmony=`, `grid=` and the metre — which are the **Python API**, derived from the request and still the implementation. A band setting is a combination of them rather than a mode:
+**Those six are the whole request, and `Request` carries them as one value.** A library caller passes it beside the progression — `engine.arrange_progression(progression, timings=timings, request=Request(bass_on="every-beat", bass_notes="walk"))`. Underneath it are the engine's own axes, **derived from the request and never spelled**: a band setting is a combination of them rather than a mode, and no axis has a keyword of its own.
 
-| axis | the question it answers | values |
-|---|---|---|
-| `texture=` | how many chord tones the chord part states, and where the fuller positions are | `uniform`, `targets`, `chord3`, `chord2`, `chord1` |
-| `bass=` | which note rules the thumb line may state | `none`, `root`, `root,5th,approach,nearest` |
-| `parts=` | which of melody, bass and chord the guitar takes | any subset of `melody`, `bass`, `chord` |
-| `harmony=` | which **degrees** a part states when not singing | `full`, `guide`, `shell_root`, `root` |
-| `grid=` | when each part sounds | `PART:PATTERN` rows — `melody:every_note,chord:freddie` |
-| `grouping` | which denominator units are felt as one beat | the score's `N+N+…` (a direction or its beaming), or `auto`; a hand-built progression states it in `TimeSignature` |
+**Which of melody, bass and chord the guitar takes is not a seventh question**: it is derived from the six — the tune from `melody=`, a chord part from `chord_on=` and `chord_fills=`, a bass part from `bass_on=`. `options=ArrangeOptions(...)` carries the knobs that are not a question about the music — the neck window, `top_strings`, the non-chord-tone strategy — and the request and the metre are **input facts** the other way, so `request=` and `time_signature=` sit beside `options=` and may be used in the same call. Every other keyword given beside `options=` raises rather than being silently ignored.
 
-The mapping is mechanical and one-way: `--chord-notes full` is `texture=uniform` and `3`/`2`/`1` are `chord3`/`chord2`/`chord1`; `--bass-notes root` is `bass=root`, `root-5th` is `root,5th` and `walk` the full four; `--chord-on` and `--bass-on` become each layer's rhythm; and `parts=` is derived from which of the three the request leaves sounding. A value of `texture=` that names a **rhythm** — `targets` — has no request spelling on purpose: its rhythm is `--chord-on 1,3`, and its automatic thinning between the strong beats is the Python API's own business (see [the strong beats](#the-strong-beats)).
+`targets` is a **content** answer rather than a rhythm one, because where the strong beats are is the metre's and the grouping's business rather than the caller's: the request names the policy, and `--chord-on` names the attacks (see [the strong beats](#the-strong-beats)).
 
-`grouping` is the metre's **third fact**. A count says how many denominator units a bar has and the denominator how long one lasts, but neither says that 12/8 is felt as four dotted-quarter beats rather than twelve eighths. **The score states it**, and the importer reads it in this order: an `N+N` direction (a 5/4 marked `3+2`), the primary beaming (a 7/4 beamed 2+2+3, a 12/8 beamed 4+4+4), then a metronome pulse (a dotted quarter in 12/8). `auto` falls back to the metre's convention — threes for 6/8, 9/8 and 12/8; one per beat otherwise — and a conventional simple metre ignores its beaming, because a notation program's beam pairs restate the beat rather than group it. **A progression built without a file declares the metre as one `TimeSignature`**: `engine.arrange_progression(progression, time_signature=TimeSignature(5, 4, grouping="3+2"))`. Omitting it means common time, and the signature validates the grouping against the bar when it is built. It moves the `--chord-on` positions, the walking bass and the named grid figures together — in 12/8 `every-beat` is four stabs, not twelve.
+The metre's **third fact**, its grouping, is not an axis either. A count says how many denominator units a bar has and the denominator how long one lasts, but neither says that 12/8 is felt as four dotted-quarter beats rather than twelve eighths. **The score states it**, and the importer reads it in this order: an `N+N` direction (a 5/4 marked `3+2`), the primary beaming (a 7/4 beamed 2+2+3, a 12/8 beamed 4+4+4), then a metronome pulse (a dotted quarter in 12/8). `auto` falls back to the metre's convention — threes for 6/8, 9/8 and 12/8; one per beat otherwise — and a conventional simple metre ignores its beaming, because a notation program's beam pairs restate the beat rather than group it. **A progression built without a file declares the metre as one `TimeSignature`**: `engine.arrange_progression(progression, time_signature=TimeSignature(5, 4, grouping="3+2"))`. Omitting it means common time, and the signature validates the grouping against the bar when it is built. A caller overriding a score's grouping states the same value — `arrange_xml_head(path, time_signature=TimeSignature(12, 8, "3+3+3+3"))` — and its count and denominator must agree with the file's, because the file owns the bars the slots came from. The grouping moves the `--chord-on` positions and the walking bass together — in 12/8 `every-beat` is four stabs, not twelve.
 
-Two need a caveat. `harmony=full` is whole-chord chord-melody, which ordinary grip route voices; comping route has no implementation — asking there answered with `guide` today ([open issue 3](docs/open-issues.md)). And `texture=` changes which shapes are on the table, not their cost: the arity is a **ceiling** the palette is built to, so "play fewer notes here" does not compete against "stay in position" — it changes what may be chosen at all, not a term in the cost tuple.
+One needs a caveat: `--chord-notes` changes which shapes are on the table, not their cost: the arity is a **ceiling** the palette is built to, so "play fewer notes here" does not compete against "stay in position" — it changes what may be chosen at all, not a term in the cost tuple.
 
 ## How thick the chord part is: `--chord-notes`
 
 **How many chord tones the chord part states.** The right hand has four digits, one string may be carrying the tune and one the thumb line, so what is left over is the chord part's arity:
 
-| `--chord-notes` | the chord part states | the engine's axis |
-|---|---|---|
-| `full` *(default)* | the most the arithmetic allows — four strings, less one for the melody and one for a thumb line that sounds | `texture=uniform` |
-| `3` | at most three chord tones | `texture=chord3` |
-| `2` | at most two — the guide pair | `texture=chord2` |
-| `1` | at most one | `texture=chord1` |
+| `--chord-notes` | the chord part states |
+|---|---|
+| `full` *(default)* | the most the arithmetic allows — four strings, less one for the melody and one for a thumb line that sounds |
+| `targets` | that same maximum on a strong beat, and a thinner shape between them |
+| `3` | at most three chord tones |
+| `2` | at most two — the guide pair |
+| `1` | at most one |
 
 **A ceiling, not a fixed count.** The palette a step is offered is every family **up to** that arity, so a shape that can state one more does; a step that cannot state two states one rather than nothing. `--chord-notes 2` with the tune ours is the tune plus two chord tones — the shell; the same arity with `--no-melody` is a chord alone.
 
@@ -351,18 +348,20 @@ The selector ranks **completeness above position**, so a bar of running eighths 
 python -m arranger head tests/data/synthetic_common_8.musicxml --bars 1-2 --chord-on 1,3
 ```
 
-The engine's `texture="targets"` does the same thing **and** thins the fills between the targets automatically — a shell, a third or sixth, or the melody alone. That automatic half has no request spelling: it is a Python-API value, and a `--chord-between` would be its CLI form. The rhythm half is `--chord-on`, which is why the two are no longer one flag.
+`--chord-notes targets` does the same thing **and** thins the fills between the targets automatically — a shell, a third or sixth, or the melody alone. That automatic half is the same request value: `--chord-notes targets` says *how much of the chord sounds at a target and between them*, while `--chord-on` says *when* a chord attacks. The two are separate questions, which is why they are two flags: `--chord-on 1,3 --chord-notes targets` is a chord on 1 and 3 only, thinned inside each one.
 
 ```python
 progression = [
-    ("C5", "maj7", "Fmaj7"),   # beat 1 - the target
-    ("E5", "maj7", "Fmaj7"),   # fill
-    ("A4", "maj7", "Fmaj7"),   # fill
-    ("F4", "maj7", "Fmaj7"),   # beat 3 - the target
+    ("C5", "Fmaj7"),   # beat 1 - the target
+    ("E5", "Fmaj7"),   # fill
+    ("A4", "Fmaj7"),   # fill
+    ("F4", "Fmaj7"),   # beat 3 - the target
 ]
 timings = [(0, 1.0, None), (0, 1.5, None), (0, 2.0, None), (0, 3.0, None)]
 
-steps = engine.arrange_progression(progression, timings=timings, texture="targets")
+steps = engine.arrange_progression(
+    progression, timings=timings, request=Request(chord_notes="targets")
+)
 for step in steps:
     print(step.beat, step.role, step.voicing.tab_string())
 ```
@@ -370,11 +369,24 @@ for step in steps:
 ```text
 1.0 target x-x-7-9-6-8
 1.5 fill x-x-x-10-10-12
-2.0 fill x-x-x-5-5-5
+2.0 fill x-x-10-9-10-x
 3.0 target x-7-7-5-6-x
 ```
 
-Expect a lighter arrangement stating the harmony on the beats and ringing between. Each step carries `role` — `target` or `fill` — and `metric_weight` (2 on beat 1, 1 on beat 3, 0 elsewhere, −1 when no timing was supplied).
+The same request from the command line — `--chord-notes targets` **is** `Request(chord_notes="targets")`, and the run header prints the spelling back:
+
+```bash
+python -m arranger head tests/data/synthetic_common_8.musicxml --bars 1-2 --chord-notes targets
+```
+
+```text
+Cmaj7    E4  3    7-x-5-5-5-x       (harmony under 3 - 4 voices - sounding: B 7, G 5, C Root, E 3)
+Cmaj7    G4  5    x-x-9-9-8-x       (shell - 3rd & 7th, partial -
+                                    3 voices, the most a fill's palette offers -
+                                    sounding: B 7, E 3, G 5)
+```
+
+Expect a lighter arrangement stating the harmony on the beats and ringing between. Each step carries `role` — `target` or `fill` — and `metric_weight` (2 on beat 1, 1 on beat 3, 0 elsewhere, and −1 for a position you state as unplaced). A progression given no `timings` is laid out on the metre's own beats, one entry per beat of the bar, so a hand-built progression is arranged as the bars it names.
 
 **A fill never costs the tune a chord.** A fill slot with nothing thin to play is re-prepared as a principal note, not skipped — the texture is lighter, never missing. Measured effect in [docs/engine.md](docs/engine.md).
 
@@ -404,7 +416,7 @@ Expect **more steps than the melody had** — four here for three notes, because
 
 Each bass note says its purpose in `step.bass_role`: `anchor` (the chord's root where the line marks the bar), `connect` (a passing note between chords), `approach` (a semitone from the next root), `pedal` (a root on a position that is not the bar's first), `enclosure`, `hold` (a repeat). The thumb is placed against the **shape the hand holds**, not the melody: adjacent bass strings are five semitones apart, so "prefer the lowest string" and "stay where the hand is" are in permanent opposition, and placement takes the fret nearest the upper voicing — within the hand's reach. When the ranking's first shape cannot reach the requested note at all, the **harmony moves** to one that can, so the note sounds instead of going missing.
 
-A step whose bass note cannot be played keeps its upper voicing and says so rather than writing unplayable tab (`no playable bass note for bass ... - no free string below the melody, no octave of that pitch below the shape, the hand would need a fifth fret, or the reach is wider than five frets`). **The chord moves first**: a requested note the shape cannot reach is played by re-voicing the chord where the thumb *can* reach it, and the line says so (`placed to leave room for the requested bass note`). Dropping the note is the last resort, for the slots where no shape can carry it; counts over the committed heads are in [docs/open-issues.md](docs/open-issues.md) item 2.
+A step whose bass note cannot be played keeps its upper voicing and says so rather than writing unplayable tab (`no playable bass note for bass ... - no free string below the melody, no octave of that pitch below the shape, the hand would need a fifth fret, or the reach is wider than five frets`). **The chord moves first**: a requested note the shape cannot reach is played by re-voicing the chord where the thumb *can* reach it, and the line says so (`placed to leave room for the requested bass note`). Dropping the note is the last resort, for the slots where no shape can carry it; counts over the committed heads are in [docs/history/open-issues.md](docs/history/open-issues.md) item 2.
 
 ## Who plays what: `--no-melody` and the two layer flags
 
@@ -419,24 +431,17 @@ Three separate questions, one flag each: **does the guitar sing the tune**, **wh
 | the chord alone, for a horn on the tune | `--no-melody --chord-on every-beat` |
 | a bass line alone | `--no-melody --chord-on none --bass-on every-beat` |
 
-**The tune is the guitar's unless `--no-melody` is passed**, and that flag is a complete request on its own: the chord's default names the written onsets, this guitar has none, so the metre's own reading is used — every felt beat. The run header prints the resolved positions (`chord-on=1,2,3,4`, or `1,2` in 2/2), so the derivation is visible rather than assumed.
+**The tune is the guitar's unless `--no-melody` is passed**, and that flag is a complete request on its own: the chord's default is the written onsets, and those are a fact about the *score* rather than about who plays it, so the comp falls where the tune does — the tune's own rhythm, not a substitute for it. Every felt beat is the one flag away it always was (`--chord-on every-beat`), and the run header prints the resolved rhythm (`chord-on=melody`, or `1,2,3,4` for the explicit ask), so what the comp is doing is on the line rather than assumed.
 
-`--bass-notes` names what each thumb note is: `root` is the chord's root, `root-5th` alternates root and fifth, and `walk` is the full `root,5th,approach,nearest` chain — a note on every requested position, moving toward the next chord rather than repeating a grid. The rhythm is `--bass-on`'s, so `--bass-on every-beat --bass-notes root` is a pedal on every felt beat, which is what it says.
+`--bass-notes` names what each thumb note is: `root` is the chord's root, `root-5th` alternates root and fifth, and `walk` is the full `root,5th,approach,nearest` chain — a note on every requested position, moving toward the next chord rather than repeating a grid. **The three names are sugar over the four rules**, so a chain the names do not offer is spelled out: `--bass-notes root,approach` is the root with an approach note between it and the next chord, and the order is the resolution order rather than formatting. The rhythm is `--bass-on`'s, so `--bass-on every-beat --bass-notes root` is a pedal on every felt beat, which is what it says.
 
 **A combination the left hand cannot accommodate at all is refused outright** (`ValueError`); a single note the thumb cannot reach is dropped and named on its own step (`bass_refused`), and the arrangement proceeds without it — a walking line with gaps is worse than none, but losing the bass costs less than losing the tune.
 
-### Which degrees a non-singing part states: `harmony=` (Python API)
+### Which degrees a non-singing part states
 
-`harmony` is read only when the guitar has no tune of its own, and it is a **library-only** value: there is no request flag, because it changes nothing on the route the guitar sings — a chord-melody's shell is a **grip** the selector picks, not a degree family.
+The chord part states the **guide pair** — the 3rd and the 7th, the two notes that say major or minor — whenever the guitar is comping rather than singing. It is not a setting: a chord stated to somebody else's ear with no tune on top *is* a claim about its 3rd and 7th, and the guitar's own chord-melody takes its shape from the grip the selector picks instead.
 
-| `harmony=` | the part sounds | needs |
-|---|---|---|
-| `guide` (default) | 3rd and 7th — the notes that say major or minor | two notes |
-| `shell_root` | both guide tones **and** root or 5th underneath | three notes |
-| `root` | root, or 5th where root unreachable — the bass note alone | `parts=("bass",)` |
-| `full` | whole chord | ordinary chord-melody route — see [the request](#the-request-and-the-six-axes-under-it) |
-
-`harmony="shell_root", parts=("bass", "chord")` is the ensemble: horn on the tune, guitar stating the quality *and* the root underneath. A degree order named for a part the selection leaves out is **refused outright** (`ValueError`), not quietly thinned — `harmony="guide"` with `parts=("melody",)` asks degrees of a part the guitar is not playing.
+So a request that takes the chord part with a thumb line under it — `Request(melody=False, bass_on="every-beat")` — is the ensemble: horn on the tune, bassist on the root, guitar stating the quality in between — `8-x-8-8-x-x` for a `Cm7`, the root under the guide pair. What the comping part varies is *where* its chords fall (`--chord-on`), not which degrees they state.
 
 ### The thumb alone
 
@@ -471,16 +476,16 @@ python -m arranger head tests/data/synthetic_repeat_slash.musicxml --bars 1-2 \
 ```
 
 ```text
-Gmaj9    D4  5    x-x-x-x-7-7       (comping - B 3 & F# 7; the guitar does not play the tune)
-Gmaj9    D4  5    x-x-x-x-x-x       (the guitar rests here -
-                                    no part was asked to sound at this position)
-Gmaj9    D4  5    x-x-x-x-7-7       (comping - B 3 & F# 7; the guitar does not play the tune)
-Gmaj9/F# D4  5    x-x-x-x-x-x       (the guitar rests here - no part was asked to sound at this position)
+Gmaj9    D4  5    x-x-x-11-12-x     (comping - B 3 & F# 7; the guitar does not play the tune)
+Gmaj9    D4  5    x-x-x-11-12-x     (comping - B 3 & F# 7; the guitar does not play the tune)
+Gmaj9/F# D4  5    x-x-x-11-12-x     (comping - B 3 & F# 7; the guitar does not play the tune)
 ```
 
-Expect **the arity** per step — two here, three under `--chord-notes 3` and one under `1` — not a count of layers. A position the chord rhythm does not name is a **rest**, emitted rather than dropped so the part keeps its place against the tune; that is why a 2/2 bar shows two comped positions and two rests. `step.melody` still carries the horn's note and `step.melody_voiced` is False — the first is the written tune, the second is who sounds it.
+**The high E is not on the comping palette** — the same two guide tones, on the G and B strings rather than the B and high E. That string is where the tune itself is pinned first, and a comping part has no tune to put there: a chord whose top voice sits on it is heard as a melody, and heard *above* the horn playing the real one. Dropping it is a palette narrow rather than a cost criterion, so the chord is never lost — it moves.
 
-**Shape chosen from the chord alone.** `get_comping_voicings` takes no melody argument; `D5` and `G3` under the same chord return *identical* candidate sets. A chord tone in the shell may land on the same pitch class as the melody — unremarkable, and the guide-tone ear needs it anyway. Every voiceable quality has a comping shape in some playable position, checked over `CHORD_TONES_FROM_ROOT`. A quality with no readable root gets nothing: a shell is a claim about *this* chord's 3rd and 7th, and guessing without the root is how wrong notes get in.
+Expect **the arity** per step — two here, three under `--chord-notes 3` and one under `1` — not a count of layers. The comp falls on the **tune's own onsets**: this bar of the head states three notes (beat 1, the and of 1 and the and of 2), so there are three attacks and no rests. Ask for a rhythm of its own and the positions it does not name become **rests**, emitted rather than dropped so the part keeps its place against the tune — `--chord-on 1,2` on the same bar comps beats 1 and 2 and rests the two offbeats the tune states between them. `step.melody` still carries the horn's note and `step.melody_voiced` is False — the first is the written tune, the second is who sounds it.
+
+**Shape chosen from the chord alone.** `get_comping_voicings` takes no melody argument; `D5` and `G3` under the same chord return *identical* candidate sets. A chord tone in the shell may land on the same pitch class as the melody — unremarkable, and the guide-tone ear needs it anyway. Every voiceable quality has a comping shape in some playable position, checked over `CHORD_TONES_FROM_ROOT`. A symbol with no readable root is refused: a shell is a claim about *this* chord's 3rd and 7th, and guessing without the root is how wrong notes get in.
 
 **A repeated melody holds the whole shape.** Normally a repeat is a soprano-only re-strike with the rest muted; there is no soprano to re-strike when the guitar is not singing, so the shape is held instead — the guitar does not play a moving line on exactly the beats the arrangement handed the tune away.
 
@@ -538,7 +543,7 @@ Gmaj9/F# D4  5    x-x-x-x-3-x       (harmony under 5 - melody alone, the most th
 
 One stab, on the and of 1; the melody notes elsewhere are the tune alone. **A stab lasts its felt beat and no further** — the beats it does not fill are written as a rest — and a position the metre does not have is refused rather than clamped.
 
-**Every position you name is a new attack**, even where the chord is the same shape as the one before it. `--no-melody --chord-on 1,2` on a 2/2 head strikes the same chord twice a bar, and the staff, the HTML, the score and the GP5 file all draw both; a comp on `--chord-on every-beat` is four attacks a bar, not one long chord. Only a position the engine *invents* — a slot the tune merely sustains through — is a hold.
+**Every position you name is a new attack**, even where the chord is the same shape as the one before it. `--no-melody --chord-on 1,2` on a 2/2 head strikes the same chord twice a bar, and the staff, the HTML, the score and the GP5 file all draw both; a comp on `--chord-on every-beat` is four attacks a bar, not one long chord. **The tune's own rhythm counts as named positions too**: a comp whose chord rhythm is `melody` strikes at each written onset, which is why `--no-melody` writes one attack per note of the tune rather than one chord per bar. Only a position the engine *invents* — a slot the tune merely sustains through — is a hold.
 
 **What happens to a melody note with no chord on it depends who sings** — the one place the rhythm needs two answers:
 
@@ -547,7 +552,7 @@ One stab, on the and of 1; the melody notes elsewhere are the tune alone. **A st
 
 **The rhythm places chords, not the thumb.** The thumb line's own positions come from `--bass-on`, so the thumb sounds on beats where the guitar strikes no chord at all — the `bass_only` steps above are exactly that. The chord rhythm *does* change the shape a thumb note is placed against: a different chord above can move the note or refuse it.
 
-The presets the old `grid` flag exposed are **spellings of positions**, not names: `freddie` is `every-beat`, `charleston` is `1,2and`, `joe_pass` is `1and,2and,3and,4and` and `final_and` is `lastand`.
+The old `--grid` figures were **presets of positions, and only of positions**: `freddie` was `--chord-on every-beat`, `charleston` `1,2and`, `joe_pass` `1and,2and,3and,4and` and `final_and` `lastand`. They were removed because they were a second spelling of the same question — and a slightly different one, since a preset also decided which union its positions were merged into, so `grid="chord:freddie"` and `--chord-on every-beat` could differ in shape while agreeing on every position. The request is the only spelling now.
 
 ### What the chord does in a rest: `--chord-fills`
 
@@ -592,11 +597,11 @@ A rest is **split** where the harmony changes and where a `--chord-on` target fa
 | `duo` | 2 | chord's guide tone — 3rd, or 4th on sus — under any chord tone |
 | `interval` | 2 | 3rd, 6th or 10th below melody — a *fill*, not a harmony |
 
-Seven of them are `GRIP_PREFERENCE`: the order the families are tried in **and** the order an exact tie between equal-cost shapes breaks in — there is no separate grip term in the cost function and no caller order to give. A complete chord that reaches a step still outranks a partial one at equal cost, because note count is its own criterion; what `--chord-notes` does is decide whether the complete chord is on the table at all. `interval` is excluded — an interval is texture, not harmony — and `targets` offers it for fills only.
+Seven of them are `grip_tables.GRIP_PREFERENCE`: the order the families are tried in **and** the order an exact tie between equal-cost shapes breaks in — there is no separate grip term in the cost function and no caller order to give. A complete chord that reaches a step still outranks a partial one at equal cost, because note count is its own criterion; what `--chord-notes` does is decide whether the complete chord is on the table at all. `interval` is excluded — an interval is texture, not harmony — and `targets` offers it for fills only.
 
 `closed` sits **second**, right after `drop2`: tightest shape there is, so where melody can fret it at all it beats other four-note families on a tie. Most melodies cannot — close-position chord under melody is seventh or more of pitch on four strings only 4–5 semitones apart in tuning — usually never generated rather than generated and rejected.
 
-`drop3` and `drop24` derive from close-position stack under melody, keeping every *other* voice chord tone — measured over every quality and every melody, zero wrong notes where drop-2's quality-only fallback produces hundreds. [docs/engine.md](docs/engine.md) has derivation and cost tuple; [docs/history/generated-grips.md](docs/history/generated-grips.md) the rule deciding which chord tones a shape states.
+`drop3` and `drop24` derive from close-position stack under melody, keeping every *other* voice chord tone — measured over every quality and every melody, zero wrong notes - and drop-2's old quality-only fallback, which could sound a note the chord does not contain, is gone. [docs/engine.md](docs/engine.md) has derivation and cost tuple; [docs/history/generated-grips.md](docs/history/generated-grips.md) the rule deciding which chord tones a shape states.
 
 Two arities are thin by design, and the run says so:
 
@@ -643,7 +648,7 @@ Sparsest thing library plays — harmony implied not stated, for solo voice or l
 Melodies below high E open pitch (`E4`) cannot be voiced on that block. By default melody may also pin to B string (voicing on A-D-G-B) and **G string** (bottom four strings) — floor drops to `G3`:
 
 ```python
-low = [("D4", "m7", "Dm7"), ("D4", "7", "G7"), ("C4", "maj7", "Cmaj7")]
+low = [("D4", "Dm7"), ("D4", "G7"), ("C4", "Cmaj7")]
 for step in engine.arrange_progression(low):
     print(step.chord, step.voicing.tab_string(), "melody string",
           6 - step.voicing.soprano_string())
@@ -672,14 +677,14 @@ The `Cmaj7` is where the restriction shows: four notes on the low E, D, G and B 
 
 ## High melodies, and the neck window
 
-Every voicing confined frets 0–18, span ≤5 (4 for duo and interval), on real string set. `NECK_FRET_MIN`/`NECK_FRET_MAX` — frets 2–13 — range selector *aims* for, not hard filter: step with no voicing inside window still played, just outside it, because losing chord of tune beats fret out of position. Run header echoes window whether or not met.
+Every voicing confined frets 0–18, span ≤5 (4 for duo and interval), on real string set. `tuning.NECK_FRET_MIN`/`tuning.NECK_FRET_MAX` — frets 2–13 — range selector *aims* for, not hard filter: step with no voicing inside window still played, just outside it, because losing chord of tune beats fret out of position. Run header echoes window whether or not met.
 
 Cost function ranks shape's **correctness first**: out-of-chord notes, then frets outside window, then missing voices, then span, then neck position, then inner voices' movement, finally bass function. Tight shape beats shape nearer middle of neck; complete chord beats partial at any position. Spans of 0 and 1 frets equal — one fret stretch not worth moving hand — why order puts span above position but not last fret of reach. That order is library's central invariant; measurement in [docs/engine.md](docs/engine.md).
 
-Melody whose only position sits above `HIGH_FRET_LIMIT` (13) voiced an octave down.
+Melody whose only position sits above `tuning.HIGH_FRET_LIMIT` (13) voiced an octave down.
 
 ```python
-high = [("A5", "m7", "Dm7")]
+high = [("A5", "Dm7")]
 for step in engine.arrange_progression(high):
     print(step.chord, step.melody, step.voicing.tab_string(),
           "from", step.original_melody)
@@ -708,7 +713,7 @@ Two deliberate limits:
 Melodies do not always land on chord tones. Bar 2 of "All of Me" moves `C5 → D5 → C5` over `Cmaj7`, `D5` being the 9th. Pass `non_chord_tone=` to `arrange_progression` (or call `is_chord_tone` / `resolve_non_chord_tone` directly) to choose how such notes are harmonised:
 
 ```python
-bar_2 = [("C5", "maj7", "Cmaj7"), ("D5", "maj7", "Cmaj7"), ("C5", "maj7", "Cmaj7")]
+bar_2 = [("C5", "Cmaj7"), ("D5", "Cmaj7"), ("C5", "Cmaj7")]
 
 for strategy in ("extension", "diminished", "sustain"):
     steps = engine.arrange_progression(bar_2, non_chord_tone=strategy)
@@ -768,13 +773,13 @@ Am7      G4  b7   8-x-7-9-8-x       (harmony under b7 - 4 voices -
 
 Expect tune changed: written `Am7` gone, fallback states full `Bdim7` where default gave up with two voices. Colour to opt into, not default — why run counts steps it touched.
 
-On **comping** selection (`voices=` with no soprano — guitar states chord while somebody else sings) same flag moves chord guitar *states*, never anything it sings. Non-chord note at an **onset** reharmonises guitar's chord: `D5` over `Cmaj7` under `voices="alto,tenor"` gives `Cmaj9` (`extension`) or `Bdim7` (`diminished`) in guide-tone voices, `harmonized_as` reports, diagnostic naming forcing note. Held note and silent grid position state written chord unchanged; `sustain` leaves comping part's harmony exactly as chord symbol writes it.
+On a **comping** selection (`Request(melody=False)` — guitar states the chord while somebody else sings) the same flag moves the chord the guitar *states*, never anything it sings. A non-chord note at an **onset** reharmonises the guitar's chord: `D5` over `Cmaj7` under a comping selection gives `Cmaj9` (`extension`) or `Bdim7` (`diminished`) in guide-tone voices, `harmonized_as` reports it, and the annotation names the note that forced it. Held note and silent grid position state written chord unchanged; `sustain` leaves comping part's harmony exactly as chord symbol writes it.
 
 ## Supported chord qualities
 
 Seventh: `maj7`, `6`, `m7`, `m7b5`, `dim7`, `m6`, `mMaj7`, `7`, `7b9`, `7alt`. Extensions: `maj9`, `m9`, `9`, `6/9`, `13`. Triads: `maj`, `m`, `aug`. Suspended: `sus4`, `sus2`, `7sus4`. Added-note and altered: `add9`, `madd9`, `7b5`, `7#5`, `7#11`, `7b13`, `maj7#11`, `m9b5`.
 
-Aliases resolve case-sensitively: `M7` major seventh, `m7` minor seventh, `M` major triad. Aliases: `min7`, `min7b5`, `ø7`, `ø`, `half-dim`, `°7`, `°`, `dim`, `min6`, `minMaj7`, `mmaj7`, `min9`, `dom7`, `dom9`, `dom13`, `M7`, `M9`, `69`, `min`, `-`, `+`, `sus`, `7sus`. Two conventions: `dim` means `dim7` (diminished triad not voiced); bare `C` not assumed major — spell `Cmaj` or `CM`.
+Aliases resolve case-sensitively: `M7` major seventh, `m7` minor seventh, `M` major triad. Aliases: `min7`, `min7b5`, `ø7`, `ø`, `half-dim`, `min6`, `minMaj7`, `mmaj7`, `m(maj7)`, `min(maj7)`, `mM7`, `-M7`, `min9`, `mi7`, `m7(b5)`, `m7-5`, `dom7`, `dom9`, `dom13`, `M7`, `M9`, `∆7`, `Δ7`, `Ma7`, `ma7`, `M6`, `69`, `min`, `-`, `+`, `+7`, `aug7`, `sus`, `7sus`. Two conventions: `dim` means `dim7` (diminished triad not voiced); bare `C` not assumed major — spell `Cmaj` or `CM`. A suffix no table carries is a chord the library reports rather than guesses: the bar keeps its tune and the tab says "the chord symbol could not be read".
 
 Drop-2 shape has four voices, so triad templates double root octave below stack:
 
@@ -782,16 +787,16 @@ Drop-2 shape has four voices, so triad templates double root octave below stack:
 from musthe import Note
 
 colours = [
-    ("E5",  "maj",  "Cmaj"),         # x-x-10-9-8-12
-    ("C5",  "sus4", "Gsus4"),        # x-x-5-5-3-8
-    ("D5",  "add9", "Cadd9"),        # x-x-10-9-8-10
-    ("Db5", "7#11", "G7#11"),        # x-x-9-10-8-9
-    ("Eb5", "7b13", "G7b13"),        # x-x-9-10-8-11
-    ("F#5", "maj7#11", "Cmaj7#11"),  # x-x-14-16-13-14
-    ("B4",  "m9b5", "Am9b5"),        # x-x-5-5-4-7
+    ("E5", "Cmaj"),         # x-x-10-9-8-12
+    ("C5", "Gsus4"),        # x-x-5-5-3-8
+    ("D5", "Cadd9"),        # x-x-10-9-8-10
+    ("Db5", "G7#11"),        # x-x-9-10-8-9
+    ("Eb5", "G7b13"),        # x-x-9-10-8-11
+    ("F#5", "Cmaj7#11"),  # x-x-14-16-13-14
+    ("B4", "Am9b5"),        # x-x-5-5-4-7
 ]
-for note, quality, name in colours:
-    voicing = engine.get_drop2_voicings(Note(note), quality, chord_name=name)[0]
+for note, name in colours:
+    voicing = engine.get_drop2_voicings(Note(note), chord_name=name)[0]
     print(f"{name:<9} {note:<3} {voicing.tab_string()}")
 ```
 
@@ -822,12 +827,12 @@ Engine lives in `arranger` package, fourteen modules in strict dependency order 
 - Voicings 2–4 strings, never all six. Melody on high E, B or G; A and low E inner voices only, no grip puts soprano on either. No barré chord — fret `0` when voice lands on open string — no full six-string voicing modelled. `fingers.py` assigns finger per string and marks barre where two strings share fret, but no renderer prints fingering: tab is what you read. One grip — 6-4-3 shell — deliberately skips A string.
 - Melodies confined `G3`–`Bb5`.
 - Fixed max fret span 5 (4 for duo and interval), fret range 0–18, no step may need fifth fret from hand already holding shape. `close` offered, second in preference order, usually unreachable: most melodies cannot fret it inside that budget, wins only where it does.
-- Non-chord melody notes handled only for `NON_CHORD_TONE_EXTENSIONS` mappings (9ths, 6/9s, 11ths, #11s, b13s, 13ths, half-diminished 9th, 9th over plain triad) plus dim7; anything else keeps quality-only fallback — and melody-only palette (`shell`, `duo`, `interval`) has no fallback to keep, note sounds alone under its chord, step says `(melody alone - no voicing for this chord)`.
-- Chord-tone drop-2 with no inversion for — 9th in melody of 13 chord — falls to quality-only fallback, which can sound note chord does not contain. Selector rejects such shape whenever correct one exists, so *arrangement* only hears it when nothing else playable, but `get_drop2_voicings` still offers it. Shells, duos, 6-4-3 grip unaffected: build from chord's tones.
-- `sustain` strategy structural — API takes only `(note, quality, name)` triples, rhythm and duration cannot spot brief passing tone.
+- Non-chord melody notes handled only for `NON_CHORD_TONE_EXTENSIONS` mappings (9ths, 6/9s, 11ths, #11s, b13s, 13ths, half-diminished 9th, 9th over plain triad) plus dim7; anything else has nothing to state, so the note sounds alone under its chord and the step says `(melody alone - no voicing for this chord)`.
+- Chord-tone drop-2 with no inversion for — 9th in melody of 13 chord — is not offered at all: the quality-only fallback that used to answer it could sound a note the chord does not contain, and it is gone with the quality field. Another family that builds from the chord's own tones answers it - shells, duos and the 6-4-3 grip are unaffected - or the step keeps the tune and loses the chord.
+- `sustain` strategy structural — API takes only `(note, name)` pairs, rhythm and duration cannot spot brief passing tone.
 - Neck window preference not filter, so `--fret-min`/`--fret-max` may not be honoured where nothing playable inside. Header echoes window either way.
 - Slash bass honoured as preference not hard constraint: selector narrows candidates by it, engine's own rule within that set — voicing that cannot honour bass still playable.
-- Beat melody skips *inside* a bar it occupies has no chord of its own, chord in force stored per melody note. Bar-level half built — bar melody never enters arranged under every route — rest is [open issue 1](docs/open-issues.md).
+- Beat melody skips *inside* a bar it occupies has no chord of its own — chord in force stored per melody note. Bar-level half built: a comping selection states the chord of a bar the melody never enters, and `--chord-on` names the positions a singing selection adds.
 - No release published to PyPI.
 
 ## License

@@ -18,6 +18,7 @@ from typing import Any
 
 from arranger import Request
 from arranger.annotation import step_annotation
+from arranger.options import ArrangeOptions
 from headxml import arrange_xml_head
 from tabxml import format_musicxml
 from tests.support import COMMON_8, make_step
@@ -132,12 +133,29 @@ class TestTheRingEnds(unittest.TestCase):
         carry_bass([_struck_bass(), following])
         self.assertFalse(following.bass_held)
 
-    def test_an_unplaced_step_carries_nothing(self):
-        """A progression with no rhythm has no bar line, so there is nothing to stop at."""
+    def test_the_ring_follows_the_metre(self):
+        """A hand-built progression is laid out on the felt beats, so the thumb's note rings.
+
+        Two chords in 4/4 are beats 1 and 2 of one bar, and the thumb strikes the root
+        once: the second step carries that note rather than restriking it. The bar line
+        that ends the ring is therefore a real distance away.
+        """
         from arranger import VoiceLeadingEngine
 
         steps = VoiceLeadingEngine.arrange_progression(
-            [("E4", "maj7", "Cmaj7"), ("G4", "maj7", "Cmaj7")], bass="root"
+            [("E4", "Cmaj7"), ("G4", "Cmaj7")],
+            options=ArrangeOptions(request=Request(bass_on="1", bass_notes="root")),
+        )
+        self.assertEqual([step.bass_held for step in steps], [False, True])
+
+    def test_an_unplaced_step_carries_nothing(self):
+        """A position the caller states as unplaced has no bar line to stop at."""
+        from arranger import VoiceLeadingEngine
+
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("E4", "Cmaj7"), ("G4", "Cmaj7")],
+            timings=[(None, None, None)] * 2,
+            options=ArrangeOptions(request=Request(bass_on="1", bass_notes="root")),
         )
         self.assertEqual([step.bass_held for step in steps], [False, False])
 

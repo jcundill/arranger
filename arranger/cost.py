@@ -14,10 +14,11 @@ the dependency order.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Container, List, NamedTuple, Optional, Sequence
+from typing import Container, List, NamedTuple, Optional
 
 from .grips import BASS_DEGREES_6432
-from .tuning import NECK_FRET_MAX, NECK_FRET_MIN, GuitarFretboard, Voicing
+from .step_types import Voicing
+from .tuning import NECK_FRET_MAX, NECK_FRET_MIN, GuitarFretboard
 
 
 class VoicingScore(NamedTuple):
@@ -61,8 +62,8 @@ class SelectionCriteria:
 
     `previous` is here rather than beside `candidates` because it is part of the
     ranking context, not a candidate: every shape in one palette is scored against
-    the same held shape. `bass_pc` and `slash_bass_cost` are the partition's half of
-    the rule and are read before `cost` is called.
+    the same held shape. `bass_pc` is the partition's half of the rule and is read
+    before `cost` is called.
     """
 
     previous: Optional[Voicing] = None
@@ -72,7 +73,6 @@ class SelectionCriteria:
     root_pc: Optional[int] = None
     melody_pc: Optional[int] = None
     bass_pc: Optional[int] = None
-    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]] = None
 
     def cost(self, voicing: Voicing) -> VoicingScore:
         """This shape's cost under exactly these criteria."""
@@ -124,8 +124,8 @@ def voicing_cost(voicing: Voicing, criteria: SelectionCriteria) -> VoicingScore:
        criterion that outranks every preference, because a wrong note is not playable
        at all while an awkward position is merely awkward. It exists because the
        hand-authored drop-2 tables do not have an inversion for every chord tone - a
-       9th in the melody of a 13 chord, for instance - and the quality-only fallback
-       that covers the gap is free to sound a note the chord does not contain. Several
+       9th in the melody of a 13 chord, for instance - and the fallback that used to cover
+       the gap was free to sound a note the chord does not contain. Several
        of the derived grips always pass this.
 
        **A count, not a yes/no, and `melody_pc` is excluded from it.** Both parts are

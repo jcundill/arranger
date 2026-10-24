@@ -68,9 +68,9 @@ class TestVoiceLeading(unittest.TestCase):
         arrangement now contains one.
         """
         progression = [
-            ("F5", "m7b5", "Dm7b5"),
-            ("F5", "7b9", "G7b9"),
-            ("Eb5", "m7", "Cm7"),
+            ("F5", "Dm7b5"),
+            ("F5", "G7b9"),
+            ("Eb5", "Cm7"),
         ]
         result = VoiceLeadingEngine().arrange_progression(progression)
 

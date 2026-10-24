@@ -36,7 +36,8 @@ from musthe import Note
 from . import chords as _chords
 from .bass_place import BassNote, bass_placement
 from .fingers import can_fret
-from .tuning import PITCH_CLASS_NAMES, ArrangementStep
+from .step_types import ArrangementStep
+from .tuning import PITCH_CLASS_NAMES
 
 
 def attach_bass(
@@ -57,7 +58,7 @@ def attach_bass(
       intuitive one: no free string below the melody, **no octave of the wanted
       pitch below the shape's own lowest note**, a fifth fret for four fingers, or a
       reach wider than the hand's five frets. The counts are in
-      `docs/open-issues.md` item 2, and the field carries the wanted pitch rather
+      `docs/history/open-issues.md` item 2, and the field carries the wanted pitch rather
       than the cause, so a reader who needs the split has to re-measure it there.
       Same argument as the neck window being a penalty rather than a filter: losing a
       step is worse than losing its bass.
@@ -131,7 +132,7 @@ def carry_bass(steps: List[ArrangementStep]) -> None:
     no bar line to stop at, so carrying across it would ring a note through an
     arrangement that never asked for a rhythm.
     """
-    ringing: Optional[Ring] = None
+    ringing: Optional[_Ring] = None
     for step in steps:
         if step.bass is not None and not step.bass_held:
             ringing = _struck(step)
@@ -145,10 +146,10 @@ def carry_bass(steps: List[ArrangementStep]) -> None:
 
 
 #: A thumb note as the ring carries it: (midi, string, fret, the bar it began in).
-Ring = Tuple[int, int, int, int]
+_Ring = Tuple[int, int, int, int]
 
 
-def _struck(step: ArrangementStep) -> Optional[Ring]:
+def _struck(step: ArrangementStep) -> Optional[_Ring]:
     """The note this step plucks, as a ring, or None when it plucks none.
 
     `bass_pc` is the lowest sounding voice, so it is present exactly when the step
@@ -161,7 +162,7 @@ def _struck(step: ArrangementStep) -> Optional[Ring]:
     return (step.bass, string, step.voicing.frets[string], step.bar)
 
 
-def _takes_the_ring(step: ArrangementStep, ringing: Ring) -> bool:
+def _takes_the_ring(step: ArrangementStep, ringing: _Ring) -> bool:
     """Whether `step` can sound `ringing` under what it plays. See `carry_bass`."""
     midi, string, fret, bar = ringing
     if step.bar != bar or not step.voicing.active_frets():
@@ -175,7 +176,7 @@ def _takes_the_ring(step: ArrangementStep, ringing: Ring) -> bool:
     return can_fret(merged)
 
 
-def _carry(step: ArrangementStep, ringing: Ring) -> None:
+def _carry(step: ArrangementStep, ringing: _Ring) -> None:
     """Write the ringing note into `step`: sounding, and not plucked."""
     midi, string, fret, _bar = ringing
     step.voicing.frets[string] = fret
@@ -186,7 +187,7 @@ def _carry(step: ArrangementStep, ringing: Ring) -> None:
 
 
 def next_resolution_melody(
-    progression: Sequence[Tuple[Optional[str], str, str]],
+    progression: Sequence[Tuple[Optional[str], str]],
     index: int,
     onsets: Optional[Container[int]] = None,
 ) -> Optional[str]:
@@ -206,9 +207,9 @@ def next_resolution_melody(
     for offset in range(index + 1, len(progression)):
         if onsets is not None and offset not in onsets:
             continue
-        note_str, chord_type, name = progression[offset]
+        note_str, name = progression[offset]
         if note_str is None:
             continue
-        if _chords.is_chord_tone(Note(note_str), chord_type, name):
+        if _chords.is_chord_tone(Note(note_str), name):
             return note_str
     return None

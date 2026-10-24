@@ -20,9 +20,8 @@ because a rule with unnamed exceptions is a rule the next editor deletes:
   question, and a witness that recomputed it would be the clause agreeing with itself.
   `TestEveryChoiceIsExplained.test_the_slash_bass_clause_is_not_a_tautology` pins it directly.
 
-A third exemption - a melody-alone shape getting no neck-window clause, on the grounds that
-its fret is where the melody has to be rather than a choice - is **gone**, because its premise
-is gone: a lone note is chosen from a palette of single-note shapes (one position per eligible
+A melody-alone shape gets a neck-window clause: a lone note is chosen from a palette of
+single-note shapes (one position per eligible
 string) by the same `cost.voicing_cost` a chord goes through, so its fret *is* a shape the
 engine picked from alternatives, and the window clause has a measured `Palette.inside_window`
 to state. `TestTheLoneNoteKeepsTheWindowHonest` holds that down from both ends: the clause
@@ -40,25 +39,20 @@ from typing import Any, Callable, Dict, List, Tuple
 
 from musthe import Note
 
-from arranger import (
-    CHORD_FILLS_COMP,
-    CHORD_FILLS_HOLD,
-    PITCH_CLASS_NAMES,
-    ChordParser,
-    Request,
-)
+from arranger import ChordParser, Request
 from arranger.annotation import _omission_clause, step_annotation
-from arranger.chords import melody_degree_name
+from arranger.chords import melody_degree_name, split_slash
+from arranger.options import _CHORD_FILLS_HOLD, CHORD_FILLS_COMP, ArrangeOptions
+from arranger.step_types import ArrangementStep, Palette
 from arranger.tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
+    PITCH_CLASS_NAMES,
     SILENCE_GRID,
     SILENCE_NC_COMPING,
     SILENCE_NO_SHAPE,
     SILENCE_OUT_OF_REACH,
     SILENCE_TUNE_SILENT,
-    ArrangementStep,
-    Palette,
 )
 from tests.support import arranged, make_step
 
@@ -72,20 +66,30 @@ HEADS: List[str] = sorted(
 #: sweep of every committed head, so each config costs seconds.
 CONFIGS: List[Dict[str, Any]] = [
     {},
-    {"texture": "chord1"},
-    {"texture": "targets"},
-    {"parts": "melody"},
-    {"parts": "bass"},
-    {"parts": "chord"},
-    {"parts": "bass,chord"},
-    {"bass": "root,5th,approach,nearest", "grid": "melody:every_note,bass:walk"},
-    {"grid": "chord:freddie"},
+    {"options": ArrangeOptions(request=Request(chord_notes="1"))},
+    {"options": ArrangeOptions(request=Request(chord_notes="targets"))},
+    {"options": ArrangeOptions(request=Request(chord_on="none"))},
+    {"options": ArrangeOptions(request=Request(melody=False))},
+    # The pair, spelled as the request spells it: the chord part plus a thumb line. The
+    # door's `bass,chord` named the bass part and then sounded no bass layer at all, so
+    # it was this row's chord-only config twice over.
+    {
+        "options": ArrangeOptions(
+            request=Request(melody=False, bass_on="melody", bass_notes="root")
+        )
+    },
+    {
+        "options":ArrangeOptions(
+                       request=Request(bass_on="every-beat", bass_notes="walk"),
+                   )
+    },
+    {"request": Request(chord_on="every-beat")},
     {"non_chord_tone": "sustain"},
     # A fill lives where no melody slot does, which is the one place a comping step
     # can exist without a note beside it. Both policies, because `comp` states more
     # attacks than `hold` and a clause that fired for one and not the other would be
     # invisible in a sweep that only ever asked for one.
-    {"request": Request(chord_on="none", chord_fills=CHORD_FILLS_HOLD)},
+    {"request": Request(chord_on="none", chord_fills=_CHORD_FILLS_HOLD)},
     {"request": Request(chord_on="none", chord_fills=CHORD_FILLS_COMP)},
     # A lone bass line: no melody part, no chord part, and the thumb at every beat.
     # The steps it emits are the only ones with nothing above the thumb at all, which is
@@ -119,6 +123,11 @@ def _missing_degree_names(step: ArrangementStep) -> List[str]:
     chord no shape could state) are the ones the clause is silent on, so they come back
     empty here too - which is what lets the witness below catch a clause that speaks where
     it should not as well as one that stays quiet where it should speak.
+
+    **The quality is read with `chords.split_slash`, shared with the clause rather than
+    re-spelled here.** That sharing is what makes `split_slash`'s own test load-bearing: a
+    `6/9` truncated to `6` loses the 9th from the tone set, and a witness that truncated it
+    the same way would agree with a clause reporting the chord complete.
     """
     if (
         step.repeated
@@ -133,7 +142,7 @@ def _missing_degree_names(step: ArrangementStep) -> List[str]:
     harmony = step.harmonized_as or step.chord
     root_str, quality = ChordParser.parse_chord_name(harmony)
     tones = ChordParser.CHORD_TONES_FROM_ROOT.get(
-        ChordParser.canonical_quality((quality or "").split("/", 1)[0])
+        ChordParser.canonical_quality(split_slash(quality or "")[0])
     )
     if not root_str or not tones:
         return []
@@ -503,27 +512,51 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         self.assertGreater(checked, 500, "the sweep stopped arranging anything")
         self.assertEqual(missing[:10], [], f"{len(missing)} unexplained steps")
         # A count, because a clause that stops firing is silent: measured over this sweep,
-        # **139** of the steps it arranges give up a chord tone, and every one of them is
+        # **135** of the steps it arranges give up a chord tone, and every one of them is
         # asked about above. The three grouped fixtures (5/4, 7/4, 12/8) account for the
-        # last 40: they are melody-dense and every note carries a chord. A corpus, grip
+        # last 36: they are melody-dense and every note carries a chord. A corpus, grip
         # table or rule that stops reaching the clause would otherwise leave every
         # assertion here passing on its absence.
+        #
+        # The sweep's every-beat config is a **requested rhythm** (`chord_on`), and the
+        # three grouped heads are where it differs in shape from the deleted
+        # `grid="chord:freddie"` it replaced: one places the positions the caller named
+        # and the other placed the bar's, so the totals moved with it.
         self.assertEqual(
-            omitted, 139, "the number of steps owing an omitted-tone clause moved"
+            omitted, 135, "the number of steps owing an omitted-tone clause moved"
         )
         # The same reasoning for the voice list, which is the clause most steps carry:
-        # measured over this sweep, **1377** of the steps it arranges sound two or more
+        # measured over this sweep, **1347** of the steps it arranges sound two or more
         # upper voices on a route that sings the tune - so a change that thinned the
         # default palette, or that stopped the clause firing, moves this number. The
-        # grouped fixtures add 352, all of them from notes the old corpus did not have.
-        self.assertEqual(named, 1377, "the number of steps naming their voices moved")
+        # grouped fixtures add 320, all of them from notes the old corpus did not have.
+        # Two of the 1347 come from the union's gate reading the *selection* rather than
+        # the spelling: the waltz's first note is harmonised rather than read as a repeat
+        # of a comping position, and the walk re-plans one line around a position the
+        # union adds.
+        self.assertEqual(named, 1347, "the number of steps naming their voices moved")
         # And for the comping part, whose voices are the only harmony the line can show:
-        # measured over this sweep, **1827** of the steps it arranges state a comping shape
+        # measured over this sweep, **1475** of the steps it arranges state a comping shape
         # and name each of its voices, so the reading of a thin line cannot quietly become
-        # a list of degrees again. The grouped fixtures add 802, and the 116 rest fills
+        # a list of degrees again. The grouped fixtures add 413, and the 116 rest fills
         # (`--chord-fills`) are the newest addition: a fill is a comping step with no
-        # melody beside it, which is why it counts here and nowhere else.
-        self.assertEqual(comping, 1827, "the number of comping lines naming a voice moved")
+        # melody beside it, which is why it counts here and nowhere else. The union's gate
+        # reading the **selection** took the other 372: a singing selection's axis spelling
+        # does not comp the bars its tune does not enter - `chord1`, `targets` and
+        # `bass=walk` each drop to the default's 28 comping steps - and a lone bass line
+        # has no chord part to state at such a position. The last **20** are the release
+        # instant: a note sounds over `[onset, end)`, so the union admits the position
+        # where the tune has just stopped and the comp there names its voices
+        # (`docs/history/open-issues.md` item 6).
+        #
+        # A request row replaced the door's, and the count moved **-247**. The
+        # `parts="bass"` config was a one-note comping on every head - which the
+        # `chord_notes="1"` row above already states - and `parts="bass,chord"` named a
+        # bass part and then sounded no bass layer at all, so it was the `chord` row
+        # twice over. What it becomes (`melody=False` plus a thumb line) states the same
+        # three voices with the thumb below them, so this sweep's *clause* coverage is
+        # unchanged: what went is two configs that arranged what other rows already did.
+        self.assertEqual(comping, 1228, "the number of comping lines naming a voice moved")
 
     def test_the_slash_bass_clause_is_not_a_tautology(self):
         """The one decision the witness table cannot hold, pinned in both directions.
@@ -533,14 +566,17 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         the head that exercises it instead: `Am7/D` loses its D and must say so, `Gmaj/D`
         sounds its F# and must stay quiet about it.
 
-        The witness is a **named** grid. The default grid now withholds a position the
-        tune is still holding (§9.2), and the `Am7/D` bars are exactly such a hold, so
-        the default arrangement no longer states them at all. `freddie` states its figure
-        whatever the tune is doing, which is what keeps the slash-bass question asked.
+        The witness is a **named rhythm**. The melody-anchored union withholds a
+        position the tune is still holding (§9.2), and the `Am7/D` bars are exactly such
+        a hold, so an arrangement that follows the tune states nothing there at all. A
+        requested rhythm states its positions whatever the tune is doing, which is what
+        keeps the slash-bass question asked.
         """
         steps, _head, _notes = arranged(
-            "tests/data/Trouble_in_Mind_Blues.musicxml", grid="chord:freddie"
-        )
+                "tests/data/Trouble_in_Mind_Blues.musicxml", options=ArrangeOptions(
+                    request=Request(chord_on="every-beat"),
+                ),
+            )
         lost = [
             step for step in steps
             if "/" in step.chord and "written bass" in step_annotation(step)
@@ -551,6 +587,16 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         ]
         self.assertTrue(lost, "the head stopped losing a slash bass")
         self.assertTrue(kept, "a shape that sounds its written bass was flagged")
+
+    def test_a_bass_note_after_a_six_nine_is_a_bass(self):
+        """`C6/9/E` is a 6/9 over an E, and its bass rides in the name like any other.
+
+        The `9` before the slash belongs to the quality and the `E` after it is the bass, so
+        the clause reads `E`. A symbol read as `6` with no bass leaves this written bass
+        unnoticed, and the shape's lowest voice unexplained with it.
+        """
+        step = make_step([8, -1, 7, 7, 8, -1], chord="C6/9/E", melody="G4")
+        self.assertIn("written bass E", step_annotation(step))
 
 
 #: `Eb6` under D5 as the corpus voices it: four voices stating the 3rd, the 5th and the
@@ -614,14 +660,25 @@ class TestTheToneAFourVoiceShapeGivesUp(unittest.TestCase):
         step = make_step(_DROPS_THE_ROOT, chord="Czz", melody="D5", harmonized_as="Eb6")
         self.assertEqual(_omission_clause(step), "the chord tone it leaves out is Root")
 
+    def test_a_six_nine_chord_is_read_as_its_whole_quality(self):
+        """`C6/9` is one quality, not a `6` with a `/9` after it.
+
+        The shape `x-10-x-9-10-8` states the 6th, the 3rd, the 5th and the root, so the 9th
+        is the tone it leaves out - and `6/9`'s tone set is the one with a 9th in it to leave
+        out. A quality read as `6` drops the 9th from the table, and the clause then reports a
+        four-voice shape complete while the name above it promises a 9th.
+        """
+        step = make_step([-1, 10, -1, 9, 10, 8], chord="C6/9", melody="C5")
+        self.assertEqual(_omission_clause(step), "the chord tone it leaves out is 9")
+
 
 class TestTheLoneNoteKeepsTheWindowHonest(unittest.TestCase):
     """A lone note is chosen from a palette, so its window fact is measured, not defaulted.
 
-    This is the exemption that went. A melody-alone shape used to carry no palette, which
-    meant `annotation._window_clause` could say nothing about it - and a step that *did* carry
-    one (a fill) recorded `inside_window` at its `False` default, so the clause read as an
-    engine judgement nobody had made. Every lone note now records the palette it was chosen
+    A melody-alone shape that carried no palette would leave `annotation._window_clause`
+    with nothing to say - and a step that did carry one (a fill) would record
+    `inside_window` at its `False` default, so the clause would read as an engine
+    judgement nobody had made. Every lone note records the palette it was chosen
     from, and the two halves of the fact can be asserted together: the clause appears where
     the note is out of position, and the palette behind it has nothing inside the window.
     """
@@ -630,13 +687,17 @@ class TestTheLoneNoteKeepsTheWindowHonest(unittest.TestCase):
     #: fills, and the melody-only selection.
     CONFIGS: List[Dict[str, Any]] = [
         {},
-        {"grid": "chord:freddie"},
-        {"bass": "root,5th,approach,nearest", "grid": "melody:every_note,bass:walk"},
-        {"parts": "melody"},
+        {"request": Request(chord_on="every-beat")},
+        {
+            "options":ArrangeOptions(
+                           request=Request(bass_on="every-beat", bass_notes="walk"),
+                       )
+        },
+        {"options": ArrangeOptions(request=Request(chord_on="none"))},
     ]
 
     def test_every_lone_shape_reports_the_palette_it_came_from(self):
-        """A lone step always has a palette - the exemption's premise is gone."""
+        """A lone step always has a palette."""
         checked = 0
         for head in HEADS:
             for config in self.CONFIGS:

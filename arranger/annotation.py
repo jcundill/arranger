@@ -3,7 +3,8 @@
 A step records what it did and what shape it did it with; this module turns those
 fields into the trailing prose. The clauses are composed in order rather than
 branched at a return site, so a fact that corrects a column reaches every route that
-can suffer it. `render` lays the result out beside the tab; the words live here.
+can suffer it. `render` lays the result out beside the tab; the words live here, and
+`text_layout` breaks them into lines.
 
 This module imports `chords`, `cost`, `grip_tables` and `tuning` only, so it sits
 below `render` in the dependency order and above the engine's axis modules.
@@ -21,9 +22,11 @@ from .chords import (
     melody_degree_name,
     slash_bass,
     slash_bass_cost,
+    split_slash,
 )
 from .cost import SPAN_CRITERION, VOICING_COST_CRITERIA
 from .grip_tables import INTERVAL_NAMES
+from .step_types import ArrangementStep, Voicing
 from .tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
@@ -34,8 +37,6 @@ from .tuning import (
     SILENCE_NO_SHAPE,
     SILENCE_OUT_OF_REACH,
     SILENCE_TUNE_SILENT,
-    ArrangementStep,
-    Voicing,
     note_name,
 )
 
@@ -360,8 +361,7 @@ def _comping_clause(step: ArrangementStep) -> str:
 
     A comping step is thin because the *selection* asked for that many voices - one per
     voice named - so the voice count is not the question a reader has. Which voices sound
-    is, and they are the family as well: `harmony=guide` states the 3rd and the 7th,
-    `shell_root` puts a root or a 5th under them, and a one-voice bass selection states
+    is: the guide pair states the 3rd and the 7th, and a one-voice bass selection states
     the root alone. They are read off the shape against the harmony it states, which is
     `harmonized_as` where the horn's note was accommodated with a substitute.
 
@@ -558,7 +558,7 @@ def _bass_refusal_clause(step: ArrangementStep) -> str:
     no free string below the melody, no octave of the wanted pitch below the
     shape's own lowest note, a fifth fret for four fingers, or a reach wider than
     the hand's five frets. Measured over the committed heads the second one is
-    almost the whole of it (`docs/open-issues.md` item 2), which is not the
+    almost the whole of it (`docs/history/open-issues.md` item 2), which is not the
     intuitive answer - so the list is the honest form. A per-cause spelling would
     need `place_bass` to return its reason, and that is the follow-on rather than
     the clause.
@@ -630,7 +630,7 @@ def _omission_clause(step: ArrangementStep) -> str:
         return ""
     harmony = step.harmonized_as or step.chord
     root_str, quality = ChordParser.parse_chord_name(harmony)
-    canonical = ChordParser.canonical_quality((quality or "").split("/", 1)[0])
+    canonical = ChordParser.canonical_quality(split_slash(quality or "")[0])
     tones = ChordParser.CHORD_TONES_FROM_ROOT.get(canonical)
     if not root_str or not tones:
         return ""
@@ -773,91 +773,3 @@ def melody_degree_label(step: ArrangementStep) -> str:
     if step.melody is None:
         return ""
     return melody_degree_name(Note(step.melody), step.chord)
-
-
-def _annotation_units(body: str) -> List[Tuple[str, str]]:
-    """An annotation's clauses as (joiner, text) pairs, in the order they print.
-
-    The joiner is what precedes each clause - the empty string for the first, ` - ` for
-    the next clause of the same parenthetical, and ` (` for the **bass** parenthetical,
-    which `_bass_annotation` appends after the first one closes. Reading the boundaries
-    out of the finished text rather than rebuilding the clause list is deliberate: the
-    precedence between the routes is `step_annotation`'s, and a second copy of it here
-    would be a second answer to one question.
-    """
-    units: List[Tuple[str, str]] = []
-    joiner = ""
-    for piece in body.split(" - "):
-        head, marker, tail = piece.partition(") (")
-        if marker:
-            units.append((joiner, f"{head})"))
-            units.append((" (", tail))
-        else:
-            units.append((joiner, piece))
-        joiner = " - "
-    return units
-
-
-def _word_chunks(text: str, room: int) -> List[str]:
-    """`text` split at its own spaces into chunks that fit `room` columns.
-
-    A chunk is a run of whole words, and joining the chunks with a space gives `text`
-    back. A single word wider than `room` is a chunk of its own and overflows, because
-    cutting a word would put a syllable on one line and the rest on the next.
-    """
-    chunks: List[str] = []
-    current = ""
-    for word in text.split(" "):
-        if not current:
-            current = word
-        elif len(current) + 1 + len(word) <= room:
-            current = f"{current} {word}"
-        else:
-            chunks.append(current)
-            current = word
-    if current:
-        chunks.append(current)
-    return chunks
-
-
-def annotation_lines(body: str, room: int) -> List[str]:
-    """One annotation laid out over as many lines of at most `room` columns.
-
-    The **clause boundaries are the break points**, so a line ends where a clause does
-    rather than mid-phrase - which is what stops a line ending on the last word of a
-    list (`… Ab 3, D` / `b7)`). A clause too wide for a line of its own is wrapped at its
-    own spaces, and a single word wider than `room` overflows rather than being cut.
-
-    Every character is printed, in order: a break stands in for the space it removes, so
-    a line may end on a ` - ` and the next begin with the `(` of the bass parenthetical.
-    """
-    lines: List[str] = []
-    current = ""
-    for joiner, text in _annotation_units(body):
-        chunks = _word_chunks(text, room)
-        if current and len(current) + len(joiner) + len(text) > room:
-            # A break stands in for a space, never for a character: the ` - ` separator
-            # ends the line it was on, and the ` (` that opens the bass parenthetical
-            # starts the next one, the `)` that closed the first having ended the line
-            # before it.
-            if joiner == " (":
-                lines.append(current)
-                current = "(" + chunks[0]
-            elif len(current) + 2 <= room:
-                lines.append(f"{current} -")
-                current = chunks[0]
-            else:
-                # The line already reaches the margin, so the `-` opens the next line
-                # instead of ending this one: the same three characters, one newline
-                # later, and no line past the width.
-                lines.append(current)
-                current = f"- {chunks[0]}"
-        else:
-            current += joiner + chunks[0]
-        for chunk in chunks[1:]:
-            lines.append(current)
-            current = chunk
-    if current:
-        lines.append(current)
-    return lines
-

@@ -26,13 +26,27 @@ class TestTheEngineRule(unittest.TestCase):
     """`chord_attack` is set where the chord part was asked to strike."""
 
     def test_a_comp_strikes_every_position_the_rhythm_names(self):
-        """`--no-melody` derives `every-beat`, so a 4/4 comp is four attacks a bar."""
-        steps, _head, _notes = arrange_xml_head(
+        """`every-beat` is four attacks a bar, and `melody` the tune's own onsets.
+
+        The written onsets are a fact about the *score*, so a comping request keeps them
+        without being asked. Bar 2 of this head is where the two rhythms part company,
+        because its tune holds through the middle of the bar.
+        """
+        every, _head, _notes = arrange_xml_head(
+            COMMON_8,
+            section=(1, 3),
+            request=Request(melody=False, chord_on="every-beat"),
+        )
+        bar_two = [step for step in every if step.bar == 2 and step.voicing.active_frets()]
+        self.assertEqual([step.beat for step in bar_two], [1.0, 2.0, 3.0, 4.0])
+        self.assertTrue(all(step.chord_attack for step in bar_two))
+
+        tune, _head, _notes = arrange_xml_head(
             COMMON_8, section=(1, 3), request=Request(melody=False)
         )
-        bar_one = [step for step in steps if step.bar == 1 and step.voicing.active_frets()]
-        self.assertEqual([step.beat for step in bar_one], [1.0, 2.0, 3.0, 4.0])
-        self.assertTrue(all(step.chord_attack for step in bar_one))
+        bar_two = [step for step in tune if step.bar == 2 and step.voicing.active_frets()]
+        self.assertEqual([step.beat for step in bar_two], [1.0, 4.0])
+        self.assertTrue(all(step.chord_attack for step in bar_two))
 
     def test_a_repeated_shape_is_flagged_while_the_pitches_are_equal(self):
         """The one case the pitches cannot decide: same shape, asked for twice.

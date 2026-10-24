@@ -5,15 +5,18 @@ as well as over written scores: they are what makes an imported tune a tab rathe
 parsed document. Reading the document is `test_headxml.py`.
 """
 
+import inspect
 import os
 import tempfile
 import unittest
 from typing import List, Tuple
 
 import arranger
-from arranger import NO_CHORD
-from arranger.options import ArrangeOptions
+from arranger import TimeSignature
+from arranger.chords import parse_symbol
+from arranger.options import ArrangeOptions, Request
 from arranger.slots import arrange_slots
+from arranger.tuning import NO_CHORD
 from headxml import (
     Head,
     arrange_xml_head,
@@ -70,18 +73,17 @@ class TestReductionAndArranging(unittest.TestCase):
         self.assertEqual([s[2] for s in head_skeleton(head)], [1.0, 2.0, 3.0, 4.0])
         self.assertEqual([s[2] for s in head_skeleton(head)], [1.0, 2.0, 3.0, 4.0])
 
-    def test_the_strategy_no_longer_changes_which_notes_are_played(self):
+    def test_the_strategy_does_not_change_which_notes_are_played(self):
         """Four eighths a bar sound once under **every** setting, not just `eighths`.
 
         **This inverts the density test that stood here**, which asserted that a coarser
         grid kept strictly fewer slots - `beats` dropping the notes between the beats.
-        That was the grid doing a melody reduction, which is what cost 24 notes on the
-        committed triplet head, and it is gone: `--skeleton` is a melody-*selection* flag
-        and no setting of it removes a note of the tune.
+        A grid that dropped the notes between the beats would be reducing the melody, which
+        is what cost 24 notes on the committed triplet head: `--skeleton` is a
+        melody-*selection* flag and no setting of it removes a note of the tune.
 
-        The density decision that this test used to make is not lost, it **moved**: where
-        chords fall is now the rhythm axis's question rather than this flag's, and it is
-        not built yet. Until it is, every setting plays the tune and differs only in
+        Where chords fall is the rhythm axis's question rather than this flag's: every
+        setting plays the tune and differs only in
         nothing at all - which is the honest state of the flag and the reason it wants a
         floor (`beats` / `eighths` / `sixteenths` are placeholders for that axis) rather
         than five live densities.
@@ -118,14 +120,10 @@ class TestReductionAndArranging(unittest.TestCase):
         # The tuplets are marked as written, and they are a third of a beat apart.
         self.assertEqual([n.tuplet for n in head.notes], [True, True, False])
         beats = [beat for _t, _bar, beat, _d in head_skeleton(head)]
-        # **The slot carries the note's own float, and this assertion was inverted to
-        # say so.** It used to compare against `round(n.beat, 6)`, because the slot
-        # stored the rounded beat: `head_skeleton` grouped notes by a six-place key
-        # and then emitted that key as the position. A triplet is where that costs
-        # something - `1/3` has no exact binary form, so rounding the first note of
-        # a triplet DOWN and the next UP made the gap between them longer than the
-        # note itself, and the surplus was written as a rest. Measured on the
-        # committed triplet head: 13 such rests, and none since. See
+        # **The slot carries the note's own float.** A triplet is where rounding costs
+        # something: `1/3` has no exact binary form, so rounding the first note of a
+        # triplet DOWN and the next UP makes the gap between them longer than the note
+        # itself, and the surplus is written as a rest. See
         # `test_a_triplet_head_writes_no_rest_it_cannot_express`, which asserts that
         # on the real score rather than on this fixture's hand-written durations.
         self.assertEqual(beats, [n.beat for n in head.notes])
@@ -138,10 +136,9 @@ class TestReductionAndArranging(unittest.TestCase):
         longer than the notes in it; `tabscore.score_events` caps a note at the length the
         file wrote, so the surplus became a **rest of about 1e-06 quarters** - a
         length MusicXML cannot express, and which music21 inflates to a whole
-        triplet note. Measured on `synthetic_triplets.mxl`: **13 such rests and
-        133 events before, 0 and 120 after.** Each one put an extra note inside a
-        `3` bracket and stretched the bar, so "Trouble in Mind" bar 1 came out two
-        beats long instead of one.
+        triplet note. Each such rest puts an extra note inside a `3` bracket and
+        stretches the bar, so "Trouble in Mind" bar 1 comes out two beats long
+        instead of one.
 
         Asserted on the events rather than on the XML, because that is where the rest
         is born and it needs no optional dependency to see it.
@@ -185,11 +182,10 @@ class TestReductionAndArranging(unittest.TestCase):
     def test_a_chord_change_sounds_under_every_note_it_governs(self):
         """Two chords in the bar, six notes, and the harmony changes part-way through.
 
-        **This inverts the test that stood here**, which asserted the `chords` strategy
-        gave one slot per chord change - two slots for these six notes. That was a
-        reduction of the melody, which is the thing this module no longer does: the
-        soprano plays the tune. What survives is the part of it that was not about
-        reduction at all - **the harmony in force is right on every note**, and the
+        The `chords` strategy gives one slot per chord change, not one per melody note: a
+        reduction of the melody would put something other than the tune on the soprano.
+        What this asserts is the part that is not about reduction at all - **the harmony
+        in force is right on every note**, and the
         change lands where the file put it rather than on a downbeat.
         """
         head = self.load(
@@ -200,7 +196,7 @@ class TestReductionAndArranging(unittest.TestCase):
         # Five written notes, five slots - none of them merged away.
         self.assertEqual(len(slots), len(head.notes))
         # The first three are under Cmaj and the last two under F7.
-        self.assertEqual([s[0][2] for s in slots],
+        self.assertEqual([s[0][1] for s in slots],
                          ["Cmaj", "Cmaj", "Cmaj", "F7", "F7"])
         # And each note keeps the beat it was written on, so the change is heard at the
         # fourth quarter (beat 4) rather than being snapped to a grid position.
@@ -295,14 +291,9 @@ class TestReductionAndArranging(unittest.TestCase):
     def test_a_note_past_the_bar_line_is_still_pulled_back_inside(self):
         """The clamp still does its job, which is now a narrower one.
 
-        **The job changed with the model, and the assertion had to change with it.**
-        This used to be about a note that *rounded onto* the bar line: `eighths` put the
-        grid at 0.5, a note at 2.75 rounded to 3.0, and 3.0 is the bar line of a 2/2 bar,
-        so it was pulled back to the last eighth inside - 2.5.
-
-        There is no grid now, so nothing rounds: every note keeps the beat it was
-        written on, and a note written past the bar line is simply **over the line**
-        rather than rounding onto it. The clamp is still what stops that, and it is still
+        Nothing rounds: every note keeps the beat it was written on, so a note written
+        past the bar line is simply **over the line**. The clamp is what pulls it back to
+        the last position inside - 2.5 for a note at 3.0 in a 2/2 bar - and it is still
         load-bearing - but what it pulls back to is the bar line approached from inside,
         not the last grid step.
         """
@@ -343,8 +334,11 @@ class TestReductionAndArranging(unittest.TestCase):
         """The bass rides in the name, as the corpus path keeps it, and rule B
         promotes a triad whose bass is its own seventh."""
         head = self.load(harmony("A", "minor", bass="G") + note("E"))
-        _melody, quality, name = head_skeleton(head)[0][0]
-        self.assertEqual(quality, "m7")  # A minor triad over G is a minor 7th
+        _melody, name = head_skeleton(head)[0][0]
+        # A minor triad over G is a minor 7th, and the promotion is `parse_symbol`'s.
+        symbol = parse_symbol(name)
+        assert symbol is not None
+        self.assertEqual(symbol.quality, "m7")
         self.assertEqual(name, "Am/G")
 
     def test_a_slash_chord_is_voiced_with_its_bass_preferred(self):
@@ -442,26 +436,31 @@ class TestReductionAndArranging(unittest.TestCase):
 class TestTheHeadRequestAsOneValue(unittest.TestCase):
     """`options=` and the keyword spellings are two spellings of one request."""
 
-    def test_options_and_keywords_produce_the_same_arrangement(self):
-        """The object entry point must not be a second arrangement path."""
-        keywords = arrange_xml_head(BUT_NOT_FOR_ME, texture="chord1")[0]
+    def test_the_request_keyword_and_the_object_agree(self):
+        """The object entry point must not be a second arrangement path.
+
+        The request is an **input fact**, so it may be spelled as a keyword beside
+        `options=` as well as inside it, and the two must reach one arrangement.
+        """
+        request = Request(melody=False)
+        keywords = arrange_xml_head(BUT_NOT_FOR_ME, request=request)[0]
         as_object = arrange_xml_head(
-            BUT_NOT_FOR_ME,
-            options=ArrangeOptions(texture="chord1"),
+            BUT_NOT_FOR_ME, options=ArrangeOptions(request=request)
         )[0]
         self.assertEqual(
             [step.tab_line() for step in keywords],
             [step.tab_line() for step in as_object],
         )
 
-    def test_the_two_spellings_cannot_be_combined(self):
-        """A caller who passes both has a bug, and hears about it."""
-        with self.assertRaises(ValueError):
-            arrange_xml_head(
-                BUT_NOT_FOR_ME,
-                texture="chord1",
-                options=ArrangeOptions(texture="targets"),
-            )
+    def test_the_axis_has_no_keyword_spelling(self):
+        """The five axes are the implementation, so no signature takes one as a keyword.
+
+        The assertion is on the *signature*, which is also the form a type checker can
+        agree with: a call spelling the keyword is a `reportCallIssue`. The conflict rule
+        itself has its witness on the metre's
+        `test_the_two_metre_spellings_cannot_be_combined`.
+        """
+        self.assertNotIn("texture", inspect.signature(arrange_xml_head).parameters)
 
 
 class TestTheMetreHasADenominator(unittest.TestCase):
@@ -584,24 +583,20 @@ class TestTheMetreHasADenominator(unittest.TestCase):
     def test_the_waltz_keeps_its_onsets_through_a_round_trip(self):
         """Export → read back leaves the beats where they are, bar 1 excepted.
 
-        The compounded symptom, and the one a user meets: before the fix each cycle
-        scaled every onset by another 0.75, so the file's eighths came back at 1.0,
-        1.281, 1.562 … - a head that shrinks by a quarter every time it is written out
-        and read in.
+        A round trip must not scale the onsets: a beat is `4 / beat_type` quarters, and a
+        writer that read the count instead would shorten the head by a quarter on every
+        cycle.
 
         **Bar 1's pickup is excluded because the exporter loses it, which is a separate
-        defect and not this one.** Measured: the written bar 1 is an eighth rest then five
-        eighths (1.5 … 3.5), and the exported-then-re-read bar 1 is five eighths from 1.0,
-        the rest dropped rather than written. That is wrong under either spelling of the
+        defect and not this one.** The written bar 1 is an eighth rest then five eighths
+        (1.5 … 3.5), and the exported-then-re-read bar 1 is five eighths from 1.0, the rest
+        dropped rather than written. That is wrong under either spelling of the
         conversion, so it is recorded rather than encoded here.
 
-        **The count is re-scoped, not kept** (AGENTS.md trap 5). It used to assert
-        `len(again.notes) == len(head.notes)`, which was true only because the default grid
-        produced no steps in a bar the melody never entered - the silence
-        `docs/open-issues.md` item 1 measures. Those bars are arranged now, and the
-        exporter has always written a comping step as a note: `freddie` and `joe_pass`
-        already round-tripped **22 and 27** extra beats on this head before this change.
-        The claim that actually matters is the one the assertion was a proxy for - every
+        **The count is re-scoped, not kept** (AGENTS.md trap 5). A note count would be the
+        wrong claim: every bar is arranged now, and the exporter writes a comping step as a
+        note, so `freddie` and `joe_pass` round-trip extra beats on this head. The claim
+        that actually matters is the one a note count was a proxy for - every
         written beat comes back at the same beat - and that still holds exactly. What is
         asserted instead is that **every extra is a position the tune is silent at**.
 
@@ -648,7 +643,7 @@ class TestTheMetreHasADenominator(unittest.TestCase):
         self.assertTrue(original <= surviving, sorted(original - surviving)[:5])
         # And every extra is a position the tune is silent at - the rule the default grid
         # generates by, restated through a round trip. Empty on this head is a pass: the
-        # one position it used to add was a release instant, now correctly held.
+        # release instant is held rather than filled.
         for bar, beat in sorted(surviving - original):
             self.assertIsNone(
                 melody_at(head, bar, beat),
@@ -661,9 +656,9 @@ class TestANoteHeldAcrossABarLine(unittest.TestCase):
 
     `synthetic_cut_time.mxl` ends bar 2 with an E♭4 tied to bar 3's first eighth. The
     importer merges the halves into one `HeadNote`, but the default grid still names
-    bar 3's downbeat as a position - and the comping union used to call the tune silent
+    bar 3's downbeat as a position - and the comping union must not call the tune silent
     there and fill it with a fresh Cm7 shape. That is a re-strike of a note the left
-    hand is still holding, which is what `But_Not_for_Me` demonstrated.
+    hand is still holding, which is what `But_Not_for_Me` demonstrates.
     """
 
     def test_the_held_note_is_not_restruck_at_the_next_downbeat(self):
@@ -704,7 +699,9 @@ class TestHeadTexture(unittest.TestCase):
         Asserted through the real score rather than a hand-built one, because the metre
         is the thing under test and a hand-built fixture would supply its own.
         """
-        steps, head, _notes = arrange_xml_head(BUT_NOT_FOR_ME, texture="targets")
+        steps, head, _notes = arrange_xml_head(
+            BUT_NOT_FOR_ME, options=ArrangeOptions(request=Request(chord_notes="targets")),
+        )
         self.assertTrue(steps)
         self.assertEqual(head.beats_per_bar, 2, "this fixture must be in cut time")
         for step in steps:
@@ -737,8 +734,12 @@ class TestHeadTexture(unittest.TestCase):
         event - Ebmaj under G4 recurs five times - so pinning a number would be pinning
         the tune rather than the rule.
         """
-        uniform, _head, _n = arrange_xml_head(BUT_NOT_FOR_ME, texture="uniform")
-        targets, _head, _n = arrange_xml_head(BUT_NOT_FOR_ME, texture="targets")
+        uniform, _head, _n = arrange_xml_head(
+            BUT_NOT_FOR_ME, options=ArrangeOptions(request=Request(chord_notes="full")),
+        )
+        targets, _head, _n = arrange_xml_head(
+            BUT_NOT_FOR_ME, options=ArrangeOptions(request=Request(chord_notes="targets")),
+        )
         self.assertEqual(len(uniform), len(targets))
 
         def mean_voices(steps):
@@ -764,7 +765,7 @@ class TestHeadTexture(unittest.TestCase):
             # stays inside the reach.
             self.assertLess(
                 step.voicing.fret_span(),
-                arranger.GRIP_MAX_SPAN["drop2"],
+                arranger.grip_tables.GRIP_MAX_SPAN["drop2"],
                 "a target is still holding a full-span stretch: " + step.tab_line(),
             )
 
@@ -778,7 +779,7 @@ class TestHeadTexture(unittest.TestCase):
 class TestANarrowPaletteNeverLosesTheTune(unittest.TestCase):
     """A palette with no room to state a chord must not take the melody note with it.
 
-    `texture=chord1` is the narrowest thing the texture axis can express: a chord-melody
+    `Request(chord_notes="1")` is the narrowest chord content there is: a chord-melody
     is the tune plus **one** chord tone, where the default states four. A palette that
     narrow answers no candidate at all for a melody the non-chord-tone table cannot
     reharmonise, unless it reaches the non-grip `duo` - so this is where a dropped note
@@ -795,7 +796,9 @@ class TestANarrowPaletteNeverLosesTheTune(unittest.TestCase):
         can put there, which is what makes this a claim about the row rather than about
         which family happened to win.
         """
-        steps, _head, _notes = arrange_xml_head(BUT_NOT_FOR_ME, texture="chord1")
+        steps, _head, _notes = arrange_xml_head(
+            BUT_NOT_FOR_ME, options=ArrangeOptions(request=Request(chord_notes="1")),
+        )
         bar2 = [s for s in steps if s.bar == 2 and abs((s.beat or 0) - 2.0) < 1e-6]
         self.assertEqual(len(bar2), 1, "bar 2 beat 2 is missing")
         step = bar2[0]
@@ -817,9 +820,11 @@ class TestANarrowPaletteNeverLosesTheTune(unittest.TestCase):
         what is asserted is that no written position is missing - which is the property the
         count was a proxy for, stated directly.
         """
-        for texture in ("chord1", "uniform"):
-            with self.subTest(texture=texture):
-                steps, head, _notes = arrange_xml_head(BUT_NOT_FOR_ME, texture=texture)
+        for chord_notes in ("1", "full"):
+            with self.subTest(chord_notes=chord_notes):
+                steps, head, _notes = arrange_xml_head(
+                    BUT_NOT_FOR_ME, options=ArrangeOptions(request=Request(chord_notes=chord_notes)),
+                )
                 at = {(s.bar or 0, round(s.beat or 0.0, 6)) for s in steps}
                 for written in head.notes:
                     self.assertIn(
@@ -834,12 +839,14 @@ class TestANarrowPaletteNeverLosesTheTune(unittest.TestCase):
         otherwise. The positive case is `test_non_chord_tones`; what this pins is that
         thinning the part does not quietly start thinning the *harmony*.
         """
-        for texture in ("chord1", "uniform"):
-            with self.subTest(texture=texture):
-                steps, _head, _notes = arrange_xml_head(BUT_NOT_FOR_ME, texture=texture)
+        for chord_notes in ("1", "full"):
+            with self.subTest(chord_notes=chord_notes):
+                steps, _head, _notes = arrange_xml_head(
+                    BUT_NOT_FOR_ME, options=ArrangeOptions(request=Request(chord_notes=chord_notes)),
+                )
                 self.assertEqual(
                     [s.bar for s in steps if s.chord_unvoiced], [],
-                    f"texture={texture} left a chord unstated",
+                    f"chord_notes={chord_notes} left a chord unstated",
                 )
 
 
@@ -895,7 +902,9 @@ class TestOddMetres(unittest.TestCase):
         for beats in (5, 7):
             with self.subTest(beats=beats):
                 _head, path = self.load(beats, 4)
-                steps = arrange_xml_head(path, texture="targets")[0]
+                steps = arrange_xml_head(
+                    path, options=ArrangeOptions(request=Request(chord_notes="targets"))
+                )[0]
                 weights = {
                     (step.bar, step.beat): step.metric_weight
                     for step in steps
@@ -912,8 +921,12 @@ class TestOddMetres(unittest.TestCase):
             with self.subTest(beats=beats):
                 _head, path = self.load(beats, 4)
                 steps = arrange_xml_head(
-                    path, texture="targets", bass="root,5th,approach,nearest"
-                )[0]
+                        path, options=ArrangeOptions(
+                                          request=Request(
+                                              chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+                                          ),
+                                      ),
+                    )[0]
                 self.assertEqual(sum(1 for s in steps if s.bass is not None), beats * 2)
                 self.assertEqual(
                     [s.beat for s in steps if s.bass is not None][:beats],
@@ -955,13 +968,15 @@ class TestCompoundMetres(unittest.TestCase):
         """The bar's own rhythm is dotted quarters, so the default grid follows it."""
         head, _path = self.load()
         positions = [
-            round(slot[4], 6) for slot in chord_slots(head, (1, 2), "melody:every_note")
+            round(slot[3], 6) for slot in chord_slots(head, (1, 2))
         ]
         self.assertEqual(positions, [1.0, 4.0, 7.0, 10.0])
 
     def test_targets_are_the_first_and_third_pulses(self):
         _head, path = self.load()
-        steps = arrange_xml_head(path, texture="targets")[0]
+        steps = arrange_xml_head(
+            path, options=ArrangeOptions(request=Request(chord_notes="targets"))
+        )[0]
         bar_one = [s for s in steps if s.bar == 1]
         self.assertEqual([s.beat for s in bar_one], [1.0, 4.0, 7.0, 10.0])
         self.assertEqual([s.role for s in bar_one], ["target", "fill", "target", "fill"])
@@ -970,7 +985,11 @@ class TestCompoundMetres(unittest.TestCase):
     def test_a_walk_is_one_note_per_pulse(self):
         _head, path = self.load()
         steps = arrange_xml_head(
-            path, texture="targets", bass="root,5th,approach,nearest"
+            path, options=ArrangeOptions(
+                              request=Request(
+                                  chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+                              ),
+                          )
         )[0]
         self.assertEqual(sum(1 for s in steps if s.bass is not None), 8)
         self.assertEqual(
@@ -982,7 +1001,9 @@ class TestCompoundMetres(unittest.TestCase):
         """12/8 as 4+4+4 is three four-eighth groups: targets on beats 1 and 9."""
         _head, path = self.load()
         steps = arrange_xml_head(
-            path, texture="targets", grid="chord:freddie", grouping="4+4+4"
+            path,
+            time_signature=TimeSignature(12, 8, "4+4+4"),
+            options=ArrangeOptions(request=Request(chord_notes="targets", chord_on="every-beat")),
         )[0]
         self.assertEqual(
             [s.beat for s in steps if s.bar == 1 and s.role == "target"],
@@ -994,25 +1015,37 @@ class TestCompoundMetres(unittest.TestCase):
 
     def test_auto_and_the_explicit_compound_grouping_agree(self):
         _head, path = self.load()
-        auto = arrange_xml_head(path, texture="targets")[0]
-        explicit = arrange_xml_head(path, texture="targets", grouping="3+3+3+3")[0]
+        auto = arrange_xml_head(
+            path, options=ArrangeOptions(request=Request(chord_notes="targets"))
+        )[0]
+        explicit = arrange_xml_head(
+            path,
+            time_signature=TimeSignature(12, 8, "3+3+3+3"),
+            options=ArrangeOptions(request=Request(chord_notes="targets")),
+        )[0]
         self.assertEqual(
             [step.tab_line() for step in auto], [step.tab_line() for step in explicit]
         )
 
     def test_a_grouping_that_does_not_fill_the_bar_is_refused(self):
+        """The metre validates itself at construction, which is where a bar is known."""
         _head, path = self.load()
         with self.assertRaises(ValueError):
-            arrange_xml_head(path, grouping="4+4")
+            arrange_xml_head(path, time_signature=TimeSignature(12, 8, "4+4"))
 
-    def test_the_two_spellings_cannot_be_combined(self):
+    def test_the_two_metre_spellings_cannot_be_combined(self):
+        """A keyword and an `options=` that both state a metre is a bug, not a merge."""
         _head, path = self.load()
         with self.assertRaises(ValueError):
-            arrange_xml_head(path, grouping="3+3+3+3", options=ArrangeOptions())
+            arrange_xml_head(
+                path,
+                time_signature=TimeSignature(12, 8, "3+3+3+3"),
+                options=ArrangeOptions(time_signature=TimeSignature(12, 8, "4+4+4")),
+            )
 
 
 class TestGroupingFromTheScore(unittest.TestCase):
-    """The score states its grouping; `grouping=` is only an override.
+    """The score states its grouping; `time_signature=` is only an override.
 
     A written mark, the beaming and a metronome pulse are the three channels a
     MusicXML lead sheet has for the metre's third fact. The first two are committed
@@ -1039,7 +1072,9 @@ class TestGroupingFromTheScore(unittest.TestCase):
 
     def test_the_score_grouping_reaches_the_arrangement(self):
         """5/4 as 3+2 has two felt beats, so only the downbeat is a full target."""
-        steps = arrange_xml_head(FIVE_FOUR, texture="targets")[0]
+        steps = arrange_xml_head(
+            FIVE_FOUR, options=ArrangeOptions(request=Request(chord_notes="targets"))
+        )[0]
         bar = [s for s in steps if s.bar == 1]
         self.assertEqual(
             [s.role for s in bar], ["target", "fill", "fill", "fill", "fill"]
@@ -1047,7 +1082,9 @@ class TestGroupingFromTheScore(unittest.TestCase):
         self.assertEqual([s.metric_weight for s in bar], [2, 0, 0, 0, 0])
 
     def test_a_compound_score_sets_targets_on_its_own_pulses(self):
-        steps = arrange_xml_head(TWELVE_EIGHT, texture="targets")[0]
+        steps = arrange_xml_head(
+            TWELVE_EIGHT, options=ArrangeOptions(request=Request(chord_notes="targets"))
+        )[0]
         self.assertEqual(
             [s.beat for s in steps if s.bar == 1 and s.role == "target"],
             [1.0, 9.0],
@@ -1056,7 +1093,9 @@ class TestGroupingFromTheScore(unittest.TestCase):
     def test_a_caller_still_overrides_the_score(self):
         """The 12/8 file beams 4+4+4; asking for threes moves the targets to 1 and 7."""
         steps = arrange_xml_head(
-            TWELVE_EIGHT, texture="targets", grouping="3+3+3+3"
+            TWELVE_EIGHT,
+            time_signature=TimeSignature(12, 8, "3+3+3+3"),
+            options=ArrangeOptions(request=Request(chord_notes="targets")),
         )[0]
         self.assertEqual(
             [s.beat for s in steps if s.bar == 1 and s.role == "target"],

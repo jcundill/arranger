@@ -35,18 +35,18 @@ from .routes import (
     bass_alone_step,
     comping_step,
     no_chord_step,
-    previous_shape,
     rest_step,
     texture_fill_step,
 )
 from .slot_plan import SlotPlan
-from .tuning import ArrangementStep
+from .step_history import previous_shape
+from .step_types import ArrangementStep
 
-__all__ = ["Route", "ROUTES", "dispatch_step"]
+__all__ = ["_Route", "ROUTES", "dispatch_step"]
 
 
 @dataclass(frozen=True)
-class Route:
+class _Route:
     """One entry in the dispatch order: when it claims a slot, and what it emits.
 
     `claims` is the precondition and `emit` the answer, both reading the plan the
@@ -101,7 +101,7 @@ def _emit_texture_fill(
     """
     return texture_fill_step(
         arrangements, slot, plan.context,
-        top_strings=plan.inputs.top_strings,
+        top_strings=plan.context.neck.top_strings,
         previous=previous_shape(arrangements),
     )
 
@@ -117,7 +117,7 @@ def _emit_no_chord(
     """The tune alone on an `NC` bar, carrying no chord clause."""
     no_chord_step(
         arrangements, slot, plan.context,
-        top_strings=plan.inputs.top_strings,
+        top_strings=plan.context.neck.top_strings,
         previous=previous_shape(arrangements),
     )
     return True
@@ -130,7 +130,7 @@ def _claims_comping(plan: SlotPlan) -> bool:
     here, and only after the entries above, which are the cases with no harmony to
     state at all.
     """
-    return not plan.sings_here and not plan.inputs.melody_only
+    return not plan.sings_here and not plan.context.arrangement.melody_only
 
 
 def _emit_comping(
@@ -144,9 +144,8 @@ def _emit_comping(
     return comping_step(
         arrangements, slot, plan.context,
         chord_type=plan.context.harmony.chord_type,
-        melody_onsets=plan.inputs.melody_onsets,
-        parts=plan.inputs.parts,
-        harmony_family=plan.inputs.harmony_family,
+        melody_onsets=plan.rhythm.melody_onsets,
+        parts=plan.context.arrangement.parts,
     )
 
 
@@ -175,12 +174,12 @@ def _emit_melody(
 #: `texture_fill` before `melody_bearing` is what stops a fill from being voiced as
 #: a chord; `no_chord` before `comping` is what keeps an `NC` bar from being
 #: reharmonised. `tests/meta_route_dispatch.py` pins the sequence.
-ROUTES: Tuple[Route, ...] = (
-    Route("no_upper_voices", _claims_no_upper_voices, _emit_no_upper_voices),
-    Route("texture_fill", _claims_texture, _emit_texture_fill),
-    Route("no_chord", _claims_no_chord, _emit_no_chord),
-    Route("comping", _claims_comping, _emit_comping),
-    Route("melody_bearing", _claims_always, _emit_melody),
+ROUTES: Tuple[_Route, ...] = (
+    _Route("no_upper_voices", _claims_no_upper_voices, _emit_no_upper_voices),
+    _Route("texture_fill", _claims_texture, _emit_texture_fill),
+    _Route("no_chord", _claims_no_chord, _emit_no_chord),
+    _Route("comping", _claims_comping, _emit_comping),
+    _Route("melody_bearing", _claims_always, _emit_melody),
 )
 
 
@@ -193,7 +192,7 @@ def dispatch_step(
     and declines it hands it on; the last entry claims unconditionally, so the loop
     below always returns and a slot always leaves here with exactly one step.
 
-    The routes read the plan's `context` and `inputs`, so the slot facts and the
+    The routes read the plan's `context` and `rhythm`, so the slot facts and the
     arrangement facts keep the values the plan decided.
     """
     for route in ROUTES:

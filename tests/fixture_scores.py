@@ -499,7 +499,7 @@ def common_8() -> str:
 
     Replaces ``synthetic_common_8.musicxml``.  Bar 3 is four ``G4``s over
     ``Eb7`` - the reported bar of the fill rule - and bar 8 carries changes but no
-    tune, which is where the comping grid has to stab without inventing a melody.
+    tune, which is where the comping union has to stab without inventing a melody.
     """
     d = 8  # divisions per quarter; a 4/4 bar is 32
     bars = [
@@ -925,7 +925,7 @@ def pickup_common() -> str:
     d = 4
     bars = [
         # No harmony in the pickup bar: the tune is there and the changes have not
-        # started, which is also what keeps the default grid from filling the short
+        # started, which is also what keeps a comping union from filling the short
         # bar with chord stabs after its single note.
         [note("C5", 4)],
         [harmony("F", "maj7"), note("A4", 16)],

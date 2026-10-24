@@ -1,39 +1,42 @@
 """The knobs an arrangement is made with, as one value.
 
-The **request** is the public vocabulary: who sings the tune, when each
-accompaniment layer attacks, and what each states. The four questions and their
-grammar are in `docs/history/rhythm-request.md`; `resolve_request` turns them into
-the engine's internal axes - `parts`, `texture`, `harmony`, `bass` and the chord's
-rhythm - which is what the step loop actually reads.
+The **request** is the public vocabulary: who plays the tune, when each
+accompaniment layer attacks, what each states, and what the chord does in a melody
+rest - six questions. `head`'s six flags and `Request(...)` are two spellings of
+them, and `resolve_request` turns either into the engine's internal axes - `parts`,
+`texture`, `bass` and the chord's rhythm - which is what the step loop
+actually reads.
 
-The axes are still spellable as keyword overrides on `ArrangeOptions` and
-`arrange_progression`, because they are the engine's implementation and the axis
-tests hold them directly to their own behaviour. `None` means "derive this from the
-request"; a value means "the implementation axis, spelled out".
+**The axes are derived from the request; this object carries the rest of the knobs.** They
+are the engine's implementation rather than a question a caller asks, so no entry point takes
+one as a keyword, and nothing here spells one either. What it holds is what is *not* a
+question about the music: the neck window, the strings a shape may use, the non-chord-tone
+strategy. The request and the metre are **input facts** the other way, so `request=` and
+`time_signature=` sit beside `options=` on the entry points and
+`resolution.settle_input_fact` reconciles the two spellings.
 
 Frozen, because an options object that can be mutated halfway through arranging is
 worse than the keyword list it replaces - the failure would depend on *when* it was
 written. Build a second one instead.
 
-Every field's default is the same value `arrange_progression`'s keyword defaults to, so
-`ArrangeOptions()` asks for exactly what `arrange_progression(progression)` builds. That
-call still
-accepts the same keywords directly; see its docstring for how the two interact.
+Every field's default is the same value the entry point's keyword defaults to, so
+`ArrangeOptions()` asks for exactly what `arrange_progression(progression)` builds.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, Container, Dict, Mapping, Optional, Sequence, Tuple
+from typing import Container, Dict, Mapping, Optional, Sequence, Tuple
 
 from .bass_rules import (
+    BASS_ALL_RULES,
     BASS_RULE_5TH,
     BASS_RULE_ROOT,
     BASS_RULES,
     BASS_STYLE_NONE,
+    parse_bass_style,
 )
 from .grid import (
-    RHYTHM_EVERY_BEAT,
     RHYTHM_MELODY,
     RHYTHM_NONE,
     Rhythm,
@@ -41,8 +44,8 @@ from .grid import (
 )
 from .grip_tables import RIGHT_HAND_STRINGS
 from .grouping import COMMON_TIME, TimeSignature
-from .harmony import HARMONY_AUTO
 from .parts import PART_BASS, PART_CHORD, PART_MELODY, PART_NAMES
+from .texture import texture_arity
 from .tuning import MELODY_STRING_CHOICES_FULL, NECK_FRET_MAX, NECK_FRET_MIN
 
 # `(bar, beat, duration)` for one slot. `bar` is signed - a pickup is negative -
@@ -55,20 +58,28 @@ Timing = Tuple[Optional[int], Optional[float], Optional[float]]
 # --- the request: two rhythm questions and two content questions -------------
 
 CHORD_NOTES_FULL = "full"
+_CHORD_NOTES_TARGETS = "targets"
 
 #: The chord part's arity, as the request names it, mapped to the texture that
 #: states it. `full` is the **derivation** rather than a number: it means the most
 #: the right hand can fit at that position - three notes under the melody, and two
 #: when a bass note takes a string - which is why it is `uniform` and not `chord3`.
+#:
+#: `targets` is the one value whose answer **varies by position**: the same maximum
+#: as `full` on a strong beat, and a thinner shape between them (`texture.TARGET_BEATS`).
+#: It is a content answer rather than a rhythm one - where those strong beats *are* is
+#: the metre's and the grouping's business, not the caller's - which is why it belongs
+#: on this question rather than on `chord_on`.
 CHORD_NOTES: Dict[str, str] = {
     CHORD_NOTES_FULL: "uniform",
+    _CHORD_NOTES_TARGETS: "targets",
     "3": "chord3",
     "2": "chord2",
     "1": "chord1",
 }
 
 BASS_NOTES_ROOT = "root"
-BASS_NOTES_ROOT_FIFTH = "root-5th"
+_BASS_NOTES_ROOT_FIFTH = "root-5th"
 BASS_NOTES_WALK = "walk"
 
 #: What a bass note states, mapped to the note rules the thumb line is written on.
@@ -77,26 +88,30 @@ BASS_NOTES_WALK = "walk"
 #: `bass_notes root` is a pedal, not the old "root only where the harmony anchors".
 BASS_NOTES: Dict[str, str] = {
     BASS_NOTES_ROOT: BASS_RULE_ROOT,
-    BASS_NOTES_ROOT_FIFTH: f"{BASS_RULE_ROOT},{BASS_RULE_5TH}",
-    BASS_NOTES_WALK: ",".join(BASS_RULES),
+    _BASS_NOTES_ROOT_FIFTH: f"{BASS_RULE_ROOT},{BASS_RULE_5TH}",
+    BASS_NOTES_WALK: BASS_ALL_RULES,
 }
 
 CHORD_FILLS_NONE = "none"
-CHORD_FILLS_HOLD = "hold"
+_CHORD_FILLS_HOLD = "hold"
 CHORD_FILLS_COMP = "comp"
 
 #: What the chord states in a **notated melody rest**. Not a rhythm: a rest has no
 #: melody note to attach to, and the flag is a policy for a different span.
 CHORD_FILLS: Tuple[str, ...] = (
     CHORD_FILLS_NONE,
-    CHORD_FILLS_HOLD,
+    _CHORD_FILLS_HOLD,
     CHORD_FILLS_COMP,
 )
 
 
 @dataclass(frozen=True)
 class Request:
-    """The four questions a caller asks, before they become the engine's axes.
+    """The six questions a caller asks, before they become the engine's axes.
+
+    The same six `head`'s flags ask, so a command line and a library name one
+    request: passing this value to `arrange_progression` is the library spelling,
+    and it is the only spelling - every axis below is derived from it.
 
     One value rather than six loose keywords, because the six are one request: a
     caller that names the chord's rhythm and the bass's content is describing one
@@ -112,7 +127,8 @@ class Request:
     #: When the chord attacks: `melody` (the written onsets), `none`, or
     #: positions such as `1and`. See `grid.parse_rhythm`.
     chord_on: str = RHYTHM_MELODY
-    #: How many chord notes to state, `full` being "the most that fits".
+    #: How many chord notes to state, `full` being "the most that fits" and
+    #: `targets` "the most that fits on a strong beat, thinner between".
     chord_notes: str = CHORD_NOTES_FULL
     #: When the bass attacks. `none` is no bass line.
     bass_on: str = RHYTHM_NONE
@@ -148,7 +164,6 @@ class ResolvedRequest:
     parts: Tuple[str, ...]
     texture: str
     bass: str
-    harmony: str = HARMONY_AUTO
 
     @property
     def chord_on(self) -> str:
@@ -174,16 +189,15 @@ def resolve_request(
     refused rather than ignored - the library's standing rule that a request it
     cannot honour is answered with a reason, never with an arrangement that quietly
     answers a different one.
+
+    **`chord_on="melody"` reads the same whether or not this guitar sings the tune.**
+    The written onsets are a fact about the *score* - which is how `bass_on="melody"`
+    has always read them - so a comping selection states the chord on the tune's own
+    rhythm rather than being handed the metre's reading in its place. A caller who
+    wants every felt beat asks for it: `chord_on="every-beat"` is the same request
+    whichever part is the guitar's.
     """
     chord_rhythm = parse_rhythm(request.chord_on, beats_per_bar, grouping)
-    if not request.melody and chord_rhythm.wants_melody:
-        # **`--no-melody` on its own is a complete request.** The chord's default is
-        # "the written onsets", and a request that hands the tune to another instrument
-        # has none - so the answer is the metre's own reading of where a chord falls,
-        # which is every beat. It is a **derivation rather than a silent default**: the
-        # run header prints the resolved positions (`chord-on=1,2,3,4`), so a caller who
-        # wanted a sparser comp names it and can see what they were given otherwise.
-        chord_rhythm = parse_rhythm(RHYTHM_EVERY_BEAT, beats_per_bar, grouping)
     bass_rhythm = parse_rhythm(request.bass_on, beats_per_bar, grouping)
     return _resolved(request, chord_rhythm, bass_rhythm)
 
@@ -193,10 +207,11 @@ def _resolved(
 ) -> ResolvedRequest:
     """The value `resolve_request` returns, from the request and its parsed rhythms."""
     fills = _named(request.chord_fills, _identity(CHORD_FILLS), "chord-fills")
+    bass_notes = _bass_notes_name(request.bass_notes)
     resolved = ResolvedRequest(
         melody=request.melody,
         chord_notes=request.chord_notes,
-        bass_notes=request.bass_notes,
+        bass_notes=bass_notes,
         chord_fills=fills,
         chord_rhythm=chord_rhythm,
         bass_rhythm=bass_rhythm,
@@ -206,7 +221,7 @@ def _resolved(
             not bass_rhythm.is_none,
         ),
         texture=_named(request.chord_notes, CHORD_NOTES, "chord-notes"),
-        bass=_bass_policy(request.bass_notes, bass_rhythm),
+        bass=_bass_policy(bass_notes, bass_rhythm),
     )
     _refuse(resolved)
     return resolved
@@ -250,16 +265,57 @@ def _named(value: str, vocabulary: Dict[str, str], label: str) -> str:
     return vocabulary[value]
 
 
+def _bass_notes_name(bass_notes: str) -> str:
+    """The caller's answer to the content question, in one canonical spelling.
+
+    A **name** is already canonical - it is the vocabulary's own word - and a rule
+    list is written the way `parse_bass_style` reads it back: lowercase, no whitespace
+    around the commas, in the order given. That is what `format_request` prints and
+    what a reader pastes back, so the two are the same string, and the value is
+    validated here rather than at the point of use.
+    """
+    if bass_notes in BASS_NOTES:
+        return bass_notes
+    return _bass_rules(bass_notes)
+
+
 def _bass_policy(bass_notes: str, bass_rhythm: Rhythm) -> str:
     """The note rules to run, or no line when the bass never attacks.
 
     The rhythm decides *whether* there is a line at all, and the names decide what
     it states - so `bass_on none` is no line whatever it is asked to state, rather
     than a policy that silently exists with nothing to play it.
+
+    A value is either one of the three **names** or the rules themselves as a
+    comma-separated list, which is the axis's own spelling: `walk` is
+    `root,5th,approach,nearest`, so a caller who wants a subset the names do not
+    offer (`root,approach`) asks for it in the request rather than reaching for
+    `options=`. The list is validated by `bass_rules.parse_bass_style`, which owns the
+    vocabulary, its order and its message - the order **is** the resolution order, so
+    it is kept as spelled rather than sorted.
     """
     if bass_rhythm.is_none:
         return BASS_STYLE_NONE
-    return _named(bass_notes, BASS_NOTES, "bass-notes")
+    if bass_notes in BASS_NOTES:
+        return BASS_NOTES[bass_notes]
+    return _bass_rules(bass_notes)
+
+
+def _bass_rules(bass_notes: str) -> str:
+    """`bass_notes` read as the rule list itself, or a refusal naming both spellings.
+
+    The names and the rules are one vocabulary written two ways, so the message lists
+    both: a caller who wrote `swing` is told what `root`/`root-5th`/`walk` mean and
+    what the rules are, rather than being handed the parser's list of the three.
+    """
+    try:
+        return ",".join(parse_bass_style(bass_notes))
+    except ValueError:
+        raise ValueError(
+            f"Unknown bass-notes {bass_notes!r}; expected any of "
+            f"{', '.join(BASS_NOTES)}, or a comma-separated list of "
+            f"{', '.join(BASS_RULES)}"
+        ) from None
 
 
 def _request_parts(melody: bool, has_chord: bool, has_bass: bool) -> Tuple[str, ...]:
@@ -267,7 +323,7 @@ def _request_parts(melody: bool, has_chord: bool, has_bass: bool) -> Tuple[str, 
 
     Derived rather than spelled, which is the whole point: one fact decides each
     part, and the parts selection is a **set**, so its order is canonicalised here
-    for the same reason `parse_parts` canonicalises a caller's.
+    into `PART_NAMES` order.
     """
     chosen = {PART_MELODY if melody else "", PART_CHORD if has_chord else "",
               PART_BASS if has_bass else ""}
@@ -286,9 +342,9 @@ def _refuse_melody(resolved: ResolvedRequest) -> None:
 
     It is about a **span of the tune** - its notated rests - and the guitar has no
     tune on its part to attach it to, so it cannot be answered by guessing a different
-    policy. `chord-on=melody` used to be refused here too; it is now derived to
-    `every-beat` in `resolve_request`, which is the one answer that keeps
-    `--no-melody` a complete request.
+    policy. `chord-on=melody` is not refused and needs no derivation: the written
+    onsets are a fact about the score, so a comping selection reads them like any
+    other request does.
     """
     if not resolved.melody and resolved.chord_fills != CHORD_FILLS_NONE:
         raise ValueError(
@@ -334,15 +390,19 @@ def _refuse_bass_content(resolved: ResolvedRequest) -> None:
 def _refuse_capacity(resolved: ResolvedRequest) -> None:
     """`melody + bass + chord <= RIGHT_HAND_STRINGS`, checked as arithmetic.
 
-    `full` is absent deliberately: it means "the most that fits", so it can never
-    ask for more than the hand has. A **number** can, and a four-note chord under a
-    melody with a bass beneath it is five strings - a request no voicing can honour
-    and no renderer could show.
+    **The arity is read from the texture table, not from the request's spelling.** A
+    spelling that names a *number* is the only one that can over-ask - `full` and
+    `targets` mean "the most that fits", so they cannot - and `texture.texture_arity`
+    is what says which spellings those are. Parsing the request's own string would be
+    the same fact written twice, and it would have to grow a branch per value: a
+    four-note chord under a melody with a bass beneath it is five strings, a request
+    no voicing can honour and no renderer could show.
     """
-    if resolved.chord_notes == CHORD_NOTES_FULL:
+    arity = texture_arity(resolved.texture, resolved.parts)
+    if arity is None:
         return
     strings = (
-        int(resolved.chord_notes)
+        arity
         + int(resolved.melody)
         + int(PART_BASS in resolved.parts)
     )
@@ -365,32 +425,13 @@ class ArrangeOptions:
     fret_min: int = NECK_FRET_MIN
     fret_max: int = NECK_FRET_MAX
     # --- the request ---
-    # The four questions as one value: who sings, when each accompaniment layer
-    # attacks, and what each states. Everything else in this dataclass is the
-    # engine's **implementation axis**; `None` means "derive it from the request",
-    # and a value is the axis spelled out - which is how the axis tests hold a
-    # texture or a bass policy directly to its own behaviour.
+    # The six questions as one value: who plays the tune, when each accompaniment
+    # layer attacks, and what each states. It is the **one** door to the axes below
+    # - how many notes the chord part states, the note rules the thumb line is
+    # written on, and which parts the guitar takes are all derived from it by
+    # `resolve_request`, so there is no second spelling of any of them to keep in
+    # step.
     request: Request = Request()
-    # --- implementation overrides ---
-    # How many notes the chord part states (`TEXTURE_ARITY`). Derived from
-    # `request.chord_notes`: `full` is `uniform`, which means the most the right
-    # hand can fit at that position.
-    texture: Optional[str] = None
-    # The note rules the thumb line is written on (`BASS_RULES`). Derived from
-    # `request.bass_notes`, or `none` when `request.bass_on` never attacks.
-    bass: Optional[str] = None
-    # Which of melody / bass / chord the guitar takes (`PART_NAMES`). Derived from
-    # the request, because the three questions already decide it: the tune, a chord
-    # position, a bass position.
-    parts: Optional[str] = None
-    # Which degrees the chord states when it is not singing (`HARMONY_STYLES`).
-    # `auto` - the derivation - is the full order under the melody and the guide
-    # pair when comping, which is the shipped answer on each route.
-    harmony: Optional[str] = None
-    # Where a chord falls, as one of the named presets in `grid.GRID_PATTERNS`.
-    # `None` means the request's `chord_on` rhythm decides, which is the public
-    # spelling; a preset here is the internal axis, and it wins.
-    grid: Optional[str] = None
     # The metre as one value: the count, the denominator and the grouping. The
     # denominator is not decoration - a beat is `4 / beat_type` quarters, so the
     # count alone says which beats exist but not how long one lasts. The grouping is
@@ -406,28 +447,23 @@ class ArrangeOptions:
     # This is the third time list invariance in a signature has cost this library
     # something, and the fourth would not have been a surprise.
     timings: Optional[Sequence[Timing]] = None
-    # Per-progression-index bass pitch class, for the slash-chord preference (rule C,
-    # inherited from the removed corpus path). This is the field that lets a caller
-    # delegate instead of running a second step loop: the corpus's only selection
-    # difference from the library was *which candidates are considered*, and that is
-    # data, not control flow. Absent or None for an index means no restriction, which
-    # is exactly the library's own behaviour.
-    bass_pcs: Optional[Mapping[int, Optional[int]]] = None
-    # The ranking that honours `bass_pcs` is passed in rather than imported:
-    # `slash_bass_cost` lives in `arranger.slots`, which reaches `decisions` through
-    # `steps`, so a module-level import either way would be a cycle. It is a field
-    # rather than a module global because a slash-bass preference is the only reason
-    # to supply one, and making that visible at the call site is the point.
+    # Per-progression-index bass pitch class: the note a written slash chord asks
+    # for (`A-/G` wants G). It narrows *which candidates are considered*, and the
+    # engine's own rule then decides within that narrowed set, so the two selection
+    # rules stay combined rather than sequential. Absent or None for an index means
+    # no restriction, which is exactly the library's own behaviour.
     #
-    # Both halves are needed: `bass_pcs` says which pitch the caller wants, and this
-    # says how near a candidate is to it. Neither alone narrows anything.
-    slash_bass_cost: Optional[Callable[[Sequence[int], Optional[int]], int]] = None
+    # The ranking that honours it is `chords.slash_bass_cost`, which `decisions`
+    # calls directly - it is pure integer arithmetic over a voicing and a pitch
+    # class, and `chords` sits below `decisions` in the order. There is nothing to
+    # inject, so this field is the whole of the request.
+    bass_pcs: Optional[Mapping[int, Optional[int]]] = None
     # The progression indexes whose melody note **articulates** (an onset), for the
     # §9.2 reharmonise rule on the comping route: a non-chord melody note is
     # substituted where it begins, not under a held note and not where the tune is
-    # silent. `None` means *every* slot is an onset - the honest default for a
-    # hand-built progression that carries no timeline, so a bare
-    # `arrange_progression(..., parts=chord)` still honours `--non-chord-tone`.
+    # silent. `None` means *every* slot is an onset - the honest answer for a caller who
+    # said nothing about onsets, so a bare `arrange_progression(..., parts=chord)` still
+    # honours `--non-chord-tone`.
     # The head layer computes it from `headxml.melody_state`, which is the one place
     # that knows a note is sounding rather than merely in force.
     #

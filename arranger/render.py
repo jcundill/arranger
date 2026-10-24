@@ -28,8 +28,9 @@ from __future__ import annotations
 
 from typing import List, Optional
 
-from .annotation import annotation_lines, melody_degree_label, step_annotation
-from .tuning import MUTED_CELL, STAFF_CELL_WIDTH, ArrangementStep, cells_from_frets
+from .annotation import melody_degree_label, step_annotation
+from .step_types import MUTED_CELL, STAFF_CELL_WIDTH, ArrangementStep, cells_from_frets
+from .text_layout import annotation_lines
 
 __all__ = ["MUTED_CELL", "STAFF_CELL_WIDTH", "format_progression", "print_step"]
 
@@ -130,7 +131,7 @@ def _format_step(
     The first three columns are fixed width, and the annotation - whose text length
     varies - is **appended after the tab** rather than printed between the melody and
     it. That is what stops the shape drifting: an inline annotation is as wide as its
-    own text, so every annotated step used to start its tab in a different column
+    own text, so an annotated step would otherwise start its tab in a different column
     from every unannotated one.
 
     Each tab is **hyphen-joined and ragged** - `x-11-x` is wider than `x-x-x` - so a

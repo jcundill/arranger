@@ -1,6 +1,6 @@
 """The texture axis: how many notes the chord part states, by metric weight.
 
-`texture=` owns **how many notes the chord part states**. It is not a grip list:
+`texture` owns **how many notes the chord part states**. It is not a grip list:
 the grip families are an internal search space over the chord part's degrees
 and the neck window, keyed by the number of notes they sound under the melody.
 What remains a choice is the arity and the metric policy that varies it.
@@ -55,34 +55,14 @@ TEXTURE_ARITY: Dict[str, Optional[int]] = {
 #: beats: beats 1 and 7 of 12/8, and the downbeat alone of 6/8 or 2/2.
 TARGET_BEATS: Tuple[int, ...] = (1, 3)
 
-FILL_THINNING = 1
+_FILL_THINNING = 1
 
-THIN_ENTRIES: Dict[str, int] = {
+_THIN_ENTRIES: Dict[str, int] = {
     "interval": 1,
     "melody": 0,
 }
 
-FILL_ONLY_EXCLUDED: Tuple[str, ...] = ("duo",)
-
-
-def families_for_arity(arity: int) -> Tuple[str, ...]:
-    """The grip families that state exactly `arity` notes under the melody.
-
-    Derived from the string tables rather than listed, so a family added to the
-    search space joins at its own size rather than needing a row here. `arity` below
-    one is the empty palette - "the left hand plays nothing" - which is a real answer
-    rather than an error, because that is what a one-note fill means.
-    """
-    if arity < 1:
-        return ()
-    families: List[str] = []
-    for family in GRIP_PREFERENCE:
-        sets = GRIP_STRING_SETS.get(family, ())
-        if not sets:
-            continue
-        if min(len(strings) for strings, _soprano in sets) == arity + 1:
-            families.append(family)
-    return tuple(families)
+_FILL_ONLY_EXCLUDED: Tuple[str, ...] = ("duo",)
 
 
 def families_up_to_arity(arity: int) -> Tuple[str, ...]:
@@ -112,14 +92,14 @@ def families_up_to_with_thin(arity: int) -> Tuple[str, ...]:
     because neither states a chord part. They come **last**, which is where the
     voice-count criterion would put them anyway.
 
-    `FILL_ONLY_EXCLUDED` is removed first, so the 3rd/7th reading is not offered where
+    `_FILL_ONLY_EXCLUDED` is removed first, so the 3rd/7th reading is not offered where
     the loose one is - the two are the same thickness, and an exact tie between them
     would otherwise be decided by the order of this tuple rather than by the rule.
     """
     return tuple(
         family for family in families_up_to_arity(arity)
-        if family not in FILL_ONLY_EXCLUDED
-    ) + tuple(name for name, size in THIN_ENTRIES.items() if size <= arity)
+        if family not in _FILL_ONLY_EXCLUDED
+    ) + tuple(name for name, size in _THIN_ENTRIES.items() if size <= arity)
 
 
 def parse_texture(argument: str) -> str:
@@ -203,7 +183,7 @@ def texture_palette(
     """The palette a slot of this role may use, and nothing else.
 
     A **target** states the chord part's full arity; a **fill** states
-    `FILL_THINNING` notes fewer, which is the thickness claim the role
+    `_FILL_THINNING` notes fewer, which is the thickness claim the role
     has always made. Both are **ceilings rather than exact counts** - see
     `families_up_to_arity` - so the fullest shape a position admits is the one
     generated first, and a position only a shell fits is a shell rather than silence.
@@ -218,7 +198,7 @@ def texture_palette(
     arity = derived_arity(texture, parts, has_thumb)
     if role == ROLE_TARGET:
         return families_up_to_arity(arity)
-    return families_up_to_with_thin(arity - FILL_THINNING)
+    return families_up_to_with_thin(arity - _FILL_THINNING)
 
 
 BEAT_EPSILON = 1e-6
@@ -280,7 +260,7 @@ def roles_for_slot(
       - `uniform` and the `chordN` rows make every slot a target, which is the
         default and the reason `arrange_progression` is unchanged unless a caller
         opts in;
-      - a weight below zero means no timing was supplied, so the slot is a target;
+      - a weight below zero means the position was stated as unplaced, so it is a target;
       - a strong beat is a target and any other beat is a fill.
 
     Raises ValueError for an unknown texture, checked before any voicing work so a

@@ -7,19 +7,16 @@ rhythm neither invents beats the caller did not name nor leaves a bar unmarked, 
 that `root`/`root-5th` state a note at every requested position - which is the one
 thing the walk's filtered vocabulary cannot do.
 
-The `bass=` axis is the engine's own spelling and keeps its documented
-anchors-only meaning until Stage 8 retires it, so one test holds the two apart.
+The `bass` axis is the engine's own spelling, reached through `ArrangeOptions`, and it
+keeps its documented anchors-only meaning, so one test holds the axis's own value and the
+request's derivation apart.
 """
 
 import unittest
 
-from arranger import (
-    BASS_ROLE_ANCHOR,
-    BASS_ROLE_FIFTH,
-    BASS_ROLE_PEDAL,
-    Request,
-)
+from arranger import Request
 from arranger.bass import bass_line_for
+from arranger.bass_rules import BASS_ROLE_ANCHOR, BASS_ROLE_FIFTH, BASS_ROLE_PEDAL
 from arranger.options import resolve_request
 from tests.support import arranged
 
@@ -171,7 +168,7 @@ class TestTheSimpleLines(unittest.TestCase):
 
 
 class TestTheAxisIsStillTheAxis(unittest.TestCase):
-    """The `bass=` spelling keeps its documented meaning until Stage 8 retires it."""
+    """The `bass` axis keeps its documented meaning, reached through `ArrangeOptions`."""
 
     def test_the_axis_root_is_anchors_only(self):
         """No rhythm named means the felt-beat walk, filtered to the anchors."""

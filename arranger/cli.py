@@ -5,7 +5,7 @@ a flag cannot be added in one place and silently missed in another. The idea beh
 split is that **the duplication worth removing is the *argument*, not the *prose***: the
 flags whose help is identical are written once here, and prose that genuinely differs is
 kept and lives in one table. `HEAD_HELP` holds the prose for every flag whose wording
-carries a musical decision, and `CommonHelp` is one dataclass with one field per such
+carries a musical decision, and `_CommonHelp` is one dataclass with one field per such
 flag, so a flag added here has nowhere else to be forgotten - `tests/test_cli.py`
 asserts every declared field reaches `add_argument` with its text.
 
@@ -31,7 +31,6 @@ from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Sequence, 
 from .chords import NON_CHORD_TONE_STRATEGIES
 from .grid import RHYTHM_NONE
 from .options import (
-    BASS_NOTES,
     BASS_NOTES_ROOT,
     CHORD_FILLS,
     CHORD_FILLS_NONE,
@@ -39,21 +38,23 @@ from .options import (
     CHORD_NOTES_FULL,
 )
 from .render import format_progression
-from .tuning import NECK_FRET_MAX, NECK_FRET_MIN, ArrangementStep
+from .step_types import ArrangementStep
+from .tuning import NECK_FRET_MAX, NECK_FRET_MIN
 
 if TYPE_CHECKING:  # pragma: no cover - the annotations are strings at runtime
     import argparse
 
 __all__ = [
     "HEAD_HELP",
-    "CommonHelp",
+    "_REQUEST_DESTS",
+    "_CommonHelp",
     "ScoreMeta",
     "add_common_arguments",
     "render_and_write",
 ]
 
 @dataclass(frozen=True)
-class CommonHelp:
+class _CommonHelp:
     """The `--help` prose for the flags whose wording is not mechanical.
 
     One field per flag whose help is *written* rather than derived. A flag absent
@@ -92,6 +93,25 @@ class CommonHelp:
     bass_notes: str
 
 
+#: The six request questions, as `(the Request field, the flag's argparse dest)`.
+#:
+#: One list, because the six are one vocabulary spelled twice - by these flags and by
+#: `Request(...)` - and a seventh question added to one spelling but not the other
+#: would be a question one of the two front ends could not ask. `melody` is the one
+#: name that differs: the flag states the exception (`--no-melody`) where the field
+#: states the shipped default. The order is the flags' own, grouped by layer, which is
+#: why it is not the dataclass field order; `tests/test_request.py` holds the two
+#: spellings to this list as a set rather than a sequence.
+_REQUEST_DESTS: Tuple[Tuple[str, str], ...] = (
+    ("melody", "no_melody"),
+    ("chord_on", "chord_on"),
+    ("chord_notes", "chord_notes"),
+    ("chord_fills", "chord_fills"),
+    ("bass_on", "bass_on"),
+    ("bass_notes", "bass_notes"),
+)
+
+
 @dataclass(frozen=True)
 class ScoreMeta:
     """The score-level facts every writer needs, as one value.
@@ -124,7 +144,7 @@ class ScoreMeta:
 #: than either state. What survives says what the deleted half could not - that the
 #: window is an aim, not a filter, and that a head read from a score may want a
 #: narrower one than a solo would.
-HEAD_HELP = CommonHelp(
+HEAD_HELP = _CommonHelp(
     bars="narrow to a half-open LO-HI bar range; bounds may be negative",
     bars_per_line="bars per system on the staff",
     fret_min=f"lowest fret to aim for (default {NECK_FRET_MIN}; an aim, not a filter)",
@@ -139,9 +159,9 @@ HEAD_HELP = CommonHelp(
     mutes="with --tab staff, spell out the unsounded strings",
     tab="'staff' lays the head on one six-line staff, spaced on its real rhythm",
     no_melody=(
-        "hand the tune to another instrument and comp instead. The chord then "
-        "attacks on every felt beat - the default names the written melody's "
-        "onsets, and this guitar has none - unless --chord-on names positions"
+        "hand the tune to another instrument and comp instead. The chord keeps "
+        "the tune's own written onsets, so the comp falls where the tune does - "
+        "pass --chord-on every-beat for one on every felt beat, or name positions"
     ),
     chord_on=(
         "when the chord attacks, comma-separated, in felt beats: 'melody' (the "
@@ -153,7 +173,8 @@ HEAD_HELP = CommonHelp(
     chord_notes=(
         "how many chord notes to state: 'full' (the default) is the most the right "
         "hand can fit - three under the melody, two once a bass note takes a string "
-        "- or 3, 2 or 1 for exactly that many"
+        "- 'targets' is that same maximum on a strong beat and a thinner shape "
+        "between them, and 3, 2 or 1 is exactly that many everywhere"
     ),
     chord_fills=(
         "what the chord does in a notated melody rest: 'none' (the default) rests "
@@ -168,24 +189,23 @@ HEAD_HELP = CommonHelp(
     ),
     bass_notes=(
         "what each bass attack states: 'root' (the default), 'root-5th' "
-        "alternating, or 'walk' for the anchor/connect/approach line. The rhythm is "
-        "--bass-on's, so 'root' on every beat is a pedal rather than the old "
-        "anchors-only rule"
+        "alternating, 'walk' for the anchor/connect/approach line, or the note "
+        "rules themselves as a comma-separated list ('root,approach'). The order "
+        "is the resolution order. The rhythm is --bass-on's, so 'root' on every "
+        "beat is a pedal rather than the old anchors-only rule"
     ),
 )
 
 def add_common_arguments(
     parser: argparse.ArgumentParser,
-    help_text: CommonHelp,
+    help_text: _CommonHelp,
 ) -> None:
     """Add the flags the front end takes, to `parser`.
 
-    **One caller now.** This was written for two commands that shared a block of
-    flags, and its prose spoke throughout of "both" and "the other" - which is how
-    `--skeleton` and `--pick` are **not** offered, and the reason is a policy
-    rather than an omission: the MusicXML path does not reduce - every written note of a
-    score gets its own slot. Where chords fall is the `grid=` axis, and which notes the
-    guitar plays is the `parts=` axis.
+    **One caller.** Two flags are deliberately absent rather than forgotten:
+    `--skeleton` and `--pick` are **not** offered, because this path does not reduce -
+    every written note of a score gets its own slot. Where chords fall is the request's
+    `chord_on`, and which notes the guitar plays is derived from the whole request.
 
     The order the flags are added in is the order they appear in `--help`.
     """
@@ -232,7 +252,7 @@ def add_common_arguments(
     )
     parser.add_argument(
         "--bass-notes",
-        choices=list(BASS_NOTES),
+        metavar="RULES",
         default=BASS_NOTES_ROOT,
         help=help_text.bass_notes,
     )

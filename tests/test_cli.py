@@ -10,7 +10,7 @@ trusting the structure:
 - **every flag reaches the parser** - the nineteen are named, so a flag registered without
   a decision behind it fails;
 - **the help text is not one shared string**: eleven flags take their prose from
-  `CommonHelp` and eight are written inline, and every declared field reaches its flag with
+  `_CommonHelp` and eight are written inline, and every declared field reaches its flag with
   that text, which catches a field added to the dataclass and never passed to
   `add_argument`.
 
@@ -33,8 +33,8 @@ from typing import Dict, List
 import arranger
 from arranger.cli import (
     HEAD_HELP,
-    CommonHelp,
     ScoreMeta,
+    _CommonHelp,
     add_common_arguments,
     render_and_write,
 )
@@ -120,7 +120,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         parser there is nothing to disagree with, so what the count is for changes:
         it is now a tripwire for a flag appearing or vanishing unnoticed.
 
-        **20, and the grouping flag that briefly made it 21 is gone.** The metre's
+        **20 flags.** The metre's
         third fact - which denominator units are felt as one beat - is the score's
         own: the importer reads an `N+N` direction, the beaming or a metronome pulse,
         and a hand-built progression declares the whole metre as a `TimeSignature`. A
@@ -159,9 +159,9 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         'tests/data/...'`), so a list option written *before* the file could not work at
         all. `AGENTS.md` trap 14 is the rule - a list-valued option is one comma-separated
         string the module that owns the vocabulary parses, never `nargs` and never
-        `choices` - and the two rhythm flags are what carry it now that `--parts` and
-        `--grid` are gone. Asserted on the parse rather than on a whole run, because a
-        positional is the parser's business and no score is needed to see it eaten.
+        `choices` - and the two rhythm flags are what carry it. Asserted on the parse
+        rather than on a whole run, because a positional is the parser's business and no
+        score is needed to see it eaten.
 
         **Neither rhythm flag takes `choices`**, because the grammar is open-ended: a
         position list is only legal against a metre, and `--grips`' old refusal showed
@@ -179,7 +179,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         self.assertEqual(parsed.file, "head.musicxml")
 
     def test_the_help_text_is_not_one_shared_string(self):
-        """Sixteen flags take their prose from `CommonHelp`, four are written inline.
+        """Sixteen flags take their prose from `_CommonHelp`, four are written inline.
 
         Measured before `arranger/cli.py` existed: of the seventeen shared flags,
         all seventeen agreed on every field of *meaning*, and eleven disagreed on
@@ -189,7 +189,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
 
         With one parser there is no "differing" set any more, so this asserts the
         partition that produced it instead: **sixteen flags get their text from
-        `CommonHelp` and four get it written inline**, and both halves are named.
+        `_CommonHelp` and four get it written inline**, and both halves are named.
         That is the property the split was built on - a flag whose help is the same
         wherever it is read is written once at the `add_argument` call, and one
         whose wording carries an arrangement of its own lives in the table.
@@ -204,7 +204,7 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
         from dataclasses import fields
 
         flags = self.parser()
-        declared = {field.name for field in fields(CommonHelp)}
+        declared = {field.name for field in fields(_CommonHelp)}
         self.assertEqual(
             sorted(flags),
             [
@@ -235,34 +235,12 @@ class TestTheFlagsAreOneDefinition(unittest.TestCase):
             sorted(declared | {"fallback", "file", "non_chord_tone", "part"}),
         )
 
-    def test_the_reduction_flags_are_gone(self):
-        """`--skeleton` and `--pick` went with the database, and that is asserted.
-
-        Both were a *reduction* - they decided which melody notes were dropped -
-        and the MusicXML path does not reduce: every written note of a score sounds,
-        because a note of the tune going missing silently is worse than a busy tab.
-        The corpus command kept both while it existed, which is why they were
-        *parameters* of `add_common_arguments` rather than flags: their vocabularies
-        belonged to `wjazzd`, and `head` never passed them.
-
-        So these two flags were unreachable before this change - gated on a
-        vocabulary the one caller had no way to supply. Removing the gate is what
-        makes them removable, and the assertion is that they are not offered: a flag
-        reaching a parameter that had gone would be a `TypeError` at first run rather
-        than a parser error, which is the worse of the two.
-        """
-        flags = self.parser()
-        for name in ("--skeleton", "--pick", "--vertical", "--melid", "--list",
-                     "--lift", "--section"):
-            with self.subTest(flag=name):
-                self.assertNotIn(name, flags)
-
     def test_head_states_the_fret_window(self):
         """The one omission, filled deliberately rather than quietly preserved.
 
         `corpus` told the user what its fret window defaulted to and `head` said
         nothing. That read like an oversight, so it was pinned as a *deliberate*
-        difference (`Optional[str]` in `CommonHelp` exists for exactly it), which
+        difference (`Optional[str]` in `_CommonHelp` exists for exactly it), which
         turned "tidying it up" into a change someone had to look at.
 
         Someone looked, and filled it: a flag the reader can pass but cannot
@@ -297,11 +275,9 @@ class TestTheSharedDispatch(unittest.TestCase):
     replaces it; this only states the dispatch itself, which is reachable without
     a file on disk.
 
-    **These were the "shared" half of a pair of commands**, and every test here
-    existed to hold the two callers to one definition: a metre passed by one and
-    defaulted by the other had to land in the same place. That comparison is gone,
-    and what remains is the weaker and still real claim that the defaults are the
-    writers' own - which is what the tests assert.
+    **These are the writers' own defaults**, and every test here holds one of them to the
+    place it has to land: a metre the caller passes and one the writer defaults resolve to
+    the same thing, which is what the tests assert.
     """
 
     def steps(self, count: int = 2):
@@ -432,14 +408,9 @@ class TestTheSharedDispatch(unittest.TestCase):
         calls = self.captured_calls(beats_per_bar=2, beat_type=2)
         for name in ("staff", "html", "musicxml", "gp5"):
             self.assertEqual(calls[name]["beats_per_bar"], 2, name)
-        # `beat_type` used to reach only the two score writers, and this test asserted
-        # the staff and the HTML did *not* take it - on the stated grounds that
-        # "neither the ASCII staff nor the HTML page writes a time signature at all".
-        # Both now do, from `show_timing`: a staff that shows where a chord falls but
-        # not how long it sounds, and prints no metre, is half a score. So the
-        # assertion is inverted rather than dropped: all four renderers must now
-        # carry the notated metre, or a 2/2 head is laid out on the wrong grid and
-        # displayed as common time.
+        # All four renderers carry the notated metre, or a 2/2 head is laid out on the
+        # wrong grid and displayed as common time: a staff that shows where a chord falls
+        # but not how long it sounds, and prints no metre, is half a score.
         for name in ("staff", "html", "musicxml", "gp5"):
             self.assertEqual(calls[name]["beat_type"], 2, name)
 

@@ -1,18 +1,24 @@
-"""The arrangement request: four questions resolved into the engine's axes.
+"""The arrangement request: six questions resolved into the engine's axes.
 
-`Request` is the public spelling, and `resolve_request` is the **derivation** that
-turns it into `parts`, `texture`, `harmony` and the bass policy. What is verified:
+`Request` is the public spelling, `head`'s flags are the other, and
+`resolve_request` is the **derivation** that turns either into `parts`, `texture`,
+`harmony` and the bass policy. What is verified:
 
 - **the defaults are the shipped arrangement**: the guitar sings, the chord states
   the full harmonisation under each written melody note, and nothing else sounds;
 - **the two rhythms decide the parts**, so `bass_on` is what makes the bass part
-  exist rather than a `parts=` spelling beside it;
+  exist rather than a `parts` spelling beside it;
 - **content maps to the implementation**: `chord_notes` to the texture,
   `bass_notes` to the note rules, and `full` to the *derivation* rather than to a
   number;
 - **every refusal happens before any voicing work**, naming what would work;
 - **the canonical spelling round trips**, so the run header is a request a reader
-  can copy back.
+  can copy back;
+- **the library's own front door answers the same six questions**, asserted on the
+  tab rather than on the axes, so a request built in Python is the request the
+  flags build;
+- **the two spellings are one vocabulary**, held together by `cli._REQUEST_DESTS`
+  rather than by convention.
 
 The step loop's behaviour is elsewhere; this is the request's own arithmetic and
 its refusals.
@@ -20,17 +26,13 @@ its refusals.
 
 from __future__ import annotations
 
+import argparse
 import unittest
 
 from arranger import (
-    BASS_NOTES_ROOT_FIFTH,
-    BASS_NOTES_WALK,
-    CHORD_FILLS_HOLD,
-    PART_BASS,
-    PART_CHORD,
-    PART_MELODY,
-    PART_NAMES,
+    Note,
     Request,
+    VoiceLeadingEngine,
     format_request,
     parse_rhythm,
     resolve_request,
@@ -40,7 +42,16 @@ from arranger.bass_rules import (
     BASS_RULE_ROOT,
     BASS_STYLE_NONE,
 )
-from arranger.harmony import HARMONY_AUTO
+from arranger.cli import _REQUEST_DESTS, HEAD_HELP, add_common_arguments
+from arranger.options import (
+    _BASS_NOTES_ROOT_FIFTH,
+    _CHORD_FILLS_HOLD,
+    BASS_NOTES_WALK,
+    CHORD_NOTES,
+    ArrangeOptions,
+)
+from arranger.parts import PART_BASS, PART_CHORD, PART_MELODY, PART_NAMES
+from arranger.texture import TEXTURE_STYLES
 
 
 class TestTheShippedRequest(unittest.TestCase):
@@ -55,10 +66,6 @@ class TestTheShippedRequest(unittest.TestCase):
     def test_the_full_harmonisation_is_the_derivation(self):
         """`chord_notes=full` is `uniform`: the most the right hand can fit."""
         self.assertEqual(resolve_request(Request(), 4).texture, "uniform")
-
-    def test_the_degree_order_is_the_engine_s_auto(self):
-        """`harmony=` is not a public question; the shipped answer is its `auto`."""
-        self.assertEqual(resolve_request(Request(), 4).harmony, HARMONY_AUTO)
 
     def test_the_chord_attacks_at_the_written_melody(self):
         """`chord_on=melody` is the written onsets, and no bass attacks at all."""
@@ -83,7 +90,7 @@ class TestTheRhythmsDecideTheParts(unittest.TestCase):
     def test_root_and_fifth_is_a_two_rule_line(self):
         """`root-5th` is the two rules, not the whole walk."""
         resolved = resolve_request(
-            Request(bass_on="1", bass_notes=BASS_NOTES_ROOT_FIFTH), 4
+            Request(bass_on="1", bass_notes=_BASS_NOTES_ROOT_FIFTH), 4
         )
         self.assertEqual(resolved.bass, f"{BASS_RULE_ROOT},5th")
 
@@ -101,13 +108,47 @@ class TestTheRhythmsDecideTheParts(unittest.TestCase):
     def test_a_rest_policy_keeps_the_chord_part_alive(self):
         """`chord-on none` with `chord-fills hold` comps in the rests, so it exists."""
         resolved = resolve_request(
-            Request(chord_on="none", chord_fills=CHORD_FILLS_HOLD), 4
+            Request(chord_on="none", chord_fills=_CHORD_FILLS_HOLD), 4
         )
         self.assertIn(PART_CHORD, resolved.parts)
-        self.assertEqual(resolved.chord_fills, CHORD_FILLS_HOLD)
+        self.assertEqual(resolved.chord_fills, _CHORD_FILLS_HOLD)
+
+    def test_a_rule_list_is_the_axis_s_own_spelling(self):
+        """`root,approach` is the rules themselves: a subset the three names do not offer.
+
+        The names are sugar over one vocabulary - `walk` is the four rules in their
+        resolution order - so a caller who wants part of that chain asks for the rules.
+        The order **is** the request: `approach,root` is a different line.
+        """
+        resolved = resolve_request(
+            Request(bass_on="every-beat", bass_notes="root,approach"), 4
+        )
+        self.assertEqual(resolved.bass, f"{BASS_RULE_ROOT},{BASS_RULE_APPROACH}")
+        self.assertEqual(resolved.bass_notes, "root,approach")
+        self.assertEqual(
+            resolve_request(
+                Request(bass_on="every-beat", bass_notes="approach,root"), 4
+            ).bass,
+            f"{BASS_RULE_APPROACH},{BASS_RULE_ROOT}",
+            "the order is the resolution order, not formatting",
+        )
+
+    def test_a_rule_list_is_reported_the_way_it_parses_back(self):
+        """`ROOT, approach` is one request with one canonical header line."""
+        resolved = resolve_request(
+            Request(bass_on="every-beat", bass_notes=" ROOT , approach "), 4
+        )
+        self.assertEqual(resolved.bass_notes, "root,approach")
+        self.assertIn("bass-notes=root,approach", format_request(resolved))
+
+    def test_a_silent_bass_refuses_a_rule_list_too(self):
+        """The content question is answered the same way whichever spelling asks it."""
+        with self.assertRaises(ValueError) as caught:
+            resolve_request(Request(bass_on="none", bass_notes="root,approach"), 4)
+        self.assertIn("bass-notes=root,approach", str(caught.exception))
 
     def test_the_parts_are_canonicalised(self):
-        """A derived selection is written in `PART_NAMES` order, as `parse_parts` is."""
+        """A derived selection is written in `PART_NAMES` order."""
         resolved = resolve_request(Request(bass_on="1", chord_on="none"), 4)
         self.assertEqual(
             resolved.parts,
@@ -124,6 +165,28 @@ class TestTheContentQuestions(unittest.TestCase):
                 self.assertEqual(
                     resolve_request(Request(chord_notes=notes), 4).texture, texture
                 )
+
+    def test_targets_is_the_arity_that_varies_by_position(self):
+        """`targets` is a content answer, so it belongs on this question.
+
+        It is the one spelling whose answer depends on *where* the chord falls - the
+        same maximum as `full` on a strong beat and a thinner shape between them - and
+        it is not a `chord_on` value: that says *when* a chord attacks, this says how
+        much of it sounds there. Where the strong beats are is the metre's and the
+        grouping's business rather than the caller's, which is why the request names
+        the policy and not the positions.
+        """
+        self.assertEqual(
+            resolve_request(Request(chord_notes="targets"), 4).texture, "targets"
+        )
+
+    def test_the_request_vocabulary_reaches_every_texture(self):
+        """Every `TEXTURE_STYLES` entry has a request spelling, so none is API-only.
+
+        A style the request cannot name is a style the command line cannot ask for, and
+        nothing would report the gap: the flag would simply not offer it.
+        """
+        self.assertEqual(set(CHORD_NOTES.values()), set(TEXTURE_STYLES))
 
     def test_the_bass_names_are_note_rules(self):
         """The names say *what*, so `root` on a beat is a pedal rather than an anchor."""
@@ -142,6 +205,19 @@ class TestTheContentQuestions(unittest.TestCase):
                     resolve_request(request, 4)
                 self.assertIn(label, str(caught.exception))
 
+    def test_the_bass_refusal_names_both_spellings_of_the_vocabulary(self):
+        """A name the request does not know is answered with the names *and* the rules.
+
+        The two are one vocabulary - `walk` is `root,5th,approach,nearest` - so a
+        caller who wrote something else is told both rather than being handed a list of
+        the three names it already rejected.
+        """
+        with self.assertRaises(ValueError) as caught:
+            resolve_request(Request(bass_on="every-beat", bass_notes="swing"), 4)
+        message = str(caught.exception)
+        self.assertIn("root-5th", message)
+        self.assertIn("approach", message)
+
     def test_a_bad_position_names_the_metre(self):
         """`3` in a 2/2 bar is refused by the metre, not clamped or dropped."""
         with self.assertRaises(ValueError) as caught:
@@ -153,18 +229,21 @@ class TestTheContentQuestions(unittest.TestCase):
 class TestTheRefusals(unittest.TestCase):
     """A request the engine cannot honour is answered before any voicing work."""
 
-    def test_no_melody_reads_the_melody_s_rhythm_as_every_beat(self):
-        """The default cannot attach to a tune this guitar does not play.
+    def test_no_melody_keeps_the_tune_s_own_rhythm(self):
+        """`--no-melody` reads the written onsets, as every other request does.
 
-        It is a **derivation** rather than a refusal: `--no-melody` on its own is a
-        complete request, and the header prints the positions it resolved to. The
-        refusal this replaces told the caller to name positions such as `every-beat`,
-        which is the answer the metre has anyway.
+        The written onsets are a fact about the *score*, which is how `bass_on="melody"`
+        reads them too, so the comp states the chord where the tune states a note. Every
+        felt beat is the request that names it.
         """
         for spelling in ("melody", ""):
             request = Request(melody=False, **({"chord_on": spelling} if spelling else {}))
             resolved = resolve_request(request, 4)
-            self.assertEqual(resolved.chord_on, "1,2,3,4", spelling)
+            self.assertEqual(resolved.chord_on, "melody", spelling)
+        self.assertEqual(
+            resolve_request(Request(melody=False, chord_on="every-beat"), 4).chord_on,
+            "1,2,3,4",
+        )
 
     def test_no_melody_cannot_ask_for_rest_fills(self):
         with self.assertRaises(ValueError) as caught:
@@ -203,6 +282,19 @@ class TestTheRefusals(unittest.TestCase):
         )
         self.assertEqual(resolved.texture, "uniform")
 
+    def test_the_capacity_check_reads_the_texture_and_not_the_spelling(self):
+        """`targets` is a derivation too, so a thumb under it cannot over-ask.
+
+        The check is `texture.texture_arity`'s answer rather than the request's own
+        string, because a spelling that names a *number* is the only one that can
+        over-ask. Written against the string it would have had to grow a branch per
+        value, and `targets` would have reached it as an `int()` on a word.
+        """
+        resolved = resolve_request(
+            Request(chord_notes="targets", bass_on="every-beat"), 4
+        )
+        self.assertEqual(resolved.texture, "targets")
+
 
 class TestTheCanonicalSpelling(unittest.TestCase):
     """The run header prints a request that parses back to the same value."""
@@ -230,6 +322,8 @@ class TestTheCanonicalSpelling(unittest.TestCase):
             (Request(melody=False, chord_on="every-beat"), 4),
             (Request(chord_on="none", chord_fills="hold"), 3),
             (Request(bass_on="every-beat", chord_on="none"), 2),
+            (Request(chord_notes="targets"), 4),
+            (Request(chord_notes="targets", bass_on="every-beat"), 4),
         ):
             with self.subTest(request=request, beats=beats):
                 resolved = resolve_request(request, beats)
@@ -257,6 +351,224 @@ class TestTheCanonicalSpelling(unittest.TestCase):
             with self.subTest(text=text):
                 resolved = resolve_request(Request(chord_on=text), 4)
                 self.assertEqual(str(parse_rhythm(text, 4)), resolved.chord_on)
+
+
+#: A four-slot progression, one quality per melody note, so a question about the
+#: chord part has something to change and a walk has a next chord to move toward.
+#: The timings are `(bar, beat, duration)`: bar 1, one felt beat per slot.
+_PROGRESSION = (
+    ("C5", "Cmaj7"),
+    ("B4", "Cm7"),
+    ("A4", "A7"),
+    ("G4", "Gmaj7"),
+)
+_TIMINGS = ((1, 1.0, 1.0), (1, 2.0, 1.0), (1, 3.0, 1.0), (1, 4.0, 1.0))
+
+#: One chord held across the whole bar, which is what gives a walk somewhere to go:
+#: with a chord per beat there is one attack per chord, so a line can only reach
+#: toward the next chord rather than move inside this one.
+_HELD = (
+    ("C5", "Cmaj7"),
+    ("B4", "Cmaj7"),
+    ("A4", "Cmaj7"),
+    ("G4", "Cmaj7"),
+)
+
+
+def _arrange(progression=_PROGRESSION, timings=_TIMINGS, **kwargs):
+    """The library's own front door, with the request passed as one value."""
+    return VoiceLeadingEngine.arrange_progression(
+        progression, timings=timings, options=ArrangeOptions(**kwargs)
+    )
+
+
+def _sounded(step) -> int:
+    """How many strings a step plucks; the tune alone is one."""
+    return sum(1 for fret in step.voicing.frets if fret >= 0)
+
+
+def _thumb_pitches(steps):
+    """The thumb notes of an arrangement, in order."""
+    return [step.bass for step in steps]
+
+
+def _tune_midi(index: int) -> int:
+    """The written pitch of the slot at `index`, read off the progression."""
+    return Note(_PROGRESSION[index][0]).midi_note()
+
+
+class TestTheLibrarySpelling(unittest.TestCase):
+    """The six questions asked of `arrange_progression`, not of a score.
+
+    Every other `request=` in the suite goes through `arrange_xml_head`, so the
+    library's own front door had no witness of its own. Each of the six is asserted
+    on the tab it produces rather than on the axis it resolves to: the resolution is
+    `resolve_request`'s business, and it is verified above.
+    """
+
+    def test_no_melody_leaves_the_tune_to_somebody_else(self):
+        """The tune's pitch is never the top voice, so this guitar is not singing it.
+
+        The strongest form of the claim, because the soprano *is* the melody on every
+        arrangement that has one: a step whose highest note is not the written pitch
+        is one where the guitar stopped playing the tune.
+        """
+        steps = _arrange(request=Request(melody=False, chord_on="every-beat"))
+        self.assertEqual([step.beat for step in steps], [1.0, 2.0, 3.0, 4.0])
+        for index, step in enumerate(steps):
+            with self.subTest(beat=step.beat):
+                self.assertNotEqual(
+                    max(step.voicing.midi_notes()), _tune_midi(index)
+                )
+
+    def test_chord_on_names_when_the_chord_attacks(self):
+        """`1,3` is a chord under the tune at 1 and 3, and the tune alone at 2 and 4.
+
+        Asserted on the plucked strings, which is the difference between "the chord
+        part is silent here" and "the chord part states nothing here". The slots come
+        back in the timings' order, so the position in the list is the beat.
+        """
+        steps = _arrange(request=Request(chord_on="1,3"))
+        sounded = [_sounded(step) for step in steps]
+        self.assertEqual(len(sounded), 4)
+        self.assertGreater(sounded[0], 1)
+        self.assertEqual(sounded[1], 1)
+        self.assertGreater(sounded[2], 1)
+        self.assertEqual(sounded[3], 1)
+
+    def test_chord_notes_is_a_ceiling_on_what_the_chord_states(self):
+        """`2` states the guide pair where the derivation states three strings."""
+        derived = _arrange(request=Request(melody=False, chord_on="every-beat"))
+        pair = _arrange(
+            request=Request(melody=False, chord_on="every-beat", chord_notes="2")
+        )
+        self.assertTrue(all(_sounded(step) > 2 for step in derived))
+        self.assertTrue(all(_sounded(step) == 2 for step in pair))
+
+    def test_chord_notes_targets_is_not_the_shipped_content(self):
+        """`targets` is a real narrowing, not another name for the default.
+
+        Asserted on the frets, because a value that resolved to the right name and then
+        arranged as the default would otherwise pass.
+        """
+        targets = _arrange(request=Request(chord_notes="targets"))
+        self.assertNotEqual(
+            [step.voicing.frets for step in _arrange(request=Request())],
+            [step.voicing.frets for step in targets],
+            "targets arranged exactly as full, so this proves nothing",
+        )
+
+    def test_chord_fills_states_the_chord_in_a_rest_the_tune_left(self):
+        """A slot with no melody note is silent by default, and sounds with `hold`."""
+        rests = (("C5", "Cmaj7"), (None, "Cm7"))
+        timings = ((1, 1.0, 1.0), (1, 2.0, 1.0))
+        silent = _arrange(rests, timings, request=Request(chord_on="none"))
+        filled = _arrange(
+            rests, timings, request=Request(chord_on="none", chord_fills="hold")
+        )
+        self.assertEqual(_sounded(silent[-1]), 0)
+        self.assertGreater(_sounded(filled[-1]), 1)
+
+    def test_bass_on_places_the_thumb(self):
+        """Nothing sounds under the tune by default; `every-beat` is a thumb per beat."""
+        self.assertTrue(all(step.bass is None for step in _arrange()))
+        steps = _arrange(request=Request(bass_on="every-beat"))
+        self.assertEqual(len(steps), 4)
+        self.assertTrue(all(step.bass is not None for step in steps))
+
+    def test_bass_notes_changes_what_each_thumb_note_states(self):
+        """`root` is a pedal on one pitch; `walk` is a line through the bar.
+
+        Asked of a chord held across the bar, because that is the unit the line is
+        written for: with a chord per beat there is one attack per chord, and the
+        only movement a walk can make is toward the next chord.
+        """
+        pedal = _thumb_pitches(
+            _arrange(_HELD, request=Request(bass_on="every-beat"))
+        )
+        walk = _thumb_pitches(
+            _arrange(_HELD, request=Request(bass_on="every-beat", bass_notes="walk"))
+        )
+        self.assertEqual(len(pedal), 4)
+        self.assertEqual(len(set(pedal)), 1)
+        self.assertGreater(len(set(walk)), 1)
+
+
+    def test_a_composed_request_keeps_every_answer(self):
+        """Three questions in one request, and each answer reaches the music.
+
+        A selection, a rhythm and a content spelled together, because the derivation is
+        one pass over all six questions rather than six independent defaults.
+        """
+        composed = VoiceLeadingEngine.arrange_progression(
+            _PROGRESSION,
+            timings=_TIMINGS,
+            request=Request(
+                melody=False, chord_on="every-beat", chord_notes="targets"
+            ),
+        )
+        self.assertEqual([step.beat for step in composed], [1.0, 2.0, 3.0, 4.0])
+        # `melody=False` is the request's answer.
+        self.assertTrue(all(not step.melody_voiced for step in composed))
+        self.assertEqual(
+            [step.role for step in composed], ["target", "fill", "target", "fill"]
+        )
+
+
+class TestTheTwoSpellingsAreOneVocabulary(unittest.TestCase):
+    """`head`'s flags and `Request`'s fields are the same six questions.
+
+    The request is spelled twice - once for a command line and once for a library
+    caller - and the two are held together by `cli._REQUEST_DESTS` rather than by
+    convention. A seventh question added to one spelling and not the other is a
+    question one of the two front ends cannot ask, and nothing else would notice:
+    the flag would parse and be ignored, or the field would be unreachable from a
+    command line.
+    """
+
+    def test_the_list_names_every_field_exactly_once(self):
+        """One entry per `Request` field, and no two questions sharing a flag."""
+        fields = [field for field, _ in _REQUEST_DESTS]
+        dests = [dest for _, dest in _REQUEST_DESTS]
+        self.assertEqual(sorted(fields), sorted(Request.__dataclass_fields__))
+        self.assertEqual(len(dests), len(set(dests)))
+
+    def test_every_dest_is_a_flag_the_parser_registers(self):
+        """A flag renamed without its entry moves the dest, and shows up here."""
+        parser = argparse.ArgumentParser()
+        add_common_arguments(parser, HEAD_HELP)
+        namespace = parser.parse_args([])
+        for field, dest in _REQUEST_DESTS:
+            with self.subTest(field=field):
+                self.assertIn(dest, vars(namespace))
+
+    def test_every_chord_notes_value_is_one_the_parser_accepts(self):
+        """The run header prints a spelling, so the parser has to take it back.
+
+        `--chord-notes targets` is the line the header prints for a `targets` request,
+        and a vocabulary entry the parser does not offer is a request a reader can copy
+        out of the output and not paste back in.
+        """
+        parser = argparse.ArgumentParser()
+        add_common_arguments(parser, HEAD_HELP)
+        for value in CHORD_NOTES:
+            with self.subTest(value=value):
+                namespace = parser.parse_args(["--chord-notes", value])
+                self.assertEqual(namespace.chord_notes, value)
+
+    def test_a_bass_rule_list_is_one_the_parser_accepts(self):
+        """`--bass-notes` is a vocabulary the *module* validates, so the list is one token.
+
+        The three names and the rules are one question, and the flag takes either - the
+        refusal for a value that is neither comes from `options`, which is what lets it
+        name both spellings.
+        """
+        parser = argparse.ArgumentParser()
+        add_common_arguments(parser, HEAD_HELP)
+        for value in ("walk", "nearest", "root,approach", "root,5th,approach,nearest"):
+            with self.subTest(value=value):
+                namespace = parser.parse_args(["--bass-notes", value])
+                self.assertEqual(namespace.bass_notes, value)
 
 
 if __name__ == "__main__":

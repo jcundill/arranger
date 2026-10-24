@@ -42,14 +42,9 @@ from typing import Dict, List, Optional, Sequence, Tuple
 
 from musthe import Note
 
-from arranger import (
-    STANDARD_TUNING,
-    ChordParser,
-    GuitarFretboard,
-    VoiceLeadingEngine,
-    Voicing,
-)
+from arranger import ChordParser, GuitarFretboard, VoiceLeadingEngine, Voicing
 from arranger.grips import drop2_template_for
+from arranger.tuning import STANDARD_TUNING
 
 # The two four-string blocks a drop-2 chord melody actually uses, as
 # (conventional string numbers high-to-low, soprano string index). Drop-2 is
@@ -200,7 +195,7 @@ def cells_for(quality: str, top_string: int, root: str = "C") -> List[Optional[C
             cells.append(None)
             continue
         voicings = VoiceLeadingEngine.get_drop2_voicings(
-            Note(spell(melody)), quality, root + quality, top_string=top_string
+            Note(spell(melody)), chord_name=root + quality, top_string=top_string
         )
         if not voicings:
             cells.append(None)
@@ -514,7 +509,9 @@ def _check_reading(cell: ChartCell, frets: List[int], quality: str) -> List[str]
     ]
     if not midis:
         return [f"{cell.where}: no sounding strings"]
-    tones = set(ChordParser.get_chord_tones(quality))
+    # Read off a C-rooted symbol: C is pitch class 0, so the absolute set is the relative
+    # one the shape's degrees are compared against.
+    tones = set(ChordParser.get_chord_tones("C" + quality))
     degrees = {(m - root_pc) % 12 for m in midis}
 
     foreign = sorted(degrees - tones)
@@ -613,7 +610,7 @@ def _engine_has_shape(quality: str, top: int, chart_frets: List[int]) -> bool:
     )
     for soprano in (5, 4):
         for voicing in VoiceLeadingEngine.get_drop2_voicings(
-            Note(spell(top)), quality, "C" + quality, top_string=soprano
+            Note(spell(top)), chord_name="C" + quality, top_string=soprano
         ):
             # A sorted list, not a set: a shape may double a chord tone, and a set
             # would quietly accept a four-note shape with only three distinct notes.

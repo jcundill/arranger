@@ -9,9 +9,10 @@ sentence is the whole point of recording anything.
 
 import unittest
 
-from arranger import VoiceLeadingEngine
+from arranger import Note, VoiceLeadingEngine
 from arranger.annotation import _criterion_phrase, step_annotation
 from arranger.cost import PARTITION_CRITERION, SPAN_CRITERION, VOICING_COST_CRITERIA
+from arranger.options import ArrangeOptions, Request
 from tests.support import arranged, make_voicing, sweep_head_paths
 
 #: The voice-count criterion of the cost tuple, which a *fuller* shape can never lose on:
@@ -27,12 +28,12 @@ VOICES_CRITERION = VOICING_COST_CRITERIA.index("leaves a voice out")
 #: substitutes the chord), a shell that beat the complete shape out of the neck window,
 #: and another complete shape.
 STRUGGLING = (
-    ("B4", "m7", "F#m7"), ("A4", "m7", "F#m7"), ("A4", "m7", "F#m7"),
-    ("Bb3", "7", "B7"), ("B3", "7", "B7"), ("A4", "7", "B7"),
+    ("B4", "F#m7"), ("A4", "F#m7"), ("A4", "F#m7"),
+    ("Bb3", "B7"), ("B3", "B7"), ("A4", "B7"),
 )
 
 #: Three ordinary steps, where the palette has four voices and the shape states them.
-COMPLETE = (("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7"))
+COMPLETE = (("D5", "Dm7"), ("B4", "G7"), ("C5", "Cmaj7"))
 
 
 class TestTheRecordedPalette(unittest.TestCase):
@@ -99,7 +100,9 @@ class TestTheRecordedPalette(unittest.TestCase):
         the line says which degrees sound instead (`annotation._comping_clause`) - so
         `_shape_clause` is silent here even though the palette is not.
         """
-        steps = VoiceLeadingEngine.arrange_progression(COMPLETE, parts="chord")
+        steps = VoiceLeadingEngine.arrange_progression(
+            COMPLETE, options=ArrangeOptions(request=Request(melody=False)),
+        )
         self.assertEqual(len(steps), 3)
         for step in steps:
             self.assertFalse(step.melody_voiced)
@@ -118,7 +121,9 @@ class TestTheRecordedPalette(unittest.TestCase):
         is why the count is recorded rather than left to read like a decision between
         shapes.
         """
-        steps = VoiceLeadingEngine.arrange_progression(COMPLETE, parts="melody")
+        steps = VoiceLeadingEngine.arrange_progression(
+            COMPLETE, options=ArrangeOptions(request=Request(chord_on="none")),
+        )
         self.assertEqual(len(steps), 3)
         for step in steps:
             palette = step.palette
@@ -142,8 +147,10 @@ class TestTheRecordedPalette(unittest.TestCase):
         paths = sweep_head_paths()
         checked = 0
         for path in paths:
-            for texture in ("uniform", "targets"):
-                steps, _head, _notes = arranged(path, texture=texture)
+            for chord_notes in ("full", "targets"):
+                steps, _head, _notes = arranged(
+                    path, options=ArrangeOptions(request=Request(chord_notes=chord_notes))
+                )
                 for step in steps:
                     palette = step.palette
                     if palette is None or palette.alternative is None:
@@ -225,6 +232,33 @@ class TestTheShapeClause(unittest.TestCase):
         assert palette is not None
         self.assertEqual(palette.decided_by, PARTITION_CRITERION)
 
+    def test_a_requested_bass_narrows_the_palette_on_its_own(self):
+        """`ArrangeOptions.bass_pcs` is the whole request - nothing rides along with it.
+
+        The ranking that honours a written bass is `chords.slash_bass_cost`, a pure
+        function of the shape and the pitch class, and `decisions` calls it directly.
+        So a caller who asks for a bass **without** writing a slash into the chord
+        symbol gets the partition too: `Gmaj9` alone states four voices on its root,
+        and `Gmaj9` with F# asked for as data drops to the shell whose lowest voice is
+        the F#. The field needs nothing supplied beside it: a caller who set the pitch
+        class and nothing else would get no narrowing at all - a knob with an invisible
+        effect, which is the defect this pins shut.
+        """
+        triple = (("D4", "Gmaj9"),)
+        f_sharp = Note("F#3").midi_note() % 12
+
+        unasked = VoiceLeadingEngine.arrange_progression(triple)[0]
+        self.assertEqual(unasked.voicing.tab_string(), "3-x-4-4-3-x")
+
+        asked = VoiceLeadingEngine.arrange_progression(
+            triple, options=ArrangeOptions(bass_pcs={0: f_sharp})
+        )[0]
+        self.assertEqual(asked.voicing.tab_string(), "x-x-4-4-3-x")
+        self.assertEqual(min(asked.voicing.midi_notes()) % 12, f_sharp)
+        palette = asked.palette
+        assert palette is not None
+        self.assertEqual(palette.decided_by, PARTITION_CRITERION)
+
     def test_a_complete_shape_states_its_count_and_no_reason(self):
         """Four is every string the right hand has, so the count is the whole *why*.
 
@@ -252,7 +286,9 @@ class TestTheShapeClause(unittest.TestCase):
         fallback dressed up - which is the difference between "the library had nothing
         else" and "this selection asked for one voice".
         """
-        steps = VoiceLeadingEngine.arrange_progression(COMPLETE, parts="melody")
+        steps = VoiceLeadingEngine.arrange_progression(
+            COMPLETE, options=ArrangeOptions(request=Request(chord_on="none")),
+        )
         self.assertEqual(
             [step_annotation(step) for step in steps],
             [
@@ -297,10 +333,11 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
 
         steps, _head, _notes = arrange_xml_head(
             "tests/data/synthetic_repeat_slash.musicxml",
-            section=(1, 2), grid="chord:freddie", parts="chord",
+            section=(1, 2),
+            options=ArrangeOptions(request=Request(melody=False, chord_on="every-beat")),
         )
         silent = [step for step in steps if not step.voicing.active_frets()]
-        self.assertTrue(silent, "the grid stopped leaving the guitar out")
+        self.assertTrue(silent, "the rhythm stopped leaving the guitar out")
         for step in silent:
             self.assertEqual(
                 step_annotation(step),
@@ -316,43 +353,75 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         pitch off, so a degree alone would leave the reader to work out which note of the
         chord the shape put where.
 
-        **Naming the bass part beside the chord part adds a note below rather than widening
-        the chord**, because the chord part's arity is the texture's and not the number of
-        parts named - so the two three-note rows state the same voices and differ only in
-        the thumb.
+        **A bass line under the same chord part adds a note below rather than widening the
+        chord**, because the chord part's arity is the chord content's and not the number of
+        layers that attack - so the pair states the same three voices and adds only the
+        thumb.
+
+        The voices named here are the ones the palette settles on, and the palette no
+        longer offers the high E (`grip_tables.COMPING_EXCLUDED_STRINGS`), so this chord's
+        shell is `x-12-x-11-12-x` - a 9th, a 3rd and a 7th rather than a 3rd, a 5th and a
+        7th. A pinned expectation is the point: the clause is read off the shape, and the
+        shape is what the palette decides.
         """
         from headxml import arrange_xml_head
 
         head = "tests/data/synthetic_repeat_slash.musicxml"
         comping = "; the guitar does not play the tune)"
-        expected = {
-            "bass": f" (comping - D 5{comping}",
-            "chord": f" (comping - B 3, D 5 & F# 7{comping}",
-            "bass,chord": f" (comping - B 3, D 5 & F# 7{comping}",
-        }
-        for parts, text in expected.items():
-            steps, _head, _notes = arrange_xml_head(
-                head, section=(1, 2), parts=parts, bass="none"
-            )
-            self.assertEqual(step_annotation(steps[0]), text, parts)
-            self.assertFalse(steps[0].melody_voiced)
-        # A lone bass part is one note, and one note is what the line says.
-        lone, _head, _notes = arrange_xml_head(
-            head, section=(1, 2), parts="bass", bass="none"
+        chord, _head, _notes = arrange_xml_head(
+            head,
+            section=(1, 2),
+            options=ArrangeOptions(request=Request(melody=False)),
         )
-        self.assertEqual(len(lone[0].voicing.upper_midi_notes()), 1)
+        self.assertEqual(step_annotation(chord[0]), f" (comping - A 9, B 3 & F# 7{comping}")
+        self.assertFalse(chord[0].melody_voiced)
+        # A bass line under that same chord part states the *same* three voices and
+        # puts the thumb below them rather than widening the chord - which is what
+        # "adds a note below" means, and what the door could not express: it named a
+        # bass part and then sounded no bass layer at all.
+        pair, _head, _notes = arrange_xml_head(
+            head,
+            section=(1, 2),
+            options=ArrangeOptions(
+                request=Request(melody=False, bass_on="melody", bass_notes="root")
+            ),
+        )
+        self.assertIn("comping - A 9, B 3 & F# 7", step_annotation(pair[0]))
+        self.assertIn("(bass: ", step_annotation(pair[0]))
+        self.assertEqual(len(pair[0].voicing.upper_midi_notes()), 3)
+        self.assertEqual(len(pair[0].voicing.active_frets()), 4)
+        # The thumb alone is one note, and the line says which part is missing. The
+        # request has no spelling for a bass part with **no bass layer** - `melody=False`
+        # with no chord position and no bass position is refused - so the lone bass the
+        # library builds is the thumb's own line.
+        lone, _head, _notes = arrange_xml_head(
+            head,
+            section=(1, 2),
+            options=ArrangeOptions(
+                request=Request(
+                    melody=False, chord_on="none", bass_on="melody", bass_notes="root"
+                )
+            ),
+        )
+        self.assertEqual(len(lone[0].voicing.active_frets()), 1)
+        self.assertIn("the thumb alone", step_annotation(lone[0]))
 
     def test_a_held_step_says_the_shape_above_it_is_held(self):
         """`bass_only` is a claim about the left hand, and the tab cannot show it.
 
-        `texture=targets` rather than a fixed arity, because a fixed-arity row makes *every*
-        slot a target and so leaves no step whose shape the guitar holds through.
+        `Request(chord_notes="targets")` rather than a fixed arity, because a fixed-arity
+        row makes *every* slot a target and so leaves no step whose shape the guitar holds
+        through.
         """
         from headxml import arrange_xml_head
 
         steps, _head, _notes = arrange_xml_head(
             "tests/data/synthetic_repeat_slash.musicxml", section=(1, 3),
-            texture="targets", bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk",
+            options=ArrangeOptions(
+                        request=Request(
+                            chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+                        ),
+                    ),
         )
         held = [step for step in steps if step.bass_only and step.palette]
         self.assertTrue(held, "no held step under the thumb in this section")
@@ -365,7 +434,7 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
 
         steps, _head, _notes = arrange_xml_head(
             "tests/data/synthetic_common_8.musicxml", section=(1, 8),
-            texture="targets",
+            options=ArrangeOptions(request=Request(chord_notes="targets")),
         )
         fills = [
             step for step in steps
@@ -392,12 +461,14 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         """
         head = "tests/data/synthetic_common_8.musicxml"
 
-        def steps_under(texture):
-            steps, _head, _notes = arranged(head, texture=texture)
+        def steps_under(chord_notes):
+            steps, _head, _notes = arranged(
+                head, options=ArrangeOptions(request=Request(chord_notes=chord_notes))
+            )
             return steps
 
         stranded = [
-            step for step in steps_under("chord1")
+            step for step in steps_under("1")
             if step.palette is not None and not step.palette.inside_window
             and not step.repeated
         ]
@@ -418,18 +489,21 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         )
 
     def test_an_unreadable_chord_says_so(self):
-        """`melody_degree_label` blanks for two reasons, and only one is worth printing.
+        """A melody over a chord no table can read is a fact the reader cannot get
+        anywhere else - the chord column shows the spelling, not the problem.
 
-        A slot the tune is silent at has no degree to name and needs no clause; a melody
-        over a chord no table can read is a fact the reader cannot get anywhere else - the
-        chord column shows the spelling, not the problem.
+        The spelling decides, and only the spelling. `Dm(maj7)` is the notation's
+        parenthesis form of a minor-major seventh, so the bar states that chord - the
+        same `x-x-11-10-10-10` drop-2 `DmMaj7` gets - and a suffix no table carries
+        leaves the tune alone with the reason on it. A caller cannot spell a *readable*
+        quality beside an unreadable symbol any more, because the quality is read off
+        the name, so this is one answer rather than two.
         """
-        voiced = VoiceLeadingEngine.arrange_progression([("C5", "m7", "Dm(maj7)")])
-        self.assertEqual(
-            step_annotation(voiced[0]),
-            " (the chord symbol could not be read - 4 voices)",
-        )
-        unvoiced = VoiceLeadingEngine.arrange_progression([("C5", "zz", "Czz")])
+        read = VoiceLeadingEngine.arrange_progression([("D5", "Dm(maj7)")])
+        self.assertEqual(read[0].tab_line(), "x-x-11-10-10-10")
+        self.assertNotIn("could not be read", step_annotation(read[0]))
+
+        unvoiced = VoiceLeadingEngine.arrange_progression([("C5", "Czz")])
         self.assertEqual(
             step_annotation(unvoiced[0]),
             " (melody alone - the chord symbol could not be read)",
@@ -449,8 +523,10 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         from headxml import arrange_xml_head
 
         steps, _head, _notes = arrange_xml_head(
-            "tests/data/Trouble_in_Mind_Blues.musicxml", grid="chord:freddie"
-        )
+                "tests/data/Trouble_in_Mind_Blues.musicxml", options=ArrangeOptions(
+                    request=Request(chord_on="every-beat"),
+                ),
+            )
         lost = [
             step for step in steps
             if "/" in step.chord and "the written bass" in step_annotation(step)
@@ -470,9 +546,9 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
     def test_a_strategy_that_found_nothing_says_which_one_it_was(self):
         """`non-chord tone` alone cannot tell a failed substitution from an untried one.
 
-        Measured over the corpus: 2,713 steps keep the written chord under a melody that is
-        not in it, and every one of them used to read just `(non-chord tone - 4 voices)` -
-        the words a route that never attempted a substitution would also print.
+        A step that keeps the written chord under a melody that is not in it reads
+        `(non-chord tone - 4 voices)`, which is the same words a route that never attempted
+        a substitution would print - so the strategy names itself instead.
         """
         steps = VoiceLeadingEngine.arrange_progression(STRUGGLING)
         third = step_annotation(steps[3])
@@ -491,9 +567,11 @@ class TestTheOtherRoutesExplainThemselves(unittest.TestCase):
         from headxml import arrange_xml_head
 
         steps, _head, _notes = arrange_xml_head(
-            "tests/data/synthetic_common_8.musicxml", section=(7, 9), grid="chord:freddie",
-            parts="chord",
-        )
+                "tests/data/synthetic_common_8.musicxml", section=(7, 9), options=ArrangeOptions(
+                    request=Request(melody=False, chord_on="every-beat"),
+                ),
+
+            )
         silent_slots = [step for step in steps if step.melody is None]
         self.assertTrue(silent_slots, "the grid stopped stabbing where the tune is silent")
         for step in silent_slots:

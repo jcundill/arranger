@@ -20,27 +20,6 @@ import unittest
 from typing import List, Optional, Tuple
 
 from arranger import (
-    BASS_ROLE_ANCHOR,
-    BASS_ROLE_APPROACH,
-    BASS_ROLE_CONNECT,
-    BASS_ROLE_ENCLOSURE,
-    BASS_ROLE_HOLD,
-    BASS_ROLE_PEDAL,
-    BASS_RULE_5TH,
-    BASS_RULE_APPROACH,
-    BASS_RULE_NEAREST,
-    BASS_RULE_ROLES,
-    BASS_RULE_ROOT,
-    BASS_RULES,
-    BASS_STYLE_ANCHORS,
-    BASS_STYLE_NONE,
-    BASS_STYLE_WALK,
-    NO_CHORD,
-    PART_NAMES,
-    PITCH_CLASS_NAMES,
-    ROLE_FILL,
-    ROLE_TARGET,
-    TEXTURE_STYLES,
     bass_allowed,
     bass_cost,
     bass_line_for,
@@ -58,14 +37,31 @@ from arranger.bass import (
     _walking_bass_line,
 )
 from arranger.bass_rules import (
+    BASS_ALL_RULES,
+    BASS_ROLE_ANCHOR,
+    BASS_ROLE_APPROACH,
+    BASS_ROLE_CONNECT,
+    BASS_ROLE_ENCLOSURE,
+    BASS_ROLE_HOLD,
+    BASS_ROLE_PEDAL,
+    BASS_RULE_5TH,
+    BASS_RULE_APPROACH,
+    BASS_RULE_NEAREST,
+    BASS_RULE_ROLES,
+    BASS_RULE_ROOT,
+    BASS_RULES,
+    BASS_STYLE_NONE,
     _comping_no_room_reason,
 )
+from arranger.parts import PART_NAMES
+from arranger.texture import TEXTURE_STYLES
+from arranger.tuning import NO_CHORD, PITCH_CLASS_NAMES, ROLE_FILL, ROLE_TARGET
 
 # The two shipped non-`none` styles, as the loops below iterate them. `walk` is the whole
 # rule vocabulary; `anchors` is the root rule alone. `none` and `auto` are not styles a
 # caller asks `bass_allowed` about directly - `auto` is resolved first, and `none` is
 # answered without a capacity question - so they are not in this list.
-SHIPPED_STYLES = (BASS_STYLE_WALK, BASS_STYLE_ANCHORS)
+SHIPPED_STYLES = (BASS_ALL_RULES, BASS_RULE_ROOT)
 
 
 def line(chords, onsets, beats_per_bar=4):
@@ -343,13 +339,11 @@ class TestGridAndHarmonyEdges(unittest.TestCase):
         self.assertEqual([entry[1] for entry in walked], [1.0, 2.0, 3.0, 4.0])
 
     def test_an_nc_bar_yields_no_notes_rather_than_continuing_the_harmony(self):
-        """A chordless bar states no bass part - and the assertion inverts with the rule.
+        """A chordless bar states no bass part, whatever the bar before it stated.
 
-        This asserted the opposite until `docs/history/parts.md` §4 derived the other answer: a
-        part whose notes are chosen from a chord cannot state anything where there is no
-        chord, so continuing the last known harmony across the gap is the *guess* here —
-        it is the right pitch class for the wrong music. Per AGENTS.md trap 5 the test is
-        inverted rather than deleted, because the rule it protects is the same one.
+        A part whose notes are chosen from a chord cannot state anything where there is no
+        chord, so continuing the last known harmony across the gap is the *guess* here — the
+        right pitch class for the wrong music. `docs/history/parts.md` §4 derives that.
 
         It sits beside the unspeakable-quality case on purpose: that one also yields no
         notes, but for the opposite reason. An `NC` bar has no chord to state; an
@@ -466,7 +460,7 @@ if __name__ == "__main__":
 
 
 class TestTheBassStyleRegistry(unittest.TestCase):
-    """`bass=` names note rules, and the set of rules is open.
+    """`bass` names note rules, and the set of rules is open.
 
     The point of the registry is that a **new note rule is a row in a table**, not
     another branch at each of the call sites that decide whether a thumb line exists.
@@ -506,46 +500,44 @@ class TestTheBassStyleRegistry(unittest.TestCase):
             parse_bass_style("none")
 
     def test_the_shipped_walk_is_the_whole_vocabulary_in_order(self):
-        """`BASS_STYLE_WALK` is every rule, and its order is the resolution order.
+        """`BASS_ALL_RULES` is every rule, and its order is the resolution order.
 
         `approach` before `nearest` is what makes the walk byte-identical to the old
         `walk` policy: on the last beat the approach outranks the connective note.
         """
-        self.assertEqual(BASS_STYLE_WALK, ",".join(BASS_RULES))
+        self.assertEqual(BASS_ALL_RULES, ",".join(BASS_RULES))
         self.assertEqual(
-            parse_bass_style(BASS_STYLE_WALK),
+            parse_bass_style(BASS_ALL_RULES),
             (BASS_RULE_ROOT, BASS_RULE_5TH, BASS_RULE_APPROACH, BASS_RULE_NEAREST),
         )
 
-    def test_the_shipped_anchors_is_the_root_rule_alone(self):
-        """`BASS_STYLE_ANCHORS` names one rule, which admits the root's two roles.
+    def test_the_root_rule_alone_admits_the_root_s_two_roles(self):
+        """`root` names one rule, which admits the root's two roles.
 
         The rule governs the root wherever it sounds: on the position that marks the
-        bar (`anchor`) and on one that does not (`pedal`). With no rhythm named - the
-        only way this style is reached - the filtered walk keeps the anchors, so the
-        line this spelling produces is what it always was.
+        bar (`anchor`) and on one that does not (`pedal`), which is what makes the
+        filtered line the one a request for the root rule gets.
         """
-        self.assertEqual(BASS_STYLE_ANCHORS, BASS_RULE_ROOT)
         self.assertEqual(
             BASS_RULE_ROLES[BASS_RULE_ROOT],
             frozenset({BASS_ROLE_ANCHOR, BASS_ROLE_PEDAL}),
         )
 
-    def test_the_walk_keeps_every_role_and_anchors_keeps_only_the_root(self):
-        """`anchors` is `walk` with the connective roles dropped, not a second opinion.
+    def test_the_walk_keeps_every_role_and_the_root_rule_only_the_root(self):
+        """The root rule is `walk` with the connective roles dropped, not a second opinion.
 
         Asserted against the same generator's output so the two cannot drift: if a role
         is added to the walk, `anchors` either keeps it or it does not - but it is
         computed from the same line either way.
         """
         # Annotated rather than inferred: `List` is invariant, so a list of
-        # `Tuple[str, str, str]` is not a `List[Tuple[Optional[str], str, str]]` and
+        # `Tuple[str, str]` is not a `List[Tuple[Optional[str], str, str]]` and
         # pyright rejects it - the same trap, and the same spelling, as every other
         # timing list in this suite.
         chords: List[Tuple[Optional[str], str, str]] = [("C", "maj7", "Cmaj7")] * 8
         onsets: List[Tuple[int, float]] = [(1, 1.0 + 0.5 * i) for i in range(8)]
-        walked = bass_line_for(BASS_STYLE_WALK, chords, onsets, 4)
-        anchored = bass_line_for(BASS_STYLE_ANCHORS, chords, onsets, 4)
+        walked = bass_line_for(BASS_ALL_RULES, chords, onsets, 4)
+        anchored = bass_line_for(BASS_RULE_ROOT, chords, onsets, 4)
         self.assertGreater(len(walked), len(anchored))
         self.assertEqual({n.role for n in anchored}, {BASS_ROLE_ANCHOR})
         self.assertTrue(
@@ -578,12 +570,11 @@ class TestThumbCapacityAndRefusal(unittest.TestCase):
     """A thumb line needs a string, and the capacity is derived not listed."""
 
     def test_capacity_is_read_from_the_grip_tables(self):
-        """No texture can fill every thumb string: the set that could is gone.
+        """No texture fills every thumb string: every palette leaves one free.
 
-        `uniform` used to answer **0** here, because `drop24`'s `(4,2,1,0)` set spanned the
-        low E, the A and the D at once. That was one of the four inner-skip `drop24` sets
-        removed for a *finger* reason (`docs/history/fingering.md` §4.4), and this capacity is
-        derived from the tables rather than listed, so it followed on its own: one string is
+        `drop24`'s `(4,2,1,0)` set spanned the low E, the A and the D at once, and it is
+        gone for a *finger* reason (`docs/history/fingering.md` §4.4). This capacity is
+        derived from the tables rather than listed, so it follows on its own: one string is
         the worst case now - which is the rule's threshold, not a special case.
         """
         self.assertEqual(thumb_capacity("uniform", ROLE_TARGET), 1)
@@ -601,25 +592,19 @@ class TestThumbCapacityAndRefusal(unittest.TestCase):
         # route is known - `bass_allowed`'s `melody_only`, unbounded by
         # construction rather than measured.
         allowed, _why = bass_allowed(
-            PART_NAMES, "uniform", BASS_STYLE_WALK, melody_only=True
+            PART_NAMES, "uniform", BASS_ALL_RULES, melody_only=True
         )
         self.assertTrue(allowed, "a single-fret upper shape leaves every string free")
 
     def test_no_texture_refuses_a_policy_now_that_uniform_leaves_a_string(self):
-        """
-        The tree's only refusal dissolved with the set that caused it.
+        """No shipped texture refuses a bass policy, and `bass_allowed` says so.
 
-        `uniform` failed every policy because its palette held `drop24`'s `(4,2,1,0)` - the
-        one reachable set that spanned all three thumb strings - so `bass_allowed` refused
-        and the caller was told which texture to use instead. Removing the four inner-skip
-        `drop24` sets (`docs/history/fingering.md` §4.4) left one string free in the worst case,
-        which is the rule's threshold, so every texture now carries every policy.
-
-        **This test was inverted rather than deleted.** It used to assert that `uniform` was
-        refused for every policy *and* that the reason named a usable texture. The rule
-        still exists and still derives its answer from the tables - `TestCompingCapacity`
-        below holds the other route's half - so what is asserted here is the outcome: no
-        shipped texture refuses, and the reason machinery is simply not reached.
+        `uniform`'s palette leaves a string free for the thumb in the worst case, which is
+        the rule's threshold, so every texture carries every policy. The rule derives its
+        answer from the tables - `TestCompingCapacity` below holds the other route's half -
+        so what is asserted here is the outcome, and the reason machinery is simply not
+        reached. `docs/history/fingering.md` §4.4 holds the palette that made the worst
+        case.
         """
         for texture in TEXTURE_STYLES:
             for style in SHIPPED_STYLES:
@@ -648,16 +633,10 @@ class TestCompingCapacity(unittest.TestCase):
     inert, so passing a texture there refused a playable combination - and produced a
     warning telling the player to change a setting that could not affect the result.
 
-    Measured on `tests/data/synthetic_cut_time.mxl` before the fix, with
-    `parts="chord", bass="root,5th,approach,nearest"`:
-
-        texture=uniform    80 steps, **0 thumb notes**, warning "uniform leaves no
-                           bass string free for a target"
-        texture=targets   166 steps, 127 thumb notes, no warning
-
-    The warning was false on the facts too: those 80 comping shapes sound on strings
-    `(2, 3, 4, 5)` and never once on the low E or the A, so the thumb had the whole
-    bottom of the neck.
+    The comping shapes on this head sound within strings `(1, 2, 3)`, `(2, 3, 4)` and
+    `(1, 3, 4)` - never on the low E or the A, so the thumb has the whole bottom of the
+    neck, and never on the high E, which `comping_string_sets` excludes at every arity.
+    A warning about thumb strings would be false on the facts as well as on the route.
     """
 
     def test_the_capacity_is_measured_at_every_arity(self):
@@ -696,10 +675,9 @@ class TestCompingCapacity(unittest.TestCase):
     def test_every_texture_is_allowed_on_the_comping_route(self):
         """The bug in one assertion: no texture may refuse, because none is consulted.
 
-        This is the inverted form of `test_uniform_is_refused_for_every_policy_and_the
-        _reason_names_a_texture` above. That test is **not** deleted and its premise is
-        still true - `uniform` really does occupy all three thumb strings on the route it
-        describes. What was wrong was asking it about a route where `uniform` is a
+        `uniform` really does occupy all three thumb strings on the route
+        `test_uniform_is_refused_for_every_policy_and_the_reason_names_a_texture` above
+        describes. What is wrong is asking it about a route where `uniform` is a
         meaningless name.
         """
         for texture in TEXTURE_STYLES:
@@ -715,7 +693,7 @@ class TestCompingCapacity(unittest.TestCase):
 
         `_no_room_reason` names a texture because a palette is what failed. On the comping
         route the route itself was chosen by the parts selection, and the original bug
-        produced a warning that pointed at `texture=` - a setting that could not change
+        produced a warning that pointed at `texture` - a setting that could not change
         the outcome. Since no arity currently refuses, this asserts the sentence's shape
         directly against the function rather than through `bass_allowed`.
         """

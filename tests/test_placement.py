@@ -32,14 +32,7 @@ from typing import Dict, FrozenSet, List, Optional, Tuple
 from musthe import Note
 
 import headxml
-from arranger import (
-    GRIP_MAX_SPAN,
-    GRIP_PREFERENCE,
-    MELODY_STRING_CHOICES_FULL,
-    SHELL_DEGREES,
-    ChordParser,
-    GuitarFretboard,
-)
+from arranger import ChordParser, GuitarFretboard
 from arranger.grip_place import (
     Placement,
     _searched_shape,
@@ -49,6 +42,7 @@ from arranger.grip_place import (
     place_template,
     search_shape,
 )
+from arranger.grip_tables import GRIP_MAX_SPAN, GRIP_PREFERENCE, SHELL_DEGREES
 from arranger.grips import (
     _drop2_6432_request,
     _shell_request,
@@ -56,6 +50,7 @@ from arranger.grips import (
     get_grip_voicings,
     string_sets_for,
 )
+from arranger.tuning import MELODY_STRING_CHOICES_FULL
 
 HEADS = sorted(glob.glob("tests/data/*.musicxml") + glob.glob("tests/data/*.mxl"))
 
@@ -83,7 +78,7 @@ def _context(chord_name: str) -> Tuple[str, int, Tuple[int, ...]]:
     request, not how the request is derived.
     """
     _, quality = ChordParser.parse_chord_name(chord_name)
-    canonical, root_pc, tones = chord_context(quality or chord_name, chord_name)
+    canonical, root_pc, tones = chord_context(chord_name)
     assert root_pc is not None
     return canonical, root_pc, tones
 
@@ -238,7 +233,7 @@ class TestTheSearchObeysTheInvariants(unittest.TestCase):
                     generated = {
                         tuple(voicing.frets)
                         for voicing in get_grip_voicings(
-                            Note(melody), canonical, chord_name, top_string, (grip,)
+                            Note(melody), chord_name, top_string, (grip,)
                         )
                     }
                     searched = set()
@@ -580,9 +575,9 @@ class TestTheGripDistribution(unittest.TestCase):
         # pre-existing heads' distribution is unchanged. A moved count here still
         # means a shape moved; the fixture delta is the only expected difference.
         #
-        # **387, nine fewer than before the request redesign**, and the nine are all
-        # `shell`: they were the default union's comping steps in the tune's rests,
-        # which `head FILE` no longer invents (`docs/history/rhythm-request.md`).
+        # **387**, and the nine that are not counted are all `shell`: they are the default
+        # union's comping steps in the tune's rests, which `head FILE` does not invent
+        # (`docs/history/rhythm-request.md`).
         self.assertEqual(total, 387)
         self.assertEqual(
             counts,
@@ -597,8 +592,8 @@ class TestTheGripDistribution(unittest.TestCase):
                 "duo": 4,
             },
         )
-        # The shell count is the comping steps the default grid no longer states under a
-        # note the tune is still holding (§9.2); a named grid still states them, which is
+        # The shell count is the comping steps the default grid does not state under a
+        # note the tune is still holding (§9.2); a named grid states them, which is
         # why this table moves when the timeline does. `melody` is the one key that is not
         # a family - a step whose chord nothing could voice - and the set assertion below
         # is what keeps the table a distribution rather than a list of survivors.

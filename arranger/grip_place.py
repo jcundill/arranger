@@ -14,7 +14,8 @@ from functools import lru_cache
 from typing import FrozenSet, Iterable, List, Optional, Tuple
 
 from .grip_tables import GRIP_MAX_SPAN, supported_string_sets
-from .tuning import STANDARD_TUNING, GuitarFretboard, Voicing
+from .step_types import Voicing
+from .tuning import STANDARD_TUNING, GuitarFretboard
 
 
 def frets_in_span(

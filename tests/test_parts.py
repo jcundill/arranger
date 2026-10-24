@@ -1,4 +1,4 @@
-"""`parts=`: which of melody, bass and chord the guitar takes.
+"""`parts`: which of melody, bass and chord the guitar takes.
 
 The axis is a selection rather than a setting, so these tests are about what the guitar
 leaves to the other players - a melody-only selection, a bass part under a comp, and the
@@ -9,32 +9,23 @@ import unittest
 from typing import List
 
 from arranger import (
-    GRID_PART_PATTERNS,
-    GRIP_STRING_SETS,
-    PART_BASS,
-    PART_CHORD,
-    PART_MELODY,
-    PART_NAMES,
-    PARTS_AUTO,
-    TEXTURE_STYLES,
     VoiceLeadingEngine,
     get_comping_voicings,
-    parse_parts,
     parts_has_melody_only,
     parts_have_melody,
-    resolve_parts,
     supported_string_sets,
 )
+from arranger.grip_tables import GRIP_STRING_SETS
+from arranger.options import CHORD_NOTES, ArrangeOptions, Request
+from arranger.parts import PART_BASS, PART_CHORD, PART_MELODY, PART_NAMES
 from arranger.render import _step_cells
-from arranger.tuning import MUTED_CELL
+from arranger.step_types import MUTED_CELL
 from tests.support import (
     PROGRESSION,
-    VOICES_ARG,
     bass_comping,
     chord_pcs,
     comping,
     guide_pcs,
-    quality_of,
     root_of,
 )
 
@@ -47,9 +38,8 @@ class TestMelodyOnlySelections(unittest.TestCase):
     and nothing else. That refusal dissolved when the melody-only claim moved
     onto the voice selection: a soprano-less selection simply comps, on every
     texture, and nothing is self-contradictory anywhere. What the class still
-    owes the suite is the fact the two textures used to state, asserted on its
-    new home - the same shape as trap 5: the premise moved, the protection
-    moved with it.
+    owes the suite is the fact the two textures stated, asserted on its home: the premise
+    moved, and the protection moved with it.
     """
 
     def test_the_predicate_is_derived_from_the_selection(self):
@@ -70,18 +60,21 @@ class TestMelodyOnlySelections(unittest.TestCase):
     def test_a_soprano_less_selection_comps_on_every_texture(self):
         """The refusal that dissolved: nothing is self-contradictory anywhere now.
 
-        Before the collapse, `parts=alto,tenor` on a melody-only texture was
+        Before the collapse, `parts="alto,tenor"` on a melody-only texture was
         refused with a warning and the melody handed back to the guitar. With
         the claim keyed on the selection, the same request comps, on every
-        texture, without a refusal.
+        chord content, without a refusal.
         """
-        for texture in TEXTURE_STYLES:
+        for chord_notes in CHORD_NOTES:
             steps = VoiceLeadingEngine().arrange_progression(
-                PROGRESSION, parts=VOICES_ARG, texture=texture,
+                PROGRESSION,
+                options=ArrangeOptions(
+                    request=Request(melody=False, chord_notes=chord_notes)
+                ),
             )
-            self.assertTrue(steps, texture)
+            self.assertTrue(steps, chord_notes)
             self.assertTrue(
-                all(not step.melody_voiced for step in steps), texture
+                all(not step.melody_voiced for step in steps), chord_notes
             )
 
     def test_soprano_alone_arranges_the_melody_and_nothing_else(self):
@@ -94,7 +87,7 @@ class TestMelodyOnlySelections(unittest.TestCase):
         statement of it.
         """
         steps = VoiceLeadingEngine().arrange_progression(
-            PROGRESSION, parts="melody"
+            PROGRESSION, options=ArrangeOptions(request=Request(chord_on="none"))
         )
         self.assertTrue(steps)
         for step in steps:
@@ -102,20 +95,6 @@ class TestMelodyOnlySelections(unittest.TestCase):
             self.assertEqual(len(step.voicing.active_frets()), 1)
             self.assertFalse(step.melody_only)
             self.assertFalse(step.bass_only)
-
-    def test_the_old_spellings_are_gone_from_the_vocabulary(self):
-        """An unknown texture is a usage error, not a silent alias.
-
-        The precedent the corpus removal set for removed flags: a deprecated
-        spelling kept working would be the same fact stated twice, which is
-        what this stage exists to collapse.
-        """
-        self.assertNotIn("melody", TEXTURE_STYLES)
-        self.assertNotIn("melody_bass", TEXTURE_STYLES)
-        with self.assertRaises(ValueError):
-            VoiceLeadingEngine().arrange_progression(
-                PROGRESSION, texture="melody"
-            )
 
     def test_an_nc_bar_under_soprano_takes_the_no_chord_route(self):
         """
@@ -130,7 +109,8 @@ class TestMelodyOnlySelections(unittest.TestCase):
         in `docs/history/one-fact.md`'s build notes shows.
         """
         steps = VoiceLeadingEngine().arrange_progression(
-            [("F4", "NC", "NC"), ("E4", "7", "G7")], parts="melody"
+            [("F4", "NC"), ("E4", "G7")],
+            options=ArrangeOptions(request=Request(chord_on="none")),
         )
         self.assertEqual([s.chord for s in steps], ["NC", "G7"])
         self.assertTrue(steps[0].melody_only)
@@ -139,82 +119,37 @@ class TestMelodyOnlySelections(unittest.TestCase):
 
     def test_an_off_grid_slot_under_soprano_still_sounds(self):
         """
-        The grid guard answers before the empty palette too, on both routes.
+        The rhythm guard answers before the empty palette too, on both routes.
 
-        An off-grid slot is the one case where the guitar may play nothing
-        rather than one note: under a comping selection it is a rest, and under
-        a melody-only selection the note of the tune still sounds, alone -
-        which is what every slot of that selection is anyway, so the ordering
-        is asserted rather than left to read as a coincidence. Measured under
-        `grid=joe_pass`, which places no chord on beat 1.0: every slot of the
-        soprano-only arrangement still sounds its note.
+        A slot the chord's rhythm does not name is the one case where the guitar may
+        play nothing rather than one note: under a comping selection it is a rest, and
+        under a melody-only selection the note of the tune still sounds, alone - which
+        is what every slot of that selection is anyway, so the ordering is asserted
+        rather than left to read as a coincidence.
+
+        A melody-only selection names no chord position at all (`chord_on="none"`), so
+        **every** slot is one the chord's rhythm does not name, and each still sounds
+        its note. Naming no position is the honest form of the claim: a rhythm spelled
+        beside a melody-only selection has no chord to place.
         """
         progression = [
-            ("F5", "maj7", "Fmaj7"), ("E5", "7", "A7"),
-            ("D5", "NC", "NC"), ("C5", "m7", "Dm7"),
+            ("F5", "Fmaj7"), ("E5", "A7"),
+            ("D5", "NC"), ("C5", "Dm7"),
         ]
         timings = [(0, 1.0, 1.0), (0, 2.5, 0.5), (1, 1.0, 1.0), (1, 3.0, 1.0)]
         steps = VoiceLeadingEngine.arrange_progression(
-            progression, timings=timings, parts="melody", grid="chord:joe_pass"
+            progression,
+            timings=timings,
+            options=ArrangeOptions(request=Request(chord_on="none")),
         )
         self.assertEqual(len(steps), 4, "an off-grid slot of the tune went missing")
         for step in steps:
             self.assertEqual(len(step.voicing.active_frets()), 1)
 
 
-    def test_every_part_name_the_library_uses_is_in_the_vocabulary(self):
-        """So a table cannot name a part a caller could not have typed."""
-        for part in GRID_PART_PATTERNS:
-            self.assertIn(part, PART_NAMES, part)
-        self.assertEqual(set(GRID_PART_PATTERNS), set(PART_NAMES))
 
-
-class TestParseParts(unittest.TestCase):
-    """The `--parts` argument surface: what a caller can actually write."""
-
-    def test_the_order_a_caller_lists_them_in_does_not_matter(self):
-        """`bass,chord` and `chord,bass` are one request, not two that happen to agree."""
-        self.assertEqual(parse_parts("bass,chord"), parse_parts("chord,bass"))
-        self.assertEqual(parse_parts("bass,chord"), (PART_BASS, PART_CHORD))
-
-    def test_the_result_is_always_in_the_vocabularys_order(self):
-        """Canonical order, so a policy row and an argument can be compared directly."""
-        self.assertEqual(parse_parts("chord,melody"), (PART_MELODY, PART_CHORD))
-
-    def test_whitespace_and_case_are_not_the_callers_problem(self):
-        """A player types what they say."""
-        self.assertEqual(parse_parts(" Melody , CHORD "), (PART_MELODY, PART_CHORD))
-
-    def test_a_repeated_part_is_one_part(self):
-        """`chord,chord` is a slip, not a request for two chord parts."""
-        self.assertEqual(parse_parts("chord,chord"), (PART_CHORD,))
-
-    def test_every_single_part_parses(self):
-        """All three are nameable, which is what makes the axis an enumeration."""
-        for name in PART_NAMES:
-            self.assertEqual(parse_parts(name), (name,))
-
-    def test_an_unknown_part_raises(self):
-        """A spelling nobody recognises is a question, not a part to drop."""
-        with self.assertRaises(ValueError):
-            parse_parts("banjo")
-        with self.assertRaises(ValueError):
-            parse_parts("chord,banjo")
-
-    def test_an_empty_selection_raises(self):
-        """The guitar has to take something; silence is not an arrangement."""
-        with self.assertRaises(ValueError):
-            parse_parts("")
-
-    def test_auto_cannot_be_mixed_with_named_parts(self):
-        """`auto` means *all* of them, so it is a whole answer and not a part."""
-        self.assertEqual(parse_parts("auto"), (PARTS_AUTO,))
-        with self.assertRaises(ValueError):
-            parse_parts("auto,chord")
-
-    def test_resolve_parts_turns_auto_into_every_part(self):
-        """Which is what keeps the whole axis inert until a caller opts in."""
-        self.assertEqual(resolve_parts((PARTS_AUTO,)), PART_NAMES)
+class TestThePartsPredicates(unittest.TestCase):
+    """The one-line part questions the engine's route logic reads."""
 
     def test_parts_have_melody_answers_the_arrangement_level_half_of_the_route(self):
         """Whether the tune is *ours* is one input to the route, not the route (§9.3 D).
@@ -235,7 +170,7 @@ class TestTheArityFollowsTheTexture(unittest.TestCase):
     The first version of the generator always built a three-voice shell, so
     `--voices alto` and `--voices alto,tenor` both came back with three notes - the part
     sounding a voice nobody asked for, which in a band setting is a voice another player
-    was supposed to have. The equivalent hole now is `texture=`: a comping slot that
+    was supposed to have. The equivalent hole now is `texture`: a comping slot that
     states the default three regardless of the arity the caller asked for would be the
     same defect with the knob renamed, and this is the class that would catch it.
     """
@@ -243,38 +178,49 @@ class TestTheArityFollowsTheTexture(unittest.TestCase):
     def setUp(self):
         self.engine = VoiceLeadingEngine()
 
-    def counts_for(self, texture: str) -> List[int]:
+    def counts_for(self, chord_notes: str) -> List[int]:
         steps = self.engine.arrange_progression(
-            PROGRESSION, parts=PART_CHORD, texture=texture
+            PROGRESSION,
+            options=ArrangeOptions(request=Request(melody=False, chord_notes=chord_notes)),
         )
-        self.assertTrue(steps, texture)
+        self.assertTrue(steps, chord_notes)
         return [len(step.voicing.active_frets()) for step in steps]
 
     def test_every_arity_produces_at_most_that_many_notes(self):
-        """One note per chord-part voice the texture names, and never more."""
-        for texture, ceiling in (
-            ("chord1", 1),
-            ("chord2", 2),
-            ("chord3", 3),
+        """One note per chord-part voice the request names, and never more."""
+        for chord_notes, ceiling in (
+            ("1", 1),
+            ("2", 2),
+            ("3", 3),
         ):
-            for count in self.counts_for(texture):
-                self.assertLessEqual(count, ceiling, f"{texture} sounded {count} notes")
+            for count in self.counts_for(chord_notes):
+                self.assertLessEqual(
+                    count, ceiling, f"{chord_notes} sounded {count} notes"
+                )
 
     def test_the_whole_chord_is_the_default(self):
-        """`uniform` is the arrangement that always was: the fullest shape available."""
-        self.assertEqual(set(self.counts_for("uniform")), {3})
+        """`full` is the arrangement that always was: the fullest shape available."""
+        self.assertEqual(set(self.counts_for("full")), {3})
 
     def test_a_selection_is_never_sounded_thicker_than_asked(self):
-        """The direction that matters: no texture plays more voices than it named."""
-        for texture in TEXTURE_STYLES:
-            for count in self.counts_for(texture):
+        """The direction that matters: no content plays more voices than it named."""
+        for chord_notes in CHORD_NOTES:
+            for count in self.counts_for(chord_notes):
                 self.assertLessEqual(
-                    count, 3, f"{texture} sounded {count} notes"
+                    count, 3, f"{chord_notes} sounded {count} notes"
                 )
 
 
+# The three selections this class reads, spelled as the requests they are.
+CHORD_ONLY = Request(melody=False)
+# The thumb alone, on the tune's own onsets: one low note per written attack.
+LONE_BASS = Request(melody=False, chord_on="none", bass_on="melody", bass_notes="root")
+# The pair: a thumb line under a comped chord.
+BASS_AND_CHORD = Request(melody=False, bass_on="melody", bass_notes="root")
+
+
 class TestABassPartIsABassNote(unittest.TestCase):
-    """`parts=bass` sounds a bass note: low, and a root or a 5th.
+    """A lone bass line sounds a bass note: low, and a root or a 5th.
 
     Three defects, all measured on `tests/data/synthetic_cut_time.mxl` before this class
     existed, and all three had to be fixed together - which is why the tests are three
@@ -292,37 +238,31 @@ class TestABassPartIsABassNote(unittest.TestCase):
       sounds like the wrong chord, which is what `BASS_DEGREES_6432` says in as many
       words. So register alone would have produced a *low 3rd*, still wrong.
 
-    `parts=` names **parts**, not voices, which is what makes the first defect
-    unreachable through the API: there is one bass part and it is addressed by name, so
-    two different requests cannot collapse to one arrangement. The inner voices are
-    reached as the chord part - both guide tones together - and
-    `test_an_inner_voice_is_not_addressable_as_a_part` is the inversion of the old
-    per-voice test.
+    **A part is derived from the layers that attack, never named.** `melody`,
+    `chord_on` and `bass_on` decide the selection, so the first defect is unreachable
+    through the API: there is one bass part, and two different requests cannot collapse
+    to one arrangement. An inner voice has no spelling at all - the chord part states
+    both guide tones together - and `test_an_inner_voice_is_not_addressable_as_a_part`
+    is the inversion of the old per-voice test.
     """
 
     def setUp(self):
         self.engine = VoiceLeadingEngine()
 
-    def arrange(self, parts: str):
-        return self.engine.arrange_progression(PROGRESSION, parts=parts)
+    def arrange(self, request: Request):
+        return self.engine.arrange_progression(
+            PROGRESSION, options=ArrangeOptions(request=request)
+        )
 
     def test_an_inner_voice_is_not_addressable_as_a_part(self):
-        """The axis has no spelling for one inner voice, and that is the fix.
+        """The selection has no spelling for one inner voice: there is no part for it.
 
-        **Inverted rather than deleted.** It used to assert that `bass`, `alto` and
-        `tenor` produce three *different* arrangements, because they used to produce
-        one - the voice identity was discarded and only the count survived. With the
-        parts axis, the request itself cannot be made: `alto` is not a part, and the
-        inner voices are what the **chord** part is for, both of them at once. So the
-        assertion is on the vocabulary, which is where the collapse used to happen.
+        The inner voices are what the **chord** part is for, both of them at once, so the
+        chord part states a complete comping shape rather than a named inner voice.
         """
-        with self.assertRaises(ValueError):
-            parse_parts("alto")
-        with self.assertRaises(ValueError):
-            parse_parts("tenor")
         # The part that does carry them states a complete comping shape, and the
         # guide-tone pair is *inside* it rather than being the whole of it.
-        for step in self.arrange(PART_CHORD):
+        for step in self.arrange(CHORD_ONLY):
             self.assertEqual(len(step.voicing.active_frets()), 3, step.tab_line())
             self.assertLessEqual(guide_pcs(step.chord), {m % 12 for m in step.voicing.midi_notes()})
 
@@ -335,9 +275,9 @@ class TestABassPartIsABassNote(unittest.TestCase):
         about how many notes happen to sound.
         """
         self.assertEqual(
-            {len(s.voicing.active_frets()) for s in self.arrange(PART_CHORD)}, {3}
+            {len(s.voicing.active_frets()) for s in self.arrange(CHORD_ONLY)}, {3}
         )
-        for step in self.arrange(PART_BASS):
+        for step in self.arrange(LONE_BASS):
             self.assertEqual(len(step.voicing.active_frets()), 1, step.tab_line())
 
     def test_the_chord_part_still_sounds_its_guide_tones(self):
@@ -346,7 +286,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
         Asserted separately from the register above because a generator that moved the
         pair to low strings while leaving its degrees alone would pass that one.
         """
-        for step in self.arrange(PART_CHORD):
+        for step in self.arrange(CHORD_ONLY):
             self.assertLessEqual(
                 guide_pcs(step.chord),
                 {m % 12 for m in step.voicing.midi_notes()},
@@ -366,7 +306,7 @@ class TestABassPartIsABassNote(unittest.TestCase):
                 self.assertIn(
                     min(voicing.active_strings), (0, 1, 2), voicing.tab_string()
                 )
-        for step in self.arrange("bass"):
+        for step in self.arrange(LONE_BASS):
             self.assertLessEqual(min(step.voicing.active_strings), 2, step.tab_line())
 
     def test_a_bass_voice_sounds_a_root_or_a_fifth(self):
@@ -425,21 +365,21 @@ class TestABassPartIsABassNote(unittest.TestCase):
         violated "the sounding strings are exactly one supported set". Nothing caught
         it because the per-shape assertions in `tests/test_grips.py` never generated
         one. It is asserted here over the **generator**, since the parts axis cannot
-        ask for an inner voice on its own; the fix added `SINGLE_NOTE_STRING_SETS`
+        ask for an inner voice on its own; the fix added `_SINGLE_NOTE_STRING_SETS`
         rather than leaving a shape outside the contract.
         """
         supported = {frozenset(s) for s in supported_string_sets()}
         for name in ("Cmaj7", "A7", "Dm7b5"):
             for bass_voice in (False, True):
                 for voicing in get_comping_voicings(
-                    quality_of(name), name, notes=1, bass_voice=bass_voice
+                    name, notes=1, bass_voice=bass_voice
                 ):
                     self.assertIn(
                         frozenset(voicing.active_strings),
                         supported,
                         voicing.tab_string(),
                     )
-        for step in self.arrange(PART_BASS):
+        for step in self.arrange(LONE_BASS):
             self.assertIn(
                 frozenset(step.voicing.active_strings),
                 supported,
@@ -453,8 +393,8 @@ class TestABassPartIsABassNote(unittest.TestCase):
         fret-number comparison would not survive the octave transposition that moves the
         same pitch between strings.
         """
-        chord = [max(s.voicing.midi_notes()) for s in self.arrange(PART_CHORD)]
-        bass = [max(s.voicing.midi_notes()) for s in self.arrange(PART_BASS)]
+        chord = [max(s.voicing.midi_notes()) for s in self.arrange(CHORD_ONLY)]
+        bass = [max(s.voicing.midi_notes()) for s in self.arrange(LONE_BASS)]
         self.assertEqual(len(chord), len(bass))
         self.assertLess(
             sum(bass), sum(chord), "the bass part is not below the chord part"
@@ -469,36 +409,36 @@ class TestABassPartIsABassNote(unittest.TestCase):
         already correct: the lowest note of a two-note chord belongs to the chord's own
         string set, not to the bass register rule (`BASS_DEGREES_6432`).
 
-        **Inverted rather than deleted.** It used to assert `len(active_frets) ==
-        len(voices)` for `tenor,bass` and `alto,tenor,bass` - one note per *named
-        voice* - which was the old arity rule. The arity is the texture's now, so what
-        survives is the pair of claims that do not depend on it: the lone bass is one
+        The claims are the two that do not depend on the arity: the lone bass is one
         low note, and nothing else is the lone-bass case.
         """
-        lone = [len(s.voicing.active_frets()) for s in self.arrange(PART_BASS)]
+        lone = [len(s.voicing.active_frets()) for s in self.arrange(LONE_BASS)]
         self.assertEqual(set(lone), {1}, "the lone bass states more than one note")
-        for step in self.arrange(PART_BASS):
+        for step in self.arrange(LONE_BASS):
             self.assertLessEqual(min(step.voicing.active_strings), 2, step.tab_line())
         counts = {
             len(s.voicing.active_frets())
-            for s in self.arrange("bass,chord")
+            for s in self.arrange(BASS_AND_CHORD)
         }
-        self.assertEqual(counts, {3}, "a pair selection is not the lone-bass case")
+        self.assertEqual(
+            counts,
+            {4},
+            "a pair is not the lone-bass case: the chord part plus the thumb",
+        )
 
-    def test_an_unreadable_chord_still_gets_no_bass_note(self):
+    def test_an_unreadable_chord_is_refused(self):
         """No root, no claim - the same rule, on the branch that was added.
 
         A bass note is *more* dependent on the root than a guide-tone shape is, not less:
         it is the root or the 5th **of that root**, so a guessed one is not a weak claim,
-        it is a wrong one. Asserted because the new branch reads `root_pc` directly, and a
-        regression there would be silent rather than loud.
+        it is a wrong one. It is a refusal rather than an empty list now that the quality
+        is read off the name. Asserted because the new branch reads `root_pc` directly,
+        and a regression there would be silent rather than loud.
         """
-        self.assertEqual(
-            get_comping_voicings("maj7", None, notes=1, bass_voice=True), []
-        )
-        self.assertEqual(
-            get_comping_voicings("maj7", "H7", notes=1, bass_voice=True), []
-        )
+        with self.assertRaises(ValueError):
+            get_comping_voicings(None, notes=1, bass_voice=True)
+        with self.assertRaises(ValueError):
+            get_comping_voicings("H7", notes=1, bass_voice=True)
 
     def test_the_default_generates_no_singletons_on_its_own(self):
         """`supported_string_sets()` grew; nothing else did.
@@ -569,7 +509,7 @@ class TestRepeatedStepsHoldTheShape(unittest.TestCase):
         the difference between a *muted* string ('x') and a *held* one (blank) is the
         library's, not this test's - and a literal here would re-state it wrongly.
         """
-        from arranger.tuning import cells_from_frets
+        from arranger.step_types import cells_from_frets
         from tests.support import make_step
 
         step = make_step([-1, -1, -1, 10, 12, 10], repeated=True, melody_voiced=False)

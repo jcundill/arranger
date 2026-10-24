@@ -14,6 +14,7 @@ dependency and no database.
 from __future__ import annotations
 
 import contextlib
+import dataclasses
 import io
 import unittest
 from typing import List, Optional, Tuple
@@ -22,29 +23,17 @@ from musthe import Note
 
 import arranger
 from arranger import (
-    BASS_STRING_INDICES,
-    BASS_STYLE_WALK,
-    COMMON_TIME,
-    GRIP_MAX_SPAN,
-    GRIP_PREFERENCE,
-    GRIP_STRING_SETS,
-    PART_BASS,
-    PART_CHORD,
-    PART_MELODY,
-    PART_NAMES,
-    ROLE_FILL,
-    ROLE_TARGET,
-    SHELL_DEGREES,
-    TEXTURE_ARITY,
-    TEXTURE_STYLES,
     ChordParser,
+    Request,
     VoiceLeadingEngine,
     derived_arity,
     supported_string_sets,
     texture_palette,
 )
 from arranger.bass_rules import (
+    BASS_ALL_RULES,
     BASS_RULES,
+    BASS_STRING_INDICES,
     parse_bass_style,
 )
 
@@ -59,21 +48,31 @@ from arranger.decisions import (
     resolve_texture_grips,
 )
 from arranger.grip_tables import (
+    GRIP_MAX_SPAN,
+    GRIP_PREFERENCE,
+    GRIP_STRING_SETS,
     RIGHT_HAND_STRINGS,
+    SHELL_DEGREES,
     grip_pluck_count,
     thumb_safe_grips,
 )
 from arranger.grips import (
     _interval_offsets,
 )
+from arranger.grouping import COMMON_TIME
+from arranger.options import CHORD_NOTES, CHORD_NOTES_FULL, ArrangeOptions
+from arranger.parts import PART_BASS, PART_CHORD, PART_MELODY, PART_NAMES
 from arranger.texture import (
-    FILL_THINNING,
-    THIN_ENTRIES,
+    _FILL_THINNING,
+    _THIN_ENTRIES,
+    TEXTURE_ARITY,
+    TEXTURE_STYLES,
     families_up_to_arity,
     families_up_to_with_thin,
     metric_weight,
     roles_for_slot,
 )
+from arranger.tuning import ROLE_FILL, ROLE_TARGET
 from tests.support import (
     MAJOR_CADENCE,
     MINOR_CADENCE,
@@ -86,14 +85,14 @@ from tests.support import (
 # `targets` behaviour tests and the backward-compatibility pin below, so the two cannot
 # drift apart.
 BUT_NOT_FOR_ME = [
-    ("C5", "maj7", "Fmaj7"),
-    ("C5", "maj7", "Fmaj7"),
-    ("B4", "maj7", "Fmaj7"),
-    ("C5", "maj7", "Fmaj7"),
-    ("D5", "maj7", "Fmaj7"),
-    ("F5", "m7", "Gm7"),
-    ("C5", "maj7", "Fmaj7"),
-    ("A4", "7", "C7"),
+    ("C5", "Fmaj7"),
+    ("C5", "Fmaj7"),
+    ("B4", "Fmaj7"),
+    ("C5", "Fmaj7"),
+    ("D5", "Fmaj7"),
+    ("F5", "Gm7"),
+    ("C5", "Fmaj7"),
+    ("A4", "C7"),
 ]
 
 # One chord per eighth for a single bar of 4/4, so the eight slots land on beats 1.0,
@@ -282,14 +281,9 @@ class TestRoles(unittest.TestCase):
         without consulting this table at all - so a texture that harmonises
         something cannot lose its harmony by being absent from a table.
 
-        **This assertion was inverted, not deleted.** It used to name the one
-        empty palette a texture *did* carry - `walking_bass`'s fill - and assert
-        that it was the only one. `walking_bass` is not a texture any more (it is
-        `bass=BASS_STYLE_WALK` over `texture=targets`), and the arity rule leaves
-        no row that can be empty: a fill one thinner than a one-note target is the
-        `melody` entry rather than nothing. What survives is the rule the test was
-        for, and it is now stated over the whole palette table rather than over a
-        hand-written subset of it.
+        The arity rule leaves no row that can be empty: a fill one thinner than a one-note
+        target is the `melody` entry rather than nothing. So the rule is stated over the
+        whole palette table rather than over a hand-written subset of it.
         """
         selections = (
             (PART_MELODY,), (PART_BASS,), (PART_CHORD,), PART_NAMES,
@@ -311,23 +305,21 @@ class TestRoles(unittest.TestCase):
             "and the route that has to read it",
         )
         # The thinnest fill is the melody alone, which is a real entry rather than
-        # an empty palette - the distinction the emptied row used to blur.
+        # an empty palette - the distinction this keeps.
         self.assertEqual(families_up_to_with_thin(0), ("melody",))
-        self.assertEqual(THIN_ENTRIES["melody"], 0)
-        self.assertEqual(FILL_THINNING, 1)
+        self.assertEqual(_THIN_ENTRIES["melody"], 0)
+        self.assertEqual(_FILL_THINNING, 1)
 
     def test_the_walking_line_is_a_bass_style_not_a_texture(self):
         """
         A walk is the bass axis' own row, over a texture that names an arity.
 
-        It used to be a texture of its own (`texture="walking_bass"`), which made
-        one name cover two claims: which note the thumb states (a *bass* fact) and
-        how many notes the chord part states (a *texture* fact). `docs/history/parts.md` §6
-        splits them - `bass=BASS_STYLE_WALK` with `texture="targets"` - and the
-        arrangement is the same, so what is asserted here is the pair rather than
-        the one spelling.
+        One name must not cover two claims - which note the thumb states (a *bass* fact)
+        and how many notes the chord part states (a *texture* fact) - so the pair is the
+        full bass vocabulary with `chord_notes="targets"`, and what is asserted here is
+        that pair rather than one spelling. `docs/history/parts.md` §6 splits them.
         """
-        self.assertEqual(set(parse_bass_style(BASS_STYLE_WALK)), set(BASS_RULES))
+        self.assertEqual(set(parse_bass_style(BASS_ALL_RULES)), set(BASS_RULES))
         # A walk's targets are the arity a thumb leaves room for, so the chord part
         # states a shell or a duo and nothing wider.
         self.assertEqual(
@@ -335,8 +327,9 @@ class TestRoles(unittest.TestCase):
         )
         steps = VoiceLeadingEngine.arrange_progression(
             MINOR_CADENCE,
-            texture="targets",
-            bass=BASS_STYLE_WALK,
+            request=Request(
+                chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+            ),
             timings=[(0, 1.0 + 0.5 * i, None) for i in range(len(MINOR_CADENCE))],
         )
         self.assertTrue(steps)
@@ -359,7 +352,7 @@ class TestRoles(unittest.TestCase):
         for a texture, and the backward-compatibility guarantee would be a fiction.
         The set is compared rather than the order: the palette is read off
         `GRIP_STRING_SETS` (families at *this* arity first), while
-        `GRIP_PREFERENCE` is the authored ranking, and the tuple no longer names a
+        `GRIP_PREFERENCE` is the authored ranking, and the tuple does not name a
         family - so an order difference is not a behavioural one here. The order
         that *is* load-bearing is the generation order, and that is pinned by
         `TestBackwardCompatibility` and by the exact fingerings in `test_grips.py`:
@@ -382,18 +375,15 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
     """
     The families are the chord part's **search space**, not a caller's choice.
 
-    This class replaces `TestGripsIntersectTheTexture`, whose subject - the
-    intersection of a requested grip list with the texture's - no longer exists
-    (`docs/history/parts.md` §4 and §6): what a caller chooses is the *arity*, and the
-    families that state exactly that many notes under the melody are the ones the
-    selector may use. **Inverted rather than deleted**, so the fact that there is
-    nothing left to intersect is still asserted, and the two rules that survived
-    the change - a target is thicker than a fill, and a target that cannot be
-    played falls back to the melody alone - keep their own tests below.
+    What a caller chooses is the *arity*, and the families that state exactly that many
+    notes under the melody are the ones the selector may use - there is no grip list to
+    intersect with the texture (`docs/history/parts.md` §4 and §6). The two rules that
+    go with it - a target is thicker than a fill, and a target that cannot be played
+    falls back to the melody alone - keep their own tests below.
     """
 
     # the synthetic cut-time head's strong beats, in a form both paths can read.
-    PROGRESSION = [("G4", "maj", "Ebmaj")]
+    PROGRESSION = [("G4", "Ebmaj")]
 
     def test_the_palette_is_the_families_the_arity_names(self):
         """
@@ -414,7 +404,7 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
             with self.subTest(texture=texture, role=ROLE_FILL):
                 self.assertEqual(
                     texture_palette(ROLE_FILL, texture, PART_NAMES),
-                    families_up_to_with_thin(arity - FILL_THINNING),
+                    families_up_to_with_thin(arity - _FILL_THINNING),
                 )
 
     def test_the_three_fixed_arities_are_three_different_palettes(self):
@@ -437,13 +427,9 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
 
     def test_only_the_arity_and_the_thumb_change_the_palette(self):
         """
-        There is no other input, which is what `grips=` being deleted *means*.
-
-        The four arguments of `texture_palette` are the whole surface - role,
-        texture, parts, and whether a thumb is taking a string - so the assertion
-        that no third thing narrows a palette is a signature check plus a TypeError
-        on the old spelling. Both are cheap and both fail loudly if a request
-        channel is ever reintroduced without a decision.
+        The four arguments of `texture_palette` are the whole surface - role, texture,
+        parts, and whether a thumb is taking a string - so no third thing narrows a
+        palette. A request channel reintroduced without a decision fails here.
         """
         import inspect
 
@@ -451,13 +437,6 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
             list(inspect.signature(texture_palette).parameters),
             ["role", "texture", "parts", "has_thumb"],
         )
-        with self.assertRaises(TypeError):
-            VoiceLeadingEngine.arrange_progression(
-                self.PROGRESSION,
-                timings=[(0, 1.0, 1.0)],
-                grips=("shell",),  # type: ignore[call-arg]
-            )
-        self.assertFalse(hasattr(arranger.options.ArrangeOptions, "grips"))
 
     def test_an_empty_palette_still_arranges(self):
         """
@@ -468,16 +447,12 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
         answer that must not be "fixed" by handing the hand a chord nobody offered.
         The thumb budget leaves it alone for the same reason.
 
-        **Inverted rather than deleted.** It used to be the companion of an
-        `--grips shell` on a walk's fill, whose palette was empty by design: the
-        point was that an empty palette is *not* a caller error while a non-empty
-        palette lacking the request was. There is no requested palette any more, so
-        what survives is the first half - an empty palette is honoured rather than
-        reported - and it is now stated on the route that produces one.
+        An empty palette is honoured rather than reported, which is stated on the route
+        that produces one.
         """
         self.assertEqual(resolve_texture_grips(ROLE_TARGET, (), has_thumb=True), ())
         steps = VoiceLeadingEngine.arrange_progression(
-            MINOR_CADENCE, parts=PART_MELODY
+            MINOR_CADENCE, options=ArrangeOptions(request=Request(chord_on="none"))
         )
         self.assertTrue(steps, "the arrangement must not be lost")
         for step in steps:
@@ -497,7 +472,7 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
         """
         self.assertNotIn("interval", GRIP_PREFERENCE)
         self.assertNotIn("melody", GRIP_PREFERENCE)
-        for name in THIN_ENTRIES:
+        for name in _THIN_ENTRIES:
             with self.subTest(entry=name):
                 self.assertIn(name, texture_palette(ROLE_FILL, "targets", PART_NAMES))
                 self.assertNotIn(
@@ -518,16 +493,16 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
         chords whose only shape is a five-fret stretch fall back to the melody
         alone, which is the rule this asserts.
 
-        The *answer* has moved once already (drop-2's `x-6-5-3-8-x` used to leave
-        nothing playable, then drop-3's `3-x-1-3-4-x` did) and it has moved again
-        with the palette: `closed` now states this chord inside the hand
+        The *answer* moves with the tables (drop-2's `x-6-5-3-8-x` leaves nothing
+        playable, where drop-3's `3-x-1-3-4-x` does), and the palette decides it:
+        `closed` states this chord inside the hand
         (`x-10-8-8-8-x`, span 2). So what is asserted is the *rule* rather than the
         shape - a `targets` target is always either a complete chord or the melody
         alone, never a partial one, and never a melody with a stale chord name.
         """
         steps = VoiceLeadingEngine.arrange_progression(
             self.PROGRESSION,
-            texture="targets",
+            options=ArrangeOptions(request=Request(chord_notes="targets")),
             timings=[(0, 1.0, 1.0)],
         )
         self.assertEqual(len(steps), 1)
@@ -540,7 +515,7 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
         else:
             # A complete chord, and every note is a tone of Ebmaj.
             self.assertEqual(len(step.voicing.active_frets()), 4, step.tab_line())
-            tones = {t % 12 for t in ChordParser.get_chord_tones("maj", "Ebmaj")}
+            tones = {t % 12 for t in ChordParser.get_chord_tones("Ebmaj")}
             self.assertLessEqual(
                 {p % 12 for p in step.voicing.midi_notes()}, tones, step.tab_line()
             )
@@ -553,7 +528,9 @@ class TestThePaletteFollowsTheArity(unittest.TestCase):
         only what sits at the very top of the budget.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D4", "m7", "Dm7")], texture="targets", timings=[(0, 1.0, 1.0)]
+            [("D4", "Dm7")],
+            options=ArrangeOptions(request=Request(chord_notes="targets")),
+            timings=[(0, 1.0, 1.0)],
         )
         self.assertEqual(len(steps), 1)
         self.assertNotEqual(steps[0].voicing.grip, "melody")
@@ -588,13 +565,13 @@ class TestTheRightHandBudget(unittest.TestCase):
     selection (`VoiceLeadingEngine.attach_bass`), so no check ever saw the two together.
     A four-note target on a strong beat with a bass note placed under it is five
     simultaneous plucks - one more hand than a player has. The counts are in
-    [docs/open-issues.md](../docs/open-issues.md) item 2.
+    [docs/history/open-issues.md](../docs/history/open-issues.md) item 2.
 
     The rule is a **budget** rather than a preference, so it narrows the *target* palette
     only, and only while a thumb line is running.
 
     A target's palette is the arity ceiling, which is where a four-string family comes
-    from: `texture="chord3"` with a thumb states four strings unless the budget is
+    from: `chord_notes="3"` with a thumb states four strings unless the budget is
     applied, because a *fixed* arity is what the caller asked for and the thumb is a
     separate question. `derived_arity` counts the thumb into the ceiling; the fixed rows
     do not, and that is exactly the gap this rule closes.
@@ -634,7 +611,7 @@ class TestTheRightHandBudget(unittest.TestCase):
 
         The whole defect is a four-note target voiced on a beat the thumb is also playing.
         A **fixed** arity is the caller's own request, so the thumb does not reduce it the
-        way `derived_arity`'s ceiling folds the thumb in: `texture="chord3"` still names
+        way `derived_arity`'s ceiling folds the thumb in: `chord_notes="3"` still names
         the four-string families, and `resolve_texture_grips` is the only thing between
         that palette and a five-string step. Both halves are asserted - the fixed row
         that needs the rule, and the derived row that is already inside the budget.
@@ -703,11 +680,8 @@ class TestTheRightHandBudget(unittest.TestCase):
         """A palette of nothing but four-string grips is not an error, and not silence.
 
         It resolves to the widest statement that leaves a finger free, because a target
-        still has to state the harmony. **Inverted rather than deleted**: this used to
-        assert the *caller* was refused for asking for such a grip (`--grips drop2`
-        under a thumb), which was right while a request could be intersected with the
-        budget. There is no request any more - the palette arrives from the arity rule -
-        so the surviving half is what the budget does with one.
+        still has to state the harmony: the palette arrives from the arity rule, and the
+        budget's job is what it does with one.
         """
         self.assertEqual(resolve_texture_grips(ROLE_TARGET, ("drop2",), has_thumb=True), ("shell",))
         self.assertEqual(thumb_safe_grips(("drop2", "closed")), ("shell",))
@@ -715,14 +689,18 @@ class TestTheRightHandBudget(unittest.TestCase):
     def test_a_thumb_carrying_targets_arrangement_never_sounds_five_strings(self) -> None:
         """The engine-level sweep, and the assertion whose absence let this ship."""
         progression = [
-            ("F5", "maj7", "Fmaj7"), ("D5", "m7", "Dm7"),
-            ("C5", "7", "G7"), ("B4", "maj7", "Cmaj7"),
+            ("F5", "Fmaj7"), ("D5", "Dm7"),
+            ("C5", "G7"), ("B4", "Cmaj7"),
         ]
         timings = [(bar, 1.0 + 0.5 * n, None) for bar in range(4) for n in range(4)]
         with contextlib.redirect_stdout(io.StringIO()):
             steps = VoiceLeadingEngine.arrange_progression(
-                progression, timings=timings, texture="targets", bass="root,5th,approach,nearest"
-            )
+                    progression, timings=timings, options=ArrangeOptions(
+                                                              request=Request(
+                                                                  chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+                                                              ),
+                                                          ),
+                )
         checked = 0
         for step in steps:
             sounding = [fret for fret in step.voicing.frets if fret >= 0]
@@ -742,7 +720,7 @@ class TestTheThumbReach(unittest.TestCase):
 
     The right hand assigns **strings**, not roles - the thumb takes the bottom note of a two-
     or three-note shape whenever that note sits on the E, A, D or G string, with or without a
-    bass line under the shape. `bass=` is an arrangement-level fact and never reaches it: the
+    bass line under the shape. `bass` is an arrangement-level fact and never reaches it: the
     merged bass note is written into the fret vector *after* selection. Above the G the thumb
     is out of reach and the fingers take the bottom, which `duo`'s 1-2 pair and the two
     one-note comping shapes are the only reachable sets to ask for. How often it happens is
@@ -828,10 +806,9 @@ class TestBackwardCompatibility(unittest.TestCase):
         # the palette now, so a complete chord can be built on the skipped-bass sets and
         # a tighter shape outranks the old one. The A7 is a drop-3 (G3 E4 A4 Db5) where it
         # was a drop-2 at `x-x-7-9-8-9` - the same A7, span 1 against span 2. The Am7
-        # likewise. The Dm(maj7) is unchanged, and staying that way was not automatic:
-        # that spelling does not parse, so it has no tone set, and counting wrong notes
-        # against an empty set made a two-note duo look *better* than a four-note chord.
-        # An unreadable chord now leaves the criterion unasked - see cost.voicing_cost.
+        # likewise. The last bar did not move: `Dm(maj7)` is the parenthesis spelling of
+        # the minor-major seventh, which `ChordParser.QUALITY_ALIASES` reads, so the bar
+        # keeps its `x-x-11-10-10-10` drop-2 and states the shape count.
         # The A-7 of the other cadence is the exception, and it went the other way: the
         # four-note shape it had was an inner-skip set, and no playable replacement exists
         # at C#5 in that position, so `major_cadence_tabs` records the melody alone there.
@@ -857,15 +834,17 @@ class TestBackwardCompatibility(unittest.TestCase):
 
         The very last fill is `x-x-10-9-10-x` rather than `x-x-x-5-5-5`: span 0 and
         span 1 are bucketed together at the span index of `voicing_cost`, so a
-        zero-span barre no longer beats a one-fret shape sitting where the hand
+        zero-span barre does not beat a one-fret shape sitting where the hand
         already is. Both are legal and both are tight - the previous fill is at
         frets 9-10 - so the selector holds the position instead of jumping to fret 5
         for the last chord of the phrase. Span 2 and above still outrank position
         untouched, which is the trade `docs/engine.md` measures.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            BUT_NOT_FOR_ME, timings=BUT_NOT_FOR_ME_TIMINGS, texture="targets"
-        )
+                BUT_NOT_FOR_ME, timings=BUT_NOT_FOR_ME_TIMINGS, options=ArrangeOptions(
+                    request=Request(chord_notes="targets"),
+                ),
+            )
         self.assertEqual(
             [s.tab_line() for s in steps],
             [
@@ -901,8 +880,10 @@ class TestBackwardCompatibility(unittest.TestCase):
         shells and its targets are drop-2, and neither takes a set that was removed.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            BUT_NOT_FOR_ME, timings=BUT_NOT_FOR_ME_TIMINGS, texture="uniform"
-        )
+                BUT_NOT_FOR_ME, timings=BUT_NOT_FOR_ME_TIMINGS, options=ArrangeOptions(
+                    request=Request(chord_notes="full"),
+                ),
+            )
         self.assertEqual(
             [s.tab_line() for s in steps],
             [
@@ -917,9 +898,31 @@ class TestBackwardCompatibility(unittest.TestCase):
             ],
         )
 
-    def test_every_step_defaults_to_a_target_with_no_weight(self):
-        """No timing means role=target and metric_weight=-1 on every step."""
-        for step in VoiceLeadingEngine.arrange_progression(MINOR_CADENCE):
+    def test_a_progression_with_no_timeline_is_located_by_the_metre(self):
+        """A bare call is laid out on the metre's felt beats, so the beat decides the role.
+
+        The "we know nothing" rule below is about a *stated* unplaced position, not about
+        a caller who supplies no timeline at all: `arrange_progression` lays that out
+        itself, which is what lets `targets` state the chord on beat 1 and fill on beat 2.
+        """
+        steps = VoiceLeadingEngine.arrange_progression(
+            MINOR_CADENCE, options=ArrangeOptions(request=Request(chord_notes="targets"))
+        )
+        self.assertEqual(
+            [(step.bar, step.beat) for step in steps],
+            [(1, 1.0), (1, 2.0), (1, 3.0), (1, 4.0)],
+        )
+        self.assertEqual([step.metric_weight for step in steps], [2, 0, 1, 0])
+        self.assertEqual(
+            [step.role for step in steps], [ROLE_TARGET, ROLE_FILL, ROLE_TARGET, ROLE_FILL]
+        )
+
+    def test_a_supplied_unplaced_slot_is_a_target_with_no_weight(self):
+        """A position the caller states as unplaced weighs -1, so it is a target."""
+        steps = VoiceLeadingEngine.arrange_progression(
+            MINOR_CADENCE, timings=[(None, None, None)] * len(MINOR_CADENCE)
+        )
+        for step in steps:
             self.assertEqual(step.role, ROLE_TARGET)
             self.assertEqual(step.metric_weight, -1)
 
@@ -929,7 +932,7 @@ class TestBackwardCompatibility(unittest.TestCase):
         reading `grip` or `partial` sees the same values.
         """
         for step in VoiceLeadingEngine.arrange_progression(MINOR_CADENCE):
-            self.assertIn(step.grip, arranger.GRIP_PREFERENCE)
+            self.assertIn(step.grip, arranger.grip_tables.GRIP_PREFERENCE)
             self.assertEqual(step.partial, len(step.voicing.active_frets()) < 4)
             self.assertFalse(step.repeated)
             self.assertIsNone(step.original_melody)
@@ -943,8 +946,10 @@ class TestBackwardCompatibility(unittest.TestCase):
         """
         plain = VoiceLeadingEngine.arrange_progression(MINOR_CADENCE)
         explicit = VoiceLeadingEngine.arrange_progression(
-            MINOR_CADENCE, timings=None, texture="uniform", time_signature=COMMON_TIME
-        )
+                MINOR_CADENCE, timings=None,
+                options=ArrangeOptions(request=Request(chord_notes="full")),
+                time_signature=COMMON_TIME
+            )
         self.assertEqual(
             [s.tab_line() for s in plain], [s.tab_line() for s in explicit]
         )
@@ -955,7 +960,9 @@ class TestBackwardCompatibility(unittest.TestCase):
         arrangement followed by a surprise.
         """
         with self.assertRaises(ValueError):
-            VoiceLeadingEngine.arrange_progression(MINOR_CADENCE, texture="sorcery")
+            VoiceLeadingEngine.arrange_progression(
+                MINOR_CADENCE, options=ArrangeOptions(request=Request(chord_notes="sorcery")),
+            )
 
 
 class TestTimingsDefensive(unittest.TestCase):
@@ -966,12 +973,15 @@ class TestTimingsDefensive(unittest.TestCase):
         Fewer timings than steps is not an error.
 
         The trailing steps were never located, so they are targets - the same
-        "we know nothing" rule that governs a progression with no timings at all.
+        "we know nothing" rule that governs a stated `(None, None, None)` entry.
         This is the guard `slots.arrange_slots` already applies to its own timings,
         for the same reason: a hand-built list must not silently shift the rhythm.
+        A progression given *no* list at all is a different case: `arrange_progression`
+        lays it out on the metre, so nothing of it is left unlocated.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            MINOR_CADENCE, timings=[(0, 2.0, None)], texture="targets"
+            MINOR_CADENCE, timings=[(0, 2.0, None)],
+            options=ArrangeOptions(request=Request(chord_notes="targets")),
         )
         self.assertEqual(len(steps), len(MINOR_CADENCE))
         self.assertEqual(steps[0].metric_weight, 0)
@@ -985,7 +995,7 @@ class TestTimingsDefensive(unittest.TestCase):
         steps = VoiceLeadingEngine.arrange_progression(
             MINOR_CADENCE,
             timings=[(bar, 1.0, None) for bar in range(20)],
-            texture="targets",
+            options=ArrangeOptions(request=Request(chord_notes="targets")),
         )
         self.assertEqual(len(steps), len(MINOR_CADENCE))
 
@@ -1000,30 +1010,34 @@ class TestTimingsDefensive(unittest.TestCase):
         timed = VoiceLeadingEngine.arrange_progression(
             MINOR_CADENCE,
             timings=[(0, 1.0 + 0.5 * i, None) for i in range(len(MINOR_CADENCE))],
-            texture="targets",
+            options=ArrangeOptions(request=Request(chord_notes="targets")),
         )
         self.assertEqual([s.melody for s in plain], [s.melody for s in timed])
 
 
 class TestMelodyOnlySelections(unittest.TestCase):
-    """`parts=melody` and `parts=melody,bass`: the tune alone, and the tune
-    with a thumb under it.
+    """The tune alone, and the tune with a thumb under it.
 
     Both answer "lead sheet in, melody out". They are **part selections** rather
     than grips because what they change is *which parts sound at all* - a grip
     would have to win a cost comparison it should not be in, and
     `GRIP_PREFERENCE` deliberately leaves `melody` out for exactly that reason.
-    They were the `melody` and `melody_bass` textures, then the `voices=` axis,
-    and they are the `parts=` axis now - see `docs/history/one-fact.md` and
-    `docs/history/parts.md`.
+    See `docs/history/one-fact.md` and `docs/history/parts.md`.
     """
 
     PROGRESSION = BUT_NOT_FOR_ME
     TIMINGS = BUT_NOT_FOR_ME_TIMINGS
 
-    def arrange(self, parts, **kwargs):
+    #: The two selections this class is about, as the requests that derive them:
+    #: the tune alone, and the tune with a walk under it.
+    MELODY_ALONE = Request(chord_on="none")
+    MELODY_AND_BASS = Request(chord_on="none", bass_on="every-beat", bass_notes="walk")
+
+    def arrange(self, request):
         return VoiceLeadingEngine.arrange_progression(
-            self.PROGRESSION, timings=self.TIMINGS, parts=parts, **kwargs
+            self.PROGRESSION,
+            timings=self.TIMINGS,
+            options=ArrangeOptions(request=request),
         )
 
     def test_every_slot_is_the_melody_alone(self):
@@ -1035,8 +1049,11 @@ class TestMelodyOnlySelections(unittest.TestCase):
         test is that the **left hand** plays one note, and that is what the
         upper voices are.
         """
-        for parts in ("melody", "melody,bass"):
-            steps = self.arrange(parts)
+        for parts, request in (
+            ("melody", self.MELODY_ALONE),
+            ("melody,bass", self.MELODY_AND_BASS),
+        ):
+            steps = self.arrange(request)
             self.assertTrue(steps, parts)
             for step in steps:
                 self.assertEqual(step.grip, "melody", f"{parts} {step.melody}")
@@ -1060,9 +1077,12 @@ class TestMelodyOnlySelections(unittest.TestCase):
                 )
 
     def test_the_two_differ_only_in_the_thumb_line(self):
-        """`melody` alone has no bass; `melody,bass` walks one under every bar."""
-        for parts in ("melody", "melody,bass"):
-            steps = self.arrange(parts)
+        """The tune alone has no bass; the tune with a bass walks one under every bar."""
+        for parts, request in (
+            ("melody", self.MELODY_ALONE),
+            ("melody,bass", self.MELODY_AND_BASS),
+        ):
+            steps = self.arrange(request)
             with_bass = [s for s in steps if s.bass is not None]
             if parts == "melody":
                 self.assertEqual(with_bass, [], "melody alone must not carry a thumb")
@@ -1084,52 +1104,55 @@ class TestMelodyOnlySelections(unittest.TestCase):
         it, which is what `is_bass_only` decides from the role - so a bar of running
         notes must still sound every note it was given.
         """
-        played = [s.melody for s in self.arrange("melody,bass") if not s.bass_only]
+        played = [
+            s.melody for s in self.arrange(self.MELODY_AND_BASS) if not s.bass_only
+        ]
         self.assertEqual(
             played,
             [t[0] for t in self.PROGRESSION],
             "melody,bass dropped, duplicated or reordered the melody",
         )
 
-    def test_no_texture_can_thicken_a_melody_only_selection(self):
-        """A melody-only selection states the tune whatever the *other* axes say.
+    def test_no_chord_content_can_be_asked_of_a_melody_only_selection(self):
+        """A melody-only selection refuses a chord content choice, rather than ignoring it.
 
-        The loop hands it an empty chord palette without consulting the texture at
-        all - the selection means the left hand plays no chord whatever the arity
-        asks for - so no arity can add a voice to a line nobody asked to harmonise.
-
-        **Inverted rather than deleted.** It used to loop over `grips=("duo",)`,
-        `("shell",)` and so on, asserting the same thing about the axis that was
-        deleted; `texture=` is the axis that survived, and it is the one that can
-        change how many notes the chord part states.
+        A question about a layer the request leaves silent is answered with a reason, so a
+        `chord_notes` choice beside `chord_on="none"` is refused - and no arity can be
+        asked of a line nobody asked to harmonise. `chord_notes="full"` is the default
+        rather than a choice, so it is not refused.
         """
-        for parts in ("melody", "melody,bass"):
-            for texture in TEXTURE_STYLES:
-                steps = self.arrange(parts, texture=texture)
-                self.assertTrue(steps, f"{parts} {texture} produced nothing")
-                for step in steps:
-                    self.assertEqual(step.grip, "melody", f"{parts} {texture}")
+        for name, request in (
+            ("melody", self.MELODY_ALONE),
+            ("melody,bass", self.MELODY_AND_BASS),
+        ):
+            for chord_notes in CHORD_NOTES:
+                if chord_notes == CHORD_NOTES_FULL:
+                    continue
+                with self.subTest(selection=name, chord_notes=chord_notes):
+                    with self.assertRaises(ValueError) as caught:
+                        self.arrange(
+                            dataclasses.replace(request, chord_notes=chord_notes)
+                        )
+                    self.assertIn("chord-on=none", str(caught.exception))
 
     def test_a_solo_note_is_a_supported_single_string_set(self):
-        """A solo note is a singleton, and the invariant now says so.
+        """A solo note is a singleton, and the invariant says so.
 
-        **This assertion was inverted, not deleted.** It previously read
-        `assertNotIn(..., supported_string_sets())`, pinning the fact that a one-string
-        shape was *outside* the playability invariant. That was true and it was a real
-        gap: the invariant claims "the sounding strings are exactly one
-        `supported_string_sets()` entry", and a melody-only selection violates it on every
-        slot, so the library shipped shapes it had not agreed to be playable.
+        A one-string shape is *inside* the playability invariant: it claims "the sounding
+        strings are exactly one `supported_string_sets()` entry", and a melody-only
+        selection sounds one string on every slot, so a singleton entry is what makes that
+        claim true of it rather than an exception to it.
 
-        `grips.SINGLE_NOTE_STRING_SETS` fixes that rather than excusing it: one note on
+        `grips._SINGLE_NOTE_STRING_SETS` fixes that rather than excusing it: one note on
         one string has no span to exceed and no second voice to clash with, so it is
         playable anywhere, and `supported_string_sets()` now lists all six singletons.
         The claim this test protects is unchanged - that the solo note is one string, and
         that the library says so in one place - only the direction of it has moved.
 
         Measured alongside: the same gap existed for the one-note *comping* shape, which
-        `SINGLE_NOTE_STRING_SETS` also closes; see `tests/test_comping.py`.
+        `_SINGLE_NOTE_STRING_SETS` also closes; see `tests/test_comping.py`.
         """
-        for step in self.arrange("melody"):
+        for step in self.arrange(self.MELODY_ALONE):
             self.assertEqual(len(step.voicing.active_frets()), 1)
             self.assertIn(
                 frozenset(step.voicing.active_strings),
@@ -1150,7 +1173,8 @@ class TestTargetsTexture(unittest.TestCase):
 
     def setUp(self):
         self.steps = VoiceLeadingEngine.arrange_progression(
-            self.PROGRESSION, timings=self.TIMINGS, texture="targets"
+            self.PROGRESSION, timings=self.TIMINGS,
+            options=ArrangeOptions(request=Request(chord_notes="targets")),
         )
         self.assertEqual(len(self.steps), len(self.PROGRESSION))
 
@@ -1201,10 +1225,12 @@ class TestTargetsTexture(unittest.TestCase):
         the strong beats.
         """
         uniform = VoiceLeadingEngine.arrange_progression(
-            self.PROGRESSION, timings=self.TIMINGS, texture="uniform"
+            self.PROGRESSION, timings=self.TIMINGS,
+            options=ArrangeOptions(request=Request(chord_notes="full")),
         )
         targets = VoiceLeadingEngine.arrange_progression(
-            self.PROGRESSION, timings=self.TIMINGS, texture="targets"
+            self.PROGRESSION, timings=self.TIMINGS,
+            options=ArrangeOptions(request=Request(chord_notes="targets")),
         )
 
         def mean_voices(steps):
@@ -1247,7 +1273,7 @@ class TestTargetsTexture(unittest.TestCase):
             self.assertIsNotNone(root)
             tones = set(
                 arranger.ChordParser.get_chord_tones(
-                    arranger.ChordParser.canonical_quality(quality or ""), step.chord
+                    step.chord
                 )
             )
             harmony = tones | {max(step.voicing.midi_notes()) % 12}
@@ -1279,9 +1305,9 @@ class TestTargetsTexture(unittest.TestCase):
         nothing to say about it - and it must still be flagged melody_only.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("C5", "NC", "NC"), ("C5", "maj7", "Fmaj7")],
+            [("C5", "NC"), ("C5", "Fmaj7")],
             timings=[(0, 2.0, None), (0, 1.0, None)],
-            texture="targets",
+            options=ArrangeOptions(request=Request(chord_notes="targets")),
         )
         self.assertTrue(steps[0].melody_only)
         self.assertEqual(len(steps[0].voicing.active_frets()), 1)
@@ -1303,14 +1329,14 @@ class TestTargetsTexture(unittest.TestCase):
         a target - never a fill that quietly got thick.
         """
         checked = 0
-        for quality, chord in (
+        for _quality, chord in (
             ("maj7", "Fmaj7"), ("m7", "Dm7"), ("7", "G7"), ("m7b5", "Bm7b5"),
         ):
             for melody in ("C5", "A4", "F4", "E4"):
                 steps = VoiceLeadingEngine.arrange_progression(
-                    [(melody, quality, chord)],
+                    [(melody, chord)],
                     timings=[(0, 2.0, None)],
-                    texture="targets",
+                    options=ArrangeOptions(request=Request(chord_notes="targets")),
                 )
                 for step in steps:
                     checked += 1
@@ -1352,10 +1378,10 @@ class TestIntervalGrip(unittest.TestCase):
         string set, with the melody on top.
         """
         checked = 0
-        for quality, name in self.QUALITIES:
+        for _quality, name in self.QUALITIES:
             for melody in ("C5", "E5", "A4", "G4", "B4"):
                 for voicing in VoiceLeadingEngine.get_interval_voicings(
-                    Note(melody), quality, chord_name=name
+                    Note(melody), chord_name=name
                 ):
                     checked += 1
                     active = voicing.active_frets()
@@ -1378,10 +1404,10 @@ class TestIntervalGrip(unittest.TestCase):
     def test_the_two_notes_are_a_third_or_a_sixth_apart(self):
         """A 3rd, a 6th or a 10th - the intervals the guide names, and no others."""
         allowed = {3, 8, 9}
-        for quality, name in self.QUALITIES:
+        for _quality, name in self.QUALITIES:
             for melody in ("C5", "A4", "G4"):
                 for voicing in VoiceLeadingEngine.get_interval_voicings(
-                    Note(melody), quality, chord_name=name
+                    Note(melody), chord_name=name
                 ):
                     low, high = sorted(voicing.midi_notes())
                     self.assertIn((high - low) % 12, allowed, f"{name} under {melody}")
@@ -1394,26 +1420,23 @@ class TestIntervalGrip(unittest.TestCase):
         The guide asks for "2-note intervals (3rds or 6ths)" as a *fill*, so a 3rd or a
         7th in the melody has to be playable.
 
-        The second half of this test was **inverted rather than deleted**. It used to
-        assert that a duo refuses those same three melodies, and cited that refusal as
-        the reason `interval` is a distinct family. A duo no longer refuses them: its
-        second voice is the chord's guide tone, and a guide tone *beneath* a 3rd or a 7th
-        is what states the chord's function rather than losing it. So the distinction
-        between the two families is no longer the melody degree, and asserting the old
-        difference would assert a rule the engine does not have.
+        A duo does not refuse those melodies: its second voice is the chord's guide tone,
+        and a guide tone *beneath* a 3rd or a 7th is what states the chord's function
+        rather than losing it. So the distinction between the two families is not the
+        melody degree, and the second half of this test asserts what it is instead.
 
         What still distinguishes them is asserted below: a duo is a **harmony** and must
         sound a guide tone, while an interval is a **texture** and pairs the melody with
         whichever of a 3rd, 6th or 10th it can reach - including, for a non-chord tone, a
         note of the prevailing key rather than of the chord.
         """
-        for quality, name, melody in (
+        for _quality, name, melody in (
             ("m7", "Dm7", "C5"),
             ("7", "D7", "F#4"),
             ("maj7", "Dmaj7", "C#5"),
         ):
             voicings = VoiceLeadingEngine.get_all_grip_voicings(
-                Note(melody), quality, chord_name=name, grips=("interval",)
+                Note(melody), chord_name=name, grips=("interval",)
             )
             self.assertTrue(voicings, f"no interval under {melody} for {name}")
 
@@ -1423,7 +1446,7 @@ class TestIntervalGrip(unittest.TestCase):
         and its second voice is the chord's guide tone.
 
         This is what makes the pair above a *harmony* rather than a renamed interval -
-        the assertion the old "a duo refuses these" check used to stand for.
+        is the claim this asserts.
         """
         for quality, name, melody in (
             ("m7", "Dm7", "C5"),      # the b7 in the melody
@@ -1431,7 +1454,7 @@ class TestIntervalGrip(unittest.TestCase):
             ("maj7", "Dmaj7", "C#5"),  # the major 7th in the melody
         ):
             duos = VoiceLeadingEngine.get_all_grip_voicings(
-                Note(melody), quality, chord_name=name, grips=("duo",)
+                Note(melody), chord_name=name, grips=("duo",)
             )
             self.assertTrue(duos, f"no duo under {melody} for {name}")
             guide = set(SHELL_DEGREES[quality])
@@ -1451,13 +1474,16 @@ class TestIntervalGrip(unittest.TestCase):
 
     def test_no_interval_without_a_chord_root(self):
         """
-        With no chord name there are no guide tones to measure from, so nothing is
-        generated.
+        With no chord root there are no guide tones to measure from, so nothing is
+        generated - and the symbol is refused rather than guessed at.
 
         The same argument as the shell: an interval named against a chord we cannot
-        identify is a guess, and a guess here is how a wrong note gets in.
+        identify is a guess, and a guess here is how a wrong note gets in. It is a
+        refusal rather than an empty list, because a symbol with no root has no quality
+        to measure from either.
         """
-        self.assertEqual(VoiceLeadingEngine.get_interval_voicings(Note("C5"), "maj7"), [])
+        with self.assertRaises(ValueError):
+            VoiceLeadingEngine.get_interval_voicings(Note("C5"), chord_name="maj7")
 
     def test_offsets_are_empty_rather_than_guessed_for_an_unknown_quality(self):
         """A quality with no tone set yields no intervals at all."""
@@ -1469,11 +1495,10 @@ class TestARepeatedMelodyHoldsItsString(unittest.TestCase):
 
     A `repeated` step is a **hold**: the renderers strike its soprano alone and let the
     inner voices ring. That is only true if the melody is where the previous step's
-    finger already is - and the selector used to be free to move it. Span outranks neck
-    position in `voicing_cost`, and a fill's thin palette has a compact shape whose top
-    note sits on a different string, so a bar of four identical notes read as a
-    four-fret jump and the chord the step had just voiced was muted by a rule that meant
-    "hold what is already ringing".
+    finger already is. Span outranks neck position in `voicing_cost`, and a fill's thin
+    palette has a compact shape whose top note sits on a different string, so a bar of
+    four identical notes can read as a four-fret jump - and then the chord the step had
+    just voiced is muted by a rule that means "hold what is already ringing".
 
     Two halves of one claim, which is why the last test here is a sweep rather than the
     bar the report came from: `decisions.hold_the_melody_string` narrows the candidates
@@ -1484,14 +1509,14 @@ class TestARepeatedMelodyHoldsItsString(unittest.TestCase):
     def test_a_fill_on_a_repeated_note_keeps_the_melody_string(self):
         """The reported bar, reduced: four G4s over `Eb7` under `--texture targets`.
 
-        Beats 1 and 3 are targets and beats 2 and 4 are fills. Measured before the fix,
-        the soprano string ran `[4, 3, 4, 3]` - the B string for the targets and the G
-        string for the fills, four frets apart, on a note that never moves.
+        Beats 1 and 3 are targets and beats 2 and 4 are fills, and the melody string must
+        not move between them: a fill that re-places the tune four frets away on a note
+        that never moves is the defect this pins.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("G4", "7", "Eb7")] * 4,
+            [("G4", "Eb7")] * 4,
             timings=[(0, float(beat), None) for beat in (1, 2, 3, 4)],
-            texture="targets",
+            options=ArrangeOptions(request=Request(chord_notes="targets")),
         )
         self.assertEqual([step.melody for step in steps], ["G4"] * 4)
         self.assertEqual(
@@ -1510,7 +1535,8 @@ class TestARepeatedMelodyHoldsItsString(unittest.TestCase):
         from headxml import arrange_xml_head
 
         steps, _head, _notes = arrange_xml_head(
-            "tests/data/synthetic_common_8.musicxml", texture="targets"
+            "tests/data/synthetic_common_8.musicxml",
+            options=ArrangeOptions(request=Request(chord_notes="targets")),
         )
         bar_three = [step for step in steps if step.bar == 3]
         self.assertEqual([step.melody for step in bar_three], ["G4"] * 4)
@@ -1576,16 +1602,16 @@ class TestARepeatedMelodyHoldsItsString(unittest.TestCase):
 
         paths = sweep_head_paths()
         configs = (
-            ("uniform", "auto"),
-            ("targets", "auto"),
-            ("targets", BASS_STYLE_WALK),
-            ("targets", "root"),
-            ("chord1", BASS_STYLE_WALK),
+            Request(chord_notes="full"),
+            Request(chord_notes="targets"),
+            Request(chord_notes="targets", bass_on="every-beat", bass_notes="walk"),
+            Request(chord_notes="targets", bass_on="1", bass_notes="root"),
+            Request(chord_notes="1", bass_on="every-beat", bass_notes="walk"),
         )
         checked = held = 0
         for path in paths:
-            for texture, bass in configs:
-                steps, _head, _notes = arranged(path, texture=texture, bass=bass)
+            for request in configs:
+                steps, _head, _notes = arranged(path, request=request)
                 for previous, step in zip(steps, steps[1:]):
                     if step.bass_only:
                         held += 1

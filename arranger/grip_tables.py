@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import Dict, List, Tuple
 
 from .chords import ChordParser
-from .tuning import MELODY_STRING_CHOICES_FULL, Voicing
+from .tuning import MELODY_STRING_CHOICES_FULL
 
 # Grip families, in the order they are generated in - which is *also* the order an exact
 # tie is broken in: `cost.best_voicing` is a stable `min` and no criterion in
@@ -44,8 +44,7 @@ from .tuning import MELODY_STRING_CHOICES_FULL, Voicing
 # §"Known limitations" holds the reachability measurement.
 #
 # `drop3` and `drop24` are here because a melody that is *not* a chord tone leaves drop-2
-# with no template and no shell, so its quality-only fallback offers shapes carrying notes
-# the chord does not contain. Both derive from the close stack under the melody, which
+# with no template and no shell, so it offers no drop-2 shape for that melody at all. Both derive from the close stack under the melody, which
 # keeps every *other* voice a chord tone, so offering them is what puts a correct voicing
 # in the candidate set for the selector to find - see `cost.voicing_cost`, whose first
 # criterion counts wrong notes rather than flagging them.
@@ -126,9 +125,8 @@ GRIP_STRING_SETS: Dict[str, Tuple[Tuple[Tuple[int, ...], int], ...]] = {
     #
     # No set here skips an *inner* string: the digit that takes a string above an
     # unplucked one has to reach over it, and that is the right hand's cost rather than
-    # the left's. `finger_skip_count` states the rule, `docs/engine.md` records the price
-    # of the four sets removed for it, and `tests/test_grip_tables.py` holds every reachable set
-    # to it.
+    # the left's. `docs/engine.md` records the price of the four sets removed for it, and
+    # `tests/test_grip_tables.py` states the rule and holds every reachable set to it.
     #
     # Stored as **string indices**, high to low, like every other entry - so the
     # conventional numbers read 1-2-4-5 as (5, 4, 2, 1). Written the other way round these
@@ -310,11 +308,12 @@ BOTTOM_FOUR = frozenset((0, 1, 2, 3))
 # (`BOTTOM_FOUR`) is about four voices crowding there, and does not apply to one.
 #
 # An invariant a shape can violate is not an invariant, and the one-voice comping shape is
-# what showed it: it is generated on the *top* string of a `duo` pair - strings 5, 4 and 3 -
-# while `tests/test_grips.py` asserted the invariant per *shape* and only for its note
+# what showed it: it is generated on the *top* string of a `duo` pair - strings 4 and 3,
+# once `COMPING_EXCLUDED_STRINGS` has taken the high E off the comping part - while
+# `tests/test_grips.py` asserted the invariant per *shape* and only for its note
 # count, so nothing noticed. Which of the six a given voice *may* use is a separate
 # question, and that question is `BASS_VOICE_STRING_SETS` below.
-SINGLE_NOTE_STRING_SETS: Tuple[Tuple[int, ...], ...] = tuple((s,) for s in range(6))
+_SINGLE_NOTE_STRING_SETS: Tuple[Tuple[int, ...], ...] = tuple((s,) for s in range(6))
 
 
 # The strings a **single bass voice** may occupy: the bottom three - low E, A and D.
@@ -346,9 +345,9 @@ def supported_string_sets() -> List[frozenset]:
     The bottom four strings are excluded, deliberately: see `BOTTOM_FOUR`.
 
     The single-string sets are included, and that is a **consequence** rather than an
-    addition: `SINGLE_NOTE_STRING_SETS` states that one note on one string is playable
+    addition: `_SINGLE_NOTE_STRING_SETS` states that one note on one string is playable
     anywhere, and an invariant a shape can violate is not an invariant. See
-    `SINGLE_NOTE_STRING_SETS` for how the one-note comping shape showed it.
+    `_SINGLE_NOTE_STRING_SETS` for how the one-note comping shape showed it.
     """
     sets = {
         frozenset(range(top - 3, top + 1))
@@ -357,7 +356,7 @@ def supported_string_sets() -> List[frozenset]:
     }
     for shapes in GRIP_STRING_SETS.values():
         sets.update(frozenset(strings) for strings, _ in shapes)
-    sets.update(frozenset(strings) for strings in SINGLE_NOTE_STRING_SETS)
+    sets.update(frozenset(strings) for strings in _SINGLE_NOTE_STRING_SETS)
     return sorted(sets, key=lambda s: sorted(s))
 
 
@@ -417,55 +416,6 @@ def thumb_safe_grips(palette: Tuple[str, ...]) -> Tuple[str, ...]:
     return tuple(g for g in safe if grip_pluck_count(g) == widest)
 
 
-# The strings the right hand's **thumb** can reach: the four lowest, E A D G. A gap between
-# two sounding strings is normally the thumb's - the thumb is on the bottom note and the
-# index on the next string up - so the gap only stops being the thumb's where the note under
-# it is above this reach. Measured in `docs/history/fingering.md` §4.4, where narrowing §2.5's
-# exemption to this reach moved no count at all: it is the reach the tables already respect.
-THUMB_REACH_STRINGS = frozenset((0, 1, 2, 3))
-
-
-def finger_skip_count(voicing: Voicing) -> int:
-    """How many strings a finger has to cross to fret `voicing`: 0, 1, 2 or 3.
-
-    The right hand's second question, after how many strings are plucked. Four adjacent
-    strings are no trouble whatever the shape: the thumb takes the bottom note and each
-    finger the next string up. The trouble is a **gap** - a string sounding with a silent
-    one between it and the string below - because the digit that would take it has to
-    reach over a string it is not using, and that is the middle or the ring finger's cost
-    (`docs/history/fingering.md` §2.5).
-
-    The bottom gap is the exception, and it is checked on the **lowest sounding string**:
-    while that string is inside the thumb's reach the thumb is the digit on the bottom
-    note, so the gap above it is the index's and costs nothing - which is exactly the
-    bass-skipping rule this table's four-note sets were built on. Any *other* gap is
-    counted, so `(5,4,2,1)` answers 1 - the middle crosses the G - while `(5,4,3,1)`
-    answers 0, its gap being the bottom one.
-
-    Note the direction of the asymmetry: the exemption is for the **first** gap only, so a
-    set whose bottom note is inside the reach and whose *second* gap is not still counts
-    that second gap. Where the bottom note sits above the reach, every gap counts.
-
-    This is a **shape**-level rule, which is the limit of its reach: a `bass_only` step
-    merges a thumb note in *after* selection, so that gap is invisible here and §4.4
-    measures the merged case at step level instead. And no selector reads this at all -
-    the engine enforces the rule by **not offering** the shapes that fail it, so no
-    inner-skip `drop24` set is in the table above. Only the `(5,3,2)`
-    shell can answer nonzero, kept on purpose for the walking bass's three-layer
-    split; `tests/test_grip_tables.py` is what holds the tables to it.
-    """
-    sounded = sorted(index for index, fret in enumerate(voicing.frets) if fret >= 0)
-    total = 0
-    for position in range(1, len(sounded)):
-        gap = sounded[position] - sounded[position - 1] - 1
-        if gap <= 0:
-            continue
-        if position == 1 and sounded[0] in THUMB_REACH_STRINGS:
-            continue           # the thumb has the bottom note: the index's gap, not a skip
-        total += gap
-    return total
-
-
 def stated_tones(
     quality: str, melody_degree: int, voices: int = 4
 ) -> Tuple[int, ...]:
@@ -501,10 +451,23 @@ def stated_tones(
 INTERVAL_NAMES: Dict[int, str] = {3: "3rd", 8: "b6", 9: "6th"}
 
 
-def comping_string_sets(
-    notes: int, bass_voice: bool = False
-) -> List[Tuple[int, ...]]:
-    """The string sets a comping shape of `notes` voices may occupy, most preferred first.
+# The one string a **comping shape** never sounds, whatever its arity: the high E.
+#
+# It is the string the tune itself is pinned to first (`MELODY_STRING_CHOICES_FULL` tries
+# it before the B and the G), and a comping part has no tune to put there. A shape whose
+# top voice sits on it is therefore heard as a melody - and heard *above* the horn that is
+# playing the real one, which is the opposite of what a comping part is for.
+#
+# Every set that carries it has it as its **soprano** (it is the highest string there is),
+# so the filter below reads as one sentence: a comping shape never puts its top voice on
+# the high E. Dropping the sets is what makes that a property of the palette rather than a
+# criterion in `cost.voicing_cost`; `docs/engine.md` §"`get_comping_voicings`: a chord with
+# no melody on top" holds the register that buys and what it costs in shapes.
+COMPING_EXCLUDED_STRINGS: Tuple[int, ...] = (5,)
+
+
+def _comping_family(notes: int, bass_voice: bool) -> List[Tuple[int, ...]]:
+    """The sets the arity's own family offers, before the high E is taken off them.
 
     **The arity picks the family, rather than truncating one.** Truncating a `shell` set
     to two strings looks free and is not: it yields pairs the library has never vetted -
@@ -516,6 +479,30 @@ def comping_string_sets(
     Three notes take the `shell` sets unchanged, which is the whole point of the shell.
     One note takes the `duo` sets' top strings, since a single note is the limiting case
     of a pair and any of those strings will do.
+    """
+    if notes <= 1:
+        if bass_voice:
+            return list(BASS_VOICE_STRING_SETS)
+        return [(strings[0],) for strings, _ in GRIP_STRING_SETS["duo"]]
+    if notes == 2:
+        return [strings for strings, _ in GRIP_STRING_SETS["duo"]]
+    return [strings for strings, _ in GRIP_STRING_SETS["shell"]]
+
+
+def comping_string_sets(
+    notes: int, bass_voice: bool = False
+) -> List[Tuple[int, ...]]:
+    """The string sets a comping shape of `notes` voices may occupy, most preferred first.
+
+    **The high E is not offered at any arity** (`COMPING_EXCLUDED_STRINGS` carries the
+    reason). The sets that carry it are dropped rather than ranked lower, so the rule is a
+    property of the palette the generator is handed and no criterion has to know about it -
+    and no arity reaches the string, because every family is filtered by the same constant.
+    Which family an arity takes, and why it is not a truncated one, is `_comping_family`.
+
+    **A set is offered once.** Two `duo` pairs share the G string as their top, so the
+    one-note arity would otherwise name the same shape twice - harmless to the ranking, and
+    wrong as a palette: it hands the selector the identical candidate twice.
 
     **`bass_voice` moves the one-note case to the bottom of the neck, and it is a
     different question rather than a different arity.** "A single note is the limiting
@@ -526,17 +513,16 @@ def comping_string_sets(
 
     This is why the flag is a parameter and not a fourth arity: `alto`, `tenor` and `bass`
     all request **one note** and all reach this function, so arity alone cannot tell them
-    apart. See `docs/history/voices-axis.md` §8a for what that cost.
-
-    It applies only at arity one, because that is the only arity where the selection
-    names nothing but the bass: at two or more voices the shape is a pair or a shell
-    whose lowest note is placed by its own string set, and moving that would be
-    re-deciding a shape that is already correct.
+    apart. See `docs/history/voices-axis.md` §8a for what that cost. It applies only at
+    arity one, the only arity whose selection names nothing but the bass: at two or more
+    voices the lowest note is placed by the shape's own string set, and moving that would
+    re-decide a shape that is already correct.
     """
-    if notes <= 1:
-        if bass_voice:
-            return list(BASS_VOICE_STRING_SETS)
-        return [(strings[0],) for strings, _ in GRIP_STRING_SETS["duo"]]
-    if notes == 2:
-        return [strings for strings, _ in GRIP_STRING_SETS["duo"]]
-    return [strings for strings, _ in GRIP_STRING_SETS["shell"]]
+    # One pass, because both rules are about a set that must not be *offered* rather than
+    # about a shape that must not be chosen.
+    offered: List[Tuple[int, ...]] = []
+    for strings in _comping_family(notes, bass_voice):
+        if set(strings) & set(COMPING_EXCLUDED_STRINGS) or strings in offered:
+            continue
+        offered.append(strings)
+    return offered

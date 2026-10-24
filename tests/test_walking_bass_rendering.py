@@ -15,9 +15,8 @@ import unittest
 from typing import List
 
 from arranger import (
-    BASS_STRING_INDICES,
-    ROLE_TARGET,
     ArrangementStep,
+    Request,
     VoiceLeadingEngine,
     format_progression,
     format_tab_html,
@@ -30,6 +29,8 @@ from arranger import (
 # surface for the benefit of one test file. `test_bass.py` covers them directly for
 # the same reason.
 from arranger.annotation import step_annotation
+from arranger.bass_rules import BASS_STRING_INDICES
+from arranger.tuning import ROLE_TARGET
 from tabgp import _sounding_frets
 from tabstaff import _strikes_here
 from tests.support import (
@@ -67,7 +68,7 @@ class TestWalkingBassRendering(unittest.TestCase):
         # The plan's own worked example, bar 1: one melody slot - a whole note - over
         # one chord, which the union turns into four steps. Chosen because it is the
         # case every rule here exists for: a held melody with a moving thumb.
-        self.steps = walk([("F5", "maj7", "Fmaj7")], [(0, 1.0)])
+        self.steps = walk([("F5", "Fmaj7")], [(0, 1.0)])
         self.staff = format_tab_staff(self.steps, show_melody=True)
 
     def sounded(self, step: ArrangementStep) -> List[int]:
@@ -216,7 +217,7 @@ class TestWalkingBassRendering(unittest.TestCase):
 
     def test_the_annotation_names_the_bass_and_its_role(self):
         """
-        The role is printed because the thumb is no longer uniformly chord tones, so a
+        The role is printed because the thumb is not uniformly chord tones, so a
         reader counting strings would wonder why the bass is not playing the chord.
 
         The connect note on the fill is `E2`, not `E3`: the hand is at the open position
@@ -261,28 +262,49 @@ class TestWalkingBassRendering(unittest.TestCase):
         self.assertNotIn("(bass:", rendered)
         self.assertNotIn("bass:", format_tab_html(steps))
 
-    """The documented degradation, asserted rather than left silent."""
+    """How far the walk reaches: the metre's own layout, and a stated absence of one."""
 
-    def test_without_a_beat_grid_the_walk_is_one_note_per_slot(self):
-        """
-        `timings=None` gives nothing to place four quarters on, so the texture degrades
-        to one anchor per slot.
+    def test_the_metres_layout_gives_the_walk_four_quarters(self):
+        """A hand-built progression is laid out on the felt beats, so the walk places four.
 
-        This is the path every hand-written caller takes, which is exactly why it is
-        worth a test: a silent degradation here would read as "the feature does
-        nothing" rather than as a documented limit of the grid.
+        Two chords in 4/4 make one bar of four positions, and the thumb walks them: an
+        anchor on each chord and a connection between. The degradation in the next test is
+        for a caller who *states* no positions, which is a different request.
         """
-        steps = walk([("F5", "maj7", "Fmaj7"), ("G4", "maj7", "Gmaj7")])
+        steps = walk([("F5", "Fmaj7"), ("G4", "Gmaj7")])
+        self.assertEqual(
+            [(step.bar, step.beat) for step in steps],
+            [(1, 1.0), (1, 2.0), (1, 3.0), (1, 4.0)],
+        )
+        self.assertEqual(
+            [step.bass_role for step in steps], ["anchor", "connect", "anchor", "connect"]
+        )
+        self.assertEqual([bass_name(step) for step in steps], ["F", "F#", "G", "F#"])
+
+    def test_an_unplaced_timeline_degrades_to_one_note_per_slot(self):
+        """`(None, None, None)` gives nothing to place four quarters on, so it anchors.
+
+        This is the path a caller takes who knows a position is *not* on the metre - and
+        it is worth a test of its own, because a silent degradation here would read as
+        "the feature does nothing" rather than as a documented limit of the grid.
+        """
+        steps = VoiceLeadingEngine.arrange_progression(
+            [("F5", "Fmaj7"), ("G4", "Gmaj7")],
+            timings=[(None, None, None)] * 2,
+            request=Request(
+                chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+            ),
+        )
         self.assertEqual(len(steps), 2)
         self.assertEqual([step.bass_role for step in steps], ["anchor", "anchor"])
         self.assertEqual([bass_name(step) for step in steps], ["F", "G"])
 
-    def test_the_upper_voices_are_still_there_without_a_grid(self):
+    def test_the_upper_voices_are_still_there_on_a_single_note(self):
         """
-        The degradation costs the walk, not the arrangement: with no timing every slot
-        is a target, so each is a shell as it always would be.
+        The degradation costs the walk, not the arrangement: one position on a strong beat
+        is a target, so it is a shell as it always would be.
         """
-        steps = walk([("F5", "maj7", "Fmaj7")])
+        steps = walk([("F5", "Fmaj7")])
         self.assertEqual(steps[0].role, ROLE_TARGET)
         self.assertEqual(steps[0].voicing.grip, "shell")
         self.assertEqual(len(upper_pitches(steps[0])), 3)

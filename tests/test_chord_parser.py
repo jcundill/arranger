@@ -3,6 +3,14 @@ import unittest
 from musthe import Note
 
 from arranger import ChordParser, melody_degree_name
+from arranger.chords import (
+    ChordSymbol,
+    parse_symbol,
+    promote_slash_chord,
+    slash_bass,
+    split_slash,
+)
+from arranger.tuning import PITCH_CLASS_NAMES
 
 
 class TestChordParser(unittest.TestCase):
@@ -70,8 +78,22 @@ class TestChordToneSets(unittest.TestCase):
             ("min6", "m6"),
             ("mmaj7", "mMaj7"),
             ("minMaj7", "mMaj7"),
+            ("m(maj7)", "mMaj7"),
+            ("min(maj7)", "mMaj7"),
+            ("mM7", "mMaj7"),
+            ("-M7", "mMaj7"),
+            ("mi7", "m7"),
+            ("m7(b5)", "m7b5"),
+            ("m7-5", "m7b5"),
             ("M9", "maj9"),
+            ("∆7", "maj7"),
+            ("Δ7", "maj7"),
+            ("Ma7", "maj7"),
+            ("ma7", "maj7"),
+            ("M6", "6"),
             ("69", "6/9"),
+            ("+7", "7#5"),
+            ("aug7", "7#5"),
             ("  m7  ", "m7"),
             # triads and suspended chords ("dim" deliberately still means dim7)
             ("M", "maj"),
@@ -90,22 +112,27 @@ class TestChordToneSets(unittest.TestCase):
         self.assertEqual(ChordParser.canonical_quality(""), "")
         self.assertEqual(ChordParser.canonical_quality(None), "")
 
-    def test_get_chord_tones_relative_to_root(self):
-        """Without a chord name the tones are pitch classes relative to the root."""
-        self.assertEqual(ChordParser.get_chord_tones("maj7"), (0, 4, 7, 11))
-        self.assertEqual(ChordParser.get_chord_tones("m7"), (0, 3, 7, 10))
+    def test_a_bare_quality_is_not_a_chord(self):
+        """`get_chord_tones` reads a *symbol*: a quality with no root has no tones.
 
-    def test_get_chord_tones_absolute_with_chord_name(self):
-        """With a chord name the pitch classes are absolute."""
-        self.assertEqual(ChordParser.get_chord_tones("maj7", "Cmaj7"), (0, 4, 7, 11))
-        self.assertEqual(ChordParser.get_chord_tones("maj7", "Dmaj7"), (2, 6, 9, 1))
+        The relative reading is gone with the quality field - a tone set without a root
+        is exactly the thing a caller had to add the root back to, and that is the
+        second spelling this change removes.
+        """
+        with self.assertRaises(ValueError):
+            ChordParser.get_chord_tones("maj7")
+
+    def test_get_chord_tones_reads_the_symbol(self):
+        """The pitch classes are absolute, read from the name's own root."""
+        self.assertEqual(ChordParser.get_chord_tones("Cmaj7"), (0, 4, 7, 11))
+        self.assertEqual(ChordParser.get_chord_tones("Dmaj7"), (2, 6, 9, 1))
         # The root is included even though a 7b9 is voiced rootless
-        self.assertEqual(ChordParser.get_chord_tones("7b9", "G7b9"), (7, 8, 11, 2, 5))
+        self.assertEqual(ChordParser.get_chord_tones("G7b9"), (7, 8, 11, 2, 5))
 
-    def test_get_chord_tones_unknown_quality_is_empty(self):
-        """An unsupported quality has no known tones."""
-        self.assertEqual(ChordParser.get_chord_tones("not-a-chord"), ())
-        self.assertEqual(ChordParser.get_chord_tones("not-a-chord", "Cnot-a-chord"), ())
+    def test_get_chord_tones_unknown_quality_is_refused(self):
+        """An unsupported quality has no known tones, and the resolver says so."""
+        with self.assertRaises(ValueError):
+            ChordParser.get_chord_tones("not-a-chord")
 
 
 class TestWidenedQualityVocabulary(unittest.TestCase):
@@ -128,21 +155,32 @@ class TestWidenedQualityVocabulary(unittest.TestCase):
         ("m9b5", (0, 2, 3, 6, 10)),
     ]
 
-    def test_relative_tone_sets(self):
+    def test_the_widened_vocabularies_tone_sets(self):
+        """Every widened quality's tone set, read off a C-rooted symbol.
+
+        The table is written root-relative for readability, which is what the numbers
+        are; the reading is absolute, so the symbol carries the C the numbers are
+        measured from.
+        """
         for quality, tones in self.NEW_QUALITIES:
-            self.assertEqual(ChordParser.get_chord_tones(quality), tones, quality)
+            self.assertEqual(
+                ChordParser.get_chord_tones("C" + quality), tones, quality
+            )
 
     def test_absolute_tone_sets(self):
-        self.assertEqual(ChordParser.get_chord_tones("7sus4", "G7sus4"), (7, 0, 2, 5))
-        self.assertEqual(ChordParser.get_chord_tones("m9b5", "Am9b5"), (9, 11, 0, 3, 7))
-        self.assertEqual(ChordParser.get_chord_tones("aug", "Caug"), (0, 4, 8))
+        self.assertEqual(ChordParser.get_chord_tones("G7sus4"), (7, 0, 2, 5))
+        self.assertEqual(ChordParser.get_chord_tones("Am9b5"), (9, 11, 0, 3, 7))
+        self.assertEqual(ChordParser.get_chord_tones("Caug"), (0, 4, 8))
 
-    def test_bare_major_chord_symbol_is_not_assumed(self):
-        """A name with no written quality ('C') is not guessed to be a major
-        triad; the caller spells it, e.g. 'Cmaj' or 'M'."""
+    def test_a_bare_root_is_a_major_triad(self):
+        """A letter on its own is a major triad, which is a fact about the notation.
+
+        The tolerant splitter still reports no *written* quality, and that reading is
+        what the renderers keep; the engine's own resolver reads a bare root as `maj`,
+        because a letter on its own in a lead sheet is a major triad rather than a guess.
+        """
         self.assertEqual(ChordParser.parse_chord_name("C"), ("C", ""))
-        self.assertEqual(ChordParser.get_chord_tones(""), ())
-        self.assertEqual(ChordParser.get_chord_tones("", "C"), ())
+        self.assertEqual(ChordParser.get_chord_tones("C"), (0, 4, 7))
 
 
 class TestMelodyDegreeName(unittest.TestCase):
@@ -210,6 +248,166 @@ class TestMelodyDegreeName(unittest.TestCase):
         """No root or no tone set means no claim, rather than a guessed degree."""
         for chord in ("NC", "", None, "X7"):
             self.assertEqual(melody_degree_name(Note("C5"), chord), "", chord)
+
+
+class TestSplitSlash(unittest.TestCase):
+    """Where a chord symbol's slash bass begins, and where the body ends.
+
+    **The rule is the note letter.** A `/` followed by a note letter asks for a bass, and
+    it is the *last* such slash that counts, because a body may carry a slash of its own:
+    `6/9` is the one quality spelled with one, and `9` is not a note letter.
+
+    A split on the first slash instead loses `C6/9/E`'s bass and reads `C6/9` as a `6`,
+    whose tone set is missing the 9th - a wrong chord that raises nothing, because both
+    `6` and `6/9` are legal.
+    """
+
+    def test_a_note_letter_after_the_slash_is_the_bass(self):
+        """The ordinary case: the body is everything before the slash."""
+        self.assertEqual(split_slash("Dm7/G"), ("Dm7", "G"))
+        self.assertEqual(split_slash("D/C"), ("D", "C"))
+        self.assertEqual(split_slash("Gmaj9/F#"), ("Gmaj9", "F#"))
+        self.assertEqual(split_slash("A-/G"), ("A-", "G"))
+
+    def test_a_six_nine_chord_is_a_quality_not_a_bass(self):
+        """`9` is not a note letter, so `C6/9` has no bass and keeps its whole body."""
+        self.assertEqual(split_slash("C6/9"), ("C6/9", None))
+
+    def test_a_slash_bass_on_a_six_nine_chord_is_still_a_bass(self):
+        """The last slash decides, so a body may carry one of its own."""
+        self.assertEqual(split_slash("C6/9/E"), ("C6/9", "E"))
+        self.assertEqual(split_slash("C6/9/G"), ("C6/9", "G"))
+
+    def test_no_slash_is_no_bass(self):
+        """An unaccompanied symbol comes back whole, with nothing to prefer."""
+        for symbol in ("Dm7", "C69", "NC", "", None):
+            self.assertEqual(split_slash(symbol), (symbol or "", None), symbol)
+
+    def test_surrounding_space_is_not_part_of_the_symbol(self):
+        self.assertEqual(split_slash("  D/C  "), ("D", "C"))
+
+    def test_slash_bass_reads_the_same_rule(self):
+        """`slash_bass` is the bass half of this, so the two cannot disagree."""
+        for symbol in ("Dm7/G", "C6/9/E", "C6/9", "NC", ""):
+            self.assertEqual(slash_bass(symbol), split_slash(symbol)[1], symbol)
+
+
+class TestSlashChordPromotion(unittest.TestCase):
+    """A triad whose bass is its own seventh is named as that seventh chord.
+
+    The rule exists for the Weimar corpus, which writes `D/C` for what is played
+    as D7/C. **Which seventh the bass is decides the target**, because a promotion
+    that did not contain the bass it promoted for would leave that bass a tension no
+    shape can state - the opposite of what the promotion is for.
+    """
+
+    def test_the_bass_seventh_decides_the_target(self):
+        """The same triad over each of the two sevenths becomes a different chord."""
+        self.assertEqual(promote_slash_chord("D", "maj", "C"), "7")
+        self.assertEqual(promote_slash_chord("D", "maj", "C#"), "maj7")
+        self.assertEqual(promote_slash_chord("D", "m", "C"), "m7")
+        self.assertEqual(promote_slash_chord("D", "m", "C#"), "mMaj7")
+
+    def test_no_bass_promotes_nothing(self):
+        """Without a slash bass there is no seventh to name."""
+        self.assertEqual(promote_slash_chord("D", "maj", None), "maj")
+        self.assertEqual(promote_slash_chord("D", "m", None), "m")
+
+    def test_a_non_triad_quality_passes_through(self):
+        """Only a triad is promoted: a seventh chord already names its own seventh."""
+        for quality in ("7", "maj7", "m7", "mMaj7", "dim7", "m7b5", "6", "6/9"):
+            self.assertEqual(promote_slash_chord("D", quality, "C"), quality)
+
+    def test_a_bass_that_is_a_seventh_lies_inside_the_settled_chord(self):
+        """The invariant, swept over every root, triad and bass pitch class.
+
+        The rule fires exactly when the bass is one of the two sevenths, so that is
+        where it can be wrong - and it was: `Dmaj/C#` used to come back a plain D
+        major, leaving the written C# outside the chord. Only the bass note's own
+        pitch class is asserted here, because which *voice* states it is the shape's
+        business rather than this rule's.
+        """
+        tones = ChordParser.CHORD_TONES_FROM_ROOT
+        for root in PITCH_CLASS_NAMES:
+            root_pc = Note(root + "4").midi_note() % 12
+            for quality in ("maj", "m"):
+                for bass_pc in range(12):
+                    interval = (bass_pc - root_pc) % 12
+                    if interval not in (10, 11):
+                        continue
+                    bass = PITCH_CLASS_NAMES[bass_pc]
+                    promoted = promote_slash_chord(root, quality, bass)
+                    self.assertIn(
+                        interval, tones[promoted], f"{root}{quality}/{bass} -> {promoted}"
+                    )
+
+    def test_a_bass_that_is_not_a_seventh_leaves_the_triad_alone(self):
+        """The rule's scope: an inversion or a pedal is not a seventh chord.
+
+        Such a bass is honoured as a *preference*, by `bass_pitch_class` rather than
+        by changing the chord, so the quality must come back untouched.
+        """
+        for root in PITCH_CLASS_NAMES:
+            root_pc = Note(root + "4").midi_note() % 12
+            for quality in ("maj", "m"):
+                for bass_pc in range(12):
+                    if (bass_pc - root_pc) % 12 in (10, 11):
+                        continue
+                    bass = PITCH_CLASS_NAMES[bass_pc]
+                    self.assertEqual(
+                        promote_slash_chord(root, quality, bass), quality, f"{root}{quality}/{bass}"
+                    )
+
+
+class TestParseSymbol(unittest.TestCase):
+    """Resolving a chord symbol: the root, the quality and the slash bass, from one name.
+
+    The name is the single spelling of the harmony, so this is where a quality stops being
+    carried beside a chord and starts being read out of it. The two refusals are as much the
+    contract as the readings are: a bare root is a major triad, and anything else unreadable
+    raises rather than being guessed at.
+    """
+
+    def test_a_written_quality_is_canonicalised(self):
+        """One chord, however the corpus spells it."""
+        for name in ("Dm7", "D-7", "Dmin7"):
+            self.assertEqual(parse_symbol(name), ChordSymbol("D", "m7"), name)
+
+    def test_a_bare_root_is_a_major_triad(self):
+        """A letter on its own is a major triad - a fact about the notation, not a guess."""
+        self.assertEqual(parse_symbol("D"), ChordSymbol("D", "maj"))
+        self.assertEqual(parse_symbol("Bb"), ChordSymbol("Bb", "maj"))
+
+    def test_the_slash_bass_is_carried_and_promotes_the_triad(self):
+        """`D/C` is a D7 over C: the bass names the seventh the triad was missing."""
+        self.assertEqual(parse_symbol("D/C"), ChordSymbol("D", "7", "C"))
+        self.assertEqual(parse_symbol("Am/G"), ChordSymbol("A", "m7", "G"))
+        self.assertEqual(parse_symbol("Gmaj9/F#"), ChordSymbol("G", "maj9", "F#"))
+
+    def test_a_six_nine_chord_is_one_quality(self):
+        """The `9` belongs to the quality and the letter after the last slash is the bass."""
+        self.assertEqual(parse_symbol("C6/9"), ChordSymbol("C", "6/9"))
+        self.assertEqual(parse_symbol("C6/9/E"), ChordSymbol("C", "6/9", "E"))
+
+    def test_no_chord_resolves_to_nothing(self):
+        """`NC` is the absence of a chord, not a chord with an unreadable quality."""
+        self.assertIsNone(parse_symbol("NC"))
+        self.assertIsNone(parse_symbol("  NC  "))
+
+    def test_an_unreadable_symbol_is_refused(self):
+        """A wrong chord is worse than a refused one, so junk raises rather than guessing.
+
+        The refusal is for a symbol with no readable **root** - there is no chord to read
+        a quality from, so there is nothing to arrange. A root whose suffix is no table
+        knows is *not* junk: it is a chord the callers can still report, which is what the
+        "the chord symbol could not be read" annotation exists for.
+        """
+        for name in ("Hmax15#", "weird label", "7sus4", "", None):
+            with self.assertRaises(ValueError, msg=name):
+                parse_symbol(name)
+        symbol = parse_symbol("D minor seven")
+        assert symbol is not None
+        self.assertEqual((symbol.root, symbol.quality), ("D", "minor seven"))
 
 
 if __name__ == "__main__":

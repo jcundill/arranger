@@ -11,7 +11,6 @@ import tempfile
 import unittest
 from xml.etree import ElementTree
 
-import arranger
 from arranger import format_progression
 from headxml import (
     arrange_xml_head,
@@ -95,9 +94,8 @@ class TestHeadCli(unittest.TestCase):
     def test_the_written_files_carry_the_notated_metre(self):
         """A head in cut time is written 2/2, not left on the writers' 4/4 default.
 
-        `head_cli` passes the notated metre to the staff and the HTML but used to
-        pass nothing to the two file writers, so each fell back to its own
-        `beats_per_bar=4`. A 2/2 head was therefore written as 4/4: every bar laid
+        `head_cli` passes the notated metre to all four renderers; a writer left on its own
+        `beats_per_bar=4` writes a 2/2 head as 4/4: every bar laid
         out against the wrong grid, and a tune in cut time displayed as common time.
         The denominator matters too - 2/2 and 2/4 are the same bar length but not
         the same metre, and only the notated `beat_type` tells them apart.
@@ -268,9 +266,9 @@ class TestHeadCli(unittest.TestCase):
         than uninstalled, so the test says what it means on a machine that has
         music21 installed.
 
-        **The stub moved with the code.** It used to patch `arranger`, because
-        `head_cli` reached the writer through the facade's lazy `__getattr__` and
-        an attribute assignment there was what `from arranger import` then saw.
+        **The stub patches where the writer is read.** Patching `arranger` would not be
+        seen: `head_cli` reaches the writer through the facade's lazy `__getattr__`, so
+        the attribute assignment has to land where the import reads it.
         Phase 7 moved the dispatch into `arranger.cli`, which imports the writer
         from its real home in `tabxml` - which is where the extra is actually
         checked. The property under test is untouched; only the seam the test
@@ -305,28 +303,13 @@ class TestHeadCli(unittest.TestCase):
         self.assertIn("Dm7", output)
         self.assertIn("jazz-arranger[xml]", output)
 
-    def test_the_grips_flag_is_gone_and_a_list_flag_is_one_argument(self):
-        """The deleted spelling is a usage error, and the surviving list is one string.
+    def test_a_list_flag_is_one_argument(self):
+        """`--chord-on` is one comma-separated string, never `nargs="+"`.
 
-        `--grips` named a family list, and the family axis is deleted, so the flag is gone
-        rather than deprecated: a spelling quietly ignored would arrange something other
-        than what the run header reported. What survives of its lesson is `--chord-on`,
-        the same shape of option - a list, spelled the way the flags beside it spell one -
-        and it is one argument, never `nargs="+"`.
+        An option that takes a list with spaces consumes the positional written after it,
+        so it could only ever come last - and the run header prints the spelling back, so
+        the line a reader copies has to be the line the parser accepts.
         """
-        import io
-        from contextlib import redirect_stderr
-
-        from arranger.options import ArrangeOptions
-
-        errors = io.StringIO()
-        with redirect_stderr(errors), self.assertRaises(SystemExit):
-            self.run_cli(RAINY_DAY, "--grips", "shell,duo")
-        self.assertIn("--grips", errors.getvalue())
-        # And the library's spelling went with the flag, both halves of it.
-        self.assertFalse(hasattr(arranger, "parse_grips"))
-        self.assertFalse(hasattr(ArrangeOptions(), "grips"))
-
         output = self.run_cli(RAINY_DAY, "--bars", "1-3", "--chord-on", "1,2and")
         self.assertEqual(self.code, 0)
         self.assertIn("chord-on=1,2and", output)
@@ -379,26 +362,29 @@ class TestHeadCli(unittest.TestCase):
         self.assertEqual(self.code, 0, again)
         self.assertIn(f"chord-on={fields['chord-on']}", again)
 
-    def test_no_melody_defaults_the_chord_to_every_beat(self):
-        """`--no-melody` hands the tune away, and the chord defaults to every beat.
+    def test_no_melody_keeps_the_chord_on_the_tune_s_rhythm(self):
+        """`--no-melody` hands the tune away and comps the tune's own onsets.
 
-        The default is a **derivation**, not a rule: `chord-on=melody` names the written
-        onsets, and this guitar has none - so the metre's own reading is used, and the
-        canonical header prints the positions it actually resolved to rather than the
-        word `every-beat`. Spellings are one request: omitting the flag and naming
-        `melody` produce the same arrangement.
+        The written onsets are a fact about the *score*, so the header prints
+        `chord-on=melody` and the comp falls where the tune does; every felt beat is a
+        request of its own.
         """
         output = self.run_cli(RAINY_DAY, "--bars", "1-3", "--no-melody")
         self.assertEqual(self.code, 0)
         self.assertIn("melody=off", output)
-        self.assertIn("chord-on=", output)
-        self.assertNotIn("chord-on=melody", output)
+        self.assertIn("chord-on=melody", output)
 
         named = self.run_cli(
             RAINY_DAY, "--bars", "1-3", "--no-melody", "--chord-on", "melody"
         )
         self.assertEqual(self.code, 0)
         self.assertEqual(named, output, "two spellings of one request differed")
+
+        every = self.run_cli(
+            RAINY_DAY, "--bars", "1-3", "--no-melody", "--chord-on", "every-beat"
+        )
+        self.assertEqual(self.code, 0)
+        self.assertNotEqual(every, output, "every-beat is a request of its own")
 
     def test_bass_on_is_what_writes_a_bass_line(self):
         """`--bass-on` is the only thing that adds a note below the tune.

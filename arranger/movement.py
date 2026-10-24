@@ -1,7 +1,7 @@
 """The step loop: one progression in, one arrangement out.
 
-`arrange_progression` is the entry point. It turns `(melody, quality, name)`
-triples into `ArrangementStep`s by asking `route_dispatch` which of the five routes
+`arrange_progression` is the entry point. It turns `(melody, name)` pairs into
+`ArrangementStep`s by asking `route_dispatch` which of the five routes
 takes each slot - a rest, a texture fill, a no-chord melody-alone step, a comping
 shape, or a harmonised melody step - and merging the walking bass in afterwards.
 
@@ -21,66 +21,94 @@ from typing import Container, List, Optional, Sequence, Tuple
 
 from .bass import Slot
 from .bass_merge import carry_bass
+from .context import SlotArrangementFacts, SlotBassFacts, SlotNeckFacts
 from .grips import MELODY_STRING_CHOICES_FULL
 from .grouping import COMMON_TIME, TimeSignature
 from .options import DEFAULT_REQUEST, ArrangeOptions, Request
-from .resolution import resolve_knobs, resolve_policies
+from .resolution import felt_beat_timings, resolve_knobs, resolve_policies
 from .route_dispatch import dispatch_step
-from .slot_plan import Carried, SlotInputs, slot_state
+from .slot_plan import Carried, SlotInputs, SlotRhythmFacts, slot_state
+from .step_types import ArrangementStep
 from .tuning import (
     NECK_FRET_MAX,
     NECK_FRET_MIN,
-    ArrangementStep,
 )
 
 __all__ = ["arrange_progression"]
 
 
+def _stated(
+    timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
+    index: int,
+) -> Optional[Tuple[Optional[int], Optional[float], Optional[float]]]:
+    """The entry at `index`, or `None` where there is none: a short list, or a stated absence."""
+    if timings is None or index >= len(timings):
+        return None
+    return timings[index]
+
+
+def _placed(
+    entry: Optional[Tuple[Optional[int], Optional[float], Optional[float]]],
+) -> Tuple[Optional[int], Optional[float], Optional[float]]:
+    """The slot's timing: the entry's own, with a float beat - or `(None, None, None)`.
+
+    An absent entry and a `(None, None, None)` entry mean the same thing to the metric
+    layer, "this position is not on the metre", which it reports as `-1` rather than as a
+    weak beat.
+    """
+    if entry is None:
+        return (None, None, None)
+    bar, beat, duration = entry
+    return (bar, None if beat is None else float(beat), duration)
+
+
 def _loop_slots(
-    progression: Sequence[Tuple[Optional[str], str, str]],
+    progression: Sequence[Tuple[Optional[str], str]],
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
     slots: Optional[List[Slot]],
 ) -> List[Slot]:
     """One slot per triple, carrying that triple's own timing or None for an unplaced one.
 
-    The walk's union wins when it exists, because its extra beats are the steps the
-    thumb needs. Otherwise the list is read defensively - a short `timings` leaves
-    the trailing steps unlocated - and, importantly, tolerating a *present but empty*
-    entry: the corpus normalises its unplaced slots to `(None, None, None)`, so
-    `float(beat)` here has to cope with None or the head path raises the moment it is
-    allowed to delegate. That is the fourth time the two paths' differing timing
-    types have cost something, and the first time it was a crash rather than a
-    signature that would not typecheck.
+    Read defensively at both ends: a short `timings` leaves the trailing steps unlocated,
+    and a *present* entry may still be `(None, None, None)` - the importer pads with one
+    where the tune is silent, and a caller may say so deliberately. Both mean the same
+    thing here, "this position is not on the metre", which is what `metric_weight`
+    reports as `-1` rather than as a weak beat.
     """
     if slots is not None:
         return slots
 
-    def timing(index: int) -> Tuple[Optional[int], Optional[float], Optional[float]]:
-        if timings is None or index >= len(timings):
-            return (None, None, None)
-        bar, beat, duration = timings[index]
-        return (bar, None if beat is None else float(beat), duration)
-
     return [
         Slot(index=index, bar=bar, beat=beat, duration=duration)
         for index, (bar, beat, duration) in enumerate(
-            timing(i) for i in range(len(progression))
+            _placed(_stated(timings, i)) for i in range(len(progression))
         )
     ]
 
 
+def _timeline(
+    progression: Sequence[Tuple[Optional[str], str]],
+    timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]],
+    beats_per_bar: int,
+) -> Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]:
+    """What the caller supplied, or the metre's own layout for a progression that did not.
+
+    Decided once, because two consumers read it and they must agree: the walk's union
+    (inside `resolve_policies`) and the slot loop. A supplied timeline - the importer's, or
+    a caller's, including stated absences - is used exactly as given.
+    """
+    if timings is not None:
+        return timings
+    return felt_beat_timings(len(progression), beats_per_bar)
+
+
 def arrange_progression(
-    progression: Sequence[Tuple[Optional[str], str, str]],
+    progression: Sequence[Tuple[Optional[str], str]],
     top_strings: Tuple[int, ...] = MELODY_STRING_CHOICES_FULL,
     non_chord_tone: str = "extension",
     fret_min: int = NECK_FRET_MIN,
     fret_max: int = NECK_FRET_MAX,
     timings: Optional[Sequence[Tuple[Optional[int], Optional[float], Optional[float]]]] = None,
-    texture: Optional[str] = None,
-    bass: Optional[str] = None,
-    parts: Optional[str] = None,
-    harmony: Optional[str] = None,
-    grid: Optional[str] = None,
     request: Request = DEFAULT_REQUEST,
     time_signature: TimeSignature = COMMON_TIME,
     melody_onsets: Optional[Container[int]] = None,
@@ -89,6 +117,16 @@ def arrange_progression(
     """
     Takes a progression of (Melody Note, Chord Quality, Name) tuples
     and computes the optimal voice-led arrangement.
+
+    What to play is asked as a `request=` - the six questions - and the implementation
+    axes are derived from it rather than spelled. `options=ArrangeOptions(...)` carries the
+    knobs that are not a question about the music, and a keyword given beside `options=`
+    raises rather than being silently ignored.
+
+    `timings=` says where each entry falls. Omitted, the progression is laid out on the
+    metre's own felt beats - one entry per beat of the bar - so a hand-built progression
+    is arranged as the bars it names. A *supplied* timeline is used as given, including
+    a `(None, None, None)` entry, which states that a position is deliberately unplaced.
     """
     _k = resolve_knobs(
         options,
@@ -96,56 +134,44 @@ def arrange_progression(
         non_chord_tone=non_chord_tone,
         fret_min=fret_min,
         fret_max=fret_max,
-        texture=texture,
-        bass=bass,
-        parts=parts,
-        harmony=harmony,
-        grid=grid,
         request=request,
         time_signature=time_signature,
         melody_onsets=melody_onsets,
         timings=timings,
     )
+    timeline = _timeline(progression, _k.timings, _k.beats_per_bar)
     arrangements: List[ArrangementStep] = []
 
     _p = resolve_policies(
         progression,
-        parts_arg=_k.parts,
+        parts=_k.parts,
         texture=_k.texture,
         bass=_k.bass,
-        harmony=_k.harmony,
-        grid=_k.grid,
         chord_rhythm=_k.request.chord_rhythm,
         bass_rhythm=_k.request.bass_rhythm,
         chord_fills=_k.request.chord_fills,
         beats_per_bar=_k.beats_per_bar,
         beat_type=_k.beat_type,
         grouping=_k.grouping,
-        timings=_k.timings,
+        timings=timeline,
     )
     carried = Carried()
-    loop = _loop_slots(progression, _k.timings, _p.slots)
+    loop = _loop_slots(progression, timeline, _p.slots)
     slot_inputs = SlotInputs(
-        progression=progression,
-        top_strings=_k.top_strings,
-        texture=_k.texture,
-        parts=_p.parts,
-        has_thumb=_p.has_thumb,
-        melody_only=_p.melody_only,
-        melody_voiced=_p.melody_voiced,
-        melody_onsets=_k.melody_onsets,
-        harmony_family=_p.harmony_family,
-        chord_rhythm=_p.chord_rhythm,
-        grid_pattern=_p.grid_pattern,
-        bass_rhythm=_p.bass_rhythm,
-        chord_fills=_p.chord_fills,
-        beats_per_bar=_k.beats_per_bar,
-        grouping=_k.grouping,
-        fret_min=_k.fret_min,
-        fret_max=_k.fret_max,
-        non_chord_tone=_k.non_chord_tone,
-        bass_pcs=_k.bass_pcs,
-        slash_bass_cost_for=_k.slash_bass_cost,
+        arrangement=SlotArrangementFacts(
+            progression=progression, texture=_k.texture, parts=_p.parts,
+            melody_only=_p.melody_only, melody_voiced=_p.melody_voiced,
+            non_chord_tone=_k.non_chord_tone, has_thumb=_p.has_thumb,
+        ),
+        rhythm=SlotRhythmFacts(
+            beats_per_bar=_k.beats_per_bar, grouping=_k.grouping,
+            chord_rhythm=_p.chord_rhythm, chord_fills=_p.chord_fills,
+            melody_onsets=_k.melody_onsets,
+        ),
+        neck=SlotNeckFacts(
+            fret_min=_k.fret_min, fret_max=_k.fret_max, top_strings=_k.top_strings
+        ),
+        bass=SlotBassFacts(bass_pcs=_k.bass_pcs),
     )
     for slot in loop:
         plan = slot_state(carried, slot, slot_inputs)

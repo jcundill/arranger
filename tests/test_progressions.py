@@ -16,9 +16,9 @@ class TestProgressions(unittest.TestCase):
         Melody: F5 -> F5 -> Eb5
         """
         progression = [
-            ("F5", "m7b5", "Dm7b5"),
-            ("F5", "7b9", "G7b9"),
-            ("Eb5", "m7", "Cm7")
+            ("F5", "Dm7b5"),
+            ("F5", "G7b9"),
+            ("Eb5", "Cm7")
         ]
         result = self.engine.arrange_progression(progression)
 
@@ -43,8 +43,9 @@ class TestProgressions(unittest.TestCase):
         # The Cm7 is a **drop-3** where it was a drop-2 & 4 at `x-10-10-x-11-11`. The four
         # notes are the same four chord tones - Bb3 G4 C5 Eb5 is b7, 5, root and b3, the
         # same notes the drop-2 & 4 carried - but the drop-2 & 4 that fitted here was one of
-        # the four inner-skip `drop24` sets, and those are gone because a finger had to
-        # reach over an unplucked string to fret them (`docs/history/fingering.md` §4.4; the table's
+        # the four inner-skip `drop24` sets, which the tables do not hold because a finger
+        # would have to reach over an unplucked string to fret them
+        # (`docs/history/fingering.md` §4.4; the table's
         # own comment holds the measured price). The replacement spans 2 where the old
         # shape spanned 1: that is the cost this end of the ban pays.
         self.assertEqual(result[2].voicing.grip, "drop3")
@@ -59,9 +60,9 @@ class TestProgressions(unittest.TestCase):
         Melody: C5 -> C5 -> Bb4
         """
         progression = [
-            ("C5", "m7b5", "Am7b5"),
-            ("C5", "7b9", "D7b9"),
-            ("Bb4", "m6", "Gm6"),
+            ("C5", "Am7b5"),
+            ("C5", "D7b9"),
+            ("Bb4", "Gm6"),
         ]
         result = self.engine.arrange_progression(progression)
         self.assertEqual(len(result), 3)
@@ -94,9 +95,9 @@ class TestProgressions(unittest.TestCase):
         Melody: D5 -> B4 -> C5
         """
         progression = [
-            ("D5", "m7", "Dm7"),
-            ("B4", "7", "G7"),
-            ("C5", "maj7", "Cmaj7")
+            ("D5", "Dm7"),
+            ("B4", "G7"),
+            ("C5", "Cmaj7")
         ]
         result = self.engine.arrange_progression(progression)
         self.assertEqual(len(result), 3)
@@ -111,14 +112,14 @@ class TestProgressions(unittest.TestCase):
 
     def test_low_register_cadence_voices_low_with_a_complete_chord_or_a_shell(self):
         """
-        D4 and C4 sit below the high E string's open pitch, so these steps used to be
-        skipped with a warning. They are now voiced on the G string, one string lower
-        again, which puts the whole cadence in low position on the bottom four strings.
+        D4 and C4 sit below the high E string's open pitch, so they are voiced on the G
+        string, one string lower again, which puts the whole cadence in low position on the
+        bottom four strings.
         """
         progression = [
-            ("D4", "m7", "Dm7"),
-            ("D4", "7", "G7"),
-            ("C4", "maj7", "Cmaj7"),
+            ("D4", "Dm7"),
+            ("D4", "G7"),
+            ("C4", "Cmaj7"),
         ]
         result = self.engine.arrange_progression(progression)
 
@@ -158,8 +159,8 @@ class TestProgressions(unittest.TestCase):
         # Recovering it would mean ranking the bass above span, which was measured and
         # brings back the five-fret `8-x-8-8-13-x` this change exists to remove.
         self.assertEqual(sorted(result[0].voicing.pitch_classes()), [0, 2, 5, 9])
-        # G7 gained its root and a fourth voice: it used to be the bare shell F3 B3 D4,
-        # and is now a complete G7 with G2 underneath.
+        # G7 states its root and a fourth voice - a complete G7 with G2 underneath,
+        # rather than the bare shell F3 B3 D4.
         self.assertEqual(sorted(result[1].voicing.pitch_classes()), [2, 5, 7, 11])  # G B D F
         self.assertEqual(sorted(result[2].voicing.pitch_classes()), [0, 4, 11])  # C E B
 
@@ -172,9 +173,9 @@ class TestProgressions(unittest.TestCase):
         pitch is reachable, but not on the strings this caller named.
         """
         progression = [
-            ("D4", "m7", "Dm7"),
-            ("D4", "7", "G7"),
-            ("C4", "maj7", "Cmaj7"),
+            ("D4", "Dm7"),
+            ("D4", "G7"),
+            ("C4", "Cmaj7"),
         ]
         steps = self.engine.arrange_progression(progression, top_strings=(5,))
         self.assertEqual(len(steps), 3)
@@ -188,8 +189,8 @@ class TestProgressions(unittest.TestCase):
         exactly as it was when the B5 position was dropped outright.
         """
         progression = [
-            ("B5", "m7", "Dm7"),  # Above fret 18 on both the high E and B strings
-            ("D5", "m7", "Dm7"),
+            ("B5", "Dm7"),  # Above fret 18 on both the high E and B strings
+            ("D5", "Dm7"),
         ]
         result = self.engine.arrange_progression(progression)
 

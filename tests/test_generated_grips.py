@@ -25,8 +25,9 @@ import unittest
 
 from musthe import Note
 
-from arranger import SHELL_DEGREES, ChordParser, VoiceLeadingEngine
+from arranger import ChordParser, VoiceLeadingEngine
 from arranger.grip_tables import (
+    SHELL_DEGREES,
     TONE_PRIORITY,
     stated_tones,
 )
@@ -111,9 +112,12 @@ class TestTheRuleReproducesTheTables(unittest.TestCase):
         """A quality spelled another way gets the same shapes, through the same rule.
 
         The aliases (`min7`, `dom7`, `min7b5`, `mmaj7` and the rest) have no priority row
-        of their own, so the rule itself answers nothing for them. They work because
-        `chord_context` canonicalises the quality before the rule is asked, and this is
+        of their own, so the rule itself answers nothing for them. They work because the
+        quality is canonicalised out of the symbol before the rule is asked, and this is
         what says so - on the route a caller takes, not on a table key.
+
+        The alias is spelled in the **name** now, which is the only place a caller can
+        spell it: the two spellings are two chord names, and the test compares their tabs.
         """
         aliases = [
             name for name in ChordParser.QUALITY_ALIASES if name not in TONE_PRIORITY
@@ -128,13 +132,13 @@ class TestTheRuleReproducesTheTables(unittest.TestCase):
                         [
                             voicing.tab_string()
                             for voicing in VoiceLeadingEngine.get_drop2_voicings(
-                                Note(melody), name
+                                Note(melody), chord_name="C" + name
                             )
                         ],
                         [
                             voicing.tab_string()
                             for voicing in VoiceLeadingEngine.get_drop2_voicings(
-                                Note(melody), canonical
+                                Note(melody), chord_name="C" + canonical
                             )
                         ],
                         name,
@@ -299,10 +303,9 @@ class TestTheGeneratedShapesAreLegal(unittest.TestCase):
         generated shape that dropped either would be a different chord rather than a
         thinner one.
 
-        This is a **gate rather than a branch**: the rule used to be held to it at runtime,
-        by a fallback that rebuilt a shape from the guide tones when the derived one lost
-        them, and that fallback was measured never to fire over all 125 degrees - so the
-        rule is now asserted to hold, and a quality added later that breaks it fails here.
+        This is a **gate rather than a branch**: the rule is asserted to hold rather than
+        repaired at runtime, so a quality added later that breaks it fails here rather than
+        being silently rebuilt.
         """
         from arranger.grips import _guide_tones
 

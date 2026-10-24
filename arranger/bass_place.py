@@ -21,7 +21,8 @@ from .bass_rules import (
     BASS_STRING_INDICES,
 )
 from .fingers import can_fret
-from .tuning import STANDARD_TUNING, ArrangementStep, Voicing
+from .step_types import ArrangementStep, Voicing
+from .tuning import STANDARD_TUNING
 
 
 @dataclass
@@ -148,7 +149,7 @@ def bass_cost(
             0, pitch_class)
 
 
-def previous_bass(arrangements: List[ArrangementStep]) -> Optional[int]:
+def _previous_bass(arrangements: List[ArrangementStep]) -> Optional[int]:
     """
     The most recent thumb note placed, or None at the head of the phrase.
 
@@ -163,7 +164,7 @@ def previous_bass(arrangements: List[ArrangementStep]) -> Optional[int]:
     return None
 
 
-def held_shape(
+def _held_shape(
     arrangements: List[ArrangementStep],
 ) -> Optional[Tuple[List[int], Optional[int]]]:
     """The shape the left hand is still holding, and which of its strings the thumb
@@ -198,12 +199,12 @@ def held_shape(
 def is_shape_held(arrangements: List[ArrangementStep]) -> bool:
     """Whether any **upper** voice is still ringing under this slot.
 
-    `held_shape` answered as a question: a shape is held when one of its strings other
+    `_held_shape` answered as a question: a shape is held when one of its strings other
     than the thumb's own is fretted. A lone thumb leaves the previous chord ringing, so
     the answer has to survive a run of them - which is why this is not
     `previous_shape`, the last *sounding* step, whose vector a lone thumb replaces.
     """
-    held = held_shape(arrangements)
+    held = _held_shape(arrangements)
     if held is None:
         return False
     frets, thumb = held
@@ -213,7 +214,7 @@ def is_shape_held(arrangements: List[ArrangementStep]) -> bool:
 def _thumb_frame(
     upper: Voicing,
     held: Optional[Tuple[Sequence[int], Optional[int]]],
-    previous_bass: Optional[int] = None,
+    _previous_bass: Optional[int] = None,
 ) -> Tuple[int, List[int], List[int], float]:
     """The geometry a thumb note is placed against.
 
@@ -233,7 +234,7 @@ def _thumb_frame(
     # A silent shape still places a lone thumb: the note has nothing to sound below,
     # which is a different question from "no room for it".
     lowest_upper = min(upper_midis) if upper_midis else _THUMB_CEILING
-    hand_fret = float(min(active)) if active else _thumb_hand_fret(previous_bass)
+    hand_fret = float(min(active)) if active else _thumb_hand_fret(_previous_bass)
 
     # The held shape widens "is this string free" and "what is the lowest note
     # sounding", and supplies the hand position, because the melody alone is up an
@@ -276,13 +277,13 @@ def _thumb_frame(
         # The hand covers the **whole** held vector, including the note the thumb last
         # played: that string is still ringing, so it is still fretted. `structure` is the
         # base the three questions above need, because it excludes that note - right for
-        # harmony, wrong for fingers. Measured on the committed heads the two readings give
-        # the same answer, so this one is chosen on the physics rather than on a count.
+        # harmony, wrong for fingers. A string that is still ringing is still fretted, so
+        # this is the reading the physics asks for.
         hand_base = list(held_frets)
     return lowest_upper, sounding_frets, hand_base, hand_fret
 
 
-def _thumb_hand_fret(previous_bass: Optional[int]) -> float:
+def _thumb_hand_fret(_previous_bass: Optional[int]) -> float:
     """Where the hand is for a lone bass note: the previous thumb note's fret.
 
     The bass line is the only thing that moves a lone-thumb step's hand, so its own
@@ -291,10 +292,10 @@ def _thumb_hand_fret(previous_bass: Optional[int]) -> float:
     of a phrase) means the open position, which makes the first note the lowest
     playable one.
     """
-    if previous_bass is None:
+    if _previous_bass is None:
         return 0.0
     frets = [
-        previous_bass - STANDARD_TUNING[index].midi_note()
+        _previous_bass - STANDARD_TUNING[index].midi_note()
         for index in BASS_STRING_INDICES
     ]
     playable = [fret for fret in frets if 0 <= fret <= 18]
@@ -303,7 +304,7 @@ def _thumb_hand_fret(previous_bass: Optional[int]) -> float:
 
 def _best_thumb_fret(
     pitch_class: int,
-    previous_bass: Optional[int],
+    _previous_bass: Optional[int],
     lowest_upper: int,
     sounding_frets: Sequence[int],
     hand_base: Sequence[int],
@@ -345,7 +346,7 @@ def _best_thumb_fret(
             # so a line does not leap octaves for no reason; then the lower pitch.
             key = (
                 abs(float(fret) - hand_fret),
-                0 if previous_bass is None or abs(midi - previous_bass) <= 4 else 1,
+                0 if _previous_bass is None or abs(midi - _previous_bass) <= 4 else 1,
                 midi,
             )
             candidate = (key, (midi, string_index, fret))
@@ -369,7 +370,7 @@ def bass_placement(
     merge then refuses.
 
     `bass_only` says the hand is holding a shape this step does not strike, so the
-    placement is measured against `held_shape` rather than against `upper`: the thumb then
+    placement is measured against `_held_shape` rather than against `upper`: the thumb then
     joins frets the hand is already fingering, may sound *below* a shape it does not
     re-state, and is counted as a fifth fret for four fingers rather than as a note of its
     own. See `place_bass`.
@@ -379,15 +380,15 @@ def bass_placement(
     return place_bass(
         upper,
         note.pitch_class,
-        previous_bass=previous_bass(arrangements),
-        held=held_shape(arrangements) if bass_only else None,
+        _previous_bass=_previous_bass(arrangements),
+        held=_held_shape(arrangements) if bass_only else None,
     )
 
 
 def place_bass(
     upper: Voicing,
     pitch_class: int,
-    previous_bass: Optional[int] = None,
+    _previous_bass: Optional[int] = None,
     held: Optional[Tuple[Sequence[int], Optional[int]]] = None,
 ) -> Optional[Tuple[int, int, int]]:
     """
@@ -399,7 +400,7 @@ def place_bass(
     and in that order, because a note an octave away is a different fret on every
     string.
 
-    `held` is the shape still ringing under a `bass_only` step - see `held_shape`.
+    `held` is the shape still ringing under a `bass_only` step - see `_held_shape`.
     It matters for **four** of the questions below at once, and passing it is what keeps
     a `bass_only` step playable: that step's own vector holds only the
     melody, so measuring against it alone gets all
@@ -441,7 +442,7 @@ def place_bass(
     `annotation._bass_refusal_clause` phrases them all because none of them is visible from
     outside: no free string below the melody, **no octave of the wanted pitch below the
     shape's own lowest note**, or a fifth fret for four fingers. The middle clause is
-    the common case; the counts are in `docs/open-issues.md` item 2, and the caller
+    the common case; the counts are in `docs/history/open-issues.md` item 2, and the caller
     records the wanted pitch class on `ArrangementStep.bass_refused` rather than the
     reason, so the split is measured rather than read off the step.
 
@@ -453,9 +454,9 @@ def place_bass(
     is never dropped because the thumb could not reach it.
     """
     lowest_upper, sounding_frets, hand_base, hand_fret = _thumb_frame(
-        upper, held, previous_bass
+        upper, held, _previous_bass
     )
     return _best_thumb_fret(
-        pitch_class, previous_bass, lowest_upper, sounding_frets, hand_base, hand_fret
+        pitch_class, _previous_bass, lowest_upper, sounding_frets, hand_base, hand_fret
     )
 

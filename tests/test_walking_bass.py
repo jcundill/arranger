@@ -26,17 +26,7 @@ from typing import List, Optional, Tuple
 from musthe import Note
 
 import arranger
-from arranger import (
-    BASS_ROLE_APPROACH,
-    BASS_STYLE_ANCHORS,
-    BASS_STYLE_WALK,
-    NO_CHORD,
-    ROLE_FILL,
-    ROLE_TARGET,
-    TimeSignature,
-    VoiceLeadingEngine,
-    beat_offset,
-)
+from arranger import TimeSignature, VoiceLeadingEngine, beat_offset
 from arranger.annotation import step_annotation
 
 # The precedence rule `bass._melody_in_force` implements. The two private helpers are
@@ -51,9 +41,13 @@ from arranger.bass import (
     walking_slots,
 )
 from arranger.bass_rules import (
+    BASS_ALL_RULES,
+    BASS_ROLE_APPROACH,
     BASS_RULES,
     parse_bass_style,
 )
+from arranger.options import ArrangeOptions, Request
+from arranger.tuning import NO_CHORD, ROLE_FILL, ROLE_TARGET
 from tests.support import (
     MAJOR_CADENCE,
     MINOR_CADENCE,
@@ -71,14 +65,13 @@ class TestValidation(unittest.TestCase):
     def test_the_walk_is_an_accepted_bass_style(self):
         """The style is a list of `BASS_RULES`, and the pair it is spelled with arranges.
 
-        It used to be a texture of its own (`texture="walking_bass"`), which made one
-        name cover two claims - what the thumb states, and how many notes the chord
-        part states. `docs/history/parts.md` §6 splits them, so what "accepted" means here is that
-        `bass=BASS_STYLE_WALK` parses and the arrangement it makes is one bar of four
-        beats.
+        One name must not cover two claims - what the thumb states, and how many notes the
+        chord part states - so `docs/history/parts.md` §6 splits them. What "accepted"
+        means here is that `bass_notes="root,5th,approach,nearest"` parses and the
+        arrangement it makes is one bar of four beats.
         """
-        self.assertEqual(set(parse_bass_style(BASS_STYLE_WALK)), set(BASS_RULES))
-        self.assertEqual(len(walk([("F5", "maj7", "Fmaj7")], [(0, 1.0)])), 4)
+        self.assertEqual(set(parse_bass_style(BASS_ALL_RULES)), set(BASS_RULES))
+        self.assertEqual(len(walk([("F5", "Fmaj7")], [(0, 1.0)])), 4)
 
     def test_an_unknown_texture_is_still_rejected_before_any_voicing(self):
         """
@@ -88,7 +81,7 @@ class TestValidation(unittest.TestCase):
         """
         with self.assertRaises(ValueError) as caught:
             VoiceLeadingEngine.arrange_progression(
-                [("F5", "maj7", "Fmaj7")], texture="sorcery"
+                [("F5", "Fmaj7")], options=ArrangeOptions(request=Request(chord_notes="sorcery"))
             )
         self.assertIn("sorcery", str(caught.exception))
 
@@ -105,7 +98,7 @@ class TestTheUnion(unittest.TestCase):
         the assertion that fails if the bass grid is assumed to be the melody grid, and
         it is why `arrange_progression` may now return more steps than it was given.
         """
-        steps = walk([("F5", "maj7", "Fmaj7")], [(0, 1.0)])
+        steps = walk([("F5", "Fmaj7")], [(0, 1.0)])
         self.assertEqual(len(steps), 4)
         self.assertEqual([step.beat for step in steps], [1.0, 2.0, 3.0, 4.0])
         self.assertEqual([step.bass is not None for step in steps], [True] * 4)
@@ -124,9 +117,9 @@ class TestTheUnion(unittest.TestCase):
         add, so the two counts agree - the growth is the union doing its job, not a
         constant offset.
         """
-        self.assertEqual(len(walk([("F5", "maj7", "Fmaj7")], [(0, 1.0)])), 4)
+        self.assertEqual(len(walk([("F5", "Fmaj7")], [(0, 1.0)])), 4)
         eighths = [(0, 1.0 + 0.5 * n) for n in range(8)]
-        self.assertEqual(len(walk([("F5", "maj7", "Fmaj7")] * 8, eighths)), 8)
+        self.assertEqual(len(walk([("F5", "Fmaj7")] * 8, eighths)), 8)
 
     def test_a_sparser_skeleton_still_walks_every_beat(self):
         """
@@ -139,7 +132,7 @@ class TestTheUnion(unittest.TestCase):
         `test_bass.py` already owns.
         """
         on_beats = [(0, float(beat)) for beat in (1, 2, 3, 4)]
-        steps = walk([("F5", "maj7", "Fmaj7")] * 4, on_beats)
+        steps = walk([("F5", "Fmaj7")] * 4, on_beats)
         self.assertEqual(len(steps), 4)
         self.assertEqual([bass_name(step) for step in steps], ["F", "E", "F", "E"])
         self.assertEqual(steps[0].bass_role, "anchor")
@@ -154,7 +147,7 @@ class TestTheUnion(unittest.TestCase):
         It carries the previous melody pitch and the harmony in force, so a renderer
         printing the chord name above it is not claiming a chord that stopped.
         """
-        for step in walk([("F5", "maj7", "Fmaj7")], [(0, 1.0)])[1:]:
+        for step in walk([("F5", "Fmaj7")], [(0, 1.0)])[1:]:
             self.assertEqual(step.chord, "Fmaj7")
             self.assertEqual(step.melody, "F5")
 
@@ -186,11 +179,13 @@ class TestTheWalkFollowsTheFeltBeats(unittest.TestCase):
     ) -> List[arranger.ArrangementStep]:
         timings: List[Tuple[int, float, Optional[float]]] = [(0, 1.0, None)]
         return VoiceLeadingEngine.arrange_progression(
-            [("F5", "maj7", "Fmaj7")],
+            [("F5", "Fmaj7")],
             timings=timings,
-            texture="targets",
-            bass=BASS_STYLE_WALK,
-            grid="melody:every_note,bass:walk",
+            options=ArrangeOptions(
+                request=Request(
+                    chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+                ),
+            ),
             time_signature=TimeSignature(
                 beats_per_bar, beat_type, grouping if grouping is not None else "auto"
             ),
@@ -229,11 +224,13 @@ class TestTheWalkFollowsTheFeltBeats(unittest.TestCase):
             (1, 1.0, None),
         ]
         steps = VoiceLeadingEngine.arrange_progression(
-            [("F5", "maj7", "Fmaj7"), ("F5", "maj7", "Fmaj7")],
+            [("F5", "Fmaj7"), ("F5", "Fmaj7")],
             timings=timings,
-            texture="targets",
-            bass=BASS_STYLE_WALK,
-            grid="melody:every_note,bass:walk",
+            options=ArrangeOptions(
+                request=Request(
+                    chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+                ),
+            ),
             time_signature=TimeSignature(12, 8),
         )
         last_of_first = next(
@@ -255,7 +252,7 @@ class TestFillsAreTheMelodyAlone(unittest.TestCase):
         Spelled as a property rather than an exact string, because the note and its
         fret depend on the position - it is the *count* that is the design.
         """
-        for step in walk([("F5", "maj7", "Fmaj7")], [(0, 1.0)])[1:]:
+        for step in walk([("F5", "Fmaj7")], [(0, 1.0)])[1:]:
             self.assertEqual(step.role, ROLE_FILL)
             self.assertEqual(upper_pitches(step), [Note("F5").midi_note()])
             self.assertIsNotNone(step.bass)
@@ -268,7 +265,7 @@ class TestFillsAreTheMelodyAlone(unittest.TestCase):
         not set it: the annotation would claim a lie, and the `repeated` hold keys off
         it.
         """
-        for step in walk([("F5", "maj7", "Fmaj7")], [(0, 1.0)])[1:]:
+        for step in walk([("F5", "Fmaj7")], [(0, 1.0)])[1:]:
             self.assertFalse(step.melody_only)
             self.assertNotIn("no chord", step_annotation(step))
 
@@ -282,7 +279,7 @@ class TestFillsAreTheMelodyAlone(unittest.TestCase):
         slot under a shell would send the melody through the non-chord-tone
         strategies. So the step's only upper pitch is the melody.
         """
-        steps = walk([("D5", "m7", "Dm7"), ("B4", "7", "G7")], [(0, 1.0), (0, 4.5)])
+        steps = walk([("D5", "Dm7"), ("B4", "G7")], [(0, 1.0), (0, 4.5)])
         change = steps[-1]
         self.assertEqual(change.chord, "G7")
         self.assertEqual(change.role, ROLE_FILL)
@@ -299,7 +296,7 @@ class TestFillsAreTheMelodyAlone(unittest.TestCase):
         would get busier precisely where it is meant to get lighter.
         """
         steps = walk(
-            [("D5", "m7", "Dm7"), ("E5", "7", "G7"), ("F#5", "maj7", "Cmaj7")],
+            [("D5", "Dm7"), ("E5", "G7"), ("F#5", "Cmaj7")],
             [(0, 1.0), (0, 2.0), (0, 3.0)],
         )
         fills = [step for step in steps if step.role == ROLE_FILL]
@@ -318,7 +315,7 @@ class TestFillsAreTheMelodyAlone(unittest.TestCase):
         easy to miss in a long run and says nothing about what a reader would have
         played instead.
         """
-        steps = walk([("D5", "m7", "Bbm7")], [(0, 1.0)])
+        steps = walk([("D5", "Bbm7")], [(0, 1.0)])
         self.assertEqual(len(steps), 4)
         self.assertEqual(steps[0].melody, "D5")
         self.assertEqual(upper_pitches(steps[0]), [Note("D5").midi_note()])
@@ -338,7 +335,7 @@ class TestDecisionEAMidBarChange(unittest.TestCase):
         naming different chords on the same beat, which is the one thing this texture
         must never do. The beat-1 anchor is the *first* chord's root, not the second's.
         """
-        steps = walk([("D5", "m7", "Bbm7"), ("F4", "7", "Eb7")], [(0, 1.0), (0, 3.0)])
+        steps = walk([("D5", "Bbm7"), ("F4", "Eb7")], [(0, 1.0), (0, 3.0)])
         on_three = [step for step in steps if step.beat == 3.0][0]
         self.assertEqual(on_three.chord, "Eb7")
         self.assertEqual(on_three.role, ROLE_TARGET)
@@ -361,7 +358,7 @@ class TestDecisionFTheSecondBarOfAHeldChord(unittest.TestCase):
         The thumb's half of decision F, which no reading disputes: a chord lasting two
         bars is re-anchored on each downbeat, because the anchor is a metric event.
         """
-        steps = walk([("D5", "7", "G7"), ("D5", "7", "G7")], [(0, 1.0), (1, 1.0)])
+        steps = walk([("D5", "G7"), ("D5", "G7")], [(0, 1.0), (1, 1.0)])
         downbeats = [step for step in steps if step.beat == 1.0]
         self.assertEqual([step.bass_role for step in downbeats], ["anchor", "anchor"])
         self.assertEqual([bass_name(step) for step in downbeats], ["G", "G"])
@@ -373,7 +370,7 @@ class TestDecisionFTheSecondBarOfAHeldChord(unittest.TestCase):
         what the guide's own tab does, and what the plain "harmony changed" rule
         cannot produce.
         """
-        steps = walk([("C#5", "7", "G7"), ("D5", "7", "G7")], [(0, 1.0), (1, 1.0)])
+        steps = walk([("C#5", "G7"), ("D5", "G7")], [(0, 1.0), (1, 1.0)])
         second = [step for step in steps if step.beat == 1.0][-1]
         self.assertEqual(second.role, ROLE_TARGET)
         self.assertEqual(second.voicing.grip, "shell")
@@ -386,7 +383,7 @@ class TestDecisionFTheSecondBarOfAHeldChord(unittest.TestCase):
         and nothing else - thinner than a restated shell, and never claiming a harmony
         that is not sounding.
         """
-        steps = walk([("D5", "7", "G7"), ("D5", "7", "G7")], [(0, 1.0), (1, 1.0)])
+        steps = walk([("D5", "G7"), ("D5", "G7")], [(0, 1.0), (1, 1.0)])
         second = [step for step in steps if step.beat == 1.0][-1]
         self.assertEqual(second.role, ROLE_FILL)
         self.assertEqual(len(upper_pitches(second)), 1)
@@ -426,12 +423,12 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
         and the test would pass for the wrong reason.
         """
         progression = [
-            ("G4", "maj", "Ebmaj"),   # bar 2 beat 1.0
-            ("F4", "maj", "Ebmaj"),   # bar 2 beat 2.0 - the note the bug inherited
-            ("Eb4", "m7", "Cm7"),     # bar 2 beat 2.5 - the note that is sounding
-            ("F4", "7", "Bb7"),       # bar 3 beat 1.5, after the invented downbeat
-            ("G4", "7", "Bb7"),
-            ("F4", "7", "Bb7"),
+            ("G4", "Ebmaj"),   # bar 2 beat 1.0
+            ("F4", "Ebmaj"),   # bar 2 beat 2.0 - the note the bug inherited
+            ("Eb4", "Cm7"),     # bar 2 beat 2.5 - the note that is sounding
+            ("F4", "Bb7"),       # bar 3 beat 1.5, after the invented downbeat
+            ("G4", "Bb7"),
+            ("F4", "Bb7"),
         ]
         timings = [
             (2, 1.0, 0.5),
@@ -442,8 +439,13 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
             (3, 2.5, 0.25),
         ]
         return VoiceLeadingEngine.arrange_progression(
-            progression, timings=timings, texture="chord2", bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk", time_signature=TimeSignature(2, 4)
-        )
+                progression, timings=timings, options=ArrangeOptions(
+                                                          request=Request(
+                                                              chord_notes="2", bass_on="every-beat", bass_notes="walk"
+                                                          ),
+                                                      ),
+                time_signature=TimeSignature(2, 4)
+            )
 
     def test_the_invented_downbeat_takes_the_sustaining_note_not_the_previous_one(self):
         """
@@ -533,15 +535,18 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
         """
         from arranger.options import ArrangeOptions
 
-        progression = [("E5", "maj7", "Cmaj7"), ("F5", "m7", "Dm7")]
+        progression = [("E5", "Cmaj7"), ("F5", "Dm7")]
         timings = [(1, 1.0, 1.0), (1, 2.0, 0.25)]
 
         def invented(beat_type: int) -> List[Tuple[str, Optional[str]]]:
             steps = VoiceLeadingEngine.arrange_progression(
                 progression,
                 timings=timings,
-                texture="chord2", grid="melody:every_note,bass:walk",
-                bass=BASS_STYLE_WALK,
+                options=ArrangeOptions(
+                    request=Request(
+                        chord_notes="2", bass_on="every-beat", bass_notes="walk"
+                    ),
+                ),
                 time_signature=TimeSignature(3, beat_type),
             )
             return [(step.chord, step.melody) for step in steps]
@@ -558,8 +563,11 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
             for step in VoiceLeadingEngine.arrange_progression(
                 progression,
                 timings=timings,
-                texture="chord2", grid="melody:every_note,bass:walk",
-                bass=BASS_STYLE_WALK,
+                options=ArrangeOptions(
+                    request=Request(
+                        chord_notes="2", bass_on="every-beat", bass_notes="walk"
+                    ),
+                ),
                 time_signature=TimeSignature(3, 4),
             )
         ]
@@ -575,9 +583,11 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
         arrangement, at which point it should be tested there too.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("G4", "maj", "Ebmaj"), ("F4", "maj", "Ebmaj")],
+            [("G4", "Ebmaj"), ("F4", "Ebmaj")],
             timings=[(2, 1.0, 0.5), (2, 2.0, 0.5)],
-            texture="chord2", bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk",
+            options=ArrangeOptions(
+                        request=Request(chord_notes="2", bass_on="every-beat", bass_notes="walk"),
+                    ),
             time_signature=TimeSignature(4, 4),
         )
         first_onset = beat_offset(2, 1.0, 4)
@@ -600,9 +610,11 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
         accident - and because on "the synthetic cut-time head" it is 5 of the 22 invented beats.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("G4", "maj", "Ebmaj"), ("G4", "maj", "Ebmaj")],
+            [("G4", "Ebmaj"), ("G4", "Ebmaj")],
             timings=[(1, 1.0, 0.25), (1, 2.0, None)],
-            texture="chord2", bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk",
+            options=ArrangeOptions(
+                        request=Request(chord_notes="2", bass_on="every-beat", bass_notes="walk"),
+                    ),
             time_signature=TimeSignature(4, 4),
         )
         held = [step for step in steps if step.melody == "G4" and step.bar == 1]
@@ -622,12 +634,12 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
         fails and says the fixture no longer reproduces the defect.
         """
         progression = [
-            ("G4", "maj", "Ebmaj"),
-            ("F4", "maj", "Ebmaj"),
-            ("Eb4", "m7", "Cm7"),
-            ("F4", "7", "Bb7"),
-            ("G4", "7", "Bb7"),
-            ("F4", "7", "Bb7"),
+            ("G4", "Ebmaj"),
+            ("F4", "Ebmaj"),
+            ("Eb4", "Cm7"),
+            ("F4", "Bb7"),
+            ("G4", "Bb7"),
+            ("F4", "Bb7"),
         ]
         timings = [
             (2, 1.0, 0.5),
@@ -653,8 +665,13 @@ class TestAWalkInventedBeatTakesTheMelodyInForce(unittest.TestCase):
             old_choice = progression[previous_melody][0]
         self.assertEqual(old_choice, "F4", "the fixture no longer reproduces the bug")
         steps = VoiceLeadingEngine.arrange_progression(
-            progression, timings=timings, texture="chord2", bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk", time_signature=TimeSignature(2, 4)
-        )
+                progression, timings=timings, options=ArrangeOptions(
+                                                          request=Request(
+                                                              chord_notes="2", bass_on="every-beat", bass_notes="walk"
+                                                          ),
+                                                      ),
+                time_signature=TimeSignature(2, 4)
+            )
         new_choice = [
             step for step in steps if step.bar == 3 and step.beat == 1.0
         ][0].melody
@@ -767,8 +784,8 @@ class TestNoRegression(unittest.TestCase):
         about them meaningful: `bass` is not populated by a melody that merely happens
         to sit on a bass string.
         """
-        progression = [("D5", "m7", "Dm7"), ("C#5", "7", "A7"),
-                       ("D5", "mMaj7", "Dm(maj7)")]
+        progression = [("D5", "Dm7"), ("C#5", "A7"),
+                       ("D5", "Dm(maj7)")]
         onsets = [(0, 1.0), (0, 2.0), (0, 3.0)]
         timings: List[Tuple[int, float, Optional[float]]] = [
             (bar, beat, None) for bar, beat in onsets
@@ -776,7 +793,7 @@ class TestNoRegression(unittest.TestCase):
         arrangements = [
             VoiceLeadingEngine.arrange_progression(progression),
             VoiceLeadingEngine.arrange_progression(
-                progression, timings=timings, texture="targets"),
+                progression, timings=timings, options=ArrangeOptions(request=Request(chord_notes="targets"))),
         ]
         for steps in arrangements:
             self.assertEqual(len(steps), 3)
@@ -818,8 +835,8 @@ class TestNoRegression(unittest.TestCase):
         was given, in order - the union only ever *repeats* the previous one, never
         invents or reorders a pitch.
         """
-        progression = [("F5", "maj7", "Fmaj7"), ("D5", "m7", "Dm7"),
-                       ("C5", "7", "G7"), ("B4", "maj7", "Cmaj7")]
+        progression = [("F5", "Fmaj7"), ("D5", "Dm7"),
+                       ("C5", "G7"), ("B4", "Cmaj7")]
         onsets = [(0, 1.0 + 0.5 * n) for n in range(8)]
         steps = walk(progression + progression, onsets + [(1, 1.0 + 0.5 * n)
                                                           for n in range(8)])
@@ -829,32 +846,34 @@ class TestNoRegression(unittest.TestCase):
 
 
 class TestTheBassPolicyIsAnAxis(unittest.TestCase):
-    """`bass=` selects the pattern; the texture no longer carries it.
+    """The bass policy selects the pattern; a texture does not carry it.
 
-    `walking_bass` used to mean "a thumb line" as part of its name. Now it means "a
-    thumb line, by default", and the same line is reachable from a texture that has
-    never heard of walking bass. What must not change is that the default produces
+    `walking_bass` means "a thumb line, by default", and the same line is reachable
+    from a texture that has never heard of walking bass. What must not change is that
+    the default produces
     exactly what it always did - which is the whole of the equivalence below.
     """
 
     PROGRESSION = [
-        ("F5", "maj7", "Fmaj7"),
-        ("E5", "maj7", "Emaj7"),
-        ("D5", "maj7", "Dmaj7"),
-        ("C5", "7", "C7"),
-        ("C5", "maj7", "Fmaj7"),
-        ("B4", "m7", "Bm7"),
-        ("A4", "maj7", "Amaj7"),
-        ("G4", "7", "G7"),
+        ("F5", "Fmaj7"),
+        ("E5", "Emaj7"),
+        ("D5", "Dmaj7"),
+        ("C5", "C7"),
+        ("C5", "Fmaj7"),
+        ("B4", "Bm7"),
+        ("A4", "Amaj7"),
+        ("G4", "G7"),
     ]
     ONSETS: List[Tuple[int, float]] = [(0, 1.0 + 0.5 * i) for i in range(8)]
 
-    def arrange(self, **kwargs):
+    def arrange(self, **request_kwargs):
         timings = [
             (bar, beat, None) for bar, beat in self.ONSETS
         ]
         return VoiceLeadingEngine.arrange_progression(
-            self.PROGRESSION, timings=timings, **kwargs
+            self.PROGRESSION,
+            timings=timings,
+            options=ArrangeOptions(request=Request(**request_kwargs)),
         )
 
     def tabs(self, steps):
@@ -863,43 +882,50 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
     def test_the_named_walk_is_the_pinned_line(self):
         """The walk is **named** now, and the named spelling is what the tabs are pinned to.
 
-        `auto` used to resolve to a walk because `texture="walking_bass"` *meant* a
-        thumb line, and every published walking-bass tab is pinned against that
-        arrangement. With the walk on the bass axis there is no texture left that
+        Every published walking-bass tab is pinned against the arrangement the walk
+        makes, so the walk is spelled on the bass axis rather than left to a texture that
         implies one, so the shipped answer is no line (`docs/history/parts.md` §9) - the
         equivalence this asserts is therefore the other direction: the style and the
         four rules it is spelled from are one arrangement, and the default is not it.
         """
-        grid = "melody:every_note,bass:walk"
-        named = self.tabs(self.arrange(texture="targets", grid=grid, bass=BASS_STYLE_WALK))
+        named = self.tabs(
+            self.arrange(chord_notes="targets", bass_on="every-beat", bass_notes="walk")
+        )
         spelled = self.tabs(
-            self.arrange(texture="targets", grid=grid, bass="root,5th,approach,nearest")
+            self.arrange(
+                chord_notes="targets",
+                bass_on="every-beat",
+                bass_notes=BASS_ALL_RULES,
+            )
         )
         self.assertEqual(named, spelled)
         self.assertNotEqual(
             named,
-            self.tabs(self.arrange(texture="targets", grid=grid)),
-            "the default produced the walk, so `bass=` is not an axis",
+            self.tabs(self.arrange(chord_notes="targets")),
+            "the default produced the walk, so `bass` is not an axis",
         )
 
-    def test_auto_follows_the_selection_under_a_melody_only_part(self):
-        """
-        `BASS_STYLE_AUTO` reads the voice selection, not just the texture.
+    def test_the_walk_needs_a_bass_part_to_play_it(self):
+        """A walk is a claim about the bass part, and the selection is what says.
 
         `(soprano, bass)` walks - it is the old `melody_bass` texture under the
         new spelling, measured byte for byte in `docs/history/one-fact.md`'s build
-        notes. `(soprano,)` alone keeps no thumb, and a lone `bass` selection
-        keeps none either: that part already is the bass line, and a thumb
-        under it would double it.
+        notes. `(soprano,)` alone keeps no thumb, because nothing named a bass part;
+        a bass part on its own has no chord part to carry the line, so the thumb
+        *is* the line rather than doubling it.
         """
-        alone = self.arrange(parts="melody")
+        alone = self.arrange(chord_on="none")
         self.assertTrue(alone)
         self.assertTrue(all(s.bass is None for s in alone))
-        with_thumb = self.arrange(parts="melody,bass")
+        with_thumb = self.arrange(
+            chord_on="none", bass_on="every-beat", bass_notes="walk"
+        )
         self.assertTrue(any(s.bass is not None for s in with_thumb))
-        lone = self.arrange(parts="bass")
+        lone = self.arrange(
+            melody=False, chord_on="none", bass_on="every-beat", bass_notes="walk"
+        )
         self.assertTrue(lone)
-        self.assertTrue(all(s.bass is None for s in lone))
+        self.assertTrue(any(s.bass is not None for s in lone))
 
     def test_bass_none_drops_the_thumb_and_keeps_the_shells(self):
         """A walking bass with no bass is still a coherent texture: shells on the beats.
@@ -908,8 +934,10 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
         which is a shell on a strong beat and the melody alone between them, is about
         the *left* hand and is unaffected by how many notes the thumb writes.
         """
-        with_thumb = self.arrange(texture="chord2", grid="melody:every_note,bass:walk", bass=BASS_STYLE_WALK)
-        without = self.arrange(texture="chord2", grid="melody:every_note,bass:walk", bass="none")
+        with_thumb = self.arrange(
+            chord_notes="2", bass_on="every-beat", bass_notes="walk"
+        )
+        without = self.arrange(chord_notes="2")
         self.assertTrue(any(s.bass is not None for s in with_thumb))
         self.assertEqual([s.bass for s in without], [None] * len(without))
         shells = [s for s in without if s.grip == "shell"]
@@ -925,8 +953,12 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
 
     def test_anchors_writes_fewer_notes_than_a_walk(self):
         """Same texture, two policies, and the line is measurably sparser."""
-        walked = self.arrange(texture="chord2", grid="melody:every_note,bass:walk", bass=BASS_STYLE_WALK)
-        anchored = self.arrange(texture="chord2", grid="melody:every_note,bass:walk", bass=BASS_STYLE_ANCHORS)
+        walked = self.arrange(
+            chord_notes="2", bass_on="every-beat", bass_notes="walk"
+        )
+        anchored = self.arrange(
+            chord_notes="2", bass_on="1", bass_notes="root"
+        )
         # The notes actually *struck*: a carried note rings into the steps after it,
         # so counting `s.bass` would measure the bar rather than the line.
         walked_notes = sum(1 for s in walked if s.bass is not None and not s.bass_held)
@@ -945,28 +977,28 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
 
     def test_a_texture_that_never_had_a_thumb_can_carry_one(self):
         """`targets` harmonises in full, and a thumb line under it is now expressible."""
-        plain = self.arrange(texture="targets")
-        walked = self.arrange(texture="targets", bass=BASS_STYLE_WALK)
+        plain = self.arrange(chord_notes="targets")
+        walked = self.arrange(
+            chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+        )
         self.assertEqual([s.bass for s in plain], [None] * len(plain))
         self.assertTrue(any(s.bass is not None for s in walked))
 
-    def test_uniform_no_longer_refuses_the_line_because_a_string_is_free(self):
+    def test_uniform_admits_the_line_because_a_string_is_free(self):
         """
-        This was the tree's one refusal, and the set behind it is gone.
+        No shape in `uniform`'s palette spans all three thumb strings, so `bass_allowed`
+        admits every policy. `drop24`'s `(4,2,1,0)` was the one reachable shape that did,
+        and the four inner-skip `drop24` sets are not in the tables for a *finger* reason
+        (`docs/history/fingering.md` §4.4): the worst case `uniform` can reach leaves one
+        string free - the rule's threshold - and the line is written.
 
-        `uniform`'s palette held `drop24`'s `(4,2,1,0)`, the one reachable shape spanning
-        all three thumb strings, so `bass_allowed` refused every policy and the caller was
-        told which texture would work instead. The four inner-skip `drop24` sets were
-        removed for a *finger* reason (`docs/history/fingering.md` §4.4) and that set was among
-        them, so the worst case `uniform` can reach now leaves one string free - the rule's
-        threshold - and the line is written.
-
-        **Inverted rather than deleted.** It used to demand the refusal message and no bass
-        notes; it now demands the opposite, and keeps the half that made the refusal safe -
-        the arrangement still sounds, one step per melody note - so a silently dropped
-        chord cannot pass for a working bass line.
+        The line is written rather than refused, and the half that made the refusal safe
+        still holds: the arrangement sounds one step per melody note, so a silently
+        dropped chord cannot pass for a working bass line.
         """
-        steps = self.arrange(texture="uniform", bass=BASS_STYLE_WALK)
+        steps = self.arrange(
+            chord_notes="full", bass_on="every-beat", bass_notes="walk"
+        )
         self.assertTrue(
             any(s.bass is not None for s in steps), "the walk wrote no note at all"
         )
@@ -976,7 +1008,9 @@ class TestTheBassPolicyIsAnAxis(unittest.TestCase):
 
     def test_an_unknown_policy_raises(self):
         with self.assertRaises(ValueError):
-            self.arrange(texture="targets", bass="stride")
+            self.arrange(
+                chord_notes="targets", bass_on="every-beat", bass_notes="stride"
+            )
 
 
 class TestAChordlessBarHasNoBassPart(unittest.TestCase):
@@ -1000,9 +1034,9 @@ class TestAChordlessBarHasNoBassPart(unittest.TestCase):
     # either side of it. That is what makes the old forward fill wrong here and not in
     # the corpus.
     PROGRESSION = [
-        ("D4", "m7", "Dm7"),
-        ("E4", NO_CHORD, NO_CHORD),
-        ("C5", "7", "G7"),
+        ("D4", "Dm7"),
+        ("E4", NO_CHORD),
+        ("C5", "G7"),
     ]
     TIMINGS: List[Tuple[int, float, float]] = [
         (1, 1.0, 1.0),
@@ -1010,14 +1044,18 @@ class TestAChordlessBarHasNoBassPart(unittest.TestCase):
         (3, 1.0, 1.0),
     ]
 
-    def arrange(self, **kwargs) -> List[arranger.ArrangementStep]:
+    def arrange(self, **request_kwargs) -> List[arranger.ArrangementStep]:
         return VoiceLeadingEngine.arrange_progression(
-            self.PROGRESSION, timings=self.TIMINGS, **kwargs
+            self.PROGRESSION,
+            timings=self.TIMINGS,
+            options=ArrangeOptions(request=Request(**request_kwargs)),
         )
 
     def test_the_walked_bar_carries_no_thumb_note(self) -> None:
         """Under a texture that puts a note on every beat, the chordless bar has none."""
-        steps = self.arrange(texture="targets", grid="melody:every_note,bass:walk", bass=BASS_STYLE_WALK)
+        steps = self.arrange(
+            chord_notes="targets", bass_on="every-beat", bass_notes="walk"
+        )
         walked = [s for s in steps if s.bar == 2]
         # One step, not four: with no chord there is no beat for the walk to be written
         # on, so the bar the grid would have invented collapses to its melody slot.
@@ -1036,7 +1074,13 @@ class TestAChordlessBarHasNoBassPart(unittest.TestCase):
 
     def test_the_melody_is_unaffected(self) -> None:
         """The third part is the one part an `NC` bar still states."""
-        nc = [s for s in self.arrange(texture="chord2", bass="root,5th,approach,nearest", grid="melody:every_note,bass:walk") if s.chord == NO_CHORD]
+        nc = [
+            s
+            for s in self.arrange(
+                chord_notes="2", bass_on="every-beat", bass_notes="walk"
+            )
+            if s.chord == NO_CHORD
+        ]
         self.assertEqual(len(nc), 1)
         self.assertEqual(nc[0].melody, "E4")
         self.assertTrue(nc[0].melody_voiced)
@@ -1045,7 +1089,7 @@ class TestAChordlessBarHasNoBassPart(unittest.TestCase):
         """`"no chord here"` is a rest with a reason, not a chordless thumb line."""
         nc = [
             s
-            for s in self.arrange(texture="uniform", parts="chord")
+            for s in self.arrange(chord_notes="full", melody=False)
             if s.chord == NO_CHORD or s.silence == "nc_comping"
         ]
         self.assertTrue(nc, "the comping route has nothing to state over an NC bar")
@@ -1062,7 +1106,9 @@ class TestAChordlessBarHasNoBassPart(unittest.TestCase):
         therefore changes the note *before* it as well as its own, and this pins the
         direction: a half step from G, not a half step from D.
         """
-        steps = self.arrange(texture="chord2", grid="melody:every_note,bass:walk", bass=BASS_STYLE_WALK)
+        steps = self.arrange(
+            chord_notes="2", bass_on="every-beat", bass_notes="walk"
+        )
         last = [s for s in steps if s.bar == 1][-1]
         self.assertEqual(last.bass_role, BASS_ROLE_APPROACH)
         note = last.bass

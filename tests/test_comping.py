@@ -8,31 +8,26 @@ melody's pitch never appears, because a guide tone can share its pitch class. Th
 invariant is the identical candidate set whatever melody is asked about.
 """
 
+import inspect
 import unittest
 from typing import List, Optional, Tuple
 
 from musthe import Note
 
 from arranger import (
-    GRIP_MAX_SPAN,
-    GRIP_STRING_SETS,
-    NECK_FRET_MAX,
-    NECK_FRET_MIN,
-    PART_BASS,
-    PART_CHORD,
-    PART_MELODY,
     ChordParser,
     TimeSignature,
     VoiceLeadingEngine,
     format_progression,
     get_comping_voicings,
-    parse_parts,
     parts_has_melody_only,
-    resolve_parts,
+    resolve_request,
     supported_string_sets,
 )
 from arranger.grip_place import snapshot
 from arranger.grip_tables import (
+    GRIP_MAX_SPAN,
+    GRIP_STRING_SETS,
     comping_string_sets,
 )
 from arranger.grips import (
@@ -41,21 +36,14 @@ from arranger.grips import (
     _search_comping_voicings,
     get_comping_voicings_for,
 )
-from arranger.options import ArrangeOptions
+from arranger.options import ArrangeOptions, Request
+from arranger.tuning import NECK_FRET_MAX, NECK_FRET_MIN
 from tests.support import (
     PROGRESSION,
-    VOICES_ARG,
     chord_pcs,
     comping,
     guide_pcs,
-    quality_of,
 )
-
-# The comping part **with** the thumb line, which is a different selection rather than a
-# different setting: a bass style is a claim about the bass part.
-PARTS_WITH_BASS = "bass,chord"
-PART_NAMES_ARG = "auto"
-
 
 
 class TestCompingGenerator(unittest.TestCase):
@@ -71,7 +59,7 @@ class TestCompingGenerator(unittest.TestCase):
         missing = [
             quality
             for quality in sorted(ChordParser.CHORD_TONES_FROM_ROOT)
-            if not get_comping_voicings(quality, f"C{quality}")
+            if not get_comping_voicings(f"C{quality}")
         ]
         self.assertEqual(missing, [], f"no comping shape for {missing}")
 
@@ -110,16 +98,49 @@ class TestCompingGenerator(unittest.TestCase):
                     voicing.fret_span(), GRIP_MAX_SPAN["shell"], voicing.tab_string()
                 )
 
-    def test_a_chord_with_no_root_gets_nothing(self):
+    def test_the_high_e_is_not_on_the_palette_at_any_arity(self):
+        """The tune's own string is off the comping part's palette.
+
+        `COMPING_EXCLUDED_STRINGS` carries the reason: the high E is where
+        `MELODY_STRING_CHOICES_FULL` pins a tune first, and a comping shape has no tune
+        to put there, so a shape whose top voice sits on it is heard as a melody - above
+        the horn playing the real one.
+
+        Asserted on the **sets** rather than on a chosen tab, because a set that is
+        offered and merely not chosen today is a set that can be chosen tomorrow; and
+        over every arity including the bass voice, so a new family cannot reintroduce it.
+        """
+        for notes in range(1, 5):
+            for bass_voice in (False, True):
+                sets = comping_string_sets(notes, bass_voice)
+                self.assertTrue(sets, (notes, bass_voice))
+                for strings in sets:
+                    self.assertNotIn(5, strings, (notes, bass_voice, strings))
+
+    def test_a_one_note_shape_is_offered_once_per_string(self):
+        """Two `duo` pairs share a top string, and one note is one shape.
+
+        A duplicate is harmless to the ranking and wrong as a palette: it says the same
+        position was offered two ways, and it would hand the selector the identical
+        candidate twice.
+        """
+        sets = comping_string_sets(1)
+        self.assertEqual(len(sets), len(set(sets)), sets)
+
+    def test_a_chord_with_no_root_is_refused(self):
         """A guide tone is a claim about *this* chord, so no root means no claim.
 
-        The same rule `get_grip_voicings` applies to its shell and duo branches, and
-        for the same reason: guessing the 3rd and 7th without a root is how a wrong
-        note gets into the tab.
+        The rule survives as a refusal rather than an empty list, which is what the
+        quality field used to make it: a symbol with no readable root has no quality
+        either, so there is nothing to state and the resolver says so rather than
+        guessing the 3rd and 7th and putting a wrong note in the tab.
         """
-        self.assertEqual(get_comping_voicings("maj7", None), [])
-        self.assertEqual(get_comping_voicings("maj7", "H7"), [])
-        self.assertEqual(get_comping_voicings("", "C"), [])
+        with self.assertRaises(ValueError):
+            get_comping_voicings(None)
+        with self.assertRaises(ValueError):
+            get_comping_voicings("H7")
+        # A bare root is not rootless - it is a major triad, and it is voiced.
+        self.assertTrue(get_comping_voicings("C"))
 
     def test_the_window_is_a_preference_and_never_a_filter(self):
         """Narrowing it may cost shapes, but it must never cost the chord.
@@ -127,8 +148,8 @@ class TestCompingGenerator(unittest.TestCase):
         The rule the whole library states about `fret_min`/`fret_max`: losing a chord of
         the tune is worse than being a fret out of position.
         """
-        wide = get_comping_voicings("maj7", "Cmaj7")
-        narrow = get_comping_voicings("maj7", "Cmaj7", fret_min=0, fret_max=0)
+        wide = get_comping_voicings("Cmaj7")
+        narrow = get_comping_voicings("Cmaj7", fret_min=0, fret_max=0)
         self.assertTrue(wide)
         self.assertTrue(narrow, "a zero-width window must still voice the chord")
 
@@ -169,28 +190,24 @@ class TestTheCompingPaletteIsRemembered(unittest.TestCase):
         come out of it.
         """
         checked = 0
-        for quality, name in self.CASES:
+        for _quality, name in self.CASES:
             for notes in (1, 3):
                 for bass_voice in (False, True):
-                    for shell_root in (False, True):
-                        request = CompingRequest(
-                            quality,
-                            name,
-                            NECK_FRET_MIN,
-                            NECK_FRET_MAX,
-                            notes,
-                            bass_voice,
-                            shell_root,
-                        )
-                        searched = _search_comping_voicings(request)
-                        remembered = _comping_palette(request)
-                        self.assertEqual(
-                            [snapshot(voicing) for voicing in searched],
-                            list(remembered),
-                            f"{name} notes={notes} bass_voice={bass_voice} "
-                            f"shell_root={shell_root}",
-                        )
-                        checked += 1
+                    request = CompingRequest(
+                        name,
+                        NECK_FRET_MIN,
+                        NECK_FRET_MAX,
+                        notes,
+                        bass_voice,
+                    )
+                    searched = _search_comping_voicings(request)
+                    remembered = _comping_palette(request)
+                    self.assertEqual(
+                        [snapshot(voicing) for voicing in searched],
+                        list(remembered),
+                        f"{name} notes={notes} bass_voice={bass_voice}",
+                    )
+                    checked += 1
         self.assertGreater(checked, 20, "the memo was compared over almost nothing")
 
     def test_a_caller_writing_into_its_shape_does_not_reach_the_next_caller(self):
@@ -203,8 +220,8 @@ class TestTheCompingPaletteIsRemembered(unittest.TestCase):
         tab, so the identity assertion is the witness: it is the *sharing* that is
         forbidden, not the equality of the two answers.
         """
-        first = get_comping_voicings("maj7", "Cmaj7")
-        second = get_comping_voicings("maj7", "Cmaj7")
+        first = get_comping_voicings("Cmaj7")
+        second = get_comping_voicings("Cmaj7")
         self.assertTrue(first)
         self.assertIsNot(first, second, "the memo handed one list out twice")
         self.assertIsNot(first[0], second[0], "the memo handed one object out twice")
@@ -217,20 +234,20 @@ class TestTheCompingPaletteIsRemembered(unittest.TestCase):
         first[0].frets[muted[0]] = 7
         first[0].bass_pc = None if pristine_bass is None else (pristine_bass + 1) % 12
 
-        third = get_comping_voicings("maj7", "Cmaj7")
+        third = get_comping_voicings("Cmaj7")
         self.assertEqual(third[0].tab_string(), pristine_tab)
         self.assertEqual(third[0].bass_pc, pristine_bass)
 
     def test_the_request_is_the_memo_key(self):
         """The object entry point and the primitive one share one memo entry."""
         request = CompingRequest(
-            "maj7", "Cmaj7", NECK_FRET_MIN, NECK_FRET_MAX, 3, False, False
+            "Cmaj7", NECK_FRET_MIN, NECK_FRET_MAX, 3, False
         )
         before = _comping_palette.cache_info()
         by_object = get_comping_voicings_for(request)
         after = _comping_palette.cache_info()
         self.assertEqual(after.misses - before.misses, 1)
-        by_keyword = get_comping_voicings("maj7", "Cmaj7")
+        by_keyword = get_comping_voicings("Cmaj7")
         self.assertEqual(
             [voicing.tab_string() for voicing in by_object],
             [voicing.tab_string() for voicing in by_keyword],
@@ -244,9 +261,9 @@ class TestTheCompingPaletteIsRemembered(unittest.TestCase):
         is exactly what a reader cannot see from the code.
         """
         before = _comping_palette.cache_info()
-        get_comping_voicings("m7", "Dm7")
+        get_comping_voicings("Dm7")
         after_first = _comping_palette.cache_info()
-        get_comping_voicings("m7", "Dm7")
+        get_comping_voicings("Dm7")
         after_second = _comping_palette.cache_info()
         self.assertEqual(after_first.misses - before.misses, 1)
         self.assertEqual(after_first.hits - before.hits, 0)
@@ -260,12 +277,12 @@ class TestTheCompingPaletteIsRemembered(unittest.TestCase):
         what makes "the search is still the thing under test" a fact about this file
         rather than a hope.
         """
-        first = get_comping_voicings("7", "A7")
+        first = get_comping_voicings("A7")
         self.assertGreater(_comping_palette.cache_info().currsize, 0)
         _comping_palette.cache_clear()
         self.assertEqual(_comping_palette.cache_info().currsize, 0)
         self.assertEqual(
-            [voicing.tab_string() for voicing in get_comping_voicings("7", "A7")],
+            [voicing.tab_string() for voicing in get_comping_voicings("A7")],
             [voicing.tab_string() for voicing in first],
         )
 
@@ -276,12 +293,6 @@ class TestTheAxisIsInertByDefault(unittest.TestCase):
     def setUp(self):
         self.engine = VoiceLeadingEngine()
 
-    def test_auto_and_guitar_agree_with_each_other(self):
-        """The sentinel resolves to the same arrangement as saying so."""
-        auto = self.engine.arrange_progression(PROGRESSION)
-        explicit = self.engine.arrange_progression(PROGRESSION, parts=PART_NAMES_ARG)
-        self.assertEqual(format_progression(auto), format_progression(explicit))
-
     def test_the_default_still_pins_the_melody_to_the_soprano(self):
         """And every step says the guitar is singing."""
         for step in self.engine.arrange_progression(PROGRESSION):
@@ -290,19 +301,17 @@ class TestTheAxisIsInertByDefault(unittest.TestCase):
                 max(step.voicing.midi_notes()), Note(step.melody).midi_note()
             )
 
-    def test_the_keyword_and_the_option_spellings_agree(self):
-        """`arrange_progression` takes the axis both ways and they must not diverge.
+    def test_one_request_two_places_to_name_it(self):
+        """One request reaches the engine whether it sits beside `options=` or inside it.
 
-        Measured, because the two spellings *did* diverge: `ArrangeOptions.melody`
-        defaulted to the resolved `"guitar"` while the keyword defaulted to the
-        `"auto"` sentinel, so a caller passing the options was compared field-by-field
-        against a different default and told it had passed both.
+        Both halves are what a second spelling would cost: the comping selection
+        reaches the engine as `Request(melody=False)`, and the bare call is the shipped
+        request rather than a different default.
         """
-        by_keyword = self.engine.arrange_progression(PROGRESSION, parts=VOICES_ARG)
         by_option = self.engine.arrange_progression(
-            PROGRESSION, options=ArrangeOptions(parts=VOICES_ARG)
+            PROGRESSION, options=ArrangeOptions(request=Request(melody=False))
         )
-        self.assertEqual(format_progression(by_keyword), format_progression(by_option))
+        self.assertTrue(all(not step.melody_voiced for step in by_option))
         self.assertEqual(
             format_progression(self.engine.arrange_progression(PROGRESSION)),
             format_progression(
@@ -310,33 +319,33 @@ class TestTheAxisIsInertByDefault(unittest.TestCase):
             ),
         )
 
-    def test_passing_both_spellings_raises(self):
-        """As for every other knob: two spellings of one value is a bug, not a merge."""
-        with self.assertRaises(ValueError):
-            self.engine.arrange_progression(
-                PROGRESSION, parts=VOICES_ARG, options=ArrangeOptions()
-            )
+    def test_the_axis_is_not_a_keyword_on_the_entry_point(self):
+        """The five axes are the implementation, so they have no keyword spelling.
 
-    def test_an_unknown_policy_raises(self):
-        """A spelling nobody recognises is a question, not something to default."""
-        with self.assertRaises(ValueError):
-            self.engine.arrange_progression(PROGRESSION, parts="banjo")
+        A call naming one is unspellable rather than conflicting;
+        `tests/meta_structure.py` holds the whole entry-point surface to it.
+        """
+        signature = inspect.signature(self.engine.arrange_progression)
+        self.assertNotIn("parts", signature.parameters)
 
 
 class TestTheCompingArrangement(unittest.TestCase):
-    """`parts=bass,chord` through the engine: what the guitarist is handed."""
+    """A comping request with a thumb line: what the guitarist is handed."""
 
     def setUp(self):
         self.engine = VoiceLeadingEngine()
         self.timings = [(0, 1.0, 1.0), (0, 2.0, 1.0), (0, 3.0, 1.0), (0, 4.0, 1.0)]
 
-    def comped(self, **kwargs):
-        # `bass,chord`: the thumb line is the **bass part**, and a bass style is
-        # refused without it ("add 'bass' to parts"). The arity is unaffected -
-        # `comping_arity` reads the chord part and the hand, not how many parts are
-        # named - so the shapes are the same as a chord-only selection's.
+    def comped(self, timings=None, **request_kwargs):
+        # `melody=False` with a chord position: the thumb line is the **bass part**,
+        # and a bass style is refused without it ("add 'bass' to parts"). The arity is
+        # unaffected - `comping_arity` reads the chord part and the hand, not how many
+        # parts are named - so the shapes are the same as a chord-only selection's.
         steps = self.engine.arrange_progression(
-            PROGRESSION, parts=PARTS_WITH_BASS, **kwargs
+            PROGRESSION,
+            options=ArrangeOptions(
+                request=Request(melody=False, **request_kwargs), timings=timings
+            ),
         )
         self.assertTrue(steps, "an arrangement with no steps at all is a defect")
         return steps
@@ -345,8 +354,9 @@ class TestTheCompingArrangement(unittest.TestCase):
         """The load-bearing claim of the whole feature, stated so it cannot pass by luck.
 
         The first version of this test asserted that no comping step *contains* the
-        melody's pitch, which reads well and is false: measured over three corpus
-        heads, **409 of 2,069 steps do contain it**. That is not a defect but it is
+        melody's pitch, which reads well and is false: measured over the three committed
+        sweep heads under `--no-melody --chord-notes 2`, **37 of the 93 comping steps do
+        contain it**. That is not a defect but it is
         worth being exact about, because the two claims are not the same claim:
 
         - the guitar is not *singing* - the shape was chosen from the chord alone;
@@ -361,9 +371,8 @@ class TestTheCompingArrangement(unittest.TestCase):
         from arranger.grips import get_comping_voicings
 
         for chord in ("Dm7", "G7", "Fmaj7"):
-            quality = quality_of(chord)
             sets = {
-                tuple(sorted(v.tab_string() for v in get_comping_voicings(quality, chord)))
+                tuple(sorted(v.tab_string() for v in get_comping_voicings(chord)))
                 for _melody in ("D5", "C5", "A4", "F4", "Bb4", "E5", "G3", "D6")
             }
             self.assertEqual(
@@ -398,6 +407,42 @@ class TestTheCompingArrangement(unittest.TestCase):
             )
             self.assertIn(active, comping_sets, step.tab_line())
 
+    def test_no_comping_step_over_the_committed_heads_sounds_the_high_e(self):
+        """The palette's rule, asserted at the level the tab is read at.
+
+        `comping_string_sets` drops the high E; this is the same claim about the
+        **step**, because a rule stated over a shape says nothing about a step the
+        engine builds afterwards - and a thumb line merges into the fret vector after
+        selection. It cannot put the string back (the thumb lives on the low E, the A
+        and the D), which is why the assertion is on the whole step's sounding strings
+        rather than on the upper shape's.
+
+        Every arity is swept, since each takes a different family. A count as well as an
+        assertion, because a palette that stopped offering shapes at all would satisfy
+        "nothing sounds the high E" silently.
+        """
+        from tests.support import arranged, sweep_head_paths
+
+        checked = 0
+        for path in sweep_head_paths():
+            for notes in ("1", "2", "3"):
+                steps, _head, _notes = arranged(
+                    path, request=Request(melody=False, chord_notes=notes)
+                )
+                for step in steps:
+                    active = [
+                        i for i, fret in enumerate(step.voicing.frets) if fret >= 0
+                    ]
+                    if not active:
+                        continue
+                    checked += 1
+                    self.assertNotIn(
+                        5,
+                        active,
+                        f"{path} --chord-notes {notes}: {step.tab_line()}",
+                    )
+        self.assertGreater(checked, 50, "the sweep found too few comping steps")
+
     def test_the_step_still_carries_the_written_melody(self):
         """It is the horn's line, and the band lines up against it.
 
@@ -406,13 +451,14 @@ class TestTheCompingArrangement(unittest.TestCase):
         given away.
         """
         for step, triple in zip(self.comped(), PROGRESSION):
-            self.assertEqual(step.chord, triple[2])
+            self.assertEqual(step.chord, triple[1])
 
     def test_every_step_is_a_guide_tone_shape_of_the_requested_arity(self):
         """`partial` is set, because the chord name above describes the harmony only.
 
-        The arity is asserted rather than assumed, because `VOICES_ARG` is two voices and
-        the first version of the generator always built a three-note shell regardless.
+        The arity is asserted rather than assumed, because `Request(melody=False)` states
+        the chord alone, and the first version of the generator always built a three-note
+        shell regardless.
         """
         for step in self.comped():
             self.assertEqual(step.grip, "shell")
@@ -422,9 +468,27 @@ class TestTheCompingArrangement(unittest.TestCase):
             )
             self.assertTrue(step.partial)
 
+    def test_every_step_states_the_guide_pair(self):
+        """Both guide tones sound: the 3rd and the 7th, which is what a shell claims.
+
+        The degree rule the comping route ships with, asserted here because nothing else
+        pins it: a shell states *which* chord it is through its 3rd and 7th, so a shape
+        that sounds a root and a 5th instead would be a different part with the same
+        arity. The chord part states the guide pair, and `texture` is what decides how
+        many of the chord's other tones join them.
+        """
+        for step, triple in zip(self.comped(), PROGRESSION):
+            name = triple[1]
+            sounding = {midi % 12 for midi in step.voicing.upper_midi_notes()}
+            self.assertTrue(
+                guide_pcs(name) <= sounding,
+                f"{name}: {step.tab_line()} sounds {sorted(sounding)} without both "
+                f"guide tones {sorted(guide_pcs(name))}",
+            )
+
     def test_the_texture_axis_still_decides_where_notes_fall(self):
         """`voices` and `texture` are orthogonal, not one mode between them."""
-        steps = self.comped(texture="targets", timings=self.timings)
+        steps = self.comped(chord_notes="targets", timings=self.timings)
         roles = [step.role for step in steps]
         self.assertIn("target", roles)
         self.assertIn("fill", roles)
@@ -438,7 +502,7 @@ class TestTheCompingArrangement(unittest.TestCase):
         assertion is on the *shape*, not on the melody's pitch class, which a comping
         shape may legitimately share; see `test_the_generator_never_reads_the_melody`.
         """
-        for step in self.comped(texture="targets", timings=self.timings):
+        for step in self.comped(chord_notes="targets", timings=self.timings):
             self.assertEqual(
                 len(step.voicing.active_frets()), 3,
                 step.tab_line(),
@@ -447,56 +511,59 @@ class TestTheCompingArrangement(unittest.TestCase):
             self.assertFalse(step.melody_voiced, step.tab_line())
 
     def test_the_bass_axis_still_decides_the_bottom(self):
-        """`bass=walk` walks under a comping part, and `bass=none` does not.
+        """`bass_notes="walk"` walks under a comping part, and `bass_on="none"` does not.
 
-        This is the band setting as a whole: both axes named, and neither inferred
+        This is the band setting as a whole: both layers named, and neither inferred
         from the other.
         """
         walked = self.comped(
-            texture="targets", bass="root,5th,approach,nearest", timings=self.timings
+            chord_notes="targets",
+            bass_on="every-beat",
+            bass_notes="walk",
+            timings=self.timings,
         )
         self.assertTrue(any(step.bass is not None for step in walked))
-        silent = self.comped(texture="targets", bass="none", timings=self.timings)
+        silent = self.comped(chord_notes="targets", bass_on="none", timings=self.timings)
         self.assertTrue(all(step.bass is None for step in silent))
         for step in silent:
             self.assertFalse(step.melody_voiced)
 
-    def test_the_bass_axis_takes_the_option_spelling(self):
-        """`ArrangeOptions.bass` reaches the engine, which it never did before.
+    def test_the_bass_notes_reach_the_engine_through_the_options(self):
+        """The request's bass content reaches the engine rather than being dropped.
 
-        The test above spells `bass` as a keyword and this one spells it as an
-        options field, and the two diverged for the field's whole life: the engine
-        never read `options.bass` back out, so a walk handed over as options - which
-        is how the slot layer hands over every request, `arranger head` among them -
-        was silently dropped while the keyword test above stayed green.
+        The walk is handed over as options - which is how the slot layer hands over
+        every request, `arranger head` among them - so a request whose bass content
+        never reached the engine would be dropped silently, with every tab unchanged.
         """
-        by_keyword = self.comped(texture="targets", bass="root,5th,approach,nearest", timings=self.timings)
-        by_option = self.engine.arrange_progression(
+        by_request = self.engine.arrange_progression(
             PROGRESSION,
             options=ArrangeOptions(
-                parts=PARTS_WITH_BASS, texture="targets",
-                bass="root,5th,approach,nearest",
+                request=Request(
+                    melody=False,
+                    chord_notes="targets",
+                    bass_on="every-beat",
+                    bass_notes="walk",
+                ),
                 timings=self.timings,
             ),
         )
-        self.assertTrue(any(step.bass is not None for step in by_option))
-        self.assertEqual(format_progression(by_keyword), format_progression(by_option))
+        self.assertTrue(any(step.bass is not None for step in by_request))
 
-    def test_passing_both_bass_spellings_raises(self):
-        """As for every other knob: two spellings of one value is a bug, not a merge."""
-        with self.assertRaises(ValueError):
-            self.engine.arrange_progression(
-                PROGRESSION, bass="root,5th,approach,nearest", options=ArrangeOptions(parts=VOICES_ARG)
-            )
+    def test_the_bass_axis_is_not_a_keyword_on_the_entry_point(self):
+        """The five axes are the implementation, so they have no keyword spelling.
+
+        A call naming one is unspellable rather than conflicting.
+        """
+        signature = inspect.signature(self.engine.arrange_progression)
+        self.assertNotIn("bass", signature.parameters)
 
     def test_the_bass_axis_survives_the_slot_layer(self):
-        """The head command's own path: `--bass-style` becomes an `ArrangeOptions` here.
+        """The head command's own path: the request becomes an `ArrangeOptions` here.
 
-        `arrange_slots` is the layer that builds the options and calls the engine,
-        so this is the route `arranger head` actually takes and the one the unread
-        field broke. Asserted on the thumb notes rather than on any warning, because
-        a fix that quieted a warning while still dropping the line would pass
-        otherwise.
+        `arrange_slots` is the layer that builds the options and calls the engine, so
+        this is the route `arranger head` actually takes. Asserted on the thumb notes,
+        because a walk that reached the layer and was dropped inside it would leave
+        every tab unchanged.
         """
         from arranger.slots import arrange_slots
 
@@ -504,8 +571,7 @@ class TestTheCompingArrangement(unittest.TestCase):
             PROGRESSION,
             self.timings,
             options=ArrangeOptions(
-                parts=PARTS_WITH_BASS,
-                bass="root,5th,approach,nearest",
+                request=Request(melody=False, bass_on="every-beat", bass_notes="walk"),
             ),
         )
         self.assertTrue(steps, "an arrangement with no steps at all is a defect")
@@ -520,8 +586,8 @@ class TestTheCompingArrangement(unittest.TestCase):
         what the tab's line reads for the reason, so it is what is asserted.
         """
         steps = self.engine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("C5", "NC", "NC"), ("A4", "7", "A7")],
-            parts=VOICES_ARG,
+            [("D5", "Dm7"), ("C5", "NC"), ("A4", "A7")],
+            options=ArrangeOptions(request=Request(melody=False)),
         )
         self.assertEqual([step.chord for step in steps], ["Dm7", "NC", "A7"])
         self.assertEqual(steps[1].silence, "nc_comping")
@@ -530,53 +596,56 @@ class TestTheCompingArrangement(unittest.TestCase):
     def test_the_corpus_nc_bar_keeps_its_place_in_the_tab(self):
         """The measured case: `Trouble_in_Mind_Blues` bar 1 is `NC`.
 
-        It used to be absent from the comping part's tab - **12** positions over
-        the three voice selections that reach the comping route, all of them this
-        bar - while the horn played in it, so a reader lining the two parts up was
-        one bar short with nothing to say which bar went. The bar is now present
-        under every one of those selections, and every position in it is silent
-        with the same reason.
+        The bar is present under every selection that reaches the comping route, and
+        every position in it is silent with the same reason - so a reader lining the two
+        parts up is not one bar short with nothing to say which bar went, while the horn
+        plays in it.
         """
         from tests.support import arranged
 
         path = "tests/data/Trouble_in_Mind_Blues.musicxml"
-        for parts in (PART_BASS, PART_CHORD, "bass,chord"):
-            steps, head, _notes = arranged(path, parts=parts)
+        rows = (
+            ("chord", Request(melody=False)),
+            ("chord+bass", Request(melody=False, bass_on="melody", bass_notes="root")),
+            (
+                "bass",
+                Request(melody=False, chord_on="none", bass_on="melody", bass_notes="root"),
+            ),
+        )
+        for label, selection in rows:
+            steps, head, _notes = arranged(path, request=selection)
             bars = sorted(
                 bar for bar in {step.bar for step in steps} if bar is not None
             )
-            self.assertIn(1, bars, f"bar 1 vanished under parts={parts}")
+            self.assertIn(1, bars, f"bar 1 vanished under {label}")
             nc = [step for step in steps if step.silence == "nc_comping"]
-            self.assertTrue(nc, f"no silent NC position under parts={parts}")
+            self.assertTrue(nc, f"no silent NC position under {label}")
             self.assertTrue(
                 all(not step.voicing.active_frets() for step in nc),
-                f"a silent NC position sounds something under parts={parts}",
+                f"a silent NC position sounds something under {label}",
             )
             # Every bar the tune has is in the tab, bar 1 included.
             tune_bars = {note.bar for note in head.notes}
             self.assertTrue(
                 tune_bars <= set(bars),
-                f"bars missing under parts={parts}: {sorted(tune_bars - set(bars))}",
+                f"bars missing under {label}: {sorted(tune_bars - set(bars))}",
             )
 
 
 class TestCompingMelodyIndependence(unittest.TestCase):
-    """Step 0 of `docs/history/comping-styles.md` §9.3, **re-scoped by step C**.
+    """What a melody pitch may and may not change on the comping route.
 
-    Step 0 pinned the comping route as melody-independent: scramble every melody pitch
-    and no fret moves. It landed *before* step C deliberately, because C is the first
-    step in which the melody affects the comping **harmony** - and once C lands the
-    original claim is false by design. So it is **inverted rather than deleted**
-    (AGENTS.md trap 5): the *placement* invariant survives (a slot's `bar`/`beat` never
-    depends on the melody) while the *harmony* now does, under a strategy that
-    substitutes. Both halves are asserted below.
+    The *placement* invariant holds: a slot's `bar`/`beat` never depends on the melody, so
+    scrambling every pitch moves no fret. The *harmony* does depend on it, under a
+    strategy that substitutes. Both halves are asserted below;
+    `docs/history/comping-styles.md` §9.3 holds the reasoning.
     """
 
     #: The bars these tests arrange. See `_arrange`: the claim is about how a melody pitch
     #: reaches the comping part, which eight bars of the tune settle.
     SECTION = (1, 8)
 
-    def _arrange(self, head, parts, grid="chord:freddie", non_chord_tone="extension"):
+    def _arrange(self, head, request, non_chord_tone="extension"):
         """The `arrange_xml_head` comping path over an already-loaded head.
 
         `onsets` is computed the way `arrange_xml_head` computes it, so this exercises
@@ -592,8 +661,9 @@ class TestCompingMelodyIndependence(unittest.TestCase):
         from headxml import _merge_chord_slots, head_skeleton, melody_state
 
         slots = head_skeleton(head, self.SECTION)
-        if not parts_has_melody_only(resolve_parts(parse_parts(parts))):
-            slots = _merge_chord_slots(slots, head, None, grid) or slots
+        resolved = resolve_request(request, head.beats_per_bar, head.grouping)
+        if not parts_has_melody_only(resolved.parts):
+            slots = _merge_chord_slots(slots, head, None) or slots
         onsets = {
             index
             for index, slot in enumerate(slots)
@@ -603,8 +673,7 @@ class TestCompingMelodyIndependence(unittest.TestCase):
             [slot[0] for slot in slots],
             [(slot[1], slot[2], slot[3]) for slot in slots],
             options=ArrangeOptions(
-                parts=parts,
-                grid=grid,
+                request=request,
                 time_signature=TimeSignature(head.beats_per_bar, head.beat_type),
                 non_chord_tone=non_chord_tone,
             ),
@@ -642,19 +711,24 @@ class TestCompingMelodyIndependence(unittest.TestCase):
         """
         from headxml import load_musicxml
 
-        for parts in (
-            PART_CHORD,
-            PART_BASS,
-            "bass,chord",
+        for label, selection in (
+            ("chord", Request(melody=False)),
+            ("chord+bass", Request(melody=False, bass_on="melody", bass_notes="root")),
+            (
+                "bass",
+                Request(melody=False, chord_on="none", bass_on="melody", bass_notes="root"),
+            ),
         ):
-            with self.subTest(parts=parts):
+            with self.subTest(selection=label):
                 head = load_musicxml(self._path())
-                before = self._arrange(head, parts, non_chord_tone="sustain")
+                before = self._arrange(head, selection, non_chord_tone="sustain")
                 self.assertTrue(before, "an arrangement with no steps at all is a defect")
                 self.assertEqual(
-                    self._arrange(self._scrambled(head), parts, non_chord_tone="sustain"),
+                    self._arrange(
+                        self._scrambled(head), selection, non_chord_tone="sustain"
+                    ),
                     before,
-                    f"{parts}: a melody pitch reached the comping part with no strategy",
+                    f"{label}: a melody pitch reached the comping part with no strategy",
                 )
 
     def test_a_substituted_melody_reaches_the_harmony_and_not_the_placement(self):
@@ -669,8 +743,10 @@ class TestCompingMelodyIndependence(unittest.TestCase):
 
         head = load_musicxml(self._path())
         scrambled = self._scrambled(head)
-        substituted = self._arrange(scrambled, PART_CHORD)  # default extension
-        unsubstituted = self._arrange(scrambled, PART_CHORD, non_chord_tone="sustain")
+        substituted = self._arrange(scrambled, Request(melody=False))  # default extension
+        unsubstituted = self._arrange(
+            scrambled, Request(melody=False), non_chord_tone="sustain"
+        )
         self.assertEqual(
             [(step[0], step[1]) for step in substituted],
             [(step[0], step[1]) for step in unsubstituted],
@@ -687,13 +763,13 @@ class TestTheSopranoIsPerSlotNotPerRoute(unittest.TestCase):
     """§9.3 step D: the guitar sings a slot only where the tune *articulates*.
 
     `parts_have_melody` answers the arrangement-level half of the route; the other
-    half is per slot. A soprano-named selection still **comps** the grid positions its
-    tune is silent at, or merely sustains through, so `grid=joe_pass --voices
-    soprano,...` places chords on the offbeats instead of ignoring the grid. The written
-    onsets are untouched - that is the acceptance criterion, and **the default grid
-    generates positions of its own** too (`every_note`, at each bar's own subdivision),
-    so the default is no longer inert but still invents no melody - see
-    `test_the_default_grid_invents_no_melody`.
+    half is per slot. A soprano-named selection still **comps** the positions its tune is
+    silent at, or merely sustains through, so a rhythm of the **ands** with the tune still
+    ours places chords on the offbeats instead of being ignored. The written onsets are
+    untouched - that is the acceptance criterion, and the engine's own union generates
+    positions of its own too (at each bar's own subdivision), so an axis spelling is not
+    inert either but still invents no melody - see
+    `test_the_default_request_invents_no_melody`.
 
     "Does the guitar sing this slot?" reuses §9.2's onset signal rather than re-deriving
     it: a position the melody only *holds* through is not an onset, so the guitar states
@@ -707,16 +783,25 @@ class TestTheSopranoIsPerSlotNotPerRoute(unittest.TestCase):
             os.path.dirname(os.path.abspath(__file__)), "data", "synthetic_cut_time.mxl"
         )
 
-    def _arrange(self, parts=PART_NAMES_ARG, grid="chord:joe_pass"):
+    def _arrange(self, request=None, chord_on="1and,2and"):
+        """A **requested** rhythm over the cut-time head, so the comps land on the ands.
+
+        `chord_on` spells the rhythm for the callers that want the shipped selection; a
+        caller with a selection of its own passes the whole request, because a
+        melody-only selection names no chord position for a rhythm to move.
+        """
         from tests.support import arranged
 
-        return arranged(self._path(), parts=parts, grid=grid)
+        return arranged(
+            self._path(),
+            request=Request(chord_on=chord_on) if request is None else request,
+        )
 
-    def test_a_singing_selection_comps_the_grid_positions_it_does_not_sing(self):
-        """The grid is no longer ignored when the guitar has the tune."""
+    def test_a_singing_selection_comps_the_positions_it_does_not_sing(self):
+        """A requested rhythm is not ignored when the guitar has the tune."""
         steps, _head, _notes = self._arrange()
         comps = [s for s in steps if not s.melody_voiced]
-        self.assertTrue(comps, "the grid was ignored on a singing selection")
+        self.assertTrue(comps, "the rhythm was ignored on a singing selection")
         for step in comps:
             # A comp states the chord and invents no melody; the written symbol is kept.
             self.assertTrue(step.voicing.active_frets(), step.tab_line())
@@ -746,8 +831,8 @@ class TestTheSopranoIsPerSlotNotPerRoute(unittest.TestCase):
             sounding = {pitch % 12 for pitch in step.voicing.midi_notes()}
             self.assertTrue(sounding <= allowed, step.tab_line())
 
-    def test_no_written_note_is_dropped_by_the_grid(self):
-        """The grid *adds* positions; it never removes a written note's slot."""
+    def test_no_written_note_is_dropped_by_the_rhythm(self):
+        """The rhythm *adds* positions; it never removes a written note's slot."""
         from headxml import head_skeleton
 
         steps, head, _notes = self._arrange()
@@ -759,19 +844,19 @@ class TestTheSopranoIsPerSlotNotPerRoute(unittest.TestCase):
             self.assertIn((bar, beat), at, f"{note} at bar {bar} beat {beat} went missing")
             self.assertEqual(at[(bar, beat)].melody, note)
 
-    def test_the_default_grid_invents_no_melody(self):
-        """The default grid adds positions; it never adds a *note* of the tune.
+    def test_the_default_request_invents_no_melody(self):
+        """The default request adds no position, and never a *note* of the tune.
 
-        `every_note` generates a chord at each bar's own subdivision now (open-issues
-        item 1's remaining half), so the step count is no longer the skeleton's - what
-        must still hold is that **no invented pitch reaches a singing part**. Every step
-        either carries a written note at its written position, or carries none at all;
+        What must hold is that **no invented pitch reaches a singing part**: every step
+        either carries a written note at its written position, or carries none at all -
         and the ones that carry none are positions the tune is *silent* at rather than
-        positions it wrote.
+        positions it wrote. The engine's own union, which does add positions, is held to
+        the same rule by
+        `test_headxml_timeline.py::TestChordSlots::test_every_added_position_is_one_the_tune_is_silent_at`.
         """
         from headxml import head_skeleton, melody_state
 
-        steps, head, _notes = self._arrange(grid="melody:every_note")
+        steps, head, _notes = self._arrange(chord_on="melody")
         written = {(bar, round(beat, 6)) for _t, bar, beat, _d in head_skeleton(head, None)}
         self.assertTrue(steps)
         for step in steps:
@@ -785,9 +870,9 @@ class TestTheSopranoIsPerSlotNotPerRoute(unittest.TestCase):
                 step.tab_line(),
             )
 
-    def test_a_parts_has_melody_only_adds_nothing(self):
-        """`soprano` plays the tune and nothing else, so it never comps a grid position."""
-        steps, _head, _notes = self._arrange(parts=PART_MELODY)
+    def test_a_melody_only_selection_adds_nothing(self):
+        """The guitar plays the tune and nothing else, so it never comps a grid position."""
+        steps, _head, _notes = self._arrange(request=Request(chord_on="none"))
         self.assertTrue(steps)
         self.assertTrue(all(step.melody_voiced for step in steps))
         self.assertTrue(all(len(step.voicing.active_frets()) == 1 for step in steps))
@@ -804,13 +889,16 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
 
     def _comp(self, progression, strategy, **kwargs):
         steps = VoiceLeadingEngine.arrange_progression(
-            progression, parts=VOICES_ARG, non_chord_tone=strategy, **kwargs
+            progression,
+            options=ArrangeOptions(
+                request=Request(melody=False), non_chord_tone=strategy, **kwargs
+            ),
         )
         self.assertTrue(steps, "an arrangement with no steps at all is a defect")
         return steps
 
     def test_extension_absorbs_the_note_as_an_extension(self):
-        steps = self._comp([("D5", "maj7", "Cmaj7")], "extension")
+        steps = self._comp([("D5", "Cmaj7")], "extension")
         self.assertEqual([s.harmonized_as for s in steps], ["Cmaj9"])
         # `chord` stays the written symbol; `harmonized_as` says what was stated.
         self.assertEqual([s.chord for s in steps], ["Cmaj7"])
@@ -818,7 +906,7 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
         self.assertEqual(steps[0].strategy, "extension")
 
     def test_diminished_states_the_dim7_a_semitone_below_the_resolution(self):
-        steps = self._comp([("D5", "maj7", "Cmaj7")], "diminished")
+        steps = self._comp([("D5", "Cmaj7")], "diminished")
         self.assertEqual([s.harmonized_as for s in steps], ["Bdim7"])
         self.assertEqual(steps[0].strategy, "diminished")
 
@@ -829,7 +917,7 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
         for coinciding with the tune - every sounding pitch must be a tone of the chord
         actually stated, `Bdim7`.
         """
-        steps = self._comp([("D5", "maj7", "Cmaj7")], "diminished")
+        steps = self._comp([("D5", "Cmaj7")], "diminished")
         self.assertFalse(steps[0].melody_voiced)
         sounding = {pitch % 12 for pitch in steps[0].voicing.midi_notes()}
         self.assertTrue(sounding <= chord_pcs("Bdim7"), steps[0].tab_line())
@@ -840,7 +928,7 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
         A comping shape is built fresh on every slot, so `sustain`'s hold-the-previous
         move has nothing to act on and it must fall through to no substitution.
         """
-        steps = self._comp([("D5", "maj7", "Cmaj7")], "sustain")
+        steps = self._comp([("D5", "Cmaj7")], "sustain")
         self.assertIsNone(steps[0].harmonized_as)
         self.assertIsNone(steps[0].strategy)
         self.assertFalse(steps[0].non_chord_tone)
@@ -849,7 +937,7 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
         """A melody the chord already contains is not reharmonised under any strategy."""
         for strategy in ("extension", "diminished"):
             with self.subTest(strategy=strategy):
-                steps = self._comp([("C5", "maj7", "Cmaj7")], strategy)
+                steps = self._comp([("C5", "Cmaj7")], strategy)
                 self.assertIsNone(steps[0].harmonized_as, strategy)
 
     def test_the_onset_guard_skips_a_held_position(self):
@@ -859,14 +947,14 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
         carrying the same note - it must be voiced as the written chord, not re-decided
         under a note whose onset already decided it.
         """
-        progression = [("D5", "maj7", "Cmaj7"), ("D5", "maj7", "Cmaj7")]
+        progression = [("D5", "Cmaj7"), ("D5", "Cmaj7")]
         steps = self._comp(progression, "diminished", melody_onsets={0})
         self.assertEqual(steps[0].harmonized_as, "Bdim7")
         self.assertIsNone(steps[1].harmonized_as)
 
     def test_a_bare_call_with_no_timeline_treats_every_slot_as_an_onset(self):
         """`melody_onsets=None` (the default) is all-onsets - the hand-built caller's rule."""
-        progression = [("D5", "maj7", "Cmaj7"), ("D5", "maj7", "Cmaj7")]
+        progression = [("D5", "Cmaj7"), ("D5", "Cmaj7")]
         steps = self._comp(progression, "diminished")
         self.assertEqual([s.harmonized_as for s in steps], ["Bdim7", "Bdim7"])
 
@@ -879,7 +967,7 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
         the fixture is a single slot, so a second element would mean the route
         duplicated it.
         """
-        steps = self._comp([("D5", "maj7", "Cmaj7")], "diminished")
+        steps = self._comp([("D5", "Cmaj7")], "diminished")
         self.assertEqual(len(steps), 1)
         self.assertEqual([s.harmonized_as for s in steps], ["Bdim7"])
         self.assertTrue(all(s.strategy for s in steps))
@@ -893,12 +981,12 @@ class TestTheNonChordToneStrategyReachesTheCompingRoute(unittest.TestCase):
         """
         from arranger.slots import arrange_slots
 
-        progression = [("D5", "m7", "Bbm7"), ("D5", "m7", "Bbm7")]
+        progression = [("D5", "Bbm7"), ("D5", "Bbm7")]
         timings = [(0, 1.0, 1.0), (0, 1.5, 0.5)]
         steps, rescued, _notes = arrange_slots(
             progression,
             timings,
-            options=ArrangeOptions(parts=VOICES_ARG),
+            options=ArrangeOptions(request=Request(melody=False)),
             fallback="diminished",
             onsets={0},
         )
@@ -912,18 +1000,18 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
 
     **`bass_allowed` was asked about `TEXTURE_GRIPS` on a route where it is inert.**
     That table describes the shapes `get_all_grip_voicings` generates; on the comping
-    route the shapes come from `get_comping_voicings` and the texture is a meaningless
-    name - measured on `tests/data/synthetic_cut_time.mxl`, all 80 comping shapes are
-    byte-identical under `texture=uniform` and `texture=targets`.
+    route the shapes come from `get_comping_voicings` and the chord content is a
+    meaningless name there - measured on `tests/data/synthetic_cut_time.mxl`, all 80
+    comping shapes are byte-identical under `chord_notes="full"` and `chord_notes="targets"`.
 
-    So `parts="chord", bass="root,5th,approach,nearest"` under the **default** texture was refused with
-    "uniform leaves no bass string free for a target" and emitted no thumb at all, while
-    the same request under `texture=targets` emitted 127. The warning named a setting
-    that could not change the outcome.
+    So the walk beside a comping selection - `Request(melody=False, bass_on="every-beat",
+    bass_notes="walk")` - was refused under the default content, naming a chord setting
+    that could not change the outcome, and emitted no thumb at all; the same request with
+    `chord_notes="targets"` emitted 127.
 
-    The existing `test_the_bass_axis_still_decides_the_bottom` passed throughout,
-    because it spelled `texture="targets"` - the one texture that happened to fit. These
-    tests pin the invariant rather than the workaround: **the texture is inert on this
+    The existing `test_the_bass_axis_still_decides_the_bottom` passed throughout, because
+    it spelled `chord_notes="targets"` - the one content that happened to fit. These tests
+    pin the invariant rather than the workaround: **the chord content is inert on this
     route, so it must not appear in the decision.**
     """
 
@@ -935,24 +1023,27 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
         # so they are spread over four beats rather than sitting on all four slots.
         self.timings = [(0, 1.0, 1.0), (0, 2.0, 1.0), (0, 2.5, 0.5), (0, 3.5, 0.5)]
 
-    def comped(self, **kwargs):
-        # `bass,chord`: the thumb line is the bass part, and a bass style with no
-        # bass part is refused ("add 'bass' to parts"). This class is the one that
-        # carries a thumb, so it takes both parts.
+    def comped(self, **request_kwargs):
+        # `melody=False` with a bass position: the thumb line is the bass part, and a
+        # bass style with no bass part is refused ("add 'bass' to parts"). This class
+        # is the one that carries a thumb, so it names both.
         steps = self.engine.arrange_progression(
-            PROGRESSION, parts=PARTS_WITH_BASS,
-            timings=self.timings, **kwargs,
+            PROGRESSION,
+            options=ArrangeOptions(
+                request=Request(melody=False, **request_kwargs),
+                timings=self.timings,
+            ),
         )
         self.assertTrue(steps, "an arrangement with no steps at all is a defect")
         return steps
 
-    def test_the_default_texture_no_longer_refuses_a_thumb_line(self):
-        """The regression itself: `bass=walk` under the default texture.
+    def test_the_default_texture_admits_a_thumb_line(self):
+        """The regression itself: a walk under the default texture.
 
         Asserted on the *thumb notes* rather than on the warning, because a fix that
         merely quieted the warning while still dropping the line would pass otherwise.
         """
-        steps = self.comped(bass="root,5th,approach,nearest")
+        steps = self.comped(bass_on="every-beat", bass_notes="walk")
         self.assertTrue(
             any(step.bass is not None for step in steps),
             "the comping route emitted no thumb notes at all",
@@ -961,19 +1052,15 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
     def test_the_texture_changes_the_arity_and_nothing_else_on_this_route(self):
         """How many notes the comping part states is the texture's; the slots are not.
 
-        **Inverted rather than deleted.** It used to assert the frets were identical
-        under every texture, and that was true while the arity came from the *number of
-        voice names* - so the texture could not reach this route at all, and a texture
-        that thinned a comping part was a defect. The arity is the texture's now
-        (`chord1`/`chord2`/`chord3`), so the surviving claim is the split between the
-        two: the texture decides the count, and the harmony timeline, the slot
-        structure and the role are untouched by it.
+        The claim is the split between the two: the texture decides the count
+        (`chord1`/`chord2`/`chord3`), and the harmony timeline, the slot structure and the
+        role are untouched by it.
         """
         baseline: Optional[list] = None
-        for texture, ceiling in (
-            ("chord1", 1), ("chord2", 2), ("chord3", 3), ("uniform", 3),
+        for notes, ceiling in (
+            ("1", 1), ("2", 2), ("3", 3), ("full", 3),
         ):
-            steps = self.comped(bass="root,5th,approach,nearest", texture=texture)
+            steps = self.comped(bass_on="every-beat", bass_notes="walk", chord_notes=notes)
             for step in steps:
                 # The **upper** voices: the thumb is merged into the fret vector
                 # after the comping shape is chosen, so it is not one of the notes
@@ -987,7 +1074,7 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
                 continue
             self.assertEqual(
                 structure, baseline,
-                f"texture={texture} moved a slot rather than thinning one",
+                f"chord_notes={notes} moved a slot rather than thinning one",
             )
 
     def test_bass_none_is_still_honoured_on_this_route(self):
@@ -996,7 +1083,7 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
         Without this, "the thumb line now appears" and "the thumb line always appears"
         would be indistinguishable, and the second is the bug's mirror image.
         """
-        steps = self.comped(bass="none", texture="uniform")
+        steps = self.comped(bass_on="none", chord_notes="full")
         self.assertTrue(all(step.bass is None for step in steps))
 
     def test_the_walked_beats_reach_the_part(self):
@@ -1008,14 +1095,12 @@ class TestTheCompingRouteCarriesAThumb(unittest.TestCase):
         barely visits still carries four quarters, and the part has more steps than the
         head had notes.
 
-        **Compared against `bass=none` and not against a texture.** The first draft of
-        this test compared `uniform` against `targets` and failed, which was the fix
-        working: both now build the same union, because the texture no longer reaches
-        the decision. A test asserting the texture *changes* the step count here would
-        have pinned the bug.
+        **Compared against `bass_on="none"` and not against a texture.** Both textures build
+        the same union, because the texture does not reach this decision. A test asserting
+        the texture *changes* the step count here would pin a bug.
         """
-        walked = self.comped(bass="root,5th,approach,nearest")
-        silent = self.comped(bass="none")
+        walked = self.comped(bass_on="every-beat", bass_notes="walk")
+        silent = self.comped(bass_on="none")
         # Four written notes, and the walk adds the two beats the melody skips.
         self.assertEqual(len(silent), 4, "the head is four notes in one bar")
         self.assertEqual(len(walked), 6, "the walk should add the two empty beats")

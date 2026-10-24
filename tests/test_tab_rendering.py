@@ -12,7 +12,6 @@ from typing import List
 
 import arranger
 from arranger import (
-    NO_CHORD,
     ArrangementStep,
     VoiceLeadingEngine,
     format_progression,
@@ -20,6 +19,8 @@ from arranger import (
     format_tab_staff,
 )
 from arranger.annotation import step_annotation
+from arranger.options import ArrangeOptions, Request
+from arranger.tuning import NO_CHORD
 from tests.support import arranged, make_voicing, sweep_head_paths
 
 # The compact line's fixed layout, in columns: chord(8) + space + melody(3) + space =
@@ -150,21 +151,21 @@ class TestFormatProgression(unittest.TestCase):
         # selector - the arity rule offers the whole family set, and this fixture is
         # whatever the tuple prefers inside it.
         self.major = self.engine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("B4", "7", "G7"), ("C5", "maj7", "Cmaj7")],
+            [("D5", "Dm7"), ("B4", "G7"), ("C5", "Cmaj7")],
             top_strings=(5,),
         )
         self.all_of_me = self.engine.arrange_progression(
-            [("C5", "maj7", "Cmaj7"), ("D5", "maj7", "Cmaj7"), ("C5", "maj7", "Cmaj7")]
+            [("C5", "Cmaj7"), ("D5", "Cmaj7"), ("C5", "Cmaj7")]
         )
 
     def test_a_short_explanation_is_one_line_per_step(self):
         """A step whose explanation fits the width is one line, as it always was.
 
-        The renderer is no longer "one line per step" for *every* step - a long
-        explanation continues below its step - but nothing about the short case changed:
-        the four columns are on the one line, with the annotation trailing them.
+        The renderer is not "one line per step" for *every* step - a long explanation
+        continues below its step - but nothing about the short case differs: the four
+        columns are on the one line, with the annotation trailing them.
         """
-        steps = self.engine.arrange_progression([("F4", NO_CHORD, NO_CHORD)])
+        steps = self.engine.arrange_progression([("F4", NO_CHORD)])
         lines = format_progression(steps).split("\n")
         self.assertEqual(len(lines), 1)
         self.assertIn("F4", lines[0])
@@ -195,22 +196,6 @@ class TestFormatProgression(unittest.TestCase):
         for line, step in zip(lines, self.major):
             self.assertIn(step_annotation(step).strip(), line)
             self.assertIn(step.chord, line)
-
-    def test_vertical_is_no_longer_an_argument(self):
-        """`format_progression` no longer takes `vertical`, and says so by raising.
-
-        The inversion of the test this replaces, which asserted that `vertical=True`
-        gave seven lines per step. That branch is gone: the compact one-line form is
-        the whole renderer, and a whole-progression staff is `format_tab_staff`'s
-        job. Asserting the `TypeError` pins the removal, so a caller that still
-        passes it gets a clear failure rather than a silently different rendering.
-
-        A `TypeError` is the honest form of that failure: the parameter was removed
-        rather than deprecated, so there is nothing to warn about and nothing to
-        keep working.
-        """
-        with self.assertRaises(TypeError):
-            format_progression(self.major, vertical=True)  # type: ignore[call-arg]
 
     def test_non_chord_tone_step_is_annotated(self):
         """
@@ -271,19 +256,19 @@ class TestTextureAnnotation(unittest.TestCase):
         # test_a_non_chord_tone_annotation_takes_precedence_over_the_fill_note.
         self.steps = VoiceLeadingEngine.arrange_progression(
             [
-                ("C5", "maj7", "Fmaj7"),
-                ("E5", "maj7", "Fmaj7"),
-                ("A4", "maj7", "Fmaj7"),
-                ("F4", "maj7", "Fmaj7"),
+                ("C5", "Fmaj7"),
+                ("E5", "Fmaj7"),
+                ("A4", "Fmaj7"),
+                ("F4", "Fmaj7"),
             ],
             timings=[(0, 1.0, None), (0, 1.5, None), (0, 2.0, None), (0, 3.0, None)],
-            texture="targets",
+            options=ArrangeOptions(request=Request(chord_notes="targets")),
         )
         self.rendered = format_progression(self.steps)
 
     def test_a_thin_step_is_annotated_as_partial(self):
         """Every fill says so, in the shared annotation the staff renderer uses too."""
-        fills = [s for s in self.steps if s.role == arranger.ROLE_FILL]
+        fills = [s for s in self.steps if s.role == arranger.tuning.ROLE_FILL]
         self.assertTrue(fills, "the fixture must contain fills")
         for step in fills:
             self.assertTrue(step.partial, f"{step.melody} is a fill but not partial")
@@ -299,10 +284,12 @@ class TestTextureAnnotation(unittest.TestCase):
         `step_annotation` - a fill does not get its own exception to it.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D5", "maj7", "Fmaj7")], timings=[(0, 2.0, None)], texture="targets"
-        )
+                [("D5", "Fmaj7")], timings=[(0, 2.0, None)], options=ArrangeOptions(
+                    request=Request(chord_notes="targets"),
+                ),
+            )
         step = steps[0]
-        self.assertEqual(step.role, arranger.ROLE_FILL)
+        self.assertEqual(step.role, arranger.tuning.ROLE_FILL)
         self.assertTrue(step.non_chord_tone)
         self.assertIn("non-chord tone", step_annotation(step))
 
@@ -349,7 +336,7 @@ class TestTextureAnnotation(unittest.TestCase):
         rendering is what it always was.
         """
         plain = VoiceLeadingEngine.arrange_progression(
-            [("C5", "maj7", "Fmaj7"), ("B4", "maj7", "Fmaj7")]
+            [("C5", "Fmaj7"), ("B4", "Fmaj7")]
         )
         self.assertNotIn("interval fill", format_progression(plain))
 
@@ -384,20 +371,20 @@ class TestRepeatedMelody(unittest.TestCase):
     def test_engine_marks_a_repeated_melody(self):
         """arrange_progression flags every step after the first on the same pitch."""
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("D5", "m7", "Dm7"), ("F5", "maj7", "Fmaj7")]
+            [("D5", "Dm7"), ("D5", "Dm7"), ("F5", "Fmaj7")]
         )
         self.assertEqual([step.repeated for step in steps], [False, True, False])
 
     def test_engine_does_not_flag_a_moving_melody(self):
         """A step whose melody moves is not a repeat, even on the same chord."""
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D5", "m7", "Dm7"), ("F5", "m7", "Dm7")]
+            [("D5", "Dm7"), ("F5", "Dm7")]
         )
         self.assertFalse(any(step.repeated for step in steps))
 
     def test_a_run_of_repeats_is_all_flagged(self):
         """Four notes on the same pitch: the first is struck, the next three repeat."""
-        progression = [("C4", "m7", "Dm7")] * 4
+        progression = [("C4", "Dm7")] * 4
         steps = VoiceLeadingEngine.arrange_progression(progression)
         self.assertEqual([step.repeated for step in steps], [False, True, True, True])
 
@@ -407,7 +394,7 @@ class TestRepeatedMelody(unittest.TestCase):
         chord the hold started on, so the step is re-harmonised and struck in full.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("C4", "m7", "F-7"), ("C4", "m7", "Bb-7"), ("C4", "7", "Eb7")]
+            [("C4", "F-7"), ("C4", "Bb-7"), ("C4", "Eb7")]
         )
         self.assertEqual([step.repeated for step in steps], [False, False, False])
 
@@ -417,7 +404,7 @@ class TestRepeatedMelody(unittest.TestCase):
         is the case that leaves the shape ringing rather than re-fingering it.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("C4", "7", "Eb7"), ("C4", "7", "Eb7"), ("C4", "7", "Eb7")]
+            [("C4", "Eb7"), ("C4", "Eb7"), ("C4", "Eb7")]
         )
         self.assertEqual([step.repeated for step in steps], [False, True, True])
 
@@ -427,7 +414,7 @@ class TestRepeatedMelody(unittest.TestCase):
         across that change is still a hold. Compared as (root, quality), not as text.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("C4", "m7", "D-7"), ("C4", "m7", "Dm7")]
+            [("C4", "D-7"), ("C4", "Dm7")]
         )
         self.assertEqual([step.repeated for step in steps], [False, True])
 
@@ -511,7 +498,7 @@ class TestRepeatedMelody(unittest.TestCase):
         and keeps spelling its own mutes.
         """
         steps = VoiceLeadingEngine.arrange_progression(
-            [("D5", "NC", "NC"), ("D5", "NC", "NC")]
+            [("D5", "NC"), ("D5", "NC")]
         )
         self.assertFalse(any(step.repeated for step in steps))
         self.assertTrue(all(step.melody_only for step in steps))
@@ -546,9 +533,9 @@ class TestTheExplanationWraps(unittest.TestCase):
         for head in sweep_head_paths():
             for config in (
                 {},
-                {"parts": "bass,chord"},
-                {"grid": "chord:freddie"},
-                {"texture": "targets"},
+                {"options": ArrangeOptions(request=Request(melody=False))},
+                {"request": Request(chord_on="every-beat")},
+                {"options": ArrangeOptions(request=Request(chord_notes="targets"))},
             ):
                 steps, _head, _notes = arranged(head, section=(1, 4), **config)
                 for step in steps:
@@ -602,16 +589,24 @@ class TestTheExplanationWraps(unittest.TestCase):
     def test_the_number_of_steps_that_wrap(self):
         """A count, because a step that stops wrapping is silent.
 
-        Measured over this sweep: **93** of the steps it renders carry an explanation too
+        Measured over this sweep: **82** of the steps it renders carry an explanation too
         long for the width, so each of them continues below the step. A clause that stopped
         being printed, or a width that stopped being honoured, would move this number.
+
+        The count is a function of the width and the clauses, and two things set it: the
+        union's gate reading the **selection** (`targets` does not comp a position before
+        the waltz's first note, so that note is harmonised rather than read as a repeat of
+        the comping shape) and the comping palette's string set - the waltz's comping shape
+        left the G-B-E set for `x-6-5-5-x-x` on the A, D and G strings, which states
+        `G 3, Bb 5 & C 6` where the G-B-E set stated `Eb Root, G 3 & C 6`, three
+        characters shorter. Three characters is the whole of the difference at this width.
         """
         from arranger.render import _format_step
 
         wrapped = sum(
             len(_format_step(step, self.WIDTH)) > 1 for _head, step in self.rendered_steps()
         )
-        self.assertEqual(wrapped, 93, "the number of steps that wrap moved")
+        self.assertEqual(wrapped, 82, "the number of steps that wrap moved")
 
 
 class TestOneLineColumns(unittest.TestCase):
@@ -619,7 +614,8 @@ class TestOneLineColumns(unittest.TestCase):
 
     Two guarantees. The **tab column is fixed**, so shapes line up down the page: the
     annotation, whose length varies, trails the line instead of sitting between the
-    melody and the tab, where it used to push every annotated shape out of line. And
+    melody and the tab, where its varying width would push every annotated shape out of
+    line. And
     the **degree column** names the melody's chord tone - or, for a note outside the
     chord, the tension it spells - immediately after the melody note.
     """
@@ -636,7 +632,7 @@ class TestOneLineColumns(unittest.TestCase):
         since a continuation line carries the explanation alone.
         """
         rendered = self.build(
-            [("D4", "7", "D7"), ("Eb4", "7", "D7"), ("D4", "7", "D7")]
+            [("D4", "D7"), ("Eb4", "D7"), ("D4", "D7")]
         )
         for block in _blocks(rendered):
             self.assertRegex(block[0][_TAB_FIELD].strip(), r"^[x0-9]+(-[x0-9]+){5}$")
@@ -663,19 +659,19 @@ class TestOneLineColumns(unittest.TestCase):
         self.assertEqual(len({block[0].index("(") for block in blocks}), 1, blocks)
 
     def test_the_degree_column_names_the_melody_note(self):
-        rendered = self.build([("G4", "maj7", "Ebmaj7"), ("D4", "maj7", "Ebmaj7")])
+        rendered = self.build([("G4", "Ebmaj7"), ("D4", "Ebmaj7")])
         blocks = _blocks(rendered)
         self.assertEqual(blocks[0][0][_DEGREE_FIELD].strip(), "3")
         self.assertEqual(blocks[1][0][_DEGREE_FIELD].strip(), "7")
 
     def test_a_tension_is_named_in_the_degree_column(self):
         """`Eb` over `D7` is the b9 the reharmonisation below it names."""
-        rendered = self.build([("Eb4", "7", "D7")])
+        rendered = self.build([("Eb4", "D7")])
         self.assertEqual(_blocks(rendered)[0][0][_DEGREE_FIELD].strip(), "b9")
 
     def test_the_annotation_trails_the_tab(self):
         """The explanation is appended after the shape, not between the melody and it."""
-        block = _blocks(self.build([("Eb4", "7", "D7")]))[0]
+        block = _blocks(self.build([("Eb4", "D7")]))[0]
         self.assertLess(_TAB_FIELD.stop, block[0].index("("))
 
     def test_a_slot_with_no_melody_leaves_the_degree_column_blank(self):
