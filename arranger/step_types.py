@@ -200,6 +200,7 @@ class Palette:
     decided_by: Optional[int] = None
     inside_window: bool = False
     dropped_for_bass: Optional[Voicing] = None
+    dropped_for_line: Optional[Voicing] = None
 
 
 @dataclass
@@ -223,6 +224,7 @@ class ArrangementStep:
     role: str = ROLE_TARGET
     metric_weight: int = 0
     bass_role: Optional[str] = None
+    top_role: Optional[str] = None
     bass_only: bool = False
     bass_held: bool = False
     # True when this step's chord is a new attack here rather than a shape still
