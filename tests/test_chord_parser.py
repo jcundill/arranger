@@ -3,7 +3,7 @@ import unittest
 from musthe import Note
 
 from arranger import ChordParser, melody_degree_name
-from arranger.chords import promote_slash_chord
+from arranger.chords import promote_slash_chord, slash_bass, split_slash
 from arranger.tuning import PITCH_CLASS_NAMES
 
 
@@ -212,6 +212,48 @@ class TestMelodyDegreeName(unittest.TestCase):
         """No root or no tone set means no claim, rather than a guessed degree."""
         for chord in ("NC", "", None, "X7"):
             self.assertEqual(melody_degree_name(Note("C5"), chord), "", chord)
+
+
+class TestSplitSlash(unittest.TestCase):
+    """Where a chord symbol's slash bass begins, and where the body ends.
+
+    **The rule is the note letter.** A `/` followed by a note letter asks for a bass, and
+    it is the *last* such slash that counts, because a body may carry a slash of its own:
+    `6/9` is the one quality spelled with one, and `9` is not a note letter.
+
+    A split on the first slash instead loses `C6/9/E`'s bass and reads `C6/9` as a `6`,
+    whose tone set is missing the 9th - a wrong chord that raises nothing, because both
+    `6` and `6/9` are legal.
+    """
+
+    def test_a_note_letter_after_the_slash_is_the_bass(self):
+        """The ordinary case: the body is everything before the slash."""
+        self.assertEqual(split_slash("Dm7/G"), ("Dm7", "G"))
+        self.assertEqual(split_slash("D/C"), ("D", "C"))
+        self.assertEqual(split_slash("Gmaj9/F#"), ("Gmaj9", "F#"))
+        self.assertEqual(split_slash("A-/G"), ("A-", "G"))
+
+    def test_a_six_nine_chord_is_a_quality_not_a_bass(self):
+        """`9` is not a note letter, so `C6/9` has no bass and keeps its whole body."""
+        self.assertEqual(split_slash("C6/9"), ("C6/9", None))
+
+    def test_a_slash_bass_on_a_six_nine_chord_is_still_a_bass(self):
+        """The last slash decides, so a body may carry one of its own."""
+        self.assertEqual(split_slash("C6/9/E"), ("C6/9", "E"))
+        self.assertEqual(split_slash("C6/9/G"), ("C6/9", "G"))
+
+    def test_no_slash_is_no_bass(self):
+        """An unaccompanied symbol comes back whole, with nothing to prefer."""
+        for symbol in ("Dm7", "C69", "NC", "", None):
+            self.assertEqual(split_slash(symbol), (symbol or "", None), symbol)
+
+    def test_surrounding_space_is_not_part_of_the_symbol(self):
+        self.assertEqual(split_slash("  D/C  "), ("D", "C"))
+
+    def test_slash_bass_reads_the_same_rule(self):
+        """`slash_bass` is the bass half of this, so the two cannot disagree."""
+        for symbol in ("Dm7/G", "C6/9/E", "C6/9", "NC", ""):
+            self.assertEqual(slash_bass(symbol), split_slash(symbol)[1], symbol)
 
 
 class TestSlashChordPromotion(unittest.TestCase):

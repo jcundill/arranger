@@ -41,7 +41,7 @@ from musthe import Note
 
 from arranger import ChordParser, Request
 from arranger.annotation import _omission_clause, step_annotation
-from arranger.chords import melody_degree_name
+from arranger.chords import melody_degree_name, split_slash
 from arranger.options import _CHORD_FILLS_HOLD, CHORD_FILLS_COMP, ArrangeOptions
 from arranger.step_types import ArrangementStep, Palette
 from arranger.tuning import (
@@ -123,6 +123,11 @@ def _missing_degree_names(step: ArrangementStep) -> List[str]:
     chord no shape could state) are the ones the clause is silent on, so they come back
     empty here too - which is what lets the witness below catch a clause that speaks where
     it should not as well as one that stays quiet where it should speak.
+
+    **The quality is read with `chords.split_slash`, shared with the clause rather than
+    re-spelled here.** That sharing is what makes `split_slash`'s own test load-bearing: a
+    `6/9` truncated to `6` loses the 9th from the tone set, and a witness that truncated it
+    the same way would agree with a clause reporting the chord complete.
     """
     if (
         step.repeated
@@ -137,7 +142,7 @@ def _missing_degree_names(step: ArrangementStep) -> List[str]:
     harmony = step.harmonized_as or step.chord
     root_str, quality = ChordParser.parse_chord_name(harmony)
     tones = ChordParser.CHORD_TONES_FROM_ROOT.get(
-        ChordParser.canonical_quality((quality or "").split("/", 1)[0])
+        ChordParser.canonical_quality(split_slash(quality or "")[0])
     )
     if not root_str or not tones:
         return []
@@ -583,6 +588,16 @@ class TestEveryChoiceIsExplained(unittest.TestCase):
         self.assertTrue(lost, "the head stopped losing a slash bass")
         self.assertTrue(kept, "a shape that sounds its written bass was flagged")
 
+    def test_a_bass_note_after_a_six_nine_is_a_bass(self):
+        """`C6/9/E` is a 6/9 over an E, and its bass rides in the name like any other.
+
+        The `9` before the slash belongs to the quality and the `E` after it is the bass, so
+        the clause reads `E`. A symbol read as `6` with no bass leaves this written bass
+        unnoticed, and the shape's lowest voice unexplained with it.
+        """
+        step = make_step([8, -1, 7, 7, 8, -1], chord="C6/9/E", melody="G4")
+        self.assertIn("written bass E", step_annotation(step))
+
 
 #: `Eb6` under D5 as the corpus voices it: four voices stating the 3rd, the 5th and the
 #: 6th, with the root left out. The middle of the corpus's `drop2_6432` reach, and the shape
@@ -644,6 +659,17 @@ class TestTheToneAFourVoiceShapeGivesUp(unittest.TestCase):
         """`harmonized_as` is the routed chord, which is what the rest of the line names."""
         step = make_step(_DROPS_THE_ROOT, chord="Czz", melody="D5", harmonized_as="Eb6")
         self.assertEqual(_omission_clause(step), "the chord tone it leaves out is Root")
+
+    def test_a_six_nine_chord_is_read_as_its_whole_quality(self):
+        """`C6/9` is one quality, not a `6` with a `/9` after it.
+
+        The shape `x-10-x-9-10-8` states the 6th, the 3rd, the 5th and the root, so the 9th
+        is the tone it leaves out - and `6/9`'s tone set is the one with a 9th in it to leave
+        out. A quality read as `6` drops the 9th from the table, and the clause then reports a
+        four-voice shape complete while the name above it promises a 9th.
+        """
+        step = make_step([-1, 10, -1, 9, 10, 8], chord="C6/9", melody="C5")
+        self.assertEqual(_omission_clause(step), "the chord tone it leaves out is 9")
 
 
 class TestTheLoneNoteKeepsTheWindowHonest(unittest.TestCase):

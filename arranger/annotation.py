@@ -22,6 +22,7 @@ from .chords import (
     melody_degree_name,
     slash_bass,
     slash_bass_cost,
+    split_slash,
 )
 from .cost import SPAN_CRITERION, VOICING_COST_CRITERIA
 from .grip_tables import INTERVAL_NAMES
@@ -629,7 +630,7 @@ def _omission_clause(step: ArrangementStep) -> str:
         return ""
     harmony = step.harmonized_as or step.chord
     root_str, quality = ChordParser.parse_chord_name(harmony)
-    canonical = ChordParser.canonical_quality((quality or "").split("/", 1)[0])
+    canonical = ChordParser.canonical_quality(split_slash(quality or "")[0])
     tones = ChordParser.CHORD_TONES_FROM_ROOT.get(canonical)
     if not root_str or not tones:
         return ""

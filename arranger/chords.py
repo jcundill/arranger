@@ -28,7 +28,7 @@ from typing import TYPE_CHECKING, Dict, Optional, Sequence, Tuple
 from musthe import Note
 
 from .step_types import ArrangementStep
-from .tuning import NO_CHORD, PITCH_CLASS_NAMES
+from .tuning import PITCH_CLASS_NAMES
 
 if TYPE_CHECKING:  # pragma: no cover - type only, never imported at runtime
     pass
@@ -507,11 +507,35 @@ def bass_pitch_class(bass: Optional[str]) -> Optional[int]:
     return Note(bass + "4").midi_note() % 12
 
 
-# A chord symbol's slash bass: anything after a single `/`, which must be a
-# pitch. Deliberately looser than the Weimar pattern this replaces - it read the
-# *same* field with a stricter one, and the strictness bought a quality lookup
-# this call site never used. `A-/G` -> `G`; `A-` and `NC` -> None.
-_SLASH_BASS_RE = re.compile(r"^[^/]*/([A-Ga-g][#b]?)\s*$")
+# A chord symbol's slash bass: a `/` followed by a note letter, and the **last** such
+# slash in the symbol. The body may carry a slash of its own - `6/9` is the one quality
+# that does - so the split cannot be on the first one: the rule is that a note letter
+# after a slash asks for a bass, and `9` is not a note letter.
+_SLASH_BASS_RE = re.compile(r"^(.*)/([A-Ga-g][#b]?)\s*$")
+
+
+def split_slash(symbol: Optional[str]) -> Tuple[str, Optional[str]]:
+    """A chord symbol's body and its slash bass, the bass `None` when there is none.
+
+    **The rule is the note letter, and it is the last such slash that matters.** A `/`
+    followed by a note letter asks for a bass; anything else after a `/` belongs to the
+    body, because the only quality spelled with a slash is `6/9` and `9` is not a note
+    letter. So `C6/9` is a body with no bass, while `C6/9/E` is `C6/9` over an `E`.
+
+    The regex is greedy for that reason, and the greed is load-bearing rather than
+    incidental: on `C6/9` the body can only be `C6`, and `9` then fails the note-letter
+    test, so the match is *refused* rather than shortened - which is what must happen,
+    since `6` and `6/9` are different chords.
+
+    Splitting on the first slash instead loses `C6/9/E`'s bass and truncates `C6/9`'s
+    quality to `6`, whose tone set is missing the 9th - a wrong chord that raises
+    nothing, because both `6` and `6/9` are legal.
+    """
+    symbol = (symbol or "").strip()
+    match = _SLASH_BASS_RE.match(symbol)
+    if not match:
+        return symbol, None
+    return match.group(1), match.group(2)
 
 
 def slash_bass(symbol: str) -> Optional[str]:
@@ -522,11 +546,7 @@ def slash_bass(symbol: str) -> Optional[str]:
     progression's own triples, so a quality table here would be dead weight - which is
     why there is none.
     """
-    symbol = (symbol or "").strip()
-    if not symbol or symbol == NO_CHORD:
-        return None
-    match = _SLASH_BASS_RE.match(symbol)
-    return match.group(1) if match else None
+    return split_slash(symbol)[1]
 
 
 def slash_bass_cost(voicing_midis: Sequence[int], bass_pc: Optional[int]) -> int:
